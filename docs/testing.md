@@ -35,7 +35,6 @@ test/
 ```
 
 ### Fixture Guidelines
-- All fixtures must use UUIDs for primary keys
 - Use polymorphic associations correctly in fixtures
 - Keep fixtures minimal but realistic
 - Share common fixtures (users, reviews) across domains

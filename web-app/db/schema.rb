@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_07_01_122753) do
+ActiveRecord::Schema[8.0].define(version: 2025_07_02_144718) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -23,5 +23,20 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_01_122753) do
     t.index ["slug", "sluggable_type", "scope"], name: "index_friendly_id_slugs_on_slug_and_sluggable_type_and_scope", unique: true
     t.index ["slug", "sluggable_type"], name: "index_friendly_id_slugs_on_slug_and_sluggable_type"
     t.index ["sluggable_type", "sluggable_id"], name: "index_friendly_id_slugs_on_sluggable_type_and_sluggable_id"
+  end
+
+  create_table "music_artists", force: :cascade do |t|
+    t.string "name", null: false
+    t.string "slug", null: false
+    t.integer "kind", default: 0, null: false
+    t.string "country", limit: 2
+    t.date "born_on"
+    t.date "died_on"
+    t.date "formed_on"
+    t.date "disbanded_on"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["kind"], name: "index_music_artists_on_kind"
+    t.index ["slug"], name: "index_music_artists_on_slug", unique: true
   end
 end

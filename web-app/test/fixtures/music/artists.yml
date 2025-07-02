@@ -1,0 +1,16 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+david_bowie:
+  name: "David Bowie"
+  slug: "david-bowie"
+  kind: 0
+  country: "GB"
+  born_on: 1947-01-08
+  died_on: 2016-01-10
+
+pink_floyd:
+  name: "Pink Floyd"
+  slug: "pink-floyd"
+  kind: 1
+  country: "GB"
+  formed_on: 1965-01-01

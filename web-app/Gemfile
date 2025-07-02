@@ -40,10 +40,14 @@ gem "bootsnap", require: false
 # Add HTTP asset caching/compression and X-Sendfile acceleration to Puma [https://github.com/basecamp/thruster/]
 gem "thruster", require: false
 
+# Load environment variables from .env file
+# gem "dotenv-rails"
+
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
 # gem "image_processing", "~> 1.2"
 
 group :development, :test do
+  gem "dotenv-rails"
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem
   gem "debug", platforms: %i[mri windows], require: "debug/prelude"
 
@@ -59,7 +63,6 @@ group :development do
   gem "web-console"
   gem "annotaterb"
   gem "rack-mini-profiler"
-  gem "dotenv-rails"
   gem "standard", ">= 1.35.1"
 end
 
