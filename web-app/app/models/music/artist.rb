@@ -8,6 +8,7 @@ class Music::Artist < ApplicationRecord
   # Associations
   has_many :band_memberships, class_name: "Music::Membership", foreign_key: :artist_id
   has_many :memberships, class_name: "Music::Membership", foreign_key: :member_id
+  has_many :albums, class_name: "Music::Album", foreign_key: :primary_artist_id
 
   # Validations
   validates :name, presence: true

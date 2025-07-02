@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_07_02_154609) do
+ActiveRecord::Schema[8.0].define(version: 2025_07_02_160757) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -23,6 +23,18 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_02_154609) do
     t.index ["slug", "sluggable_type", "scope"], name: "index_friendly_id_slugs_on_slug_and_sluggable_type_and_scope", unique: true
     t.index ["slug", "sluggable_type"], name: "index_friendly_id_slugs_on_slug_and_sluggable_type"
     t.index ["sluggable_type", "sluggable_id"], name: "index_friendly_id_slugs_on_sluggable_type_and_sluggable_id"
+  end
+
+  create_table "music_albums", force: :cascade do |t|
+    t.string "title", null: false
+    t.string "slug", null: false
+    t.text "description"
+    t.bigint "primary_artist_id", null: false
+    t.integer "release_year"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["primary_artist_id"], name: "index_music_albums_on_primary_artist_id"
+    t.index ["slug"], name: "index_music_albums_on_slug", unique: true
   end
 
   create_table "music_artists", force: :cascade do |t|
@@ -53,6 +65,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_02_154609) do
     t.index ["member_id"], name: "index_music_memberships_on_member_id"
   end
 
+  add_foreign_key "music_albums", "music_artists", column: "primary_artist_id"
   add_foreign_key "music_memberships", "music_artists", column: "artist_id"
   add_foreign_key "music_memberships", "music_artists", column: "member_id"
 end

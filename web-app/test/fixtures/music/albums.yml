@@ -1,0 +1,15 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+dark_side_of_the_moon:
+  title: "The Dark Side of the Moon"
+  slug: "the-dark-side-of-the-moon"
+  description: "A concept album by Pink Floyd, released in 1973, exploring themes of conflict, greed, time, and mental illness."
+  primary_artist: pink_floyd
+  release_year: 1973
+
+wish_you_were_here:
+  title: "Wish You Were Here"
+  slug: "wish-you-were-here"
+  description: "Ninth studio album by Pink Floyd, released in 1975, regarded as one of the greatest albums of all time."
+  primary_artist: pink_floyd
+  release_year: 1975
