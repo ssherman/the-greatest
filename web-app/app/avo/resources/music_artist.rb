@@ -10,6 +10,7 @@ class Avo::Resources::MusicArtist < Avo::BaseResource
     field :id, as: :id
     field :name, as: :text
     field :slug, as: :text
+    field :description, as: :textarea
     field :kind, as: :number
     field :country, as: :country
     field :born_on, as: :date

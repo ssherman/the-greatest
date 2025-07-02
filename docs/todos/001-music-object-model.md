@@ -1,6 +1,6 @@
 # The Greatest Music — Database Schema (v0.3)
 
-> **Stack**: PostgreSQL 16 · Rails 8 · Schema‑first migrations
+> **Stack**: PostgreSQL 16 · Rails 8 · Schema‑first migrations
 >
 > All tables use the Rails defaults `id:bigint` primary key and `created_at` / `updated_at` timestamps unless noted otherwise.
 
@@ -13,9 +13,10 @@ Represents **both** individual people *and* groups/bands.
 | column         | type         | null? | default | notes                                          |
 | -------------- | ------------ | ----- | ------- | ---------------------------------------------- |
 | `id`           | bigint       | no    | —       | PK                                             |
-| `name`         | string (255) | no    | —       | Display name                                   |
-| `slug`         | string (255) | no    | —       | Unique URL slug (`index unique`)               |
-| `kind`         | integer      | no    | `0`     | Rails enum: `0 = person`, `1 = band` (`index`) |
+| `name`         | string       | no    | —       | Display name                                   |
+| `slug`         | string       | no    | —       | Unique URL slug (`index unique`)               |
+| `description`  | text         | yes   | —       | Biography/career overview                      |
+| `kind`         | integer      | no    | `0`     | Rails enum: `0 = person`, `1 = band` (`index`) |
 | `country`      | string(2)    | yes   | —       | ISO‑3166 alpha‑2                               |
 | `born_on`      | date         | yes   | —       | Only for persons                               |
 | `died_on`      | date         | yes   | —       | Only for persons                               |
@@ -32,13 +33,13 @@ Represents **both** individual people *and* groups/bands.
 
 ## 2. `memberships`
 
-Join table recording a person’s tenure in a band.
+Join table recording a person's tenure in a band.
 
 | column      | type   | null? | default | notes                              |
 | ----------- | ------ | ----- | ------- | ---------------------------------- |
 | `id`        | bigint | no    | —       | PK                                 |
-| `artist_id` | bigint | no    | —       | The **band** (`fk → artists.id`)   |
-| `member_id` | bigint | no    | —       | The **person** (`fk → artists.id`) |
+| `artist_id` | bigint | no    | —       | The **band** (`fk → artists.id`)   |
+| `member_id` | bigint | no    | —       | The **person** (`fk → artists.id`) |
 | `joined_on` | date   | yes   | —       |                                    |
 | `left_on`   | date   | yes   | —       |                                    |
 
@@ -54,8 +55,9 @@ Canonical work (e.g. *Black Celebration*). Commercial manifestations live in `re
 | ------------------- | ------- | ----- | ------- | ---------------------------------------- |
 | `id`                | bigint  | no    | —       | PK                                       |
 | `title`             | string  | no    | —       |                                          |
-| `slug`              | string  | no    | —       | Unique (`index unique`)                  |
-| `primary_artist_id` | bigint  | no    | —       | Main credit (`fk → artists.id`, `index`) |
+| `slug`              | string  | no    | —       | Unique (`index unique`)                  |
+| `description`       | text    | yes   | —       | Album overview and context               |
+| `primary_artist_id` | bigint  | no    | —       | Main credit (`fk → artists.id`, `index`) |
 | `release_year`      | integer | yes   | —       | 4‑digit year of **first** release        |
 
 ### Associations
@@ -73,9 +75,9 @@ A specific commercial release (format, region, bonus tracks, remaster…).
 | column           | type      | null? | default | notes                                                                     |
 | ---------------- | --------- | ----- | ------- | ------------------------------------------------------------------------- |
 | `id`             | bigint    | no    | —       | PK                                                                        |
-| `album_id`       | bigint    | no    | —       | Parent work (`fk → albums.id`, `index`)                                   |
-| `release_name`   | string    | yes   | —       | e.g. "2007 Remaster" (was `edition_name`)                                 |
-| `format`         | integer   | no    | `0`     | Enum: `0 = vinyl`, `1 = cd`, `2 = digital`, `3 = cassette`, `4 = blu_ray` |
+| `album_id`       | bigint    | no    | —       | Parent work (`fk → albums.id`, `index`)                                   |
+| `release_name`   | string    | yes   | —       | e.g. "2007 Remaster" (was `edition_name`)                                 |
+| `format`         | integer   | no    | `0`     | Enum: `0 = vinyl`, `1 = cd`, `2 = digital`, `3 = cassette`, `4 = blu_ray` |
 | `region`         | string(2) | yes   | —       | ISO‑3166 alpha‑2, for regional releases                                   |
 | `label`          | string    | yes   | —       | Record label                                                              |
 | `catalog_number` | string    | yes   | —       | Label catalogue / UPC                                                     |
@@ -99,9 +101,10 @@ Musical compositions independent of any one recording.
 | --------------- | ---------- | ----- | ------- | ----------------------------------------------------------------- |
 | `id`            | bigint     | no    | —       | PK                                                                |
 | `title`         | string     | no    | —       |                                                                   |
-| `slug`          | string     | no    | —       | Unique (`index unique`)                                           |
+| `slug`          | string     | no    | —       | Unique (`index unique`)                                           |
+| `description`   | text       | yes   | —       | Song background, meaning, and context                             |
 | `duration_secs` | integer    | yes   | —       | Canonical runtime                                                 |
-| `isrc`          | string(12) | yes   | —       | International Std. Recording Code (`index unique where not null`) |
+| `isrc`          | string(12) | yes   | —       | International Std. Recording Code (`index unique where not null`) |
 | `lyrics`        | text       | yes   | —       | Optional plaintext                                                |
 
 ### Associations
@@ -122,12 +125,12 @@ Join table for the track‑list of a release.
 | column        | type    | null? | default | notes                         |
 | ------------- | ------- | ----- | ------- | ----------------------------- |
 | `id`          | bigint  | no    | —       | PK                            |
-| `release_id`  | bigint  | no    | —       | (`fk → releases.id`, `index`) |
-| `song_id`     | bigint  | no    | —       | (`fk → songs.id`, `index`)    |
-| `disc_number` | integer | no    | `1`     | 1‑based Disc #                |
-| `position`    | integer | no    | —       | 1‑based Track # within disc   |
+| `release_id`  | bigint  | no    | —       | (`fk → releases.id`, `index`) |
+| `song_id`     | bigint  | no    | —       | (`fk → songs.id`, `index`)    |
+| `disc_number` | integer | no    | `1`     | 1‑based Disc #                |
+| `position`    | integer | no    | —       | 1‑based Track # within disc   |
 | `length_secs` | integer | yes   | —       | Release‑specific runtime      |
-| `notes`       | text    | yes   | —       | e.g. "2019 mix"               |
+| `notes`       | text    | yes   | —       | e.g. "2019 mix"               |
 
 **Unique index**: `(release_id, disc_number, position)`
 
@@ -140,9 +143,9 @@ Stores *all* artistic & technical roles.
 | column            | type       | null? | default | notes                                  |
 | ----------------- | ---------- | ----- | ------- | -------------------------------------- |
 | `id`              | bigint     | no    | —       | PK                                     |
-| `artist_id`       | bigint     | no    | —       | (`fk → artists.id`, `index`)           |
+| `artist_id`       | bigint     | no    | —       | (`fk → artists.id`, `index`)           |
 | `creditable_type` | string     | no    | —       | "Song", "Album", "Release"             |
-| `creditable_id`   | bigint     | no    | —       | (`index together with type`)           |
+| `creditable_id`   | bigint     | no    | —       | (`index together with type`)           |
 | `role`            | string(50) | no    | —       | Free‑text or controlled list (`index`) |
 | `position`        | integer    | yes   | —       | Ordering within same role              |
 
@@ -157,9 +160,9 @@ Self‑referential join to link a song to **other** versions such as covers, rem
 | column              | type    | null? | default | notes                                                   |
 | ------------------- | ------- | ----- | ------- | ------------------------------------------------------- |
 | `id`                | bigint  | no    | —       | PK                                                      |
-| `song_id`           | bigint  | no    | —       | The *original* song  (`fk → songs.id`, `index`)         |
-| `related_song_id`   | bigint  | no    | —       | The cover/remix/etc (`fk → songs.id`, `index`)          |
-| `relation_type`     | integer | no    | `0`     | Enum: `0 = cover`, `1 = remix`, `2 = sample`, `3 = alt` |
+| `song_id`           | bigint  | no    | —       | The *original* song  (`fk → songs.id`, `index`)         |
+| `related_song_id`   | bigint  | no    | —       | The cover/remix/etc (`fk → songs.id`, `index`)          |
+| `relation_type`     | integer | no    | `0`     | Enum: `0 = cover`, `1 = remix`, `2 = sample`, `3 = alt` |
 | `source_release_id` | bigint  | yes   | —       | Optional: where the related version appears             |
 
 **Unique index**: `(song_id, related_song_id, relation_type)`
@@ -218,11 +221,12 @@ artists 1——n credits (polymorphic to songs / albums / releases)
 
 ### Change‑log
 
+- **v0.4 (2025‑07‑02)** — added `description` fields to `artists`, `albums`, and `songs` tables.
 - **v0.3 (2025‑07‑02)** — renamed `album_editions` to `releases` (and associated column & FK names).
 - **v0.2 (2025‑07‑02)** — removed external ID and artwork columns; added `song_relationships`.
 - **v0.1 (2025‑07‑02)** — initial public draft.
 
 ---
 
-*Questions or edge‑cases?* Feel free to add comments in the PR or ping @author in Slack.
+*Questions or edge‑cases?* Feel free to add comments in the PR or ping @author in Slack.
 

@@ -25,6 +25,17 @@ module Music
       assert_equal "test-artist", artist.slug
     end
 
+    test "should allow description" do
+      @person.description = "A legendary musician who changed the face of rock music."
+      assert @person.valid?
+      assert_equal "A legendary musician who changed the face of rock music.", @person.description
+    end
+
+    test "should allow empty description" do
+      @person.description = nil
+      assert @person.valid?
+    end
+
     test "should require kind" do
       @person.kind = nil
       assert_not @person.valid?

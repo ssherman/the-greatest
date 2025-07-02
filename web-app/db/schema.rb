@@ -28,6 +28,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_02_154609) do
   create_table "music_artists", force: :cascade do |t|
     t.string "name", null: false
     t.string "slug", null: false
+    t.text "description"
     t.integer "kind", default: 0, null: false
     t.string "country", limit: 2
     t.date "born_on"

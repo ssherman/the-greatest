@@ -3,6 +3,7 @@ class CreateMusicArtists < ActiveRecord::Migration[8.0]
     create_table :music_artists do |t|
       t.string :name, null: false
       t.string :slug, null: false
+      t.text :description
       t.integer :kind, null: false, default: 0
       t.string :country, limit: 2
       t.date :born_on

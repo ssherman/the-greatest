@@ -3,6 +3,7 @@
 david_bowie:
   name: "David Bowie"
   slug: "david-bowie"
+  description: "Innovative English singer-songwriter and actor who was a leading figure in popular music for over five decades."
   kind: 0
   country: "GB"
   born_on: 1947-01-08
@@ -11,6 +12,7 @@ david_bowie:
 pink_floyd:
   name: "Pink Floyd"
   slug: "pink-floyd"
+  description: "English progressive rock band formed in London in 1965, known for their philosophical lyrics and sonic experimentation."
   kind: 1
   country: "GB"
   formed_on: 1965-01-01
@@ -18,6 +20,7 @@ pink_floyd:
 roger_waters:
   name: "Roger Waters"
   slug: "roger-waters"
+  description: "English musician, singer-songwriter and composer, co-founder and bassist of Pink Floyd."
   kind: 0
   country: "GB"
   born_on: 1943-09-06
@@ -25,6 +28,7 @@ roger_waters:
 david_gilmour:
   name: "David Gilmour"
   slug: "david-gilmour"
+  description: "English guitarist, singer, songwriter and member of Pink Floyd, known for his distinctive guitar sound."
   kind: 0
   country: "GB"
   born_on: 1946-03-06
