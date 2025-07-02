@@ -1,0 +1,32 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+time:
+  title: "Time"
+  slug: "time"
+  description: "A meditation on the passage of time and mortality, featuring a distinctive clock intro and David Gilmour's soaring guitar solo."
+  duration_secs: 421
+  isrc: "GBEMI7300001"
+  lyrics: "Ticking away the moments that make up a dull day..."
+
+money:
+  title: "Money"
+  slug: "money"
+  description: "A critique of capitalism and materialism, featuring a distinctive 7/4 time signature and cash register sound effects."
+  duration_secs: 382
+  isrc: "GBEMI7300002"
+  lyrics: "Money, get away..."
+
+wish_you_were_here:
+  title: "Wish You Were Here"
+  slug: "wish-you-were-here"
+  description: "A tribute to former band member Syd Barrett, exploring themes of absence and the music industry."
+  duration_secs: 334
+  isrc: "GBEMI7500001"
+  lyrics: "So, so you think you can tell Heaven from Hell..."
+
+shine_on:
+  title: "Shine On You Crazy Diamond"
+  slug: "shine-on-you-crazy-diamond"
+  description: "A nine-part suite dedicated to Syd Barrett, split across the album's opening and closing tracks."
+  duration_secs: 1380
+  isrc: "GBEMI7500002"

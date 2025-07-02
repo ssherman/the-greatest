@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_07_02_163815) do
+ActiveRecord::Schema[8.0].define(version: 2025_07_02_170924) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -75,6 +75,19 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_02_163815) do
     t.datetime "updated_at", null: false
     t.index ["album_id", "release_name", "format"], name: "index_music_releases_on_album_name_format_unique", unique: true
     t.index ["album_id"], name: "index_music_releases_on_album_id"
+  end
+
+  create_table "music_songs", force: :cascade do |t|
+    t.string "title", null: false
+    t.string "slug", null: false
+    t.text "description"
+    t.integer "duration_secs"
+    t.string "isrc", limit: 12
+    t.text "lyrics"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["isrc"], name: "index_music_songs_on_isrc", unique: true, where: "(isrc IS NOT NULL)"
+    t.index ["slug"], name: "index_music_songs_on_slug", unique: true
   end
 
   add_foreign_key "music_albums", "music_artists", column: "primary_artist_id"
