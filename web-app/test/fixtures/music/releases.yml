@@ -1,0 +1,29 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+dark_side_original:
+  album: dark_side_of_the_moon
+  release_name: "Original Release"
+  format: 1
+  metadata: { "label": "Harvest", "catalog_number": "SHVL 804", "region": "GB" }
+  release_date: 1973-03-01
+
+dark_side_remaster:
+  album: dark_side_of_the_moon
+  release_name: "2011 Remaster"
+  format: 1
+  metadata: { "label": "EMI", "catalog_number": "5099902982324", "region": "GB" }
+  release_date: 2011-09-26
+
+wish_you_were_here_vinyl:
+  album: wish_you_were_here
+  release_name: "Original Vinyl"
+  format: 0
+  metadata: { "label": "Harvest", "catalog_number": "SHVL 814", "region": "GB" }
+  release_date: 1975-09-12
+
+wish_you_were_here_digital:
+  album: wish_you_were_here
+  release_name: "Digital Release"
+  format: 2
+  metadata: { "label": "Pink Floyd Records", "region": "US" }
+  release_date: 2016-07-08

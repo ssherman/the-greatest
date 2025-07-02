@@ -4,7 +4,7 @@ class Music::Album < ApplicationRecord
 
   # Associations
   belongs_to :primary_artist, class_name: "Music::Artist"
-  # has_many :releases
+  has_many :releases, class_name: "Music::Release"
   # has_many :songs, through: :releases
   # has_many :credits, as: :creditable
 

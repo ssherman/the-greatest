@@ -70,7 +70,7 @@ Canonical work (e.g. *Black Celebration*). Commercial manifestations live in `re
 
 ## 4. `releases`
 
-A specific commercial release (format, region, bonus tracks, remaster…).
+A specific commercial release (format, bonus tracks, remaster…).
 
 | column           | type      | null? | default | notes                                                                     |
 | ---------------- | --------- | ----- | ------- | ------------------------------------------------------------------------- |
@@ -78,12 +78,10 @@ A specific commercial release (format, region, bonus tracks, remaster…).
 | `album_id`       | bigint    | no    | —       | Parent work (`fk → albums.id`, `index`)                                   |
 | `release_name`   | string    | yes   | —       | e.g. "2007 Remaster" (was `edition_name`)                                 |
 | `format`         | integer   | no    | `0`     | Enum: `0 = vinyl`, `1 = cd`, `2 = digital`, `3 = cassette`, `4 = blu_ray` |
-| `region`         | string(2) | yes   | —       | ISO‑3166 alpha‑2, for regional releases                                   |
-| `label`          | string    | yes   | —       | Record label                                                              |
-| `catalog_number` | string    | yes   | —       | Label catalogue / UPC                                                     |
+| `metadata`       | jsonb     | yes   | —       | Flexible storage for label, catalog_number, region, etc.                  |
 | `release_date`   | date      | yes   | —       | Actual street date                                                        |
 
-**Unique index**: `(album_id, release_name, format, region)` to prevent exact duplicates.
+**Unique index**: `(album_id, release_name, format)` to prevent exact duplicates.
 
 ### Associations
 
