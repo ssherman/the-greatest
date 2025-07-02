@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_07_02_144718) do
+ActiveRecord::Schema[8.0].define(version: 2025_07_02_154609) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -39,4 +39,19 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_02_144718) do
     t.index ["kind"], name: "index_music_artists_on_kind"
     t.index ["slug"], name: "index_music_artists_on_slug", unique: true
   end
+
+  create_table "music_memberships", force: :cascade do |t|
+    t.bigint "artist_id", null: false
+    t.bigint "member_id", null: false
+    t.date "joined_on"
+    t.date "left_on"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["artist_id", "member_id", "joined_on"], name: "index_music_memberships_on_artist_member_joined", unique: true
+    t.index ["artist_id"], name: "index_music_memberships_on_artist_id"
+    t.index ["member_id"], name: "index_music_memberships_on_member_id"
+  end
+
+  add_foreign_key "music_memberships", "music_artists", column: "artist_id"
+  add_foreign_key "music_memberships", "music_artists", column: "member_id"
 end

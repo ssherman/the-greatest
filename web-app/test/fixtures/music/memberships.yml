@@ -1,0 +1,12 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+pink_floyd_roger_waters:
+  artist: pink_floyd
+  member: roger_waters
+  joined_on: 1965-01-01
+  left_on: 1985-01-01
+
+pink_floyd_david_gilmour:
+  artist: pink_floyd
+  member: david_gilmour
+  joined_on: 1968-01-01

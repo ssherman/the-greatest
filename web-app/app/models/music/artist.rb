@@ -5,6 +5,10 @@ class Music::Artist < ApplicationRecord
   # Enums
   enum :kind, {person: 0, band: 1}
 
+  # Associations
+  has_many :band_memberships, class_name: "Music::Membership", foreign_key: :artist_id
+  has_many :memberships, class_name: "Music::Membership", foreign_key: :member_id
+
   # Validations
   validates :name, presence: true
   validates :slug, presence: true, uniqueness: true

@@ -14,3 +14,17 @@ pink_floyd:
   kind: 1
   country: "GB"
   formed_on: 1965-01-01
+
+roger_waters:
+  name: "Roger Waters"
+  slug: "roger-waters"
+  kind: 0
+  country: "GB"
+  born_on: 1943-09-06
+
+david_gilmour:
+  name: "David Gilmour"
+  slug: "david-gilmour"
+  kind: 0
+  country: "GB"
+  born_on: 1946-03-06
