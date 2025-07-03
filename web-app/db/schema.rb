@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_07_03_054730) do
+ActiveRecord::Schema[8.0].define(version: 2025_07_03_055348) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -91,6 +91,19 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_03_054730) do
     t.index ["album_id"], name: "index_music_releases_on_album_id"
   end
 
+  create_table "music_song_relationships", force: :cascade do |t|
+    t.bigint "song_id", null: false
+    t.bigint "related_song_id", null: false
+    t.integer "relation_type", default: 0, null: false
+    t.bigint "source_release_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["related_song_id"], name: "index_music_song_relationships_on_related_song_id"
+    t.index ["song_id", "related_song_id", "relation_type"], name: "index_music_song_relationships_on_song_related_type", unique: true
+    t.index ["song_id"], name: "index_music_song_relationships_on_song_id"
+    t.index ["source_release_id"], name: "index_music_song_relationships_on_source_release_id"
+  end
+
   create_table "music_songs", force: :cascade do |t|
     t.string "title", null: false
     t.string "slug", null: false
@@ -124,6 +137,9 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_03_054730) do
   add_foreign_key "music_memberships", "music_artists", column: "artist_id"
   add_foreign_key "music_memberships", "music_artists", column: "member_id"
   add_foreign_key "music_releases", "music_albums", column: "album_id"
+  add_foreign_key "music_song_relationships", "music_releases", column: "source_release_id"
+  add_foreign_key "music_song_relationships", "music_songs", column: "related_song_id"
+  add_foreign_key "music_song_relationships", "music_songs", column: "song_id"
   add_foreign_key "music_tracks", "music_releases", column: "release_id"
   add_foreign_key "music_tracks", "music_songs", column: "song_id"
 end

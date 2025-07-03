@@ -1,0 +1,37 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+time_money_cover:
+  song: time
+  related_song: money
+  relation_type: 0 # cover
+  source_release: dark_side_original
+
+money_time_remix:
+  song: money
+  related_song: time
+  relation_type: 1 # remix
+  source_release: dark_side_remaster
+
+wish_you_were_here_cover:
+  song: wish_you_were_here
+  related_song: shine_on
+  relation_type: 0 # cover
+  source_release: wish_you_were_here_digital
+
+time_sample:
+  song: time
+  related_song: money
+  relation_type: 2 # sample
+  source_release: dark_side_original
+
+shine_on_alternate:
+  song: shine_on
+  related_song: wish_you_were_here
+  relation_type: 3 # alternate
+  source_release: wish_you_were_here_vinyl
+
+# Example with no source_release (optional field)
+cover_without_source:
+  song: money
+  related_song: wish_you_were_here
+  relation_type: 0 # cover

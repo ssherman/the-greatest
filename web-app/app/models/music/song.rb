@@ -7,8 +7,14 @@ class Music::Song < ApplicationRecord
   has_many :releases, through: :tracks, class_name: "Music::Release"
   has_many :albums, through: :releases, class_name: "Music::Album"
   has_many :credits, as: :creditable, class_name: "Music::Credit"
-  # has_many :song_relationships
-  # has_many :related_songs, through: :song_relationships, source: :related_song
+
+  # Song relationships
+  has_many :song_relationships, class_name: "Music::SongRelationship", foreign_key: :song_id, dependent: :destroy
+  has_many :related_songs, through: :song_relationships, source: :related_song
+
+  # Reverse relationships (e.g., songs that cover this song)
+  has_many :inverse_song_relationships, class_name: "Music::SongRelationship", foreign_key: :related_song_id, dependent: :destroy
+  has_many :original_songs, through: :inverse_song_relationships, source: :song
 
   # Validations
   validates :title, presence: true
@@ -25,4 +31,37 @@ class Music::Song < ApplicationRecord
   scope :released_in, ->(year) { where(release_year: year) }
   scope :released_before, ->(year) { where("release_year <= ?", year) }
   scope :released_after, ->(year) { where("release_year >= ?", year) }
+
+  # Helper methods for each relationship type
+  def covers
+    related_songs.merge(Music::SongRelationship.covers)
+  end
+
+  def remixes
+    related_songs.merge(Music::SongRelationship.remixes)
+  end
+
+  def samples
+    related_songs.merge(Music::SongRelationship.samples)
+  end
+
+  def alternates
+    related_songs.merge(Music::SongRelationship.alternates)
+  end
+
+  def covered_by
+    original_songs.merge(Music::SongRelationship.covers)
+  end
+
+  def remixed_by
+    original_songs.merge(Music::SongRelationship.remixes)
+  end
+
+  def sampled_by
+    original_songs.merge(Music::SongRelationship.samples)
+  end
+
+  def alternated_by
+    original_songs.merge(Music::SongRelationship.alternates)
+  end
 end
