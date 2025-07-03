@@ -5,6 +5,7 @@ class CreateMusicSongs < ActiveRecord::Migration[8.0]
       t.string :slug, null: false
       t.text :description
       t.integer :duration_secs
+      t.integer :release_year
       t.string :isrc, limit: 12
       t.text :lyrics
 

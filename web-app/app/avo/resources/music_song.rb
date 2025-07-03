@@ -12,6 +12,7 @@ class Avo::Resources::MusicSong < Avo::BaseResource
     field :slug, as: :text
     field :description, as: :textarea
     field :duration_secs, as: :number
+    field :release_year, as: :number
     field :isrc, as: :text
     field :lyrics, as: :textarea
     field :created_at, as: :date_time

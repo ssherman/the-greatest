@@ -82,6 +82,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_02_170924) do
     t.string "slug", null: false
     t.text "description"
     t.integer "duration_secs"
+    t.integer "release_year"
     t.string "isrc", limit: 12
     t.text "lyrics"
     t.datetime "created_at", null: false

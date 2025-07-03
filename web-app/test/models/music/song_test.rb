@@ -72,6 +72,28 @@ module Music
       assert @song.valid?
     end
 
+    test "should allow nil release_year" do
+      @song.release_year = nil
+      assert @song.valid?
+    end
+
+    test "should require valid release_year if present" do
+      @song.release_year = 1973
+      assert @song.valid?
+      @song.release_year = 1800
+      assert_not @song.valid?
+      assert_includes @song.errors[:release_year], "must be greater than 1900"
+      @song.release_year = 2030
+      assert_not @song.valid?
+      assert_includes @song.errors[:release_year], "must be less than or equal to 2026"
+    end
+
+    test "should require integer release_year" do
+      @song.release_year = "not a year"
+      assert_not @song.valid?
+      assert_includes @song.errors[:release_year], "is not a number"
+    end
+
     # Scopes
     test "should filter songs with lyrics" do
       songs_with_lyrics = Music::Song.with_lyrics
@@ -90,6 +112,27 @@ module Music
       long_songs = Music::Song.longer_than(1000)
       assert_includes long_songs, music_songs(:shine_on)
       assert_not_includes long_songs, music_songs(:time)
+    end
+
+    test "should filter by release year" do
+      songs_from_1973 = Music::Song.released_in(1973)
+      assert_includes songs_from_1973, music_songs(:time)
+      assert_includes songs_from_1973, music_songs(:money)
+      assert_not_includes songs_from_1973, music_songs(:wish_you_were_here)
+    end
+
+    test "should filter released before year" do
+      songs_before_1974 = Music::Song.released_before(1974)
+      assert_includes songs_before_1974, music_songs(:time)
+      assert_includes songs_before_1974, music_songs(:money)
+      assert_not_includes songs_before_1974, music_songs(:wish_you_were_here)
+    end
+
+    test "should filter released after year" do
+      songs_after_1974 = Music::Song.released_after(1974)
+      assert_includes songs_after_1974, music_songs(:wish_you_were_here)
+      assert_includes songs_after_1974, music_songs(:shine_on)
+      assert_not_includes songs_after_1974, music_songs(:time)
     end
 
     # FriendlyId
