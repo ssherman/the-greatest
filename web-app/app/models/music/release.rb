@@ -4,8 +4,8 @@ class Music::Release < ApplicationRecord
 
   # Associations
   belongs_to :album, class_name: "Music::Album"
-  # has_many :tracks, -> { order(:disc_number, :position) }
-  # has_many :songs, through: :tracks
+  has_many :tracks, -> { order(:medium_number, :position) }, class_name: "Music::Track"
+  has_many :songs, through: :tracks, class_name: "Music::Song"
   # has_many :credits, as: :creditable
 
   # Validations

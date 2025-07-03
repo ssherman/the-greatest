@@ -1,0 +1,57 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+dark_side_original_1:
+  release: dark_side_original
+  song: time
+  medium_number: 1
+  position: 4
+  length_secs: 421
+  notes: "Side 1, Track 4"
+
+dark_side_original_2:
+  release: dark_side_original
+  song: money
+  medium_number: 1
+  position: 6
+  length_secs: 382
+  notes: "Side 2, Track 1"
+
+dark_side_remaster_1:
+  release: dark_side_remaster
+  song: time
+  medium_number: 1
+  position: 4
+  length_secs: 421
+  notes: "Remaster, Side 1, Track 4"
+
+wish_you_were_here_vinyl_1:
+  release: wish_you_were_here_vinyl
+  song: shine_on
+  medium_number: 1
+  position: 1
+  length_secs: 810
+  notes: "Part I-V, Side 1, Track 1"
+
+wish_you_were_here_vinyl_2:
+  release: wish_you_were_here_vinyl
+  song: wish_you_were_here
+  medium_number: 1
+  position: 4
+  length_secs: 334
+  notes: "Side 2, Track 2"
+
+wish_you_were_here_digital_1:
+  release: wish_you_were_here_digital
+  song: shine_on
+  medium_number: 1
+  position: 1
+  length_secs: 810
+  notes: "Digital, Track 1"
+
+wish_you_were_here_digital_2:
+  release: wish_you_were_here_digital
+  song: wish_you_were_here
+  medium_number: 1
+  position: 4
+  length_secs: 334
+  notes: "Digital, Track 4"

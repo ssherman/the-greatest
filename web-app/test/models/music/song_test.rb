@@ -145,5 +145,23 @@ module Music
     test "should format duration as mm:ss" do
       assert_equal "7:01", @song.duration_secs ? "#{@song.duration_secs / 60}:#{format("%02d", @song.duration_secs % 60)}" : nil
     end
+
+    # Associations
+    test "should have many tracks" do
+      assert_respond_to @song, :tracks
+      assert_includes @song.tracks, music_tracks(:dark_side_original_1)
+      assert_includes @song.tracks, music_tracks(:dark_side_remaster_1)
+    end
+
+    test "should have many releases through tracks" do
+      assert_respond_to @song, :releases
+      assert_includes @song.releases, music_releases(:dark_side_original)
+      assert_includes @song.releases, music_releases(:dark_side_remaster)
+    end
+
+    test "should have many albums through releases" do
+      assert_respond_to @song, :albums
+      assert_includes @song.albums, music_albums(:dark_side_of_the_moon)
+    end
   end
 end

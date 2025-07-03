@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_07_02_170924) do
+ActiveRecord::Schema[8.0].define(version: 2025_07_03_053333) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -91,8 +91,24 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_02_170924) do
     t.index ["slug"], name: "index_music_songs_on_slug", unique: true
   end
 
+  create_table "music_tracks", force: :cascade do |t|
+    t.bigint "release_id", null: false
+    t.bigint "song_id", null: false
+    t.integer "medium_number", default: 1, null: false
+    t.integer "position", null: false
+    t.integer "length_secs"
+    t.text "notes"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["release_id", "medium_number", "position"], name: "index_music_tracks_on_release_medium_position", unique: true
+    t.index ["release_id"], name: "index_music_tracks_on_release_id"
+    t.index ["song_id"], name: "index_music_tracks_on_song_id"
+  end
+
   add_foreign_key "music_albums", "music_artists", column: "primary_artist_id"
   add_foreign_key "music_memberships", "music_artists", column: "artist_id"
   add_foreign_key "music_memberships", "music_artists", column: "member_id"
   add_foreign_key "music_releases", "music_albums", column: "album_id"
+  add_foreign_key "music_tracks", "music_releases", column: "release_id"
+  add_foreign_key "music_tracks", "music_songs", column: "song_id"
 end

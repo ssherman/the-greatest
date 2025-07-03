@@ -54,6 +54,18 @@ module Music
       assert_equal @album, @release.album
     end
 
+    test "should have many tracks" do
+      assert_respond_to @release, :tracks
+      assert_includes @release.tracks, music_tracks(:dark_side_original_1)
+      assert_includes @release.tracks, music_tracks(:dark_side_original_2)
+    end
+
+    test "should have many songs through tracks" do
+      assert_respond_to @release, :songs
+      assert_includes @release.songs, music_songs(:time)
+      assert_includes @release.songs, music_songs(:money)
+    end
+
     # Scopes
     test "should filter by format" do
       cd_releases = Music::Release.by_format(:cd)
