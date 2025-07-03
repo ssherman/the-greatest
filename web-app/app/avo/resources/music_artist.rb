@@ -11,7 +11,7 @@ class Avo::Resources::MusicArtist < Avo::BaseResource
     field :name, as: :text
     field :slug, as: :text
     field :description, as: :textarea
-    field :kind, as: :number
+    field :kind, as: :select, enum: ::Music::Artist.kinds
     field :country, as: :country
     field :born_on, as: :date
     field :died_on, as: :date
