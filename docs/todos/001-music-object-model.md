@@ -1,8 +1,57 @@
 # The Greatest Music — Database Schema (v0.3)
 
+## Status
+- **Status**: Completed
+- **Priority**: High
+- **Created**: 2024-06-28
+- **Started**: 2024-06-28
+- **Completed**: 2024-07-03
+- **Developer**: shane/AI
+
 > **Stack**: PostgreSQL 16 · Rails 8 · Schema‑first migrations
 >
 > All tables use the Rails defaults `id:bigint` primary key and `created_at` / `updated_at` timestamps unless noted otherwise.
+
+---
+
+## Implementation Notes
+
+### Approach Taken
+- Iterative, test-driven development of each model, migration, and association.
+- Used Rails 8, PostgreSQL, and schema-first migrations with bigint primary keys.
+- All models namespaced under `Music::` for clarity and future extensibility.
+- Comprehensive validations, enums, and associations for real-world music data.
+- FriendlyId for slugs, Avo for admin, and robust fixtures/tests for all models.
+
+### Key Files Changed
+- `app/models/music/artist.rb`, `album.rb`, `release.rb`, `song.rb`, `track.rb`, `membership.rb`, `credit.rb`, `song_relationship.rb`
+- `db/migrate/` and `db/schema.rb`
+- `test/fixtures/music/` and `test/models/music/`
+- Avo resources for all major models
+
+### Challenges Encountered
+- Handling real-world data (e.g. duplicate artist names, flexible credits, alternate versions)
+- Ensuring all associations and foreign keys are valid in fixtures
+- Designing for extensibility (future genres, alternate relationships, etc.)
+
+### Deviations from Plan
+- Adjusted some field names for clarity (e.g. `medium_number` instead of `disc_number`)
+- Removed uniqueness validation on artist names to allow real-world duplicates
+
+### Testing Approach
+- Used Rails fixtures and model tests for all major models and relationships
+- Validated all associations, enums, and edge cases
+
+### Lessons Learned
+- Schema-first, test-driven approach yields robust, extensible models
+- Real-world music data is messy; flexibility and clear documentation are key
+
+### Related PRs
+- N/A (local dev)
+
+### Documentation Updated
+- [x] Class documentation files updated
+- [x] README updated if needed
 
 ---
 
