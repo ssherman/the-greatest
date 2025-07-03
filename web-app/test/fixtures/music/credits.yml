@@ -1,0 +1,57 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+time_writer:
+  artist: roger_waters
+  creditable: time
+  creditable_type: Music::Song
+  role: 0
+  position: 1
+
+time_composer:
+  artist: roger_waters
+  creditable: time
+  creditable_type: Music::Song
+  role: 1
+  position: 1
+
+time_performer:
+  artist: pink_floyd
+  creditable: time
+  creditable_type: Music::Song
+  role: 4
+  position: 1
+
+money_writer:
+  artist: roger_waters
+  creditable: money
+  creditable_type: Music::Song
+  role: 0
+  position: 1
+
+money_composer:
+  artist: roger_waters
+  creditable: money
+  creditable_type: Music::Song
+  role: 1
+  position: 1
+
+money_performer:
+  artist: pink_floyd
+  creditable: money
+  creditable_type: Music::Song
+  role: 4
+  position: 1
+
+dark_side_album_producer:
+  artist: pink_floyd
+  creditable: dark_side_of_the_moon
+  creditable_type: Music::Album
+  role: 10
+  position: 1
+
+dark_side_release_engineer:
+  artist: roger_waters
+  creditable: dark_side_original
+  creditable_type: Music::Release
+  role: 11
+  position: 1

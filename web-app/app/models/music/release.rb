@@ -6,7 +6,7 @@ class Music::Release < ApplicationRecord
   belongs_to :album, class_name: "Music::Album"
   has_many :tracks, -> { order(:medium_number, :position) }, class_name: "Music::Track"
   has_many :songs, through: :tracks, class_name: "Music::Song"
-  # has_many :credits, as: :creditable
+  has_many :credits, as: :creditable, class_name: "Music::Credit"
 
   # Validations
   validates :album, presence: true

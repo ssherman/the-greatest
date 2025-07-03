@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_07_03_053333) do
+ActiveRecord::Schema[8.0].define(version: 2025_07_03_054730) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -51,6 +51,20 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_03_053333) do
     t.datetime "updated_at", null: false
     t.index ["kind"], name: "index_music_artists_on_kind"
     t.index ["slug"], name: "index_music_artists_on_slug", unique: true
+  end
+
+  create_table "music_credits", force: :cascade do |t|
+    t.bigint "artist_id", null: false
+    t.string "creditable_type", null: false
+    t.bigint "creditable_id", null: false
+    t.integer "role", default: 0, null: false
+    t.integer "position"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["artist_id", "role"], name: "index_music_credits_on_artist_id_and_role"
+    t.index ["artist_id"], name: "index_music_credits_on_artist_id"
+    t.index ["creditable_type", "creditable_id"], name: "index_music_credits_on_creditable"
+    t.index ["creditable_type", "creditable_id"], name: "index_music_credits_on_creditable_type_and_creditable_id"
   end
 
   create_table "music_memberships", force: :cascade do |t|
@@ -106,6 +120,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_03_053333) do
   end
 
   add_foreign_key "music_albums", "music_artists", column: "primary_artist_id"
+  add_foreign_key "music_credits", "music_artists", column: "artist_id"
   add_foreign_key "music_memberships", "music_artists", column: "artist_id"
   add_foreign_key "music_memberships", "music_artists", column: "member_id"
   add_foreign_key "music_releases", "music_albums", column: "album_id"

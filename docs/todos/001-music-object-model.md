@@ -144,10 +144,10 @@ Stores *all* artistic & technical roles.
 | `artist_id`       | bigint     | no    | —       | (`fk → artists.id`, `index`)           |
 | `creditable_type` | string     | no    | —       | "Song", "Album", "Release"             |
 | `creditable_id`   | bigint     | no    | —       | (`index together with type`)           |
-| `role`            | string(50) | no    | —       | Free‑text or controlled list (`index`) |
+| `role`            | integer    | no    | `0`     | Rails enum (`index`)                   |
 | `position`        | integer    | yes   | —       | Ordering within same role              |
 
-**Suggested controlled roles**: `writer`, `lyricist`, `composer`, `producer`, `engineer`, `mixer`, `mastering`, `featured`, `editor`, `photographer` …
+**Role enum**: `writer`, `composer`, `lyricist`, `arranger`, `performer`, `vocalist`, `guitarist`, `bassist`, `drummer`, `keyboardist`, `producer`, `engineer`, `mixer`, `mastering`, `featured`, `guest`, `remixer`, `sampler`
 
 ---
 
@@ -187,6 +187,9 @@ end
 
 # releases.format
 { vinyl: 0, cd: 1, digital: 2, cassette: 3, blu_ray: 4 }
+
+# credits.role
+{ writer: 0, composer: 1, lyricist: 2, arranger: 3, performer: 4, vocalist: 5, guitarist: 6, bassist: 7, drummer: 8, keyboardist: 9, producer: 10, engineer: 11, mixer: 12, mastering: 13, featured: 14, guest: 15, remixer: 16, sampler: 17 }
 
 # song_relationships.relation_type
 { cover: 0, remix: 1, sample: 2, alternate: 3 }

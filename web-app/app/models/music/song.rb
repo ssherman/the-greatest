@@ -6,7 +6,7 @@ class Music::Song < ApplicationRecord
   has_many :tracks, class_name: "Music::Track"
   has_many :releases, through: :tracks, class_name: "Music::Release"
   has_many :albums, through: :releases, class_name: "Music::Album"
-  # has_many :credits, as: :creditable
+  has_many :credits, as: :creditable, class_name: "Music::Credit"
   # has_many :song_relationships
   # has_many :related_songs, through: :song_relationships, source: :related_song
 

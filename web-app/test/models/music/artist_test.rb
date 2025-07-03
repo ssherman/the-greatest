@@ -116,5 +116,13 @@ module Music
       found = Music::Artist.friendly.find(@person.slug)
       assert_equal @person, found
     end
+
+    # Associations
+    test "should have many credits" do
+      roger_waters = music_artists(:roger_waters)
+      assert_respond_to roger_waters, :credits
+      assert_includes roger_waters.credits, music_credits(:time_writer)
+      assert_includes roger_waters.credits, music_credits(:time_composer)
+    end
   end
 end
