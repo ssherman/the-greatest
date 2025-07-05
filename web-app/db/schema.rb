@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_07_03_055348) do
+ActiveRecord::Schema[8.0].define(version: 2025_07_05_034121) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -23,6 +23,20 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_03_055348) do
     t.index ["slug", "sluggable_type", "scope"], name: "index_friendly_id_slugs_on_slug_and_sluggable_type_and_scope", unique: true
     t.index ["slug", "sluggable_type"], name: "index_friendly_id_slugs_on_slug_and_sluggable_type"
     t.index ["sluggable_type", "sluggable_id"], name: "index_friendly_id_slugs_on_sluggable_type_and_sluggable_id"
+  end
+
+  create_table "movies_movies", force: :cascade do |t|
+    t.string "title", null: false
+    t.string "slug", null: false
+    t.text "description"
+    t.integer "release_year"
+    t.integer "runtime_minutes"
+    t.integer "rating"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["rating"], name: "index_movies_movies_on_rating"
+    t.index ["release_year"], name: "index_movies_movies_on_release_year"
+    t.index ["slug"], name: "index_movies_movies_on_slug", unique: true
   end
 
   create_table "music_albums", force: :cascade do |t|

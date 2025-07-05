@@ -1,0 +1,33 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+godfather:
+  title: The Godfather
+  slug: the-godfather
+  description: The aging patriarch of an organized crime dynasty transfers control to his reluctant son
+  release_year: 1972
+  runtime_minutes: 175
+  rating: r
+
+shawshank:
+  title: The Shawshank Redemption
+  slug: the-shawshank-redemption
+  description: Two imprisoned men bond over a number of years
+  release_year: 1994
+  runtime_minutes: 142
+  rating: r
+
+matrix:
+  title: The Matrix
+  slug: the-matrix
+  description: A computer programmer discovers a mysterious world
+  release_year: 1999
+  runtime_minutes: 136
+  rating: r
+
+toy_story:
+  title: Toy Story
+  slug: toy-story
+  description: A cowboy doll is profoundly threatened when a new spaceman figure supplants him
+  release_year: 1995
+  runtime_minutes: 81
+  rating: g
