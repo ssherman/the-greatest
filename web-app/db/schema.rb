@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_07_05_043434) do
+ActiveRecord::Schema[8.0].define(version: 2025_07_05_044112) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -37,6 +37,20 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_05_043434) do
     t.index ["rating"], name: "index_movies_movies_on_rating"
     t.index ["release_year"], name: "index_movies_movies_on_release_year"
     t.index ["slug"], name: "index_movies_movies_on_slug", unique: true
+  end
+
+  create_table "movies_people", force: :cascade do |t|
+    t.string "name", null: false
+    t.string "slug", null: false
+    t.text "description"
+    t.date "born_on"
+    t.date "died_on"
+    t.string "country", limit: 2
+    t.integer "gender"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["gender"], name: "index_movies_people_on_gender"
+    t.index ["slug"], name: "index_movies_people_on_slug", unique: true
   end
 
   create_table "movies_releases", force: :cascade do |t|

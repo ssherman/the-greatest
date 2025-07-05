@@ -1,0 +1,67 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+godfather_director:
+  name: Francis Ford Coppola
+  slug: francis-ford-coppola
+  description: Director, producer, and screenwriter known for The Godfather trilogy.
+  born_on: 1939-04-07
+  country: US
+  gender: male
+
+al_pacino:
+  name: Al Pacino
+  slug: al-pacino
+  description: Actor known for The Godfather, Scarface, and more.
+  born_on: 1940-04-25
+  country: US
+  gender: male
+
+sofia_coppola:
+  name: Sofia Coppola
+  slug: sofia-coppola
+  description: Director and screenwriter, daughter of Francis Ford Coppola.
+  born_on: 1971-05-14
+  country: US
+  gender: female
+
+lana_wachowski:
+  name: Lana Wachowski
+  slug: lana-wachowski
+  description: Director and writer, known for The Matrix series.
+  born_on: 1965-06-21
+  country: US
+  gender: non_binary
+
+akira_kurosawa:
+  name: Akira Kurosawa
+  slug: akira-kurosawa
+  description: Legendary Japanese director and screenwriter.
+  born_on: 1910-03-23
+  died_on: 1998-09-06
+  country: JP
+  gender: male
+
+edith_head:
+  name: Edith Head
+  slug: edith-head
+  description: Iconic costume designer with 8 Academy Awards.
+  born_on: 1897-10-28
+  died_on: 1981-10-24
+  country: US
+  gender: female
+
+sam_smith:
+  name: Sam Smith
+  slug: sam-smith
+  description: Fictional non-binary crew member for test coverage.
+  born_on: 1990-01-01
+  country: GB
+  gender: non_binary
+
+alex_other:
+  name: Alex Other
+  slug: alex-other
+  description: Fictional person with 'other' gender for test coverage.
+  born_on: 1985-05-05
+  country: CA
+  gender: other
