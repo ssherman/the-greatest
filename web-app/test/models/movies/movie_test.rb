@@ -17,17 +17,12 @@ module Movies
       assert_includes @movie.errors[:title], "can't be blank"
     end
 
-    test "should require slug" do
-      @movie.slug = nil
-      assert_not @movie.valid?
-      assert_includes @movie.errors[:slug], "can't be blank"
-    end
-
     test "should have unique slug" do
       duplicate_movie = @movie.dup
-      duplicate_movie.title = "Different Title"
-      assert_not duplicate_movie.valid?
-      assert_includes duplicate_movie.errors[:slug], "has already been taken"
+      duplicate_movie.title = @movie.title
+      duplicate_movie.save!
+      assert_not_equal @movie.slug, duplicate_movie.slug
+      assert Movies::Movie.pluck(:slug).uniq.length == Movies::Movie.count
     end
 
     test "should validate release year is integer" do

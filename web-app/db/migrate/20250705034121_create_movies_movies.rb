@@ -10,7 +10,7 @@ class CreateMoviesMovies < ActiveRecord::Migration[8.0]
 
       t.timestamps
     end
-    
+
     add_index :movies_movies, :slug, unique: true
     add_index :movies_movies, :release_year
     add_index :movies_movies, :rating

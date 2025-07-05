@@ -1,0 +1,55 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+godfather_theatrical:
+  movie: godfather
+  release_name: Theatrical Release
+  release_format: 0
+  runtime_minutes: 175
+  release_date: 1972-03-24
+  metadata: { distributor: 'Paramount Pictures', region: 'US' }
+  is_primary: true
+
+godfather_directors_cut:
+  movie: godfather
+  release_name: Director's Cut
+  release_format: 0
+  runtime_minutes: 180
+  release_date: 1973-01-01
+  metadata: { distributor: 'Paramount Pictures', region: 'US' }
+  is_primary: false
+
+godfather_4k:
+  movie: godfather
+  release_name: 4K Blu-ray
+  release_format: 5
+  runtime_minutes: 175
+  release_date: 2022-03-22
+  metadata: { distributor: 'Paramount Pictures', region: 'US', resolution: '2160p' }
+  is_primary: false
+
+shawshank_theatrical:
+  movie: shawshank
+  release_name: Theatrical Release
+  release_format: 0
+  runtime_minutes: 142
+  release_date: 1994-09-23
+  metadata: { distributor: 'Columbia Pictures', region: 'US' }
+  is_primary: true
+
+matrix_theatrical:
+  movie: matrix
+  release_name: Theatrical Release
+  release_format: 0
+  runtime_minutes: 136
+  release_date: 1999-03-31
+  metadata: { distributor: 'Warner Bros.', region: 'US' }
+  is_primary: true
+
+toy_story_theatrical:
+  movie: toy_story
+  release_name: Theatrical Release
+  release_format: 0
+  runtime_minutes: 81
+  release_date: 1995-11-22
+  metadata: { distributor: 'Pixar', region: 'US' }
+  is_primary: true

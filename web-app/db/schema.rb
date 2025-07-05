@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_07_05_034121) do
+ActiveRecord::Schema[8.0].define(version: 2025_07_05_043434) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -37,6 +37,23 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_05_034121) do
     t.index ["rating"], name: "index_movies_movies_on_rating"
     t.index ["release_year"], name: "index_movies_movies_on_release_year"
     t.index ["slug"], name: "index_movies_movies_on_slug", unique: true
+  end
+
+  create_table "movies_releases", force: :cascade do |t|
+    t.bigint "movie_id", null: false
+    t.string "release_name"
+    t.integer "release_format", default: 0, null: false
+    t.integer "runtime_minutes"
+    t.date "release_date"
+    t.jsonb "metadata"
+    t.boolean "is_primary", default: false, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["is_primary"], name: "index_movies_releases_on_is_primary"
+    t.index ["movie_id", "release_name", "release_format"], name: "index_movies_releases_on_movie_and_name_and_format", unique: true
+    t.index ["movie_id"], name: "index_movies_releases_on_movie_id"
+    t.index ["release_date"], name: "index_movies_releases_on_release_date"
+    t.index ["release_format"], name: "index_movies_releases_on_release_format"
   end
 
   create_table "music_albums", force: :cascade do |t|
@@ -146,6 +163,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_05_034121) do
     t.index ["song_id"], name: "index_music_tracks_on_song_id"
   end
 
+  add_foreign_key "movies_releases", "movies_movies", column: "movie_id"
   add_foreign_key "music_albums", "music_artists", column: "primary_artist_id"
   add_foreign_key "music_credits", "music_artists", column: "artist_id"
   add_foreign_key "music_memberships", "music_artists", column: "artist_id"
