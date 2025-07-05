@@ -1,0 +1,44 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+godfather_director:
+  person: godfather_director
+  creditable: godfather
+  creditable_type: Movies::Movie
+  role: 0  # director
+  position: 1
+
+godfather_actor:
+  person: al_pacino
+  creditable: godfather
+  creditable_type: Movies::Movie
+  role: 3  # actor
+  position: 1
+  character_name: Don Vito Corleone
+
+godfather_producer:
+  person: godfather_director
+  creditable: godfather
+  creditable_type: Movies::Movie
+  role: 1  # producer
+  position: 1
+
+godfather_part_ii_director:
+  person: godfather_director
+  creditable: godfather_part_ii
+  creditable_type: Movies::Movie
+  role: 0  # director
+  position: 1
+
+godfather_theatrical_director:
+  person: godfather_director
+  creditable: godfather_theatrical
+  creditable_type: Movies::Release
+  role: 0  # director
+  position: 1
+
+godfather_dvd_director:
+  person: godfather_director
+  creditable: godfather_dvd
+  creditable_type: Movies::Release
+  role: 0  # director
+  position: 1

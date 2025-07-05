@@ -1,6 +1,7 @@
 module Movies
   class Release < ApplicationRecord
     belongs_to :movie, class_name: "Movies::Movie", foreign_key: "movie_id"
+    has_many :credits, as: :creditable, class_name: "Movies::Credit", dependent: :destroy
 
     # Enums
     enum :release_format, {theatrical: 0, dvd: 1, blu_ray: 2, digital: 3, vhs: 4, "4k_blu_ray": 5}

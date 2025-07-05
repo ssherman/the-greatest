@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_07_05_044112) do
+ActiveRecord::Schema[8.0].define(version: 2025_07_05_172655) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -23,6 +23,21 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_05_044112) do
     t.index ["slug", "sluggable_type", "scope"], name: "index_friendly_id_slugs_on_slug_and_sluggable_type_and_scope", unique: true
     t.index ["slug", "sluggable_type"], name: "index_friendly_id_slugs_on_slug_and_sluggable_type"
     t.index ["sluggable_type", "sluggable_id"], name: "index_friendly_id_slugs_on_sluggable_type_and_sluggable_id"
+  end
+
+  create_table "movies_credits", force: :cascade do |t|
+    t.bigint "person_id", null: false
+    t.string "creditable_type", null: false
+    t.bigint "creditable_id", null: false
+    t.integer "role", default: 0, null: false
+    t.integer "position"
+    t.string "character_name"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["creditable_type", "creditable_id"], name: "index_movies_credits_on_creditable"
+    t.index ["creditable_type", "creditable_id"], name: "index_movies_credits_on_creditable_type_and_creditable_id"
+    t.index ["person_id", "role"], name: "index_movies_credits_on_person_id_and_role"
+    t.index ["person_id"], name: "index_movies_credits_on_person_id"
   end
 
   create_table "movies_movies", force: :cascade do |t|
@@ -177,6 +192,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_05_044112) do
     t.index ["song_id"], name: "index_music_tracks_on_song_id"
   end
 
+  add_foreign_key "movies_credits", "movies_people", column: "person_id"
   add_foreign_key "movies_releases", "movies_movies", column: "movie_id"
   add_foreign_key "music_albums", "music_artists", column: "primary_artist_id"
   add_foreign_key "music_credits", "music_artists", column: "artist_id"
