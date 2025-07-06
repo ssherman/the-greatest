@@ -7,7 +7,10 @@
   },
   "scripts": {
     "build": "rollup -c --bundleConfigAsCjs rollup.config.js",
-    "build:css": "npx @tailwindcss/cli -i ./app/assets/stylesheets/application.tailwind.css -o ./app/assets/builds/application.css --minify"
+    "build:css": "yarn build:css:music && yarn build:css:movies && yarn build:css:games",
+    "build:css:music": "npx @tailwindcss/cli -i ./app/assets/stylesheets/music/application.css -o ./app/assets/builds/music.css --minify",
+    "build:css:movies": "npx @tailwindcss/cli -i ./app/assets/stylesheets/movies/application.css -o ./app/assets/builds/movies.css --minify",
+    "build:css:games": "npx @tailwindcss/cli -i ./app/assets/stylesheets/games/application.css -o ./app/assets/builds/games.css --minify"
   },
   "dependencies": {
     "@hotwired/stimulus": "^3.2.2",

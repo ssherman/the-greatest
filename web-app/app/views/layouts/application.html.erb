@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title><%= content_for(:title) || "The Greatest" %></title>
+    <title><%= content_for(:title) || domain_name %></title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
@@ -17,12 +17,58 @@
     <link rel="icon" href="/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/icon.png">
 
-    <%# Includes all stylesheet files in app/assets/stylesheets %>
-    <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
-    <%= javascript_include_tag "application", "data-turbo-track": "reload", type: "module" %>
+    <%# Domain-specific stylesheets %>
+    <%= stylesheet_link_tag "#{current_domain}/application", "data-turbo-track": "reload" %>
+    <%= javascript_include_tag "#{current_domain}/application", "data-turbo-track": "reload", type: "module" %>
   </head>
 
-  <body>
-    <%= yield %>
+  <body class="<%= domain_specific_class('body') %>">
+    <header class="header header--<%= current_domain %>">
+      <div class="container">
+        <h1 class="logo">
+          <span class="logo__icon">
+            <% case current_domain %>
+            <% when :music %>🎵
+            <% when :movies %>🎬
+            <% when :games %>🎮
+            <% else %>📚
+            <% end %>
+          </span>
+          <%= domain_name %>
+        </h1>
+        <nav class="nav">
+          <ul class="nav__list">
+            <% case current_domain %>
+            <% when :music %>
+              <li><%= link_to "Albums", "#", class: "nav__link" %></li>
+              <li><%= link_to "Artists", "#", class: "nav__link" %></li>
+              <li><%= link_to "Genres", "#", class: "nav__link" %></li>
+            <% when :movies %>
+              <li><%= link_to "Movies", "#", class: "nav__link" %></li>
+              <li><%= link_to "Directors", "#", class: "nav__link" %></li>
+              <li><%= link_to "Genres", "#", class: "nav__link" %></li>
+            <% when :games %>
+              <li><%= link_to "Games", "#", class: "nav__link" %></li>
+              <li><%= link_to "Developers", "#", class: "nav__link" %></li>
+              <li><%= link_to "Genres", "#", class: "nav__link" %></li>
+            <% else %>
+              <li><%= link_to "Books", "#", class: "nav__link" %></li>
+              <li><%= link_to "Authors", "#", class: "nav__link" %></li>
+              <li><%= link_to "Genres", "#", class: "nav__link" %></li>
+            <% end %>
+          </ul>
+        </nav>
+      </div>
+    </header>
+
+    <main class="main">
+      <%= yield %>
+    </main>
+
+    <footer class="footer footer--<%= current_domain %>">
+      <div class="container">
+        <p>&copy; 2025 <%= domain_name %>. All rights reserved.</p>
+      </div>
+    </footer>
   </body>
 </html>

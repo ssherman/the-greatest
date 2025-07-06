@@ -1,0 +1,2 @@
+module Movies::DefaultHelper
+end

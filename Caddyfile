@@ -1,0 +1,24 @@
+(common) {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+
+	reverse_proxy localhost:3000 {
+		header_up Host {host}
+		header_up X-Real-IP {remote}
+		header_up X-Forwarded-For {remote}
+		header_up X-Forwarded-Proto {scheme}
+	}
+}
+
+dev.thegreatestmovies.org {
+	import common
+}
+
+dev.thegreatestmusic.org {
+	import common
+}
+
+dev.thegreatest.games {
+	import common
+}

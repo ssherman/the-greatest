@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html data-theme="light">
+  <head>
+    <title><%= domain_name %></title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+
+    <%= stylesheet_link_tag "movies", "data-turbo-track": "reload" %>
+  </head>
+
+  <body>
+    <div class="navbar bg-base-200">
+      <div class="navbar-start">
+        <div class="dropdown">
+          <div tabindex="0" role="button" class="btn btn-ghost lg:hidden">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" />
+            </svg>
+          </div>
+          <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
+            <li><a>Movies</a></li>
+            <li><a>Directors</a></li>
+            <li><a>Genres</a></li>
+          </ul>
+        </div>
+        <a class="btn btn-ghost text-xl">
+          <span class="text-2xl mr-2">🎬</span>
+          <%= domain_name %>
+        </a>
+      </div>
+      <div class="navbar-center hidden lg:flex">
+        <ul class="menu menu-horizontal px-1">
+          <li><a>Movies</a></li>
+          <li><a>Directors</a></li>
+          <li><a>Genres</a></li>
+        </ul>
+      </div>
+      <div class="navbar-end">
+        <a class="btn btn-primary">Get Started</a>
+      </div>
+    </div>
+
+    <main class="container mx-auto px-4 py-8">
+      <%= yield %>
+    </main>
+
+    <footer class="footer footer-center p-10 bg-base-200 text-base-content">
+      <aside>
+        <p>Copyright © 2025 - All rights reserved by <%= domain_name %></p>
+      </aside>
+    </footer>
+  </body>
+</html> 

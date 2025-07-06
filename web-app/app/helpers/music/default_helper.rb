@@ -1,0 +1,2 @@
+module Music::DefaultHelper
+end
