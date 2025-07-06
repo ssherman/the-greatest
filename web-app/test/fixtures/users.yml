@@ -1,0 +1,25 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+admin_user:
+  email: admin@example.com
+  display_name: Admin User
+  name: Admin User Full Name
+  role: 1
+  email_verified: true
+  original_signup_domain: thegreatestbooks.org
+
+regular_user:
+  email: user@example.com
+  display_name: Regular User
+  name: Regular User Full Name
+  role: 0
+  email_verified: false
+  original_signup_domain: thegreatestmusic.org
+
+editor_user:
+  email: editor@example.com
+  display_name: Editor User
+  name: Editor User Full Name
+  role: 2
+  email_verified: true
+  original_signup_domain: thegreatestmovies.org

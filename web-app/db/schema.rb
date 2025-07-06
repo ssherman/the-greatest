@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_07_06_204429) do
+ActiveRecord::Schema[8.0].define(version: 2025_07_06_224507) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -58,6 +58,8 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_06_204429) do
     t.text "raw_html"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "submitted_by_id"
+    t.index ["submitted_by_id"], name: "index_lists_on_submitted_by_id"
   end
 
   create_table "movies_credits", force: :cascade do |t|
@@ -227,7 +229,30 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_06_204429) do
     t.index ["song_id"], name: "index_music_tracks_on_song_id"
   end
 
+  create_table "users", force: :cascade do |t|
+    t.string "auth_uid"
+    t.jsonb "auth_data"
+    t.string "email"
+    t.string "display_name"
+    t.string "name"
+    t.string "photo_url"
+    t.string "original_signup_domain"
+    t.integer "role", default: 0, null: false
+    t.integer "external_provider"
+    t.boolean "email_verified", default: false, null: false
+    t.datetime "last_sign_in_at"
+    t.integer "sign_in_count"
+    t.text "provider_data"
+    t.string "stripe_customer_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["auth_uid"], name: "index_users_on_auth_uid"
+    t.index ["external_provider"], name: "index_users_on_external_provider"
+    t.index ["stripe_customer_id"], name: "index_users_on_stripe_customer_id"
+  end
+
   add_foreign_key "list_items", "lists"
+  add_foreign_key "lists", "users", column: "submitted_by_id"
   add_foreign_key "movies_credits", "movies_people", column: "person_id"
   add_foreign_key "movies_releases", "movies_movies", column: "movie_id"
   add_foreign_key "music_albums", "music_artists", column: "primary_artist_id"

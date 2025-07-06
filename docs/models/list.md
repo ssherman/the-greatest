@@ -5,7 +5,7 @@ Represents a list in the system. Core model for aggregating and ranking content 
 
 ## Associations
 - `has_many :list_items, dependent: :destroy` - Items contained in this list
-- `belongs_to :user` - User who submitted the list (future)
+- `belongs_to :submitted_by, class_name: "User", optional: true` - User who submitted the list (optional)
 
 ## Public Methods
 No custom public methods defined. Inherits standard ActiveRecord methods.
@@ -66,6 +66,7 @@ Domain-specific list for games content.
 - `voter_names_unknown` - Whether voter names are unknown (boolean)
 - `formatted_text` - Formatted text content (text)
 - `raw_html` - Raw HTML content (text)
+- `submitted_by_id` - User who submitted the list (optional, foreign key to users)
 - `created_at` - Creation timestamp
 - `updated_at` - Update timestamp
 
@@ -81,6 +82,10 @@ list = List.create!(name: "My List", type: "List", status: :unapproved)
 
 # Create a domain-specific list
 books_list = Books::List.create!(name: "Best Books 2023", status: :approved)
+
+# Assign a submitting user
+user = User.first
+list = List.create!(name: "User Submitted List", submitted_by: user, status: :approved)
 
 # Query approved lists
 approved_lists = List.approved
