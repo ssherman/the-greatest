@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_07_06_200000) do
+ActiveRecord::Schema[8.0].define(version: 2025_07_06_204429) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -23,6 +23,19 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_06_200000) do
     t.index ["slug", "sluggable_type", "scope"], name: "index_friendly_id_slugs_on_slug_and_sluggable_type_and_scope", unique: true
     t.index ["slug", "sluggable_type"], name: "index_friendly_id_slugs_on_slug_and_sluggable_type"
     t.index ["sluggable_type", "sluggable_id"], name: "index_friendly_id_slugs_on_sluggable_type_and_sluggable_id"
+  end
+
+  create_table "list_items", force: :cascade do |t|
+    t.bigint "list_id", null: false
+    t.string "listable_type", null: false
+    t.bigint "listable_id", null: false
+    t.integer "position"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["list_id", "listable_type", "listable_id"], name: "index_list_items_on_list_and_listable_unique", unique: true
+    t.index ["list_id", "position"], name: "index_list_items_on_list_id_and_position"
+    t.index ["list_id"], name: "index_list_items_on_list_id"
+    t.index ["listable_type", "listable_id"], name: "index_list_items_on_listable"
   end
 
   create_table "lists", force: :cascade do |t|
@@ -214,6 +227,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_06_200000) do
     t.index ["song_id"], name: "index_music_tracks_on_song_id"
   end
 
+  add_foreign_key "list_items", "lists"
   add_foreign_key "movies_credits", "movies_people", column: "person_id"
   add_foreign_key "movies_releases", "movies_movies", column: "movie_id"
   add_foreign_key "music_albums", "music_artists", column: "primary_artist_id"

@@ -13,3 +13,10 @@ wish_you_were_here:
   description: "Ninth studio album by Pink Floyd, released in 1975, regarded as one of the greatest albums of all time."
   primary_artist: pink_floyd
   release_year: 1975
+
+animals:
+  title: "Animals"
+  slug: "animals"
+  description: "Tenth studio album by Pink Floyd, released in 1977, featuring themes of social and political commentary."
+  primary_artist: pink_floyd
+  release_year: 1977

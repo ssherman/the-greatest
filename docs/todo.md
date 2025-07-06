@@ -14,5 +14,6 @@
 8. [Admin interface with Avo](todos/006-admin-interface.md)
 
 ## Completed
-- ✅ [2025-01-27] [Lists model implementation](todos/004-lists-model.md)
+- ✅ [2025-07-06] [List items model implementation](todos/005-list-items-model.md)
+- ✅ [2025-07-06] [Lists model implementation](todos/004-lists-model.md)
 - ✅ [2025-01-27] [basic music object model](todos/001-music-object-model.md)

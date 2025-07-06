@@ -1,4 +1,7 @@
 class List < ApplicationRecord
+  # Associations
+  has_many :list_items, dependent: :destroy
+
   # Enums
   enum :status, {unapproved: 0, approved: 1, rejected: 2}
 

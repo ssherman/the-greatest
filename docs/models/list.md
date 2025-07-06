@@ -4,8 +4,7 @@
 Represents a list in the system. Core model for aggregating and ranking content across all media domains (books, movies, music, games). Uses Single Table Inheritance (STI) to support domain-specific logic while maintaining a shared database structure.
 
 ## Associations
-Currently no associations defined. Future associations will include:
-- `has_many :list_items` - Items contained in this list
+- `has_many :list_items, dependent: :destroy` - Items contained in this list
 - `belongs_to :user` - User who submitted the list (future)
 
 ## Public Methods
@@ -94,4 +93,11 @@ lists_2023 = List.by_year(2023)
 
 # Query yearly awards
 award_lists = List.yearly_awards
+
+# Access list items
+list.list_items.ordered
+
+# Add items to a list
+album = Music::Album.first
+list.list_items.create!(listable: album, position: 1)
 ``` 

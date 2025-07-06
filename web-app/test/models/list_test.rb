@@ -92,4 +92,13 @@ class ListTest < ActiveSupport::TestCase
     assert music_list.is_a?(Music::List)
     assert games_list.is_a?(Games::List)
   end
+
+  test "destroying list should destroy associated list_items" do
+    list = lists(:basic_list)
+    item_count = list.list_items.count
+    assert item_count > 0
+
+    list.destroy
+    assert_equal 0, ListItem.where(list: list).count
+  end
 end
