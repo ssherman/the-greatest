@@ -1,0 +1,71 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+basic_list:
+  type: List
+  name: Basic Test List
+  description: A basic test list
+  source: Test Source
+  url: https://example.com/list
+  status: 0
+  estimated_quality: 50
+
+approved_list:
+  type: List
+  name: Approved Test List
+  description: An approved test list
+  source: Approved Source
+  url: https://example.com/approved
+  status: 1
+  estimated_quality: 75
+  high_quality_source: true
+
+high_quality_list:
+  type: List
+  name: High Quality List
+  description: A high quality list
+  source: High Quality Source
+  status: 1
+  estimated_quality: 90
+  high_quality_source: true
+
+yearly_award_list:
+  type: List
+  name: 2023 Award List
+  description: A yearly award list
+  source: Award Source
+  status: 1
+  estimated_quality: 85
+  yearly_award: true
+  year_published: 2023
+
+books_list:
+  type: Books::List
+  name: Books Test List
+  description: A books list
+  source: Books Source
+  status: 1
+  estimated_quality: 80
+
+movies_list:
+  type: Movies::List
+  name: Movies Test List
+  description: A movies list
+  source: Movies Source
+  status: 1
+  estimated_quality: 70
+
+music_list:
+  type: Music::List
+  name: Music Test List
+  description: A music list
+  source: Music Source
+  status: 1
+  estimated_quality: 75
+
+games_list:
+  type: Games::List
+  name: Games Test List
+  description: A games list
+  source: Games Source
+  status: 1
+  estimated_quality: 65
