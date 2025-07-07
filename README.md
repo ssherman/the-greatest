@@ -166,15 +166,28 @@ This application is designed for multi-domain deployment with:
 
 ## 🤝 Contributing
 
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for detailed information on:
+
+- Development setup and guidelines
+- Code style and testing requirements
+- Multi-domain architecture considerations
+- Pull request process and templates
+- Bug reporting and feature requests
+
+Quick start:
 1. Follow the [development setup guide](docs/dev_setup.md)
-2. Make changes in feature branches
-3. Ensure tests pass: `cd web-app && bin/rails test`
-4. Test all domains work correctly
-5. Submit pull requests
+2. Create a feature branch from `main`
+3. Make changes following our guidelines
+4. Test thoroughly across all domains
+5. Submit a pull request
 
 ## 📄 License
 
-[Add your license information here]
+This project is licensed under the GNU Affero General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+
+**Copyright (C) 2025 The Greatest LLC**
+
+Contact: contact@thegreatestbooks.org | Website: https://thegreatestbooks.org
 
 ## 🆘 Support
 
