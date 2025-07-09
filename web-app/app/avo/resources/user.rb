@@ -14,8 +14,8 @@ class Avo::Resources::User < Avo::BaseResource
     field :name, as: :text
     field :photo_url, as: :text
     field :original_signup_domain, as: :text
-    field :role, as: :number
-    field :external_provider, as: :number
+    field :role, as: :select, enum: ::User.roles
+    field :external_provider, as: :select, enum: ::User.external_providers
     field :email_verified, as: :boolean
     field :last_sign_in_at, as: :date_time
     field :sign_in_count, as: :number
