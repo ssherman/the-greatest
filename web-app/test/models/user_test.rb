@@ -59,4 +59,69 @@ class UserTest < ActiveSupport::TestCase
     assert users(:regular_user).user?
     assert users(:editor_user).editor?
   end
+
+  # Email confirmation tests
+  test "should not be confirmed by default" do
+    user = User.new(email: "newuser@example.com", display_name: "New User")
+    user.save!
+    assert_not user.confirmed?
+  end
+
+  test "should generate confirmation token" do
+    user = User.new(email: "newuser@example.com", display_name: "New User")
+    user.save!
+
+    user.generate_confirmation_token!
+
+    assert user.confirmation_token.present?
+    assert user.confirmation_sent_at.present?
+    assert_equal 32, Base64.urlsafe_decode64(user.confirmation_token).length
+  end
+
+  test "should confirm email" do
+    user = User.new(email: "newuser@example.com", display_name: "New User")
+    user.save!
+    user.generate_confirmation_token!
+
+    user.confirm_email!
+
+    assert user.confirmed?
+    assert user.email_verified?
+    assert_nil user.confirmation_token
+    assert user.confirmed_at.present?
+  end
+
+  test "should detect expired confirmation token" do
+    user = User.new(email: "newuser@example.com", display_name: "New User")
+    user.save!
+    user.generate_confirmation_token!
+
+    # Should not be expired immediately
+    assert_not user.confirmation_token_expired?
+
+    # Travel to 25 hours later
+    travel 25.hours do
+      assert user.confirmation_token_expired?
+    end
+  end
+
+  test "should not expire token if confirmation_sent_at is nil" do
+    user = User.new(email: "newuser@example.com", display_name: "New User")
+    user.save!
+
+    assert_not user.confirmation_token_expired?
+  end
+
+  test "should require unique confirmation token" do
+    user1 = User.create!(email: "user1@example.com", display_name: "User 1")
+    user2 = User.create!(email: "user2@example.com", display_name: "User 2")
+
+    user1.generate_confirmation_token!
+    token = user1.confirmation_token
+
+    # Try to set the same token on user2
+    user2.confirmation_token = token
+    assert_not user2.valid?
+    assert_includes user2.errors[:confirmation_token], "has already been taken"
+  end
 end
