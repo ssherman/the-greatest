@@ -6,7 +6,7 @@
 ## Medium Priority
 3. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
 4. [Books data import from existing site](todos/002-books-data-import.md)
-5. [User authentication with Firebase](todos/003-firebase-auth.md)
+5. [Firebase Authentication Implementation](todos/007-authentication.md)
 
 ## Low Priority
 7. [Recommendation engine MVP](todos/004-recommendation-engine.md)
