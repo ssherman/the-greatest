@@ -187,4 +187,17 @@ What worked well, what could be done better next time.
 4. **Review**: Implementation notes completed
 5. **Archive**: Serves as permanent documentation
 
+## Recent Example: RankedList Model Implementation
+
+**Task**: [009-ranked-list-model.md](todos/009-ranked-list-model.md)
+
+**Lifecycle**:
+1. **Planning**: Identified need for linking lists to ranking configurations with weights
+2. **Refinement**: Initially planned polymorphic association, then refined to use STI approach
+3. **Implementation**: Created model, migration, tests, and fixtures
+4. **Review**: Fixed polymorphic vs STI confusion, updated schema, all tests passing
+5. **Archive**: Documented in [ranked_list.md](models/ranked_list.md) and marked complete in todo.md
+
+**Key Learning**: Polymorphic associations are not needed when using STI - regular associations work better for same-table inheritance scenarios.
+
 This system creates a living history of the project that's invaluable for maintenance, debugging, and AI-assisted development.

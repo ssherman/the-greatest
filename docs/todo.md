@@ -17,6 +17,7 @@
 11. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-07-10] [RankedList model implementation](todos/009-ranked-list-model.md)
 - ✅ [2025-07-09] [Ranking configuration model implementation](todos/008-ranking-configuration-model.md)
 - ✅ [2025-07-09] [Firebase Authentication Implementation - Core System](todos/007-authentication.md)
 - ✅ [2025-07-06] [List items model implementation](todos/005-list-items-model.md)
