@@ -1,8 +1,11 @@
-// Entry point for the build script in your package.json
-import "@hotwired/turbo-rails"
+import { application } from "./controllers/application"
+
+// Import all controllers
 import "./controllers"
 
-// Import authentication services for all domains
+// Import authentication services
 import "./services/firebase_auth_service"
 import "./services/auth_providers/google_provider"
 import "./services/auth_handlers/redirect_handler"
+
+export default application 

@@ -62,6 +62,6 @@ Rails.application.configure do
   # config.generators.apply_rubocop_autocorrect_after_generate!
 
   config.hosts << "dev.thegreatestmusic.org"
-  config.hosts << "dev.thegreatestmusic.org"
+  config.hosts << "dev.thegreatestmovies.org"
   config.hosts << "dev.thegreatest.games"
 end

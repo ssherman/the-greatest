@@ -6,9 +6,14 @@ class AuthController < ApplicationController
       render json: {success: false, error: "Missing jwt or provider parameter"}, status: :unauthorized
       return
     end
-    result = AuthenticationService.call(
+
+    # Log domain information for debugging
+    Rails.logger.info "Authentication request from domain: #{params[:domain]} (current host: #{request.host})"
+
+    result = Services::AuthenticationService.call(
       auth_token: params[:jwt],
-      provider: params[:provider]
+      provider: params[:provider],
+      user_data: params[:user_data]
     )
 
     if result[:success]

@@ -3,6 +3,11 @@
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
 
+	# Firebase Authentication endpoints
+	handle /__/auth* {
+		reverse_proxy https://the-greatest-books.firebaseapp.com
+	}
+
 	reverse_proxy localhost:3000 {
 		header_up Host {host}
 		header_up X-Real-IP {remote}

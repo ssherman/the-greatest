@@ -3,5 +3,6 @@
 @source "../../../app/helpers/**/*.rb";
 @source "../../../app/javascript/**/*.js";
 @source "../../../app/views/**/*";
+@source "../../../app/components/**/*";
 
 @plugin "daisyui";

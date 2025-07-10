@@ -1,89 +1,100 @@
 require "test_helper"
-require "minitest/mock"
-require Rails.root.join("app/lib/services/authentication_service")
 
 class AuthControllerTest < ActionDispatch::IntegrationTest
-  setup do
-    @user = users(:regular_user)
+  def setup
     @valid_jwt = "valid.jwt.token"
-    @invalid_jwt = "invalid.jwt.token"
+    @valid_provider = "google"
   end
 
   test "should authenticate with valid JWT and provider" do
+    # Mock the authentication service
     mock_result = {
       success: true,
-      user: @user,
-      provider_data: {}
+      user: User.new(id: 1, email: "test@example.com", name: "Test User"),
+      provider_data: {provider: "google"}
     }
-    AuthenticationService.stub(:call, mock_result) do
-      post auth_sign_in_url, params: {
-        jwt: @valid_jwt,
-        provider: "google"
-      }
-    end
+
+    Services::AuthenticationService.stubs(:call).returns(mock_result)
+
+    post auth_sign_in_path, params: {
+      jwt: @valid_jwt,
+      provider: @valid_provider
+    }
+
     assert_response :success
-    response_data = JSON.parse(response.body)
-    assert response_data["success"]
-    assert_equal @user.id, response_data["user"]["id"]
-    assert_equal @user.email, response_data["user"]["email"]
-    assert_equal "google", response_data["user"]["provider"]
+    json_response = JSON.parse(response.body)
+    assert json_response["success"]
+    assert_equal 1, json_response["user"]["id"]
+    assert_equal "test@example.com", json_response["user"]["email"]
+    assert_equal "google", json_response["user"]["provider"]
+  end
+
+  test "should reject missing JWT" do
+    post auth_sign_in_path, params: {provider: @valid_provider}
+
+    assert_response :unauthorized
+    json_response = JSON.parse(response.body)
+    refute json_response["success"]
+    assert_equal "Missing jwt or provider parameter", json_response["error"]
+  end
+
+  test "should reject missing provider" do
+    post auth_sign_in_path, params: {jwt: @valid_jwt}
+
+    assert_response :unauthorized
+    json_response = JSON.parse(response.body)
+    refute json_response["success"]
+    assert_equal "Missing jwt or provider parameter", json_response["error"]
   end
 
   test "should reject invalid JWT" do
+    # Mock authentication service failure
     mock_result = {
       success: false,
-      error: "Invalid JWT token"
+      error: "Invalid authentication token",
+      error_code: :invalid_token
     }
-    AuthenticationService.stub(:call, mock_result) do
-      post auth_sign_in_url, params: {
-        jwt: @invalid_jwt,
-        provider: "google"
-      }
-    end
-    assert_response :unauthorized
-    response_data = JSON.parse(response.body)
-    refute response_data["success"]
-    assert_equal "Invalid JWT token", response_data["error"]
-  end
 
-  test "should handle missing JWT parameter" do
-    post auth_sign_in_url, params: {provider: "google"}
-    assert_response :unauthorized
-    response_data = JSON.parse(response.body)
-    refute response_data["success"]
-  end
+    Services::AuthenticationService.stubs(:call).returns(mock_result)
 
-  test "should handle missing provider parameter" do
-    post auth_sign_in_url, params: {jwt: @valid_jwt}
+    post auth_sign_in_path, params: {
+      jwt: "invalid.jwt.token",
+      provider: @valid_provider
+    }
+
     assert_response :unauthorized
-    response_data = JSON.parse(response.body)
-    refute response_data["success"]
+    json_response = JSON.parse(response.body)
+    refute json_response["success"]
+    assert_equal "Invalid authentication token", json_response["error"]
   end
 
   test "should handle authentication service errors" do
-    AuthenticationService.stub(:call, ->(*) { raise StandardError, "Service error" }) do
-      post auth_sign_in_url, params: {
-        jwt: @valid_jwt,
-        provider: "google"
-      }
-    end
+    # Mock authentication service to raise an exception
+    Services::AuthenticationService.stubs(:call).raises(StandardError.new("Service error"))
+
+    post auth_sign_in_path, params: {
+      jwt: @valid_jwt,
+      provider: @valid_provider
+    }
+
     assert_response :internal_server_error
-    response_data = JSON.parse(response.body)
-    refute response_data["success"]
-    assert_equal "Authentication failed", response_data["error"]
+    json_response = JSON.parse(response.body)
+    refute json_response["success"]
+    assert_equal "Authentication failed", json_response["error"]
   end
 
   test "should sign out successfully" do
-    post auth_sign_out_url
-    assert_response :success
-    response_data = JSON.parse(response.body)
-    assert response_data["success"]
-  end
+    # Set up a session first
+    post auth_sign_in_path, params: {
+      jwt: @valid_jwt,
+      provider: @valid_provider
+    }
 
-  test "should sign out even without existing session" do
-    post auth_sign_out_url
+    # Then sign out
+    post auth_sign_out_path
+
     assert_response :success
-    response_data = JSON.parse(response.body)
-    assert response_data["success"]
+    json_response = JSON.parse(response.body)
+    assert json_response["success"]
   end
 end

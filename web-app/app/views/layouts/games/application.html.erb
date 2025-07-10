@@ -7,6 +7,7 @@
     <%= csp_meta_tag %>
 
     <%= stylesheet_link_tag "games", "data-turbo-track": "reload" %>
+    <%= javascript_include_tag "application", "data-turbo-track": "reload" %>
   </head>
 
   <body>
@@ -37,13 +38,24 @@
         </ul>
       </div>
       <div class="navbar-end">
-        <a class="btn btn-primary">Get Started</a>
+        <button class="btn btn-primary" onclick="document.getElementById('login_modal').showModal()">Login</button>
       </div>
     </div>
 
     <main class="container mx-auto px-4 py-8">
       <%= yield %>
     </main>
+
+    <!-- Authentication Modal -->
+    <dialog id="login_modal" class="modal">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Sign In</h3>
+        <%= render Authentication::WidgetComponent.new %>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+      </form>
+    </dialog>
 
     <footer class="footer footer-center p-10 bg-base-200 text-base-content">
       <aside>

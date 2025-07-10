@@ -7,6 +7,7 @@
     <%= csp_meta_tag %>
 
     <%= stylesheet_link_tag "music", "data-turbo-track": "reload" %>
+    <%= javascript_include_tag "application", "data-turbo-track": "reload" %>
   </head>
 
   <body>
@@ -37,7 +38,8 @@
         </ul>
       </div>
       <div class="navbar-end">
-        <a class="btn btn-primary">Get Started</a>
+        <!-- Login Button -->
+        <button class="btn btn-primary" onclick="login_modal.showModal()">Login</button>
       </div>
     </div>
 
@@ -50,5 +52,21 @@
         <p>Copyright © 2025 - All rights reserved by <%= domain_name %></p>
       </aside>
     </footer>
+
+    <!-- Login Modal -->
+    <dialog id="login_modal" class="modal">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Sign In</h3>
+        <%= render Authentication::WidgetComponent.new(reload_after_auth: true) %>
+        <div class="modal-action">
+          <form method="dialog">
+            <button class="btn">Close</button>
+          </form>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+      </form>
+    </dialog>
   </body>
 </html> 
