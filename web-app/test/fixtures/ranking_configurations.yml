@@ -1,0 +1,104 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+books_global:
+  type: Books::RankingConfiguration
+  name: "Global Books Ranking"
+  description: "The main ranking configuration for books"
+  global: true
+  primary: true
+  archived: false
+  published_at: 2025-07-09 23:38:50
+  algorithm_version: 1
+  exponent: 3.0
+  bonus_pool_percentage: 3.0
+  min_list_weight: 1
+  list_limit: 100
+  apply_list_dates_penalty: true
+  max_list_dates_penalty_age: 50
+  max_list_dates_penalty_percentage: 80
+  inherit_penalties: true
+
+books_user:
+  type: Books::RankingConfiguration
+  name: "User Books Ranking"
+  description: "A user-specific books ranking configuration"
+  global: false
+  primary: false
+  archived: false
+  algorithm_version: 1
+  exponent: 2.5
+  bonus_pool_percentage: 5.0
+  min_list_weight: 1
+  apply_list_dates_penalty: true
+  max_list_dates_penalty_age: 30
+  max_list_dates_penalty_percentage: 60
+  inherit_penalties: true
+  user: regular_user
+
+movies_global:
+  type: Movies::RankingConfiguration
+  name: "Global Movies Ranking"
+  description: "The main ranking configuration for movies"
+  global: true
+  primary: true
+  archived: false
+  published_at: 2025-07-09 23:38:50
+  algorithm_version: 1
+  exponent: 3.0
+  bonus_pool_percentage: 3.0
+  min_list_weight: 1
+  apply_list_dates_penalty: true
+  max_list_dates_penalty_age: 30
+  max_list_dates_penalty_percentage: 70
+  inherit_penalties: true
+
+games_global:
+  type: Games::RankingConfiguration
+  name: "Global Games Ranking"
+  description: "The main ranking configuration for games"
+  global: true
+  primary: true
+  archived: false
+  published_at: 2025-07-09 23:38:50
+  algorithm_version: 1
+  exponent: 3.0
+  bonus_pool_percentage: 3.0
+  min_list_weight: 1
+  apply_list_dates_penalty: true
+  max_list_dates_penalty_age: 20
+  max_list_dates_penalty_percentage: 60
+  inherit_penalties: true
+
+music_global:
+  type: Music::RankingConfiguration
+  name: "Global Music Ranking"
+  description: "The main ranking configuration for music"
+  global: true
+  primary: true
+  archived: false
+  published_at: 2025-07-09 23:38:50
+  algorithm_version: 1
+  exponent: 3.0
+  bonus_pool_percentage: 3.0
+  min_list_weight: 1
+  apply_list_dates_penalty: true
+  max_list_dates_penalty_age: 40
+  max_list_dates_penalty_percentage: 75
+  inherit_penalties: true
+
+books_inherited:
+  type: Books::RankingConfiguration
+  name: "Inherited Books Ranking"
+  description: "A books ranking configuration inherited from another"
+  global: true
+  primary: false
+  archived: false
+  algorithm_version: 1
+  exponent: 3.0
+  bonus_pool_percentage: 3.0
+  min_list_weight: 1
+  apply_list_dates_penalty: true
+  max_list_dates_penalty_age: 50
+  max_list_dates_penalty_percentage: 80
+  inherit_penalties: true
+  inherited_from: books_global

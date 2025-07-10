@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_07_09_025001) do
+ActiveRecord::Schema[8.0].define(version: 2025_07_10_043850) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -229,6 +229,39 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_09_025001) do
     t.index ["song_id"], name: "index_music_tracks_on_song_id"
   end
 
+  create_table "ranking_configurations", force: :cascade do |t|
+    t.string "type", null: false
+    t.string "name", null: false
+    t.text "description"
+    t.boolean "global", default: true, null: false
+    t.boolean "primary", default: false, null: false
+    t.boolean "archived", default: false, null: false
+    t.datetime "published_at"
+    t.integer "algorithm_version", default: 1, null: false
+    t.decimal "exponent", precision: 10, scale: 2, default: "3.0", null: false
+    t.decimal "bonus_pool_percentage", precision: 10, scale: 2, default: "3.0", null: false
+    t.integer "min_list_weight", default: 1, null: false
+    t.integer "list_limit"
+    t.boolean "apply_list_dates_penalty", default: true, null: false
+    t.integer "max_list_dates_penalty_age", default: 50
+    t.integer "max_list_dates_penalty_percentage", default: 80
+    t.boolean "inherit_penalties", default: true, null: false
+    t.bigint "inherited_from_id"
+    t.bigint "user_id"
+    t.bigint "primary_mapped_list_id"
+    t.bigint "secondary_mapped_list_id"
+    t.integer "primary_mapped_list_cutoff_limit"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["inherited_from_id"], name: "index_ranking_configurations_on_inherited_from_id"
+    t.index ["primary_mapped_list_id"], name: "index_ranking_configurations_on_primary_mapped_list_id"
+    t.index ["secondary_mapped_list_id"], name: "index_ranking_configurations_on_secondary_mapped_list_id"
+    t.index ["type", "global"], name: "index_ranking_configurations_on_type_and_global"
+    t.index ["type", "primary"], name: "index_ranking_configurations_on_type_and_primary"
+    t.index ["type", "user_id"], name: "index_ranking_configurations_on_type_and_user_id"
+    t.index ["user_id"], name: "index_ranking_configurations_on_user_id"
+  end
+
   create_table "users", force: :cascade do |t|
     t.string "auth_uid"
     t.jsonb "auth_data"
@@ -270,4 +303,8 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_09_025001) do
   add_foreign_key "music_song_relationships", "music_songs", column: "song_id"
   add_foreign_key "music_tracks", "music_releases", column: "release_id"
   add_foreign_key "music_tracks", "music_songs", column: "song_id"
+  add_foreign_key "ranking_configurations", "lists", column: "primary_mapped_list_id"
+  add_foreign_key "ranking_configurations", "lists", column: "secondary_mapped_list_id"
+  add_foreign_key "ranking_configurations", "ranking_configurations", column: "inherited_from_id"
+  add_foreign_key "ranking_configurations", "users"
 end
