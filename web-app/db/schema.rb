@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_07_10_152255) do
+ActiveRecord::Schema[8.0].define(version: 2025_07_10_173933) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -229,6 +229,21 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_10_152255) do
     t.index ["song_id"], name: "index_music_tracks_on_song_id"
   end
 
+  create_table "ranked_items", force: :cascade do |t|
+    t.integer "rank"
+    t.decimal "score", precision: 10, scale: 2
+    t.string "item_type", null: false
+    t.bigint "item_id", null: false
+    t.bigint "ranking_configuration_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["item_id", "item_type", "ranking_configuration_id"], name: "index_ranked_items_on_item_and_ranking_config_unique", unique: true
+    t.index ["item_type", "item_id"], name: "index_ranked_items_on_item"
+    t.index ["ranking_configuration_id", "rank"], name: "index_ranked_items_on_config_and_rank"
+    t.index ["ranking_configuration_id", "score"], name: "index_ranked_items_on_config_and_score"
+    t.index ["ranking_configuration_id"], name: "index_ranked_items_on_ranking_configuration_id"
+  end
+
   create_table "ranked_lists", force: :cascade do |t|
     t.integer "weight"
     t.bigint "list_id", null: false
@@ -313,6 +328,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_10_152255) do
   add_foreign_key "music_song_relationships", "music_songs", column: "song_id"
   add_foreign_key "music_tracks", "music_releases", column: "release_id"
   add_foreign_key "music_tracks", "music_songs", column: "song_id"
+  add_foreign_key "ranked_items", "ranking_configurations"
   add_foreign_key "ranked_lists", "ranking_configurations"
   add_foreign_key "ranking_configurations", "lists", column: "primary_mapped_list_id"
   add_foreign_key "ranking_configurations", "lists", column: "secondary_mapped_list_id"

@@ -14,6 +14,10 @@ Represents a configuration for ranking algorithms across all media types (books,
   The main mapped list for yearly aggregations (e.g., "Top 100 of 2025").
 - `belongs_to :secondary_mapped_list, class_name: 'List', optional: true`  
   The secondary mapped list for yearly aggregations (e.g., "Honorable Mention").
+- `has_many :ranked_items, dependent: :destroy`  
+  All ranked items (books, movies, albums, etc.) associated with this configuration. Destroyed if the configuration is deleted.
+- `has_many :ranked_lists, dependent: :destroy`  
+  All ranked lists associated with this configuration. Destroyed if the configuration is deleted.
 
 ## Public Methods
 
@@ -89,6 +93,7 @@ _None defined in this model._
 - `User` model (for user_id)
 - `List` model (for mapped lists)
 - STI subclasses for each media type (e.g., Books::RankingConfiguration)
+- `RankedItem` and `RankedList` models (for ranking results)
 
 ## Design Notes
 - Uses STI for media-specific logic and defaults
@@ -96,16 +101,25 @@ _None defined in this model._
 - Inheritance system allows for monthly/versioned snapshots
 - Penalty system is configurable and inheritable
 - Only one primary config per media type enforced at both model and DB level
+- Ranked items and lists are destroyed if the configuration is deleted
 
 ## Related Models
 - `Books::RankingConfiguration`, `Movies::RankingConfiguration`, `Games::RankingConfiguration`, `Music::RankingConfiguration` (STI subclasses)
 - `List` (for mapped lists)
 - `User` (for user-created configs)
+- `RankedItem` (for ranked results)
+- `RankedList` (for contributing lists)
 
 ## Example Usage
 ```ruby
 # Get the primary books ranking config
 Books::RankingConfiguration.primary.first
+
+# Get all ranked items for a config
+config.ranked_items.by_rank
+
+# Get all ranked lists for a config
+config.ranked_lists
 
 # Clone a config for a new month
 new_config = old_config.clone_for_inheritance

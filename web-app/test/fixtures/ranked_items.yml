@@ -1,0 +1,10 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+# Only include unranked items to avoid conflicts with tests
+movies_unranked_item:
+  item: matrix (Movies::Movie)
+  ranking_configuration: movies_global
+
+music_unranked_item:
+  item: animals (Music::Album)
+  ranking_configuration: music_global

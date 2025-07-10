@@ -38,7 +38,8 @@ Each class documentation file should include:
 - Which domain it belongs to (if applicable)
 
 ### 2. Associations
-- List all ActiveRecord associations
+- List all ActiveRecord associations (including all `has_many`, `belongs_to`, and `has_one` relationships)
+- **Always document direct associations to result tables (e.g., `has_many :ranked_items`, `has_many :ranked_lists`)**
 - Explain the purpose of each relationship
 - Note any polymorphic associations
 
@@ -81,6 +82,7 @@ Represents a book in the system. Core model for the books domain.
 - `belongs_to :author` - The book's primary author
 - `has_many :reviews, as: :reviewable` - Polymorphic association for user reviews
 - `has_many :list_items, as: :listable` - Polymorphic association for user lists
+- `has_many :ranked_items` - All ranked results for this book (if applicable)
 
 ## Public Methods
 

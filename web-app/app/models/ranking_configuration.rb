@@ -6,6 +6,8 @@ class RankingConfiguration < ApplicationRecord
   belongs_to :secondary_mapped_list, class_name: "List", optional: true
 
   has_many :inherited_configurations, class_name: "RankingConfiguration", foreign_key: :inherited_from_id, dependent: :nullify
+  has_many :ranked_items, dependent: :destroy
+  has_many :ranked_lists, dependent: :destroy
 
   # Validations
   validates :name, presence: true, length: {maximum: 255}
