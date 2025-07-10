@@ -21,4 +21,4 @@
 - ✅ [2025-07-06] [List items model implementation](todos/005-list-items-model.md)
 - ✅ [2025-07-06] [Lists model implementation](todos/004-lists-model.md)
 - ✅ [2025-07-06] [User model implementation](todos/006-user-model.md)
-- ✅ [2025-01-27] [basic music object model](todos/001-music-object-model.md)
+- ✅ [2025-07-04] [basic music object model](todos/001-music-object-model.md)
