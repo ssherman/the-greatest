@@ -6,14 +6,18 @@
 ## Medium Priority
 3. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
 4. [Books data import from existing site](todos/002-books-data-import.md)
-5. [Firebase Authentication Implementation](todos/007-authentication.md)
+5. [Additional OAuth providers (Facebook, Twitter, Apple)](todos/007-authentication.md)
+6. [Email/password authentication](todos/007-authentication.md)
+7. [Passwordless email authentication](todos/007-authentication.md)
+8. [Phone number authentication](todos/007-authentication.md)
 
 ## Low Priority
-7. [Recommendation engine MVP](todos/004-recommendation-engine.md)
-8. [OpenSearch integration](todos/005-opensearch-integration.md)
-9. [Admin interface with Avo](todos/007-admin-interface.md)
+9. [Recommendation engine MVP](todos/004-recommendation-engine.md)
+10. [OpenSearch integration](todos/005-opensearch-integration.md)
+11. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-07-09] [Firebase Authentication Implementation - Core System](todos/007-authentication.md)
 - ✅ [2025-07-06] [List items model implementation](todos/005-list-items-model.md)
 - ✅ [2025-07-06] [Lists model implementation](todos/004-lists-model.md)
 - ✅ [2025-07-06] [User model implementation](todos/006-user-model.md)
