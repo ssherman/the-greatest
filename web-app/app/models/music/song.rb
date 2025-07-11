@@ -1,3 +1,23 @@
+# == Schema Information
+#
+# Table name: music_songs
+#
+#  id            :bigint           not null, primary key
+#  description   :text
+#  duration_secs :integer
+#  isrc          :string(12)
+#  lyrics        :text
+#  release_year  :integer
+#  slug          :string           not null
+#  title         :string           not null
+#  created_at    :datetime         not null
+#  updated_at    :datetime         not null
+#
+# Indexes
+#
+#  index_music_songs_on_isrc  (isrc) UNIQUE WHERE (isrc IS NOT NULL)
+#  index_music_songs_on_slug  (slug) UNIQUE
+#
 class Music::Song < ApplicationRecord
   extend FriendlyId
   friendly_id :title, use: [:slugged, :finders]

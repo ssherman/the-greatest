@@ -1,3 +1,26 @@
+# == Schema Information
+#
+# Table name: music_memberships
+#
+#  id         :bigint           not null, primary key
+#  joined_on  :date
+#  left_on    :date
+#  created_at :datetime         not null
+#  updated_at :datetime         not null
+#  artist_id  :bigint           not null
+#  member_id  :bigint           not null
+#
+# Indexes
+#
+#  index_music_memberships_on_artist_id             (artist_id)
+#  index_music_memberships_on_artist_member_joined  (artist_id,member_id,joined_on) UNIQUE
+#  index_music_memberships_on_member_id             (member_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (artist_id => music_artists.id)
+#  fk_rails_...  (member_id => music_artists.id)
+#
 class Music::Membership < ApplicationRecord
   # Associations
   belongs_to :artist, class_name: "Music::Artist"  # The band

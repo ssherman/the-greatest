@@ -1,5 +1,38 @@
 # Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
 
+# == Schema Information
+#
+# Table name: users
+#
+#  id                     :bigint           not null, primary key
+#  auth_data              :jsonb
+#  auth_uid               :string
+#  confirmation_sent_at   :datetime
+#  confirmation_token     :string
+#  confirmed_at           :datetime
+#  display_name           :string
+#  email                  :string
+#  email_verified         :boolean          default(FALSE), not null
+#  external_provider      :integer
+#  last_sign_in_at        :datetime
+#  name                   :string
+#  original_signup_domain :string
+#  photo_url              :string
+#  provider_data          :text
+#  role                   :integer          default("user"), not null
+#  sign_in_count          :integer
+#  created_at             :datetime         not null
+#  updated_at             :datetime         not null
+#  stripe_customer_id     :string
+#
+# Indexes
+#
+#  index_users_on_auth_uid            (auth_uid)
+#  index_users_on_confirmation_token  (confirmation_token) UNIQUE
+#  index_users_on_confirmed_at        (confirmed_at)
+#  index_users_on_external_provider   (external_provider)
+#  index_users_on_stripe_customer_id  (stripe_customer_id)
+#
 admin_user:
   email: admin@example.com
   display_name: Admin User

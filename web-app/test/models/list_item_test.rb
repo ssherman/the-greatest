@@ -1,3 +1,26 @@
+# == Schema Information
+#
+# Table name: list_items
+#
+#  id            :bigint           not null, primary key
+#  listable_type :string           not null
+#  position      :integer
+#  created_at    :datetime         not null
+#  updated_at    :datetime         not null
+#  list_id       :bigint           not null
+#  listable_id   :bigint           not null
+#
+# Indexes
+#
+#  index_list_items_on_list_and_listable_unique  (list_id,listable_type,listable_id) UNIQUE
+#  index_list_items_on_list_id                   (list_id)
+#  index_list_items_on_list_id_and_position      (list_id,position)
+#  index_list_items_on_listable                  (listable_type,listable_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (list_id => lists.id)
+#
 require "test_helper"
 
 class ListItemTest < ActiveSupport::TestCase

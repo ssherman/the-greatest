@@ -1,3 +1,23 @@
+# == Schema Information
+#
+# Table name: movies_people
+#
+#  id          :bigint           not null, primary key
+#  born_on     :date
+#  country     :string(2)
+#  description :text
+#  died_on     :date
+#  gender      :integer
+#  name        :string           not null
+#  slug        :string           not null
+#  created_at  :datetime         not null
+#  updated_at  :datetime         not null
+#
+# Indexes
+#
+#  index_movies_people_on_gender  (gender)
+#  index_movies_people_on_slug    (slug) UNIQUE
+#
 require "test_helper"
 
 module Movies

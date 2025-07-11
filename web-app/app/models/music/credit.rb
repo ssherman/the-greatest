@@ -1,3 +1,27 @@
+# == Schema Information
+#
+# Table name: music_credits
+#
+#  id              :bigint           not null, primary key
+#  creditable_type :string           not null
+#  position        :integer
+#  role            :integer          default("writer"), not null
+#  created_at      :datetime         not null
+#  updated_at      :datetime         not null
+#  artist_id       :bigint           not null
+#  creditable_id   :bigint           not null
+#
+# Indexes
+#
+#  index_music_credits_on_artist_id                          (artist_id)
+#  index_music_credits_on_artist_id_and_role                 (artist_id,role)
+#  index_music_credits_on_creditable                         (creditable_type,creditable_id)
+#  index_music_credits_on_creditable_type_and_creditable_id  (creditable_type,creditable_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (artist_id => music_artists.id)
+#
 class Music::Credit < ApplicationRecord
   # Enums
   enum :role, {

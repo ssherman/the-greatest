@@ -1,3 +1,28 @@
+# == Schema Information
+#
+# Table name: ranked_items
+#
+#  id                       :bigint           not null, primary key
+#  item_type                :string           not null
+#  rank                     :integer
+#  score                    :decimal(10, 2)
+#  created_at               :datetime         not null
+#  updated_at               :datetime         not null
+#  item_id                  :bigint           not null
+#  ranking_configuration_id :bigint           not null
+#
+# Indexes
+#
+#  index_ranked_items_on_config_and_rank                 (ranking_configuration_id,rank)
+#  index_ranked_items_on_config_and_score                (ranking_configuration_id,score)
+#  index_ranked_items_on_item                            (item_type,item_id)
+#  index_ranked_items_on_item_and_ranking_config_unique  (item_id,item_type,ranking_configuration_id) UNIQUE
+#  index_ranked_items_on_ranking_configuration_id        (ranking_configuration_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (ranking_configuration_id => ranking_configurations.id)
+#
 class RankedItem < ApplicationRecord
   belongs_to :item, polymorphic: true
   belongs_to :ranking_configuration

@@ -1,3 +1,25 @@
+# == Schema Information
+#
+# Table name: music_releases
+#
+#  id           :bigint           not null, primary key
+#  format       :integer          default("vinyl"), not null
+#  metadata     :jsonb
+#  release_date :date
+#  release_name :string
+#  created_at   :datetime         not null
+#  updated_at   :datetime         not null
+#  album_id     :bigint           not null
+#
+# Indexes
+#
+#  index_music_releases_on_album_id                  (album_id)
+#  index_music_releases_on_album_name_format_unique  (album_id,release_name,format) UNIQUE
+#
+# Foreign Keys
+#
+#  fk_rails_...  (album_id => music_albums.id)
+#
 require "test_helper"
 
 module Music

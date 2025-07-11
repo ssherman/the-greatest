@@ -1,3 +1,23 @@
+# == Schema Information
+#
+# Table name: movies_movies
+#
+#  id              :bigint           not null, primary key
+#  description     :text
+#  rating          :integer
+#  release_year    :integer
+#  runtime_minutes :integer
+#  slug            :string           not null
+#  title           :string           not null
+#  created_at      :datetime         not null
+#  updated_at      :datetime         not null
+#
+# Indexes
+#
+#  index_movies_movies_on_rating        (rating)
+#  index_movies_movies_on_release_year  (release_year)
+#  index_movies_movies_on_slug          (slug) UNIQUE
+#
 module Movies
   class Movie < ApplicationRecord
     extend FriendlyId

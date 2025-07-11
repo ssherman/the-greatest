@@ -1,3 +1,25 @@
+# == Schema Information
+#
+# Table name: music_artists
+#
+#  id           :bigint           not null, primary key
+#  born_on      :date
+#  country      :string(2)
+#  description  :text
+#  died_on      :date
+#  disbanded_on :date
+#  formed_on    :date
+#  kind         :integer          default("person"), not null
+#  name         :string           not null
+#  slug         :string           not null
+#  created_at   :datetime         not null
+#  updated_at   :datetime         not null
+#
+# Indexes
+#
+#  index_music_artists_on_kind  (kind)
+#  index_music_artists_on_slug  (slug) UNIQUE
+#
 class Music::Artist < ApplicationRecord
   extend FriendlyId
   friendly_id :name, use: [:slugged, :finders]

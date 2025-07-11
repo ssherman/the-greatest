@@ -1,3 +1,25 @@
+# == Schema Information
+#
+# Table name: music_albums
+#
+#  id                :bigint           not null, primary key
+#  description       :text
+#  release_year      :integer
+#  slug              :string           not null
+#  title             :string           not null
+#  created_at        :datetime         not null
+#  updated_at        :datetime         not null
+#  primary_artist_id :bigint           not null
+#
+# Indexes
+#
+#  index_music_albums_on_primary_artist_id  (primary_artist_id)
+#  index_music_albums_on_slug               (slug) UNIQUE
+#
+# Foreign Keys
+#
+#  fk_rails_...  (primary_artist_id => music_artists.id)
+#
 class Music::Album < ApplicationRecord
   extend FriendlyId
   friendly_id :title, use: [:slugged, :finders]

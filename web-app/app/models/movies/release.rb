@@ -1,3 +1,30 @@
+# == Schema Information
+#
+# Table name: movies_releases
+#
+#  id              :bigint           not null, primary key
+#  is_primary      :boolean          default(FALSE), not null
+#  metadata        :jsonb
+#  release_date    :date
+#  release_format  :integer          default("theatrical"), not null
+#  release_name    :string
+#  runtime_minutes :integer
+#  created_at      :datetime         not null
+#  updated_at      :datetime         not null
+#  movie_id        :bigint           not null
+#
+# Indexes
+#
+#  index_movies_releases_on_is_primary                 (is_primary)
+#  index_movies_releases_on_movie_and_name_and_format  (movie_id,release_name,release_format) UNIQUE
+#  index_movies_releases_on_movie_id                   (movie_id)
+#  index_movies_releases_on_release_date               (release_date)
+#  index_movies_releases_on_release_format             (release_format)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (movie_id => movies_movies.id)
+#
 module Movies
   class Release < ApplicationRecord
     belongs_to :movie, class_name: "Movies::Movie", foreign_key: "movie_id"
