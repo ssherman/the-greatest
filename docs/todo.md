@@ -17,6 +17,7 @@
 11. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-07-11] [Penalty model implementation](todos/011-penalty-model.md)
 - ✅ [2025-07-10] [RankedItem model implementation](todos/010-ranked-item-model.md)
 - ✅ [2025-07-10] [RankedList model implementation](todos/009-ranked-list-model.md)
 - ✅ [2025-07-09] [Ranking configuration model implementation](todos/008-ranking-configuration-model.md)

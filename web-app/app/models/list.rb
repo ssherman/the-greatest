@@ -36,6 +36,8 @@ class List < ApplicationRecord
   # Associations
   has_many :list_items, dependent: :destroy
   belongs_to :submitted_by, class_name: "User", optional: true
+  has_many :list_penalties, dependent: :destroy
+  has_many :penalties, through: :list_penalties
 
   # Enums
   enum :status, {unapproved: 0, approved: 1, rejected: 2}
@@ -51,4 +53,21 @@ class List < ApplicationRecord
   scope :high_quality, -> { where(high_quality_source: true) }
   scope :by_year, ->(year) { where(year_published: year) }
   scope :yearly_awards, -> { where(yearly_award: true) }
+
+  # Public Methods
+  def total_penalty_value(ranking_configuration)
+    list_penalties.sum { |list_penalty| list_penalty.calculate_penalty_value(ranking_configuration) }
+  end
+
+  def has_penalties?
+    penalties.any?
+  end
+
+  def global_penalties
+    penalties.global
+  end
+
+  def user_penalties
+    penalties.user_specific
+  end
 end

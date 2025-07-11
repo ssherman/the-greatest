@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_07_10_173933) do
+ActiveRecord::Schema[8.0].define(version: 2025_07_11_045508) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -36,6 +36,16 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_10_173933) do
     t.index ["list_id", "position"], name: "index_list_items_on_list_id_and_position"
     t.index ["list_id"], name: "index_list_items_on_list_id"
     t.index ["listable_type", "listable_id"], name: "index_list_items_on_listable"
+  end
+
+  create_table "list_penalties", force: :cascade do |t|
+    t.bigint "list_id", null: false
+    t.bigint "penalty_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["list_id", "penalty_id"], name: "index_list_penalties_on_list_and_penalty", unique: true
+    t.index ["list_id"], name: "index_list_penalties_on_list_id"
+    t.index ["penalty_id"], name: "index_list_penalties_on_penalty_id"
   end
 
   create_table "lists", force: :cascade do |t|
@@ -229,6 +239,34 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_10_173933) do
     t.index ["song_id"], name: "index_music_tracks_on_song_id"
   end
 
+  create_table "penalties", force: :cascade do |t|
+    t.string "type", null: false
+    t.string "name", null: false
+    t.text "description"
+    t.boolean "global", default: false, null: false
+    t.bigint "user_id"
+    t.integer "media_type", default: 0, null: false
+    t.boolean "dynamic", default: false, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["dynamic"], name: "index_penalties_on_dynamic"
+    t.index ["global"], name: "index_penalties_on_global"
+    t.index ["media_type"], name: "index_penalties_on_media_type"
+    t.index ["type"], name: "index_penalties_on_type"
+    t.index ["user_id"], name: "index_penalties_on_user_id"
+  end
+
+  create_table "penalty_applications", force: :cascade do |t|
+    t.bigint "penalty_id", null: false
+    t.bigint "ranking_configuration_id", null: false
+    t.integer "value", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["penalty_id", "ranking_configuration_id"], name: "index_penalty_applications_on_penalty_and_config", unique: true
+    t.index ["penalty_id"], name: "index_penalty_applications_on_penalty_id"
+    t.index ["ranking_configuration_id"], name: "index_penalty_applications_on_ranking_configuration_id"
+  end
+
   create_table "ranked_items", force: :cascade do |t|
     t.integer "rank"
     t.decimal "score", precision: 10, scale: 2
@@ -315,6 +353,8 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_10_173933) do
   end
 
   add_foreign_key "list_items", "lists"
+  add_foreign_key "list_penalties", "lists"
+  add_foreign_key "list_penalties", "penalties"
   add_foreign_key "lists", "users", column: "submitted_by_id"
   add_foreign_key "movies_credits", "movies_people", column: "person_id"
   add_foreign_key "movies_releases", "movies_movies", column: "movie_id"
@@ -328,6 +368,9 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_10_173933) do
   add_foreign_key "music_song_relationships", "music_songs", column: "song_id"
   add_foreign_key "music_tracks", "music_releases", column: "release_id"
   add_foreign_key "music_tracks", "music_songs", column: "song_id"
+  add_foreign_key "penalties", "users"
+  add_foreign_key "penalty_applications", "penalties"
+  add_foreign_key "penalty_applications", "ranking_configurations"
   add_foreign_key "ranked_items", "ranking_configurations"
   add_foreign_key "ranked_lists", "ranking_configurations"
   add_foreign_key "ranking_configurations", "lists", column: "primary_mapped_list_id"

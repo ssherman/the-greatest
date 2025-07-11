@@ -1,0 +1,83 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+# == Schema Information
+#
+# Table name: list_penalties
+#
+#  id         :bigint           not null, primary key
+#  created_at :datetime         not null
+#  updated_at :datetime         not null
+#  list_id    :bigint           not null
+#  penalty_id :bigint           not null
+#
+# Indexes
+#
+#  index_list_penalties_on_list_and_penalty  (list_id,penalty_id) UNIQUE
+#  index_list_penalties_on_list_id           (list_id)
+#  index_list_penalties_on_penalty_id        (penalty_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (list_id => lists.id)
+#  fk_rails_...  (penalty_id => penalties.id)
+#
+
+# Books list penalties
+books_list_global_penalty:
+  list: books_list
+  penalty: global_penalty
+
+books_list_cross_media_penalty:
+  list: books_list
+  penalty: cross_media_penalty
+
+books_list_books_penalty:
+  list: books_list
+  penalty: books_penalty
+
+books_list_dynamic_penalty:
+  list: books_list
+  penalty: dynamic_penalty
+
+books_list_static_penalty:
+  list: books_list
+  penalty: static_penalty
+
+# Movies list penalties
+movies_list_global_penalty:
+  list: movies_list
+  penalty: global_penalty
+
+movies_list_cross_media_penalty:
+  list: movies_list
+  penalty: cross_media_penalty
+
+movies_list_movies_penalty:
+  list: movies_list
+  penalty: movies_penalty
+
+# Games list penalties
+games_list_global_penalty:
+  list: games_list
+  penalty: global_penalty
+
+games_list_cross_media_penalty:
+  list: games_list
+  penalty: cross_media_penalty
+
+games_list_games_penalty:
+  list: games_list
+  penalty: games_penalty
+
+# Music list penalties
+music_list_global_penalty:
+  list: music_list
+  penalty: global_penalty
+
+music_list_cross_media_penalty:
+  list: music_list
+  penalty: cross_media_penalty
+
+music_list_music_penalty:
+  list: music_list
+  penalty: music_penalty

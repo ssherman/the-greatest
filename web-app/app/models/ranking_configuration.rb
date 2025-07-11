@@ -54,6 +54,8 @@ class RankingConfiguration < ApplicationRecord
   has_many :inherited_configurations, class_name: "RankingConfiguration", foreign_key: :inherited_from_id, dependent: :nullify
   has_many :ranked_items, dependent: :destroy
   has_many :ranked_lists, dependent: :destroy
+  has_many :penalty_applications, dependent: :destroy
+  has_many :penalties, through: :penalty_applications
 
   # Validations
   validates :name, presence: true, length: {maximum: 255}
@@ -101,6 +103,17 @@ class RankingConfiguration < ApplicationRecord
     new_config.inherited_from_id = id
     new_config.primary = false
     new_config.published_at = nil
+
+    # Clone penalty applications if inheritance is enabled
+    if inherit_penalties?
+      penalty_applications.each do |penalty_app|
+        new_config.penalty_applications.build(
+          penalty: penalty_app.penalty,
+          value: penalty_app.value
+        )
+      end
+    end
+
     new_config
   end
 

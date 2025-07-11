@@ -6,6 +6,31 @@
 - **Coverage Goal**: 100% test coverage
 - **Scope**: Test public methods only - never test private methods
 
+## Fixture Best Practices and Common Pitfalls
+
+### Always Check Actual Fixture Names
+A common source of test failures is assuming fixture references like `user: one` or `users(:one)` exist, when the actual fixture names may be different (e.g., `regular_user`, `admin_user`).
+
+**Best Practice:**
+- Always check the relevant fixture file (e.g., `test/fixtures/users.yml`) for the correct keys before referencing them in tests or other fixtures.
+- Never assume that `one`, `two`, etc. exist—use descriptive fixture names and reference them explicitly.
+- If you add new fixtures, use clear, semantic names (e.g., `regular_user`, `editor_user`).
+
+**Example (bad):**
+```yaml
+user_penalty:
+  user: one  # ❌ This will fail if 'one' is not defined in users.yml
+```
+
+**Example (good):**
+```yaml
+user_penalty:
+  user: regular_user  # ✅ Always use the actual fixture name
+```
+
+**AI/Automation Note:**
+- When using AI agents or code generation, always instruct the agent to check the actual fixture file for valid keys before referencing them. This prevents a very common and frustrating class of test failures.
+
 ## Test Organization
 
 ### Namespacing Requirements

@@ -1,0 +1,114 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+# == Schema Information
+#
+# Table name: penalties
+#
+#  id          :bigint           not null, primary key
+#  description :text
+#  dynamic     :boolean          default(FALSE), not null
+#  global      :boolean          default(FALSE), not null
+#  media_type  :integer          default(0), not null
+#  name        :string           not null
+#  type        :string           not null
+#  created_at  :datetime         not null
+#  updated_at  :datetime         not null
+#  user_id     :bigint
+#
+# Indexes
+#
+#  index_penalties_on_dynamic     (dynamic)
+#  index_penalties_on_global      (global)
+#  index_penalties_on_media_type  (media_type)
+#  index_penalties_on_type        (type)
+#  index_penalties_on_user_id     (user_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (user_id => users.id)
+#
+
+# Global penalties (available to all users)
+global_penalty:
+  type: Penalty
+  name: "Limited Time Coverage"
+  description: "List only covers a limited time period"
+  global: true
+  media_type: 0 # cross_media
+  dynamic: false
+
+cross_media_penalty:
+  type: Penalty
+  name: "Non-Expert Voters"
+  description: "Voters are not critics, authors, or experts"
+  global: true
+  media_type: 0 # cross_media
+  dynamic: false
+
+dynamic_penalty:
+  type: Penalty
+  name: "Dynamic Test Penalty"
+  description: "A dynamic penalty for testing"
+  global: true
+  media_type: 0 # cross_media
+  dynamic: true
+
+static_penalty:
+  type: Penalty
+  name: "Static Test Penalty"
+  description: "A static penalty for testing"
+  global: true
+  media_type: 0 # cross_media
+  dynamic: false
+
+# Media-specific penalties
+books_penalty:
+  type: Books::Penalty
+  name: "Western Canon Bias"
+  description: "List focuses heavily on Western Canon books"
+  global: true
+  media_type: 1 # books
+  dynamic: true
+
+movies_penalty:
+  type: Movies::Penalty
+  name: "Hollywood Bias"
+  description: "List focuses heavily on Hollywood movies"
+  global: true
+  media_type: 2 # movies
+  dynamic: true
+
+games_penalty:
+  type: Games::Penalty
+  name: "AAA Bias"
+  description: "List focuses heavily on AAA games"
+  global: true
+  media_type: 3 # games
+  dynamic: true
+
+music_penalty:
+  type: Music::Penalty
+  name: "English Language Bias"
+  description: "List focuses heavily on English-language music"
+  global: true
+  media_type: 4 # music
+  dynamic: true
+
+# User-specific penalties
+user_penalty:
+  type: Penalty
+  name: "User Custom Penalty"
+  description: "A user-created penalty"
+  global: false
+  user: regular_user
+  media_type: 0 # cross_media
+  dynamic: false
+
+user_books_penalty:
+  type: Books::Penalty
+  name: "User Books Penalty"
+  description: "A user-created books penalty"
+  global: false
+  user: regular_user
+  media_type: 1 # books
+  dynamic: false

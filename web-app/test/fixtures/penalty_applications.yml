@@ -1,0 +1,77 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+# == Schema Information
+#
+# Table name: penalty_applications
+#
+#  id                       :bigint           not null, primary key
+#  value                    :integer          default(0), not null
+#  created_at               :datetime         not null
+#  updated_at               :datetime         not null
+#  penalty_id               :bigint           not null
+#  ranking_configuration_id :bigint           not null
+#
+# Indexes
+#
+#  index_penalty_applications_on_penalty_and_config        (penalty_id,ranking_configuration_id) UNIQUE
+#  index_penalty_applications_on_penalty_id                (penalty_id)
+#  index_penalty_applications_on_ranking_configuration_id  (ranking_configuration_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (penalty_id => penalties.id)
+#  fk_rails_...  (ranking_configuration_id => ranking_configurations.id)
+#
+
+# Global penalty applications
+global_penalty_app:
+  penalty: global_penalty
+  ranking_configuration: books_global
+  value: 25
+
+cross_media_penalty_app:
+  penalty: cross_media_penalty
+  ranking_configuration: books_global
+  value: 15
+
+dynamic_penalty_app:
+  penalty: dynamic_penalty
+  ranking_configuration: books_global
+  value: 30
+
+static_penalty_app:
+  penalty: static_penalty
+  ranking_configuration: books_global
+  value: 10
+
+# Media-specific penalty applications
+books_penalty_app:
+  penalty: books_penalty
+  ranking_configuration: books_global
+  value: 20
+
+movies_penalty_app:
+  penalty: movies_penalty
+  ranking_configuration: movies_global
+  value: 18
+
+games_penalty_app:
+  penalty: games_penalty
+  ranking_configuration: games_global
+  value: 12
+
+music_penalty_app:
+  penalty: music_penalty
+  ranking_configuration: music_global
+  value: 22
+
+# User-specific penalty applications
+user_penalty_app:
+  penalty: user_penalty
+  ranking_configuration: books_user
+  value: 35
+
+user_books_penalty_app:
+  penalty: user_books_penalty
+  ranking_configuration: books_user
+  value: 28
