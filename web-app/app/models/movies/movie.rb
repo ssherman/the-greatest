@@ -26,6 +26,7 @@ module Movies
     # Associations
     has_many :releases, class_name: "Movies::Release", foreign_key: "movie_id", dependent: :destroy
     has_many :credits, as: :creditable, class_name: "Movies::Credit", dependent: :destroy
+    has_many :ai_chats, as: :parent, dependent: :destroy
 
     # Enums
     enum :rating, {g: 0, pg: 1, pg_13: 2, r: 3, nc_17: 4, unrated: 5}

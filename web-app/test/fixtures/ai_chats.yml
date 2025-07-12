@@ -1,0 +1,26 @@
+general_chat:
+  chat_type: general
+  model: "gpt-4"
+  provider: openai
+  temperature: 0.2
+  json_mode: false
+  messages: [{ role: "user", content: "Hello", timestamp: "2024-01-01T10:00:00Z" }]
+  user: regular_user
+
+ranking_chat:
+  chat_type: ranking
+  model: "claude-3"
+  provider: anthropic
+  temperature: 0.1
+  json_mode: true
+  messages: [{ role: "system", content: "Rank these items", timestamp: "2024-01-01T11:00:00Z" }]
+  parent: books_list (Books::List)
+
+recommendation_chat:
+  chat_type: recommendation
+  model: "gemini-pro"
+  provider: gemini
+  temperature: 0.5
+  json_mode: false
+  messages: [{ role: "user", content: "Recommend me a book", timestamp: "2024-01-01T12:00:00Z" }]
+  user: admin_user

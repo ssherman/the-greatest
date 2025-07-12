@@ -43,6 +43,24 @@
   belongs_to :listable, polymorphic: true
   ```
 - **Consistent naming**: Use `_able` suffix for polymorphic associations
+- **Polymorphic fixtures**: Use Rails fixture syntax with target type specification
+  ```yaml
+  # ✅ Correct polymorphic fixture syntax
+  basic_item:
+    list: basic_list
+    listable: dark_side_of_the_moon (Music::Album)
+    position: 1
+  
+  # ❌ Incorrect - will cause errors
+  basic_item:
+    list: basic_list
+    listable: dark_side_of_the_moon
+    listable_type: Music::Album
+    position: 1
+  ```
+  - Always use `association_name: fixture_name (ClassName)` format
+  - Never manually set `_type` fields in fixtures
+  - Rails automatically handles the polymorphic type mapping
 
 ## 4. Simplicity Over Complexity
 - **YAGNI principle**: Build only what's required now
@@ -75,6 +93,14 @@
 - **RESTful routes**: Maintain predictable URL patterns
 - **Testing approach**: Minitest with fixtures (see testing-guide.md)
 - **Default tools**: Prefer Rails built-ins over external gems
+- **Rails 8 enum syntax**: Always use the new format with colon prefix
+  ```ruby
+  # ✅ Correct Rails 8 syntax
+  enum :media_type, { cross_media: 0, books: 1, movies: 2, games: 3, music: 4 }
+  
+  # ❌ Old Rails syntax (will cause errors)
+  enum media_type: { cross_media: 0, books: 1, movies: 2, games: 3, music: 4 }
+  ```
 
 ## 8. Progressive Enhancement
 - **Server-first rendering**: Full functionality without JavaScript

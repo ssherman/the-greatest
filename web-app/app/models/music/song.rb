@@ -27,6 +27,7 @@ class Music::Song < ApplicationRecord
   has_many :releases, through: :tracks, class_name: "Music::Release"
   has_many :albums, through: :releases, class_name: "Music::Album"
   has_many :credits, as: :creditable, class_name: "Music::Credit"
+  has_many :ai_chats, as: :parent, dependent: :destroy
 
   # Song relationships
   has_many :song_relationships, class_name: "Music::SongRelationship", foreign_key: :song_id, dependent: :destroy

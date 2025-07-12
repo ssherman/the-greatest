@@ -10,9 +10,27 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_07_11_045508) do
+ActiveRecord::Schema[8.0].define(version: 2025_07_12_194724) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "ai_chats", force: :cascade do |t|
+    t.integer "chat_type", default: 0, null: false
+    t.string "model", null: false
+    t.integer "provider", default: 0, null: false
+    t.decimal "temperature", precision: 3, scale: 2, default: "0.2", null: false
+    t.boolean "json_mode", default: false, null: false
+    t.jsonb "response_schema"
+    t.jsonb "messages"
+    t.jsonb "raw_responses"
+    t.string "parent_type"
+    t.bigint "parent_id"
+    t.bigint "user_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["parent_type", "parent_id"], name: "index_ai_chats_on_parent"
+    t.index ["user_id"], name: "index_ai_chats_on_user_id"
+  end
 
   create_table "friendly_id_slugs", force: :cascade do |t|
     t.string "slug", null: false
@@ -352,6 +370,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_11_045508) do
     t.index ["stripe_customer_id"], name: "index_users_on_stripe_customer_id"
   end
 
+  add_foreign_key "ai_chats", "users"
   add_foreign_key "list_items", "lists"
   add_foreign_key "list_penalties", "lists"
   add_foreign_key "list_penalties", "penalties"

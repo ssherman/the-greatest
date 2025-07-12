@@ -38,6 +38,7 @@ class List < ApplicationRecord
   belongs_to :submitted_by, class_name: "User", optional: true
   has_many :list_penalties, dependent: :destroy
   has_many :penalties, through: :list_penalties
+  has_many :ai_chats, as: :parent, dependent: :destroy
 
   # Enums
   enum :status, {unapproved: 0, approved: 1, rejected: 2}

@@ -8,7 +8,7 @@
 #  description :text
 #  dynamic     :boolean          default(FALSE), not null
 #  global      :boolean          default(FALSE), not null
-#  media_type  :integer          default(0), not null
+#  media_type  :integer          default("cross_media"), not null
 #  name        :string           not null
 #  type        :string           not null
 #  created_at  :datetime         not null
