@@ -41,6 +41,8 @@ gem "bootsnap", require: false
 gem "thruster", require: false
 
 gem "countries"
+gem "ruby_llm-schema"
+gem "openai"
 # Load environment variables from .env file
 # gem "dotenv-rails"
 

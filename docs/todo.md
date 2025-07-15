@@ -17,6 +17,7 @@
 11. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-07-15] [AI chat service implementation](todos/013-ai-chat-service.md)
 - ✅ [2025-07-12] [AI chats model implementation](todos/012-ai-chats-model.md)
 - ✅ [2025-07-11] [Penalty model implementation](todos/011-penalty-model.md)
 - ✅ [2025-07-10] [RankedItem model implementation](todos/010-ranked-item-model.md)

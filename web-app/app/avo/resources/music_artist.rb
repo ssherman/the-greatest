@@ -9,7 +9,7 @@ class Avo::Resources::MusicArtist < Avo::BaseResource
   def fields
     field :id, as: :id
     field :name, as: :text
-    field :slug, as: :text
+    field :slug, as: :text, readonly: true
     field :description, as: :textarea
     field :kind, as: :select, enum: ::Music::Artist.kinds
     field :country, as: :country

@@ -9,7 +9,7 @@ class Avo::Resources::MusicAlbum < Avo::BaseResource
   def fields
     field :id, as: :id
     field :title, as: :text
-    field :slug, as: :text
+    field :slug, as: :text, readonly: true
     field :description, as: :textarea
     field :primary_artist, as: :belongs_to
     field :release_year, as: :number

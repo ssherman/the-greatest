@@ -33,7 +33,6 @@ class Music::Album < ApplicationRecord
 
   # Validations
   validates :title, presence: true
-  validates :slug, presence: true, uniqueness: true
   validates :primary_artist, presence: true
   validates :release_year, numericality: {only_integer: true, allow_nil: true}
 end

@@ -146,5 +146,194 @@ module Music
       assert_includes roger_waters.credits, music_credits(:time_writer)
       assert_includes roger_waters.credits, music_credits(:time_composer)
     end
+
+    # AI Integration
+    test "should populate details with AI successfully" do
+      # Mock the AI task
+      mock_task = mock
+      mock_result = mock
+      mock_result.stubs(:success?).returns(true)
+      mock_result.stubs(:data).returns({
+        description: "Innovative English singer-songwriter",
+        born_on: "1947-01-08",
+        died_on: "2016-01-10",
+        country: "GB",
+        kind: "person"
+      })
+
+      Services::Ai::Tasks::ArtistDetailsTask.expects(:new).with(parent: @person).returns(mock_task)
+      mock_task.expects(:call).returns(mock_result).with do
+        # Simulate the process_and_persist behavior
+        @person.update!(
+          description: "Innovative English singer-songwriter",
+          born_on: Date.parse("1947-01-08"),
+          died_on: Date.parse("2016-01-10"),
+          country: "GB",
+          kind: "person"
+        )
+        mock_result
+      end
+
+      # Store original values
+      @person.description
+      @person.born_on
+      @person.died_on
+      @person.country
+      @person.kind
+
+      result = @person.populate_details_with_ai!
+
+      # Verify the artist was updated
+      @person.reload
+      assert_equal "Innovative English singer-songwriter", @person.description
+      assert_equal Date.parse("1947-01-08"), @person.born_on
+      assert_equal Date.parse("2016-01-10"), @person.died_on
+      assert_equal "GB", @person.country
+      assert_equal "person", @person.kind
+
+      assert result.success?
+    end
+
+    test "should handle AI task failure gracefully" do
+      # Mock the AI task to fail
+      mock_task = mock
+      mock_result = mock
+      mock_result.stubs(:success?).returns(false)
+      mock_result.stubs(:error).returns("AI service unavailable")
+
+      Services::Ai::Tasks::ArtistDetailsTask.expects(:new).with(parent: @person).returns(mock_task)
+      mock_task.expects(:call).returns(mock_result)
+
+      # Store original values
+      original_description = @person.description
+      original_born_on = @person.born_on
+      original_died_on = @person.died_on
+      original_country = @person.country
+      original_kind = @person.kind
+
+      result = @person.populate_details_with_ai!
+
+      # Verify the artist was not updated
+      @person.reload
+      assert_equal original_description, @person.description
+      assert_equal original_born_on, @person.born_on
+      assert_equal original_died_on, @person.died_on
+      assert_equal original_country, @person.country
+      assert_equal original_kind, @person.kind
+
+      refute result.success?
+      assert_includes result.error, "AI service unavailable"
+    end
+
+    test "should handle AI task exceptions gracefully" do
+      # Mock the AI task to raise an exception
+      Services::Ai::Tasks::ArtistDetailsTask.expects(:new).with(parent: @person).raises(StandardError.new("Task creation failed"))
+
+      # Store original values
+      original_description = @person.description
+      original_born_on = @person.born_on
+      original_died_on = @person.died_on
+      original_country = @person.country
+      original_kind = @person.kind
+
+      # Expect the exception to be raised
+      assert_raises(StandardError) do
+        @person.populate_details_with_ai!
+      end
+
+      # Verify the artist was not updated
+      @person.reload
+      assert_equal original_description, @person.description
+      assert_equal original_born_on, @person.born_on
+      assert_equal original_died_on, @person.died_on
+      assert_equal original_country, @person.country
+      assert_equal original_kind, @person.kind
+    end
+
+    test "should handle band type artists with AI" do
+      # Mock the AI task for a band
+      mock_task = mock
+      mock_result = mock
+      mock_result.stubs(:success?).returns(true)
+      mock_result.stubs(:data).returns({
+        description: "English progressive rock band",
+        born_on: nil,
+        died_on: nil,
+        country: "GB",
+        kind: "band"
+      })
+
+      # Ensure the mock is properly applied and simulates the full task behavior
+      Services::Ai::Tasks::ArtistDetailsTask.expects(:new).with(parent: @band).returns(mock_task)
+      mock_task.expects(:call).returns(mock_result).with do
+        # Simulate the process_and_persist behavior
+        @band.update!(
+          description: "English progressive rock band",
+          born_on: nil,
+          died_on: nil,
+          country: "GB",
+          kind: "band"
+        )
+        mock_result
+      end
+
+      # Store original values
+      @band.description
+      @band.country
+      @band.kind
+
+      result = @band.populate_details_with_ai!
+
+      # Verify the band was updated
+      @band.reload
+      assert_equal "English progressive rock band", @band.description
+      assert_equal "GB", @band.country
+      assert_equal "band", @band.kind
+      assert_nil @band.born_on
+      assert_nil @band.died_on
+
+      assert result.success?
+    end
+
+    test "should handle missing optional fields from AI response" do
+      # Reset description to nil to match test expectation
+      @person.update!(description: nil)
+      # Mock the AI task with minimal data
+      mock_task = mock
+      mock_result = mock
+      mock_result.stubs(:success?).returns(true)
+      mock_result.stubs(:data).returns({
+        description: nil,
+        born_on: nil,
+        died_on: nil,
+        country: nil,
+        kind: "person"
+      })
+
+      Services::Ai::Tasks::ArtistDetailsTask.expects(:new).with(parent: @person).returns(mock_task)
+      mock_task.expects(:call).returns(mock_result).with do
+        # Simulate the process_and_persist behavior
+        @person.update!(
+          description: nil,
+          born_on: nil,
+          died_on: nil,
+          country: nil,
+          kind: "person"
+        )
+        mock_result
+      end
+
+      result = @person.populate_details_with_ai!
+
+      # Verify the artist was updated with nil values for optional fields
+      @person.reload
+      assert_nil @person.description
+      assert_nil @person.born_on
+      assert_nil @person.died_on
+      assert_nil @person.country
+      assert_equal "person", @person.kind
+
+      assert result.success?
+    end
   end
 end

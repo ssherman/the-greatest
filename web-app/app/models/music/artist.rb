@@ -36,7 +36,6 @@ class Music::Artist < ApplicationRecord
 
   # Validations
   validates :name, presence: true
-  validates :slug, presence: true, uniqueness: true
   validates :kind, presence: true
   validates :country, length: {is: 2}, allow_blank: true
   validate :date_consistency
@@ -45,6 +44,11 @@ class Music::Artist < ApplicationRecord
   scope :people, -> { where(kind: :person) }
   scope :bands, -> { where(kind: :band) }
   scope :active, -> { where(disbanded_on: nil) }
+
+  # AI Methods
+  def populate_details_with_ai!
+    Services::Ai::Tasks::ArtistDetailsTask.new(parent: self).call
+  end
 
   private
 

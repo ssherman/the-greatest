@@ -9,7 +9,7 @@ class Avo::Resources::MusicSong < Avo::BaseResource
   def fields
     field :id, as: :id
     field :title, as: :text
-    field :slug, as: :text
+    field :slug, as: :text, readonly: true
     field :description, as: :textarea
     field :duration_secs, as: :number
     field :release_year, as: :number

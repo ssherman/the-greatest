@@ -9,7 +9,7 @@ class Avo::Resources::MoviesPerson < Avo::BaseResource
   def fields
     field :id, as: :id
     field :name, as: :text
-    field :slug, as: :text
+    field :slug, as: :text, readonly: true
     field :description, as: :textarea
     field :born_on, as: :date
     field :died_on, as: :date

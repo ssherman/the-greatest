@@ -39,7 +39,6 @@ class Music::Song < ApplicationRecord
 
   # Validations
   validates :title, presence: true
-  validates :slug, presence: true, uniqueness: true
   validates :duration_secs, numericality: {only_integer: true, greater_than: 0}, allow_nil: true
   validates :release_year, numericality: {only_integer: true, greater_than: 1900, less_than_or_equal_to: Date.current.year + 1}, allow_nil: true
   validates :isrc, length: {is: 12}, allow_blank: true
