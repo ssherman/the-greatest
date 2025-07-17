@@ -2,18 +2,18 @@
 #
 # Table name: music_artists
 #
-#  id           :bigint           not null, primary key
-#  born_on      :date
-#  country      :string(2)
-#  description  :text
-#  died_on      :date
-#  disbanded_on :date
-#  formed_on    :date
-#  kind         :integer          default("person"), not null
-#  name         :string           not null
-#  slug         :string           not null
-#  created_at   :datetime         not null
-#  updated_at   :datetime         not null
+#  id              :bigint           not null, primary key
+#  born_on         :date
+#  country         :string(2)
+#  description     :text
+#  kind            :integer          default("person"), not null
+#  name            :string           not null
+#  slug            :string           not null
+#  year_died       :integer
+#  year_disbanded  :integer
+#  year_formed     :integer
+#  created_at      :datetime         not null
+#  updated_at      :datetime         not null
 #
 # Indexes
 #
@@ -77,25 +77,20 @@ module Music
 
     # Date consistency validations
     test "person cannot have band dates" do
-      @person.formed_on = Date.current
+      @person.year_formed = 1965
       assert_not @person.valid?
-      assert_includes @person.errors[:formed_on], "cannot be set for a person"
+      assert_includes @person.errors[:year_formed], "cannot be set for a person"
 
-      @person.formed_on = nil
-      @person.disbanded_on = Date.current
+      @person.year_formed = nil
+      @person.year_disbanded = 1995
       assert_not @person.valid?
-      assert_includes @person.errors[:disbanded_on], "cannot be set for a person"
+      assert_includes @person.errors[:year_disbanded], "cannot be set for a person"
     end
 
     test "band cannot have person dates" do
-      @band.born_on = Date.current
+      @band.year_died = 2016
       assert_not @band.valid?
-      assert_includes @band.errors[:born_on], "cannot be set for a band"
-
-      @band.born_on = nil
-      @band.died_on = Date.current
-      assert_not @band.valid?
-      assert_includes @band.errors[:died_on], "cannot be set for a band"
+      assert_includes @band.errors[:year_died], "cannot be set for a band"
     end
 
     # Enums
@@ -125,7 +120,7 @@ module Music
     end
 
     test "active scope" do
-      @band.disbanded_on = Date.current
+      @band.year_disbanded = 1995
       @band.save!
 
       active_bands = Music::Artist.active
@@ -156,7 +151,7 @@ module Music
       mock_result.stubs(:data).returns({
         description: "Innovative English singer-songwriter",
         born_on: "1947-01-08",
-        died_on: "2016-01-10",
+        year_died: 2016,
         country: "GB",
         kind: "person"
       })
@@ -167,7 +162,7 @@ module Music
         @person.update!(
           description: "Innovative English singer-songwriter",
           born_on: Date.parse("1947-01-08"),
-          died_on: Date.parse("2016-01-10"),
+          year_died: 2016,
           country: "GB",
           kind: "person"
         )
@@ -177,7 +172,7 @@ module Music
       # Store original values
       @person.description
       @person.born_on
-      @person.died_on
+      @person.year_died
       @person.country
       @person.kind
 
@@ -187,7 +182,7 @@ module Music
       @person.reload
       assert_equal "Innovative English singer-songwriter", @person.description
       assert_equal Date.parse("1947-01-08"), @person.born_on
-      assert_equal Date.parse("2016-01-10"), @person.died_on
+      assert_equal 2016, @person.year_died
       assert_equal "GB", @person.country
       assert_equal "person", @person.kind
 
@@ -207,7 +202,7 @@ module Music
       # Store original values
       original_description = @person.description
       original_born_on = @person.born_on
-      original_died_on = @person.died_on
+      original_year_died = @person.year_died
       original_country = @person.country
       original_kind = @person.kind
 
@@ -217,7 +212,7 @@ module Music
       @person.reload
       assert_equal original_description, @person.description
       assert_equal original_born_on, @person.born_on
-      assert_equal original_died_on, @person.died_on
+      assert_equal original_year_died, @person.year_died
       assert_equal original_country, @person.country
       assert_equal original_kind, @person.kind
 
@@ -232,7 +227,7 @@ module Music
       # Store original values
       original_description = @person.description
       original_born_on = @person.born_on
-      original_died_on = @person.died_on
+      original_year_died = @person.year_died
       original_country = @person.country
       original_kind = @person.kind
 
@@ -245,7 +240,7 @@ module Music
       @person.reload
       assert_equal original_description, @person.description
       assert_equal original_born_on, @person.born_on
-      assert_equal original_died_on, @person.died_on
+      assert_equal original_year_died, @person.year_died
       assert_equal original_country, @person.country
       assert_equal original_kind, @person.kind
     end
@@ -258,7 +253,7 @@ module Music
       mock_result.stubs(:data).returns({
         description: "English progressive rock band",
         born_on: nil,
-        died_on: nil,
+        year_died: nil,
         country: "GB",
         kind: "band"
       })
@@ -270,7 +265,7 @@ module Music
         @band.update!(
           description: "English progressive rock band",
           born_on: nil,
-          died_on: nil,
+          year_died: nil,
           country: "GB",
           kind: "band"
         )
@@ -290,7 +285,7 @@ module Music
       assert_equal "GB", @band.country
       assert_equal "band", @band.kind
       assert_nil @band.born_on
-      assert_nil @band.died_on
+      assert_nil @band.year_died
 
       assert result.success?
     end
@@ -305,7 +300,7 @@ module Music
       mock_result.stubs(:data).returns({
         description: nil,
         born_on: nil,
-        died_on: nil,
+        year_died: nil,
         country: nil,
         kind: "person"
       })
@@ -316,7 +311,7 @@ module Music
         @person.update!(
           description: nil,
           born_on: nil,
-          died_on: nil,
+          year_died: nil,
           country: nil,
           kind: "person"
         )
@@ -329,7 +324,7 @@ module Music
       @person.reload
       assert_nil @person.description
       assert_nil @person.born_on
-      assert_nil @person.died_on
+      assert_nil @person.year_died
       assert_nil @person.country
       assert_equal "person", @person.kind
 

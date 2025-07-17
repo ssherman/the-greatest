@@ -2,18 +2,18 @@
 #
 # Table name: music_artists
 #
-#  id           :bigint           not null, primary key
-#  born_on      :date
-#  country      :string(2)
-#  description  :text
-#  died_on      :date
-#  disbanded_on :date
-#  formed_on    :date
-#  kind         :integer          default("person"), not null
-#  name         :string           not null
-#  slug         :string           not null
-#  created_at   :datetime         not null
-#  updated_at   :datetime         not null
+#  id              :bigint           not null, primary key
+#  born_on         :date
+#  country         :string(2)
+#  description     :text
+#  kind            :integer          default("person"), not null
+#  name            :string           not null
+#  slug            :string           not null
+#  year_died       :integer
+#  year_disbanded  :integer
+#  year_formed     :integer
+#  created_at      :datetime         not null
+#  updated_at      :datetime         not null
 #
 # Indexes
 #
@@ -43,7 +43,7 @@ class Music::Artist < ApplicationRecord
   # Scopes
   scope :people, -> { where(kind: :person) }
   scope :bands, -> { where(kind: :band) }
-  scope :active, -> { where(disbanded_on: nil) }
+  scope :active, -> { where(year_disbanded: nil) }
 
   # AI Methods
   def populate_details_with_ai!
@@ -54,11 +54,10 @@ class Music::Artist < ApplicationRecord
 
   def date_consistency
     if person?
-      errors.add(:formed_on, "cannot be set for a person") if formed_on.present?
-      errors.add(:disbanded_on, "cannot be set for a person") if disbanded_on.present?
+      errors.add(:year_formed, "cannot be set for a person") if year_formed.present?
+      errors.add(:year_disbanded, "cannot be set for a person") if year_disbanded.present?
     elsif band?
-      errors.add(:born_on, "cannot be set for a band") if born_on.present?
-      errors.add(:died_on, "cannot be set for a band") if died_on.present?
+      errors.add(:year_died, "cannot be set for a band") if year_died.present?
     end
   end
 end

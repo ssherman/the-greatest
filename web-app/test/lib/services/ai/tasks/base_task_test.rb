@@ -130,7 +130,7 @@ module Services
           default_data = {
             description: "Innovative English singer-songwriter and actor",
             born_on: "1947-01-08",
-            died_on: "2016-01-10",
+            year_died: 2016,
             country: "GB",
             kind: "person"
           }

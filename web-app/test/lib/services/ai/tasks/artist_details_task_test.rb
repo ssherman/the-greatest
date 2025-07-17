@@ -44,6 +44,12 @@ module Services
           assert_includes user_prompt, "description"
           assert_includes user_prompt, "country"
           assert_includes user_prompt, "kind"
+          assert_includes user_prompt, "year_died"
+          assert_includes user_prompt, "year_formed"
+          assert_includes user_prompt, "year_disbanded"
+          assert_includes user_prompt, "For individual people only"
+          assert_includes user_prompt, "For bands only"
+          assert_includes user_prompt, "Only provide year_died for people"
           assert_includes user_prompt, "artist_known"
           assert_includes user_prompt, "don't know this artist"
           assert_includes user_prompt, "valid JSON matching the schema"
@@ -78,7 +84,8 @@ module Services
             artist_known: true,
             description: "Innovative English singer-songwriter",
             country: "GB",
-            kind: "person"
+            kind: "person",
+            year_died: 2016
           )
           @mock_strategy.stubs(:send_message!).returns(mock_response)
 
@@ -89,6 +96,7 @@ module Services
           assert_equal "Innovative English singer-songwriter", @artist.description
           assert_equal "GB", @artist.country
           assert_equal "person", @artist.kind
+          assert_equal 2016, @artist.year_died
 
           assert result.success?
         end
@@ -99,7 +107,8 @@ module Services
             artist_known: true,
             description: nil,
             country: nil,
-            kind: "person"
+            kind: "person",
+            year_died: nil
           )
           @mock_strategy.stubs(:send_message!).returns(mock_response)
 
@@ -110,6 +119,7 @@ module Services
           assert_nil @artist.description
           assert_nil @artist.country
           assert_equal "person", @artist.kind
+          assert_nil @artist.year_died
 
           assert result.success?
         end
@@ -123,7 +133,8 @@ module Services
             artist_known: true,
             description: "English progressive rock band",
             country: "GB",
-            kind: "band"
+            kind: "band",
+            year_formed: 1965
           )
           @mock_strategy.stubs(:send_message!).returns(mock_response)
 
@@ -134,6 +145,115 @@ module Services
           assert_equal "English progressive rock band", @artist.description
           assert_equal "GB", @artist.country
           assert_equal "band", @artist.kind
+          assert_equal 1965, @artist.year_formed
+
+          assert result.success?
+        end
+
+        test "should only set year_died for person type artists" do
+          # Mock response for a person with year_died
+          mock_response = mock_provider_response(
+            artist_known: true,
+            description: "Innovative English singer-songwriter",
+            country: "GB",
+            kind: "person",
+            year_died: 2016,
+            year_formed: 1965,  # This should be ignored
+            year_disbanded: 1995  # This should be ignored
+          )
+          @mock_strategy.stubs(:send_message!).returns(mock_response)
+
+          result = @task.call
+
+          # Verify the artist was updated correctly
+          @artist.reload
+          assert_equal "Innovative English singer-songwriter", @artist.description
+          assert_equal "GB", @artist.country
+          assert_equal "person", @artist.kind
+          assert_equal 2016, @artist.year_died
+          assert_nil @artist.year_formed    # Should not be set for person
+          assert_nil @artist.year_disbanded # Should not be set for person
+
+          assert result.success?
+        end
+
+        test "should only set year_formed and year_disbanded for band type artists" do
+          @artist = music_artists(:pink_floyd)
+          @task = ArtistDetailsTask.new(parent: @artist)
+
+          # Mock response for a band with year_formed and year_disbanded
+          mock_response = mock_provider_response(
+            artist_known: true,
+            description: "English progressive rock band",
+            country: "GB",
+            kind: "band",
+            year_died: 2016,      # This should be ignored
+            year_formed: 1965,
+            year_disbanded: 1995
+          )
+          @mock_strategy.stubs(:send_message!).returns(mock_response)
+
+          result = @task.call
+
+          # Verify the artist was updated correctly
+          @artist.reload
+          assert_equal "English progressive rock band", @artist.description
+          assert_equal "GB", @artist.country
+          assert_equal "band", @artist.kind
+          assert_nil @artist.year_died        # Should not be set for band
+          assert_equal 1965, @artist.year_formed
+          assert_equal 1995, @artist.year_disbanded
+
+          assert result.success?
+        end
+
+        test "should handle partial year data for person" do
+          # Mock response for a person with no year_died
+          mock_response = mock_provider_response(
+            artist_known: true,
+            description: "Living artist",
+            country: "US",
+            kind: "person",
+            year_died: nil
+          )
+          @mock_strategy.stubs(:send_message!).returns(mock_response)
+
+          result = @task.call
+
+          # Verify the artist was updated correctly
+          @artist.reload
+          assert_equal "Living artist", @artist.description
+          assert_equal "US", @artist.country
+          assert_equal "person", @artist.kind
+          assert_nil @artist.year_died
+
+          assert result.success?
+        end
+
+        test "should handle partial year data for band" do
+          @artist = music_artists(:pink_floyd)
+          @task = ArtistDetailsTask.new(parent: @artist)
+
+          # Mock response for a band with only year_formed (still active)
+          mock_response = mock_provider_response(
+            artist_known: true,
+            description: "Active progressive rock band",
+            country: "GB",
+            kind: "band",
+            year_formed: 1965,
+            year_disbanded: nil
+          )
+          @mock_strategy.stubs(:send_message!).returns(mock_response)
+
+          result = @task.call
+
+          # Verify the artist was updated correctly
+          @artist.reload
+          assert_equal "Active progressive rock band", @artist.description
+          assert_equal "GB", @artist.country
+          assert_equal "band", @artist.kind
+          assert_equal 1965, @artist.year_formed
+          assert_nil @artist.year_disbanded
 
           assert result.success?
         end
@@ -254,10 +374,13 @@ module Services
             artist_known: true,
             description: "Innovative English singer-songwriter and actor",
             country: "GB",
-            kind: "person"
+            kind: "person",
+            year_died: nil,
+            year_formed: nil,
+            year_disbanded: nil
           }
 
-          final_data = data || default_data
+          final_data = default_data.merge(data || {})
 
           {
             content: final_data.to_json,

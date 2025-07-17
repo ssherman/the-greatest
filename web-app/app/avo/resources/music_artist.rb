@@ -12,10 +12,10 @@ class Avo::Resources::MusicArtist < Avo::BaseResource
     field :slug, as: :text, readonly: true
     field :description, as: :textarea
     field :kind, as: :select, enum: ::Music::Artist.kinds
-    field :country, as: :country
     field :born_on, as: :date
-    field :died_on, as: :date
-    field :formed_on, as: :date
-    field :disbanded_on, as: :date
+    field :year_died, as: :number
+    field :year_formed, as: :number
+    field :year_disbanded, as: :number
+    field :country, as: :country
   end
 end

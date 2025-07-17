@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_07_12_194724) do
+ActiveRecord::Schema[8.0].define(version: 2025_07_16_233754) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -169,11 +169,11 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_12_194724) do
     t.integer "kind", default: 0, null: false
     t.string "country", limit: 2
     t.date "born_on"
-    t.date "died_on"
-    t.date "formed_on"
-    t.date "disbanded_on"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "year_died"
+    t.integer "year_formed"
+    t.integer "year_disbanded"
     t.index ["kind"], name: "index_music_artists_on_kind"
     t.index ["slug"], name: "index_music_artists_on_slug", unique: true
   end

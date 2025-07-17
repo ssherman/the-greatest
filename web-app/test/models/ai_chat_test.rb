@@ -3,12 +3,12 @@
 # Table name: ai_chats
 #
 #  id              :bigint           not null, primary key
-#  chat_type       :integer          default(0), not null
+#  chat_type       :integer          default("general"), not null
 #  json_mode       :boolean          default(FALSE), not null
 #  messages        :jsonb
 #  model           :string           not null
 #  parent_type     :string
-#  provider        :integer          default(0), not null
+#  provider        :integer          default("openai"), not null
 #  raw_responses   :jsonb
 #  response_schema :jsonb
 #  temperature     :decimal(3, 2)    default(0.2), not null

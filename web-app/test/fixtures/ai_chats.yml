@@ -1,3 +1,31 @@
+# == Schema Information
+#
+# Table name: ai_chats
+#
+#  id              :bigint           not null, primary key
+#  chat_type       :integer          default("general"), not null
+#  json_mode       :boolean          default(FALSE), not null
+#  messages        :jsonb
+#  model           :string           not null
+#  parent_type     :string
+#  provider        :integer          default("openai"), not null
+#  raw_responses   :jsonb
+#  response_schema :jsonb
+#  temperature     :decimal(3, 2)    default(0.2), not null
+#  created_at      :datetime         not null
+#  updated_at      :datetime         not null
+#  parent_id       :bigint
+#  user_id         :bigint
+#
+# Indexes
+#
+#  index_ai_chats_on_parent   (parent_type,parent_id)
+#  index_ai_chats_on_user_id  (user_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (user_id => users.id)
+#
 general_chat:
   chat_type: general
   model: "gpt-4"
