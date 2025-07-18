@@ -84,4 +84,12 @@ class Music::Song < ApplicationRecord
   def alternated_by
     original_songs.merge(Music::SongRelationship.alternates)
   end
+
+  # Search Methods
+  def as_indexed_json
+    {
+      title: title,
+      artist_names: albums.includes(:primary_artist).map { |album| album.primary_artist&.name }.compact.uniq
+    }
+  end
 end

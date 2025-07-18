@@ -35,4 +35,12 @@ class Music::Album < ApplicationRecord
   validates :title, presence: true
   validates :primary_artist, presence: true
   validates :release_year, numericality: {only_integer: true, allow_nil: true}
+
+  # Search Methods
+  def as_indexed_json
+    {
+      title: title,
+      primary_artist_name: primary_artist&.name
+    }
+  end
 end

@@ -2,7 +2,7 @@ services:
   db:
     image: postgres:17
     environment:
-      - POSTGRES_PASSWORD=postgres_password
+      - POSTGRES_PASSWORD=${DOCKER_POSTGRES_PASSWORD}
     volumes:
       - postgresql-data:/var/lib/postgresql/data
     ports:
@@ -13,10 +13,31 @@ services:
                -c 'log_min_error_statement=error'
     networks:
       - the-greatest
+  opensearch:
+    image: opensearchproject/opensearch:latest
+    container_name: opensearch-dev
+    environment:
+      - discovery.type=single-node
+      - plugins.security.disabled=true
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${DOCKER_OPENSEARCH_PASSWORD} # required even if security is disabled
+      - OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    networks:
+      - the-greatest
+    ports:
+      - "9200:9200"
+      - "9600:9600"
 
 volumes:
   postgresql-data:
     name: tg_postgresql_data 
+  opensearch-data:
+    name: tg_opensearch_data
 
 networks:
   the-greatest:

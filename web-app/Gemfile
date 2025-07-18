@@ -43,6 +43,8 @@ gem "thruster", require: false
 gem "countries"
 gem "ruby_llm-schema"
 gem "openai"
+gem "opensearch-ruby"
+
 # Load environment variables from .env file
 # gem "dotenv-rails"
 

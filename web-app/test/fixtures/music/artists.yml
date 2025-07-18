@@ -28,6 +28,21 @@ david_bowie:
   slug: "david-bowie"
   description: "Innovative English singer-songwriter and actor who was a leading figure in popular music for over five decades."
   kind: 0
+
+the_beatles:
+  name: "The Beatles"
+  slug: "the-beatles"
+  description: "English rock band formed in Liverpool in 1960."
+  kind: 1
+  year_formed: 1960
+  year_disbanded: 1970
+
+beatles_tribute_band:
+  name: "Beatles Tribute Band"
+  slug: "beatles-tribute-band"
+  description: "A tribute band that plays Beatles songs."
+  kind: 1
+  year_formed: 1990
   country: "GB"
   born_on: 1947-01-08
   year_died: 2016

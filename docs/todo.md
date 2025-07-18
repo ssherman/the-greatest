@@ -13,10 +13,10 @@
 
 ## Low Priority
 9. [Recommendation engine MVP](todos/004-recommendation-engine.md)
-10. [OpenSearch integration](todos/005-opensearch-integration.md)
-11. [Admin interface with Avo](todos/007-admin-interface.md)
+10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-07-18] [OpenSearch integration](todos/014-opensearch-integration.md)
 - ✅ [2025-07-15] [AI chat service implementation](todos/013-ai-chat-service.md)
 - ✅ [2025-07-12] [AI chats model implementation](todos/012-ai-chats-model.md)
 - ✅ [2025-07-11] [Penalty model implementation](todos/011-penalty-model.md)

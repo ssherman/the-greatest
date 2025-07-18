@@ -192,6 +192,7 @@ GEM
     mocha (2.7.1)
       ruby2_keywords (>= 0.0.5)
     msgpack (1.8.0)
+    multi_json (1.16.0)
     net-http (0.6.0)
       uri
     net-imap (0.5.9)
@@ -222,6 +223,9 @@ GEM
       racc (~> 1.4)
     openai (0.14.0)
       connection_pool
+    opensearch-ruby (3.4.0)
+      faraday (>= 1.0, < 3)
+      multi_json (>= 1.0)
     pagy (9.3.5)
     parallel (1.27.0)
     parser (3.3.8.0)
@@ -419,6 +423,7 @@ DEPENDENCIES
   mocha
   nokogiri
   openai
+  opensearch-ruby
   pg (~> 1.1)
   propshaft
   puma (>= 5.0)

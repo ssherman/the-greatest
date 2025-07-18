@@ -50,6 +50,13 @@ class Music::Artist < ApplicationRecord
     Services::Ai::Tasks::ArtistDetailsTask.new(parent: self).call
   end
 
+  # Search Methods
+  def as_indexed_json
+    {
+      name: name
+    }
+  end
+
   private
 
   def date_consistency
