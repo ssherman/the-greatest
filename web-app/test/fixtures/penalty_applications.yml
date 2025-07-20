@@ -65,6 +65,22 @@ music_penalty_app:
   ranking_configuration: music_global
   value: 22
 
+# Global penalties applied to music configuration
+music_global_penalty_app:
+  penalty: global_penalty
+  ranking_configuration: music_global
+  value: 15
+
+music_cross_media_penalty_app:
+  penalty: cross_media_penalty
+  ranking_configuration: music_global
+  value: 10
+
+music_static_penalty_app:
+  penalty: static_penalty
+  ranking_configuration: music_global
+  value: 8
+
 # User-specific penalty applications
 user_penalty_app:
   penalty: user_penalty

@@ -117,6 +117,29 @@ class RankingConfiguration < ApplicationRecord
     new_config
   end
 
+  def median_voter_count
+    # Get all lists associated with this ranking configuration
+    list_ids = ranked_lists.pluck(:list_id)
+    lists = List.where(id: list_ids)
+    numbers = lists.where.not(number_of_voters: nil).pluck(:number_of_voters).sort
+
+    # Condense all 1s into a single 1 (as per original logic)
+    if numbers.include?(1)
+      numbers = numbers.reject { |n| n == 1 } + [1]
+      numbers = numbers.sort  # Re-sort after condensation
+    end
+
+    return nil if numbers.empty?
+
+    Rails.logger.debug "Median voter count calculation - numbers: #{numbers.inspect}"
+    len = numbers.length
+    if len.odd?
+      numbers[len / 2]
+    else
+      (numbers[len / 2 - 1] + numbers[len / 2]) / 2.0
+    end
+  end
+
   private
 
   def only_one_primary_per_type

@@ -2,20 +2,19 @@
 #
 # Table name: penalties
 #
-#  id          :bigint           not null, primary key
-#  description :text
-#  dynamic     :boolean          default(FALSE), not null
-#  global      :boolean          default(FALSE), not null
-#  media_type  :integer          default("cross_media"), not null
-#  name        :string           not null
-#  type        :string           not null
-#  created_at  :datetime         not null
-#  updated_at  :datetime         not null
-#  user_id     :bigint
+#  id           :bigint           not null, primary key
+#  description  :text
+#  dynamic_type :integer
+#  global       :boolean          default(FALSE), not null
+#  media_type   :integer          default("cross_media"), not null
+#  name         :string           not null
+#  type         :string           not null
+#  created_at   :datetime         not null
+#  updated_at   :datetime         not null
+#  user_id      :bigint
 #
 # Indexes
 #
-#  index_penalties_on_dynamic     (dynamic)
 #  index_penalties_on_global      (global)
 #  index_penalties_on_media_type  (media_type)
 #  index_penalties_on_type        (type)
@@ -42,11 +41,18 @@ class Penalty < ApplicationRecord
     music: 4
   }
 
+  enum :dynamic_type, {
+    number_of_voters: 0,
+    percentage_western: 1,
+    voter_names_unknown: 2,
+    voter_count_unknown: 3,
+    category_specific: 4,
+    location_specific: 5
+  }, allow_nil: true
+
   # Validations
   validates :name, presence: true
   validates :type, presence: true
-  validates :global, inclusion: {in: [true, false]}
-  validates :dynamic, inclusion: {in: [true, false]}
   validates :media_type, presence: true
   validate :user_presence_for_non_global_penalties
   validate :media_type_consistency
@@ -54,10 +60,11 @@ class Penalty < ApplicationRecord
   # Scopes
   scope :global, -> { where(global: true) }
   scope :user_specific, -> { where(global: false) }
-  scope :dynamic, -> { where(dynamic: true) }
-  scope :static, -> { where(dynamic: false) }
+  scope :dynamic, -> { where.not(dynamic_type: nil) }
+  scope :static, -> { where(dynamic_type: nil) }
   scope :by_media_type, ->(media_type) { where(media_type: media_type) }
   scope :cross_media, -> { where(media_type: :cross_media) }
+  scope :by_dynamic_type, ->(dynamic_type) { where(dynamic_type: dynamic_type) }
 
   # Public Methods
   def global?
@@ -69,11 +76,11 @@ class Penalty < ApplicationRecord
   end
 
   def dynamic?
-    dynamic
+    dynamic_type.present?
   end
 
   def static?
-    !dynamic?
+    dynamic_type.nil?
   end
 
   def cross_media?

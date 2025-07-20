@@ -22,20 +22,20 @@
 #
 books_ranked_list:
   weight: 10
-  list: books_list (Books::List)
+  list: books_list
   ranking_configuration: books_global
 
 movies_ranked_list:
   weight: 15
-  list: movies_list (Movies::List)
+  list: movies_list
   ranking_configuration: movies_global
 
 music_ranked_list:
   weight: 12
-  list: music_list (Music::List)
+  list: music_list
   ranking_configuration: music_global
 
 games_ranked_list:
   weight: 8
-  list: games_list (Games::List)
+  list: games_list
   ranking_configuration: games_global

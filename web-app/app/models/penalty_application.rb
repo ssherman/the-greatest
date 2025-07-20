@@ -31,23 +31,7 @@ class PenaltyApplication < ApplicationRecord
   validates :value, presence: true, numericality: {greater_than_or_equal_to: 0, less_than_or_equal_to: 100}
   validate :penalty_and_configuration_compatibility
 
-  # Scopes
-  scope :by_value, -> { order(:value) }
-  scope :high_value, -> { where("value >= ?", 25) }
-  scope :low_value, -> { where("value < ?", 25) }
-
   # Public Methods
-  def percentage_value
-    "#{value}%"
-  end
-
-  def high_penalty?
-    value >= 25
-  end
-
-  def low_penalty?
-    value < 25
-  end
 
   # Clone this penalty application for inheritance
   def clone_for_inheritance(new_ranking_configuration)

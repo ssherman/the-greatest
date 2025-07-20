@@ -2,18 +2,18 @@
 #
 # Table name: music_artists
 #
-#  id              :bigint           not null, primary key
-#  born_on         :date
-#  country         :string(2)
-#  description     :text
-#  kind            :integer          default("person"), not null
-#  name            :string           not null
-#  slug            :string           not null
-#  year_died       :integer
-#  year_disbanded  :integer
-#  year_formed     :integer
-#  created_at      :datetime         not null
-#  updated_at      :datetime         not null
+#  id             :bigint           not null, primary key
+#  born_on        :date
+#  country        :string(2)
+#  description    :text
+#  kind           :integer          default("person"), not null
+#  name           :string           not null
+#  slug           :string           not null
+#  year_died      :integer
+#  year_disbanded :integer
+#  year_formed    :integer
+#  created_at     :datetime         not null
+#  updated_at     :datetime         not null
 #
 # Indexes
 #

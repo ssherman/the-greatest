@@ -2,20 +2,19 @@
 #
 # Table name: penalties
 #
-#  id          :bigint           not null, primary key
-#  description :text
-#  dynamic     :boolean          default(FALSE), not null
-#  global      :boolean          default(FALSE), not null
-#  media_type  :integer          default("cross_media"), not null
-#  name        :string           not null
-#  type        :string           not null
-#  created_at  :datetime         not null
-#  updated_at  :datetime         not null
-#  user_id     :bigint
+#  id           :bigint           not null, primary key
+#  description  :text
+#  dynamic_type :integer
+#  global       :boolean          default(FALSE), not null
+#  media_type   :integer          default("cross_media"), not null
+#  name         :string           not null
+#  type         :string           not null
+#  created_at   :datetime         not null
+#  updated_at   :datetime         not null
+#  user_id      :bigint
 #
 # Indexes
 #
-#  index_penalties_on_dynamic     (dynamic)
 #  index_penalties_on_global      (global)
 #  index_penalties_on_media_type  (media_type)
 #  index_penalties_on_type        (type)

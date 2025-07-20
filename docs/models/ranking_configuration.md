@@ -36,6 +36,16 @@ Checks if this configuration can inherit from another (must be same type and not
 Returns a new, unsaved configuration cloned from this one, with `inherited_from_id` set and `primary`/`published_at` reset.
 - Returns: RankingConfiguration (unsaved)
 
+### `#median_voter_count`
+Calculates the median number of voters across all lists in this ranking configuration. Used by weight calculation algorithms to determine voter count penalties.
+- Returns: Float/Integer - median voter count, or nil if no data available
+- Algorithm: 
+  1. Gets all lists associated with ranked lists in this configuration
+  2. Extracts non-nil `number_of_voters` values and sorts them
+  3. Condenses multiple lists with 1 voter into a single 1 (reduces noise from single-voter lists)
+  4. Calculates median for odd/even length arrays
+- Used by: Weight calculation services for dynamic penalty calculations
+
 ## Validations
 - `name`: presence, max 255 chars
 - `algorithm_version`: presence, integer > 0

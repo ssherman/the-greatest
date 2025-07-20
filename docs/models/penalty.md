@@ -21,12 +21,14 @@ Returns true if the penalty is user-specific
 - Returns: Boolean
 
 ### `#dynamic?`
-Returns true if the penalty is dynamic (calls custom logic)
+Returns true if the penalty has a dynamic_type (calls custom calculation logic)
 - Returns: Boolean
+- Implementation: `dynamic_type.present?`
 
 ### `#static?`
-Returns true if the penalty is static (fixed value)
+Returns true if the penalty is static (fixed value, no dynamic calculation)
 - Returns: Boolean
+- Implementation: `dynamic_type.blank?`
 
 ### `#cross_media?`
 Returns true if the penalty applies to all media types
@@ -53,13 +55,15 @@ Returns the penalty value for a given list and ranking configuration. Overridden
 ## Scopes
 - `global` - Global penalties
 - `user_specific` - User-specific penalties
-- `dynamic` - Dynamic penalties
-- `static` - Static penalties
+- `dynamic` - Penalties with dynamic_type present (calculated at runtime)
+- `static` - Penalties without dynamic_type (fixed values)
 - `by_media_type(media_type)` - Filter by media type
+- `by_dynamic_type(dynamic_type)` - Filter by specific dynamic penalty type
 - `cross_media` - Cross-media penalties
 
 ## Constants
 - Enum: `media_type` (cross_media, books, movies, games, music)
+- Enum: `dynamic_type` (number_of_voters, percentage_western, voter_names_unknown, voter_count_unknown, category_specific, location_specific)
 
 ## Callbacks
 _None defined._

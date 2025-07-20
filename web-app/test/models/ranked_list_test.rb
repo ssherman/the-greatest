@@ -29,9 +29,20 @@ class RankedListTest < ActiveSupport::TestCase
   end
 
   test "should be valid with correct types" do
+    # Create fresh test data to avoid fixture conflicts
+    test_config = Books::RankingConfiguration.create!(
+      name: "Test Config #{SecureRandom.hex(4)}",
+      global: true,
+      min_list_weight: 1
+    )
+    test_list = Books::List.create!(
+      name: "Test List #{SecureRandom.hex(4)}",
+      status: :approved
+    )
+
     ranked_list = RankedList.new(
-      ranking_configuration: @books_config,
-      list: @books_list
+      ranking_configuration: test_config,
+      list: test_list
     )
     assert ranked_list.valid?
   end
@@ -46,31 +57,86 @@ class RankedListTest < ActiveSupport::TestCase
   end
 
   test "should enforce uniqueness per ranking configuration" do
-    RankedList.create!(ranking_configuration: @books_config, list: @books_list)
-    duplicate = RankedList.new(ranking_configuration: @books_config, list: @books_list)
+    # Create fresh test data to avoid fixture conflicts
+    test_config = Books::RankingConfiguration.create!(
+      name: "Test Config #{SecureRandom.hex(4)}",
+      global: true,
+      min_list_weight: 1
+    )
+    test_list = Books::List.create!(
+      name: "Test List #{SecureRandom.hex(4)}",
+      status: :approved
+    )
+
+    # First entry should be valid
+    first_entry = RankedList.create!(ranking_configuration: test_config, list: test_list)
+    assert first_entry.valid?
+
+    # Duplicate should not be valid
+    duplicate = RankedList.new(ranking_configuration: test_config, list: test_list)
     assert_not duplicate.valid?
     assert_includes duplicate.errors[:list_id], "can only be added once per ranking configuration"
   end
 
   test "should allow same list in different ranking configurations" do
-    other_config = RankingConfiguration.create!(
-      name: "Other Books Config",
-      type: "Books::RankingConfiguration"
+    # Create fresh test data to avoid fixture conflicts
+    test_list = Books::List.create!(
+      name: "Test List for Multiple Configs",
+      status: :approved
     )
-    RankedList.create!(ranking_configuration: @books_config, list: @books_list)
-    ranked_list = RankedList.new(ranking_configuration: other_config, list: @books_list)
 
-    assert ranked_list.valid?
+    # Create two different ranking configurations (completely separate from fixtures)
+    config1 = Books::RankingConfiguration.create!(
+      name: "First Books Config #{SecureRandom.hex(4)}",
+      global: true,
+      min_list_weight: 1
+    )
+    config2 = Books::RankingConfiguration.create!(
+      name: "Second Books Config #{SecureRandom.hex(4)}",
+      global: true,
+      min_list_weight: 1
+    )
+
+    # Should be able to add the same list to both configurations
+    RankedList.create!(ranking_configuration: config1, list: test_list)
+    ranked_list2 = RankedList.new(ranking_configuration: config2, list: test_list)
+
+    assert ranked_list2.valid?, "Same list should be allowed in different ranking configurations"
+
+    # Verify it actually saves
+    assert ranked_list2.save, "Should be able to save the same list to a different ranking configuration"
   end
 
   test "should allow null weight" do
-    ranked_list = RankedList.new(ranking_configuration: @books_config, list: @books_list, weight: nil)
+    # Create fresh test data to avoid fixture conflicts
+    test_config = Books::RankingConfiguration.create!(
+      name: "Test Config #{SecureRandom.hex(4)}",
+      global: true,
+      min_list_weight: 1
+    )
+    test_list = Books::List.create!(
+      name: "Test List #{SecureRandom.hex(4)}",
+      status: :approved
+    )
+
+    ranked_list = RankedList.new(ranking_configuration: test_config, list: test_list, weight: nil)
     assert ranked_list.valid?
   end
 
   test "should belong to ranking_configuration and list" do
-    ranked_list = RankedList.new(ranking_configuration: @books_config, list: @books_list)
-    assert_equal @books_config, ranked_list.ranking_configuration
-    assert_equal @books_list, ranked_list.list
+    # Create fresh test data to avoid fixture conflicts
+    test_config = Books::RankingConfiguration.create!(
+      name: "Test Config #{SecureRandom.hex(4)}",
+      global: true,
+      min_list_weight: 1
+    )
+    test_list = Books::List.create!(
+      name: "Test List #{SecureRandom.hex(4)}",
+      status: :approved
+    )
+
+    ranked_list = RankedList.new(ranking_configuration: test_config, list: test_list)
+    assert_equal test_config, ranked_list.ranking_configuration
+    assert_equal test_list, ranked_list.list
   end
 end

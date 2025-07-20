@@ -9,18 +9,6 @@ Represents the application of a penalty to a specific ranking configuration, wit
 
 ## Public Methods
 
-### `#percentage_value`
-Returns the penalty value as a percentage string (e.g., "25%")
-- Returns: String
-
-### `#high_penalty?`
-Returns true if the penalty value is high (>= 25)
-- Returns: Boolean
-
-### `#low_penalty?`
-Returns true if the penalty value is low (< 25)
-- Returns: Boolean
-
 ### `#clone_for_inheritance(new_ranking_configuration)`
 Clones this penalty application for a new ranking configuration (used when inheriting configs)
 - Parameters: new_ranking_configuration (RankingConfiguration)
@@ -33,9 +21,7 @@ Clones this penalty application for a new ranking configuration (used when inher
 - Custom: penalty and configuration must be compatible (media type)
 
 ## Scopes
-- `by_value` - Order by value
-- `high_value` - Value >= 25
-- `low_value` - Value < 25
+_None defined._
 
 ## Constants
 _None defined._
