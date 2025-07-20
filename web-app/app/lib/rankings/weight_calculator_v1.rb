@@ -28,13 +28,29 @@ module Rankings
 
     def calculate_total_penalty_percentage
       # Get all penalty values applied to this list for this ranking configuration
-      penalty_percentage = list.total_penalty_value(ranking_configuration).to_f
+      penalty_percentage = calculate_static_penalties.to_f
 
       # Add any additional penalties based on list attributes
       penalty_percentage += calculate_voter_count_penalty
       penalty_percentage += calculate_attribute_penalties
 
       penalty_percentage
+    end
+
+    def calculate_static_penalties
+      total_penalty = 0
+
+      # Calculate penalties from list penalty associations (list-specific penalties)
+      list.list_penalties.includes(:penalty).each do |list_penalty|
+        penalty = list_penalty.penalty
+        if penalty.static?
+          # For static penalties, get value from penalty applications for this configuration
+          penalty_application = penalty.penalty_applications.find_by(ranking_configuration: ranking_configuration)
+          total_penalty += penalty_application&.value || 0
+        end
+      end
+
+      total_penalty
     end
 
     def calculate_voter_count_penalty

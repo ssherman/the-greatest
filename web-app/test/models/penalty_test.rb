@@ -211,18 +211,6 @@ class PenaltyTest < ActiveSupport::TestCase
     assert_not penalty.cross_media?
   end
 
-  test "should calculate penalty value from penalty applications" do
-    penalty = penalties(:global_penalty)
-    value = penalty.calculate_penalty_value(@list, @ranking_configuration)
-    assert_equal 25, value
-  end
-
-  test "should return 0 for penalty value when no application exists" do
-    penalty = penalties(:user_penalty)
-    value = penalty.calculate_penalty_value(@list, @ranking_configuration)
-    assert_equal 0, value
-  end
-
   # STI Subclasses
   test "should create books penalty" do
     penalty = Books::Penalty.create!(

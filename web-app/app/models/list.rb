@@ -56,10 +56,6 @@ class List < ApplicationRecord
   scope :yearly_awards, -> { where(yearly_award: true) }
 
   # Public Methods
-  def total_penalty_value(ranking_configuration)
-    list_penalties.sum { |list_penalty| list_penalty.calculate_penalty_value(ranking_configuration) }
-  end
-
   def has_penalties?
     penalties.any?
   end

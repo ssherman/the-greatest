@@ -91,12 +91,6 @@ class Penalty < ApplicationRecord
     !cross_media?
   end
 
-  # Dynamic penalty calculation method (to be overridden by subclasses)
-  def calculate_penalty_value(list, ranking_configuration)
-    # Default implementation returns the static value from penalty_applications
-    penalty_applications.find_by(ranking_configuration: ranking_configuration)&.value || 0
-  end
-
   private
 
   def user_presence_for_non_global_penalties

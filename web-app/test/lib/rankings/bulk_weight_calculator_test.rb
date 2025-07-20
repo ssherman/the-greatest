@@ -75,20 +75,23 @@ module Rankings
 
     # Test results tracking
     test "tracks detailed results of weight changes" do
-      # Set specific weights on some ranked lists to test change tracking
+      # Set an incorrect weight that will definitely change when recalculated
       ranked_list = @books_config.ranked_lists.first
-      ranked_list.update!(weight: 50)
+      ranked_list.update!(weight: 999)  # Set to obviously wrong value
 
       results = @bulk_calculator.call
 
       # Should track the change
       change_entry = results[:weights_calculated].find { |w| w[:ranked_list_id] == ranked_list.id }
 
-      refute_nil change_entry
-      assert_equal 50, change_entry[:old_weight]
+      refute_nil change_entry, "Should track weight changes when weight actually changes"
+      assert_equal 999, change_entry[:old_weight]
       assert_kind_of Integer, change_entry[:new_weight]
       assert_equal ranked_list.list.name, change_entry[:list_name]
       assert_kind_of Integer, change_entry[:change]
+
+      # New weight should be different from the obviously wrong old weight
+      refute_equal 999, change_entry[:new_weight]
     end
 
     # Test transaction usage - simplified test

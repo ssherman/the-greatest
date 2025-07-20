@@ -53,11 +53,6 @@ class ListPenalty < ApplicationRecord
     penalty.static?
   end
 
-  # Calculate the total penalty value for this list in a given ranking configuration
-  def calculate_penalty_value(ranking_configuration)
-    penalty.calculate_penalty_value(list, ranking_configuration)
-  end
-
   private
 
   def list_and_penalty_compatibility

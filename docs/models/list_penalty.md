@@ -25,10 +25,7 @@ Returns true if the associated penalty is dynamic
 Returns true if the associated penalty is static
 - Returns: Boolean
 
-### `#calculate_penalty_value(ranking_configuration)`
-Returns the penalty value for this list in a given ranking configuration
-- Parameters: ranking_configuration (RankingConfiguration)
-- Returns: Integer (penalty percentage)
+**Note:** Penalty calculation logic has been moved to service objects (`Rankings::WeightCalculatorV1`) following "Skinny Models, Fat Services" principles. The join model only provides data relationships and compatibility validation.
 
 ## Validations
 - `list_id` - presence, uniqueness scoped to penalty_id
@@ -37,10 +34,10 @@ Returns the penalty value for this list in a given ranking configuration
 
 ## Scopes
 - `by_penalty_type(type)` - Filter by penalty STI type
-- `global_penalties` - Only global penalties
+- `global_penalties` - Only global penalties  
 - `user_penalties` - Only user-specific penalties
-- `dynamic_penalties` - Only dynamic penalties
-- `static_penalties` - Only static penalties
+- `dynamic_penalties` - Only dynamic penalties (based on penalty.dynamic_type)
+- `static_penalties` - Only static penalties (no dynamic_type)
 
 ## Constants
 _None defined._
@@ -50,4 +47,8 @@ _None defined._
 
 ## Dependencies
 - List model
-- Penalty model 
+- Penalty model
+
+## Related Services
+- `Rankings::WeightCalculatorV1` - Handles penalty calculations using ListPenalty associations
+- `Rankings::BulkWeightCalculator` - Processes penalties for multiple lists 

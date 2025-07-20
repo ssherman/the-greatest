@@ -6,9 +6,25 @@ Represents a list in the system. Core model for aggregating and ranking content 
 ## Associations
 - `has_many :list_items, dependent: :destroy` - Items contained in this list
 - `belongs_to :submitted_by, class_name: "User", optional: true` - User who submitted the list (optional)
+- `has_many :list_penalties, dependent: :destroy` - Join table for penalties associated with this list
+- `has_many :penalties, through: :list_penalties` - Penalties that apply to this list
+- `has_many :ai_chats, as: :parent, dependent: :destroy` - AI chat conversations about this list
 
 ## Public Methods
-No custom public methods defined. Inherits standard ActiveRecord methods.
+
+### `#has_penalties?`
+Returns true if this list has any penalties associated with it.
+- Returns: Boolean
+
+### `#global_penalties`
+Returns penalties that are globally available (not user-specific).
+- Returns: ActiveRecord::Relation of Penalty objects
+
+### `#user_penalties`
+Returns penalties that are user-specific (not global).
+- Returns: ActiveRecord::Relation of Penalty objects
+
+**Note:** Penalty calculation logic has been moved to service objects (`Rankings::WeightCalculatorV1`) following "Skinny Models, Fat Services" principles. The model only provides data access methods.
 
 ## Validations
 - `name` - presence required
@@ -31,6 +47,11 @@ None defined.
 ## Dependencies
 - Rails STI functionality for type-based inheritance
 - URI module for URL validation
+
+## Related Services
+- `Rankings::WeightCalculatorV1` - Handles penalty calculations and weight determination
+- `Rankings::BulkWeightCalculator` - Processes multiple lists for weight calculation
+- `Rankings::DisplayWeightService` - Formats weight information for UI display (when implemented)
 
 ## STI Subclasses
 The List model uses Single Table Inheritance with the following subclasses:
@@ -105,4 +126,13 @@ list.list_items.ordered
 # Add items to a list
 album = Music::Album.first
 list.list_items.create!(listable: album, position: 1)
+
+# Check for penalties (data access only)
+list.has_penalties?            # => true/false
+list.global_penalties          # => ActiveRecord::Relation
+list.user_penalties           # => ActiveRecord::Relation
+
+# For penalty calculations, use service objects:
+# calculator = Rankings::WeightCalculator.for_ranked_list(ranked_list)
+# weight = calculator.call
 ``` 

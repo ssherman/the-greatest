@@ -38,17 +38,14 @@ Returns true if the penalty applies to all media types
 Returns true if the penalty is media-specific
 - Returns: Boolean
 
-### `#calculate_penalty_value(list, ranking_configuration)`
-Returns the penalty value for a given list and ranking configuration. Overridden by dynamic subclasses.
-- Parameters: list (List), ranking_configuration (RankingConfiguration)
-- Returns: Integer (penalty percentage)
+**Note:** Penalty calculation logic has been moved to service objects (`Rankings::WeightCalculatorV1`) following "Skinny Models, Fat Services" principles. The model only provides data definitions and type checking.
 
 ## Validations
 - `name` - presence required
 - `type` - presence required (for STI)
 - `global` - must be true or false
-- `dynamic` - must be true or false
 - `media_type` - presence required, must match STI type if media-specific
+- `dynamic_type` - optional enum, when present indicates dynamic calculation needed
 - Custom: user must be present for user-specific penalties
 - Custom: STI type and media_type must be consistent
 
@@ -72,4 +69,8 @@ _None defined._
 - User model (for user-specific penalties)
 - PenaltyApplication model
 - ListPenalty model
-- STI subclasses for media-specific penalties 
+- STI subclasses for media-specific penalties
+
+## Related Services
+- `Rankings::WeightCalculatorV1` - Handles all penalty calculation logic using Penalty definitions
+- `Rankings::BulkWeightCalculator` - Processes penalty calculations for multiple rankings 
