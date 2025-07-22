@@ -93,13 +93,13 @@
 - **RESTful routes**: Maintain predictable URL patterns
 - **Testing approach**: Minitest with fixtures (see testing-guide.md)
 - **Default tools**: Prefer Rails built-ins over external gems
-- **Rails 8 enum syntax**: Always use the new format with colon prefix
+-   **Rails 8 enum syntax**: Always use the new format with colon prefix
   ```ruby
   # ✅ Correct Rails 8 syntax
-  enum :media_type, { cross_media: 0, books: 1, movies: 2, games: 3, music: 4 }
+  enum :dynamic_type, { number_of_voters: 0, percentage_western: 1, voter_names_unknown: 2 }
   
   # ❌ Old Rails syntax (will cause errors)
-  enum media_type: { cross_media: 0, books: 1, movies: 2, games: 3, music: 4 }
+  enum dynamic_type: { number_of_voters: 0, percentage_western: 1, voter_names_unknown: 2 }
   ```
 
 ## 8. Progressive Enhancement

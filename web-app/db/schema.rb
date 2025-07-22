@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_07_20_150149) do
+ActiveRecord::Schema[8.0].define(version: 2025_07_22_024743) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -261,14 +261,10 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_20_150149) do
     t.string "type", null: false
     t.string "name", null: false
     t.text "description"
-    t.boolean "global", default: false, null: false
     t.bigint "user_id"
-    t.integer "media_type", default: 0, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.integer "dynamic_type"
-    t.index ["global"], name: "index_penalties_on_global"
-    t.index ["media_type"], name: "index_penalties_on_media_type"
     t.index ["type"], name: "index_penalties_on_type"
     t.index ["user_id"], name: "index_penalties_on_user_id"
   end

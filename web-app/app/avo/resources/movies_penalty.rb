@@ -1,11 +1,7 @@
-class Avo::Resources::Penalty < Avo::BaseResource
+class Avo::Resources::MoviesPenalty < Avo::BaseResource
   self.title = :name
-  self.description = "Base penalty resource - use specific penalty types instead"
-  # self.includes = []
-  # self.attachments = []
-  # self.search = {
-  #   query: -> { query.ransack(id_eq: params[:q], m: "or").result(distinct: false) }
-  # }
+  self.description = "Movie-specific penalties that only apply to movie lists and configurations"
+  self.model_class = ::Movies::Penalty
 
   def fields
     field :id, as: :id

@@ -22,8 +22,8 @@
 #
 class PenaltyApplication < ApplicationRecord
   # Associations
-  belongs_to :penalty
-  belongs_to :ranking_configuration
+  belongs_to :penalty, inverse_of: :penalty_applications
+  belongs_to :ranking_configuration, inverse_of: :penalty_applications
 
   # Validations
   validates :penalty_id, presence: true, uniqueness: {scope: :ranking_configuration_id}
@@ -47,27 +47,28 @@ class PenaltyApplication < ApplicationRecord
   def penalty_and_configuration_compatibility
     return unless penalty && ranking_configuration
 
-    # Check if penalty media type is compatible with ranking configuration
-    penalty_media_type = penalty.media_type
+    # Check if penalty STI type is compatible with ranking configuration
+    penalty_type = penalty.type
     config_type = ranking_configuration.type
 
-    case penalty_media_type
-    when "cross_media"
-      # Cross-media penalties work with any configuration
-      nil
-    when "books"
+    # Global::Penalty works with any configuration
+    return if penalty_type == "Global::Penalty"
+
+    # Check media-specific penalty compatibility
+    case penalty_type
+    when /^Books::/
       unless config_type.start_with?("Books::")
         errors.add(:penalty, "books penalty cannot be applied to #{config_type} configuration")
       end
-    when "movies"
+    when /^Movies::/
       unless config_type.start_with?("Movies::")
         errors.add(:penalty, "movies penalty cannot be applied to #{config_type} configuration")
       end
-    when "games"
+    when /^Games::/
       unless config_type.start_with?("Games::")
         errors.add(:penalty, "games penalty cannot be applied to #{config_type} configuration")
       end
-    when "music"
+    when /^Music::/
       unless config_type.start_with?("Music::")
         errors.add(:penalty, "music penalty cannot be applied to #{config_type} configuration")
       end

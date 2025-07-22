@@ -1,11 +1,7 @@
-class Avo::Resources::Penalty < Avo::BaseResource
+class Avo::Resources::MusicPenalty < Avo::BaseResource
   self.title = :name
-  self.description = "Base penalty resource - use specific penalty types instead"
-  # self.includes = []
-  # self.attachments = []
-  # self.search = {
-  #   query: -> { query.ransack(id_eq: params[:q], m: "or").result(distinct: false) }
-  # }
+  self.description = "Music-specific penalties that only apply to music lists and configurations"
+  self.model_class = ::Music::Penalty
 
   def fields
     field :id, as: :id

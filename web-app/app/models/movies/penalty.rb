@@ -5,8 +5,6 @@
 #  id           :bigint           not null, primary key
 #  description  :text
 #  dynamic_type :integer
-#  global       :boolean          default(FALSE), not null
-#  media_type   :integer          default("cross_media"), not null
 #  name         :string           not null
 #  type         :string           not null
 #  created_at   :datetime         not null
@@ -15,10 +13,8 @@
 #
 # Indexes
 #
-#  index_penalties_on_global      (global)
-#  index_penalties_on_media_type  (media_type)
-#  index_penalties_on_type        (type)
-#  index_penalties_on_user_id     (user_id)
+#  index_penalties_on_type     (type)
+#  index_penalties_on_user_id  (user_id)
 #
 # Foreign Keys
 #
@@ -27,14 +23,5 @@
 module Movies
   class Penalty < ::Penalty
     # Movies-specific penalty logic can be added here
-
-    # Example of a dynamic penalty for movies
-    def calculate_penalty_value(list, ranking_configuration)
-      return super unless dynamic?
-
-      # TODO: Implement Movies-specific dynamic penalty logic once Movies::Movie model is complete
-      # For now, return the static penalty value
-      super
-    end
   end
 end

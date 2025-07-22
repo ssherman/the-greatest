@@ -54,8 +54,8 @@ class RankingConfiguration < ApplicationRecord
   has_many :inherited_configurations, class_name: "RankingConfiguration", foreign_key: :inherited_from_id, dependent: :nullify
   has_many :ranked_items, dependent: :destroy
   has_many :ranked_lists, dependent: :destroy
-  has_many :penalty_applications, dependent: :destroy
-  has_many :penalties, through: :penalty_applications
+  has_many :penalty_applications, dependent: :destroy, inverse_of: :ranking_configuration
+  has_many :penalties, through: :penalty_applications, inverse_of: :ranking_configurations
 
   # Validations
   validates :name, presence: true, length: {maximum: 255}

@@ -5,8 +5,6 @@
 #  id           :bigint           not null, primary key
 #  description  :text
 #  dynamic_type :integer
-#  global       :boolean          default(FALSE), not null
-#  media_type   :integer          default("cross_media"), not null
 #  name         :string           not null
 #  type         :string           not null
 #  created_at   :datetime         not null
@@ -15,145 +13,114 @@
 #
 # Indexes
 #
-#  index_penalties_on_global      (global)
-#  index_penalties_on_media_type  (media_type)
-#  index_penalties_on_type        (type)
-#  index_penalties_on_user_id     (user_id)
+#  index_penalties_on_type     (type)
+#  index_penalties_on_user_id  (user_id)
 #
 # Foreign Keys
 #
 #  fk_rails_...  (user_id => users.id)
 #
+
 require "test_helper"
 
 class PenaltyTest < ActiveSupport::TestCase
   def setup
-    @user = users(:regular_user)
-    @ranking_configuration = ranking_configurations(:books_global)
-    @list = lists(:books_list)
+    @regular_user = users(:regular_user)
+  end
+
+  # Associations
+  test "should belong to user (optional)" do
+    penalty = penalties(:global_penalty)
+    assert_nil penalty.user
+
+    penalty = penalties(:user_penalty)
+    assert_equal @regular_user, penalty.user
+  end
+
+  test "should have penalty applications" do
+    penalty = penalties(:global_penalty)
+    assert penalty.penalty_applications.any?
+  end
+
+  test "should have ranking configurations through penalty applications" do
+    penalty = penalties(:global_penalty)
+    assert penalty.ranking_configurations.any?
+  end
+
+  test "should have list penalties" do
+    penalty = penalties(:global_penalty)
+    assert penalty.list_penalties.any?
+  end
+
+  test "should have lists through list penalties" do
+    penalty = penalties(:global_penalty)
+    assert penalty.lists.any?
   end
 
   # Validations
-  test "should be valid with required attributes" do
-    penalty = Penalty.new(
-      name: "Test Penalty",
-      type: "Penalty",
-      global: true,
-      media_type: :cross_media
+  test "should be valid with valid attributes for Global::Penalty" do
+    penalty = Global::Penalty.new(
+      name: "Test Global Penalty",
+      type: "Global::Penalty"
+    )
+    assert penalty.valid?
+  end
+
+  test "should be valid with valid attributes for media-specific penalty" do
+    penalty = Music::Penalty.new(
+      name: "Test Music Penalty",
+      type: "Music::Penalty"
     )
     assert penalty.valid?
   end
 
   test "should require name" do
-    penalty = Penalty.new(type: "Penalty", global: true, media_type: :cross_media)
+    penalty = Global::Penalty.new(type: "Global::Penalty")
     assert_not penalty.valid?
     assert_includes penalty.errors[:name], "can't be blank"
   end
 
   test "should require type" do
-    penalty = Penalty.new(name: "Test Penalty", global: true, media_type: :cross_media)
+    penalty = Penalty.new(name: "Test Penalty")
     assert_not penalty.valid?
     assert_includes penalty.errors[:type], "can't be blank"
   end
 
-  test "should require user for non-global penalties" do
-    penalty = Penalty.new(
-      name: "Test Penalty",
-      type: "Penalty",
-      global: false,
-      media_type: :cross_media
-    )
-    assert_not penalty.valid?
-    assert_includes penalty.errors[:user], "must be present for user-specific penalties"
-  end
-
-  test "should not require user for global penalties" do
-    penalty = Penalty.new(
-      name: "Test Penalty",
-      type: "Penalty",
-      global: true,
-      media_type: :cross_media
+  test "should allow Global::Penalty without user (system-wide)" do
+    penalty = Global::Penalty.new(
+      name: "Test Global Penalty",
+      type: "Global::Penalty"
     )
     assert penalty.valid?
   end
 
-  test "should validate media type consistency for books" do
-    penalty = Penalty.new(
-      name: "Test Penalty",
-      type: "Books::Penalty",
-      global: true,
-      media_type: :movies
+  test "should allow Global::Penalty with user (user-specific)" do
+    penalty = Global::Penalty.new(
+      name: "Test User Global Penalty",
+      type: "Global::Penalty",
+      user: @regular_user
     )
-    assert_not penalty.valid?
-    assert_includes penalty.errors[:media_type], "must be 'books' for Books::Penalty types"
+    assert penalty.valid?
   end
 
-  test "should validate media type consistency for movies" do
-    penalty = Penalty.new(
-      name: "Test Penalty",
-      type: "Movies::Penalty",
-      global: true,
-      media_type: :books
+  test "should allow media-specific penalty without user (system-wide)" do
+    penalty = Music::Penalty.new(
+      name: "Test System Music Penalty",
+      type: "Music::Penalty"
     )
-    assert_not penalty.valid?
-    assert_includes penalty.errors[:media_type], "must be 'movies' for Movies::Penalty types"
+    assert penalty.valid?
   end
 
-  # Associations
-  test "should belong to user optionally" do
-    penalty = Penalty.new(
-      name: "Test Penalty",
-      type: "Penalty",
-      global: true,
-      media_type: :cross_media
+  test "should allow media-specific penalty with user (user-specific)" do
+    penalty = Music::Penalty.new(
+      name: "Test User Music Penalty",
+      type: "Music::Penalty",
+      user: @regular_user
     )
-    assert penalty.save
-    assert_nil penalty.user
-
-    penalty.user = @user
-    assert penalty.save
-  end
-
-  test "should have many penalty applications" do
-    penalty = penalties(:global_penalty)
-    assert penalty.penalty_applications.any?
-  end
-
-  test "should have many ranking configurations through penalty applications" do
-    penalty = penalties(:global_penalty)
-    assert penalty.ranking_configurations.any?
-  end
-
-  test "should have many list penalties" do
-    penalty = penalties(:global_penalty)
-    assert penalty.list_penalties.any?
-  end
-
-  test "should have many lists through list penalties" do
-    penalty = penalties(:global_penalty)
-    assert penalty.lists.any?
-  end
-
-  # Enums
-  test "should have correct media type enum values" do
-    assert_equal 0, Penalty.media_types[:cross_media]
-    assert_equal 1, Penalty.media_types[:books]
-    assert_equal 2, Penalty.media_types[:movies]
-    assert_equal 3, Penalty.media_types[:games]
-    assert_equal 4, Penalty.media_types[:music]
+    assert penalty.valid?
   end
 
   # Scopes
-  test "should scope global penalties" do
-    global_penalties = Penalty.global
-    assert global_penalties.all?(&:global?)
-  end
-
-  test "should scope user specific penalties" do
-    user_penalties = Penalty.user_specific
-    assert user_penalties.all?(&:user_specific?)
-  end
-
   test "should scope dynamic penalties" do
     dynamic_penalties = Penalty.dynamic
     assert dynamic_penalties.all?(&:dynamic?)
@@ -164,27 +131,21 @@ class PenaltyTest < ActiveSupport::TestCase
     assert static_penalties.all?(&:static?)
   end
 
-  test "should scope by media type" do
-    books_penalties = Penalty.by_media_type(:books)
-    assert books_penalties.all? { |p| p.media_type == "books" }
+  test "should scope by dynamic type" do
+    voter_penalties = Penalty.by_dynamic_type(:number_of_voters)
+    assert voter_penalties.all? { |p| p.dynamic_type == "number_of_voters" }
   end
 
-  test "should scope cross media penalties" do
-    cross_media_penalties = Penalty.cross_media
-    assert cross_media_penalties.all?(&:cross_media?)
-  end
-
-  # Public Methods
-  test "should identify global penalties" do
-    penalty = penalties(:global_penalty)
-    assert penalty.global?
-    assert_not penalty.user_specific?
-  end
-
-  test "should identify user specific penalties" do
+  test "User-specific penalties should identify as user-specific" do
     penalty = penalties(:user_penalty)
-    assert penalty.user_specific?
+    assert_instance_of Global::Penalty, penalty
     assert_not penalty.global?
+    assert penalty.user_specific?
+
+    penalty = penalties(:user_books_penalty)
+    assert_instance_of Books::Penalty, penalty
+    assert_not penalty.global?
+    assert penalty.user_specific?
   end
 
   test "should identify dynamic penalties" do
@@ -199,56 +160,26 @@ class PenaltyTest < ActiveSupport::TestCase
     assert_not penalty.dynamic?
   end
 
-  test "should identify cross media penalties" do
-    penalty = penalties(:cross_media_penalty)
-    assert penalty.cross_media?
-    assert_not penalty.media_specific?
+  # STI Functionality
+  test "should create correct STI types" do
+    global_penalty = Global::Penalty.create!(name: "Test Global", type: "Global::Penalty")
+    assert_equal "Global::Penalty", global_penalty.type
+    assert_instance_of Global::Penalty, global_penalty
+
+    music_penalty = Music::Penalty.create!(name: "Test Music", type: "Music::Penalty")
+    assert_equal "Music::Penalty", music_penalty.type
+    assert_instance_of Music::Penalty, music_penalty
+
+    books_penalty = Books::Penalty.create!(name: "Test Books", type: "Books::Penalty")
+    assert_equal "Books::Penalty", books_penalty.type
+    assert_instance_of Books::Penalty, books_penalty
   end
 
-  test "should identify media specific penalties" do
-    penalty = penalties(:books_penalty)
-    assert penalty.media_specific?
-    assert_not penalty.cross_media?
-  end
+  test "should query by STI type" do
+    global_penalties = Global::Penalty.all
+    assert global_penalties.all? { |p| p.instance_of?(Global::Penalty) }
 
-  # STI Subclasses
-  test "should create books penalty" do
-    penalty = Books::Penalty.create!(
-      name: "Books Penalty",
-      global: true,
-      media_type: :books
-    )
-    assert_equal "Books::Penalty", penalty.type
-    assert_equal "books", penalty.media_type
-  end
-
-  test "should create movies penalty" do
-    penalty = Movies::Penalty.create!(
-      name: "Movies Penalty",
-      global: true,
-      media_type: :movies
-    )
-    assert_equal "Movies::Penalty", penalty.type
-    assert_equal "movies", penalty.media_type
-  end
-
-  test "should create games penalty" do
-    penalty = Games::Penalty.create!(
-      name: "Games Penalty",
-      global: true,
-      media_type: :games
-    )
-    assert_equal "Games::Penalty", penalty.type
-    assert_equal "games", penalty.media_type
-  end
-
-  test "should create music penalty" do
-    penalty = Music::Penalty.create!(
-      name: "Music Penalty",
-      global: true,
-      media_type: :music
-    )
-    assert_equal "Music::Penalty", penalty.type
-    assert_equal "music", penalty.media_type
+    music_penalties = Music::Penalty.all
+    assert music_penalties.all? { |p| p.instance_of?(Music::Penalty) }
   end
 end

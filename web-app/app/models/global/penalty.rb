@@ -20,8 +20,9 @@
 #
 #  fk_rails_...  (user_id => users.id)
 #
-module Music
+module Global
   class Penalty < ::Penalty
-    # Music-specific penalty logic can be added here
+    # Global penalties apply to all media types (cross-media)
+    # These penalties can be used with any ranking configuration regardless of media type
   end
 end

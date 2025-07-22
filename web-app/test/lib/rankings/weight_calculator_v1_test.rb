@@ -78,11 +78,9 @@ module Rankings
       )
 
       # Create a penalty to apply to both
-      test_penalty = Penalty.create!(
-        type: "Penalty",
-        name: "Test Penalty",
-        global: true,
-        media_type: :music
+      test_penalty = Music::Penalty.create!(
+        type: "Music::Penalty",
+        name: "Test Penalty"
       )
 
       PenaltyApplication.create!(
@@ -121,11 +119,9 @@ module Rankings
         high_quality_source: false
       )
 
-      extreme_penalty = Penalty.create!(
-        type: "Penalty",
-        name: "Extreme Penalty",
-        global: true,
-        media_type: :books
+      extreme_penalty = Books::Penalty.create!(
+        type: "Books::Penalty",
+        name: "Extreme Penalty"
       )
 
       PenaltyApplication.create!(
@@ -176,11 +172,9 @@ module Rankings
       )
 
       # Create a dynamic voter penalty
-      voter_penalty = Penalty.create!(
-        type: "Penalty",
+      voter_penalty = Global::Penalty.create!(
+        type: "Global::Penalty",
         name: "Low Voter Count Penalty",
-        global: true,
-        media_type: :cross_media,
         dynamic_type: :number_of_voters
       )
 
@@ -236,35 +230,27 @@ module Rankings
       )
 
       # Create penalties that match the attribute names
-      category_penalty = Penalty.create!(
-        type: "Penalty",
+      category_penalty = Global::Penalty.create!(
+        type: "Global::Penalty",
         name: "Category Specific Bias",
-        global: true,
-        media_type: :cross_media,
         dynamic_type: :category_specific
       )
 
-      location_penalty = Penalty.create!(
-        type: "Penalty",
+      location_penalty = Global::Penalty.create!(
+        type: "Global::Penalty",
         name: "Location Specific Bias",
-        global: true,
-        media_type: :cross_media,
         dynamic_type: :location_specific
       )
 
-      unknown_names_penalty = Penalty.create!(
-        type: "Penalty",
+      unknown_names_penalty = Global::Penalty.create!(
+        type: "Global::Penalty",
         name: "Unknown Voter Names",
-        global: true,
-        media_type: :cross_media,
         dynamic_type: :voter_names_unknown
       )
 
-      unknown_count_penalty = Penalty.create!(
-        type: "Penalty",
+      unknown_count_penalty = Global::Penalty.create!(
+        type: "Global::Penalty",
         name: "Unknown Voter Count",
-        global: true,
-        media_type: :cross_media,
         dynamic_type: :voter_count_unknown
       )
 
@@ -314,11 +300,9 @@ module Rankings
       # Create multiple high-value penalties
       penalties = []
       3.times do |i|
-        penalty = Penalty.create!(
-          type: "Penalty",
-          name: "Extreme Penalty #{i}",
-          global: true,
-          media_type: :cross_media
+        penalty = Global::Penalty.create!(
+          type: "Global::Penalty",
+          name: "Extreme Penalty #{i}"
         )
 
         PenaltyApplication.create!(
@@ -348,8 +332,8 @@ module Rankings
       )
 
       # Apply both cross-media and music-specific penalties to our test configuration
-      cross_media_penalty = penalties(:global_penalty)  # This is a cross-media penalty (media_type: cross_media)
-      music_penalty = penalties(:music_penalty)         # This is a music-specific penalty (media_type: music)
+      cross_media_penalty = penalties(:global_penalty)  # This is a cross-media penalty (Global::Penalty)
+      music_penalty = penalties(:music_penalty)         # This is a music-specific penalty (Music::Penalty)
 
       PenaltyApplication.create!(penalty: cross_media_penalty, ranking_configuration: music_config, value: 15)
       PenaltyApplication.create!(penalty: music_penalty, ranking_configuration: music_config, value: 20)
@@ -376,16 +360,16 @@ module Rankings
 
       # Verify the configuration has both cross-media and music-specific penalty applications
       applied_penalties = music_config.penalty_applications.includes(:penalty)
-      cross_media_penalty_apps = applied_penalties.joins(:penalty).where(penalties: {media_type: "cross_media"})
-      music_specific_penalty_apps = applied_penalties.joins(:penalty).where(penalties: {media_type: "music"})
+      cross_media_penalty_apps = applied_penalties.joins(:penalty).where(penalties: {type: "Global::Penalty"})
+      music_specific_penalty_apps = applied_penalties.joins(:penalty).where(penalties: {type: "Music::Penalty"})
 
       assert_operator cross_media_penalty_apps.count, :>, 0, "Should have cross-media penalties via penalty_applications"
       assert_operator music_specific_penalty_apps.count, :>, 0, "Should have music-specific penalties via penalty_applications"
 
       # Verify the list has penalty associations (list-level penalties)
       list_penalties = music_list.list_penalties.includes(:penalty)
-      list_cross_media_penalties = list_penalties.joins(:penalty).where(penalties: {media_type: "cross_media"})
-      list_music_penalties = list_penalties.joins(:penalty).where(penalties: {media_type: "music"})
+      list_cross_media_penalties = list_penalties.joins(:penalty).where(penalties: {type: "Global::Penalty"})
+      list_music_penalties = list_penalties.joins(:penalty).where(penalties: {type: "Music::Penalty"})
 
       assert_operator list_cross_media_penalties.count, :>, 0, "Should have cross-media penalties via list_penalties"
       assert_operator list_music_penalties.count, :>, 0, "Should have music-specific penalties via list_penalties"

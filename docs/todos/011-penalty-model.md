@@ -43,10 +43,8 @@ Three main tables:
      type varchar NOT NULL, -- STI discriminator
      name varchar NOT NULL,
      description text,
-     global boolean DEFAULT false,
-     user_id bigint, -- null for global penalties
-     media_type integer DEFAULT 0, -- enum: 0=cross_media, 1=books, 2=movies, 3=games, 4=music
-     dynamic boolean DEFAULT false NOT NULL, -- dynamic penalties call methods for special logic
+     user_id bigint, -- null for system-wide penalties
+     dynamic_type integer, -- enum for dynamic penalty types
      created_at timestamp NOT NULL,
      updated_at timestamp NOT NULL
    );
@@ -81,8 +79,8 @@ Three main tables:
 
 #### Penalty Model (Base)
 - STI support for media-specific penalties
-- Global vs user-specific scope
-- Media type filtering
+- System-wide vs user-specific scope (based on user_id)
+- Dynamic penalty types via dynamic_type enum
 - Polymorphic associations
 
 #### STI Subclasses
@@ -113,9 +111,9 @@ Three main tables:
 - User model for user-specific penalties
 
 ## Acceptance Criteria
-- [x] Global penalties can be created and applied to any ranking configuration
+- [x] System-wide penalties can be created and applied to any ranking configuration
 - [x] Users can create private penalties for their own ranking configurations
-- [x] Penalties can be media-specific or cross-media
+- [x] Penalties can be media-specific (via STI) or cross-media (Global::Penalty)
 - [x] Penalty values are ranking-configuration specific
 - [x] Lists can have multiple penalties applied
 - [x] Penalty inheritance works when cloning ranking configurations
@@ -137,9 +135,9 @@ Using STI for penalties because:
 - Simpler queries and associations
 - Better performance than polymorphic
 
-### Global vs User-Specific
-- Global penalties are site-wide and available to all users
-- User-specific penalties are private to the creating user
+### System-wide vs User-Specific
+- System-wide penalties (`user_id: nil`) are available to all users
+- User-specific penalties (`user_id: present`) are private to the creating user
 - Both can be applied to any ranking configuration
 
 ### Inheritance Strategy
@@ -152,13 +150,14 @@ Using STI for penalties because:
 ## Implementation Notes
 
 ### Approach Taken
-Implemented a three-table design with STI support for media-specific penalties. Created base Penalty model with enum for media_type, STI subclasses for each media domain, and supporting models for applications and list associations. Integrated with existing RankingConfiguration and List models.
+Implemented a three-table design with STI support for media-specific penalties. Created base Penalty model with dynamic_type enum for dynamic penalties, STI subclasses for each media domain, and supporting models for applications and list associations. Integrated with existing RankingConfiguration and List models.
 
 ### Key Files Changed
-- `db/migrate/20250711045426_create_penalties.rb` - Created penalties table with STI, enums, and indexes
+- `db/migrate/20250711045426_create_penalties.rb` - Created penalties table with STI and indexes
+- `db/migrate/20250722024743_remove_global_and_media_type_from_penalties.rb` - Removed global and media_type fields
 - `db/migrate/20250711045456_create_penalty_applications.rb` - Created penalty_applications table with unique constraints
 - `db/migrate/20250711045508_create_list_penalties.rb` - Created list_penalties table with unique constraints
-- `app/models/penalty.rb` - Base Penalty model with STI, enums, validations, and associations
+- `app/models/penalty.rb` - Base Penalty model with STI, dynamic_type enum, validations, and associations
 - `app/models/books/penalty.rb` - Books-specific penalty subclass with dynamic logic
 - `app/models/movies/penalty.rb` - Movies-specific penalty subclass with dynamic logic
 - `app/models/games/penalty.rb` - Games-specific penalty subclass with dynamic logic
@@ -169,7 +168,7 @@ Implemented a three-table design with STI support for media-specific penalties. 
 - `app/models/list.rb` - Added list_penalties association and penalty calculation methods
 - `app/avo/resources/penalty.rb` - Updated Avo admin interface to use enum select
 - `test/models/penalty_test.rb` - Comprehensive test suite with 31 tests
-- `test/fixtures/penalties.yml` - Complete fixture set with global, user-specific, and media-specific penalties
+- `test/fixtures/penalties.yml` - Complete fixture set with system-wide, user-specific, and media-specific penalties
 - `test/fixtures/penalty_applications.yml` - Fixtures for penalty applications
 - `test/fixtures/list_penalties.yml` - Fixtures for list-penalty associations
 - `docs/models/penalty.md` - Complete model documentation
@@ -177,9 +176,9 @@ Implemented a three-table design with STI support for media-specific penalties. 
 - `docs/models/list_penalty.md` - Complete model documentation
 
 ### Challenges Encountered
-1. **Rails 8 enum syntax**: Had to update from `enum media_type:` to `enum :media_type,` format
+1. **Rails 8 enum syntax**: Had to update from `enum dynamic_type:` to `enum :dynamic_type,` format
 2. **Fixture references**: Initially used `user: one` instead of checking actual fixture names like `regular_user`
-3. **STI validation logic**: Had to fix media type consistency validation to check type first, then media_type
+3. **STI validation logic**: Had to fix validation logic to work with pure STI approach
 4. **Avo enum display**: Updated admin interface to use select field with enum options
 
 ### Deviations from Plan
@@ -189,12 +188,9 @@ Implemented a three-table design with STI support for media-specific penalties. 
 
 ### Code Examples
 ```ruby
-# Create a global penalty
-penalty = Penalty.create!(
-  name: "Limited Time Coverage",
-  type: "Penalty",
-  global: true,
-  media_type: :cross_media
+# Create a system-wide cross-media penalty
+penalty = Global::Penalty.create!(
+  name: "Limited Time Coverage"
 )
 
 # Apply penalty to ranking configuration
@@ -221,7 +217,7 @@ total_penalty = list.total_penalty_value(ranking_configuration)
 - All tests pass with 100% coverage of public methods
 
 ### Performance Considerations
-- Added database indexes on frequently queried fields (type, global, media_type, dynamic)
+- Added database indexes on frequently queried fields (type, dynamic_type)
 - Used STI instead of polymorphic associations for better performance
 - Unique constraints prevent duplicate penalty applications and list penalties
 

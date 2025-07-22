@@ -21,8 +21,8 @@
 #
 class ListPenalty < ApplicationRecord
   # Associations
-  belongs_to :list
-  belongs_to :penalty
+  belongs_to :list, inverse_of: :list_penalties
+  belongs_to :penalty, inverse_of: :list_penalties
 
   # Validations
   validates :list_id, presence: true, uniqueness: {scope: :penalty_id}
@@ -31,10 +31,10 @@ class ListPenalty < ApplicationRecord
 
   # Scopes
   scope :by_penalty_type, ->(type) { joins(:penalty).where(penalties: {type: type}) }
-  scope :global_penalties, -> { joins(:penalty).where(penalties: {global: true}) }
-  scope :user_penalties, -> { joins(:penalty).where(penalties: {global: false}) }
-  scope :dynamic_penalties, -> { joins(:penalty).where(penalties: {dynamic: true}) }
-  scope :static_penalties, -> { joins(:penalty).where(penalties: {dynamic: false}) }
+  scope :global_penalties, -> { joins(:penalty).where(penalties: {type: "Global::Penalty"}) }
+  scope :user_penalties, -> { joins(:penalty).where.not(penalties: {type: "Global::Penalty"}) }
+  scope :dynamic_penalties, -> { joins(:penalty).where.not(penalties: {dynamic_type: nil}) }
+  scope :static_penalties, -> { joins(:penalty).where(penalties: {dynamic_type: nil}) }
 
   # Public Methods
   def global_penalty?
@@ -58,27 +58,28 @@ class ListPenalty < ApplicationRecord
   def list_and_penalty_compatibility
     return unless list && penalty
 
-    # Check if penalty media type is compatible with list type
-    penalty_media_type = penalty.media_type
+    # Check if penalty STI type is compatible with list type
+    penalty_type = penalty.type
     list_type = list.type
 
-    case penalty_media_type
-    when "cross_media"
-      # Cross-media penalties work with any list
-      nil
-    when "books"
+    # Global::Penalty works with any list
+    return if penalty_type == "Global::Penalty"
+
+    # Check media-specific penalty compatibility
+    case penalty_type
+    when /^Books::/
       unless list_type.start_with?("Books::")
         errors.add(:penalty, "books penalty cannot be applied to #{list_type} list")
       end
-    when "movies"
+    when /^Movies::/
       unless list_type.start_with?("Movies::")
         errors.add(:penalty, "movies penalty cannot be applied to #{list_type} list")
       end
-    when "games"
+    when /^Games::/
       unless list_type.start_with?("Games::")
         errors.add(:penalty, "games penalty cannot be applied to #{list_type} list")
       end
-    when "music"
+    when /^Music::/
       unless list_type.start_with?("Music::")
         errors.add(:penalty, "music penalty cannot be applied to #{list_type} list")
       end

@@ -36,8 +36,8 @@ class List < ApplicationRecord
   # Associations
   has_many :list_items, dependent: :destroy
   belongs_to :submitted_by, class_name: "User", optional: true
-  has_many :list_penalties, dependent: :destroy
-  has_many :penalties, through: :list_penalties
+  has_many :list_penalties, dependent: :destroy, inverse_of: :list
+  has_many :penalties, through: :list_penalties, inverse_of: :lists
   has_many :ai_chats, as: :parent, dependent: :destroy
 
   # Enums
