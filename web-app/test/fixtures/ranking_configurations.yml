@@ -115,10 +115,10 @@ games_global:
   max_list_dates_penalty_percentage: 60
   inherit_penalties: true
 
-music_global:
-  type: Music::RankingConfiguration
-  name: "Global Music Ranking"
-  description: "The main ranking configuration for music"
+music_albums_global:
+  type: Music::Albums::RankingConfiguration
+  name: "Global Music Albums Ranking"
+  description: "The main ranking configuration for music albums"
   global: true
   primary: true
   archived: false
@@ -130,6 +130,23 @@ music_global:
   apply_list_dates_penalty: true
   max_list_dates_penalty_age: 40
   max_list_dates_penalty_percentage: 75
+  inherit_penalties: true
+
+music_songs_global:
+  type: Music::Songs::RankingConfiguration
+  name: "Global Music Songs Ranking"
+  description: "The main ranking configuration for music songs"
+  global: true
+  primary: true
+  archived: false
+  published_at: 2025-07-09 23:38:50
+  algorithm_version: 1
+  exponent: 3.0
+  bonus_pool_percentage: 3.0
+  min_list_weight: 1
+  apply_list_dates_penalty: true
+  max_list_dates_penalty_age: 35
+  max_list_dates_penalty_percentage: 70
   inherit_penalties: true
 
 books_inherited:

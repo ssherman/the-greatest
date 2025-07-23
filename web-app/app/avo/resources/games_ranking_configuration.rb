@@ -1,7 +1,7 @@
-class Avo::Resources::RankingConfiguration < Avo::BaseResource
+class Avo::Resources::GamesRankingConfiguration < Avo::BaseResource
   # self.includes = []
   # self.attachments = []
-  self.model_class = ::RankingConfiguration
+  self.model_class = ::Games::RankingConfiguration
   self.title = :name
   # self.search = {
   #   query: -> { query.ransack(id_eq: params[:q], m: "or").result(distinct: false) }
@@ -30,11 +30,11 @@ class Avo::Resources::RankingConfiguration < Avo::BaseResource
     field :primary_mapped_list_id, as: :number
     field :secondary_mapped_list_id, as: :number
     field :primary_mapped_list_cutoff_limit, as: :number
-    field :inherited_from, as: :belongs_to
+    field :inherited_from, as: :belongs_to, use_resource: Avo::Resources::GamesRankingConfiguration
     field :user, as: :belongs_to
-    field :primary_mapped_list, as: :belongs_to
-    field :secondary_mapped_list, as: :belongs_to
-    field :inherited_configurations, as: :has_many
+    field :primary_mapped_list, as: :belongs_to, use_resource: Avo::Resources::GamesList
+    field :secondary_mapped_list, as: :belongs_to, use_resource: Avo::Resources::GamesList
+    field :inherited_configurations, as: :has_many, use_resource: Avo::Resources::GamesRankingConfiguration
     field :ranked_items, as: :has_many
     field :ranked_lists, as: :has_many
     field :penalty_applications, as: :has_many

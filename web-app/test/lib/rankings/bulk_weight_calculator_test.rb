@@ -59,8 +59,8 @@ module Rankings
       # This test verifies that the bulk calculator can handle errors
       # without stopping the entire process
 
-      # Use music config since music models are more complete
-      music_config = ranking_configurations(:music_global)
+      # Use music albums config since music models are more complete
+      music_config = ranking_configurations(:music_albums_global)
       music_bulk_calculator = BulkWeightCalculator.new(music_config)
 
       # The bulk calculator should have error handling structure

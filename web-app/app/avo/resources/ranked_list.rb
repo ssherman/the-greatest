@@ -8,7 +8,7 @@ class Avo::Resources::RankedList < Avo::BaseResource
   def fields
     field :id, as: :id
     field :weight, as: :number
-    field :list, as: :text
+    field :list, as: :belongs_to
     field :ranking_configuration, as: :belongs_to
   end
 end

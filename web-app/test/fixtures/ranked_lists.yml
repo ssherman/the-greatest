@@ -30,10 +30,15 @@ movies_ranked_list:
   list: movies_list
   ranking_configuration: movies_global
 
-music_ranked_list:
+music_albums_ranked_list:
   weight: 12
-  list: music_list
-  ranking_configuration: music_global
+  list: music_albums_list
+  ranking_configuration: music_albums_global
+
+music_songs_ranked_list:
+  weight: 10
+  list: music_songs_list
+  ranking_configuration: music_songs_global
 
 games_ranked_list:
   weight: 8

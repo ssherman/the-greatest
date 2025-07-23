@@ -12,7 +12,7 @@ class Avo::Resources::MusicCredit < Avo::BaseResource
     field :creditable, as: :text
     field :role, as: :select, options: Music::Credit.roles
     field :position, as: :number
-    field :created_at, as: :date_time
-    field :updated_at, as: :date_time
+    field :created_at, as: :date_time, readonly: true
+    field :updated_at, as: :date_time, readonly: true
   end
 end

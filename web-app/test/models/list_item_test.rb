@@ -125,12 +125,14 @@ class ListItemTest < ActiveSupport::TestCase
   test "should work with different polymorphic types" do
     books_item = list_items(:books_item)
     movies_item = list_items(:movies_item)
-    music_item = list_items(:music_item)
+    music_albums_item = list_items(:music_albums_item)
+    music_songs_item = list_items(:music_songs_item)
     games_item = list_items(:games_item)
 
     assert_equal "Books::Book", books_item.listable_type
     assert_equal "Movies::Movie", movies_item.listable_type
-    assert_equal "Music::Album", music_item.listable_type
+    assert_equal "Music::Album", music_albums_item.listable_type
+    assert_equal "Music::Song", music_songs_item.listable_type
     assert_equal "Games::Game", games_item.listable_type
   end
 

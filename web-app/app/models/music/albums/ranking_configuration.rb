@@ -44,8 +44,10 @@
 #  fk_rails_...  (secondary_mapped_list_id => lists.id)
 #  fk_rails_...  (user_id => users.id)
 #
-module Books
-  class RankingConfiguration < ::RankingConfiguration
-    # Books-specific logic can be added here
+module Music
+  module Albums
+    class RankingConfiguration < ::RankingConfiguration
+      # Music Albums-specific logic can be added here
+    end
   end
 end

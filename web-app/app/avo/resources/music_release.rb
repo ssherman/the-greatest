@@ -13,7 +13,7 @@ class Avo::Resources::MusicRelease < Avo::BaseResource
     field :format, as: :select, options: Music::Release.formats
     field :metadata, as: :code
     field :release_date, as: :date
-    field :created_at, as: :date_time
-    field :updated_at, as: :date_time
+    field :created_at, as: :date_time, readonly: true
+    field :updated_at, as: :date_time, readonly: true
   end
 end

@@ -33,7 +33,9 @@
 #  fk_rails_...  (submitted_by_id => users.id)
 #
 module Music
-  class List < ::List
-    # Music-specific logic can be added here
+  module Albums
+    class List < ::List
+      # Music Albums-specific logic can be added here
+    end
   end
 end

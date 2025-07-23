@@ -88,13 +88,21 @@ movies_list:
   status: 1
   estimated_quality: 70
 
-music_list:
-  type: Music::List
-  name: Music Test List
-  description: A music list
-  source: Music Source
+music_albums_list:
+  type: Music::Albums::List
+  name: Music Albums Test List
+  description: A music albums list
+  source: Music Albums Source
   status: 1
   estimated_quality: 75
+
+music_songs_list:
+  type: Music::Songs::List
+  name: Music Songs Test List
+  description: A music songs list
+  source: Music Songs Source
+  status: 1
+  estimated_quality: 70
 
 games_list:
   type: Games::List

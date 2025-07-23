@@ -50,11 +50,10 @@ class RankedItem < ApplicationRecord
       errors.add(:item, "must be a Movies::Movie") unless item.is_a?(Movies::Movie)
     when "Games::RankingConfiguration"
       errors.add(:item, "must be a Games::Game") unless item.is_a?(Games::Game)
-    when "Music::RankingConfiguration"
-      # Music can have both albums and songs
-      unless item.is_a?(Music::Album) || item.is_a?(Music::Song)
-        errors.add(:item, "must be a Music::Album or Music::Song")
-      end
+    when "Music::Albums::RankingConfiguration"
+      errors.add(:item, "must be a Music::Album") unless item.is_a?(Music::Album)
+    when "Music::Songs::RankingConfiguration"
+      errors.add(:item, "must be a Music::Song") unless item.is_a?(Music::Song)
     end
   end
 end

@@ -28,7 +28,8 @@ require "test_helper"
 class RankedItemTest < ActiveSupport::TestCase
   def setup
     @movies_config = ranking_configurations(:movies_global)
-    @music_config = ranking_configurations(:music_global)
+    @music_albums_config = ranking_configurations(:music_albums_global)
+    @music_songs_config = ranking_configurations(:music_songs_global)
     @godfather = movies_movies(:godfather)
     @dark_side = music_albums(:dark_side_of_the_moon)
     @wish_you_were_here = music_albums(:wish_you_were_here)
@@ -90,18 +91,23 @@ class RankedItemTest < ActiveSupport::TestCase
     assert_equal @godfather, ranked_item.item
   end
 
-  test "should accept music albums in music ranking configuration" do
+  test "should accept music albums in music albums ranking configuration" do
     # Use a different album that's not already in fixtures
     ranked_item = RankedItem.new(
-      ranking_configuration: @music_config,
+      ranking_configuration: @music_albums_config,
       item: @wish_you_were_here
     )
     assert ranked_item.valid?
   end
 
-  test "should accept music songs in music ranking configuration" do
-    # Skip this test for now since we don't have song fixtures
-    skip "No song fixtures available"
+  test "should accept music songs in music songs ranking configuration" do
+    # Use a song fixture that's not already ranked
+    song = music_songs(:time)
+    ranked_item = RankedItem.new(
+      ranking_configuration: @music_songs_config,
+      item: song
+    )
+    assert ranked_item.valid?
   end
 
   test "by_rank scope should order by rank" do

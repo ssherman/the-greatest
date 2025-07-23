@@ -45,15 +45,9 @@
 #  fk_rails_...  (user_id => users.id)
 #
 module Music
-  class RankingConfiguration < ::RankingConfiguration
-    # Music-specific defaults
-    after_initialize :set_music_defaults, if: :new_record?
-
-    private
-
-    def set_music_defaults
-      self.max_list_dates_penalty_percentage ||= 75
-      self.max_list_dates_penalty_age ||= 40
+  module Songs
+    class RankingConfiguration < ::RankingConfiguration
+      # Music Songs-specific logic can be added here
     end
   end
 end

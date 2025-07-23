@@ -13,15 +13,15 @@ module Rankings
 
     # Test basic weight calculation without penalties
     test "calculates base weight when no penalties applied" do
-      # Create a fresh music config to avoid fixture interference
-      test_config = Music::RankingConfiguration.create!(
+      # Create a fresh music albums config to avoid fixture interference
+      test_config = Music::Albums::RankingConfiguration.create!(
         name: "Clean Test Config #{SecureRandom.hex(4)}",
         global: true,
         min_list_weight: 1
       )
 
       # Create a list with no penalties
-      clean_list = Music::List.create!(
+      clean_list = Music::Albums::List.create!(
         name: "Clean Test List",
         status: :approved,
         high_quality_source: false
@@ -57,21 +57,21 @@ module Rankings
 
     # Test high quality source bonus
     test "applies quality source bonus reducing penalties" do
-      # Create fresh music config to avoid fixture interference
-      test_config = Music::RankingConfiguration.create!(
+      # Create fresh music albums config to avoid fixture interference
+      test_config = Music::Albums::RankingConfiguration.create!(
         name: "Quality Bonus Test Config #{SecureRandom.hex(4)}",
         global: true,
         min_list_weight: 1
       )
 
       # Create two identical lists, one high quality, one not
-      regular_list = Music::List.create!(
+      regular_list = Music::Albums::List.create!(
         name: "Regular List",
         status: :approved,
         high_quality_source: false
       )
 
-      high_quality_list = Music::List.create!(
+      high_quality_list = Music::Albums::List.create!(
         name: "High Quality List",
         status: :approved,
         high_quality_source: true
@@ -145,27 +145,27 @@ module Rankings
 
     # Test voter count penalty calculation
     test "calculates voter count penalty with power curve" do
-      # Create fresh music ranking configuration to avoid fixture interference
-      test_config = Music::RankingConfiguration.create!(
+      # Create fresh music albums ranking configuration to avoid fixture interference
+      test_config = Music::Albums::RankingConfiguration.create!(
         name: "Voter Penalty Test Config #{SecureRandom.hex(4)}",
         global: true,
         min_list_weight: 1
       )
 
-      # Create music lists with different voter counts
-      few_voters_list = Music::List.create!(
+      # Create music albums lists with different voter counts
+      few_voters_list = Music::Albums::List.create!(
         name: "Few Voters List",
         status: :approved,
         number_of_voters: 2  # Below median
       )
 
-      many_voters_list = Music::List.create!(
+      many_voters_list = Music::Albums::List.create!(
         name: "Many Voters List",
         status: :approved,
         number_of_voters: 100  # Well above median
       )
 
-      one_voter_list = Music::List.create!(
+      one_voter_list = Music::Albums::List.create!(
         name: "One Voter List",
         status: :approved,
         number_of_voters: 1  # Minimum
@@ -325,8 +325,8 @@ module Rankings
     # Test that both cross-media and media-specific penalties are applied
     test "applies both cross-media and music-specific penalties to music configuration" do
       # Create fresh test data to avoid fixture conflicts
-      music_config = Music::RankingConfiguration.create!(
-        name: "Test Music Config #{SecureRandom.hex(4)}",
+      music_config = Music::Albums::RankingConfiguration.create!(
+        name: "Test Music Albums Config #{SecureRandom.hex(4)}",
         global: true,
         min_list_weight: 1
       )
@@ -338,9 +338,9 @@ module Rankings
       PenaltyApplication.create!(penalty: cross_media_penalty, ranking_configuration: music_config, value: 15)
       PenaltyApplication.create!(penalty: music_penalty, ranking_configuration: music_config, value: 20)
 
-      # Create a fresh music list with penalties
-      music_list = Music::List.create!(
-        name: "Test Music List #{SecureRandom.hex(4)}",
+      # Create a fresh music albums list with penalties
+      music_list = Music::Albums::List.create!(
+        name: "Test Music Albums List #{SecureRandom.hex(4)}",
         status: :approved,
         high_quality_source: false,
         number_of_voters: 150
@@ -397,7 +397,7 @@ module Rankings
     # Test median voter count calculation and usage in penalty calculation
     test "calculates median voter count from ranking configuration lists" do
       # Create a fresh ranking configuration
-      test_config = Music::RankingConfiguration.create!(
+      test_config = Music::Albums::RankingConfiguration.create!(
         name: "Test Median Config #{SecureRandom.hex(4)}",
         global: true,
         min_list_weight: 1
@@ -415,7 +415,7 @@ module Rankings
       ]
 
       lists_data.each do |data|
-        list = Music::List.create!(
+        list = Music::Albums::List.create!(
           name: "#{data[:name]} #{SecureRandom.hex(4)}",
           status: :approved,
           number_of_voters: data[:voters]
@@ -436,7 +436,7 @@ module Rankings
       assert_equal 25, median
 
       # Create a list with low voter count to test penalty calculation
-      low_voter_list = Music::List.create!(
+      low_voter_list = Music::Albums::List.create!(
         name: "Low Voter List #{SecureRandom.hex(4)}",
         status: :approved,
         number_of_voters: 5

@@ -69,15 +69,28 @@ games_list_games_penalty:
   list: games_list
   penalty: games_penalty
 
-# Music list penalties
-music_list_global_penalty:
-  list: music_list
+# Music Albums list penalties
+music_albums_list_global_penalty:
+  list: music_albums_list
   penalty: global_penalty
 
-music_list_cross_media_penalty:
-  list: music_list
+music_albums_list_cross_media_penalty:
+  list: music_albums_list
   penalty: cross_media_penalty
 
-music_list_music_penalty:
-  list: music_list
+music_albums_list_music_penalty:
+  list: music_albums_list
+  penalty: music_penalty
+
+# Music Songs list penalties
+music_songs_list_global_penalty:
+  list: music_songs_list
+  penalty: global_penalty
+
+music_songs_list_cross_media_penalty:
+  list: music_songs_list
+  penalty: cross_media_penalty
+
+music_songs_list_music_penalty:
+  list: music_songs_list
   penalty: music_penalty

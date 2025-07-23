@@ -113,17 +113,20 @@ class ListTest < ActiveSupport::TestCase
   test "STI should work with domain-specific classes" do
     books_list = lists(:books_list)
     movies_list = lists(:movies_list)
-    music_list = lists(:music_list)
+    music_albums_list = lists(:music_albums_list)
+    music_songs_list = lists(:music_songs_list)
     games_list = lists(:games_list)
 
     assert_equal "Books::List", books_list.type
     assert_equal "Movies::List", movies_list.type
-    assert_equal "Music::List", music_list.type
+    assert_equal "Music::Albums::List", music_albums_list.type
+    assert_equal "Music::Songs::List", music_songs_list.type
     assert_equal "Games::List", games_list.type
 
     assert books_list.is_a?(Books::List)
     assert movies_list.is_a?(Movies::List)
-    assert music_list.is_a?(Music::List)
+    assert music_albums_list.is_a?(Music::Albums::List)
+    assert music_songs_list.is_a?(Music::Songs::List)
     assert games_list.is_a?(Games::List)
   end
 

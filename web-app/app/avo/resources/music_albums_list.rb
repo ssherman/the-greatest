@@ -1,7 +1,7 @@
-class Avo::Resources::MusicList < Avo::BaseResource
+class Avo::Resources::MusicAlbumsList < Avo::BaseResource
   # self.includes = []
   # self.attachments = []
-  self.model_class = ::Music::List
+  self.model_class = ::Music::Albums::List
   self.title = :name
   # self.search = {
   #   query: -> { query.ransack(id_eq: params[:q], m: "or").result(distinct: false) }
@@ -14,7 +14,7 @@ class Avo::Resources::MusicList < Avo::BaseResource
     field :description, as: :textarea
     field :source, as: :text
     field :url, as: :text
-    field :status, as: :select, enum: ::Music::List.statuses
+    field :status, as: :select, enum: ::Music::Albums::List.statuses
     field :estimated_quality, as: :number
     field :high_quality_source, as: :boolean
     field :category_specific, as: :boolean

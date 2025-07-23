@@ -30,6 +30,10 @@ movies_unranked_item:
   item: matrix (Movies::Movie)
   ranking_configuration: movies_global
 
-music_unranked_item:
+music_albums_unranked_item:
   item: animals (Music::Album)
-  ranking_configuration: music_global
+  ranking_configuration: music_albums_global
+
+music_songs_unranked_item:
+  item: wish_you_were_here (Music::Song)
+  ranking_configuration: music_songs_global

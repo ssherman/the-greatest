@@ -41,8 +41,10 @@ class RankedList < ApplicationRecord
       errors.add(:list, "must be a Movies::List") unless list.is_a?(Movies::List)
     when "Games::RankingConfiguration"
       errors.add(:list, "must be a Games::List") unless list.is_a?(Games::List)
-    when "Music::RankingConfiguration"
-      errors.add(:list, "must be a Music::List") unless list.is_a?(Music::List)
+    when "Music::Albums::RankingConfiguration"
+      errors.add(:list, "must be a Music::Albums::List") unless list.is_a?(Music::Albums::List)
+    when "Music::Songs::RankingConfiguration"
+      errors.add(:list, "must be a Music::Songs::List") unless list.is_a?(Music::Songs::List)
     end
   end
 end

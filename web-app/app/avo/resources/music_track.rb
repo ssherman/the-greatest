@@ -14,7 +14,7 @@ class Avo::Resources::MusicTrack < Avo::BaseResource
     field :position, as: :number
     field :length_secs, as: :number
     field :notes, as: :textarea
-    field :created_at, as: :date_time
-    field :updated_at, as: :date_time
+    field :created_at, as: :date_time, readonly: true
+    field :updated_at, as: :date_time, readonly: true
   end
 end

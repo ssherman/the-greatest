@@ -15,7 +15,7 @@ class Avo::Resources::MusicSong < Avo::BaseResource
     field :release_year, as: :number
     field :isrc, as: :text
     field :lyrics, as: :textarea
-    field :created_at, as: :date_time
-    field :updated_at, as: :date_time
+    field :created_at, as: :date_time, readonly: true
+    field :updated_at, as: :date_time, readonly: true
   end
 end

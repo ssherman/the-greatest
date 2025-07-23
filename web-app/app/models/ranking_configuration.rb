@@ -46,12 +46,12 @@
 #
 class RankingConfiguration < ApplicationRecord
   # Associations
-  belongs_to :inherited_from, class_name: "RankingConfiguration", optional: true
+  belongs_to :inherited_from, class_name: "RankingConfiguration", optional: true, inverse_of: :inherited_configurations
   belongs_to :user, optional: true
   belongs_to :primary_mapped_list, class_name: "List", optional: true
   belongs_to :secondary_mapped_list, class_name: "List", optional: true
 
-  has_many :inherited_configurations, class_name: "RankingConfiguration", foreign_key: :inherited_from_id, dependent: :nullify
+  has_many :inherited_configurations, class_name: "RankingConfiguration", foreign_key: :inherited_from_id, dependent: :nullify, inverse_of: :inherited_from
   has_many :ranked_items, dependent: :destroy
   has_many :ranked_lists, dependent: :destroy
   has_many :penalty_applications, dependent: :destroy, inverse_of: :ranking_configuration

@@ -1,7 +1,7 @@
-class Avo::Resources::RankingConfiguration < Avo::BaseResource
+class Avo::Resources::MoviesRankingConfiguration < Avo::BaseResource
   # self.includes = []
   # self.attachments = []
-  self.model_class = ::RankingConfiguration
+  self.model_class = ::Movies::RankingConfiguration
   self.title = :name
   # self.search = {
   #   query: -> { query.ransack(id_eq: params[:q], m: "or").result(distinct: false) }
@@ -32,8 +32,8 @@ class Avo::Resources::RankingConfiguration < Avo::BaseResource
     field :primary_mapped_list_cutoff_limit, as: :number
     field :inherited_from, as: :belongs_to
     field :user, as: :belongs_to
-    field :primary_mapped_list, as: :belongs_to
-    field :secondary_mapped_list, as: :belongs_to
+    field :primary_mapped_list, as: :belongs_to, use_resource: Avo::Resources::MoviesList
+    field :secondary_mapped_list, as: :belongs_to, use_resource: Avo::Resources::MoviesList
     field :inherited_configurations, as: :has_many
     field :ranked_items, as: :has_many
     field :ranked_lists, as: :has_many

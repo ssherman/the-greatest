@@ -15,9 +15,9 @@ class Avo::Resources::AiChat < Avo::BaseResource
     field :response_schema, as: :code
     field :messages, as: :code
     field :raw_responses, as: :code
-    field :parent, as: :text
-    field :user, as: :belongs_to
-    field :created_at, as: :date_time
-    field :updated_at, as: :date_time
+    field :parent, as: :belongs_to, readonly: true
+    field :user, as: :belongs_to, readonly: true
+    field :created_at, as: :date_time, readonly: true
+    field :updated_at, as: :date_time, readonly: true
   end
 end
