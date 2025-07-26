@@ -4,7 +4,7 @@ module Music
   module Musicbrainz
     # Load exception classes
     require_relative "../exceptions"
-    
+
     module Search
       class BaseSearch
         attr_reader :client
@@ -58,7 +58,7 @@ module Music
         def search_by_field(field, value, options = {})
           query = build_field_query(field, value)
           params = build_search_params(query, options)
-          
+
           begin
             response = client.get(entity_type, params)
             process_search_response(response)
@@ -82,15 +82,15 @@ module Music
         # @param options [Hash] additional options
         # @return [Hash] API parameters
         def build_search_params(query, options = {})
-          params = { query: query }
-          
+          params = {query: query}
+
           # Add pagination parameters
           params[:limit] = options[:limit] if options[:limit]
           params[:offset] = options[:offset] if options[:offset]
-          
+
           # Add dismax parameter for simpler queries
           params[:dismax] = options[:dismax] if options.key?(:dismax)
-          
+
           validate_search_params!(params)
           params
         end
@@ -138,7 +138,7 @@ module Music
         # @param mbid [String] the MBID to validate
         def validate_mbid!(mbid)
           uuid_pattern = /\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i
-          
+
           unless mbid.match?(uuid_pattern)
             raise QueryError, "Invalid MBID format: #{mbid}"
           end
@@ -150,11 +150,11 @@ module Music
           if params[:limit] && (params[:limit] < 1 || params[:limit] > 100)
             raise QueryError, "Limit must be between 1 and 100"
           end
-          
+
           if params[:offset] && params[:offset] < 0
             raise QueryError, "Offset must be non-negative"
           end
-          
+
           if params[:query].blank?
             raise QueryError, "Query cannot be blank"
           end
@@ -167,16 +167,16 @@ module Music
           # For now, just escape the most common problematic characters
           # This can be improved later for full Lucene compliance
           escaped = query.dup
-          
+
           # Escape basic special characters
-          escaped.gsub!('\\', '\\\\\\\\')  # Each \ becomes \\
-          escaped.gsub!(' ', '\\ ')
-          escaped.gsub!(':', '\\:')
-          escaped.gsub!('-', '\\-')
-          
+          escaped.gsub!("\\", "\\\\\\\\")  # Each \ becomes \\
+          escaped.gsub!(" ", '\\ ')
+          escaped.gsub!(":", '\\:')
+          escaped.gsub!("-", '\\-')
+
           escaped
         end
       end
     end
   end
-end 
+end

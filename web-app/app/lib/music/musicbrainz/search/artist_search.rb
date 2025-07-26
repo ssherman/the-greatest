@@ -79,7 +79,7 @@ module Music
         # @return [Hash] search results
         def search(query, options = {})
           params = build_search_params(query, options)
-          
+
           begin
             response = client.get(entity_type, params)
             process_search_response(response)
@@ -94,27 +94,25 @@ module Music
         # @return [Hash] search results
         def search_with_criteria(criteria, options = {})
           query_parts = []
-          
+
           criteria.each do |field, value|
             next if value.blank?
-            
+
             if available_fields.include?(field.to_s)
               query_parts << build_field_query(field.to_s, value)
             else
               raise QueryError, "Invalid search field: #{field}"
             end
           end
-          
+
           if query_parts.empty?
             raise QueryError, "At least one search criterion must be provided"
           end
-          
+
           query = query_parts.join(" AND ")
           search(query, options)
         end
-
-
       end
     end
   end
-end 
+end

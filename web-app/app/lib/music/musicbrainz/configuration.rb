@@ -16,7 +16,7 @@ module Music
         @timeout = DEFAULT_TIMEOUT
         @open_timeout = DEFAULT_OPEN_TIMEOUT
         @logger = Rails.logger
-        
+
         validate_configuration!
       end
 
@@ -28,7 +28,7 @@ module Music
 
       def validate_configuration!
         raise ArgumentError, "MUSICBRAINZ_URL cannot be blank" if base_url.blank?
-        
+
         begin
           uri = URI.parse(base_url)
           unless uri.is_a?(URI::HTTP) || uri.is_a?(URI::HTTPS)
@@ -40,4 +40,4 @@ module Music
       end
     end
   end
-end 
+end

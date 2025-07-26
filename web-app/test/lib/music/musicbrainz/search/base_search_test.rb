@@ -19,12 +19,12 @@ class Music::Musicbrainz::Search::BaseSearchTest < ActiveSupport::TestCase
 
     def search(query, options = {})
       params = build_search_params(query, options)
-      { success: true, data: { query: query }, metadata: { params: params } }
+      {success: true, data: {query: query}, metadata: {params: params}}
     end
   end
 
   def setup
-    @mock_client = mock('client')
+    @mock_client = mock("client")
     @search = TestSearch.new(@mock_client)
   end
 
@@ -50,27 +50,27 @@ class Music::Musicbrainz::Search::BaseSearchTest < ActiveSupport::TestCase
   end
 
   test "build_field_query escapes and formats query" do
-    query = @search.send(:build_field_query, 'name', 'test value')
+    query = @search.send(:build_field_query, "name", "test value")
     assert_equal 'name:test\\ value', query
   end
 
   test "build_field_query escapes basic Lucene characters" do
-    query = @search.send(:build_field_query, 'name', 'test value-with:special')
+    query = @search.send(:build_field_query, "name", "test value-with:special")
     assert_equal 'name:test\\ value\\-with\\:special', query
   end
 
   test "build_search_params includes basic parameters" do
     params = @search.send(:build_search_params, "test query", {})
-    
+
     assert_equal "test query", params[:query]
     refute params.key?(:limit)
     refute params.key?(:offset)
   end
 
   test "build_search_params includes optional parameters" do
-    options = { limit: 10, offset: 20, dismax: true }
+    options = {limit: 10, offset: 20, dismax: true}
     params = @search.send(:build_search_params, "test query", options)
-    
+
     assert_equal "test query", params[:query]
     assert_equal 10, params[:limit]
     assert_equal 20, params[:offset]
@@ -79,7 +79,7 @@ class Music::Musicbrainz::Search::BaseSearchTest < ActiveSupport::TestCase
 
   test "validate_mbid! accepts valid MBID" do
     valid_mbid = "550e8400-e29b-41d4-a716-446655440000"
-    
+
     assert_nothing_raised do
       @search.send(:validate_mbid!, valid_mbid)
     end
@@ -92,7 +92,7 @@ class Music::Musicbrainz::Search::BaseSearchTest < ActiveSupport::TestCase
       "550e8400-e29b-41d4-a716-44665544000g",
       ""
     ]
-    
+
     invalid_mbids.each do |mbid|
       assert_raises(Music::Musicbrainz::QueryError) do
         @search.send(:validate_mbid!, mbid)
@@ -101,8 +101,8 @@ class Music::Musicbrainz::Search::BaseSearchTest < ActiveSupport::TestCase
   end
 
   test "validate_search_params! accepts valid parameters" do
-    valid_params = { query: "test", limit: 50, offset: 10 }
-    
+    valid_params = {query: "test", limit: 50, offset: 10}
+
     assert_nothing_raised do
       @search.send(:validate_search_params!, valid_params)
     end
@@ -110,38 +110,38 @@ class Music::Musicbrainz::Search::BaseSearchTest < ActiveSupport::TestCase
 
   test "validate_search_params! rejects invalid limit" do
     assert_raises(Music::Musicbrainz::QueryError) do
-      @search.send(:validate_search_params!, { query: "test", limit: 0 })
+      @search.send(:validate_search_params!, {query: "test", limit: 0})
     end
-    
+
     assert_raises(Music::Musicbrainz::QueryError) do
-      @search.send(:validate_search_params!, { query: "test", limit: 101 })
+      @search.send(:validate_search_params!, {query: "test", limit: 101})
     end
   end
 
   test "validate_search_params! rejects negative offset" do
     assert_raises(Music::Musicbrainz::QueryError) do
-      @search.send(:validate_search_params!, { query: "test", offset: -1 })
+      @search.send(:validate_search_params!, {query: "test", offset: -1})
     end
   end
 
   test "validate_search_params! rejects blank query" do
     assert_raises(Music::Musicbrainz::QueryError) do
-      @search.send(:validate_search_params!, { query: "" })
+      @search.send(:validate_search_params!, {query: ""})
     end
-    
+
     assert_raises(Music::Musicbrainz::QueryError) do
-      @search.send(:validate_search_params!, { query: nil })
+      @search.send(:validate_search_params!, {query: nil})
     end
   end
 
   test "escape_lucene_query escapes basic special characters" do
     special_chars = {
-      'test query' => 'test\\ query',
-      'test:query' => 'test\\:query', 
-      'test-query' => 'test\\-query',
+      "test query" => 'test\\ query',
+      "test:query" => 'test\\:query',
+      "test-query" => 'test\\-query',
       'test\\query' => 'test\\\\query'
     }
-    
+
     special_chars.each do |input, expected|
       result = @search.send(:escape_lucene_query, input)
       assert_equal expected, result, "Failed to escape: #{input}"
@@ -150,23 +150,23 @@ class Music::Musicbrainz::Search::BaseSearchTest < ActiveSupport::TestCase
 
   test "find_by_mbid validates and searches by MBID" do
     valid_mbid = "550e8400-e29b-41d4-a716-446655440000"
-    
+
     @mock_client.expects(:get)
-      .with("test-entity", { query: "tid:550e8400\\-e29b\\-41d4\\-a716\\-446655440000" })
-      .returns({ success: true, data: { test: "result" } })
-    
+      .with("test-entity", {query: "tid:550e8400\\-e29b\\-41d4\\-a716\\-446655440000"})
+      .returns({success: true, data: {test: "result"}})
+
     result = @search.find_by_mbid(valid_mbid)
-    
+
     assert result[:success]
   end
 
   test "handle_search_error returns structured error response" do
     error = Music::Musicbrainz::NetworkError.new("Connection failed")
     query = "test query"
-    options = { limit: 10 }
-    
+    options = {limit: 10}
+
     result = @search.send(:handle_search_error, error, query, options)
-    
+
     refute result[:success]
     assert_nil result[:data]
     assert_equal ["Connection failed"], result[:errors]
@@ -177,16 +177,16 @@ class Music::Musicbrainz::Search::BaseSearchTest < ActiveSupport::TestCase
   end
 
   test "process_search_response returns response unchanged for successful responses" do
-    response = { success: true, data: { test: "data" } }
+    response = {success: true, data: {test: "data"}}
     result = @search.send(:process_search_response, response)
-    
+
     assert_equal response, result
   end
 
   test "process_search_response returns response unchanged for failed responses" do
-    response = { success: false, errors: ["Error"] }
+    response = {success: false, errors: ["Error"]}
     result = @search.send(:process_search_response, response)
-    
+
     assert_equal response, result
   end
-end 
+end

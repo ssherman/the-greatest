@@ -81,7 +81,7 @@ GEM
       activerecord (>= 6.0.0)
       activesupport (>= 6.0.0)
     ast (2.4.3)
-    avo (3.22.0)
+    avo (3.22.2)
       actionview (>= 6.1)
       active_link_to
       activerecord (>= 6.1)
@@ -135,7 +135,7 @@ GEM
     drb (2.2.3)
     erb (5.0.2)
     erubi (1.13.1)
-    faraday (2.13.3)
+    faraday (2.13.4)
       faraday-net_http (>= 2.0, < 3.5)
       json
       logger
@@ -168,7 +168,7 @@ GEM
       activesupport (>= 5.0.0)
     jsbundling-rails (1.3.1)
       railties (>= 6.0.0)
-    json (2.13.0)
+    json (2.13.1)
     jwt (3.1.2)
       base64
     language_server-protocol (3.17.0.5)
@@ -228,7 +228,7 @@ GEM
       multi_json (>= 1.0)
     pagy (9.3.5)
     parallel (1.27.0)
-    parser (3.3.8.0)
+    parser (3.3.9.0)
       ast (~> 2.4.1)
       racc
     pg (1.5.9)

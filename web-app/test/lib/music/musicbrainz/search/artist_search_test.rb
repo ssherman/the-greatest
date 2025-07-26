@@ -4,7 +4,7 @@ require "test_helper"
 
 class Music::Musicbrainz::Search::ArtistSearchTest < ActiveSupport::TestCase
   def setup
-    @mock_client = mock('client')
+    @mock_client = mock("client")
     @search = Music::Musicbrainz::Search::ArtistSearch.new(@mock_client)
   end
 
@@ -26,82 +26,82 @@ class Music::Musicbrainz::Search::ArtistSearchTest < ActiveSupport::TestCase
 
   test "search_by_name searches by name field" do
     @mock_client.expects(:get)
-      .with("artist", { query: 'name:The\\ Beatles' })
+      .with("artist", {query: 'name:The\\ Beatles'})
       .returns(successful_artist_response)
-    
+
     result = @search.search_by_name("The Beatles")
-    
+
     assert result[:success]
     assert_equal 1, result[:data]["count"]
   end
 
   test "search_by_alias searches by alias field" do
     @mock_client.expects(:get)
-      .with("artist", { query: 'alias:Fab\\ Four' })
+      .with("artist", {query: 'alias:Fab\\ Four'})
       .returns(successful_artist_response)
-    
+
     result = @search.search_by_alias("Fab Four")
-    
+
     assert result[:success]
   end
 
   test "search_by_tag searches by tag field" do
     @mock_client.expects(:get)
-      .with("artist", { query: 'tag:rock' })
+      .with("artist", {query: "tag:rock"})
       .returns(successful_artist_response)
-    
+
     result = @search.search_by_tag("rock")
-    
+
     assert result[:success]
   end
 
   test "search_by_type searches by type field" do
     @mock_client.expects(:get)
-      .with("artist", { query: 'type:group' })
+      .with("artist", {query: "type:group"})
       .returns(successful_artist_response)
-    
+
     result = @search.search_by_type("group")
-    
+
     assert result[:success]
   end
 
   test "search_by_country searches by country field" do
     @mock_client.expects(:get)
-      .with("artist", { query: 'country:GB' })
+      .with("artist", {query: "country:GB"})
       .returns(successful_artist_response)
-    
+
     result = @search.search_by_country("GB")
-    
+
     assert result[:success]
   end
 
   test "search_by_gender searches by gender field" do
     @mock_client.expects(:get)
-      .with("artist", { query: 'gender:male' })
+      .with("artist", {query: "gender:male"})
       .returns(successful_artist_response)
-    
+
     result = @search.search_by_gender("male")
-    
+
     assert result[:success]
   end
 
   test "search performs general search with custom query" do
     @mock_client.expects(:get)
-      .with("artist", { query: 'name:Beatles AND country:GB' })
+      .with("artist", {query: "name:Beatles AND country:GB"})
       .returns(successful_artist_response)
-    
+
     result = @search.search("name:Beatles AND country:GB")
-    
+
     assert result[:success]
   end
 
   test "search includes pagination options" do
     @mock_client.expects(:get)
-      .with("artist", { query: 'name:Beatles', limit: 10, offset: 20 })
+      .with("artist", {query: "name:Beatles", limit: 10, offset: 20})
       .returns(successful_artist_response)
-    
+
     result = @search.search("name:Beatles", limit: 10, offset: 20)
-    
+
     assert result[:success]
   end
 
@@ -111,15 +111,15 @@ class Music::Musicbrainz::Search::ArtistSearchTest < ActiveSupport::TestCase
       country: "GB",
       type: "group"
     }
-    
+
     expected_query = 'name:The\\ Beatles AND country:GB AND type:group'
-    
+
     @mock_client.expects(:get)
-      .with("artist", { query: expected_query })
+      .with("artist", {query: expected_query})
       .returns(successful_artist_response)
-    
+
     result = @search.search_with_criteria(criteria)
-    
+
     assert result[:success]
   end
 
@@ -129,27 +129,27 @@ class Music::Musicbrainz::Search::ArtistSearchTest < ActiveSupport::TestCase
       country: "",
       type: nil
     }
-    
+
     @mock_client.expects(:get)
-      .with("artist", { query: 'name:The\\ Beatles' })
+      .with("artist", {query: 'name:The\\ Beatles'})
       .returns(successful_artist_response)
-    
+
     result = @search.search_with_criteria(criteria)
-    
+
     assert result[:success]
   end
 
   test "search_with_criteria raises error for invalid fields" do
-    criteria = { invalid_field: "value" }
-    
+    criteria = {invalid_field: "value"}
+
     assert_raises(Music::Musicbrainz::QueryError) do
       @search.search_with_criteria(criteria)
     end
   end
 
   test "search_with_criteria raises error when no criteria provided" do
-    criteria = { name: "", country: nil }
-    
+    criteria = {name: "", country: nil}
+
     assert_raises(Music::Musicbrainz::QueryError) do
       @search.search_with_criteria(criteria)
     end
@@ -157,11 +157,11 @@ class Music::Musicbrainz::Search::ArtistSearchTest < ActiveSupport::TestCase
 
   test "returns raw API response data without processing" do
     @mock_client.expects(:get)
-      .with("artist", { query: 'name:The\\ Beatles' })
+      .with("artist", {query: 'name:The\\ Beatles'})
       .returns(successful_artist_response)
-    
+
     result = @search.search_by_name("The Beatles")
-    
+
     assert result[:success]
     # Should return raw data structure from API
     assert_equal "b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d", result[:data]["artists"].first["id"]
@@ -171,9 +171,9 @@ class Music::Musicbrainz::Search::ArtistSearchTest < ActiveSupport::TestCase
   test "search handles API errors gracefully" do
     @mock_client.expects(:get)
       .raises(Music::Musicbrainz::NetworkError.new("Connection failed"))
-    
+
     result = @search.search("name:Beatles")
-    
+
     refute result[:success]
     assert_includes result[:errors], "Connection failed"
     assert_equal "artist", result[:metadata][:entity_type]
@@ -181,13 +181,13 @@ class Music::Musicbrainz::Search::ArtistSearchTest < ActiveSupport::TestCase
 
   test "find_by_mbid uses correct MBID field" do
     valid_mbid = "b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d"
-    
+
     @mock_client.expects(:get)
-      .with("artist", { query: "arid:b10bbbfc\\-cf9e\\-42e0\\-be17\\-e2c3e1d2600d" })
+      .with("artist", {query: "arid:b10bbbfc\\-cf9e\\-42e0\\-be17\\-e2c3e1d2600d"})
       .returns(successful_artist_response)
-    
+
     result = @search.find_by_mbid(valid_mbid)
-    
+
     assert result[:success]
   end
 
@@ -216,4 +216,4 @@ class Music::Musicbrainz::Search::ArtistSearchTest < ActiveSupport::TestCase
       }
     }
   end
-end 
+end

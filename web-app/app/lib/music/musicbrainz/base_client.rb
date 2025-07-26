@@ -21,7 +21,7 @@ module Music
       # @return [Hash] parsed response with metadata
       def get(endpoint, params = {})
         start_time = Time.current
-        
+
         response = connection.get(endpoint) do |req|
           req.params = build_params(params)
           req.headers["User-Agent"] = config.user_agent
@@ -42,25 +42,25 @@ module Music
         Faraday.new(url: config.api_url) do |conn|
           conn.options.timeout = config.timeout
           conn.options.open_timeout = config.open_timeout
-          
+
           # Add logging if logger is available
           if config.logger
-            conn.response :logger, config.logger, { headers: true, bodies: false }
+            conn.response :logger, config.logger, {headers: true, bodies: false}
           end
-          
+
           conn.adapter Faraday.default_adapter
         end
       end
 
       def build_params(params)
         # Always request JSON format
-        base_params = { fmt: "json" }
+        base_params = {fmt: "json"}
         base_params.merge(params)
       end
 
       def parse_response(response, endpoint, params, start_time)
         response_time = Time.current - start_time
-        
+
         case response.status
         when 200
           parse_success_response(response, endpoint, params, response_time)
@@ -98,4 +98,4 @@ module Music
       end
     end
   end
-end 
+end

@@ -5,7 +5,7 @@ module Music
     class Error < StandardError; end
 
     class ConfigurationError < Error; end
-    
+
     class NetworkError < Error
       attr_reader :original_error
 
@@ -28,8 +28,11 @@ module Music
     end
 
     class ClientError < HttpError; end      # 4xx errors
+
     class ServerError < HttpError; end      # 5xx errors
+
     class NotFoundError < ClientError; end  # 404 errors
+
     class BadRequestError < ClientError; end # 400 errors
 
     class ParseError < Error
@@ -43,4 +46,4 @@ module Music
 
     class QueryError < Error; end # Invalid Lucene queries
   end
-end 
+end
