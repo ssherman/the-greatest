@@ -9,6 +9,7 @@ Represents a musical artist, which can be either an individual person or a band.
 - `has_many :albums, class_name: "Music::Album", foreign_key: :primary_artist_id` — Albums where this artist is the primary credited artist
 - `has_many :credits, class_name: "Music::Credit"` — All credits (artistic/technical) associated with this artist
 - `has_many :ai_chats, as: :parent, dependent: :destroy` — Polymorphic association for AI chat conversations
+- `has_many :identifiers, as: :identifiable, dependent: :destroy` — External identifiers for data import and deduplication
 
 ## Public Methods
 

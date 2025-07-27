@@ -12,6 +12,7 @@ Represents a musical composition independent of any specific recording. This is 
 - `has_many :related_songs, through: :song_relationships, source: :related_song` — Songs that this song relates to
 - `has_many :inverse_song_relationships, class_name: "Music::SongRelationship", foreign_key: :related_song_id, dependent: :destroy` — Inbound relationships (other songs cover/remix this one)
 - `has_many :original_songs, through: :inverse_song_relationships, source: :song` — Songs that relate to this song
+- `has_many :identifiers, as: :identifiable, dependent: :destroy` — External identifiers for data import and deduplication
 
 ## Public Methods
 

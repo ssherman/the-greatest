@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_07_22_024743) do
+ActiveRecord::Schema[8.0].define(version: 2025_07_27_171428) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -41,6 +41,18 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_22_024743) do
     t.index ["slug", "sluggable_type", "scope"], name: "index_friendly_id_slugs_on_slug_and_sluggable_type_and_scope", unique: true
     t.index ["slug", "sluggable_type"], name: "index_friendly_id_slugs_on_slug_and_sluggable_type"
     t.index ["sluggable_type", "sluggable_id"], name: "index_friendly_id_slugs_on_sluggable_type_and_sluggable_id"
+  end
+
+  create_table "identifiers", force: :cascade do |t|
+    t.string "identifiable_type", null: false
+    t.bigint "identifiable_id", null: false
+    t.integer "identifier_type", null: false
+    t.string "value", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["identifiable_type", "identifiable_id"], name: "index_identifiers_on_identifiable"
+    t.index ["identifiable_type", "identifier_type", "value", "identifiable_id"], name: "index_identifiers_on_lookup_unique", unique: true
+    t.index ["identifiable_type", "value"], name: "index_identifiers_on_type_and_value"
   end
 
   create_table "list_items", force: :cascade do |t|

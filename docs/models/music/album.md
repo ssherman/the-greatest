@@ -7,6 +7,7 @@ Represents a canonical album/work (e.g., "Dark Side of the Moon"). This is the c
 - `belongs_to :primary_artist, class_name: "Music::Artist"` — The main credited artist for the album
 - `has_many :releases, class_name: "Music::Release"` — All commercial releases of this album (CD, vinyl, digital, etc.)
 - `has_many :credits, as: :creditable, class_name: "Music::Credit"` — Polymorphic association for all artistic and technical credits
+- `has_many :identifiers, as: :identifiable, dependent: :destroy` — External identifiers for data import and deduplication
 
 ## Public Methods
 None

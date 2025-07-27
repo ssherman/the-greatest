@@ -8,6 +8,7 @@ Represents a specific commercial release of an album (e.g., "Dark Side of the Mo
 - `has_many :tracks, -> { order(:medium_number, :position) }, class_name: "Music::Track"` — All tracks on this release, ordered by medium and position
 - `has_many :songs, through: :tracks, class_name: "Music::Song"` — All songs included on this release
 - `has_many :credits, as: :creditable, class_name: "Music::Credit"` — Polymorphic association for release-specific credits
+- `has_many :identifiers, as: :identifiable, dependent: :destroy` — External identifiers for data import and deduplication
 
 ## Public Methods
 None

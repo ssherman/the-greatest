@@ -1,0 +1,73 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+# == Schema Information
+#
+# Table name: identifiers
+#
+#  id                :bigint           not null, primary key
+#  identifiable_type :string           not null
+#  identifier_type   :integer          not null
+#  value             :string           not null
+#  created_at        :datetime         not null
+#  updated_at        :datetime         not null
+#  identifiable_id   :bigint           not null
+#
+# Indexes
+#
+#  index_identifiers_on_identifiable    (identifiable_type,identifiable_id)
+#  index_identifiers_on_lookup_unique   (identifiable_type,identifier_type,value,identifiable_id) UNIQUE
+#  index_identifiers_on_type_and_value  (identifiable_type,value)
+#
+
+# Music Artist Identifiers
+david_bowie_musicbrainz:
+  identifiable: david_bowie (Music::Artist)
+  identifier_type: 100  # music_musicbrainz_artist_id
+  value: "5441c29d-3602-4898-b1a1-b77fa23b8e50"
+
+david_bowie_discogs:
+  identifiable: david_bowie (Music::Artist)
+  identifier_type: 102  # music_discogs_artist_id
+  value: "5882"
+
+pink_floyd_musicbrainz:
+  identifiable: pink_floyd (Music::Artist)
+  identifier_type: 100  # music_musicbrainz_artist_id
+  value: "83d91898-7763-47d7-b03b-b92132375c47"
+
+pink_floyd_discogs:
+  identifiable: pink_floyd (Music::Artist)
+  identifier_type: 102  # music_discogs_artist_id
+  value: "45467"
+
+the_beatles_musicbrainz:
+  identifiable: the_beatles (Music::Artist)
+  identifier_type: 100  # music_musicbrainz_artist_id
+  value: "b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d"
+
+# Music Album Identifiers
+dark_side_musicbrainz_release_group:
+  identifiable: dark_side_of_the_moon (Music::Album)
+  identifier_type: 200  # music_musicbrainz_release_group_id
+  value: "f5093c06-23e3-404f-afe0-f9df359d6e68"
+
+dark_side_musicbrainz_release:
+  identifiable: dark_side_of_the_moon (Music::Album)
+  identifier_type: 201  # music_musicbrainz_release_id
+  value: "a4e7c0b4-7e7e-4e7e-8e7e-7e7e7e7e7e7e"
+
+dark_side_discogs:
+  identifiable: dark_side_of_the_moon (Music::Album)
+  identifier_type: 203  # music_discogs_release_id
+  value: "178618"
+
+wish_you_were_here_musicbrainz:
+  identifiable: wish_you_were_here (Music::Album)
+  identifier_type: 200  # music_musicbrainz_release_group_id
+  value: "a4e7c0b4-23e3-404f-afe0-f9df359d6e68"
+
+# Duplicate value test case (same identifier for different objects)
+duplicate_discogs_value:
+  identifiable: animals (Music::Album)
+  identifier_type: 203  # music_discogs_release_id
+  value: "999999"  # Same value, different object - should be allowed

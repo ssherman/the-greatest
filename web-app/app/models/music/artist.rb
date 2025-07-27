@@ -33,6 +33,7 @@ class Music::Artist < ApplicationRecord
   has_many :albums, class_name: "Music::Album", foreign_key: :primary_artist_id
   has_many :credits, class_name: "Music::Credit"
   has_many :ai_chats, as: :parent, dependent: :destroy
+  has_many :identifiers, as: :identifiable, dependent: :destroy
 
   # Validations
   validates :name, presence: true

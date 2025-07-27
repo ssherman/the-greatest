@@ -30,6 +30,7 @@ class Music::Album < ApplicationRecord
   # has_many :songs, through: :releases
   has_many :credits, as: :creditable, class_name: "Music::Credit"
   has_many :ai_chats, as: :parent, dependent: :destroy
+  has_many :identifiers, as: :identifiable, dependent: :destroy
 
   # Validations
   validates :title, presence: true

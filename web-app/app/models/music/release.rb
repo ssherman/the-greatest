@@ -29,6 +29,7 @@ class Music::Release < ApplicationRecord
   has_many :tracks, -> { order(:medium_number, :position) }, class_name: "Music::Track"
   has_many :songs, through: :tracks, class_name: "Music::Song"
   has_many :credits, as: :creditable, class_name: "Music::Credit"
+  has_many :identifiers, as: :identifiable, dependent: :destroy
 
   # Validations
   validates :album, presence: true
