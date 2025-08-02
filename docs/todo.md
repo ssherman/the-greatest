@@ -16,6 +16,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-08-02] [Data Importer Service - Music Artists (Phase 1)](todos/018-import-artists.md)
 - ✅ [2025-07-27] [Identifiers model implementation](todos/017-identifiers.md)
 - ✅ [2025-07-25] [MusicBrainz API wrapper implementation](todos/016-musicbrainz-api.md)
 - ✅ [2025-07-20] [Weighted rank calculation implementation](todos/015-weighted-rank.md)
