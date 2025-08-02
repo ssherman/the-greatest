@@ -34,13 +34,21 @@ module DataImporters
     def summary
       {
         success: success?,
-        item_saved: item&.persisted? || false,
+        item_saved: item_saved?,
         providers_run: provider_results.count,
         providers_succeeded: successful_providers.count,
         providers_failed: failed_providers.count,
         data_populated: successful_providers.flat_map(&:data_populated).uniq,
         errors: all_errors
       }
+    end
+
+    private
+
+    def item_saved?
+      return false unless item
+      return item.persisted? if item.respond_to?(:persisted?)
+      false
     end
   end
 end

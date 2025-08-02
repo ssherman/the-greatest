@@ -8,7 +8,7 @@ module DataImporters
       case type
       when :artist then Music::Artist::ImportQuery.new(**params)
       # Future: when :book then Books::Book::ImportQuery.new(**params)
-      # Future: when :movie then Movies::Movie::ImportQuery.new(**params)  
+      # Future: when :movie then Movies::Movie::ImportQuery.new(**params)
       # Future: when :game then Games::Game::ImportQuery.new(**params)
       else
         raise ArgumentError, "Unknown import type: #{type}"

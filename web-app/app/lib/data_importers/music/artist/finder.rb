@@ -8,10 +8,10 @@ module DataImporters
         def call(query:)
           # First, search MusicBrainz to get the MBID for this artist
           search_result = search_musicbrainz(query.name)
-          
+
           if search_result[:success] && search_result[:data]["artists"].any?
             mbid = search_result[:data]["artists"].first["id"]
-            
+
             # Try to find existing artist by MusicBrainz ID (most reliable)
             existing = find_by_musicbrainz_id(mbid)
             return existing if existing
@@ -23,7 +23,7 @@ module DataImporters
 
           # For now, skip AI-assisted matching - will add later
           # TODO: Add AI-assisted matching for ambiguous cases
-          
+
           nil
         end
 
@@ -33,7 +33,7 @@ module DataImporters
           search_service.search_by_name(name)
         rescue => e
           Rails.logger.warn "MusicBrainz search failed in finder: #{e.message}"
-          { success: false, errors: [e.message] }
+          {success: false, errors: [e.message]}
         end
 
         def search_service

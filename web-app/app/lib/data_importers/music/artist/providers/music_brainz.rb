@@ -9,19 +9,19 @@ module DataImporters
           def populate(artist, query:)
             # Search for artist - MusicBrainz search already returns detailed data
             search_result = search_for_artist(query.name)
-            
+
             return failure_result(errors: search_result[:errors]) unless search_result[:success]
-            
+
             artists_data = search_result[:data]["artists"]
             return failure_result(errors: ["No artists found"]) if artists_data.empty?
 
             # Take the first result (top match by score) - already contains all the rich data
             artist_data = artists_data.first
-            
+
             # Populate artist with all available data from search result
             populate_artist_data(artist, artist_data)
             create_identifiers(artist, artist_data)
-            
+
             success_result(data_populated: data_fields_populated(artist_data))
           rescue => e
             failure_result(errors: ["MusicBrainz error: #{e.message}"])
@@ -40,7 +40,7 @@ module DataImporters
           def populate_artist_data(artist, artist_data)
             # Set basic artist information
             artist.name = artist_data["name"] if artist.name.blank?
-            
+
             # Map MusicBrainz type to our kind enum
             if artist_data["type"]
               artist.kind = map_musicbrainz_type_to_kind(artist_data["type"])
@@ -126,11 +126,11 @@ module DataImporters
 
           def data_fields_populated(artist_data)
             fields = [:name, :kind, :musicbrainz_id]
-            
+
             fields << :country if artist_data["country"]
             fields << :life_span_data if artist_data["life-span"]
             fields << :isni if artist_data["isnis"]&.any?
-            
+
             fields
           end
         end

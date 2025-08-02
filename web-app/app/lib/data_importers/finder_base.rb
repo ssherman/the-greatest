@@ -14,10 +14,10 @@ module DataImporters
     def find_by_identifier(identifier_type:, identifier_value:, model_class:)
       identifier = Identifier.find_by(
         identifier_type: identifier_type,
-        identifier_value: identifier_value,
+        value: identifier_value,
         identifiable_type: model_class.name
       )
-      
+
       identifier&.identifiable
     end
   end
