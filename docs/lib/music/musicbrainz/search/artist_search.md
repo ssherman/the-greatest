@@ -16,6 +16,11 @@ Search class for finding artists in the MusicBrainz database by name, MBID, alia
 - `type` - Artist type (Person, Group, Orchestra, Choir, Character)
 - `country` - ISO country code
 - `gender` - Gender (male, female, other)
+- `begin` - Begin date
+- `end` - End date
+- `area` - Area information
+- `sortname` - Sort name
+- `comment` - Disambiguation comment
 
 ## Public Methods
 
@@ -28,10 +33,10 @@ Searches for artists by name
   - options (Hash) - Additional search options (limit, offset)
 - Returns: Hash - Search results
 
-#### `#search_by_mbid(mbid, options = {})`
+#### `#find_by_mbid(mbid, options = {})`
 Searches for artist by MusicBrainz ID
 - Parameters:
-  - mbid (String) - Artist MBID
+  - mbid (String) - Artist MBID (UUID format)
   - options (Hash) - Additional search options
 - Returns: Hash - Search results
 
@@ -72,33 +77,28 @@ Searches for artists by gender
 
 ### Combined Search Methods
 
-#### `#search_by_name_and_type(name, type, options = {})`
-Searches for artists by name and type
+#### `#search_with_criteria(criteria, options = {})`
+Searches for artists using multiple criteria
 - Parameters:
-  - name (String) - Artist name
-  - type (String) - Artist type
-  - options (Hash) - Additional search options
+  - criteria (Hash) - Search criteria with field names as keys (name:, type:, country:, etc.)
+  - options (Hash) - Additional search options (limit, offset)
 - Returns: Hash - Search results
 
-#### `#search_by_name_and_country(name, country_code, options = {})`
-Searches for artists by name and country
+#### `#search(query, options = {})`
+Performs a general search with custom Lucene syntax
 - Parameters:
-  - name (String) - Artist name
-  - country_code (String) - ISO country code
-  - options (Hash) - Additional search options
-- Returns: Hash - Search results
-
-#### `#search_artist_groups(artist_mbid, options = {})`
-Searches for groups associated with an artist
-- Parameters:
-  - artist_mbid (String) - Artist MBID
+  - query (String) - Raw Lucene query string
   - options (Hash) - Additional search options
 - Returns: Hash - Search results
 
 ## Usage Examples
 
 ```ruby
-client = Music::Musicbrainz::BaseClient.new(config)
+# Create search instance (client is optional - defaults to new BaseClient)
+artist_search = Music::Musicbrainz::Search::ArtistSearch.new
+
+# Or with custom client
+client = Music::Musicbrainz::BaseClient.new
 artist_search = Music::Musicbrainz::Search::ArtistSearch.new(client)
 
 # Search by name
@@ -106,6 +106,13 @@ results = artist_search.search_by_name("The Beatles")
 if results[:success]
   artists = results[:data]["artists"]
   puts "Found #{artists.length} artists"
+end
+
+# Search by MBID
+results = artist_search.find_by_mbid("b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d")
+if results[:success]
+  artist = results[:data]["artists"].first
+  puts "Found: #{artist['name']}"
 end
 
 # Search by type
@@ -122,12 +129,15 @@ if results[:success]
   puts "Found #{uk_artists.length} UK artists"
 end
 
-# Complex search
+# Complex search with multiple criteria
 results = artist_search.search_with_criteria({
   name: "Beatles",
   type: "Group",
   country: "GB"
 })
+
+# Raw Lucene query
+results = artist_search.search("name:Beatles AND type:Group")
 ```
 
 ## Response Data Structure
@@ -164,6 +174,8 @@ results = artist_search.search_with_criteria({
 - **Geographic Filtering**: Find artists by country
 - **Type Filtering**: Distinguish between individuals and groups
 - **MBID Lookup**: Get artist details by MusicBrainz ID
+- **Complex Queries**: Combine multiple search criteria
+- **Raw Lucene Queries**: Use advanced search syntax
 
 ## Error Handling
 - **Invalid MBIDs**: Validates UUID format
@@ -173,5 +185,12 @@ results = artist_search.search_with_criteria({
 
 ## Dependencies
 - Music::Musicbrainz::Search::BaseSearch for common functionality
-- Music::Musicbrainz::BaseClient for HTTP requests
-- Music::Musicbrainz::Exceptions for error handling 
+- Music::Musicbrainz::BaseClient for HTTP requests (auto-instantiated if not provided)
+- Music::Musicbrainz::Exceptions for error handling
+
+## Notes
+- The ArtistSearch class inherits from BaseSearch which provides common search functionality
+- Client instantiation is optional - if not provided, a default BaseClient will be created
+- All search methods return a standardized response hash with :success, :data, :errors, and :metadata keys
+- MBID searches use the `find_by_mbid` method which validates UUID format
+- Complex searches can be performed using `search_with_criteria` or raw Lucene queries with `search` 
