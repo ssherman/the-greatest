@@ -26,9 +26,9 @@ class Music::Release < ApplicationRecord
 
   # Associations
   belongs_to :album, class_name: "Music::Album"
-  has_many :tracks, -> { order(:medium_number, :position) }, class_name: "Music::Track"
+  has_many :tracks, -> { order(:medium_number, :position) }, class_name: "Music::Track", dependent: :destroy
   has_many :songs, through: :tracks, class_name: "Music::Song"
-  has_many :credits, as: :creditable, class_name: "Music::Credit"
+  has_many :credits, as: :creditable, class_name: "Music::Credit", dependent: :destroy
   has_many :identifiers, as: :identifiable, dependent: :destroy
 
   # Validations

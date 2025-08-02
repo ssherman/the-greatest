@@ -34,6 +34,12 @@
 class User < ApplicationRecord
   serialize :provider_data, coder: JSON
 
+  # Associations
+  has_many :ranking_configurations, dependent: :destroy
+  has_many :penalties, dependent: :destroy
+  has_many :ai_chats, dependent: :destroy
+  has_many :submitted_lists, class_name: "List", foreign_key: :submitted_by_id, dependent: :nullify
+
   enum :role, [:user, :admin, :editor]
   enum :external_provider, [:facebook, :twitter, :google, :apple, :password]
 
