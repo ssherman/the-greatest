@@ -20,8 +20,10 @@ module Music
         # @return [Array<String>] list of searchable fields
         def available_fields
           %w[
-            title rgid arid artist artistname tag type
-            country date firstreleasedate status comment
+            alias arid artist artistname comment creditname
+            firstreleasedate primarytype reid release releasegroup
+            releasegroupaccent releases rgid secondarytype status
+            tag type title country date
           ]
         end
 
@@ -87,6 +89,81 @@ module Music
         # @return [Hash] search results
         def search_by_first_release_date(date, options = {})
           search_by_field("firstreleasedate", date, options)
+        end
+
+        # Search for release groups by primary type (Album, Single, EP, etc.)
+        # @param primary_type [String] the primary type (e.g., "Album", "Single", "EP")
+        # @param options [Hash] additional search options
+        # @return [Hash] search results
+        def search_by_primary_type(primary_type, options = {})
+          search_by_field("primarytype", primary_type, options)
+        end
+
+        # Search for release groups by secondary type (Compilation, Live, Soundtrack, etc.)
+        # @param secondary_type [String] the secondary type
+        # @param options [Hash] additional search options
+        # @return [Hash] search results
+        def search_by_secondary_type(secondary_type, options = {})
+          search_by_field("secondarytype", secondary_type, options)
+        end
+
+        # Search for release groups by alias
+        # @param alias_name [String] the alias to search for
+        # @param options [Hash] additional search options
+        # @return [Hash] search results
+        def search_by_alias(alias_name, options = {})
+          search_by_field("alias", alias_name, options)
+        end
+
+        # Search for release groups by credited artist name
+        # @param credit_name [String] the credited artist name
+        # @param options [Hash] additional search options
+        # @return [Hash] search results
+        def search_by_credit_name(credit_name, options = {})
+          search_by_field("creditname", credit_name, options)
+        end
+
+        # Search for release groups by release MBID
+        # @param release_mbid [String] the release MBID
+        # @param options [Hash] additional search options
+        # @return [Hash] search results
+        def search_by_release_mbid(release_mbid, options = {})
+          search_by_field("reid", release_mbid, options)
+        end
+
+        # Search for release groups by release title
+        # @param release_title [String] the release title
+        # @param options [Hash] additional search options
+        # @return [Hash] search results
+        def search_by_release_title(release_title, options = {})
+          search_by_field("release", release_title, options)
+        end
+
+        # Search for release groups by number of releases
+        # @param count [Integer] the number of releases
+        # @param options [Hash] additional search options
+        # @return [Hash] search results
+        def search_by_release_count(count, options = {})
+          search_by_field("releases", count.to_s, options)
+        end
+
+        # Search for primary albums only (no secondary types like Compilation, Soundtrack, etc.)
+        # This is useful for finding official studio albums
+        # @param artist_mbid [String, nil] optional artist MBID to filter by
+        # @param options [Hash] additional search options
+        # @return [Hash] search results
+        def search_primary_albums_only(artist_mbid = nil, options = {})
+          query_parts = []
+          query_parts << "primarytype:Album"
+          query_parts << "-secondarytype:*"  # Exclude any secondary types
+          query_parts << "status:Official"   # Only official releases
+
+          if artist_mbid
+            query_parts << build_field_query("arid", artist_mbid)
+          end
+
+          query = query_parts.join(" AND ")
+          search(query, options)
         end
 
         # Search for albums by artist and title (common use case)

@@ -28,6 +28,13 @@ Search class for finding musical works (compositions) in the MusicBrainz databas
 
 ### Basic Search Methods
 
+#### `#find_by_mbid(mbid, options = {})`
+Searches for work by MusicBrainz ID
+- Parameters:
+  - mbid (String) - Work MBID (UUID format)
+  - options (Hash) - Additional search options
+- Returns: Hash - Search results
+
 #### `#search_by_title(title, options = {})`
 Searches for works by title
 - Parameters:
@@ -153,10 +160,28 @@ Searches for works with recording count in a range
   - options (Hash) - Additional search options
 - Returns: Hash - Search results
 
+#### `#search_with_criteria(criteria, options = {})`
+Searches for works using multiple criteria
+- Parameters:
+  - criteria (Hash) - Search criteria with field names as keys (work:, arid:, type:, etc.)
+  - options (Hash) - Additional search options (limit, offset)
+- Returns: Hash - Search results
+
+#### `#search(query, options = {})`
+Performs a general search with custom Lucene syntax
+- Parameters:
+  - query (String) - Raw Lucene query string
+  - options (Hash) - Additional search options
+- Returns: Hash - Search results
+
 ## Usage Examples
 
 ```ruby
-client = Music::Musicbrainz::BaseClient.new(config)
+# Create search instance (client is optional - defaults to new BaseClient)
+work_search = Music::Musicbrainz::Search::WorkSearch.new
+
+# Or with custom client
+client = Music::Musicbrainz::BaseClient.new
 work_search = Music::Musicbrainz::Search::WorkSearch.new(client)
 
 # Search by title
@@ -164,6 +189,13 @@ results = work_search.search_by_title("Yesterday")
 if results[:success]
   works = results[:data]["works"]
   puts "Found #{works.length} works"
+end
+
+# Search by MBID
+results = work_search.find_by_mbid("10c1a66a-8166-32ec-a00f-540f111ce7a3")
+if results[:success]
+  work = results[:data]["works"].first
+  puts "Found: #{work['title']}"
 end
 
 # Search by artist and title
@@ -211,12 +243,15 @@ if results[:success]
   puts "Found #{works.length} works with 10-100 recordings"
 end
 
-# Complex search
+# Complex search with multiple criteria
 results = work_search.search_with_criteria({
   work: "Yesterday",
   arid: "ba550d0e-adac-4208-b99b-7a5f8d7bcf31",
   iswc: "T-010.140.236-1"
 })
+
+# Raw Lucene query
+results = work_search.search("work:Yesterday AND artist:\"Paul McCartney\"")
 ```
 
 ## Response Data Structure
@@ -264,6 +299,9 @@ results = work_search.search_with_criteria({
 - **Language Filtering**: Find works by language
 - **Type Filtering**: Distinguish between songs, symphonies, operas, etc.
 - **Recording Relationships**: Find works through their recordings
+- **MBID Lookup**: Get work details by MusicBrainz ID
+- **Complex Queries**: Combine multiple search criteria
+- **Raw Lucene Queries**: Use advanced search syntax
 
 ## Error Handling
 - **Invalid MBIDs**: Validates UUID format
@@ -273,5 +311,13 @@ results = work_search.search_with_criteria({
 
 ## Dependencies
 - Music::Musicbrainz::Search::BaseSearch for common functionality
-- Music::Musicbrainz::BaseClient for HTTP requests
-- Music::Musicbrainz::Exceptions for error handling 
+- Music::Musicbrainz::BaseClient for HTTP requests (auto-instantiated if not provided)
+- Music::Musicbrainz::Exceptions for error handling
+
+## Notes
+- The WorkSearch class inherits from BaseSearch which provides common search functionality
+- Client instantiation is optional - if not provided, a default BaseClient will be created
+- All search methods return a standardized response hash with :success, :data, :errors, and :metadata keys
+- MBID searches use the `find_by_mbid` method which validates UUID format
+- Complex searches can be performed using `search_with_criteria` or raw Lucene queries with `search`
+- Recording count ranges use Lucene range syntax: `[min TO max]` 

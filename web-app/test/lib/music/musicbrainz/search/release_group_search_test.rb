@@ -18,8 +18,10 @@ class Music::Musicbrainz::Search::ReleaseGroupSearchTest < ActiveSupport::TestCa
 
   test "available_fields returns correct release group fields" do
     expected_fields = %w[
-      title rgid arid artist artistname tag type
-      country date firstreleasedate status comment
+      alias arid artist artistname comment creditname
+      firstreleasedate primarytype reid release releasegroup
+      releasegroupaccent releases rgid secondarytype status
+      tag type title country date
     ]
     assert_equal expected_fields, @search.available_fields
   end
@@ -229,6 +231,25 @@ class Music::Musicbrainz::Search::ReleaseGroupSearchTest < ActiveSupport::TestCa
     end
   end
 
+  test "search_with_criteria works with new fields" do
+    criteria = {
+      primarytype: "Album",
+      secondarytype: "Compilation",
+      alias: "White Album",
+      releases: "1"
+    }
+
+    expected_query = 'primarytype:Album AND secondarytype:Compilation AND alias:White\\ Album AND releases:1'
+
+    @mock_client.expects(:get)
+      .with("release-group", {query: expected_query})
+      .returns(successful_release_group_response)
+
+    result = @search.search_with_criteria(criteria)
+
+    assert result[:success]
+  end
+
   test "returns raw API response data without processing" do
     @mock_client.expects(:get)
       .with("release-group", {query: 'title:Abbey\\ Road'})
@@ -261,6 +282,103 @@ class Music::Musicbrainz::Search::ReleaseGroupSearchTest < ActiveSupport::TestCa
       .returns(successful_release_group_response)
 
     result = @search.find_by_mbid(valid_mbid)
+
+    assert result[:success]
+  end
+
+  test "search_by_primary_type searches by primary type field" do
+    @mock_client.expects(:get)
+      .with("release-group", {query: "primarytype:Album"})
+      .returns(successful_release_group_response)
+
+    result = @search.search_by_primary_type("Album")
+
+    assert result[:success]
+  end
+
+  test "search_by_secondary_type searches by secondary type field" do
+    @mock_client.expects(:get)
+      .with("release-group", {query: "secondarytype:Compilation"})
+      .returns(successful_release_group_response)
+
+    result = @search.search_by_secondary_type("Compilation")
+
+    assert result[:success]
+  end
+
+  test "search_by_alias searches by alias field" do
+    @mock_client.expects(:get)
+      .with("release-group", {query: 'alias:White\\ Album'})
+      .returns(successful_release_group_response)
+
+    result = @search.search_by_alias("White Album")
+
+    assert result[:success]
+  end
+
+  test "search_by_credit_name searches by credit name field" do
+    @mock_client.expects(:get)
+      .with("release-group", {query: 'creditname:The\\ Beatles'})
+      .returns(successful_release_group_response)
+
+    result = @search.search_by_credit_name("The Beatles")
+
+    assert result[:success]
+  end
+
+  test "search_by_release_mbid searches by release MBID" do
+    release_mbid = "f4a31f0a-51dd-4fa7-986d-3095c40c5ed9"
+
+    @mock_client.expects(:get)
+      .with("release-group", {query: "reid:f4a31f0a\\-51dd\\-4fa7\\-986d\\-3095c40c5ed9"})
+      .returns(successful_release_group_response)
+
+    result = @search.search_by_release_mbid(release_mbid)
+
+    assert result[:success]
+  end
+
+  test "search_by_release_title searches by release title field" do
+    @mock_client.expects(:get)
+      .with("release-group", {query: 'release:Abbey\\ Road'})
+      .returns(successful_release_group_response)
+
+    result = @search.search_by_release_title("Abbey Road")
+
+    assert result[:success]
+  end
+
+  test "search_by_release_count searches by number of releases" do
+    @mock_client.expects(:get)
+      .with("release-group", {query: "releases:1"})
+      .returns(successful_release_group_response)
+
+    result = @search.search_by_release_count(1)
+
+    assert result[:success]
+  end
+
+  test "search_primary_albums_only searches for official primary albums without artist" do
+    expected_query = "primarytype:Album AND -secondarytype:* AND status:Official"
+
+    @mock_client.expects(:get)
+      .with("release-group", {query: expected_query})
+      .returns(successful_release_group_response)
+
+    result = @search.search_primary_albums_only
+
+    assert result[:success]
+  end
+
+  test "search_primary_albums_only searches for official primary albums with artist" do
+    artist_mbid = "b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d"
+    expected_query = "primarytype:Album AND -secondarytype:* AND status:Official AND arid:b10bbbfc\\-cf9e\\-42e0\\-be17\\-e2c3e1d2600d"
+
+    @mock_client.expects(:get)
+      .with("release-group", {query: expected_query})
+      .returns(successful_release_group_response)
+
+    result = @search.search_primary_albums_only(artist_mbid)
 
     assert result[:success]
   end
