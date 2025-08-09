@@ -1,7 +1,8 @@
 # The Greatest - Todo List
 
 ## High Priority
-1. [Movies data model implementation](todos/002-movies-object-model.md)
+1. [Data Importer Service - Music Albums (Phase 1)](todos/019-import-albums.md)
+2. [Movies data model implementation](todos/002-movies-object-model.md)
 
 ## Medium Priority
 3. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
