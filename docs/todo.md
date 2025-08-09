@@ -1,7 +1,7 @@
 # The Greatest - Todo List
 
 ## High Priority
-1. [Data Importer Service - Music Albums (Phase 1)](todos/019-import-albums.md)
+1. [Data Importer Service - Music Albums (Phase 1)](todos/019-import-albums.md) — In Progress (started 2025-08-05)
 2. [Movies data model implementation](todos/002-movies-object-model.md)
 
 ## Medium Priority

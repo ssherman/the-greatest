@@ -34,8 +34,8 @@ module DataImporters
 
         def get_artist_musicbrainz_id(artist)
           artist.identifiers
-                .find_by(identifier_type: :music_musicbrainz_artist_id)
-                &.value
+            .find_by(identifier_type: :music_musicbrainz_artist_id)
+            &.value
         end
 
         def search_musicbrainz(artist_mbid, query)
@@ -55,7 +55,7 @@ module DataImporters
           if query.primary_albums_only
             # First try primary albums only
             result = search_service.search_primary_albums_only(artist_mbid)
-            
+
             if result[:success] && result[:data]["release-groups"].any?
               # Filter by title from primary albums
               filtered_result = filter_by_title(result, query.title)
@@ -78,8 +78,8 @@ module DataImporters
         def filter_by_title(result, title)
           # Simple case-insensitive title filtering
           filtered_albums = result[:data]["release-groups"].select do |rg|
-            rg["title"].downcase.include?(title.downcase) || 
-            title.downcase.include?(rg["title"].downcase)
+            rg["title"].downcase.include?(title.downcase) ||
+              title.downcase.include?(rg["title"].downcase)
           end
 
           {
@@ -95,12 +95,12 @@ module DataImporters
 
         def find_by_musicbrainz_id(release_group_id, artist)
           ::Music::Album.joins(:identifiers)
-                        .where(identifiers: { 
-                          identifier_type: :music_musicbrainz_release_group_id, 
-                          value: release_group_id 
-                        })
-                        .where(primary_artist: artist)
-                        .first
+            .where(identifiers: {
+              identifier_type: :music_musicbrainz_release_group_id,
+              value: release_group_id
+            })
+            .where(primary_artist: artist)
+            .first
         end
 
         def find_by_title(title, artist)
