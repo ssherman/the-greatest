@@ -1,0 +1,134 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+# == Schema Information
+#
+# Table name: categories
+#
+#  id                :bigint           not null, primary key
+#  alternative_names :string           default([]), is an Array
+#  category_type     :integer          default(0)
+#  deleted           :boolean          default(FALSE)
+#  description       :text
+#  import_source     :integer
+#  item_count        :integer          default(0)
+#  name              :string           not null
+#  slug              :string
+#  type              :string           not null
+#  created_at        :datetime         not null
+#  updated_at        :datetime         not null
+#  parent_id         :bigint
+#
+# Indexes
+#
+#  index_categories_on_category_type  (category_type)
+#  index_categories_on_deleted        (deleted)
+#  index_categories_on_name           (name)
+#  index_categories_on_parent_id      (parent_id)
+#  index_categories_on_slug           (slug)
+#  index_categories_on_type           (type)
+#  index_categories_on_type_and_slug  (type,slug)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (parent_id => categories.id)
+#
+# Music Categories
+music_rock_genre:
+  type: "Music::Category"
+  name: "Rock"
+  slug: "rock"
+  description: "Rock music genre"
+  category_type: 0  # genre
+  import_source: 4  # musicbrainz
+  alternative_names: []
+  item_count: 0
+  deleted: false
+  parent: 
+
+music_progressive_rock_genre:
+  type: "Music::Category"
+  name: "Progressive Rock"
+  slug: "progressive-rock"
+  description: "Progressive rock subgenre"
+  category_type: 0  # genre
+  import_source: 4  # musicbrainz
+  alternative_names: ["Prog Rock"]
+  item_count: 0
+  deleted: false
+  parent: music_rock_genre
+
+music_uk_location:
+  type: "Music::Category"
+  name: "United Kingdom"
+  slug: "united-kingdom"
+  description: "Music from the United Kingdom"
+  category_type: 1  # location
+  import_source: 4  # musicbrainz
+  alternative_names: ["UK", "Britain"]
+  item_count: 0
+  deleted: false
+  parent: 
+
+# Movies Categories
+movies_horror_genre:
+  type: "Movies::Category"
+  name: "Horror"
+  slug: "horror"
+  description: "Horror film genre"
+  category_type: 0  # genre
+  import_source: 0  # amazon
+  alternative_names: []
+  item_count: 0
+  deleted: false
+  parent: 
+
+movies_usa_location:
+  type: "Movies::Category"
+  name: "United States"
+  slug: "united-states"
+  description: "Movies from the United States"
+  category_type: 1  # location
+  import_source: 0  # amazon
+  alternative_names: ["USA", "America"]
+  item_count: 0
+  deleted: false
+  parent: 
+
+# Books Categories (for future use)
+books_fiction_genre:
+  type: "Books::Category"
+  name: "Fiction"
+  slug: "fiction"
+  description: "Fiction books"
+  category_type: 0  # genre
+  import_source: 1  # open_library
+  alternative_names: []
+  item_count: 0
+  deleted: false
+  parent: 
+
+# Games Categories (for future use)
+games_action_genre:
+  type: "Games::Category"
+  name: "Action"
+  slug: "action"
+  description: "Action games"
+  category_type: 0  # genre
+  import_source: 2  # openai
+  alternative_names: []
+  item_count: 0
+  deleted: false
+  parent: 
+
+# Soft deleted category for testing
+music_deleted_genre:
+  type: "Music::Category"
+  name: "Deleted Genre"
+  slug: "deleted-genre"
+  description: "A deleted genre for testing"
+  category_type: 0  # genre
+  import_source: 4  # musicbrainz
+  alternative_names: []
+  item_count: 0
+  deleted: true
+  parent:

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_07_27_171428) do
+ActiveRecord::Schema[8.0].define(version: 2025_08_10_230523) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -30,6 +30,40 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_27_171428) do
     t.datetime "updated_at", null: false
     t.index ["parent_type", "parent_id"], name: "index_ai_chats_on_parent"
     t.index ["user_id"], name: "index_ai_chats_on_user_id"
+  end
+
+  create_table "categories", force: :cascade do |t|
+    t.string "type", null: false
+    t.string "name", null: false
+    t.string "slug"
+    t.text "description"
+    t.integer "category_type", default: 0
+    t.integer "import_source"
+    t.string "alternative_names", default: [], array: true
+    t.integer "item_count", default: 0
+    t.boolean "deleted", default: false
+    t.bigint "parent_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["category_type"], name: "index_categories_on_category_type"
+    t.index ["deleted"], name: "index_categories_on_deleted"
+    t.index ["name"], name: "index_categories_on_name"
+    t.index ["parent_id"], name: "index_categories_on_parent_id"
+    t.index ["slug"], name: "index_categories_on_slug"
+    t.index ["type", "slug"], name: "index_categories_on_type_and_slug"
+    t.index ["type"], name: "index_categories_on_type"
+  end
+
+  create_table "category_items", force: :cascade do |t|
+    t.bigint "category_id", null: false
+    t.string "item_type", null: false
+    t.bigint "item_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["category_id", "item_type", "item_id"], name: "index_category_items_on_category_id_and_item_type_and_item_id", unique: true
+    t.index ["category_id"], name: "index_category_items_on_category_id"
+    t.index ["item_type", "item_id"], name: "index_category_items_on_item"
+    t.index ["item_type", "item_id"], name: "index_category_items_on_item_type_and_item_id"
   end
 
   create_table "friendly_id_slugs", force: :cascade do |t|
@@ -378,6 +412,8 @@ ActiveRecord::Schema[8.0].define(version: 2025_07_27_171428) do
   end
 
   add_foreign_key "ai_chats", "users"
+  add_foreign_key "categories", "categories", column: "parent_id"
+  add_foreign_key "category_items", "categories"
   add_foreign_key "list_items", "lists"
   add_foreign_key "list_penalties", "lists"
   add_foreign_key "list_penalties", "penalties"

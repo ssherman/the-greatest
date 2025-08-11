@@ -5,18 +5,19 @@
 2. [Movies data model implementation](todos/002-movies-object-model.md)
 
 ## Medium Priority
-3. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
-4. [Books data import from existing site](todos/002-books-data-import.md)
-5. [Additional OAuth providers (Facebook, Twitter, Apple)](todos/007-authentication.md)
-6. [Email/password authentication](todos/007-authentication.md)
-7. [Passwordless email authentication](todos/007-authentication.md)
-8. [Phone number authentication](todos/007-authentication.md)
+4. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
+5. [Books data import from existing site](todos/002-books-data-import.md)
+6. [Additional OAuth providers (Facebook, Twitter, Apple)](todos/007-authentication.md)
+7. [Email/password authentication](todos/007-authentication.md)
+8. [Passwordless email authentication](todos/007-authentication.md)
+9. [Phone number authentication](todos/007-authentication.md)
 
 ## Low Priority
-9. [Recommendation engine MVP](todos/004-recommendation-engine.md)
-10. [Admin interface with Avo](todos/007-admin-interface.md)
+10. [Recommendation engine MVP](todos/004-recommendation-engine.md)
+11. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-08-10] [Categories Model Implementation](todos/020-categories.md)
 - ✅ [2025-08-02] [Data Importer Service - Music Artists (Phase 1)](todos/018-import-artists.md)
 - ✅ [2025-07-27] [Identifiers model implementation](todos/017-identifiers.md)
 - ✅ [2025-07-25] [MusicBrainz API wrapper implementation](todos/016-musicbrainz-api.md)

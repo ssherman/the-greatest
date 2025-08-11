@@ -1,0 +1,40 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+# == Schema Information
+#
+# Table name: category_items
+#
+#  id          :bigint           not null, primary key
+#  item_type   :string           not null
+#  created_at  :datetime         not null
+#  updated_at  :datetime         not null
+#  category_id :bigint           not null
+#  item_id     :bigint           not null
+#
+# Indexes
+#
+#  index_category_items_on_category_id                            (category_id)
+#  index_category_items_on_category_id_and_item_type_and_item_id  (category_id,item_type,item_id) UNIQUE
+#  index_category_items_on_item                                   (item_type,item_id)
+#  index_category_items_on_item_type_and_item_id                  (item_type,item_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (category_id => categories.id)
+#
+# Music album categorizations
+dark_side_rock_category:
+  category: music_rock_genre
+  item: dark_side_of_the_moon (Music::Album)
+
+dark_side_progressive_category:
+  category: music_progressive_rock_genre
+  item: dark_side_of_the_moon (Music::Album)
+
+dark_side_uk_category:
+  category: music_uk_location
+  item: dark_side_of_the_moon (Music::Album)
+
+wish_you_were_here_rock_category:
+  category: music_rock_genre
+  item: wish_you_were_here (Music::Album)

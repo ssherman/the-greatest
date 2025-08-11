@@ -29,6 +29,10 @@ module Movies
     has_many :ai_chats, as: :parent, dependent: :destroy
     has_many :identifiers, as: :identifiable, dependent: :destroy
 
+    # Category associations
+    has_many :category_items, as: :item, dependent: :destroy
+    has_many :categories, through: :category_items, class_name: "Movies::Category"
+
     # Enums
     enum :rating, {g: 0, pg: 1, pg_13: 2, r: 3, nc_17: 4, unrated: 5}
 

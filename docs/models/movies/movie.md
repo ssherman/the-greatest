@@ -7,6 +7,8 @@ Represents a movie in the system. Core model for the movies domain with support 
 - `has_many :releases, class_name: "Movies::Release", foreign_key: "movie_id", dependent: :destroy` - Different versions/formats of the movie
 - `has_many :credits, as: :creditable, class_name: "Movies::Credit", dependent: :destroy` - Polymorphic association for film production credits
 - `has_many :identifiers, as: :identifiable, dependent: :destroy` - External identifiers for data import and deduplication
+- `has_many :category_items, as: :item, dependent: :destroy` - Polymorphic association for category assignments
+- `has_many :categories, through: :category_items, class_name: "Movies::Category"` - All categories this movie belongs to
 
 ## Public Methods
 

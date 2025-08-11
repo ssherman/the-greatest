@@ -35,6 +35,10 @@ class Music::Artist < ApplicationRecord
   has_many :ai_chats, as: :parent, dependent: :destroy
   has_many :identifiers, as: :identifiable, dependent: :destroy
 
+  # Category associations
+  has_many :category_items, as: :item, dependent: :destroy
+  has_many :categories, through: :category_items, class_name: "Music::Category"
+
   # Validations
   validates :name, presence: true
   validates :kind, presence: true

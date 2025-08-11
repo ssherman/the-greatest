@@ -30,6 +30,10 @@ class Music::Song < ApplicationRecord
   has_many :ai_chats, as: :parent, dependent: :destroy
   has_many :identifiers, as: :identifiable, dependent: :destroy
 
+  # Category associations
+  has_many :category_items, as: :item, dependent: :destroy
+  has_many :categories, through: :category_items, class_name: "Music::Category"
+
   # Song relationships
   has_many :song_relationships, class_name: "Music::SongRelationship", foreign_key: :song_id, dependent: :destroy
   has_many :related_songs, through: :song_relationships, source: :related_song

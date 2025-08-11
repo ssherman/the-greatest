@@ -10,6 +10,8 @@ Represents a musical artist, which can be either an individual person or a band.
 - `has_many :credits, class_name: "Music::Credit"` — All credits (artistic/technical) associated with this artist
 - `has_many :ai_chats, as: :parent, dependent: :destroy` — Polymorphic association for AI chat conversations
 - `has_many :identifiers, as: :identifiable, dependent: :destroy` — External identifiers for data import and deduplication
+- `has_many :category_items, as: :item, dependent: :destroy` — Polymorphic association for category assignments
+- `has_many :categories, through: :category_items, class_name: "Music::Category"` — All categories this artist belongs to
 
 ## Public Methods
 
