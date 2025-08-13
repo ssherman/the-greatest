@@ -17,6 +17,7 @@
 11. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-08-12] [Populate Categories from MusicBrainz Tags](todos/021-populate-categories-music.md)
 - ✅ [2025-08-10] [Categories Model Implementation](todos/020-categories.md)
 - ✅ [2025-08-02] [Data Importer Service - Music Artists (Phase 1)](todos/018-import-artists.md)
 - ✅ [2025-07-27] [Identifiers model implementation](todos/017-identifiers.md)

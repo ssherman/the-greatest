@@ -287,6 +287,53 @@ module DataImporters
             assert result.success?
             assert_equal 1979, album.release_year
           end
+
+          # NEW TEST: verify genre categories created and associated for albums
+          test "populate creates top 5 genre categories for albums and does not create location categories" do
+            persisted_album = music_albums(:animals)
+
+            search_service = mock
+            search_service.expects(:search_by_artist_mbid_and_title)
+              .with("83d91898-7763-47d7-b03b-b92132375c47", "The Wall")
+              .returns(
+                success: true,
+                data: {
+                  "release-groups" => [
+                    {
+                      "id" => "the-wall-release-group-id",
+                      "title" => "The Wall",
+                      "first-release-date" => "1979-11-30",
+                      "tags" => [
+                        {"count" => 25, "name" => "progressive rock"},
+                        {"count" => 19, "name" => "art rock"},
+                        {"count" => 9, "name" => "concept album"},
+                        {"count" => 8, "name" => "psychedelic rock"},
+                        {"count" => 6, "name" => "british"},
+                        {"count" => 0, "name" => "downtempo"}
+                      ]
+                    }
+                  ]
+                }
+              )
+
+            @provider.stubs(:search_service).returns(search_service)
+
+            result = @provider.populate(persisted_album, query: @query)
+            assert result.success?
+
+            persisted_album.reload
+
+            names = persisted_album.categories.pluck(:name)
+            assert_includes names, "Progressive Rock"
+            assert_includes names, "Art Rock"
+            assert_includes names, "Concept Album"
+            assert_includes names, "Psychedelic Rock"
+            assert_includes names, "British"
+            refute_includes names, "Downtempo"
+
+            # Ensure no location categories were created/associated for album
+            assert_equal 0, persisted_album.categories.where(category_type: "location").count
+          end
         end
       end
     end

@@ -6,6 +6,13 @@ module DataImporters
       module Providers
         # MusicBrainz provider for Music::Artist data
         class MusicBrainz < DataImporters::ProviderBase
+          # Populates an artist with MusicBrainz data and categories
+          #
+          # Params:
+          # - artist: Music::Artist - the artist to enrich
+          # - query: ImportQuery - contains name
+          #
+          # Returns: Result(success:, data_populated:|errors:)
           def populate(artist, query:)
             # Search for artist - MusicBrainz search already returns detailed data
             search_result = search_for_artist(query.name)
@@ -21,6 +28,7 @@ module DataImporters
             # Populate artist with all available data from search result
             populate_artist_data(artist, artist_data)
             create_identifiers(artist, artist_data)
+            create_categories_from_musicbrainz_data(artist, artist_data)
 
             success_result(data_populated: data_fields_populated(artist_data))
           rescue => e
@@ -29,6 +37,10 @@ module DataImporters
 
           private
 
+          # Executes artist search on MusicBrainz
+          #
+          # Params: name (String)
+          # Returns: search result Hash
           def search_for_artist(name)
             search_service.search_by_name(name)
           end
@@ -37,6 +49,8 @@ module DataImporters
             @search_service ||= ::Music::Musicbrainz::Search::ArtistSearch.new
           end
 
+          # Maps core fields from MusicBrainz response to artist
+          # Sets name, kind, country and life-span
           def populate_artist_data(artist, artist_data)
             # Set basic artist information
             artist.name = artist_data["name"] if artist.name.blank?
@@ -57,6 +71,8 @@ module DataImporters
             end
           end
 
+          # Populates life-span fields based on response
+          # Sets born_on/year_died for people and year_formed/year_disbanded for bands
           def populate_life_span_data(artist, life_span_data)
             return unless life_span_data
 
@@ -93,6 +109,8 @@ module DataImporters
             end
           end
 
+          # Maps MusicBrainz type to internal kind enum
+          # Returns: "person" or "band"
           def map_musicbrainz_type_to_kind(mb_type)
             case mb_type.downcase
             when "group", "orchestra", "choir"
@@ -104,6 +122,8 @@ module DataImporters
             end
           end
 
+          # Builds external identifiers on the artist from MusicBrainz data
+          # Creates: music_musicbrainz_artist_id and optional ISNI(s)
           def create_identifiers(artist, artist_data)
             # Create MusicBrainz identifier
             if artist_data["id"]
@@ -122,6 +142,68 @@ module DataImporters
                 )
               end
             end
+          end
+
+          # Creates genre and location categories for artists from MusicBrainz data
+          # Creates genre and location categories based on MusicBrainz tags and area data
+          # - Genres: top 5 non-zero tags (normalized, hyphens preserved)
+          # - Locations: area and begin-area names
+          # Associates via CategoryItem and raises on errors
+          def create_categories_from_musicbrainz_data(artist, artist_data)
+            categories = []
+
+            # Genres from tags (top 5 non-zero, normalized)
+            if artist_data["tags"].is_a?(Array)
+              tag_categories = artist_data["tags"]
+                .reject { |t| t["count"].to_i == 0 }
+                .sort_by { |t| -t["count"].to_i }
+                .first(5)
+                .map { |t| normalize_tag_name(t["name"]) }
+                .uniq
+
+              categories += find_or_create_music_categories(tag_categories, category_type: "genre")
+            end
+
+            # Locations from area and begin-area (artist only)
+            area_names = []
+            area_names << artist_data.dig("area", "name") if artist_data.dig("area", "name").present?
+            area_names << artist_data.dig("begin-area", "name") if artist_data.dig("begin-area", "name").present?
+
+            if area_names.any?
+              categories += find_or_create_music_categories(area_names, category_type: "location")
+            end
+
+            # Associate categories with artist via join to avoid through-write quirks
+            categories.compact.uniq.each do |category|
+              ::CategoryItem.find_or_create_by!(category: category, item: artist)
+            end
+          rescue => e
+            Rails.logger.error "MusicBrainz artist categories error: #{e.message}"
+            raise
+          end
+
+          # Finds or creates Music::Category records by name and type
+          # Params:
+          # - names: Array<String>
+          # - category_type: "genre" | "location"
+          # Returns: Array<Music::Category>
+          def find_or_create_music_categories(names, category_type:)
+            names.map do |name|
+              next if name.blank?
+              ::Music::Category.find_or_create_by!(
+                name: name,
+                category_type: category_type,
+                import_source: "musicbrainz"
+              )
+            end
+          end
+
+          # Normalizes a MusicBrainz tag to Title Case preserving hyphens
+          # Example: "synth-pop" => "Synth-Pop"
+          def normalize_tag_name(name)
+            return "" if name.blank?
+            # Preserve hyphens within words while capitalizing each part (e.g., "synth-pop" => "Synth-Pop")
+            name.split(/\s+/).map { |word| word.split("-").map(&:capitalize).join("-") }.join(" ")
           end
 
           def data_fields_populated(artist_data)

@@ -190,6 +190,67 @@ module DataImporters
             assert result.success?
             assert_equal "Pink Floyd", @artist.name # Should preserve original name
           end
+
+          # NEW TESTS BELOW
+          test "populate creates top 5 genre categories and location categories for artists" do
+            persisted_artist = music_artists(:pink_floyd)
+
+            search_service = mock
+            search_service.expects(:search_by_name).with("Pink Floyd").returns(
+              success: true,
+              data: {
+                "artists" => [
+                  {
+                    "id" => "83d91898-7763-47d7-b03b-b92132375c47",
+                    "name" => "Pink Floyd",
+                    "type" => "Group",
+                    "country" => "GB",
+                    "tags" => [
+                      {"count" => 25, "name" => "electronic"},
+                      {"count" => 0, "name" => "downtempo"},
+                      {"count" => 19, "name" => "synth-pop"},
+                      {"count" => 9, "name" => "alternative rock"},
+                      {"count" => 8, "name" => "british"},
+                      {"count" => 6, "name" => "dark wave"},
+                      {"count" => 1, "name" => "psychedelic rock"}
+                    ],
+                    "area" => {"name" => "United Kingdom", "type" => "Country"},
+                    "begin-area" => {"name" => "London", "type" => "City"}
+                  }
+                ]
+              }
+            )
+
+            @provider.stubs(:search_service).returns(search_service)
+
+            result = @provider.populate(persisted_artist, query: @query)
+            assert result.success?
+
+            persisted_artist.reload
+
+            category_names = persisted_artist.categories.pluck(:name)
+            # Top 5 by count excluding zero, normalized
+            assert_includes category_names, "Electronic"
+            assert_includes category_names, "Synth-Pop"
+            assert_includes category_names, "Alternative Rock"
+            assert_includes category_names, "British"
+            assert_includes category_names, "Dark Wave"
+            refute_includes category_names, "Downtempo"
+
+            # Location categories present on artist
+            location_names = persisted_artist.categories.where(category_type: "location").pluck(:name)
+            assert_includes location_names, "United Kingdom"
+            assert_includes location_names, "London"
+
+            # Metadata on a sample category
+            genre_cat = ::Music::Category.find_by(name: "Electronic")
+            assert_equal "genre", genre_cat.category_type
+            assert_equal "musicbrainz", genre_cat.import_source
+
+            loc_cat = ::Music::Category.find_by(name: "United Kingdom")
+            assert_equal "location", loc_cat.category_type
+            assert_equal "musicbrainz", loc_cat.import_source
+          end
         end
       end
     end
