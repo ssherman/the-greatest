@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_08_10_230523) do
+ActiveRecord::Schema[8.0].define(version: 2025_08_16_230639) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -258,8 +258,12 @@ ActiveRecord::Schema[8.0].define(version: 2025_08_10_230523) do
     t.date "release_date"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["album_id", "release_name", "format"], name: "index_music_releases_on_album_name_format_unique", unique: true
+    t.string "country"
+    t.integer "status", default: 0, null: false
+    t.string "labels", default: [], array: true
     t.index ["album_id"], name: "index_music_releases_on_album_id"
+    t.index ["country"], name: "index_music_releases_on_country"
+    t.index ["status"], name: "index_music_releases_on_status"
   end
 
   create_table "music_song_relationships", force: :cascade do |t|

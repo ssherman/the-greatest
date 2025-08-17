@@ -11,25 +11,38 @@ module DataImporters
     def call(query:)
       validate_query!(query)
 
-      # Try to find existing record
-      existing = finder.call(query: query)
-      return existing if existing
+      if multi_item_import?
+        # For multi-item imports (like releases), providers handle creation
+        # Don't use finder to return early - let providers handle existing vs new logic
+        provider_results = run_providers(nil, query)
 
-      # Initialize new record
-      item = initialize_item(query)
+        ImportResult.new(
+          item: nil,
+          provider_results: provider_results,
+          success: provider_results.any?(&:success?)
+        )
+      else
+        # Standard single-item import flow
+        # Try to find existing record
+        existing = finder.call(query: query)
+        return existing if existing
 
-      # Run all providers to populate data
-      provider_results = run_providers(item, query)
+        # Initialize new record
+        item = initialize_item(query)
 
-      # Save if valid and any provider succeeded
-      success = save_item_if_valid(item, provider_results)
+        # Run all providers to populate data
+        provider_results = run_providers(item, query)
 
-      # Return aggregated results
-      ImportResult.new(
-        item: item,
-        provider_results: provider_results,
-        success: success
-      )
+        # Save if valid and any provider succeeded
+        success = save_item_if_valid(item, provider_results)
+
+        # Return aggregated results
+        ImportResult.new(
+          item: item,
+          provider_results: provider_results,
+          success: success
+        )
+      end
     end
 
     protected
@@ -49,7 +62,13 @@ module DataImporters
     end
 
     def initialize_item(query)
-      raise NotImplementedError, "Subclasses must implement #initialize_item(query)"
+      raise NotImplementedError, "Subclasses must implement #initialize_item(query)" unless multi_item_import?
+    end
+
+    # Override in subclasses that import multiple items (like releases)
+    # Default is false for single-item imports (artists, albums)
+    def multi_item_import?
+      false
     end
 
     def run_providers(item, query)

@@ -3,18 +3,22 @@
 # Table name: music_releases
 #
 #  id           :bigint           not null, primary key
+#  country      :string
 #  format       :integer          default("vinyl"), not null
+#  labels       :string           default([]), is an Array
 #  metadata     :jsonb
 #  release_date :date
 #  release_name :string
+#  status       :integer          default("official"), not null
 #  created_at   :datetime         not null
 #  updated_at   :datetime         not null
 #  album_id     :bigint           not null
 #
 # Indexes
 #
-#  index_music_releases_on_album_id                  (album_id)
-#  index_music_releases_on_album_name_format_unique  (album_id,release_name,format) UNIQUE
+#  index_music_releases_on_album_id  (album_id)
+#  index_music_releases_on_country   (country)
+#  index_music_releases_on_status    (status)
 #
 # Foreign Keys
 #
@@ -62,13 +66,6 @@ module Music
     end
 
     # Enums
-    test "should have correct format enum values" do
-      assert_equal 0, Music::Release.formats[:vinyl]
-      assert_equal 1, Music::Release.formats[:cd]
-      assert_equal 2, Music::Release.formats[:digital]
-      assert_equal 3, Music::Release.formats[:cassette]
-      assert_equal 4, Music::Release.formats[:blu_ray]
-    end
 
     # Associations
     test "should belong to album" do

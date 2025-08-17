@@ -5,18 +5,22 @@
 # Table name: music_releases
 #
 #  id           :bigint           not null, primary key
+#  country      :string
 #  format       :integer          default("vinyl"), not null
+#  labels       :string           default([]), is an Array
 #  metadata     :jsonb
 #  release_date :date
 #  release_name :string
+#  status       :integer          default("official"), not null
 #  created_at   :datetime         not null
 #  updated_at   :datetime         not null
 #  album_id     :bigint           not null
 #
 # Indexes
 #
-#  index_music_releases_on_album_id                  (album_id)
-#  index_music_releases_on_album_name_format_unique  (album_id,release_name,format) UNIQUE
+#  index_music_releases_on_album_id  (album_id)
+#  index_music_releases_on_country   (country)
+#  index_music_releases_on_status    (status)
 #
 # Foreign Keys
 #
