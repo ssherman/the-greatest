@@ -1,10 +1,10 @@
 # The Greatest
 
-## Project Overview [README.OVERVIEW]
+## Project Overview
 A web application that aggregates books, music, movie, and video game lists displays a single list of 
 The greatest of all time. Everything is searchable and filterable and users can create their own lists.
 
-## Setup Instructions [README.SETUP]
+## Setup Instructions
 ```
 cd rails
 Ruby Version: 3.4.2
@@ -24,7 +24,7 @@ cd web-app
 bin/dev
 ```
 
-## Tech Stack [README.TECH]
+## Tech Stack
 ```
 Backend
 ├─ Ruby on Rails 8
@@ -41,7 +41,7 @@ Frontend
 └─ Rollup
 ```
 
-## Directory Structure [README.DIR]
+## Directory Structure
 ```
 web-app/app/     - Core application code
 ├─ controllers/  - Request handlers
@@ -52,17 +52,24 @@ web-app/app/     - Core application code
 └─ assets/       - Static resources
 
 docs/            - Project documentation
-├─ DEVELOPER_CORE_VALUES.md
-├─ BUSINESS_RULES.md
+├─ dev-core-values.md
+├─ testing.md
 └─ ...
 ```
 
-## Quick Start Guide [README.QS]
+## Quick Start Guide
 ```
 1. Clone repository
 2. Follow setup instructions
 3. Visit http://localhost:3000
-4. Read docs/DEVELOPER_GETTING_STARTED.md
+4. Explore the application
 ```
 
-→ Next: See BUSINESS_RULES.md
+## Documentation
+- **[Project Summary](summary.md)** - High-level project overview, evolution, and architecture
+- **[Development Setup](dev_setup.md)** - Detailed setup guide with Docker, Caddy, and multi-domain configuration
+- **[Developer Core Values](dev-core-values.md)** - AI-first development principles and coding standards
+- **[Testing Guide](testing.md)** - Testing philosophy, Minitest setup, and best practices
+- **[Documentation Guide](documentation.md)** - How to document classes and maintain project documentation
+- **[Task Management Guide](todo-guide.md)** - How tasks are tracked and organized using markdown files
+- **[Current Todo List](todo.md)** - Active tasks and project priorities

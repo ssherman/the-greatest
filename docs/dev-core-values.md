@@ -176,4 +176,3 @@
 ## Related Documentation
 - **Testing**: See `testing-guide.md` for comprehensive testing guidelines
 - **Project Overview**: See `summary.md` for project context
-- **API Documentation**: See `api-guide.md` for API standards (if created)
