@@ -9,6 +9,7 @@
 #  duration_secs :integer
 #  isrc          :string(12)
 #  lyrics        :text
+#  notes         :text
 #  release_year  :integer
 #  slug          :string           not null
 #  title         :string           not null

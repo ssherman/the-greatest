@@ -59,6 +59,24 @@ module Music
           search_by_field("rgid", release_group_mbid, options)
         end
 
+        # Search for releases by release group MBID with recordings and media data
+        # This includes track listings and recording information for song/track import
+        # Uses the browse API instead of search API to get detailed data
+        # @param release_group_mbid [String] the release group's MusicBrainz ID
+        # @param options [Hash] additional search options
+        # @return [Hash] search results with recordings and media included
+        def search_by_release_group_mbid_with_recordings(release_group_mbid, options = {})
+          # Use browse API instead of search API to get detailed recordings and media data
+          browse_params = {
+            "release-group" => release_group_mbid
+          }
+
+          # Add inc parameter for recordings and media data
+          enhanced_options = options.merge(inc: "recordings+media")
+
+          browse_by_params(browse_params, enhanced_options)
+        end
+
         # Search for releases by release group name
         # @param release_group_name [String] the release group name
         # @param options [Hash] additional search options

@@ -67,6 +67,22 @@ module Music
           end
         end
 
+        # Browse entities by specific parameters (non-search API)
+        # Used for lookup/browse operations that don't use query syntax
+        # @param browse_params [Hash] browse parameters (e.g., release-group: mbid)
+        # @param options [Hash] additional options (inc, limit, offset)
+        # @return [Hash] browse results
+        def browse_by_params(browse_params, options = {})
+          params = build_browse_params(browse_params, options)
+
+          begin
+            response = client.get(entity_type, params)
+            process_search_response(response)
+          rescue Music::Musicbrainz::Error => e
+            handle_browse_error(e, browse_params, options)
+          end
+        end
+
         # Build a field-specific query
         # @param field [String] the field name
         # @param value [String] the field value
@@ -91,7 +107,28 @@ module Music
           # Add dismax parameter for simpler queries
           params[:dismax] = options[:dismax] if options.key?(:dismax)
 
+          # Add inc parameter for including additional data (recordings, media, etc.)
+          params[:inc] = options[:inc] if options[:inc]
+
           validate_search_params!(params)
+          params
+        end
+
+        # Build browse parameters for the API request
+        # @param browse_params [Hash] browse parameters
+        # @param options [Hash] additional options
+        # @return [Hash] API parameters
+        def build_browse_params(browse_params, options = {})
+          params = browse_params.dup
+
+          # Add pagination parameters
+          params[:limit] = options[:limit] if options[:limit]
+          params[:offset] = options[:offset] if options[:offset]
+
+          # Add inc parameter for including additional data (recordings, media, etc.)
+          params[:inc] = options[:inc] if options[:inc]
+
+          validate_browse_params!(params)
           params
         end
 
@@ -132,6 +169,25 @@ module Music
           }
         end
 
+        # Handle browse errors with context
+        # @param error [Music::Musicbrainz::Error] the error that occurred
+        # @param browse_params [Hash] the browse parameters
+        # @param options [Hash] browse options
+        # @return [Hash] error response
+        def handle_browse_error(error, browse_params, options)
+          {
+            success: false,
+            data: nil,
+            errors: [error.message],
+            metadata: {
+              entity_type: entity_type,
+              browse_params: browse_params,
+              options: options,
+              error_type: error.class.name
+            }
+          }
+        end
+
         private
 
         # Validate MBID format
@@ -157,6 +213,24 @@ module Music
 
           if params[:query].blank?
             raise QueryError, "Query cannot be blank"
+          end
+        end
+
+        # Validate browse parameters
+        # @param params [Hash] the parameters to validate
+        def validate_browse_params!(params)
+          if params[:limit] && (params[:limit] < 1 || params[:limit] > 100)
+            raise QueryError, "Limit must be between 1 and 100"
+          end
+
+          if params[:offset] && params[:offset] < 0
+            raise QueryError, "Offset must be non-negative"
+          end
+
+          # Browse operations need at least one browse parameter (not query)
+          browse_keys = params.keys - [:limit, :offset, :inc, :fmt]
+          if browse_keys.empty?
+            raise QueryError, "At least one browse parameter must be provided"
           end
         end
 

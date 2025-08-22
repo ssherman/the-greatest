@@ -139,6 +139,7 @@ Finds related books based on genre and author
 - Link to related classes when relevant
 - Note which services interact with this model
 - Reference any special patterns used
+- Document API integration patterns (e.g., search vs browse APIs for external services)
 
 ## What NOT to Document
 - Private methods

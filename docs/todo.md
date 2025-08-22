@@ -17,6 +17,7 @@
 11. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-08-21] [Data Importer Service - Music Songs and Tracks (Phase 2)](todos/023-import-songs-and-tracks.md)
 - ✅ [2025-08-17] [Data Importer Service - Music Releases (Phase 1)](todos/022-import-releases.md)
 - ✅ [2025-08-12] [Populate Categories from MusicBrainz Tags](todos/021-populate-categories-music.md)
 - ✅ [2025-08-10] [Categories Model Implementation](todos/020-categories.md)

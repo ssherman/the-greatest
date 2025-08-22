@@ -7,6 +7,7 @@
 #  duration_secs :integer
 #  isrc          :string(12)
 #  lyrics        :text
+#  notes         :text
 #  release_year  :integer
 #  slug          :string           not null
 #  title         :string           not null
@@ -51,6 +52,7 @@ class Music::Song < ApplicationRecord
 
   # Scopes
   scope :with_lyrics, -> { where.not(lyrics: [nil, ""]) }
+  scope :with_notes, -> { where.not(notes: [nil, ""]) }
   scope :by_duration, ->(seconds) { where("duration_secs <= ?", seconds) }
   scope :longer_than, ->(seconds) { where("duration_secs > ?", seconds) }
   scope :released_in, ->(year) { where(release_year: year) }
