@@ -25,7 +25,7 @@ module DataImporters
 
           test "populate fails when MusicBrainz search returns no releases" do
             search_service = mock
-            search_service.expects(:search_by_release_group_mbid)
+            search_service.expects(:search_by_release_group_mbid_with_recordings)
               .with("f5093c06-23e3-404f-afe0-f9df359d6e68")
               .returns({data: {"releases" => []}})
 
@@ -63,7 +63,7 @@ module DataImporters
             ]
 
             search_service = mock
-            search_service.expects(:search_by_release_group_mbid)
+            search_service.expects(:search_by_release_group_mbid_with_recordings)
               .with("f5093c06-23e3-404f-afe0-f9df359d6e68")
               .returns({data: {"releases" => musicbrainz_releases}})
 
@@ -74,7 +74,7 @@ module DataImporters
             result = @provider.populate(nil, query: @query)
 
             assert result.success?
-            assert_equal [:releases_created], result.data_populated
+            assert_equal [:releases_created, :songs_created, :tracks_created], result.data_populated
             assert_equal initial_count + 2, @album.releases.count
 
             # Check first release
@@ -134,7 +134,7 @@ module DataImporters
             ]
 
             search_service = mock
-            search_service.expects(:search_by_release_group_mbid)
+            search_service.expects(:search_by_release_group_mbid_with_recordings)
               .with("f5093c06-23e3-404f-afe0-f9df359d6e68")
               .returns({data: {"releases" => musicbrainz_releases}})
 
@@ -170,7 +170,7 @@ module DataImporters
               }]
 
               search_service = mock
-              search_service.expects(:search_by_release_group_mbid)
+              search_service.expects(:search_by_release_group_mbid_with_recordings)
                 .returns({data: {"releases" => musicbrainz_releases}})
 
               ::Music::Musicbrainz::Search::ReleaseSearch.stubs(:new).returns(search_service)
@@ -205,7 +205,7 @@ module DataImporters
               }]
 
               search_service = mock
-              search_service.expects(:search_by_release_group_mbid)
+              search_service.expects(:search_by_release_group_mbid_with_recordings)
                 .returns({data: {"releases" => musicbrainz_releases}})
 
               ::Music::Musicbrainz::Search::ReleaseSearch.stubs(:new).returns(search_service)
@@ -240,7 +240,7 @@ module DataImporters
             ]
 
             search_service = mock
-            search_service.expects(:search_by_release_group_mbid)
+            search_service.expects(:search_by_release_group_mbid_with_recordings)
               .returns({data: {"releases" => musicbrainz_releases}})
 
             ::Music::Musicbrainz::Search::ReleaseSearch.stubs(:new).returns(search_service)
@@ -273,7 +273,7 @@ module DataImporters
             }]
 
             search_service = mock
-            search_service.expects(:search_by_release_group_mbid)
+            search_service.expects(:search_by_release_group_mbid_with_recordings)
               .returns({data: {"releases" => musicbrainz_releases}})
 
             ::Music::Musicbrainz::Search::ReleaseSearch.stubs(:new).returns(search_service)
@@ -297,7 +297,7 @@ module DataImporters
             }]
 
             search_service = mock
-            search_service.expects(:search_by_release_group_mbid)
+            search_service.expects(:search_by_release_group_mbid_with_recordings)
               .returns({data: {"releases" => musicbrainz_releases}})
 
             ::Music::Musicbrainz::Search::ReleaseSearch.stubs(:new).returns(search_service)
