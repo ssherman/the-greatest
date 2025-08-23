@@ -20,6 +20,8 @@
 #  index_music_songs_on_slug  (slug) UNIQUE
 #
 class Music::Song < ApplicationRecord
+  include SearchIndexable
+  
   extend FriendlyId
   friendly_id :title, use: [:slugged, :finders]
 
@@ -94,9 +96,17 @@ class Music::Song < ApplicationRecord
 
   # Search Methods
   def as_indexed_json
+    albums_with_artists = albums.includes(:primary_artist)
+    artist_names = albums_with_artists.map { |album| album.primary_artist&.name }.compact.uniq
+    primary_artist_id = albums_with_artists.first&.primary_artist_id
+    album_ids = albums_with_artists.map(&:id)
+    
     {
       title: title,
-      artist_names: albums.includes(:primary_artist).map { |album| album.primary_artist&.name }.compact.uniq
+      artist_names: artist_names,
+      artist_id: primary_artist_id,
+      album_ids: album_ids,
+      category_ids: categories.active.pluck(:id)
     }
   end
 end

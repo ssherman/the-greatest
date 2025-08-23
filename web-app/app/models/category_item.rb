@@ -24,10 +24,54 @@ class CategoryItem < ApplicationRecord
   belongs_to :category, counter_cache: :item_count
   belongs_to :item, polymorphic: true
 
+  # Search indexing callbacks - reindex the associated item when categories change
+  after_commit :queue_item_for_reindexing, on: [:create, :update]
+  after_destroy :queue_item_for_reindexing
+
   # Validations
   validates :category_id, uniqueness: {scope: [:item_type, :item_id]}
 
   # Scopes
   scope :for_item_type, ->(type) { where(item_type: type) }
   scope :for_category_type, ->(category_type) { joins(:category).where(categories: {type: category_type}) }
+
+  private
+
+  def queue_item_for_reindexing
+    # Don't queue if the parent item is being destroyed or doesn't exist
+    return unless item_exists_and_not_being_destroyed?
+    
+    # Only queue if the item is searchable and includes category_ids in its index
+    return unless item_supports_category_indexing?
+    
+    SearchIndexRequest.create!(parent: item, action: :index_item)
+  end
+
+  def item_supports_category_indexing?
+    # Check if item responds to as_indexed_json and includes category_ids
+    return false unless item.respond_to?(:as_indexed_json)
+    
+    indexed_data = item.as_indexed_json
+    indexed_data.is_a?(Hash) && indexed_data.key?(:category_ids)
+  rescue => e
+    # If as_indexed_json fails for any reason, don't queue
+    Rails.logger.warn "Failed to check category indexing support for #{item_type} ID #{item_id}: #{e.message}"
+    false
+  end
+
+  def item_exists_and_not_being_destroyed?
+    # Check if the item still exists in the database
+    # This handles the case where category_items are destroyed as part of parent destruction
+    return false unless item
+    
+    # Check if the item is marked for destruction (Rails internal flag)
+    return false if item.marked_for_destruction?
+    
+    # Double-check the item exists in the database (handles edge cases)
+    item_type.constantize.exists?(item_id)
+  rescue => e
+    # If any check fails, assume the item is being destroyed
+    Rails.logger.debug "Item existence check failed for #{item_type} ID #{item_id}: #{e.message}"
+    false
+  end
 end

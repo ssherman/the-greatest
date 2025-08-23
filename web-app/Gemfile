@@ -44,6 +44,8 @@ gem "countries"
 gem "ruby_llm-schema"
 gem "openai"
 gem "opensearch-ruby"
+gem "sidekiq"
+gem "sidekiq-cron"
 
 # Load environment variables from .env file
 # gem "dotenv-rails"

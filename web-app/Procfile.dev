@@ -1,3 +1,4 @@
 web: env RUBY_DEBUG_OPEN=true bin/rails server
+worker: bundle exec sidekiq -C config/sidekiq.yml
 js: yarn build --watch
 css: yarn build:css:music --watch & yarn build:css:movies --watch & yarn build:css:games --watch
