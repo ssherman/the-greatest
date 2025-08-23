@@ -46,12 +46,7 @@ module DataImporters
             end
 
             if releases_created > 0
-              success_result(data_populated: [:releases_created, :songs_created, :tracks_created],
-                metadata: {
-                  releases_created: releases_created,
-                  songs_created: songs_created,
-                  tracks_created: tracks_created
-                })
+              success_result(data_populated: [:releases_created, :songs_created, :tracks_created])
             else
               failure_result(errors: errors.any? ? errors : ["No new releases created"])
             end
