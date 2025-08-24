@@ -87,7 +87,9 @@ category_ids: {
 ### Background Processing Architecture
 ```ruby
 # Sidekiq cron job (every 30 seconds)
-class Search::IndexingJob < ApplicationJob
+class Search::IndexerJob
+  include Sidekiq::Job
+  
   def perform
     # Process each indexed model type
     %w[Music::Artist Music::Album Music::Song].each do |model_type|

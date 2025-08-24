@@ -5,7 +5,7 @@ module SearchIndexable
 
   included do
     after_commit :queue_for_indexing, on: [:create, :update]
-    after_destroy :queue_for_unindexing
+    after_commit :queue_for_unindexing, on: :destroy
   end
 
   private

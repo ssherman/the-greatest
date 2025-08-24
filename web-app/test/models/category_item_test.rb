@@ -132,4 +132,136 @@ class CategoryItemTest < ActiveSupport::TestCase
     assert_includes item_names, "The Dark Side of the Moon"
     assert_includes item_names, "Wish You Were Here"
   end
+
+  # SearchIndexable behavior tests
+  test "should create search index request when category_item is created for music artist" do
+    artist = music_artists(:the_beatles)
+    category = Music::Category.create!(name: "Rock", type: "Music::Category")
+
+    assert_difference "SearchIndexRequest.count", 1 do
+      CategoryItem.create!(category: category, item: artist)
+    end
+
+    request = SearchIndexRequest.last
+    assert_equal artist, request.parent
+    assert request.index_item?
+  end
+
+  test "should create search index request when category_item is created for music album" do
+    album = music_albums(:dark_side_of_the_moon)
+    category = Music::Category.create!(name: "Rock", type: "Music::Category")
+
+    assert_difference "SearchIndexRequest.count", 1 do
+      CategoryItem.create!(category: category, item: album)
+    end
+
+    request = SearchIndexRequest.last
+    assert_equal album, request.parent
+    assert request.index_item?
+  end
+
+  test "should create search index request when category_item is created for music song" do
+    song = music_songs(:time)
+    category = Music::Category.create!(name: "Rock", type: "Music::Category")
+
+    assert_difference "SearchIndexRequest.count", 1 do
+      CategoryItem.create!(category: category, item: song)
+    end
+
+    request = SearchIndexRequest.last
+    assert_equal song, request.parent
+    assert request.index_item?
+  end
+
+  test "should create search index request when category_item is destroyed" do
+    artist = music_artists(:the_beatles)
+    category = Music::Category.create!(name: "Rock", type: "Music::Category")
+    category_item = CategoryItem.create!(category: category, item: artist)
+
+    # Clear any requests created during setup
+    SearchIndexRequest.delete_all
+
+    assert_difference "SearchIndexRequest.count", 1 do
+      category_item.destroy!
+    end
+
+    request = SearchIndexRequest.last
+    assert_equal artist, request.parent
+    assert request.index_item?
+  end
+
+  test "should not create search index request for non-music items" do
+    # Create a non-music item (e.g., a user)
+    user = users(:regular_user)
+    category = Music::Category.create!(name: "Rock", type: "Music::Category")
+
+    assert_no_difference "SearchIndexRequest.count" do
+      CategoryItem.create!(category: category, item: user)
+    end
+  end
+
+  test "should not create search index request if item does not support category indexing" do
+    # Create a music item that doesn't have as_indexed_json with category_ids
+    # We'll stub the method to return something without category_ids
+    artist = music_artists(:the_beatles)
+    category = Music::Category.create!(name: "Rock", type: "Music::Category")
+
+    artist.stubs(:as_indexed_json).returns({name: "Test"})
+
+    assert_no_difference "SearchIndexRequest.count" do
+      CategoryItem.create!(category: category, item: artist)
+    end
+  end
+
+  test "should create search index requests when item is destroyed" do
+    # Create category item first
+    artist = music_artists(:the_beatles)
+    category = Music::Category.create!(name: "Rock", type: "Music::Category")
+    CategoryItem.create!(category: category, item: artist)
+
+    # Clear any requests created during setup
+    SearchIndexRequest.delete_all
+
+    # When we destroy the artist, its category_items will be destroyed too
+    # We should get 2 requests: 1 for unindexing the artist + 1 from category_item destruction
+    # The Sidekiq job will handle the fact that the artist no longer exists
+    assert_difference "SearchIndexRequest.count", 2 do
+      artist.destroy!
+    end
+
+    requests = SearchIndexRequest.last(2)
+
+    # Should have one unindex request for the artist
+    unindex_request = requests.find(&:unindex_item?)
+    assert unindex_request
+    assert_equal artist.id, unindex_request.parent_id
+    assert_equal "Music::Artist", unindex_request.parent_type
+
+    # Should have one index request from the category_item destruction
+    index_request = requests.find(&:index_item?)
+    assert index_request
+    assert_equal artist.id, index_request.parent_id
+    assert_equal "Music::Artist", index_request.parent_type
+  end
+
+  test "should handle multiple category changes efficiently" do
+    # Adding multiple categories should create multiple requests (will be deduplicated by job)
+    artist = music_artists(:the_beatles)
+    category1 = Music::Category.create!(name: "Rock", type: "Music::Category")
+    category2 = Music::Category.create!(name: "Pop", type: "Music::Category")
+    category3 = Music::Category.create!(name: "Jazz", type: "Music::Category")
+
+    assert_difference "SearchIndexRequest.count", 3 do
+      CategoryItem.create!(category: category1, item: artist)
+      CategoryItem.create!(category: category2, item: artist)
+      CategoryItem.create!(category: category3, item: artist)
+    end
+
+    # All requests should be for the same artist
+    requests = SearchIndexRequest.last(3)
+    requests.each do |request|
+      assert_equal artist, request.parent
+      assert request.index_item?
+    end
+  end
 end

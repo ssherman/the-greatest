@@ -103,7 +103,7 @@ module Search
         actions = []
         item_ids.each do |item_id|
           actions << {
-            delete: { _index: index_name, _id: item_id }
+            delete: {_index: index_name, _id: item_id}
           }
         end
 

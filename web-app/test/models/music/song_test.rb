@@ -184,5 +184,100 @@ module Music
       assert_respond_to @song, :albums
       assert_includes @song.albums, music_albums(:dark_side_of_the_moon)
     end
+
+    # SearchIndexable concern tests
+    test "should create search index request on create" do
+      assert_difference "SearchIndexRequest.count", 1 do
+        Music::Song.create!(title: "Test Song")
+      end
+
+      request = SearchIndexRequest.last
+      assert_equal "Music::Song", request.parent_type
+      assert request.index_item?
+    end
+
+    test "should create search index request on update" do
+      song = music_songs(:time)
+
+      assert_difference "SearchIndexRequest.count", 1 do
+        song.update!(title: "Updated Title")
+      end
+
+      request = SearchIndexRequest.last
+      assert_equal song, request.parent
+      assert request.index_item?
+    end
+
+    test "should not create search index request if validation fails" do
+      assert_no_difference "SearchIndexRequest.count" do
+        Music::Song.create!(title: nil) # Invalid - title is required
+      rescue ActiveRecord::RecordInvalid
+        # Expected to fail
+      end
+    end
+
+    test "should create search index request on destroy" do
+      song = music_songs(:time)
+
+      # Note: after_destroy callback should trigger after the record is destroyed
+      assert_difference "SearchIndexRequest.count", 1 do
+        song.destroy!
+      end
+
+      request = SearchIndexRequest.last
+      assert_equal song.id, request.parent_id
+      assert_equal "Music::Song", request.parent_type
+      assert request.unindex_item?
+    end
+
+    test "as_indexed_json should include required fields when song has albums" do
+      song = music_songs(:time)
+      album = music_albums(:dark_side_of_the_moon)
+
+      # Create a release and track to connect song to album
+      release = Music::Release.create!(album: album, release_name: "Test Release")
+      Music::Track.create!(song: song, release: release, position: 1)
+
+      indexed_data = song.as_indexed_json
+
+      assert_equal song.title, indexed_data[:title]
+      assert_includes indexed_data.keys, :artist_names
+      assert_includes indexed_data.keys, :artist_id
+      assert_includes indexed_data.keys, :album_ids
+      assert_includes indexed_data.keys, :category_ids
+
+      assert indexed_data[:artist_names].is_a?(Array)
+      assert indexed_data[:album_ids].is_a?(Array)
+      assert indexed_data[:category_ids].is_a?(Array)
+    end
+
+    test "as_indexed_json should handle song without albums" do
+      song = Music::Song.create!(title: "Standalone Song")
+
+      indexed_data = song.as_indexed_json
+
+      assert_equal song.title, indexed_data[:title]
+      assert_equal [], indexed_data[:artist_names]
+      assert_nil indexed_data[:artist_id]
+      assert_equal [], indexed_data[:album_ids]
+      assert_equal [], indexed_data[:category_ids]
+    end
+
+    test "as_indexed_json should only include active categories" do
+      song = music_songs(:time)
+
+      # Create a category and associate it
+      category = Music::Category.create!(name: "Progressive Rock", type: "Music::Category")
+      CategoryItem.create!(category: category, item: song)
+
+      # Create a deleted category and associate it
+      deleted_category = Music::Category.create!(name: "Psychedelic", type: "Music::Category", deleted: true)
+      CategoryItem.create!(category: deleted_category, item: song)
+
+      indexed_data = song.as_indexed_json
+
+      assert_includes indexed_data[:category_ids], category.id
+      assert_not_includes indexed_data[:category_ids], deleted_category.id
+    end
   end
 end

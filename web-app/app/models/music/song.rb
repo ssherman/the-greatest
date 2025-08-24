@@ -21,7 +21,7 @@
 #
 class Music::Song < ApplicationRecord
   include SearchIndexable
-  
+
   extend FriendlyId
   friendly_id :title, use: [:slugged, :finders]
 
@@ -100,7 +100,7 @@ class Music::Song < ApplicationRecord
     artist_names = albums_with_artists.map { |album| album.primary_artist&.name }.compact.uniq
     primary_artist_id = albums_with_artists.first&.primary_artist_id
     album_ids = albums_with_artists.map(&:id)
-    
+
     {
       title: title,
       artist_names: artist_names,

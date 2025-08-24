@@ -22,7 +22,7 @@
 #
 class Music::Album < ApplicationRecord
   include SearchIndexable
-  
+
   extend FriendlyId
   friendly_id :title, use: [:slugged, :finders]
 
