@@ -50,6 +50,21 @@ Returns songs that sample this song
 Returns alternate versions of this song
 - Returns: ActiveRecord::Relation of Music::Song
 
+### `#as_indexed_json`
+Returns the data structure for OpenSearch indexing
+- Returns: Hash - Includes title, slug, lyrics, duration, release_year, primary artist ID, album IDs, and active category IDs
+- Used by `Search::Music::SongIndex` for indexing operations
+
+### `#primary_artist_id`
+Returns the ID of the primary credited artist for this song
+- Returns: Integer - The artist ID, or nil if no credits exist
+- Used for OpenSearch indexing and relationship queries
+
+### `#album_ids`
+Returns an array of album IDs that contain this song
+- Returns: Array of Integer - All album IDs through releases and tracks
+- Used for OpenSearch indexing to enable album-based filtering
+
 ## Validations
 - `title` — presence
 - `slug` — presence, uniqueness
@@ -69,7 +84,11 @@ Returns alternate versions of this song
 None
 
 ## Callbacks
-None
+- Includes `SearchIndexable` concern for automatic OpenSearch indexing
+- `after_save :queue_for_indexing` - Queues for background indexing when created or updated
+- `after_destroy :queue_for_unindexing` - Queues for background removal from search index
 
 ## Dependencies
-- FriendlyId gem for slug generation and lookup 
+- FriendlyId gem for slug generation and lookup
+- `SearchIndexable` concern for automatic OpenSearch indexing
+- `Search::Music::SongIndex` for OpenSearch operations
