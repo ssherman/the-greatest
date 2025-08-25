@@ -21,6 +21,8 @@
 #  fk_rails_...  (primary_artist_id => music_artists.id)
 #
 class Music::Album < ApplicationRecord
+  include SearchIndexable
+
   extend FriendlyId
   friendly_id :title, use: [:slugged, :finders]
 
@@ -45,7 +47,9 @@ class Music::Album < ApplicationRecord
   def as_indexed_json
     {
       title: title,
-      primary_artist_name: primary_artist&.name
+      primary_artist_name: primary_artist&.name,
+      artist_id: primary_artist_id,
+      category_ids: categories.active.pluck(:id)
     }
   end
 end

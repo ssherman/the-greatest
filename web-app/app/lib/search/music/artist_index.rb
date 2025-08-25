@@ -30,6 +30,9 @@ module Search
                     normalizer: "lowercase"
                   }
                 }
+              },
+              category_ids: {
+                type: "keyword"
               }
             }
           }

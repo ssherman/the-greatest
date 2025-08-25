@@ -43,6 +43,7 @@ class Music::Release < ApplicationRecord
   has_many :songs, through: :tracks, class_name: "Music::Song"
   has_many :credits, as: :creditable, class_name: "Music::Credit", dependent: :destroy
   has_many :identifiers, as: :identifiable, dependent: :destroy
+  has_many :song_relationships, class_name: "Music::SongRelationship", foreign_key: :source_release_id, dependent: :nullify
 
   # Validations
   validates :album, presence: true

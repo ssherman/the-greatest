@@ -97,6 +97,31 @@ module Search
         response
       end
 
+      def self.bulk_unindex(item_ids)
+        return if item_ids.empty?
+
+        actions = []
+        item_ids.each do |item_id|
+          actions << {
+            delete: {_index: index_name, _id: item_id}
+          }
+        end
+
+        response = client.bulk(body: actions, refresh: true)
+
+        if response["errors"]
+          response["items"].each do |item|
+            if item["delete"]["error"]
+              Rails.logger.error "Failed to unindex item ID #{item["delete"]["_id"]}: #{item["delete"]["error"]}"
+            end
+          end
+        else
+          Rails.logger.info "Successfully unindexed batch of #{item_ids.size} items from '#{index_name}'"
+        end
+
+        response
+      end
+
       def self.index_item(item)
         response = client.index(
           index: index_name,

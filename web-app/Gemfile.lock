@@ -121,6 +121,9 @@ GEM
     countries (8.0.3)
       unaccent (~> 0.3)
     crass (1.0.6)
+    cronex (0.15.0)
+      tzinfo
+      unicode (>= 0.4.4.5)
     cssbundling-rails (1.4.3)
       railties (>= 6.0.0)
     date (3.4.1)
@@ -135,6 +138,8 @@ GEM
     drb (2.2.3)
     erb (5.0.2)
     erubi (1.13.1)
+    et-orbi (1.3.0)
+      tzinfo
     faraday (2.13.4)
       faraday-net_http (>= 2.0, < 3.5)
       json
@@ -151,6 +156,9 @@ GEM
     ffi (1.17.2-x86_64-linux-musl)
     friendly_id (5.5.1)
       activerecord (>= 4.0.0)
+    fugit (1.11.2)
+      et-orbi (~> 1, >= 1.2.11)
+      raabro (~> 1.4)
     globalid (1.2.1)
       activesupport (>= 6.1)
     i18n (1.14.7)
@@ -253,6 +261,7 @@ GEM
     public_suffix (6.0.2)
     puma (6.6.1)
       nio4r (~> 2.0)
+    raabro (1.4.0)
     racc (1.8.1)
     rack (3.2.0)
     rack-mini-profiler (4.0.1)
@@ -298,6 +307,8 @@ GEM
     rdoc (6.14.2)
       erb
       psych (>= 4.0.0)
+    redis-client (0.25.2)
+      connection_pool
     regexp_parser (2.11.2)
     reline (0.6.2)
       io-console (~> 0.5)
@@ -344,6 +355,17 @@ GEM
       rexml (~> 3.2, >= 3.2.5)
       rubyzip (>= 1.2.2, < 4.0)
       websocket (~> 1.0)
+    sidekiq (8.0.7)
+      connection_pool (>= 2.5.0)
+      json (>= 2.9.0)
+      logger (>= 1.6.2)
+      rack (>= 3.1.0)
+      redis-client (>= 0.23.2)
+    sidekiq-cron (2.3.1)
+      cronex (>= 0.13.0)
+      fugit (~> 1.8, >= 1.11.1)
+      globalid (>= 1.0.1)
+      sidekiq (>= 6.5.0)
     standard (1.50.0)
       language_server-protocol (~> 3.17.0.2)
       lint_roller (~> 1.0)
@@ -374,6 +396,7 @@ GEM
     tzinfo (2.0.6)
       concurrent-ruby (~> 1.0)
     unaccent (0.4.0)
+    unicode (0.4.4.5)
     unicode-display_width (3.1.5)
       unicode-emoji (~> 4.0, >= 4.0.4)
     unicode-emoji (4.0.4)
@@ -437,6 +460,8 @@ DEPENDENCIES
   ruby-vips
   ruby_llm-schema
   selenium-webdriver
+  sidekiq
+  sidekiq-cron
   standard (>= 1.35.1)
   stimulus-rails
   thruster

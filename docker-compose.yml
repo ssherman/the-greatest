@@ -32,12 +32,24 @@ services:
     ports:
       - "9200:9200"
       - "9600:9600"
+  redis:
+    image: redis:7-alpine
+    container_name: redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - the-greatest
+    command: redis-server --appendonly yes
 
 volumes:
   postgresql-data:
     name: tg_postgresql_data 
   opensearch-data:
     name: tg_opensearch_data
+  redis-data:
+    name: tg_redis_data
 
 networks:
   the-greatest:

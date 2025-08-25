@@ -44,6 +44,15 @@ module Search
                     normalizer: "lowercase"
                   }
                 }
+              },
+              artist_id: {
+                type: "keyword"
+              },
+              album_ids: {
+                type: "keyword"
+              },
+              category_ids: {
+                type: "keyword"
               }
             }
           }

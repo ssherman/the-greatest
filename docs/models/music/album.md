@@ -12,7 +12,11 @@ Represents a canonical album/work (e.g., "Dark Side of the Moon"). This is the c
 - `has_many :categories, through: :category_items, class_name: "Music::Category"` — All categories this album belongs to
 
 ## Public Methods
-None
+
+### `#as_indexed_json`
+Returns the data structure for OpenSearch indexing
+- Returns: Hash - Includes title, slug, description, release_year, primary artist ID, and active category IDs
+- Used by `Search::Music::AlbumIndex` for indexing operations
 
 ## Validations
 - `title` — presence
@@ -27,7 +31,11 @@ None
 None
 
 ## Callbacks
-None
+- Includes `SearchIndexable` concern for automatic OpenSearch indexing
+- `after_save :queue_for_indexing` - Queues for background indexing when created or updated
+- `after_destroy :queue_for_unindexing` - Queues for background removal from search index
 
 ## Dependencies
-- FriendlyId gem for slug generation and lookup 
+- FriendlyId gem for slug generation and lookup
+- `SearchIndexable` concern for automatic OpenSearch indexing
+- `Search::Music::AlbumIndex` for OpenSearch operations

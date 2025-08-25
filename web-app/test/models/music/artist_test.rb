@@ -330,5 +330,76 @@ module Music
 
       assert result.success?
     end
+
+    # SearchIndexable concern tests
+    test "should create search index request on create" do
+      assert_difference "SearchIndexRequest.count", 1 do
+        Music::Artist.create!(name: "Test Artist", kind: :person)
+      end
+
+      request = SearchIndexRequest.last
+      assert_equal "Music::Artist", request.parent_type
+      assert request.index_item?
+    end
+
+    test "should create search index request on update" do
+      artist = music_artists(:david_bowie)
+
+      assert_difference "SearchIndexRequest.count", 1 do
+        artist.update!(name: "Updated Name")
+      end
+
+      request = SearchIndexRequest.last
+      assert_equal artist, request.parent
+      assert request.index_item?
+    end
+
+    test "should not create search index request if validation fails" do
+      assert_no_difference "SearchIndexRequest.count" do
+        Music::Artist.create!(name: nil) # Invalid - name is required
+      rescue ActiveRecord::RecordInvalid
+        # Expected to fail
+      end
+    end
+
+    test "should create search index request on destroy" do
+      artist = music_artists(:david_bowie)
+
+      assert_difference "SearchIndexRequest.count", 1 do
+        artist.destroy!
+      end
+
+      request = SearchIndexRequest.last
+      assert_equal artist.id, request.parent_id
+      assert_equal "Music::Artist", request.parent_type
+      assert request.unindex_item?
+    end
+
+    test "as_indexed_json should include name and category_ids" do
+      artist = music_artists(:the_beatles)
+
+      indexed_data = artist.as_indexed_json
+
+      assert_equal artist.name, indexed_data[:name]
+      assert_includes indexed_data.keys, :category_ids
+      assert indexed_data[:category_ids].is_a?(Array)
+    end
+
+    test "as_indexed_json should only include active categories" do
+      artist = music_artists(:the_beatles)
+
+      # Create a category and associate it
+      category = Music::Category.create!(name: "Rock", type: "Music::Category")
+      CategoryItem.create!(category: category, item: artist)
+
+      # Create a deleted category and associate it
+      deleted_category = Music::Category.create!(name: "Pop", type: "Music::Category", deleted: true)
+      CategoryItem.create!(category: deleted_category, item: artist)
+
+      indexed_data = artist.as_indexed_json
+
+      assert_includes indexed_data[:category_ids], category.id
+      assert_not_includes indexed_data[:category_ids], deleted_category.id
+    end
   end
 end
