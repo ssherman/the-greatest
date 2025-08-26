@@ -21,6 +21,8 @@
 #  index_music_artists_on_slug  (slug) UNIQUE
 #
 class Music::Artist < ApplicationRecord
+  include SearchIndexable
+
   extend FriendlyId
   friendly_id :name, use: [:slugged, :finders]
 
@@ -58,7 +60,8 @@ class Music::Artist < ApplicationRecord
   # Search Methods
   def as_indexed_json
     {
-      name: name
+      name: name,
+      category_ids: categories.active.pluck(:id)
     }
   end
 

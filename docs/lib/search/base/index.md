@@ -56,6 +56,13 @@ Indexes a single model instance
 - Returns: Hash - OpenSearch index response
 - Calls `as_indexed_json` on the item
 
+### `.bulk_unindex(item_ids)`
+Efficiently removes multiple items using OpenSearch bulk API
+- Parameters: item_ids (Array) - Collection of item IDs to remove
+- Returns: Hash - OpenSearch bulk response
+- Handles errors gracefully and logs results
+- Uses bulk delete operations for performance
+
 ### `.unindex_item(item_id)`
 Removes an item from the index by ID
 - Parameters: item_id (Integer/String) - ID of item to remove

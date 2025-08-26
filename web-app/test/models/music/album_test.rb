@@ -81,5 +81,96 @@ module Music
       found = Music::Album.friendly.find(@album.slug)
       assert_equal @album, found
     end
+
+    # SearchIndexable concern tests
+    test "should create search index request on create" do
+      artist = music_artists(:pink_floyd)
+
+      assert_difference "SearchIndexRequest.count", 1 do
+        Music::Album.create!(title: "Test Album", primary_artist: artist)
+      end
+
+      request = SearchIndexRequest.last
+      assert_equal "Music::Album", request.parent_type
+      assert request.index_item?
+    end
+
+    test "should create search index request on update" do
+      album = music_albums(:dark_side_of_the_moon)
+
+      assert_difference "SearchIndexRequest.count", 1 do
+        album.update!(title: "Updated Title")
+      end
+
+      request = SearchIndexRequest.last
+      assert_equal album, request.parent
+      assert request.index_item?
+    end
+
+    test "should not create search index request if validation fails" do
+      artist = music_artists(:pink_floyd)
+
+      assert_no_difference "SearchIndexRequest.count" do
+        Music::Album.create!(title: nil, primary_artist: artist) # Invalid - title is required
+      rescue ActiveRecord::RecordInvalid
+        # Expected to fail
+      end
+    end
+
+    test "should create search index request on destroy" do
+      album = music_albums(:dark_side_of_the_moon)
+
+      # When album is destroyed:
+      # 1. Album creates 1 unindex_item request
+      # 2. Its 3 category_items create 3 index_item requests (will be handled gracefully by job)
+      assert_difference "SearchIndexRequest.count", 4 do
+        album.destroy!
+      end
+
+      requests = SearchIndexRequest.last(4)
+
+      # Should have 1 unindex request for the album
+      unindex_request = requests.find(&:unindex_item?)
+      assert unindex_request
+      assert_equal album.id, unindex_request.parent_id
+      assert_equal "Music::Album", unindex_request.parent_type
+
+      # Should have 3 index requests from category_items (will be skipped by job since album is deleted)
+      index_requests = requests.select(&:index_item?)
+      assert_equal 3, index_requests.count
+      index_requests.each do |request|
+        assert_equal album.id, request.parent_id
+        assert_equal "Music::Album", request.parent_type
+      end
+    end
+
+    test "as_indexed_json should include required fields" do
+      album = music_albums(:dark_side_of_the_moon)
+
+      indexed_data = album.as_indexed_json
+
+      assert_equal album.title, indexed_data[:title]
+      assert_equal album.primary_artist.name, indexed_data[:primary_artist_name]
+      assert_equal album.primary_artist_id, indexed_data[:artist_id]
+      assert_includes indexed_data.keys, :category_ids
+      assert indexed_data[:category_ids].is_a?(Array)
+    end
+
+    test "as_indexed_json should only include active categories" do
+      album = music_albums(:dark_side_of_the_moon)
+
+      # Create a category and associate it
+      category = Music::Category.create!(name: "Progressive Rock", type: "Music::Category")
+      CategoryItem.create!(category: category, item: album)
+
+      # Create a deleted category and associate it
+      deleted_category = Music::Category.create!(name: "Psychedelic", type: "Music::Category", deleted: true)
+      CategoryItem.create!(category: deleted_category, item: album)
+
+      indexed_data = album.as_indexed_json
+
+      assert_includes indexed_data[:category_ids], category.id
+      assert_not_includes indexed_data[:category_ids], deleted_category.id
+    end
   end
 end

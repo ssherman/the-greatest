@@ -28,6 +28,11 @@ Populates artist details using AI services
 - Returns: Services::Ai::Tasks::ArtistDetailsTask result object
 - Side effects: Updates artist attributes with AI-generated data
 
+### `#as_indexed_json`
+Returns the data structure for OpenSearch indexing
+- Returns: Hash - Includes name, slug, description, country, years, kind, and active category IDs
+- Used by `Search::Music::ArtistIndex` for indexing operations
+
 ## Validations
 - `name` — presence
 - `kind` — presence (must be either person or band)
@@ -43,8 +48,12 @@ Populates artist details using AI services
 - `enum :kind, { person: 0, band: 1 }` — Distinguishes between people and bands
 
 ## Callbacks
-- None
+- Includes `SearchIndexable` concern for automatic OpenSearch indexing
+- `after_save :queue_for_indexing` - Queues for background indexing when created or updated
+- `after_destroy :queue_for_unindexing` - Queues for background removal from search index
 
 ## Dependencies
 - FriendlyId gem for slug generation and lookup from name
-- Services::Ai::Tasks::ArtistDetailsTask for AI-powered data enrichment 
+- Services::Ai::Tasks::ArtistDetailsTask for AI-powered data enrichment
+- `SearchIndexable` concern for automatic OpenSearch indexing
+- `Search::Music::ArtistIndex` for OpenSearch operations
