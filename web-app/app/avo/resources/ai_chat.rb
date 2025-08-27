@@ -7,9 +7,9 @@ class Avo::Resources::AiChat < Avo::BaseResource
 
   def fields
     field :id, as: :id
-    field :chat_type, as: :select, options: ::AiChat.chat_types
+    field :chat_type, as: :select, enum: ::AiChat.chat_types
     field :model, as: :text
-    field :provider, as: :select, options: ::AiChat.providers
+    field :provider, as: :select, enum: ::AiChat.providers
     field :temperature, as: :number
     field :json_mode, as: :boolean
     field :response_schema, as: :code

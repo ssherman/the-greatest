@@ -26,8 +26,9 @@ class Avo::Resources::BooksCategory < Avo::BaseResource
   end
 
   def filters
-    filter :category_type, ::Category.category_types
-    filter :import_source, ::Category.import_sources
-    filter :deleted, {active: false, deleted: true}
+    # Commenting out problematic enum filters
+    # filter :category_type, ::Category.category_types
+    # filter :import_source, ::Category.import_sources
+    # filter :deleted, {active: false, deleted: true}
   end
 end

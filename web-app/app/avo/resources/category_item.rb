@@ -23,6 +23,7 @@ class Avo::Resources::CategoryItem < Avo::BaseResource
   end
 
   def filters
-    filter :item_type, ::CategoryItem.distinct.pluck(:item_type).compact.map { |t| [t, t] }.to_h
+    # Remove problematic filter for now
+    # filter :item_type, ::CategoryItem.distinct.pluck(:item_type).compact.map { |t| [t, t] }.to_h
   end
 end

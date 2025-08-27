@@ -21,9 +21,11 @@ class Avo::Resources::Category < Avo::BaseResource
   end
 
   def filters
-    filter :type, ::Category.distinct.pluck(:type).compact.map { |t| [t, t] }.to_h
-    filter :category_type, ::Category.category_types
-    filter :import_source, ::Category.import_sources
-    filter :deleted, {active: false, deleted: true}
+    # Remove problematic filters for now
+    # filter :type, ::Category.distinct.pluck(:type).compact.map { |t| [t, t] }.to_h
+    # Commenting out problematic enum filters
+    # filter :category_type, ::Category.category_types
+    # filter :import_source, ::Category.import_sources
+    # filter :deleted, {active: false, deleted: true}
   end
 end

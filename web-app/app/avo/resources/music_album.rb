@@ -13,6 +13,14 @@ class Avo::Resources::MusicAlbum < Avo::BaseResource
     field :description, as: :textarea
     field :primary_artist, as: :belongs_to
     field :release_year, as: :number
+
+    # Associations
+    field :releases, as: :has_many
+    field :categories, as: :has_many
+    field :identifiers, as: :has_many
+    field :credits, as: :has_many
+
+    # Additional info
     field :created_at, as: :date_time, readonly: true
     field :updated_at, as: :date_time, readonly: true
   end

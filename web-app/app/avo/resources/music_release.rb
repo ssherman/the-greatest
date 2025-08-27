@@ -10,12 +10,20 @@ class Avo::Resources::MusicRelease < Avo::BaseResource
     field :id, as: :id
     field :album, as: :belongs_to
     field :release_name, as: :text
-    field :format, as: :badge, options: Music::Release.formats
+    field :format, as: :select, enum: ::Music::Release.formats
     field :country, as: :text
-    field :status, as: :badge, options: Music::Release.statuses
+    field :status, as: :select, enum: ::Music::Release.statuses
     field :labels, as: :tags
     field :release_date, as: :date
     field :metadata, as: :code
+
+    # Associations
+    field :tracks, as: :has_many
+    field :songs, as: :has_many, through: :tracks
+    field :identifiers, as: :has_many
+    field :credits, as: :has_many
+
+    # Additional info
     field :created_at, as: :date_time, readonly: true
     field :updated_at, as: :date_time, readonly: true
   end

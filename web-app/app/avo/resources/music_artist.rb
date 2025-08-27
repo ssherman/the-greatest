@@ -17,5 +17,15 @@ class Avo::Resources::MusicArtist < Avo::BaseResource
     field :year_formed, as: :number
     field :year_disbanded, as: :number
     field :country, as: :country
+
+    # Associations
+    field :albums, as: :has_many
+    field :categories, as: :has_many
+    field :identifiers, as: :has_many
+    field :credits, as: :has_many
+
+    # Additional info
+    field :created_at, as: :date_time, readonly: true
+    field :updated_at, as: :date_time, readonly: true
   end
 end

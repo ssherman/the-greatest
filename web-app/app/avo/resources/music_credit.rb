@@ -10,7 +10,7 @@ class Avo::Resources::MusicCredit < Avo::BaseResource
     field :id, as: :id
     field :artist, as: :belongs_to
     field :creditable, as: :text
-    field :role, as: :select, options: Music::Credit.roles
+    field :role, as: :select, enum: ::Music::Credit.roles
     field :position, as: :number
     field :created_at, as: :date_time, readonly: true
     field :updated_at, as: :date_time, readonly: true
