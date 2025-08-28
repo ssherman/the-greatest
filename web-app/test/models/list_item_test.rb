@@ -3,12 +3,14 @@
 # Table name: list_items
 #
 #  id            :bigint           not null, primary key
-#  listable_type :string           not null
+#  listable_type :string
+#  metadata      :jsonb
 #  position      :integer
+#  verified      :boolean          default(FALSE), not null
 #  created_at    :datetime         not null
 #  updated_at    :datetime         not null
 #  list_id       :bigint           not null
-#  listable_id   :bigint           not null
+#  listable_id   :bigint
 #
 # Indexes
 #
@@ -35,11 +37,10 @@ class ListItemTest < ActiveSupport::TestCase
     assert_includes item.errors[:list], "must exist"
   end
 
-  test "should require listable" do
+  test "should allow listable to be nil" do
     item = list_items(:basic_item)
     item.listable = nil
-    assert_not item.valid?
-    assert_includes item.errors[:listable], "must exist"
+    assert item.valid?
   end
 
   test "should accept valid position" do
@@ -149,5 +150,109 @@ class ListItemTest < ActiveSupport::TestCase
 
     list.destroy
     assert_equal 0, ListItem.where(list: list).count
+  end
+
+  test "with_listable scope should return items that have listable association" do
+    items_with_listable = ListItem.with_listable
+
+    # All existing fixtures should have listable associations
+    assert_includes items_with_listable, list_items(:basic_item)
+    assert_includes items_with_listable, list_items(:second_item)
+    assert_includes items_with_listable, list_items(:books_item)
+  end
+
+  test "without_listable scope should return items without listable association" do
+    items_without_listable = ListItem.without_listable
+
+    # Should include the unverified fixtures that have no listable
+    assert_equal 2, items_without_listable.count
+    assert_includes items_without_listable, list_items(:unverified_book)
+    assert_includes items_without_listable, list_items(:unverified_album)
+
+    # Should not include items with listable associations
+    assert_not_includes items_without_listable, list_items(:basic_item)
+
+    # Create another unverified item
+    unverified_item = ListItem.create!(
+      list: lists(:basic_list),
+      metadata: {title: "Another Unverified Book", author: "Unknown Author"}
+    )
+
+    items_without_listable = ListItem.without_listable
+    assert_includes items_without_listable, unverified_item
+    assert_equal 3, items_without_listable.count
+  end
+
+  test "verified scope should return verified items" do
+    # Should include the verified fixture
+    verified_items = ListItem.verified
+    assert_equal 1, verified_items.count
+    assert_includes verified_items, list_items(:verified_item)
+
+    # Mark another item as verified
+    item = list_items(:basic_item)
+    item.update!(verified: true)
+
+    verified_items = ListItem.verified
+    assert_includes verified_items, item
+    assert_includes verified_items, list_items(:verified_item)
+    assert_equal 2, verified_items.count
+  end
+
+  test "unverified scope should return unverified items" do
+    unverified_items = ListItem.unverified
+
+    # Most items should be unverified by default (except verified_item fixture)
+    assert_includes unverified_items, list_items(:basic_item)
+    assert_includes unverified_items, list_items(:second_item)
+    assert_includes unverified_items, list_items(:unverified_book)
+    assert_includes unverified_items, list_items(:unverified_album)
+
+    # Should not include the verified fixture
+    assert_not_includes unverified_items, list_items(:verified_item)
+
+    # Mark an item as verified
+    item = list_items(:basic_item)
+    item.update!(verified: true)
+
+    unverified_items = ListItem.unverified
+    assert_not_includes unverified_items, item
+    assert_not_includes unverified_items, list_items(:verified_item)
+  end
+
+  test "should create unverified item with metadata only" do
+    unverified_item = ListItem.create!(
+      list: lists(:basic_list),
+      metadata: {
+        title: "The Great Gatsby",
+        author: "F. Scott Fitzgerald",
+        year: 1925
+      }
+    )
+
+    assert unverified_item.valid?
+    assert_nil unverified_item.listable
+    assert_equal false, unverified_item.verified
+    assert_equal "The Great Gatsby", unverified_item.metadata["title"]
+    assert_equal "F. Scott Fitzgerald", unverified_item.metadata["author"]
+    assert_equal 1925, unverified_item.metadata["year"]
+  end
+
+  test "should allow duplicate prevention to work with nil listable_id" do
+    # Create two unverified items - should be allowed since listable_id is nil
+    item1 = ListItem.create!(
+      list: lists(:basic_list),
+      metadata: {title: "Book 1", author: "Author 1"}
+    )
+
+    item2 = ListItem.create!(
+      list: lists(:basic_list),
+      metadata: {title: "Book 2", author: "Author 2"}
+    )
+
+    assert item1.valid?
+    assert item2.valid?
+    assert_nil item1.listable_id
+    assert_nil item2.listable_id
   end
 end

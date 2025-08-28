@@ -17,6 +17,7 @@
 11. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-08-27] [Refactor ListItem for Unverified Items](todos/026-refactor-list-item.md)
 - ✅ [2025-08-26] [AVO Improvements](todos/025-avo-improvements.md)
 - ✅ [2025-08-25] [OpenSearch Improvements](todos/024-opensearch-improvements.md)
 - ✅ [2025-08-21] [Data Importer Service - Music Songs and Tracks (Phase 2)](todos/023-import-songs-and-tracks.md)

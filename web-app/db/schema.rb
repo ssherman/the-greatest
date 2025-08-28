@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_08_23_054414) do
+ActiveRecord::Schema[8.0].define(version: 2025_08_28_032452) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -91,11 +91,13 @@ ActiveRecord::Schema[8.0].define(version: 2025_08_23_054414) do
 
   create_table "list_items", force: :cascade do |t|
     t.bigint "list_id", null: false
-    t.string "listable_type", null: false
-    t.bigint "listable_id", null: false
+    t.string "listable_type"
+    t.bigint "listable_id"
     t.integer "position"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.jsonb "metadata", default: {}
+    t.boolean "verified", default: false, null: false
     t.index ["list_id", "listable_type", "listable_id"], name: "index_list_items_on_list_and_listable_unique", unique: true
     t.index ["list_id", "position"], name: "index_list_items_on_list_id_and_position"
     t.index ["list_id"], name: "index_list_items_on_list_id"

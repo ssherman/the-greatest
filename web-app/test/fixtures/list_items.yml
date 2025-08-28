@@ -8,12 +8,14 @@
 # Table name: list_items
 #
 #  id            :bigint           not null, primary key
-#  listable_type :string           not null
+#  listable_type :string
+#  metadata      :jsonb
 #  position      :integer
+#  verified      :boolean          default(FALSE), not null
 #  created_at    :datetime         not null
 #  updated_at    :datetime         not null
 #  list_id       :bigint           not null
-#  listable_id   :bigint           not null
+#  listable_id   :bigint
 #
 # Indexes
 #
@@ -70,3 +72,22 @@ games_item:
   list: games_list
   listable: one (Games::Game)
   position: 1
+
+# Unverified items with metadata only
+unverified_book:
+  list: basic_list
+  metadata: { title: "To Kill a Mockingbird", author: "Harper Lee", year: 1960 }
+  position: 3
+  verified: false
+
+unverified_album:
+  list: music_albums_list
+  metadata: { title: "Abbey Road", artist: "The Beatles", year: 1969 }
+  position: 2
+  verified: false
+
+verified_item:
+  list: approved_list
+  listable: matrix (Movies::Movie)
+  position: 2
+  verified: true

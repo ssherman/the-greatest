@@ -10,5 +10,9 @@ class Avo::Resources::ListItem < Avo::BaseResource
     field :list, as: :belongs_to
     field :listable, as: :text
     field :position, as: :number
+    field :verified, as: :boolean
+    field :metadata, as: :code, language: :json
+    field :created_at, as: :date_time, only_on: [:show]
+    field :updated_at, as: :date_time, only_on: [:show]
   end
 end
