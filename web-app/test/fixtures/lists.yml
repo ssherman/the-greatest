@@ -10,10 +10,12 @@
 #  estimated_quality   :integer          default(0), not null
 #  formatted_text      :text
 #  high_quality_source :boolean
+#  items_json          :jsonb
 #  location_specific   :boolean
 #  name                :string           not null
 #  number_of_voters    :integer
 #  raw_html            :text
+#  simplified_html     :text
 #  source              :string
 #  status              :integer          default("unapproved"), not null
 #  type                :string           not null
@@ -35,16 +37,25 @@
 #  fk_rails_...  (submitted_by_id => users.id)
 #
 basic_list:
-  type: List
+  type: Books::List
   name: Basic Test List
   description: A basic test list
   source: Test Source
   url: https://example.com/list
   status: 0
   estimated_quality: 50
+  raw_html: "<ul><li>Test Item 1</li><li>Test Item 2</li></ul>"
+
+another_list:
+  type: Books::List
+  name: Another Test List
+  description: Another test list
+  source: Another Source
+  status: 0
+  estimated_quality: 40
 
 approved_list:
-  type: List
+  type: Books::List
   name: Approved Test List
   description: An approved test list
   source: Approved Source
@@ -54,7 +65,7 @@ approved_list:
   high_quality_source: true
 
 high_quality_list:
-  type: List
+  type: Books::List
   name: High Quality List
   description: A high quality list
   source: High Quality Source
@@ -63,7 +74,7 @@ high_quality_list:
   high_quality_source: true
 
 yearly_award_list:
-  type: List
+  type: Books::List
   name: 2023 Award List
   description: A yearly award list
   source: Award Source

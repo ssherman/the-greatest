@@ -8,10 +8,12 @@
 #  estimated_quality   :integer          default(0), not null
 #  formatted_text      :text
 #  high_quality_source :boolean
+#  items_json          :jsonb
 #  location_specific   :boolean
 #  name                :string           not null
 #  number_of_voters    :integer
 #  raw_html            :text
+#  simplified_html     :text
 #  source              :string
 #  status              :integer          default("unapproved"), not null
 #  type                :string           not null
@@ -43,6 +45,9 @@ class List < ApplicationRecord
   # Enums
   enum :status, {unapproved: 0, approved: 1, rejected: 2}
 
+  # Callbacks
+  before_save :auto_simplify_html, if: :should_simplify_html?
+
   # Validations
   validates :name, presence: true
   validates :type, presence: true
@@ -66,5 +71,19 @@ class List < ApplicationRecord
 
   def user_penalties
     penalties.user_specific
+  end
+
+  def parse_with_ai!
+    Services::Lists::ImportService.call(self)
+  end
+
+  private
+
+  def should_simplify_html?
+    raw_html.present? && (new_record? || raw_html_changed?)
+  end
+
+  def auto_simplify_html
+    self.simplified_html = Services::Html::SimplifierService.call(raw_html)
   end
 end

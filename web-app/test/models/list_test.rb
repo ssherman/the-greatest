@@ -138,4 +138,28 @@ class ListTest < ActiveSupport::TestCase
     list.destroy
     assert_equal 0, ListItem.where(list: list).count
   end
+
+  # Test parse_with_ai! method
+  test "parse_with_ai! should call ImportService" do
+    list = lists(:basic_list)
+    Services::Lists::ImportService.expects(:call).with(list).returns({success: true, data: {}})
+
+    result = list.parse_with_ai!
+
+    assert_equal({success: true, data: {}}, result)
+  end
+
+  # Test automatic HTML simplification callback
+  test "should automatically simplify HTML when raw_html is present on save" do
+    list = lists(:basic_list)
+    raw_html = "<div><script>alert('test')</script><p>Content</p></div>"
+    simplified = "<div><p>Content</p></div>"
+
+    Services::Html::SimplifierService.expects(:call).with(raw_html).returns(simplified)
+
+    list.raw_html = raw_html
+    list.save!
+
+    assert_equal simplified, list.simplified_html
+  end
 end

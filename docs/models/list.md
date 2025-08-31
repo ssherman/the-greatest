@@ -24,6 +24,12 @@ Returns penalties that are globally available (not user-specific).
 Returns penalties that are user-specific (not global).
 - Returns: ActiveRecord::Relation of Penalty objects
 
+### `#parse_with_ai!`
+Triggers AI-powered parsing of the list's raw HTML content into structured data.
+- Returns: Hash with success status and extracted data or error message
+- Side effects: Updates simplified_html and items_json fields on success
+- Uses: Services::Lists::ImportService for orchestration
+
 **Note:** Penalty calculation logic has been moved to service objects (`Rankings::WeightCalculatorV1`) following "Skinny Models, Fat Services" principles. The model only provides data access methods.
 
 ## Validations
@@ -42,7 +48,7 @@ Returns penalties that are user-specific (not global).
 None defined.
 
 ## Callbacks
-None defined.
+- `before_save :auto_simplify_html, if: :should_simplify_html?` - Automatically simplifies HTML when raw_html is present or changed
 
 ## Dependencies
 - Rails STI functionality for type-based inheritance
@@ -52,6 +58,8 @@ None defined.
 - `Rankings::WeightCalculatorV1` - Handles penalty calculations and weight determination
 - `Rankings::BulkWeightCalculator` - Processes multiple lists for weight calculation
 - `Rankings::DisplayWeightService` - Formats weight information for UI display (when implemented)
+- `Services::Lists::ImportService` - Orchestrates HTML parsing and AI extraction workflow
+- `Services::Html::SimplifierService` - Cleans and simplifies HTML content for AI processing
 
 ## STI Subclasses
 The List model uses Single Table Inheritance with the following subclasses:
@@ -87,6 +95,8 @@ Domain-specific list for games content.
 - `voter_names_unknown` - Whether voter names are unknown (boolean)
 - `formatted_text` - Formatted text content (text)
 - `raw_html` - Raw HTML content (text)
+- `simplified_html` - Simplified HTML content for AI parsing (text)
+- `items_json` - Structured JSON data extracted from HTML (jsonb)
 - `submitted_by_id` - User who submitted the list (optional, foreign key to users)
 - `created_at` - Creation timestamp
 - `updated_at` - Update timestamp
@@ -135,4 +145,17 @@ list.user_penalties           # => ActiveRecord::Relation
 # For penalty calculations, use service objects:
 # calculator = Rankings::WeightCalculator.for_ranked_list(ranked_list)
 # weight = calculator.call
+
+# AI-powered list processing (HTML is automatically simplified on save)
+list = List.find(123)
+list.raw_html = "<ul><li>Item 1</li></ul>"  # Setting raw_html triggers automatic simplification
+list.save!                                   # simplified_html is now populated automatically
+
+result = list.parse_with_ai!                 # Extract structured data
+
+if result[:success]
+  puts "Extracted data: #{list.items_json}"
+else
+  puts "Parsing failed: #{result[:error]}"
+end
 ``` 

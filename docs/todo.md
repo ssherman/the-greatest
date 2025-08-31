@@ -5,18 +5,19 @@
 2. [Movies data model implementation](todos/002-movies-object-model.md)
 
 ## Medium Priority
-4. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
-5. [Books data import from existing site](todos/002-books-data-import.md)
-6. [Additional OAuth providers (Facebook, Twitter, Apple)](todos/007-authentication.md)
-7. [Email/password authentication](todos/007-authentication.md)
-8. [Passwordless email authentication](todos/007-authentication.md)
-9. [Phone number authentication](todos/007-authentication.md)
+3. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
+4. [Books data import from existing site](todos/002-books-data-import.md)
+5. [Additional OAuth providers (Facebook, Twitter, Apple)](todos/007-authentication.md)
+6. [Email/password authentication](todos/007-authentication.md)
+7. [Passwordless email authentication](todos/007-authentication.md)
+8. [Phone number authentication](todos/007-authentication.md)
 
 ## Low Priority
-10. [Recommendation engine MVP](todos/004-recommendation-engine.md)
-11. [Admin interface with Avo](todos/007-admin-interface.md)
+9. [Recommendation engine MVP](todos/004-recommendation-engine.md)
+10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-08-31] [Import Lists AI Help](todos/027-import-lists-ai-help.md)
 - ✅ [2025-08-27] [Refactor ListItem for Unverified Items](todos/026-refactor-list-item.md)
 - ✅ [2025-08-26] [AVO Improvements](todos/025-avo-improvements.md)
 - ✅ [2025-08-25] [OpenSearch Improvements](todos/024-opensearch-improvements.md)
