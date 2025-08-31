@@ -37,10 +37,10 @@ module Search
             ::Search::Shared::Utils.build_term_query("title.keyword", cleaned_text.downcase, boost: 9.0),
 
             # Artist name match with medium boost
-            ::Search::Shared::Utils.build_match_query("primary_artist_name", cleaned_text, boost: 5.0),
+            ::Search::Shared::Utils.build_match_query("artist_names", cleaned_text, boost: 5.0),
 
             # Artist name phrase match
-            ::Search::Shared::Utils.build_match_phrase_query("primary_artist_name", cleaned_text, boost: 6.0)
+            ::Search::Shared::Utils.build_match_phrase_query("artist_names", cleaned_text, boost: 6.0)
           ]
 
           {

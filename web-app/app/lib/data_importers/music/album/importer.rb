@@ -23,10 +23,11 @@ module DataImporters
         end
 
         def initialize_item(query)
-          ::Music::Album.new(
-            title: query.title,
-            primary_artist: query.artist
+          album = ::Music::Album.new(
+            title: query.title
           )
+          album.album_artists.build(artist: query.artist, position: 1)
+          album
         end
       end
     end

@@ -26,6 +26,8 @@ class Music::Song < ApplicationRecord
   friendly_id :title, use: [:slugged, :finders]
 
   # Associations
+  has_many :song_artists, -> { order(:position) }, class_name: "Music::SongArtist", dependent: :destroy
+  has_many :artists, through: :song_artists, class_name: "Music::Artist"
   has_many :tracks, class_name: "Music::Track", dependent: :destroy
   has_many :releases, through: :tracks, class_name: "Music::Release"
   has_many :albums, through: :releases, class_name: "Music::Album"
@@ -96,16 +98,11 @@ class Music::Song < ApplicationRecord
 
   # Search Methods
   def as_indexed_json
-    albums_with_artists = albums.includes(:primary_artist)
-    artist_names = albums_with_artists.map { |album| album.primary_artist&.name }.compact.uniq
-    primary_artist_id = albums_with_artists.first&.primary_artist_id
-    album_ids = albums_with_artists.map(&:id)
-
     {
       title: title,
-      artist_names: artist_names,
-      artist_id: primary_artist_id,
-      album_ids: album_ids,
+      artist_names: artists.map(&:name),
+      artist_ids: artists.map(&:id),
+      album_ids: albums.map(&:id),
       category_ids: categories.active.pluck(:id)
     }
   end

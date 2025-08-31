@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_08_30_161051) do
+ActiveRecord::Schema[8.0].define(version: 2025_08_31_204714) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -200,15 +200,25 @@ ActiveRecord::Schema[8.0].define(version: 2025_08_30_161051) do
     t.index ["release_format"], name: "index_movies_releases_on_release_format"
   end
 
+  create_table "music_album_artists", force: :cascade do |t|
+    t.bigint "album_id", null: false
+    t.bigint "artist_id", null: false
+    t.integer "position", default: 1
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["album_id", "artist_id"], name: "index_music_album_artists_on_album_id_and_artist_id", unique: true
+    t.index ["album_id", "position"], name: "index_music_album_artists_on_album_id_and_position"
+    t.index ["album_id"], name: "index_music_album_artists_on_album_id"
+    t.index ["artist_id"], name: "index_music_album_artists_on_artist_id"
+  end
+
   create_table "music_albums", force: :cascade do |t|
     t.string "title", null: false
     t.string "slug", null: false
     t.text "description"
-    t.bigint "primary_artist_id", null: false
     t.integer "release_year"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["primary_artist_id"], name: "index_music_albums_on_primary_artist_id"
     t.index ["slug"], name: "index_music_albums_on_slug", unique: true
   end
 
@@ -268,6 +278,18 @@ ActiveRecord::Schema[8.0].define(version: 2025_08_30_161051) do
     t.index ["album_id"], name: "index_music_releases_on_album_id"
     t.index ["country"], name: "index_music_releases_on_country"
     t.index ["status"], name: "index_music_releases_on_status"
+  end
+
+  create_table "music_song_artists", force: :cascade do |t|
+    t.bigint "song_id", null: false
+    t.bigint "artist_id", null: false
+    t.integer "position", default: 1
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["artist_id"], name: "index_music_song_artists_on_artist_id"
+    t.index ["song_id", "artist_id"], name: "index_music_song_artists_on_song_id_and_artist_id", unique: true
+    t.index ["song_id", "position"], name: "index_music_song_artists_on_song_id_and_position"
+    t.index ["song_id"], name: "index_music_song_artists_on_song_id"
   end
 
   create_table "music_song_relationships", force: :cascade do |t|
@@ -441,11 +463,14 @@ ActiveRecord::Schema[8.0].define(version: 2025_08_30_161051) do
   add_foreign_key "lists", "users", column: "submitted_by_id"
   add_foreign_key "movies_credits", "movies_people", column: "person_id"
   add_foreign_key "movies_releases", "movies_movies", column: "movie_id"
-  add_foreign_key "music_albums", "music_artists", column: "primary_artist_id"
+  add_foreign_key "music_album_artists", "music_albums", column: "album_id"
+  add_foreign_key "music_album_artists", "music_artists", column: "artist_id"
   add_foreign_key "music_credits", "music_artists", column: "artist_id"
   add_foreign_key "music_memberships", "music_artists", column: "artist_id"
   add_foreign_key "music_memberships", "music_artists", column: "member_id"
   add_foreign_key "music_releases", "music_albums", column: "album_id"
+  add_foreign_key "music_song_artists", "music_artists", column: "artist_id"
+  add_foreign_key "music_song_artists", "music_songs", column: "song_id"
   add_foreign_key "music_song_relationships", "music_releases", column: "source_release_id"
   add_foreign_key "music_song_relationships", "music_songs", column: "related_song_id"
   add_foreign_key "music_song_relationships", "music_songs", column: "song_id"

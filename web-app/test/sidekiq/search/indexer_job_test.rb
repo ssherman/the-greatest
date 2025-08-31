@@ -126,14 +126,14 @@ class Search::IndexerJobTest < ActiveSupport::TestCase
     SearchIndexRequest.create!(parent: @album, action: :index_item)
 
     # Mock that album index requires associations
-    Search::Music::AlbumIndex.stubs(:model_includes).returns([:primary_artist, :categories])
+    Search::Music::AlbumIndex.stubs(:model_includes).returns([:artists, :categories])
 
     # The job will call find_by first, then reload with includes
     Music::Album.expects(:find_by).with(id: @album.id).returns(@album)
 
     # Mock the ActiveRecord chain for the includes reload
     relation_mock = mock("relation")
-    relation_mock.expects(:includes).with([:primary_artist, :categories]).returns([@album])
+    relation_mock.expects(:includes).with([:artists, :categories]).returns([@album])
     Music::Album.expects(:where).with(id: [@album.id]).returns(relation_mock)
 
     Search::Music::AlbumIndex.expects(:bulk_index).with([@album])

@@ -11,7 +11,7 @@ class Avo::Resources::MusicAlbum < Avo::BaseResource
     field :title, as: :text
     field :slug, as: :text, readonly: true
     field :description, as: :textarea
-    field :primary_artist, as: :belongs_to
+    field :artists, as: :has_many
     field :release_year, as: :number
 
     # Associations

@@ -1,9 +1,11 @@
 # Music::Song
 
 ## Summary
-Represents a musical composition independent of any specific recording. This is the canonical song that can appear on multiple releases, albums, and have various relationships (covers, remixes, samples, etc.).
+Represents a musical composition independent of any specific recording. This is the canonical song that can appear on multiple releases, albums, and have various relationships (covers, remixes, samples, etc.). **Updated August 2025**: Now supports direct artist associations independent of albums.
 
 ## Associations
+- `has_many :song_artists, -> { order(:position) }, class_name: "Music::SongArtist"` — Join table for artist associations with position ordering
+- `has_many :artists, through: :song_artists, class_name: "Music::Artist"` — All artists associated with this song (independent of album artists)
 - `has_many :tracks, class_name: "Music::Track"` — All track appearances of this song
 - `has_many :releases, through: :tracks, class_name: "Music::Release"` — All releases that include this song
 - `has_many :albums, through: :releases, class_name: "Music::Album"` — All albums that include this song
@@ -52,13 +54,11 @@ Returns alternate versions of this song
 
 ### `#as_indexed_json`
 Returns the data structure for OpenSearch indexing
-- Returns: Hash - Includes title, slug, lyrics, duration, release_year, primary artist ID, album IDs, and active category IDs
+- Returns: Hash - Includes title, artist_names (array), artist_ids (array), album_ids, and active category IDs
 - Used by `Search::Music::SongIndex` for indexing operations
+- **Updated August 2025**: Now returns arrays of artist names and IDs from direct song-artist associations
 
-### `#primary_artist_id`
-Returns the ID of the primary credited artist for this song
-- Returns: Integer - The artist ID, or nil if no credits exist
-- Used for OpenSearch indexing and relationship queries
+**Removed August 2025**: `#primary_artist_id` method (replaced with direct artist associations)
 
 ### `#album_ids`
 Returns an array of album IDs that contain this song

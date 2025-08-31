@@ -17,6 +17,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-08-31] [Music Object Model: Multiple Artists Support](todos/028-music-multiple-artists.md)
 - ✅ [2025-08-31] [Import Lists AI Help](todos/027-import-lists-ai-help.md)
 - ✅ [2025-08-27] [Refactor ListItem for Unverified Items](todos/026-refactor-list-item.md)
 - ✅ [2025-08-26] [AVO Improvements](todos/025-avo-improvements.md)

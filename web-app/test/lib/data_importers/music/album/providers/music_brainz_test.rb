@@ -11,7 +11,8 @@ module DataImporters
             @provider = MusicBrainz.new
             @artist = music_artists(:pink_floyd)
             @query = ImportQuery.new(artist: @artist, title: "The Wall")
-            @album = ::Music::Album.new(title: "The Wall", primary_artist: @artist)
+            @album = ::Music::Album.new(title: "The Wall")
+            @album.album_artists.build(artist: @artist, position: 1)
           end
 
           test "populate returns success when album data found" do
@@ -38,7 +39,7 @@ module DataImporters
 
             assert result.success?
             assert_equal "The Wall", @album.title
-            assert_equal @artist, @album.primary_artist
+            assert @album.album_artists.any? { |aa| aa.artist == @artist }, "Expected album to have artist association"
             assert_equal 1979, @album.release_year
 
             # Check identifier was built
@@ -47,7 +48,7 @@ module DataImporters
             assert_equal "music_musicbrainz_release_group_id", musicbrainz_identifier.identifier_type
             assert_equal "the-wall-release-group-id", musicbrainz_identifier.value
 
-            expected_data_populated = [:title, :primary_artist, :musicbrainz_release_group_id, :release_year]
+            expected_data_populated = [:title, :artists, :musicbrainz_release_group_id, :release_year]
             assert_equal expected_data_populated, result.data_populated
           end
 
@@ -71,21 +72,23 @@ module DataImporters
             @provider.stubs(:search_service).returns(search_service)
 
             query = ImportQuery.new(artist: @artist, title: "Unknown Album")
-            album = ::Music::Album.new(title: "Unknown Album", primary_artist: @artist)
+            album = ::Music::Album.new(title: "Unknown Album")
+            album.album_artists.build(artist: @artist, position: 1)
 
             result = @provider.populate(album, query: query)
 
             assert result.success?
             assert_equal "Unknown Album", album.title
             assert_nil album.release_year
-            expected_data_populated = [:title, :primary_artist, :musicbrainz_release_group_id]
+            expected_data_populated = [:title, :artists, :musicbrainz_release_group_id]
             assert_equal expected_data_populated, result.data_populated
           end
 
           test "populate returns failure when artist has no MusicBrainz ID" do
             artist_without_mbid = music_artists(:roger_waters) # This artist has no MusicBrainz ID
             query = ImportQuery.new(artist: artist_without_mbid, title: "Heroes")
-            album = ::Music::Album.new(title: "Heroes", primary_artist: artist_without_mbid)
+            album = ::Music::Album.new(title: "Heroes")
+            album.album_artists.build(artist: artist_without_mbid, position: 1)
 
             result = @provider.populate(album, query: query)
 
@@ -162,7 +165,8 @@ module DataImporters
             @provider.stubs(:search_service).returns(search_service)
 
             query = ImportQuery.new(artist: @artist, title: "Studio Album", primary_albums_only: true)
-            album = ::Music::Album.new(title: "Studio Album", primary_artist: @artist)
+            album = ::Music::Album.new(title: "Studio Album")
+            album.album_artists.build(artist: @artist, position: 1)
 
             result = @provider.populate(album, query: query)
 
@@ -197,7 +201,8 @@ module DataImporters
             @provider.stubs(:search_service).returns(search_service)
 
             query = ImportQuery.new(artist: @artist, title: "Rare Album", primary_albums_only: true)
-            album = ::Music::Album.new(title: "Rare Album", primary_artist: @artist)
+            album = ::Music::Album.new(title: "Rare Album")
+            album.album_artists.build(artist: @artist, position: 1)
 
             result = @provider.populate(album, query: query)
 
@@ -224,7 +229,8 @@ module DataImporters
             @provider.stubs(:search_service).returns(search_service)
 
             query = ImportQuery.new(artist: @artist) # No title
-            album = ::Music::Album.new(primary_artist: @artist)
+            album = ::Music::Album.new
+            album.album_artists.build(artist: @artist, position: 1)
 
             result = @provider.populate(album, query: query)
 
@@ -280,7 +286,8 @@ module DataImporters
             @provider.stubs(:search_service).returns(search_service)
 
             query = ImportQuery.new(artist: @artist, title: "Album 1979")
-            album = ::Music::Album.new(title: "Album 1979", primary_artist: @artist)
+            album = ::Music::Album.new(title: "Album 1979")
+            album.album_artists.build(artist: @artist, position: 1)
 
             result = @provider.populate(album, query: query)
 

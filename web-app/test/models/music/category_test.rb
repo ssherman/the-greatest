@@ -1,3 +1,35 @@
+# == Schema Information
+#
+# Table name: categories
+#
+#  id                :bigint           not null, primary key
+#  alternative_names :string           default([]), is an Array
+#  category_type     :integer          default("genre")
+#  deleted           :boolean          default(FALSE)
+#  description       :text
+#  import_source     :integer
+#  item_count        :integer          default(0)
+#  name              :string           not null
+#  slug              :string
+#  type              :string           not null
+#  created_at        :datetime         not null
+#  updated_at        :datetime         not null
+#  parent_id         :bigint
+#
+# Indexes
+#
+#  index_categories_on_category_type  (category_type)
+#  index_categories_on_deleted        (deleted)
+#  index_categories_on_name           (name)
+#  index_categories_on_parent_id      (parent_id)
+#  index_categories_on_slug           (slug)
+#  index_categories_on_type           (type)
+#  index_categories_on_type_and_slug  (type,slug)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (parent_id => categories.id)
+#
 require "test_helper"
 
 module Music

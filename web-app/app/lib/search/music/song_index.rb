@@ -8,7 +8,7 @@ module Search
       end
 
       def self.model_includes
-        [albums: :primary_artist]
+        [:artists, :albums]
       end
 
       def self.index_definition
@@ -45,7 +45,7 @@ module Search
                   }
                 }
               },
-              artist_id: {
+              artist_ids: {
                 type: "keyword"
               },
               album_ids: {

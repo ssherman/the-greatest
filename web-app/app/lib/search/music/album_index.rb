@@ -8,7 +8,7 @@ module Search
       end
 
       def self.model_includes
-        [:primary_artist]
+        [:artists]
       end
 
       def self.index_definition
@@ -35,7 +35,7 @@ module Search
                   }
                 }
               },
-              primary_artist_name: {
+              artist_names: {
                 type: "text",
                 analyzer: "folding",
                 fields: {
@@ -45,7 +45,7 @@ module Search
                   }
                 }
               },
-              artist_id: {
+              artist_ids: {
                 type: "keyword"
               },
               category_ids: {
