@@ -8,10 +8,12 @@
 #  estimated_quality   :integer          default(0), not null
 #  formatted_text      :text
 #  high_quality_source :boolean
+#  items_json          :jsonb
 #  location_specific   :boolean
 #  name                :string           not null
 #  number_of_voters    :integer
 #  raw_html            :text
+#  simplified_html     :text
 #  source              :string
 #  status              :integer          default("unapproved"), not null
 #  type                :string           not null

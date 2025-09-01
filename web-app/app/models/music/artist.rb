@@ -32,7 +32,10 @@ class Music::Artist < ApplicationRecord
   # Associations
   has_many :band_memberships, class_name: "Music::Membership", foreign_key: :artist_id, dependent: :destroy
   has_many :memberships, class_name: "Music::Membership", foreign_key: :member_id, dependent: :destroy
-  has_many :albums, class_name: "Music::Album", foreign_key: :primary_artist_id, dependent: :destroy
+  has_many :album_artists, class_name: "Music::AlbumArtist", dependent: :destroy
+  has_many :albums, through: :album_artists, class_name: "Music::Album"
+  has_many :song_artists, class_name: "Music::SongArtist", dependent: :destroy
+  has_many :songs, through: :song_artists, class_name: "Music::Song"
   has_many :credits, class_name: "Music::Credit", dependent: :destroy
   has_many :ai_chats, as: :parent, dependent: :destroy
   has_many :identifiers, as: :identifiable, dependent: :destroy

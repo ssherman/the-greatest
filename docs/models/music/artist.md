@@ -1,12 +1,15 @@
 # Music::Artist
 
 ## Summary
-Represents a musical artist, which can be either an individual person or a band. Core model for the music domain, used as the primary entity for credits, albums, and memberships.
+Represents a musical artist, which can be either an individual person or a band. Core model for the music domain, used as the primary entity for credits, albums, and memberships. **Updated August 2025**: Now supports many-to-many relationships with both albums and songs.
 
 ## Associations
 - `has_many :band_memberships, class_name: "Music::Membership", foreign_key: :artist_id` — All memberships where this artist is a band
 - `has_many :memberships, class_name: "Music::Membership", foreign_key: :member_id` — All memberships where this artist is a person (member of a band)
-- `has_many :albums, class_name: "Music::Album", foreign_key: :primary_artist_id` — Albums where this artist is the primary credited artist
+- `has_many :album_artists, class_name: "Music::AlbumArtist"` — Join table for album associations
+- `has_many :albums, through: :album_artists, class_name: "Music::Album"` — All albums this artist is associated with (supports multiple artists per album)
+- `has_many :song_artists, class_name: "Music::SongArtist"` — Join table for song associations  
+- `has_many :songs, through: :song_artists, class_name: "Music::Song"` — All songs this artist is associated with (independent of albums)
 - `has_many :credits, class_name: "Music::Credit"` — All credits (artistic/technical) associated with this artist
 - `has_many :ai_chats, as: :parent, dependent: :destroy` — Polymorphic association for AI chat conversations
 - `has_many :identifiers, as: :identifiable, dependent: :destroy` — External identifiers for data import and deduplication

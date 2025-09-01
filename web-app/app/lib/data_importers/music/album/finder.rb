@@ -95,11 +95,12 @@ module DataImporters
 
         def find_by_musicbrainz_id(release_group_id, artist)
           ::Music::Album.joins(:identifiers)
+            .joins(:album_artists)
             .where(identifiers: {
               identifier_type: :music_musicbrainz_release_group_id,
               value: release_group_id
             })
-            .where(primary_artist: artist)
+            .where(music_album_artists: {artist: artist})
             .first
         end
 

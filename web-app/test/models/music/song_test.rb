@@ -242,7 +242,7 @@ module Music
 
       assert_equal song.title, indexed_data[:title]
       assert_includes indexed_data.keys, :artist_names
-      assert_includes indexed_data.keys, :artist_id
+      assert_includes indexed_data.keys, :artist_ids
       assert_includes indexed_data.keys, :album_ids
       assert_includes indexed_data.keys, :category_ids
 
@@ -258,7 +258,7 @@ module Music
 
       assert_equal song.title, indexed_data[:title]
       assert_equal [], indexed_data[:artist_names]
-      assert_nil indexed_data[:artist_id]
+      assert_equal [], indexed_data[:artist_ids]
       assert_equal [], indexed_data[:album_ids]
       assert_equal [], indexed_data[:category_ids]
     end

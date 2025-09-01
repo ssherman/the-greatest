@@ -107,11 +107,17 @@ module DataImporters
           end
 
           # Maps core fields from release group to album
-          # Sets title, primary_artist, and release_year
+          # Sets title, artists, and release_year
           def populate_album_data(album, release_group_data, artist)
             # Set basic album information
             album.title = release_group_data["title"] if album.title.blank?
-            album.primary_artist = artist
+
+            # Ensure the artist is associated if not already
+            # Check both persisted and built associations
+            existing_artist_ids = album.album_artists.map(&:artist_id)
+            unless existing_artist_ids.include?(artist.id)
+              album.album_artists.build(artist: artist, position: 1)
+            end
 
             # Extract year from first-release-date
             if release_group_data["first-release-date"].present?
@@ -177,7 +183,7 @@ module DataImporters
           end
 
           def data_fields_populated(release_group_data)
-            fields = [:title, :primary_artist, :musicbrainz_release_group_id]
+            fields = [:title, :artists, :musicbrainz_release_group_id]
             fields << :release_year if release_group_data["first-release-date"]
             fields
           end

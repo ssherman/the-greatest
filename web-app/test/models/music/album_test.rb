@@ -2,23 +2,17 @@
 #
 # Table name: music_albums
 #
-#  id                :bigint           not null, primary key
-#  description       :text
-#  release_year      :integer
-#  slug              :string           not null
-#  title             :string           not null
-#  created_at        :datetime         not null
-#  updated_at        :datetime         not null
-#  primary_artist_id :bigint           not null
+#  id           :bigint           not null, primary key
+#  description  :text
+#  release_year :integer
+#  slug         :string           not null
+#  title        :string           not null
+#  created_at   :datetime         not null
+#  updated_at   :datetime         not null
 #
 # Indexes
 #
-#  index_music_albums_on_primary_artist_id  (primary_artist_id)
-#  index_music_albums_on_slug               (slug) UNIQUE
-#
-# Foreign Keys
-#
-#  fk_rails_...  (primary_artist_id => music_artists.id)
+#  index_music_albums_on_slug  (slug) UNIQUE
 #
 require "test_helper"
 
@@ -40,10 +34,10 @@ module Music
       assert_includes @album.errors[:title], "can't be blank"
     end
 
-    test "should require primary_artist" do
-      @album.primary_artist = nil
-      assert_not @album.valid?
-      assert_includes @album.errors[:primary_artist], "can't be blank"
+    test "should have artists" do
+      assert_respond_to @album, :artists
+      assert_respond_to @album, :album_artists
+      assert_equal [@artist], @album.artists.to_a
     end
 
     test "should allow description" do
@@ -71,9 +65,10 @@ module Music
     end
 
     # Associations
-    test "should belong to primary_artist" do
-      assert_respond_to @album, :primary_artist
-      assert_equal @artist, @album.primary_artist
+    test "should have many artists through album_artists" do
+      assert_respond_to @album, :artists
+      assert_respond_to @album, :album_artists
+      assert_equal [@artist], @album.artists.to_a
     end
 
     # FriendlyId (basic integration)
@@ -85,9 +80,11 @@ module Music
     # SearchIndexable concern tests
     test "should create search index request on create" do
       artist = music_artists(:pink_floyd)
+      album = nil
 
       assert_difference "SearchIndexRequest.count", 1 do
-        Music::Album.create!(title: "Test Album", primary_artist: artist)
+        album = Music::Album.create!(title: "Test Album")
+        album.album_artists.create!(artist: artist)
       end
 
       request = SearchIndexRequest.last
@@ -108,10 +105,8 @@ module Music
     end
 
     test "should not create search index request if validation fails" do
-      artist = music_artists(:pink_floyd)
-
       assert_no_difference "SearchIndexRequest.count" do
-        Music::Album.create!(title: nil, primary_artist: artist) # Invalid - title is required
+        Music::Album.create!(title: nil) # Invalid - title is required
       rescue ActiveRecord::RecordInvalid
         # Expected to fail
       end
@@ -150,8 +145,8 @@ module Music
       indexed_data = album.as_indexed_json
 
       assert_equal album.title, indexed_data[:title]
-      assert_equal album.primary_artist.name, indexed_data[:primary_artist_name]
-      assert_equal album.primary_artist_id, indexed_data[:artist_id]
+      assert_equal album.artists.pluck(:name), indexed_data[:artist_names]
+      assert_equal album.artists.pluck(:id), indexed_data[:artist_ids]
       assert_includes indexed_data.keys, :category_ids
       assert indexed_data[:category_ids].is_a?(Array)
     end

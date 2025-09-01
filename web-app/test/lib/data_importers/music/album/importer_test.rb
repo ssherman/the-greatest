@@ -37,7 +37,7 @@ module DataImporters
           assert result.success?
           assert_instance_of ::Music::Album, result.item
           assert_equal "The Wall", result.item.title
-          assert_equal @artist, result.item.primary_artist
+          assert_includes result.item.artists, @artist
           assert result.item.persisted?
           assert_equal 1979, result.item.release_year
         end

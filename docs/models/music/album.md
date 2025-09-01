@@ -1,10 +1,11 @@
 # Music::Album
 
 ## Summary
-Represents a canonical album/work (e.g., "Dark Side of the Moon"). This is the conceptual album, while commercial manifestations are tracked in the `Music::Release` model.
+Represents a canonical album/work (e.g., "Dark Side of the Moon"). This is the conceptual album, while commercial manifestations are tracked in the `Music::Release` model. **Updated August 2025**: Now supports multiple artists through join table.
 
 ## Associations
-- `belongs_to :primary_artist, class_name: "Music::Artist"` — The main credited artist for the album
+- `has_many :album_artists, -> { order(:position) }, class_name: "Music::AlbumArtist"` — Join table for artist associations with position ordering
+- `has_many :artists, through: :album_artists, class_name: "Music::Artist"` — All artists associated with this album (supports multiple artists)
 - `has_many :releases, class_name: "Music::Release"` — All commercial releases of this album (CD, vinyl, digital, etc.)
 - `has_many :credits, as: :creditable, class_name: "Music::Credit"` — Polymorphic association for all artistic and technical credits
 - `has_many :identifiers, as: :identifiable, dependent: :destroy` — External identifiers for data import and deduplication
@@ -15,14 +16,15 @@ Represents a canonical album/work (e.g., "Dark Side of the Moon"). This is the c
 
 ### `#as_indexed_json`
 Returns the data structure for OpenSearch indexing
-- Returns: Hash - Includes title, slug, description, release_year, primary artist ID, and active category IDs
+- Returns: Hash - Includes title, artist_names (array), artist_ids (array), and active category IDs
 - Used by `Search::Music::AlbumIndex` for indexing operations
+- **Updated August 2025**: Now returns arrays of artist names and IDs instead of single primary artist
 
 ## Validations
 - `title` — presence
 - `slug` — presence, uniqueness
-- `primary_artist` — presence
 - `release_year` — numericality (integer only), allow nil
+- **Removed August 2025**: `primary_artist` validation (replaced with multiple artist support)
 
 ## Scopes
 None
