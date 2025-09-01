@@ -25,12 +25,18 @@ class Avo::Resources::List < Avo::BaseResource
     field :voter_count_unknown, as: :boolean
     field :voter_names_unknown, as: :boolean
     field :formatted_text, as: :textarea
-    field :raw_html, as: :textarea
+    field :raw_html, as: :textarea, only_on: [:edit, :new]
+    field :simplified_html, as: :textarea, only_on: [:edit, :new]
+    field :items_json, as: :code, only_on: [:show], format: :json, pretty_generated: true, height: "800px"
     field :submitted_by_id, as: :number
     field :list_items, as: :has_many
     field :submitted_by, as: :belongs_to
     field :list_penalties, as: :has_many
     field :penalties, as: :has_many, through: :list_penalties
     field :ai_chats, as: :has_many
+  end
+
+  def actions
+    action Avo::Actions::Lists::ParseWithAi
   end
 end
