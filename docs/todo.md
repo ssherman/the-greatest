@@ -17,6 +17,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-09-01] [MusicBrainz Series Search API Implementation](todos/030-musicbrainz-series-search.md)
 - ✅ [2025-09-01] [List AVO Improvements](todos/029-list-avo-improvements.md)
 - ✅ [2025-08-31] [Music Object Model: Multiple Artists Support](todos/028-music-multiple-artists.md)
 - ✅ [2025-08-31] [Import Lists AI Help](todos/027-import-lists-ai-help.md)
