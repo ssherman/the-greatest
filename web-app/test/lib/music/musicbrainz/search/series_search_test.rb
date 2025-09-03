@@ -274,7 +274,7 @@ class Music::Musicbrainz::Search::SeriesSearchTest < ActiveSupport::TestCase
 
     refute result[:success]
     assert_includes result[:errors], "Series not found"
-    assert_equal series_mbid, result[:metadata][:series_mbid]
+    assert_equal({series_mbid: series_mbid}, result[:metadata][:browse_params])
   end
 
   test "find_by_mbid uses correct MBID field" do

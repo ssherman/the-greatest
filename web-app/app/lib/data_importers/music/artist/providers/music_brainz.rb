@@ -14,18 +14,22 @@ module DataImporters
           #
           # Returns: Result(success:, data_populated:|errors:)
           def populate(artist, query:)
-            # Search for artist - MusicBrainz search already returns detailed data
-            search_result = search_for_artist(query.name)
+            # Use different API based on what information we have
+            api_result = if query.musicbrainz_id.present?
+              lookup_artist_by_mbid(query.musicbrainz_id)
+            else
+              search_for_artist(query.name)
+            end
 
-            return failure_result(errors: search_result[:errors]) unless search_result[:success]
+            return failure_result(errors: api_result[:errors]) unless api_result[:success]
 
-            artists_data = search_result[:data]["artists"]
+            artists_data = api_result[:data]["artists"]
             return failure_result(errors: ["No artists found"]) if artists_data.empty?
 
-            # Take the first result (top match by score) - already contains all the rich data
+            # Take the first result (top match by score or single lookup result)
             artist_data = artists_data.first
 
-            # Populate artist with all available data from search result
+            # Populate artist with all available data from API result
             populate_artist_data(artist, artist_data)
             create_identifiers(artist, artist_data)
             create_categories_from_musicbrainz_data(artist, artist_data)
@@ -45,6 +49,14 @@ module DataImporters
             search_service.search_by_name(name)
           end
 
+          # Executes artist lookup on MusicBrainz using direct MBID lookup
+          #
+          # Params: mbid (String) - MusicBrainz ID
+          # Returns: lookup result Hash
+          def lookup_artist_by_mbid(mbid)
+            search_service.lookup_by_mbid(mbid)
+          end
+
           def search_service
             @search_service ||= ::Music::Musicbrainz::Search::ArtistSearch.new
           end
@@ -52,8 +64,8 @@ module DataImporters
           # Maps core fields from MusicBrainz response to artist
           # Sets name, kind, country and life-span
           def populate_artist_data(artist, artist_data)
-            # Set basic artist information
-            artist.name = artist_data["name"] if artist.name.blank?
+            # Set basic artist information - always use MusicBrainz name as authoritative source
+            artist.name = artist_data["name"] if artist_data["name"].present?
 
             # Map MusicBrainz type to our kind enum
             if artist_data["type"]
@@ -145,23 +157,20 @@ module DataImporters
           end
 
           # Creates genre and location categories for artists from MusicBrainz data
-          # Creates genre and location categories based on MusicBrainz tags and area data
-          # - Genres: top 5 non-zero tags (normalized, hyphens preserved)
+          # Creates genre and location categories based on MusicBrainz tags, genres, and area data
+          # - Genres: top 5 from both "tags" and "genres" fields (normalized, hyphens preserved)
           # - Locations: area and begin-area names
           # Associates via CategoryItem and raises on errors
           def create_categories_from_musicbrainz_data(artist, artist_data)
             categories = []
 
-            # Genres from tags (top 5 non-zero, normalized)
-            if artist_data["tags"].is_a?(Array)
-              tag_categories = artist_data["tags"]
-                .reject { |t| t["count"].to_i == 0 }
-                .sort_by { |t| -t["count"].to_i }
-                .first(5)
-                .map { |t| normalize_tag_name(t["name"]) }
-                .uniq
+            # Genres from both tags and genres (top 5 combined, normalized)
+            genre_names = []
+            genre_names += extract_category_names_from_field(artist_data, "tags")
+            genre_names += extract_category_names_from_field(artist_data, "genres")
 
-              categories += find_or_create_music_categories(tag_categories, category_type: "genre")
+            if genre_names.any?
+              categories += find_or_create_music_categories(genre_names.uniq, category_type: "genre")
             end
 
             # Locations from area and begin-area (artist only)
@@ -196,6 +205,22 @@ module DataImporters
                 import_source: "musicbrainz"
               )
             end
+          end
+
+          # Extracts and processes category names from either "tags" or "genres" field
+          # Returns top 5 non-zero entries, normalized
+          # @param artist_data [Hash] MusicBrainz artist data
+          # @param field_name [String] either "tags" or "genres"
+          # @return [Array<String>] normalized category names
+          def extract_category_names_from_field(artist_data, field_name)
+            return [] unless artist_data[field_name].is_a?(Array)
+
+            artist_data[field_name]
+              .reject { |item| item["count"].to_i == 0 }
+              .sort_by { |item| -item["count"].to_i }
+              .first(5)
+              .map { |item| normalize_tag_name(item["name"]) }
+              .reject(&:blank?)
           end
 
           # Normalizes a MusicBrainz tag to Title Case preserving hyphens

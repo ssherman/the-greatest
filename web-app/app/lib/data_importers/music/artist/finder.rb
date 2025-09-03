@@ -6,6 +6,18 @@ module DataImporters
       # Finds existing Music::Artist records before import
       class Finder < DataImporters::FinderBase
         def call(query:)
+          return find_existing_item(query) if query.musicbrainz_id.present?
+          find_existing_item_by_name(query)
+        end
+
+        private
+
+        def find_existing_item(query)
+          # Direct lookup by MusicBrainz ID if provided
+          find_by_musicbrainz_id(query.musicbrainz_id)
+        end
+
+        def find_existing_item_by_name(query)
           # First, search MusicBrainz to get the MBID for this artist
           search_result = search_musicbrainz(query.name)
 
@@ -26,8 +38,6 @@ module DataImporters
 
           nil
         end
-
-        private
 
         def search_musicbrainz(name)
           search_service.search_by_name(name)

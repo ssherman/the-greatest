@@ -88,17 +88,7 @@ module Music
             response = client.get("series/#{series_mbid}", enhanced_options)
             process_browse_response(response)
           rescue Music::Musicbrainz::Error => e
-            {
-              success: false,
-              data: nil,
-              errors: [e.message],
-              metadata: {
-                entity_type: entity_type,
-                series_mbid: series_mbid,
-                options: options,
-                error_type: e.class.name
-              }
-            }
+            handle_browse_error(e, {series_mbid: series_mbid}, options)
           end
         end
 

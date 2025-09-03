@@ -191,6 +191,92 @@ class Music::Musicbrainz::Search::ArtistSearchTest < ActiveSupport::TestCase
     assert result[:success]
   end
 
+  # Tests for new lookup_by_mbid method
+  test "lookup_by_mbid performs direct artist lookup with genres" do
+    valid_mbid = "8538e728-ca0b-4321-b7e5-cff6565dd4c0"
+
+    @mock_client.expects(:get)
+      .with("artist/#{valid_mbid}", {inc: "genres"})
+      .returns(successful_lookup_response)
+
+    result = @search.lookup_by_mbid(valid_mbid)
+
+    assert result[:success]
+    assert_equal 1, result[:data]["count"]
+    assert result[:data]["artists"].is_a?(Array)
+    assert_equal "8538e728-ca0b-4321-b7e5-cff6565dd4c0", result[:data]["artists"].first["id"]
+    assert_equal "Depeche Mode", result[:data]["artists"].first["name"]
+  end
+
+  test "lookup_by_mbid includes custom options" do
+    valid_mbid = "8538e728-ca0b-4321-b7e5-cff6565dd4c0"
+    custom_options = {limit: 1, custom: "value"}
+
+    @mock_client.expects(:get)
+      .with("artist/#{valid_mbid}", {inc: "genres", limit: 1, custom: "value"})
+      .returns(successful_lookup_response)
+
+    result = @search.lookup_by_mbid(valid_mbid, custom_options)
+
+    assert result[:success]
+  end
+
+  test "lookup_by_mbid validates MBID format" do
+    invalid_mbid = "not-a-valid-uuid"
+
+    assert_raises(Music::Musicbrainz::QueryError) do
+      @search.lookup_by_mbid(invalid_mbid)
+    end
+  end
+
+  test "lookup_by_mbid handles network errors gracefully" do
+    valid_mbid = "8538e728-ca0b-4321-b7e5-cff6565dd4c0"
+
+    @mock_client.expects(:get)
+      .raises(Music::Musicbrainz::NetworkError.new("Connection timeout"))
+
+    result = @search.lookup_by_mbid(valid_mbid)
+
+    refute result[:success]
+    assert_includes result[:errors], "Connection timeout"
+    assert_equal "artist", result[:metadata][:entity_type]
+    assert_equal({artist_mbid: valid_mbid}, result[:metadata][:browse_params])
+  end
+
+  test "lookup_by_mbid transforms single artist to search format" do
+    valid_mbid = "8538e728-ca0b-4321-b7e5-cff6565dd4c0"
+
+    # Mock response with single artist object (typical lookup response)
+    single_artist_response = {
+      success: true,
+      data: {
+        "id" => "8538e728-ca0b-4321-b7e5-cff6565dd4c0",
+        "name" => "Depeche Mode",
+        "type" => "Group",
+        "genres" => [
+          {"name" => "electronic", "count" => 25},
+          {"name" => "new wave", "count" => 19}
+        ]
+      },
+      errors: [],
+      metadata: {
+        endpoint: "artist/8538e728-ca0b-4321-b7e5-cff6565dd4c0",
+        response_time: 0.089
+      }
+    }
+
+    @mock_client.expects(:get)
+      .returns(single_artist_response)
+
+    result = @search.lookup_by_mbid(valid_mbid)
+
+    assert result[:success]
+    assert_equal 1, result[:data]["count"]
+    assert_equal 0, result[:data]["offset"]
+    assert result[:data]["artists"].is_a?(Array)
+    assert_equal "8538e728-ca0b-4321-b7e5-cff6565dd4c0", result[:data]["artists"].first["id"]
+  end
+
   private
 
   def successful_artist_response
@@ -213,6 +299,40 @@ class Music::Musicbrainz::Search::ArtistSearchTest < ActiveSupport::TestCase
       metadata: {
         endpoint: "artist",
         response_time: 0.123
+      }
+    }
+  end
+
+  def successful_lookup_response
+    {
+      success: true,
+      data: {
+        "id" => "8538e728-ca0b-4321-b7e5-cff6565dd4c0",
+        "name" => "Depeche Mode",
+        "sort-name" => "Depeche Mode",
+        "type" => "Group",
+        "type-id" => "e431f5f6-b5d2-343d-8b36-72607fffb74b",
+        "country" => "GB",
+        "life-span" => {
+          "begin" => "1980-03",
+          "end" => nil,
+          "ended" => false
+        },
+        "genres" => [
+          {"name" => "electronic", "count" => 25},
+          {"name" => "new wave", "count" => 19},
+          {"name" => "synth-pop", "count" => 15}
+        ],
+        "tags" => [
+          {"name" => "alternative dance", "count" => 3},
+          {"name" => "dark wave", "count" => 6}
+        ],
+        "score" => "100"
+      },
+      errors: [],
+      metadata: {
+        endpoint: "artist/8538e728-ca0b-4321-b7e5-cff6565dd4c0",
+        response_time: 0.089
       }
     }
   end

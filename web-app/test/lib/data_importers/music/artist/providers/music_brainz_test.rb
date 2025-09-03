@@ -251,6 +251,222 @@ module DataImporters
             assert_equal "location", loc_cat.category_type
             assert_equal "musicbrainz", loc_cat.import_source
           end
+
+          # Tests for new MusicBrainz ID lookup functionality
+          test "populate uses lookup API when musicbrainz_id is provided" do
+            mbid = "8538e728-ca0b-4321-b7e5-cff6565dd4c0"
+            query = ImportQuery.new(musicbrainz_id: mbid)
+            artist = ::Music::Artist.new # Fresh artist without preset name
+
+            search_service = mock
+            search_service.expects(:lookup_by_mbid).with(mbid).returns(
+              success: true,
+              data: {
+                "artists" => [
+                  {
+                    "id" => mbid,
+                    "name" => "Depeche Mode",
+                    "type" => "Group",
+                    "country" => "GB",
+                    "life-span" => {"begin" => "1980-03", "end" => nil, "ended" => false}
+                  }
+                ]
+              }
+            )
+
+            @provider.stubs(:search_service).returns(search_service)
+
+            result = @provider.populate(artist, query: query)
+
+            assert result.success?
+            assert_equal "Depeche Mode", artist.name
+            assert_equal "band", artist.kind
+            assert_equal "GB", artist.country
+            assert_equal 1980, artist.year_formed
+          end
+
+          test "populate uses search API when name is provided" do
+            query = ImportQuery.new(name: "Pink Floyd")
+
+            search_service = mock
+            search_service.expects(:search_by_name).with("Pink Floyd").returns(
+              success: true,
+              data: {
+                "artists" => [
+                  {
+                    "id" => "83d91898-7763-47d7-b03b-b92132375c47",
+                    "name" => "Pink Floyd",
+                    "type" => "Group",
+                    "country" => "GB"
+                  }
+                ]
+              }
+            )
+
+            @provider.stubs(:search_service).returns(search_service)
+
+            result = @provider.populate(@artist, query: query)
+
+            assert result.success?
+            assert_equal "Pink Floyd", @artist.name
+          end
+
+          test "populate processes both genres and tags for categories" do
+            persisted_artist = music_artists(:pink_floyd)
+            query = ImportQuery.new(name: "Test Artist")
+
+            search_service = mock
+            search_service.expects(:search_by_name).with("Test Artist").returns(
+              success: true,
+              data: {
+                "artists" => [
+                  {
+                    "id" => "test-mbid",
+                    "name" => "Test Artist",
+                    "type" => "Group",
+                    "genres" => [
+                      {"name" => "electronic", "count" => 25},
+                      {"name" => "synth-pop", "count" => 15},
+                      {"name" => "new wave", "count" => 12}
+                    ],
+                    "tags" => [
+                      {"name" => "alternative dance", "count" => 8},
+                      {"name" => "dark wave", "count" => 6},
+                      {"name" => "minimal techno", "count" => 4}
+                    ]
+                  }
+                ]
+              }
+            )
+
+            @provider.stubs(:search_service).returns(search_service)
+
+            result = @provider.populate(persisted_artist, query: query)
+
+            assert result.success?
+
+            # Should create categories from both genres and tags
+            genre_names = persisted_artist.categories.where(category_type: "genre").pluck(:name)
+
+            # From genres field
+            assert_includes genre_names, "Electronic"
+            assert_includes genre_names, "Synth-Pop"
+            assert_includes genre_names, "New Wave"
+
+            # From tags field
+            assert_includes genre_names, "Alternative Dance"
+            assert_includes genre_names, "Dark Wave"
+            assert_includes genre_names, "Minimal Techno"
+          end
+
+          test "populate extracts top 5 genres from combined tags and genres" do
+            persisted_artist = music_artists(:pink_floyd)
+            query = ImportQuery.new(name: "Test Artist")
+
+            search_service = mock
+            search_service.expects(:search_by_name).with("Test Artist").returns(
+              success: true,
+              data: {
+                "artists" => [
+                  {
+                    "id" => "test-mbid",
+                    "name" => "Test Artist",
+                    "type" => "Group",
+                    "genres" => [
+                      {"name" => "genre1", "count" => 30},
+                      {"name" => "genre2", "count" => 25},
+                      {"name" => "genre3", "count" => 20}
+                    ],
+                    "tags" => [
+                      {"name" => "tag1", "count" => 15},
+                      {"name" => "tag2", "count" => 10},
+                      {"name" => "tag3", "count" => 5},
+                      {"name" => "tag4", "count" => 3}
+                    ]
+                  }
+                ]
+              }
+            )
+
+            @provider.stubs(:search_service).returns(search_service)
+
+            result = @provider.populate(persisted_artist, query: query)
+
+            assert result.success?
+
+            # Should create categories but respect the top 5 limit per field
+            genre_names = persisted_artist.categories.where(category_type: "genre").pluck(:name)
+
+            # All genres should be included (3 total)
+            assert_includes genre_names, "Genre1"
+            assert_includes genre_names, "Genre2"
+            assert_includes genre_names, "Genre3"
+
+            # Top 5 tags should be included (only 4 exist)
+            assert_includes genre_names, "Tag1"
+            assert_includes genre_names, "Tag2"
+            assert_includes genre_names, "Tag3"
+            assert_includes genre_names, "Tag4"
+          end
+
+          test "populate handles empty genres and tags gracefully" do
+            query = ImportQuery.new(name: "Test Artist")
+            artist = ::Music::Artist.new # Fresh artist without preset name
+
+            search_service = mock
+            search_service.expects(:search_by_name).with("Test Artist").returns(
+              success: true,
+              data: {
+                "artists" => [
+                  {
+                    "id" => "test-mbid",
+                    "name" => "Test Artist",
+                    "type" => "Group",
+                    "genres" => [],
+                    "tags" => []
+                  }
+                ]
+              }
+            )
+
+            @provider.stubs(:search_service).returns(search_service)
+
+            result = @provider.populate(artist, query: query)
+
+            assert result.success?
+            assert_equal "Test Artist", artist.name
+            # No genre categories should be created
+            assert_equal 0, artist.categories.where(category_type: "genre").count
+          end
+
+          test "populate handles missing genres and tags fields gracefully" do
+            query = ImportQuery.new(name: "Test Artist")
+            artist = ::Music::Artist.new # Fresh artist without preset name
+
+            search_service = mock
+            search_service.expects(:search_by_name).with("Test Artist").returns(
+              success: true,
+              data: {
+                "artists" => [
+                  {
+                    "id" => "test-mbid",
+                    "name" => "Test Artist",
+                    "type" => "Group"
+                    # No genres or tags fields
+                  }
+                ]
+              }
+            )
+
+            @provider.stubs(:search_service).returns(search_service)
+
+            result = @provider.populate(artist, query: query)
+
+            assert result.success?
+            assert_equal "Test Artist", artist.name
+            # No genre categories should be created
+            assert_equal 0, artist.categories.where(category_type: "genre").count
+          end
         end
       end
     end

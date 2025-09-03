@@ -110,6 +110,66 @@ module DataImporters
 
           assert_equal music_artists(:david_bowie), result
         end
+
+        # Tests for new MusicBrainz ID lookup functionality
+        test "call uses direct MBID lookup when musicbrainz_id is provided" do
+          mbid = "83d91898-7763-47d7-b03b-b92132375c47"
+          query = ImportQuery.new(musicbrainz_id: mbid)
+
+          # Should NOT call the search service when we have an MBID
+          search_service = mock
+          search_service.expects(:search_by_name).never
+          @finder.stubs(:search_service).returns(search_service)
+
+          result = @finder.call(query: query)
+
+          # Should find Pink Floyd by MBID identifier
+          assert_equal music_artists(:pink_floyd), result
+        end
+
+        test "call returns nil when musicbrainz_id is provided but no artist found with that MBID" do
+          unknown_mbid = "00000000-0000-0000-0000-000000000000"
+          query = ImportQuery.new(musicbrainz_id: unknown_mbid)
+
+          result = @finder.call(query: query)
+
+          assert_nil result
+        end
+
+        test "call prioritizes musicbrainz_id over name when both are provided" do
+          mbid = "83d91898-7763-47d7-b03b-b92132375c47"
+          query = ImportQuery.new(name: "Some Other Name", musicbrainz_id: mbid)
+
+          # Should NOT call the search service when we have an MBID
+          search_service = mock
+          search_service.expects(:search_by_name).never
+          @finder.stubs(:search_service).returns(search_service)
+
+          result = @finder.call(query: query)
+
+          # Should find Pink Floyd by MBID, ignoring the name
+          assert_equal music_artists(:pink_floyd), result
+        end
+
+        test "call falls back to name-based search when musicbrainz_id is blank" do
+          query = ImportQuery.new(name: "Pink Floyd", musicbrainz_id: "")
+
+          # Should call the search service for name-based search
+          search_service = mock
+          search_service.expects(:search_by_name).with("Pink Floyd").returns(
+            success: true,
+            data: {
+              "artists" => [
+                {"id" => "83d91898-7763-47d7-b03b-b92132375c47", "name" => "Pink Floyd"}
+              ]
+            }
+          )
+          @finder.stubs(:search_service).returns(search_service)
+
+          result = @finder.call(query: query)
+
+          assert_equal music_artists(:pink_floyd), result
+        end
       end
     end
   end

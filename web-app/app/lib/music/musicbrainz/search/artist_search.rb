@@ -88,6 +88,26 @@ module Music
           end
         end
 
+        # Lookup artist by MusicBrainz ID using direct lookup API
+        # Uses MusicBrainz lookup endpoint (/ws/2/artist/{mbid}) for direct access
+        # @param mbid [String] the MusicBrainz ID (UUID format)
+        # @param options [Hash] additional options (inc parameter, etc.)
+        # @return [Hash] lookup results with complete artist data
+        def lookup_by_mbid(mbid, options = {})
+          validate_mbid!(mbid)
+
+          # Add inc parameter for genres and other detailed data
+          enhanced_options = options.merge(inc: "genres")
+
+          begin
+            # Direct lookup uses /ws/2/artist/{mbid} endpoint
+            response = client.get("artist/#{mbid}", enhanced_options)
+            process_lookup_response(response)
+          rescue Music::Musicbrainz::Error => e
+            handle_browse_error(e, {artist_mbid: mbid}, options)
+          end
+        end
+
         # Build a complex query with multiple criteria
         # @param criteria [Hash] search criteria (name:, country:, type:, etc.)
         # @param options [Hash] additional search options
@@ -111,6 +131,29 @@ module Music
 
           query = query_parts.join(" AND ")
           search(query, options)
+        end
+
+        private
+
+        # Process lookup response for single artist lookup
+        # @param response [Hash] the raw API response
+        # @return [Hash] processed response
+        def process_lookup_response(response)
+          return response unless response[:success]
+
+          # For artist lookup, we get a single artist object
+          # Transform it to match search response format for consistency
+          if response[:data]
+            artist_data = response[:data]
+            response[:data] = {
+              "count" => 1,
+              "offset" => 0,
+              "artists" => [artist_data],
+              "created" => Time.current.iso8601
+            }
+          end
+
+          response
         end
       end
     end
