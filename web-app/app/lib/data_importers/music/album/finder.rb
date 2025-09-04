@@ -6,6 +6,14 @@ module DataImporters
       # Finds existing Music::Album records before import
       class Finder < DataImporters::FinderBase
         def call(query:)
+          # Handle direct release group MBID lookup
+          if query.release_group_musicbrainz_id.present?
+            return find_by_musicbrainz_id_only(query.release_group_musicbrainz_id)
+          end
+
+          # Handle artist-based search (existing logic)
+          return nil unless query.artist.present?
+
           # Get artist's MusicBrainz ID
           artist_mbid = get_artist_musicbrainz_id(query.artist)
           return nil unless artist_mbid
@@ -91,6 +99,15 @@ module DataImporters
 
         def search_service
           @search_service ||= ::Music::Musicbrainz::Search::ReleaseGroupSearch.new
+        end
+
+        def find_by_musicbrainz_id_only(release_group_id)
+          ::Music::Album.joins(:identifiers)
+            .where(identifiers: {
+              identifier_type: :music_musicbrainz_release_group_id,
+              value: release_group_id
+            })
+            .first
         end
 
         def find_by_musicbrainz_id(release_group_id, artist)

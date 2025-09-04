@@ -10,26 +10,36 @@ module DataImporters
           #
           # Params:
           # - album: Music::Album - the album to enrich
-          # - query: ImportQuery - contains artist, optional title, primary_albums_only
+          # - query: ImportQuery - contains artist OR release_group_musicbrainz_id, optional title, primary_albums_only
           #
           # Returns: Result(success:, data_populated:|errors:)
           def populate(album, query:)
-            # Get artist's MusicBrainz ID
-            artist_mbid = get_artist_musicbrainz_id(query.artist)
-            return failure_result(errors: ["Artist has no MusicBrainz ID"]) unless artist_mbid
+            # Use different API based on what information we have
+            api_result = if query.release_group_musicbrainz_id.present?
+              lookup_release_group_by_mbid(query.release_group_musicbrainz_id)
+            else
+              search_release_groups_by_artist(album, query)
+            end
 
-            # Search for release groups using the two-step strategy
-            search_result = search_for_release_groups(artist_mbid, query)
-            return failure_result(errors: search_result[:errors]) unless search_result[:success]
+            return failure_result(errors: api_result[:errors]) unless api_result[:success]
 
-            release_groups = search_result[:data]["release-groups"]
+            release_groups = api_result[:data]["release-groups"]
             return failure_result(errors: ["No albums found"]) if release_groups.empty?
 
-            # Take the first result (highest MusicBrainz relevance score)
+            # Take the first result (single lookup result or highest search relevance score)
             release_group_data = release_groups.first
 
+            # Import/find artists from artist-credit data (for lookup) or use provided artist (for search)
+            artists = if query.release_group_musicbrainz_id.present?
+              import_artists_from_artist_credits(release_group_data["artist-credit"])
+            else
+              [query.artist]
+            end
+
+            return failure_result(errors: ["No valid artists found"]) if artists.empty?
+
             # Populate album with MusicBrainz data
-            populate_album_data(album, release_group_data, query.artist)
+            populate_album_data(album, release_group_data, artists)
             create_identifiers(album, release_group_data)
             create_categories_from_musicbrainz_data(album, release_group_data)
 
@@ -39,6 +49,64 @@ module DataImporters
           end
 
           private
+
+          # Executes release group lookup on MusicBrainz using direct MBID lookup
+          #
+          # Params: mbid (String) - MusicBrainz Release Group ID
+          # Returns: lookup result Hash
+          def lookup_release_group_by_mbid(mbid)
+            search_service.lookup_by_release_group_mbid(mbid)
+          end
+
+          # Executes release group search by artist (existing logic)
+          #
+          # Params: album (Music::Album), query (ImportQuery)
+          # Returns: search result Hash
+          def search_release_groups_by_artist(album, query)
+            # Get artist's MusicBrainz ID
+            artist_mbid = get_artist_musicbrainz_id(query.artist)
+            return {success: false, errors: ["Artist has no MusicBrainz ID"]} unless artist_mbid
+
+            # Search for release groups using the existing strategy
+            search_for_release_groups(artist_mbid, query)
+          end
+
+          # Import artists from MusicBrainz artist-credit data
+          #
+          # Params: artist_credits (Array) - artist-credit array from MusicBrainz
+          # Returns: Array of Music::Artist instances
+          def import_artists_from_artist_credits(artist_credits)
+            return [] unless artist_credits.is_a?(Array)
+
+            artists = artist_credits.map do |credit|
+              artist_mbid = credit.dig("artist", "id")
+              next unless artist_mbid
+
+              begin
+                # Use existing artist importer with MusicBrainz ID
+                result = DataImporters::Music::Artist::Importer.call(musicbrainz_id: artist_mbid)
+
+                # Handle both ImportResult and direct Artist returns
+                if result.is_a?(Music::Artist)
+                  Rails.logger.info "Found existing artist: #{result.name}"
+                  result # Existing artist returned directly
+                elsif result.respond_to?(:success?) && result.success?
+                  Rails.logger.info "Imported new artist: #{result.item.name}"
+                  result.item # New artist from ImportResult
+                else
+                  Rails.logger.warn "Artist import failed for #{artist_mbid}: result class #{result.class}"
+                  nil
+                end
+              rescue => e
+                Rails.logger.warn "Failed to import artist #{artist_mbid}: #{e.message}"
+                Rails.logger.warn e.backtrace.join("\n")
+                nil
+              end
+            end.compact
+
+            Rails.logger.info "Imported #{artists.count} artists from artist-credits"
+            artists
+          end
 
           # Retrieves the MusicBrainz artist MBID from identifiers
           # Returns: String or nil
@@ -108,15 +176,16 @@ module DataImporters
 
           # Maps core fields from release group to album
           # Sets title, artists, and release_year
-          def populate_album_data(album, release_group_data, artist)
-            # Set basic album information
-            album.title = release_group_data["title"] if album.title.blank?
+          def populate_album_data(album, release_group_data, artists)
+            # Set basic album information - always use MusicBrainz title as authoritative source
+            album.title = release_group_data["title"] if release_group_data["title"].present?
 
-            # Ensure the artist is associated if not already
-            # Check both persisted and built associations
+            # Associate all artists with the album
             existing_artist_ids = album.album_artists.map(&:artist_id)
-            unless existing_artist_ids.include?(artist.id)
-              album.album_artists.build(artist: artist, position: 1)
+            artists.each_with_index do |artist, index|
+              unless existing_artist_ids.include?(artist.id)
+                album.album_artists.build(artist: artist, position: index + 1)
+              end
             end
 
             # Extract year from first-release-date
@@ -140,27 +209,43 @@ module DataImporters
           end
 
           # Creates genre categories for albums from MusicBrainz release group data
-          # Creates genre categories based on top 5 non-zero tags from release group data
+          # Creates genre categories from both "tags" and "genres" fields (top 5 combined, normalized)
           # Associates via CategoryItem and raises on errors
           def create_categories_from_musicbrainz_data(album, release_group_data)
-            return unless release_group_data["tags"].is_a?(Array)
+            categories = []
 
-            tag_names = release_group_data["tags"]
-              .reject { |t| t["count"].to_i == 0 }
-              .sort_by { |t| -t["count"].to_i }
-              .first(5)
-              .map { |t| normalize_tag_name(t["name"]) }
-              .uniq
+            # Genres from both tags and genres (top 5 combined, normalized)
+            genre_names = []
+            genre_names += extract_category_names_from_field(release_group_data, "tags")
+            genre_names += extract_category_names_from_field(release_group_data, "genres")
 
-            categories = find_or_create_music_categories(tag_names, category_type: "genre")
+            if genre_names.any?
+              categories += find_or_create_music_categories(genre_names.uniq, category_type: "genre")
+            end
 
-            # Associate via join model
+            # Associate categories with album via join to avoid through-write quirks
             categories.compact.uniq.each do |category|
               ::CategoryItem.find_or_create_by!(category: category, item: album)
             end
           rescue => e
             Rails.logger.error "MusicBrainz album categories error: #{e.message}"
             raise
+          end
+
+          # Extracts and processes category names from either "tags" or "genres" field
+          # Returns top 5 non-zero entries, normalized
+          # @param release_group_data [Hash] MusicBrainz release group data
+          # @param field_name [String] either "tags" or "genres"
+          # @return [Array<String>] normalized category names
+          def extract_category_names_from_field(release_group_data, field_name)
+            return [] unless release_group_data[field_name].is_a?(Array)
+
+            release_group_data[field_name]
+              .reject { |item| item["count"].to_i == 0 }
+              .sort_by { |item| -item["count"].to_i }
+              .first(5)
+              .map { |item| normalize_tag_name(item["name"]) }
+              .reject(&:blank?)
           end
 
           # Finds or creates Music::Category records by name and type

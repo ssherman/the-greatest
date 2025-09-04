@@ -383,7 +383,165 @@ class Music::Musicbrainz::Search::ReleaseGroupSearchTest < ActiveSupport::TestCa
     assert result[:success]
   end
 
+  # Tests for new MusicBrainz Release Group ID lookup functionality
+  test "lookup_by_release_group_mbid performs direct lookup with artist-credits and genres" do
+    valid_mbid = "6b9a9e04-abd7-4666-86ba-bb220ef4c3b2"
+
+    @mock_client.expects(:get)
+      .with("release-group/#{valid_mbid}", {inc: "artist-credits+genres"})
+      .returns(successful_lookup_response)
+
+    result = @search.lookup_by_release_group_mbid(valid_mbid)
+
+    assert result[:success]
+    assert_equal 1, result[:data]["release-groups"].count
+    assert_equal "Piñata", result[:data]["release-groups"].first["title"]
+    assert_equal "6b9a9e04-abd7-4666-86ba-bb220ef4c3b2", result[:data]["release-groups"].first["id"]
+  end
+
+  test "lookup_by_release_group_mbid accepts additional options" do
+    valid_mbid = "6b9a9e04-abd7-4666-86ba-bb220ef4c3b2"
+
+    @mock_client.expects(:get)
+      .with("release-group/#{valid_mbid}", {inc: "releases+artist-credits+genres"})
+      .returns(successful_lookup_response)
+
+    result = @search.lookup_by_release_group_mbid(valid_mbid, inc: "releases")
+
+    assert result[:success]
+    assert_equal "Piñata", result[:data]["release-groups"].first["title"]
+  end
+
+  test "lookup_by_release_group_mbid validates MBID format" do
+    invalid_mbid = "not-a-valid-uuid"
+
+    assert_raises(Music::Musicbrainz::QueryError) do
+      @search.lookup_by_release_group_mbid(invalid_mbid)
+    end
+  end
+
+  test "lookup_by_release_group_mbid handles API errors gracefully" do
+    valid_mbid = "6b9a9e04-abd7-4666-86ba-bb220ef4c3b2"
+
+    @mock_client.expects(:get)
+      .raises(Music::Musicbrainz::NetworkError.new("Not found"))
+
+    result = @search.lookup_by_release_group_mbid(valid_mbid)
+
+    refute result[:success]
+    assert_includes result[:errors], "Not found"
+    assert_equal "release-group", result[:metadata][:entity_type]
+    assert_equal valid_mbid, result[:metadata][:mbid]
+  end
+
+  test "lookup_by_release_group_mbid wraps single result in array format" do
+    valid_mbid = "6b9a9e04-abd7-4666-86ba-bb220ef4c3b2"
+
+    # Mock returns single object (direct lookup response)
+    single_item_response = {
+      success: true,
+      data: {
+        "id" => "6b9a9e04-abd7-4666-86ba-bb220ef4c3b2",
+        "title" => "Piñata",
+        "artist-credit" => [
+          {
+            "name" => "Freddie Gibbs",
+            "joinphrase" => " & ",
+            "artist" => {
+              "id" => "21645c31-fe1c-45a4-955c-3e172b12c3f9",
+              "name" => "Freddie Gibbs"
+            }
+          },
+          {
+            "name" => "Madlib",
+            "joinphrase" => "",
+            "artist" => {
+              "id" => "ea9078ef-20ca-4506-81ea-2ae5fe3a42e8",
+              "name" => "Madlib"
+            }
+          }
+        ],
+        "genres" => [
+          {"name" => "hip hop", "count" => 4}
+        ]
+      }
+    }
+
+    @mock_client.expects(:get)
+      .with("release-group/#{valid_mbid}", {inc: "artist-credits+genres"})
+      .returns(single_item_response)
+
+    result = @search.lookup_by_release_group_mbid(valid_mbid)
+
+    assert result[:success]
+    # Should wrap single result in release-groups array
+    assert_equal 1, result[:data]["release-groups"].count
+    assert_equal "Piñata", result[:data]["release-groups"].first["title"]
+    assert_equal 2, result[:data]["release-groups"].first["artist-credit"].count
+  end
+
+  test "lookup_by_release_group_mbid does not wrap if already in correct format" do
+    valid_mbid = "6b9a9e04-abd7-4666-86ba-bb220ef4c3b2"
+
+    @mock_client.expects(:get)
+      .with("release-group/#{valid_mbid}", {inc: "artist-credits+genres"})
+      .returns(successful_lookup_response)
+
+    result = @search.lookup_by_release_group_mbid(valid_mbid)
+
+    assert result[:success]
+    assert_equal 1, result[:data]["release-groups"].count
+    assert_equal "Piñata", result[:data]["release-groups"].first["title"]
+  end
+
   private
+
+  def successful_lookup_response
+    {
+      success: true,
+      data: {
+        "release-groups" => [
+          {
+            "id" => "6b9a9e04-abd7-4666-86ba-bb220ef4c3b2",
+            "title" => "Piñata",
+            "primary-type" => "Album",
+            "first-release-date" => "2014-03-18",
+            "artist-credit" => [
+              {
+                "name" => "Freddie Gibbs",
+                "joinphrase" => " & ",
+                "artist" => {
+                  "id" => "21645c31-fe1c-45a4-955c-3e172b12c3f9",
+                  "name" => "Freddie Gibbs",
+                  "type" => "Person",
+                  "country" => "US"
+                }
+              },
+              {
+                "name" => "Madlib",
+                "joinphrase" => "",
+                "artist" => {
+                  "id" => "ea9078ef-20ca-4506-81ea-2ae5fe3a42e8",
+                  "name" => "Madlib",
+                  "type" => "Person",
+                  "country" => "US"
+                }
+              }
+            ],
+            "genres" => [
+              {"name" => "hip hop", "count" => 4, "id" => "52faa157-6bad-4d86-a0ab-d4dec7d2513c"},
+              {"name" => "gangsta rap", "count" => 1, "id" => "bc8c2f79-dcea-43f3-962b-f0663868d42c"}
+            ]
+          }
+        ]
+      },
+      errors: [],
+      metadata: {
+        endpoint: "release-group/6b9a9e04-abd7-4666-86ba-bb220ef4c3b2",
+        response_time: 0.089
+      }
+    }
+  end
 
   def successful_release_group_response
     {

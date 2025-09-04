@@ -186,6 +186,70 @@ module DataImporters
           # Should return Wish You Were Here (found by MBID) not Animals (found by title)
           assert_equal music_albums(:wish_you_were_here), result
         end
+
+        # Tests for new MusicBrainz Release Group ID functionality
+        test "call finds existing album by release_group_musicbrainz_id" do
+          mbid = "6b9a9e04-abd7-4666-86ba-bb220ef4c3b2"
+          query = ImportQuery.new(release_group_musicbrainz_id: mbid)
+
+          # Mock finding album by MusicBrainz ID only
+          @finder.stubs(:find_by_musicbrainz_id_only).with(mbid).returns(music_albums(:dark_side_of_the_moon))
+
+          result = @finder.call(query: query)
+
+          assert_equal music_albums(:dark_side_of_the_moon), result
+        end
+
+        test "call returns nil when release_group_musicbrainz_id not found" do
+          mbid = "00000000-1111-2222-3333-444444444444"
+          query = ImportQuery.new(release_group_musicbrainz_id: mbid)
+
+          # Mock finding album by MusicBrainz ID returning nil
+          @finder.stubs(:find_by_musicbrainz_id_only).with(mbid).returns(nil)
+
+          result = @finder.call(query: query)
+
+          assert_nil result
+        end
+
+        test "call prioritizes release_group_musicbrainz_id over artist when both present" do
+          mbid = "6b9a9e04-abd7-4666-86ba-bb220ef4c3b2"
+          query = ImportQuery.new(artist: @artist, title: "Some Title", release_group_musicbrainz_id: mbid)
+
+          # Should call find_by_musicbrainz_id_only and not any artist-based methods
+          @finder.stubs(:find_by_musicbrainz_id_only).with(mbid).returns(music_albums(:wish_you_were_here))
+
+          result = @finder.call(query: query)
+
+          assert_equal music_albums(:wish_you_were_here), result
+        end
+
+        test "call falls back to artist search when release_group_musicbrainz_id is blank" do
+          query = ImportQuery.new(artist: @artist, title: "The Wall", release_group_musicbrainz_id: "")
+
+          # Should use existing artist-based search logic
+          search_service = mock
+          search_service.expects(:search_by_artist_mbid_and_title)
+            .with("83d91898-7763-47d7-b03b-b92132375c47", "The Wall")
+            .returns(
+              success: true,
+              data: {"release-groups" => []}
+            )
+
+          @finder.stubs(:search_service).returns(search_service)
+
+          result = @finder.call(query: query)
+
+          assert_nil result
+        end
+
+        test "call returns nil when artist is nil and no release_group_musicbrainz_id" do
+          query = ImportQuery.new(artist: nil, title: "Some Album")
+
+          result = @finder.call(query: query)
+
+          assert_nil result
+        end
       end
     end
   end
