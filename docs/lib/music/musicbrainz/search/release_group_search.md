@@ -33,6 +33,16 @@ Search class for finding release groups (albums) in the MusicBrainz database by 
 
 ## Public Methods
 
+### Lookup Methods
+
+#### `#lookup_by_release_group_mbid(mbid, options = {})`
+Looks up a specific release group by MusicBrainz ID using the lookup API
+- Parameters:
+  - mbid (String) - Release group MBID (UUID format)
+  - options (Hash) - Additional options (automatically includes inc: "artist-credits+genres")
+- Returns: Hash - Lookup results with single release group
+- Note: Uses MusicBrainz lookup API (/ws/2/release-group/{mbid}) for richer data including artist credits and genres
+
 ### Basic Search Methods
 
 #### `#find_by_mbid(mbid, options = {})`
@@ -204,6 +214,15 @@ rg_search = Music::Musicbrainz::Search::ReleaseGroupSearch.new
 # Or with custom client
 client = Music::Musicbrainz::BaseClient.new
 rg_search = Music::Musicbrainz::Search::ReleaseGroupSearch.new(client)
+
+# Direct lookup by Release Group MBID (includes artist credits and genres)
+results = rg_search.lookup_by_release_group_mbid("6b9a9e04-abd7-4666-86ba-bb220ef4c3b2")
+if results[:success]
+  album = results[:data]["release-groups"].first
+  puts "Found: #{album['title']}"
+  puts "Artists: #{album['artist-credit'].map { |ac| ac['name'] }.join(', ')}"
+  puts "Genres: #{album['genres'].map { |g| g['name'] }.join(', ')}" if album['genres']
+end
 
 # Search by title
 results = rg_search.search_by_title("Abbey Road")
