@@ -239,6 +239,65 @@ module Music
           query = query_parts.join(" AND ")
           search(query, options)
         end
+
+        # Lookup release group by MusicBrainz ID using direct lookup API
+        # Uses MusicBrainz lookup endpoint (/ws/2/release-group/{mbid}) for direct access
+        # @param mbid [String] the MusicBrainz Release Group ID (UUID format)
+        # @param options [Hash] additional options (inc parameter, etc.)
+        # @return [Hash] lookup results with complete release group data
+        def lookup_by_release_group_mbid(mbid, options = {})
+          validate_mbid!(mbid)
+          # Add inc parameter for artist-credits and genres, but don't override user's inc
+          default_inc = "artist-credits+genres"
+          enhanced_options = if options[:inc]
+            options.merge(inc: "#{options[:inc]}+#{default_inc}")
+          else
+            options.merge(inc: default_inc)
+          end
+
+          response = client.get("release-group/#{mbid}", enhanced_options)
+          process_lookup_response(response)
+        rescue Music::Musicbrainz::QueryError
+          # Re-raise validation errors instead of catching them
+          raise
+        rescue Music::Musicbrainz::Error => e
+          handle_lookup_error(e, mbid, options)
+        end
+
+        private
+
+        # Process lookup response - single item instead of array
+        # @param response [Hash] the raw API response
+        # @return [Hash] processed response with single release group wrapped in array
+        def process_lookup_response(response)
+          return response unless response[:success]
+
+          # Wrap single release group result in array to match search format
+          if response[:data].is_a?(Hash) && response[:data]["title"]
+            response[:data] = {"release-groups" => [response[:data]]}
+          end
+
+          process_search_response(response)
+        end
+
+        # Handle lookup errors with context
+        # @param error [Music::Musicbrainz::Error] the error that occurred
+        # @param mbid [String] the MusicBrainz ID
+        # @param options [Hash] lookup options
+        # @return [Hash] error response
+        def handle_lookup_error(error, mbid, options)
+          {
+            success: false,
+            data: nil,
+            errors: [error.message],
+            metadata: {
+              entity_type: entity_type,
+              mbid: mbid,
+              options: options,
+              error_type: error.class.name
+            }
+          }
+        end
       end
     end
   end

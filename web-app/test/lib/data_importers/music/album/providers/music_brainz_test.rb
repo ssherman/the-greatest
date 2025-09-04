@@ -341,6 +341,274 @@ module DataImporters
             # Ensure no location categories were created/associated for album
             assert_equal 0, persisted_album.categories.where(category_type: "location").count
           end
+
+          # Tests for new MusicBrainz Release Group ID lookup functionality
+          test "populate with release_group_musicbrainz_id uses lookup API" do
+            mbid = "6b9a9e04-abd7-4666-86ba-bb220ef4c3b2"
+            query = ImportQuery.new(release_group_musicbrainz_id: mbid)
+            album = ::Music::Album.new
+
+            # Mock lookup result
+            search_service = mock
+            search_service.expects(:lookup_by_release_group_mbid)
+              .with(mbid)
+              .returns(
+                success: true,
+                data: {
+                  "release-groups" => [
+                    {
+                      "id" => mbid,
+                      "title" => "Piñata",
+                      "first-release-date" => "2014-03-18",
+                      "artist-credit" => [
+                        {
+                          "artist" => {
+                            "id" => "artist-mbid-1",
+                            "name" => "Test Artist"
+                          }
+                        }
+                      ],
+                      "genres" => [
+                        {"name" => "hip hop", "count" => 4}
+                      ]
+                    }
+                  ]
+                }
+              )
+
+            # Mock artist import - return ImportResult object (simulates new artist import)
+            test_artist = music_artists(:david_bowie)
+            import_result = DataImporters::ImportResult.new(
+              item: test_artist,
+              provider_results: [],
+              success: true
+            )
+            DataImporters::Music::Artist::Importer.stubs(:call)
+              .with(musicbrainz_id: "artist-mbid-1")
+              .returns(import_result)
+
+            @provider.stubs(:search_service).returns(search_service)
+
+            result = @provider.populate(album, query: query)
+
+            assert result.success?
+            assert_equal "Piñata", album.title
+            assert_equal 2014, album.release_year
+
+            # Save album to persist associations for testing
+            album.save!
+
+            # Check artist was associated
+            assert_includes album.artists, test_artist
+
+            # Check identifier was built
+            identifier = album.identifiers.find { |id| id.identifier_type == "music_musicbrainz_release_group_id" }
+            assert_equal mbid, identifier.value
+          end
+
+          test "populate with release_group_musicbrainz_id handles multiple artists" do
+            mbid = "6b9a9e04-abd7-4666-86ba-bb220ef4c3b2"
+            query = ImportQuery.new(release_group_musicbrainz_id: mbid)
+            album = ::Music::Album.new
+
+            # Mock lookup result with multiple artists
+            search_service = mock
+            search_service.expects(:lookup_by_release_group_mbid)
+              .with(mbid)
+              .returns(
+                success: true,
+                data: {
+                  "release-groups" => [
+                    {
+                      "id" => mbid,
+                      "title" => "Collaboration Album",
+                      "artist-credit" => [
+                        {
+                          "artist" => {
+                            "id" => "artist-mbid-1",
+                            "name" => "Artist One"
+                          }
+                        },
+                        {
+                          "artist" => {
+                            "id" => "artist-mbid-2",
+                            "name" => "Artist Two"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              )
+
+            # Mock artist imports - return ImportResult objects (simulates new artist imports)
+            artist_one = music_artists(:david_bowie)
+            artist_two = music_artists(:the_beatles)
+
+            import_result_one = DataImporters::ImportResult.new(
+              item: artist_one,
+              provider_results: [],
+              success: true
+            )
+            import_result_two = DataImporters::ImportResult.new(
+              item: artist_two,
+              provider_results: [],
+              success: true
+            )
+
+            DataImporters::Music::Artist::Importer.stubs(:call)
+              .with(musicbrainz_id: "artist-mbid-1")
+              .returns(import_result_one)
+
+            DataImporters::Music::Artist::Importer.stubs(:call)
+              .with(musicbrainz_id: "artist-mbid-2")
+              .returns(import_result_two)
+
+            @provider.stubs(:search_service).returns(search_service)
+
+            result = @provider.populate(album, query: query)
+
+            assert result.success?
+            assert_equal "Collaboration Album", album.title
+
+            # Save album to persist associations for testing
+            album.save!
+
+            # Check both artists were associated with correct positions
+            assert_includes album.artists, artist_one
+            assert_includes album.artists, artist_two
+
+            artist_positions = album.album_artists.map { |aa| [aa.artist, aa.position] }.to_h
+            assert_equal 1, artist_positions[artist_one]
+            assert_equal 2, artist_positions[artist_two]
+          end
+
+          test "populate with release_group_musicbrainz_id fails when no artists imported" do
+            mbid = "6b9a9e04-abd7-4666-86ba-bb220ef4c3b2"
+            query = ImportQuery.new(release_group_musicbrainz_id: mbid)
+            album = ::Music::Album.new
+
+            # Mock lookup result
+            search_service = mock
+            search_service.expects(:lookup_by_release_group_mbid)
+              .with(mbid)
+              .returns(
+                success: true,
+                data: {
+                  "release-groups" => [
+                    {
+                      "id" => mbid,
+                      "title" => "Test Album",
+                      "artist-credit" => [
+                        {
+                          "artist" => {
+                            "id" => "unknown-artist-mbid",
+                            "name" => "Unknown Artist"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              )
+
+            # Mock artist import failure
+            DataImporters::Music::Artist::Importer.stubs(:call)
+              .with(musicbrainz_id: "unknown-artist-mbid")
+              .raises(StandardError, "Artist not found")
+
+            @provider.stubs(:search_service).returns(search_service)
+
+            result = @provider.populate(album, query: query)
+
+            refute result.success?
+            assert_includes result.errors, "No valid artists found"
+          end
+
+          test "populate with release_group_musicbrainz_id handles lookup failures" do
+            mbid = "6b9a9e04-abd7-4666-86ba-bb220ef4c3b2"
+            query = ImportQuery.new(release_group_musicbrainz_id: mbid)
+            album = ::Music::Album.new
+
+            # Mock lookup failure
+            search_service = mock
+            search_service.expects(:lookup_by_release_group_mbid)
+              .with(mbid)
+              .returns(
+                success: false,
+                errors: ["Release group not found"]
+              )
+
+            @provider.stubs(:search_service).returns(search_service)
+
+            result = @provider.populate(album, query: query)
+
+            refute result.success?
+            assert_includes result.errors, "Release group not found"
+          end
+
+          test "populate with release_group_musicbrainz_id processes genres from both tags and genres" do
+            mbid = "6b9a9e04-abd7-4666-86ba-bb220ef4c3b2"
+            query = ImportQuery.new(release_group_musicbrainz_id: mbid)
+            album = ::Music::Album.create!(title: "Test Album", slug: "test-album-lookup-genres")
+
+            # Mock lookup result with both tags and genres
+            search_service = mock
+            search_service.expects(:lookup_by_release_group_mbid)
+              .with(mbid)
+              .returns(
+                success: true,
+                data: {
+                  "release-groups" => [
+                    {
+                      "id" => mbid,
+                      "title" => "Genre Test Album",
+                      "artist-credit" => [
+                        {
+                          "artist" => {
+                            "id" => "artist-mbid-1",
+                            "name" => "Test Artist"
+                          }
+                        }
+                      ],
+                      "tags" => [
+                        {"name" => "electronic", "count" => 10},
+                        {"name" => "ambient", "count" => 5}
+                      ],
+                      "genres" => [
+                        {"name" => "hip hop", "count" => 15},
+                        {"name" => "rap", "count" => 8}
+                      ]
+                    }
+                  ]
+                }
+              )
+
+            # Mock artist import - return ImportResult (simulates new artist import)
+            test_artist = music_artists(:david_bowie)
+            import_result = DataImporters::ImportResult.new(
+              item: test_artist,
+              provider_results: [],
+              success: true
+            )
+            DataImporters::Music::Artist::Importer.stubs(:call)
+              .returns(import_result)
+
+            @provider.stubs(:search_service).returns(search_service)
+
+            result = @provider.populate(album, query: query)
+
+            assert result.success?
+
+            album.reload
+            category_names = album.categories.where(category_type: "genre").pluck(:name)
+
+            # Should include genres from both "tags" and "genres" fields
+            assert_includes category_names, "Electronic"
+            assert_includes category_names, "Ambient"
+            assert_includes category_names, "Hip Hop"
+            assert_includes category_names, "Rap"
+          end
         end
       end
     end
