@@ -37,6 +37,9 @@ class Music::Album < ApplicationRecord
   validates :title, presence: true
   validates :release_year, numericality: {only_integer: true, allow_nil: true}
 
+  # Callbacks
+  after_commit :queue_release_import, on: :create
+
   # Search Methods
   def as_indexed_json
     {
@@ -45,5 +48,11 @@ class Music::Album < ApplicationRecord
       artist_ids: artists.map(&:id),
       category_ids: categories.active.pluck(:id)
     }
+  end
+
+  private
+
+  def queue_release_import
+    Music::ImportAlbumReleasesJob.perform_async(id)
   end
 end
