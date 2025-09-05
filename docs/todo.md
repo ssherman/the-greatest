@@ -17,6 +17,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-09-04] [Auto-Import Album Releases Background Job](todos/033-auto-import-releases.md)
 - ✅ [2025-09-04] [Import Album by MusicBrainz Release Group ID Enhancement](todos/032-import-album-by-musicbrainz-id.md)
 - ✅ [2025-09-03] [Import Artist by MusicBrainz ID Enhancement](todos/031-import-artist-by-musicbrainz-id.md)
 - ✅ [2025-09-01] [MusicBrainz Series Search API Implementation](todos/030-musicbrainz-series-search.md)
