@@ -27,7 +27,21 @@ Returns the data structure for OpenSearch indexing
 - **Removed August 2025**: `primary_artist` validation (replaced with multiple artist support)
 
 ## Scopes
-None
+
+### `with_identifier(identifier_type, value)`
+Finds albums by external identifier type and value. Joins with identifiers table for efficient querying.
+- Parameters: 
+  - `identifier_type` (String) - Type of identifier (e.g., "music_musicbrainz_release_group_id")
+  - `value` (String) - Identifier value
+- Returns: ActiveRecord::Relation
+- Usage: `Music::Album.with_identifier("music_musicbrainz_release_group_id", "abc-123")`
+
+### `with_musicbrainz_release_group_id(mbid)`
+Convenience scope for finding albums by MusicBrainz Release Group ID. Used extensively during import operations.
+- Parameters: `mbid` (String) - MusicBrainz Release Group ID
+- Returns: ActiveRecord::Relation  
+- Usage: `Music::Album.with_musicbrainz_release_group_id("f5093c06-23e3-404f-aeaa-40f72885ee3a")`
+- **Added September 2025**: Supports MusicBrainz series import functionality
 
 ## Constants
 None

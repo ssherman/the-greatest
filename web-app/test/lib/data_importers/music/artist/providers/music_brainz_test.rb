@@ -72,7 +72,8 @@ module DataImporters
                     "country" => "GB",
                     "life-span" => {
                       "begin" => "1947-01-08",
-                      "ended" => "2016-01-10"
+                      "end" => "2016-01-10",
+                      "ended" => true
                     }
                   }
                 ]

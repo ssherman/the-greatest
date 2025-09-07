@@ -37,6 +37,15 @@ class Music::Album < ApplicationRecord
   validates :title, presence: true
   validates :release_year, numericality: {only_integer: true, allow_nil: true}
 
+  # Scopes
+  scope :with_identifier, ->(identifier_type, value) {
+    joins(:identifiers).where(identifiers: {identifier_type: identifier_type, value: value})
+  }
+
+  scope :with_musicbrainz_release_group_id, ->(mbid) {
+    with_identifier("music_musicbrainz_release_group_id", mbid)
+  }
+
   # Callbacks
   after_commit :queue_release_import, on: :create
 

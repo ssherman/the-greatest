@@ -25,7 +25,13 @@ module DataImporters
         # Standard single-item import flow
         # Try to find existing record
         existing = finder.call(query: query)
-        return existing if existing
+        if existing
+          return ImportResult.new(
+            item: existing,
+            provider_results: [],
+            success: true
+          )
+        end
 
         # Initialize new record
         item = initialize_item(query)

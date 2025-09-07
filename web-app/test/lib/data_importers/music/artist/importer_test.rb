@@ -55,7 +55,9 @@ module DataImporters
 
           result = Importer.call(name: "Pink Floyd")
 
-          assert_equal existing_artist, result
+          assert_instance_of DataImporters::ImportResult, result
+          assert result.success?
+          assert_equal existing_artist, result.item
         end
 
         test "call handles MusicBrainz failures gracefully" do
@@ -178,9 +180,11 @@ module DataImporters
 
           result = Importer.call(musicbrainz_id: mbid)
 
-          # When existing artist found, returns the artist directly
-          assert_equal existing_artist, result
-          assert_equal "Pink Floyd", result.name
+          # When existing artist found, returns ImportResult with the artist
+          assert_instance_of DataImporters::ImportResult, result
+          assert result.success?
+          assert_equal existing_artist, result.item
+          assert_equal "Pink Floyd", result.item.name
         end
 
         test "call validates musicbrainz_id format" do
@@ -203,9 +207,11 @@ module DataImporters
           # Provide a different name than what's in the database
           result = Importer.call(name: "Wrong Name", musicbrainz_id: mbid)
 
-          # When existing artist found, returns the artist directly
-          assert_equal existing_artist, result
-          assert_equal "Pink Floyd", result.name # Should find by MBID, not name
+          # When existing artist found, returns ImportResult with the artist
+          assert_instance_of DataImporters::ImportResult, result
+          assert result.success?
+          assert_equal existing_artist, result.item
+          assert_equal "Pink Floyd", result.item.name # Should find by MBID, not name
         end
 
         test "call creates new artist when musicbrainz_id not found locally" do

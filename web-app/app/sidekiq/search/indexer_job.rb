@@ -3,8 +3,6 @@
 class Search::IndexerJob
   include Sidekiq::Job
 
-  sidekiq_options queue: :search_indexing, retry: 3
-
   def perform
     Rails.logger.info "Starting search indexing job"
 

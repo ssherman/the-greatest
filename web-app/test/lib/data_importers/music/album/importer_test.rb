@@ -53,7 +53,9 @@ module DataImporters
 
           result = Importer.call(artist: @artist, title: "The Dark Side of the Moon")
 
-          assert_equal existing_album, result
+          assert_instance_of DataImporters::ImportResult, result
+          assert result.success?
+          assert_equal existing_album, result.item
         end
 
         test "call handles MusicBrainz failures gracefully" do
@@ -269,8 +271,10 @@ module DataImporters
 
           result = Importer.call(release_group_musicbrainz_id: mbid)
 
-          assert_equal existing_album, result
-          assert_equal "The Dark Side of the Moon", result.title
+          assert_instance_of DataImporters::ImportResult, result
+          assert result.success?
+          assert_equal existing_album, result.item
+          assert_equal "The Dark Side of the Moon", result.item.title
         end
 
         test "call with release_group_musicbrainz_id fails when artist import fails" do
