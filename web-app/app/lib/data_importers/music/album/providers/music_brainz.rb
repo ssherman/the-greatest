@@ -86,15 +86,12 @@ module DataImporters
                 # Use existing artist importer with MusicBrainz ID
                 result = DataImporters::Music::Artist::Importer.call(musicbrainz_id: artist_mbid)
 
-                # Handle both ImportResult and direct Artist returns
-                if result.is_a?(Music::Artist)
-                  Rails.logger.info "Found existing artist: #{result.name}"
-                  result # Existing artist returned directly
-                elsif result.respond_to?(:success?) && result.success?
-                  Rails.logger.info "Imported new artist: #{result.item.name}"
-                  result.item # New artist from ImportResult
+                # Artist importer now always returns ImportResult
+                if result.success?
+                  Rails.logger.info "Artist imported: #{result.item.name}"
+                  result.item
                 else
-                  Rails.logger.warn "Artist import failed for #{artist_mbid}: result class #{result.class}"
+                  Rails.logger.warn "Artist import failed for #{artist_mbid}: #{result.all_errors.join(", ")}"
                   nil
                 end
               rescue => e

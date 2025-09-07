@@ -89,7 +89,7 @@ module DataImporters
             return unless life_span_data
 
             begin_date = life_span_data["begin"]
-            end_date = life_span_data["ended"]
+            end_date = life_span_data["end"]
 
             if begin_date.present?
               if artist.person?

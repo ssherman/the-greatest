@@ -60,6 +60,7 @@ None defined.
 - `Rankings::DisplayWeightService` - Formats weight information for UI display (when implemented)
 - `Services::Lists::ImportService` - Orchestrates HTML parsing and AI extraction workflow
 - `Services::Html::SimplifierService` - Cleans and simplifies HTML content for AI processing
+- `DataImporters::Music::Lists::ImportFromMusicbrainzSeries` - Imports albums from MusicBrainz series (Music::Albums::List only)
 
 ## STI Subclasses
 The List model uses Single Table Inheritance with the following subclasses:
@@ -97,6 +98,7 @@ Domain-specific list for games content.
 - `raw_html` - Raw HTML content (text)
 - `simplified_html` - Simplified HTML content for AI parsing (text)
 - `items_json` - Structured JSON data extracted from HTML (jsonb)
+- `musicbrainz_series_id` - MusicBrainz Series ID for automatic import (string, Music::Albums::List only)
 - `submitted_by_id` - User who submitted the list (optional, foreign key to users)
 - `created_at` - Creation timestamp
 - `updated_at` - Update timestamp

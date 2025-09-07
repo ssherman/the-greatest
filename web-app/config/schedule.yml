@@ -3,4 +3,3 @@ search_indexing:
   class: Search::IndexerJob
   cron: "*/30 * * * * *"  # Every 30 seconds
   description: "Process search indexing queue"
-  queue: search_indexing
