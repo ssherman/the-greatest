@@ -102,6 +102,7 @@ module Rankings
       # Apply penalties based on list attributes
       total_penalty += calculate_unknown_data_penalties
       total_penalty += calculate_bias_penalties
+      total_penalty += calculate_temporal_coverage_penalty
 
       total_penalty
     end
@@ -136,6 +137,110 @@ module Rankings
       end
 
       penalty
+    end
+
+    def calculate_temporal_coverage_penalty
+      return 0 unless list.num_years_covered.present?
+
+      # Check if there are any temporal coverage penalties configured
+      temporal_penalties = ranking_configuration.penalties.joins(:penalty_applications)
+        .by_dynamic_type(:num_years_covered)
+
+      return 0 if temporal_penalties.empty?
+
+      total_temporal_penalty = 0
+
+      temporal_penalties.each do |penalty|
+        penalty_value = calculate_temporal_coverage_penalty_for_penalty(penalty)
+        total_temporal_penalty += penalty_value if penalty_value > 0
+      end
+
+      total_temporal_penalty
+    end
+
+    def calculate_temporal_coverage_penalty_for_penalty(penalty, exponent: 2.0)
+      years_covered = list.num_years_covered
+      return 0 unless years_covered.present?
+
+      # Get the penalty application value for this configuration
+      penalty_application = penalty.penalty_applications.find_by(ranking_configuration: ranking_configuration)
+      return 0 unless penalty_application
+
+      max_penalty = penalty_application.value
+
+      # Calculate the maximum year range for this media type
+      max_year_range = calculate_media_year_range
+
+      return 0 if years_covered >= max_year_range  # No penalty for full coverage
+
+      # Power curve penalty calculation - lists with limited coverage get penalty
+      ratio = years_covered.to_f / max_year_range.to_f
+      penalty_value = max_penalty * ((1.0 - ratio)**exponent)
+
+      penalty_value.clamp(0, max_penalty)
+    end
+
+    def calculate_media_year_range
+      # Determine media type from list class and calculate year range
+      case list.class.name
+      when /^Music::/
+        calculate_music_year_range
+      when /^Books::/
+        calculate_books_year_range
+      when /^Movies::/
+        calculate_movies_year_range
+      when /^Games::/
+        calculate_games_year_range
+      else
+        # Fallback for generic lists
+        100  # Default 100 year range
+      end
+    end
+
+    def calculate_music_year_range
+      # Use actual data from music albums and songs
+      album_years = Music::Album.where.not(release_year: nil).pluck(:release_year)
+      song_years = Music::Song.where.not(release_year: nil).pluck(:release_year)
+
+      all_years = (album_years + song_years).compact
+
+      return 100 if all_years.empty?  # Fallback
+
+      min_year = all_years.min
+      max_year = all_years.max
+      current_year = Date.current.year
+
+      # Use current year if max_year is in the future or current year is more recent
+      max_year = [max_year, current_year].max
+
+      max_year - min_year + 1
+    end
+
+    def calculate_books_year_range
+      # Books have a much longer historical range
+      # For now, use a reasonable estimate until we have book models with data
+      current_year = Date.current.year
+      estimated_oldest_book_year = -3000  # ~3000 BCE
+
+      current_year - estimated_oldest_book_year + 1
+    end
+
+    def calculate_movies_year_range
+      # Movies are relatively recent
+      # For now, use a reasonable estimate until we have movie models with data
+      current_year = Date.current.year
+      estimated_first_movie_year = 1888  # First known motion picture
+
+      current_year - estimated_first_movie_year + 1
+    end
+
+    def calculate_games_year_range
+      # Video games are very recent
+      # For now, use a reasonable estimate until we have game models with data
+      current_year = Date.current.year
+      estimated_first_game_year = 1958  # Tennis for Two or similar early games
+
+      current_year - estimated_first_game_year + 1
     end
 
     def find_penalty_value_by_dynamic_type(dynamic_type)

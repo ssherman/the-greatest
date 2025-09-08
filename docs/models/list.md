@@ -37,6 +37,7 @@ Triggers AI-powered parsing of the list's raw HTML content into structured data.
 - `type` - presence required (for STI functionality)
 - `status` - presence required
 - `url` - format validation (URI::regexp) when present, allows blank
+- `num_years_covered` - numericality validation (greater than 0, only integer), allows nil
 
 ## Scopes
 - `approved` - Returns lists with approved status
@@ -94,6 +95,7 @@ Domain-specific list for games content.
 - `number_of_voters` - Number of voters in the list (integer)
 - `voter_count_unknown` - Whether voter count is unknown (boolean)
 - `voter_names_unknown` - Whether voter names are unknown (boolean)
+- `num_years_covered` - Number of years this list covers for temporal penalty calculations (integer)
 - `formatted_text` - Formatted text content (text)
 - `raw_html` - Raw HTML content (text)
 - `simplified_html` - Simplified HTML content for AI parsing (text)

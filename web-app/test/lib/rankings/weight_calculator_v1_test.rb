@@ -471,5 +471,272 @@ module Rankings
       # Verify weight was saved to the model
       assert_equal weight, @books_ranked_list.reload.weight
     end
+
+    # Test temporal coverage penalty calculation for music
+    test "calculates temporal coverage penalty for music lists" do
+      # Create fresh music albums ranking configuration
+      test_config = Music::Albums::RankingConfiguration.create!(
+        name: "Temporal Penalty Test Config #{SecureRandom.hex(4)}",
+        global: true,
+        min_list_weight: 1
+      )
+
+      # Create music lists with different year coverage
+      decade_list = Music::Albums::List.create!(
+        name: "Best Albums of the 2010s",
+        status: :approved,
+        num_years_covered: 10  # Decade list
+      )
+
+      single_year_list = Music::Albums::List.create!(
+        name: "Best Albums of 2020",
+        status: :approved,
+        num_years_covered: 1  # Single year
+      )
+
+      full_coverage_list = Music::Albums::List.create!(
+        name: "Greatest Albums of All Time",
+        status: :approved,
+        num_years_covered: nil  # No temporal restriction
+      )
+
+      # Create a temporal coverage penalty
+      temporal_penalty = Global::Penalty.create!(
+        type: "Global::Penalty",
+        name: "Limited Temporal Coverage",
+        dynamic_type: :num_years_covered
+      )
+
+      PenaltyApplication.create!(
+        penalty: temporal_penalty,
+        ranking_configuration: test_config,
+        value: 25  # 25% max penalty
+      )
+
+      # Create ranked lists
+      decade_ranked = RankedList.create!(list: decade_list, ranking_configuration: test_config)
+      single_year_ranked = RankedList.create!(list: single_year_list, ranking_configuration: test_config)
+      full_coverage_ranked = RankedList.create!(list: full_coverage_list, ranking_configuration: test_config)
+
+      # Calculate weights
+      decade_weight = WeightCalculatorV1.new(decade_ranked).call
+      single_year_weight = WeightCalculatorV1.new(single_year_ranked).call
+      full_coverage_weight = WeightCalculatorV1.new(full_coverage_ranked).call
+
+      # Full coverage (nil num_years_covered) should have no penalty
+      assert_equal 100, full_coverage_weight, "Full coverage list should have no temporal penalty"
+
+      # Single year should have more penalty than decade
+      assert_operator single_year_weight, :<, decade_weight, "Single year list should have more penalty than decade list"
+      assert_operator decade_weight, :<, full_coverage_weight, "Decade list should have some penalty compared to full coverage"
+
+      # All weights should be reasonable (not zero or negative)
+      assert_operator single_year_weight, :>, 0, "Single year weight should be positive"
+      assert_operator decade_weight, :>, 0, "Decade weight should be positive"
+    end
+
+    # Test music year range calculation with actual data
+    test "calculates music year range from actual album and song data" do
+      # Skip if no music data exists
+      skip "No music data available" if Music::Album.where.not(release_year: nil).empty? && Music::Song.where.not(release_year: nil).empty?
+
+      # Create a test music list to get access to the calculator methods
+      test_config = Music::Albums::RankingConfiguration.create!(
+        name: "Year Range Test Config #{SecureRandom.hex(4)}",
+        global: true,
+        min_list_weight: 1
+      )
+
+      test_list = Music::Albums::List.create!(
+        name: "Year Range Test List",
+        status: :approved,
+        num_years_covered: 10
+      )
+
+      test_ranked_list = RankedList.create!(list: test_list, ranking_configuration: test_config)
+      calculator = WeightCalculatorV1.new(test_ranked_list)
+
+      # Use send to access private method for testing
+      year_range = calculator.send(:calculate_music_year_range)
+
+      # Should be a reasonable number based on actual data
+      assert_kind_of Integer, year_range
+      assert_operator year_range, :>, 0, "Year range should be positive"
+      assert_operator year_range, :<=, 200, "Year range should be reasonable (not more than 200 years)"
+
+      # Verify it's calculated from actual data, not fallback
+      album_years = Music::Album.where.not(release_year: nil).pluck(:release_year)
+      song_years = Music::Song.where.not(release_year: nil).pluck(:release_year)
+      all_years = (album_years + song_years).compact
+
+      unless all_years.empty?
+        expected_range = all_years.max - all_years.min + 1
+        expected_range = [expected_range, Date.current.year - all_years.min + 1].max
+        assert_equal expected_range, year_range, "Year range should match calculated range from actual data"
+      end
+    end
+
+    # Test temporal penalty power curve calculation
+    test "applies power curve to temporal coverage penalties" do
+      # Create test configuration
+      test_config = Music::Albums::RankingConfiguration.create!(
+        name: "Power Curve Test Config #{SecureRandom.hex(4)}",
+        global: true,
+        min_list_weight: 1
+      )
+
+      # Create temporal penalty
+      temporal_penalty = Global::Penalty.create!(
+        type: "Global::Penalty",
+        name: "Temporal Coverage Power Curve Test",
+        dynamic_type: :num_years_covered
+      )
+
+      PenaltyApplication.create!(
+        penalty: temporal_penalty,
+        ranking_configuration: test_config,
+        value: 40  # 40% max penalty
+      )
+
+      # Create lists with different coverage ratios
+      # Assuming music year range is around 40 years (1985-2025 from earlier test)
+      quarter_coverage_list = Music::Albums::List.create!(
+        name: "Quarter Coverage List",
+        status: :approved,
+        num_years_covered: 10  # ~25% of total range
+      )
+
+      half_coverage_list = Music::Albums::List.create!(
+        name: "Half Coverage List",
+        status: :approved,
+        num_years_covered: 20  # ~50% of total range
+      )
+
+      # Create ranked lists
+      quarter_ranked = RankedList.create!(list: quarter_coverage_list, ranking_configuration: test_config)
+      half_ranked = RankedList.create!(list: half_coverage_list, ranking_configuration: test_config)
+
+      # Calculate weights
+      quarter_weight = WeightCalculatorV1.new(quarter_ranked).call
+      half_weight = WeightCalculatorV1.new(half_ranked).call
+
+      # Half coverage should have higher weight than quarter coverage (less penalty)
+      assert_operator half_weight, :>, quarter_weight, "Half coverage should have less penalty than quarter coverage"
+
+      # Both should have some penalty (weight < 100)
+      assert_operator quarter_weight, :<, 100, "Quarter coverage should have penalty"
+      assert_operator half_weight, :<, 100, "Half coverage should have penalty"
+
+      # Verify power curve effect: penalty difference should be non-linear
+      # (this is a qualitative test since exact values depend on actual music data)
+      penalty_difference = half_weight - quarter_weight
+      assert_operator penalty_difference, :>, 0, "Power curve should create meaningful penalty differences"
+    end
+
+    # Test that temporal penalties are only applied when num_years_covered is present
+    test "skips temporal penalty when num_years_covered is nil" do
+      # Create test configuration with temporal penalty
+      test_config = Music::Albums::RankingConfiguration.create!(
+        name: "Nil Coverage Test Config #{SecureRandom.hex(4)}",
+        global: true,
+        min_list_weight: 1
+      )
+
+      temporal_penalty = Global::Penalty.create!(
+        type: "Global::Penalty",
+        name: "Temporal Penalty Should Be Skipped",
+        dynamic_type: :num_years_covered
+      )
+
+      PenaltyApplication.create!(
+        penalty: temporal_penalty,
+        ranking_configuration: test_config,
+        value: 50  # High penalty that should be skipped
+      )
+
+      # Create list without temporal coverage
+      unlimited_list = Music::Albums::List.create!(
+        name: "Unlimited Time Coverage List",
+        status: :approved,
+        num_years_covered: nil  # No temporal restriction
+      )
+
+      unlimited_ranked = RankedList.create!(list: unlimited_list, ranking_configuration: test_config)
+      weight = WeightCalculatorV1.new(unlimited_ranked).call
+
+      # Should have full weight since temporal penalty is skipped
+      assert_equal 100, weight, "List with nil num_years_covered should skip temporal penalty"
+    end
+
+    # Test temporal penalty combined with other penalties
+    test "combines temporal penalty with other penalty types" do
+      # Create test configuration
+      test_config = Music::Albums::RankingConfiguration.create!(
+        name: "Combined Penalties Test Config #{SecureRandom.hex(4)}",
+        global: true,
+        min_list_weight: 1
+      )
+
+      # Create multiple penalty types
+      temporal_penalty = Global::Penalty.create!(
+        type: "Global::Penalty",
+        name: "Temporal Coverage Penalty",
+        dynamic_type: :num_years_covered
+      )
+
+      static_penalty = Global::Penalty.create!(
+        type: "Global::Penalty",
+        name: "Static Test Penalty"
+        # No dynamic_type = static penalty
+      )
+
+      category_penalty = Global::Penalty.create!(
+        type: "Global::Penalty",
+        name: "Category Specific Penalty",
+        dynamic_type: :category_specific
+      )
+
+      # Apply all penalties to configuration
+      PenaltyApplication.create!(penalty: temporal_penalty, ranking_configuration: test_config, value: 15)
+      PenaltyApplication.create!(penalty: static_penalty, ranking_configuration: test_config, value: 10)
+      PenaltyApplication.create!(penalty: category_penalty, ranking_configuration: test_config, value: 12)
+
+      # Create list with multiple penalty triggers
+      multi_penalty_list = Music::Albums::List.create!(
+        name: "Multiple Penalties List",
+        status: :approved,
+        num_years_covered: 5,  # Temporal penalty trigger
+        category_specific: true  # Category penalty trigger
+      )
+
+      # Associate static penalty with list
+      ListPenalty.create!(list: multi_penalty_list, penalty: static_penalty)
+
+      # Create clean list for comparison
+      clean_list = Music::Albums::List.create!(
+        name: "Clean Comparison List",
+        status: :approved,
+        num_years_covered: nil,  # No temporal penalty
+        category_specific: false  # No category penalty
+      )
+
+      # Create ranked lists
+      multi_penalty_ranked = RankedList.create!(list: multi_penalty_list, ranking_configuration: test_config)
+      clean_ranked = RankedList.create!(list: clean_list, ranking_configuration: test_config)
+
+      # Calculate weights
+      multi_penalty_weight = WeightCalculatorV1.new(multi_penalty_ranked).call
+      clean_weight = WeightCalculatorV1.new(clean_ranked).call
+
+      # Multi-penalty list should have significantly lower weight
+      assert_operator multi_penalty_weight, :<, clean_weight, "List with multiple penalties should have lower weight"
+
+      # Multi-penalty weight should still be reasonable (not zero)
+      assert_operator multi_penalty_weight, :>, 0, "Combined penalties should not zero out weight"
+      assert_operator multi_penalty_weight, :>=, test_config.min_list_weight, "Should respect minimum weight floor"
+
+      # Clean list should have full weight (only gets static penalty if associated)
+      assert_equal 100, clean_weight, "Clean list should have full weight"
+    end
   end
 end

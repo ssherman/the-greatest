@@ -40,4 +40,8 @@ class Avo::Resources::RankingConfiguration < Avo::BaseResource
     field :penalty_applications, as: :has_many
     field :penalties, as: :has_many, through: :penalty_applications
   end
+
+  def actions
+    action Avo::Actions::RankingConfigurations::BulkCalculateWeights
+  end
 end

@@ -11,6 +11,7 @@
 #  items_json            :jsonb
 #  location_specific     :boolean
 #  name                  :string           not null
+#  num_years_covered     :integer
 #  number_of_voters      :integer
 #  raw_html              :text
 #  simplified_html       :text
@@ -54,6 +55,7 @@ class List < ApplicationRecord
   validates :type, presence: true
   validates :status, presence: true
   validates :url, format: {with: URI::RFC2396_PARSER.make_regexp, allow_blank: true}
+  validates :num_years_covered, numericality: {greater_than: 0, only_integer: true}, allow_nil: true
 
   # Scopes
   scope :approved, -> { where(status: :approved) }
