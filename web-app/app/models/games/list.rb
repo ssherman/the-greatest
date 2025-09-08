@@ -11,6 +11,7 @@
 #  items_json            :jsonb
 #  location_specific     :boolean
 #  name                  :string           not null
+#  num_years_covered     :integer
 #  number_of_voters      :integer
 #  raw_html              :text
 #  simplified_html       :text

@@ -52,7 +52,7 @@ Calculates voter count penalty for a specific penalty configuration.
 ### `#calculate_attribute_penalties`
 Calculates penalties based on list attributes.
 - Returns: Float - total attribute penalty percentage
-- Includes: unknown data penalties, bias penalties
+- Includes: unknown data penalties, bias penalties, temporal coverage penalties
 
 ### `#calculate_unknown_data_penalties`
 Penalties for lists with missing voter information.
@@ -63,6 +63,25 @@ Penalties for lists with missing voter information.
 Penalties for lists with geographic or category bias.
 - Returns: Float - penalty percentage  
 - Applied when: category_specific or location_specific
+
+### `#calculate_temporal_coverage_penalty`
+Calculates penalties based on temporal coverage (num_years_covered field).
+- Returns: Float - total temporal penalty percentage
+- Applied when: list has num_years_covered set and temporal penalties are configured
+
+### `#calculate_temporal_coverage_penalty_for_penalty(penalty, exponent: 2.0)`
+Calculates temporal coverage penalty for a specific penalty configuration.
+- Parameters: penalty (Penalty), exponent (Float, default: 2.0)
+- Returns: Float - penalty value clamped between 0 and max penalty
+- Uses media-specific year range calculations
+- Power curve formula: `max_penalty * ((1.0 - (years_covered / max_range))^exponent)`
+
+### `#calculate_media_year_range`
+Determines the maximum historical year range for the list's media type.
+- Returns: Integer - total year range for the media type
+- Music: Uses actual release_year data from albums and songs
+- Books: Uses estimated range (~5000 years)
+- Movies/Games: Uses estimated ranges with fallbacks
 
 ### `#find_penalty_value_by_dynamic_type(dynamic_type)`
 Finds and sums penalty values for a specific dynamic penalty type.
@@ -95,6 +114,7 @@ None (service object)
 2. **Voter Count Penalties**: Dynamic penalties based on median voter count
 3. **Unknown Data Penalties**: For missing voter information
 4. **Bias Penalties**: For category/location-specific lists
+5. **Temporal Coverage Penalties**: For lists with limited time coverage (num_years_covered)
 
 ### Quality Source Bonus
 High quality sources (lists marked as `high_quality_source: true`) get a 33% reduction in total penalty percentage applied after all penalties are calculated.

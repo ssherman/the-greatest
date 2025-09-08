@@ -17,11 +17,24 @@ docs/
 │   │   ├── movie.md
 │   │   └── director.md
 │   ├── user.md
+│   ├── list.md
+│   ├── penalty.md
 │   └── review.md
+├── lib/
+│   └── rankings/
+│       ├── weight_calculator.md
+│       ├── weight_calculator_v1.md
+│       └── bulk_weight_calculator.md
+├── jobs/
+│   └── bulk_calculate_weights_job.md
 ├── services/
 │   ├── books/
 │   │   └── import_service.md
 │   └── recommendation_service.md
+├── admin/
+│   └── actions/
+│       ├── bulk_calculate_weights.md
+│       └── import_from_musicbrainz_series.md
 └── controllers/
     ├── books/
     │   └── books_controller.md

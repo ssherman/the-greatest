@@ -35,7 +35,8 @@ class Penalty < ApplicationRecord
     voter_names_unknown: 2,
     voter_count_unknown: 3,
     category_specific: 4,
-    location_specific: 5
+    location_specific: 5,
+    num_years_covered: 6
   }, allow_nil: true
 
   # Validations
