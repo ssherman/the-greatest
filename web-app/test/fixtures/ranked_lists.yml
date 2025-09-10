@@ -35,6 +35,21 @@ music_albums_ranked_list:
   list: music_albums_list
   ranking_configuration: music_albums_global
 
+rolling_stone_albums_ranked:
+  weight: 20
+  list: rolling_stone_albums
+  ranking_configuration: music_albums_global
+
+pitchfork_albums_ranked:
+  weight: 15
+  list: pitchfork_albums
+  ranking_configuration: music_albums_global
+
+nme_albums_ranked:
+  weight: 10
+  list: nme_albums
+  ranking_configuration: music_albums_global
+
 music_songs_ranked_list:
   weight: 10
   list: music_songs_list

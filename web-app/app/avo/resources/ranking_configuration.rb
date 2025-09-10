@@ -43,5 +43,6 @@ class Avo::Resources::RankingConfiguration < Avo::BaseResource
 
   def actions
     action Avo::Actions::RankingConfigurations::BulkCalculateWeights
+    action Avo::Actions::RankingConfigurations::RefreshRankings
   end
 end

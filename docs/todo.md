@@ -17,6 +17,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-09-10] [Implement Item Rankings](todos/036-implement-item-rankings.md)
 - ✅ [2025-09-07] [Seed Penalties with Dynamic Types](todos/035-seed-penalties.md)
 - ✅ [2025-09-07] [Import List Items from MusicBrainz Series](todos/034-import-list-items-from-series.md)
 - ✅ [2025-09-04] [Auto-Import Album Releases Background Job](todos/033-auto-import-releases.md)

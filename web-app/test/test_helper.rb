@@ -2,6 +2,10 @@ ENV["RAILS_ENV"] ||= "test"
 require_relative "../config/environment"
 require "rails/test_help"
 require "mocha/minitest"
+require "sidekiq/testing"
+
+# Configure Sidekiq to run jobs inline during tests
+Sidekiq::Testing.inline!
 
 module ActiveSupport
   class TestCase

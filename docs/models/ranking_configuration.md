@@ -46,6 +46,23 @@ Calculates the median number of voters across all lists in this ranking configur
   4. Calculates median for odd/even length arrays
 - Used by: Weight calculation services for dynamic penalty calculations
 
+### `#calculate_rankings`
+Synchronously calculates rankings for this configuration using weighted_list_rank gem
+- Returns: ItemRankings::Calculator::Result with success?, data, errors
+- Side effects: Updates ranked_items in database with new ranks and scores
+- Algorithm: Uses exponential scoring strategy with configurable parameters
+
+### `#calculate_rankings_async`
+Queues background job for asynchronous ranking calculation
+- Returns: Sidekiq job ID
+- Side effects: Enqueues CalculateRankingsJob for background processing
+
+### `#calculator_service`
+Factory method returning appropriate calculator instance based on configuration type
+- Returns: Type-specific calculator (e.g., ItemRankings::Music::Albums::Calculator)
+- Caching: Instances cached per configuration for performance
+- Supported types: Books, Movies, Games, Music::Albums, Music::Songs
+
 ## Validations
 - `name`: presence, max 255 chars
 - `algorithm_version`: presence, integer > 0
@@ -104,6 +121,9 @@ _None defined in this model._
 - `List` model (for mapped lists)
 - STI subclasses for each media type (e.g., Books::RankingConfiguration)
 - `RankedItem` and `RankedList` models (for ranking results)
+- ItemRankings calculator services for ranking calculations
+- CalculateRankingsJob for background processing
+- weighted_list_rank gem for ranking algorithm
 
 ## Design Notes
 - Uses STI for media-specific logic and defaults

@@ -30,6 +30,12 @@ Triggers AI-powered parsing of the list's raw HTML content into structured data.
 - Side effects: Updates simplified_html and items_json fields on success
 - Uses: Services::Lists::ImportService for orchestration
 
+### `.median_list_count(type:)` *(Class Method)*
+Calculates the median number of items across all lists of a specific type
+- Parameters: type (String) - List type to filter by (e.g., "Music::Albums::List")
+- Returns: Numeric median count used for ranking algorithm normalization
+- Used by: ItemRankings calculator services for algorithm optimization
+
 **Note:** Penalty calculation logic has been moved to service objects (`Rankings::WeightCalculatorV1`) following "Skinny Models, Fat Services" principles. The model only provides data access methods.
 
 ## Validations
