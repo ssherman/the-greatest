@@ -6,6 +6,8 @@ Every class in the application should have a corresponding markdown documentatio
 ## Documentation Structure
 
 ### File Organization
+**IMPORTANT**: All documentation files go in the top-level `docs/` directory, NOT in `web-app/docs/` or any subdirectory within the application code.
+
 Mirror the application structure with `.md` files:
 ```
 docs/
@@ -25,7 +27,7 @@ docs/
 │       ├── weight_calculator.md
 │       ├── weight_calculator_v1.md
 │       └── bulk_weight_calculator.md
-├── jobs/
+├── sidekiq/
 │   └── bulk_calculate_weights_job.md
 ├── services/
 │   ├── books/
@@ -35,11 +37,24 @@ docs/
 │   └── actions/
 │       ├── bulk_calculate_weights.md
 │       └── import_from_musicbrainz_series.md
-└── controllers/
-    ├── books/
-    │   └── books_controller.md
-    └── application_controller.md
+├── controllers/
+│   ├── books/
+│   │   └── books_controller.md
+│   └── application_controller.md
+└── features/
+    └── rankings.md
 ```
+
+### Special Directories
+
+#### `docs/features/`
+For high-level feature documentation that spans multiple classes or provides system overviews. Use this for:
+- Feature introductions and architecture overviews
+- Cross-cutting concerns that involve multiple models/services
+- User-facing feature documentation
+- Implementation guides for complex features
+
+**Note**: Feature documentation supplements, but does not replace, individual class documentation.
 
 ## Documentation Template
 
@@ -159,6 +174,21 @@ Finds related books based on genre and author
 - Implementation details that may change
 - Temporary workarounds
 - Obvious Rails conventions
+- System-wide overviews that belong in `docs/features/`
+
+## Common Documentation Mistakes
+
+### File Location Errors
+- ❌ **Wrong**: Creating docs in `web-app/docs/` or other subdirectories
+- ✅ **Right**: All documentation in top-level `docs/` directory
+- ❌ **Wrong**: Creating docs in `docs/jobs/` 
+- ✅ **Right**: Sidekiq jobs go in `docs/sidekiq/`
+
+### Documentation Type Confusion
+- ❌ **Wrong**: Creating model-specific "changes" files
+- ✅ **Right**: Update existing model documentation with new methods
+- ❌ **Wrong**: Creating system overviews as individual class docs
+- ✅ **Right**: Use `docs/features/` for feature overviews, individual class docs for specific classes
 
 ## Benefits
 - Faster onboarding for new developers
