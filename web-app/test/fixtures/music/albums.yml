@@ -33,3 +33,21 @@ animals:
   slug: "animals"
   description: "Tenth studio album by Pink Floyd, released in 1977, featuring themes of social and political commentary."
   release_year: 1977
+
+abbey_road:
+  title: "Abbey Road"
+  slug: "abbey-road"
+  description: "Eleventh studio album by The Beatles, released in 1969."
+  release_year: 1969
+
+nevermind:
+  title: "Nevermind"
+  slug: "nevermind"
+  description: "Second studio album by Nirvana, released in 1991."
+  release_year: 1991
+
+thriller:
+  title: "Thriller"
+  slug: "thriller"
+  description: "Sixth studio album by Michael Jackson, released in 1982."
+  release_year: 1982

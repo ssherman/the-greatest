@@ -79,6 +79,9 @@ module Music
 
     # SearchIndexable concern tests
     test "should create search index request on create" do
+      # Stub the release import job since we're only testing search indexing
+      Music::ImportAlbumReleasesJob.stubs(:perform_async)
+
       artist = music_artists(:pink_floyd)
       album = nil
 

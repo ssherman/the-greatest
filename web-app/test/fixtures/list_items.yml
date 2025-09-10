@@ -63,6 +63,69 @@ music_albums_item:
   listable: dark_side_of_the_moon (Music::Album)
   position: 1
 
+music_albums_item_2:
+  list: music_albums_list
+  listable: wish_you_were_here (Music::Album)
+  position: 2
+
+music_albums_item_3:
+  list: music_albums_list
+  listable: abbey_road (Music::Album)
+  position: 3
+
+# Rolling Stone list items
+rolling_stone_item_1:
+  list: rolling_stone_albums
+  listable: abbey_road (Music::Album)
+  position: 1
+
+rolling_stone_item_2:
+  list: rolling_stone_albums
+  listable: dark_side_of_the_moon (Music::Album)
+  position: 2
+
+rolling_stone_item_3:
+  list: rolling_stone_albums
+  listable: thriller (Music::Album)
+  position: 3
+
+rolling_stone_item_4:
+  list: rolling_stone_albums
+  listable: nevermind (Music::Album)
+  position: 4
+
+# Pitchfork list items
+pitchfork_item_1:
+  list: pitchfork_albums
+  listable: dark_side_of_the_moon (Music::Album)
+  position: 1
+
+pitchfork_item_2:
+  list: pitchfork_albums
+  listable: wish_you_were_here (Music::Album)
+  position: 2
+
+pitchfork_item_3:
+  list: pitchfork_albums
+  listable: nevermind (Music::Album)
+  position: 3
+
+# NME list items  
+nme_item_1:
+  list: nme_albums
+  listable: nevermind (Music::Album)
+  position: 1
+
+nme_item_2:
+  list: nme_albums
+  listable: abbey_road (Music::Album)
+  position: 2
+
+nme_item_3:
+  list: nme_albums
+  listable: animals (Music::Album)
+  position: 3
+
 music_songs_item:
   list: music_songs_list
   listable: wish_you_were_here (Music::Song)

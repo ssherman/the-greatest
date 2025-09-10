@@ -45,7 +45,7 @@ class List < ApplicationRecord
   has_many :ai_chats, as: :parent, dependent: :destroy
 
   # Enums
-  enum :status, {unapproved: 0, approved: 1, rejected: 2}
+  enum :status, {unapproved: 0, approved: 1, rejected: 2, active: 3}
 
   # Callbacks
   before_save :auto_simplify_html, if: :should_simplify_html?
@@ -78,6 +78,28 @@ class List < ApplicationRecord
 
   def parse_with_ai!
     Services::Lists::ImportService.call(self)
+  end
+
+  def self.median_list_count(type: nil)
+    # Get lists of the specified type, or all lists if no type specified
+    scope = type ? where(type: type) : all
+
+    # Get list item counts for lists that have items
+    counts = scope.joins(:list_items)
+      .group("lists.id")
+      .count("list_items.id")
+      .values
+      .sort
+
+    return 0 if counts.empty?
+
+    # Calculate median
+    len = counts.length
+    if len.odd?
+      counts[len / 2]
+    else
+      (counts[len / 2 - 1] + counts[len / 2]) / 2.0
+    end
   end
 
   private

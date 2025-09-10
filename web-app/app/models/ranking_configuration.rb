@@ -117,6 +117,31 @@ class RankingConfiguration < ApplicationRecord
     new_config
   end
 
+  def calculate_rankings
+    calculator_service.call
+  end
+
+  def calculate_rankings_async
+    CalculateRankingsJob.perform_async(id)
+  end
+
+  def calculator_service
+    @calculator_service ||= case type
+    when "Books::RankingConfiguration"
+      ItemRankings::Books::Calculator.new(self)
+    when "Movies::RankingConfiguration"
+      ItemRankings::Movies::Calculator.new(self)
+    when "Games::RankingConfiguration"
+      ItemRankings::Games::Calculator.new(self)
+    when "Music::Albums::RankingConfiguration"
+      ItemRankings::Music::Albums::Calculator.new(self)
+    when "Music::Songs::RankingConfiguration"
+      ItemRankings::Music::Songs::Calculator.new(self)
+    else
+      raise "Unknown ranking configuration type: #{type}"
+    end
+  end
+
   def median_voter_count
     # Get all lists associated with this ranking configuration
     list_ids = ranked_lists.pluck(:list_id)

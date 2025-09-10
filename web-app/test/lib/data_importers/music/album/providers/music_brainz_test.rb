@@ -548,6 +548,9 @@ module DataImporters
           end
 
           test "populate with release_group_musicbrainz_id processes genres from both tags and genres" do
+            # Stub the release import job since we're testing MusicBrainz data population
+            ::Music::ImportAlbumReleasesJob.stubs(:perform_async)
+
             mbid = "6b9a9e04-abd7-4666-86ba-bb220ef4c3b2"
             query = ImportQuery.new(release_group_musicbrainz_id: mbid)
             album = ::Music::Album.create!(title: "Test Album", slug: "test-album-lookup-genres")

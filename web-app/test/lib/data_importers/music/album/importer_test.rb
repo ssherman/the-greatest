@@ -8,6 +8,8 @@ module DataImporters
       class ImporterTest < ActiveSupport::TestCase
         def setup
           @artist = music_artists(:pink_floyd)
+          # Stub the release import job since we're testing album importing
+          ::Music::ImportAlbumReleasesJob.stubs(:perform_async)
         end
 
         test "call with artist and title creates and imports new album" do

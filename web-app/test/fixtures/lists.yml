@@ -106,9 +106,39 @@ music_albums_list:
   name: Music Albums Test List
   description: A music albums list
   source: Music Albums Source
-  status: 1
+  status: 3
   estimated_quality: 75
   musicbrainz_series_id: "test-series-mbid-123"
+  year_published: 2020
+
+# Additional music album lists for ranking tests
+rolling_stone_albums:
+  type: Music::Albums::List
+  name: Rolling Stone Top Albums
+  description: Rolling Stone's greatest albums of all time
+  source: Rolling Stone
+  status: 3
+  estimated_quality: 95
+  high_quality_source: true
+  year_published: 2021
+
+pitchfork_albums:
+  type: Music::Albums::List
+  name: Pitchfork Top Albums
+  description: Pitchfork's best albums
+  source: Pitchfork
+  status: 3
+  estimated_quality: 85
+  year_published: 2022
+
+nme_albums:
+  type: Music::Albums::List
+  name: NME Greatest Albums
+  description: NME's greatest albums list
+  source: NME
+  status: 3
+  estimated_quality: 80
+  year_published: 2019
 
 music_songs_list:
   type: Music::Songs::List
