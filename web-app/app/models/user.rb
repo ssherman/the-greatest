@@ -70,6 +70,7 @@ class User < ApplicationRecord
 
   def confirmation_token_expired?
     return false if confirmation_sent_at.nil?
+
     confirmation_sent_at < 24.hours.ago
   end
 end

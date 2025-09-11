@@ -21,6 +21,7 @@
 module Movies
   class Person < ApplicationRecord
     extend FriendlyId
+
     friendly_id :name, use: [:slugged, :finders]
 
     # Enums

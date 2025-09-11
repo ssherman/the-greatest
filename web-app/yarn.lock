@@ -485,9 +485,9 @@
   integrity sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==
 
 "@jridgewell/trace-mapping@^0.3.24":
-  version "0.3.30"
-  resolved "https://registry.yarnpkg.com/@jridgewell/trace-mapping/-/trace-mapping-0.3.30.tgz#4a76c4daeee5df09f5d3940e087442fb36ce2b99"
-  integrity sha512-GQ7Nw5G2lTu/BtHTKfXhKHok2WGetd4XYcVKGx00SjAk8GMwgJM3zr6zORiPGuOE+/vkc90KtTosSSvaCjKb2Q==
+  version "0.3.31"
+  resolved "https://registry.yarnpkg.com/@jridgewell/trace-mapping/-/trace-mapping-0.3.31.tgz#db15d6781c931f3a251a3dac39501c98a6082fd0"
+  integrity sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==
   dependencies:
     "@jridgewell/resolve-uri" "^3.1.0"
     "@jridgewell/sourcemap-codec" "^1.4.14"
@@ -888,9 +888,9 @@
     "@tailwindcss/oxide-win32-x64-msvc" "4.1.13"
 
 "@tybys/wasm-util@^0.10.0":
-  version "0.10.0"
-  resolved "https://registry.yarnpkg.com/@tybys/wasm-util/-/wasm-util-0.10.0.tgz#2fd3cd754b94b378734ce17058d0507c45c88369"
-  integrity sha512-VyyPYFlOMNylG45GoAe0xDoLwWuowvf92F9kySqzYh8vmYm7D2u4iUJKa1tOUpS70Ku13ASrOkS4ScXFsTaCNQ==
+  version "0.10.1"
+  resolved "https://registry.yarnpkg.com/@tybys/wasm-util/-/wasm-util-0.10.1.tgz#ecddd3205cf1e2d5274649ff0eedd2991ed7f414"
+  integrity sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg==
   dependencies:
     tslib "^2.4.0"
 
@@ -957,9 +957,9 @@ color-name@~1.1.4:
   integrity sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==
 
 daisyui@^5.0.43:
-  version "5.1.9"
-  resolved "https://registry.yarnpkg.com/daisyui/-/daisyui-5.1.9.tgz#781cab9c006e3c170c95bb76809bab0706cd7a50"
-  integrity sha512-ucptlYpiVMiY33VCehYoO1jI3cVjo4TbTKTr+zNG7sV+FO9UFUKiT54mynoUjIwWi2FXxrm0vDPj+2PmXGkXgA==
+  version "5.1.10"
+  resolved "https://registry.yarnpkg.com/daisyui/-/daisyui-5.1.10.tgz#06be57a845e878cb8582538ec33832effade9e3d"
+  integrity sha512-p1J/HME2WmaSiy6u2alIbeP3gd5PNVft3+6Bdll0BRSm/UdI4084+pD01LxFug/5wGexNewWqbcEL6nB2n2o+Q==
 
 deepmerge@^4.2.2:
   version "4.3.1"

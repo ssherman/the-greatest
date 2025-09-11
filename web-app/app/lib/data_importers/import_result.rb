@@ -48,6 +48,7 @@ module DataImporters
     def item_saved?
       return false unless item
       return item.persisted? if item.respond_to?(:persisted?)
+
       false
     end
   end

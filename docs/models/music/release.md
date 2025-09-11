@@ -9,6 +9,9 @@ Represents a specific commercial release of an album (e.g., "Dark Side of the Mo
 - `has_many :songs, through: :tracks, class_name: "Music::Song"` — All songs included on this release
 - `has_many :credits, as: :creditable, class_name: "Music::Credit"` — Polymorphic association for release-specific credits
 - `has_many :identifiers, as: :identifiable, dependent: :destroy` — External identifiers for data import and deduplication
+- `has_many :song_relationships, class_name: "Music::SongRelationship", foreign_key: :source_release_id` — Song relationships that reference this release as source
+- `has_many :images, as: :parent, dependent: :destroy` — **NEW (Sept 2025)**: All images for this release (cover art, liner notes, promotional materials, etc.)
+- `has_one :primary_image, -> { where(primary: true) }, as: :parent, class_name: "Image"` — **NEW (Sept 2025)**: Primary image for ranking views and display
 
 ## Public Methods
 None

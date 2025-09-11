@@ -23,6 +23,7 @@ class Music::Song < ApplicationRecord
   include SearchIndexable
 
   extend FriendlyId
+
   friendly_id :title, use: [:slugged, :finders]
 
   # Associations

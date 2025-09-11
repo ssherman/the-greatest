@@ -7,6 +7,7 @@ module DataImporters
       class Finder < DataImporters::FinderBase
         def call(query:)
           return find_existing_item(query) if query.musicbrainz_id.present?
+
           find_existing_item_by_name(query)
         end
 

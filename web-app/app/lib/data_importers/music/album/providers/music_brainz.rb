@@ -249,6 +249,7 @@ module DataImporters
           def find_or_create_music_categories(names, category_type:)
             names.map do |name|
               next if name.blank?
+
               ::Music::Category.find_or_create_by!(
                 name: name,
                 category_type: category_type,
@@ -260,6 +261,7 @@ module DataImporters
           # Normalizes a MusicBrainz tag to Title Case preserving hyphens
           def normalize_tag_name(name)
             return "" if name.blank?
+
             # Preserve hyphens within words while capitalizing each part (e.g., "synth-pop" => "Synth-Pop")
             name.split(/\s+/).map { |word| word.split("-").map(&:capitalize).join("-") }.join(" ")
           end

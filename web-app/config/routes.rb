@@ -28,4 +28,16 @@ Rails.application.routes.draw do
 
   # Health check
   get "up" => "rails/health#show", :as => :rails_health_check
+
+  # Custom direct route for serving images via CDN
+  direct :rails_public_blob do |key|
+    case Rails.env
+    when "development"
+      File.join("https://images-dev.thegreatestmusic.org", key)
+    when "production"
+      File.join("https://images.thegreatestmusic.org", key)
+    else
+      File.join("https://images-dev.thegreatestmusic.org", key)
+    end
+  end
 end

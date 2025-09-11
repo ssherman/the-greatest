@@ -22,6 +22,8 @@ class Avo::Resources::MusicRelease < Avo::BaseResource
     field :songs, as: :has_many, through: :tracks
     field :identifiers, as: :has_many
     field :credits, as: :has_many
+    field :images, as: :has_many
+    field :primary_image, as: :has_one, readonly: true
 
     # Additional info
     field :created_at, as: :date_time, readonly: true

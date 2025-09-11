@@ -24,6 +24,7 @@ class Music::Artist < ApplicationRecord
   include SearchIndexable
 
   extend FriendlyId
+
   friendly_id :name, use: [:slugged, :finders]
 
   # Enums
@@ -43,6 +44,10 @@ class Music::Artist < ApplicationRecord
   # Category associations
   has_many :category_items, as: :item, dependent: :destroy
   has_many :categories, through: :category_items, class_name: "Music::Category"
+
+  # Image associations
+  has_many :images, as: :parent, dependent: :destroy
+  has_one :primary_image, -> { where(primary: true) }, as: :parent, class_name: "Image"
 
   # Validations
   validates :name, presence: true

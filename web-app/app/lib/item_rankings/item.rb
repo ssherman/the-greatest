@@ -3,6 +3,7 @@
 module ItemRankings
   class Item
     include WeightedListRank::Item
+
     attr_reader :id, :position, :score_penalty
 
     def initialize(id, position, score_penalty = nil)
