@@ -17,6 +17,7 @@ Represents a musical composition independent of any specific recording. This is 
 - `has_many :identifiers, as: :identifiable, dependent: :destroy` — External identifiers for data import and deduplication
 - `has_many :category_items, as: :item, dependent: :destroy` — Polymorphic association for category assignments
 - `has_many :categories, through: :category_items, class_name: "Music::Category"` — All categories this song belongs to
+- `has_many :external_links, as: :parent, dependent: :destroy` — **NEW (Sept 2025)**: External links (purchase, information, reviews) for this song
 
 ## Public Methods
 

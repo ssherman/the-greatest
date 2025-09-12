@@ -40,6 +40,9 @@ class Music::Song < ApplicationRecord
   has_many :category_items, as: :item, dependent: :destroy
   has_many :categories, through: :category_items, class_name: "Music::Category"
 
+  # External link associations
+  has_many :external_links, as: :parent, dependent: :destroy
+
   # Song relationships
   has_many :song_relationships, class_name: "Music::SongRelationship", foreign_key: :song_id, dependent: :destroy
   has_many :related_songs, through: :song_relationships, source: :related_song

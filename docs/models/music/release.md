@@ -12,6 +12,7 @@ Represents a specific commercial release of an album (e.g., "Dark Side of the Mo
 - `has_many :song_relationships, class_name: "Music::SongRelationship", foreign_key: :source_release_id` — Song relationships that reference this release as source
 - `has_many :images, as: :parent, dependent: :destroy` — **NEW (Sept 2025)**: All images for this release (cover art, liner notes, promotional materials, etc.)
 - `has_one :primary_image, -> { where(primary: true) }, as: :parent, class_name: "Image"` — **NEW (Sept 2025)**: Primary image for ranking views and display
+- `has_many :external_links, as: :parent, dependent: :destroy` — **NEW (Sept 2025)**: External links (purchase, information, reviews) for this release
 
 ## Public Methods
 None

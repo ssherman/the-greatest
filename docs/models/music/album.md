@@ -13,6 +13,7 @@ Represents a canonical album/work (e.g., "Dark Side of the Moon"). This is the c
 - `has_many :categories, through: :category_items, class_name: "Music::Category"` — All categories this album belongs to
 - `has_many :images, as: :parent, dependent: :destroy` — **NEW (Sept 2025)**: All images for this album (covers, artwork, liner notes, etc.)
 - `has_one :primary_image, -> { where(primary: true) }, as: :parent, class_name: "Image"` — **NEW (Sept 2025)**: Primary image for ranking views and display
+- `has_many :external_links, as: :parent, dependent: :destroy` — **NEW (Sept 2025)**: External links (purchase, information, reviews) for this album
 
 ## Public Methods
 

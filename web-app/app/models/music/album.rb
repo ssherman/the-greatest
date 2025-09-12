@@ -38,6 +38,9 @@ class Music::Album < ApplicationRecord
   has_many :images, as: :parent, dependent: :destroy
   has_one :primary_image, -> { where(primary: true) }, as: :parent, class_name: "Image"
 
+  # External link associations
+  has_many :external_links, as: :parent, dependent: :destroy
+
   # Validations
   validates :title, presence: true
   validates :release_year, numericality: {only_integer: true, allow_nil: true}

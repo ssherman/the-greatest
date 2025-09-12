@@ -1,3 +1,21 @@
+# == Schema Information
+#
+# Table name: images
+#
+#  id          :bigint           not null, primary key
+#  metadata    :json
+#  notes       :text
+#  parent_type :string           not null
+#  primary     :boolean          default(FALSE), not null
+#  created_at  :datetime         not null
+#  updated_at  :datetime         not null
+#  parent_id   :bigint           not null
+#
+# Indexes
+#
+#  index_images_on_parent              (parent_type,parent_id)
+#  index_images_on_parent_and_primary  (parent_type,parent_id,primary)
+#
 require "test_helper"
 
 class ImageTest < ActiveSupport::TestCase
