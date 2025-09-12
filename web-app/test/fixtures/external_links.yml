@@ -1,0 +1,82 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+# == Schema Information
+#
+# Table name: external_links
+#
+#  id              :bigint           not null, primary key
+#  click_count     :integer          default(0), not null
+#  description     :text
+#  link_category   :integer
+#  metadata        :jsonb
+#  name            :string           not null
+#  parent_type     :string           not null
+#  price_cents     :integer
+#  public          :boolean          default(TRUE), not null
+#  source          :integer
+#  source_name     :string
+#  url             :string           not null
+#  created_at      :datetime         not null
+#  updated_at      :datetime         not null
+#  parent_id       :bigint           not null
+#  submitted_by_id :bigint
+#
+# Indexes
+#
+#  index_external_links_on_click_count                (click_count)
+#  index_external_links_on_parent                     (parent_type,parent_id)
+#  index_external_links_on_parent_type_and_parent_id  (parent_type,parent_id)
+#  index_external_links_on_public                     (public)
+#  index_external_links_on_source                     (source)
+#  index_external_links_on_submitted_by_id            (submitted_by_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (submitted_by_id => users.id)
+#
+david_bowie_amazon:
+  name: "Blackstar (Vinyl)"
+  description: "David Bowie's final studio album on vinyl"
+  url: "https://amazon.com/blackstar-vinyl"
+  price_cents: 2499
+  source: 0  # amazon
+  link_category: 0  # product_link
+  parent: david_bowie (Music::Artist)
+  public: true
+  click_count: 5
+  metadata: '{"affiliate_id": "greatestmusic-20"}'
+
+beatles_discogs:
+  name: "The Beatles Discography"
+  description: "Complete discography on Discogs"
+  url: "https://discogs.com/artist/the-beatles"
+  source: 4  # discogs
+  link_category: 2  # information
+  parent: the_beatles (Music::Artist)
+  public: true
+  click_count: 12
+  metadata: '{}'
+
+private_link:
+  name: "Internal Research Link"
+  description: "Private link for internal use"
+  url: "https://internal.example.com/research"
+  source: 6  # other
+  source_name: "Internal Research"
+  link_category: 3  # misc
+  parent: david_bowie (Music::Artist)
+  public: false
+  click_count: 0
+  metadata: '{}'
+
+custom_source_link:
+  name: "Last.fm Profile"
+  description: "Artist profile on Last.fm"
+  url: "https://last.fm/music/David+Bowie"
+  source: 6  # other
+  source_name: "Last.fm"
+  link_category: 2  # information
+  parent: david_bowie (Music::Artist)
+  public: true
+  click_count: 8
+  metadata: '{}' 

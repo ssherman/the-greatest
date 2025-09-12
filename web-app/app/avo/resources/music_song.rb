@@ -16,6 +16,15 @@ class Avo::Resources::MusicSong < Avo::BaseResource
     field :release_year, as: :number
     field :isrc, as: :text
     field :lyrics, as: :textarea
+
+    # Associations
+    field :artists, as: :has_many
+    field :categories, as: :has_many
+    field :identifiers, as: :has_many
+    field :credits, as: :has_many
+    field :tracks, as: :has_many
+    field :external_links, as: :has_many
+
     field :created_at, as: :date_time, readonly: true
     field :updated_at, as: :date_time, readonly: true
   end

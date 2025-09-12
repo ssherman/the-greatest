@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_09_11_042017) do
+ActiveRecord::Schema[8.0].define(version: 2025_09_12_051642) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -92,6 +92,30 @@ ActiveRecord::Schema[8.0].define(version: 2025_09_11_042017) do
     t.index ["category_id"], name: "index_category_items_on_category_id"
     t.index ["item_type", "item_id"], name: "index_category_items_on_item"
     t.index ["item_type", "item_id"], name: "index_category_items_on_item_type_and_item_id"
+  end
+
+  create_table "external_links", force: :cascade do |t|
+    t.string "name", null: false
+    t.text "description"
+    t.string "url", null: false
+    t.integer "price_cents"
+    t.integer "source"
+    t.string "source_name"
+    t.integer "link_category"
+    t.string "parent_type", null: false
+    t.bigint "parent_id", null: false
+    t.bigint "submitted_by_id"
+    t.boolean "public", default: true, null: false
+    t.integer "click_count", default: 0, null: false
+    t.jsonb "metadata", default: "{}"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["click_count"], name: "index_external_links_on_click_count", order: :desc
+    t.index ["parent_type", "parent_id"], name: "index_external_links_on_parent"
+    t.index ["parent_type", "parent_id"], name: "index_external_links_on_parent_type_and_parent_id"
+    t.index ["public"], name: "index_external_links_on_public"
+    t.index ["source"], name: "index_external_links_on_source"
+    t.index ["submitted_by_id"], name: "index_external_links_on_submitted_by_id"
   end
 
   create_table "friendly_id_slugs", force: :cascade do |t|
@@ -501,6 +525,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_09_11_042017) do
   add_foreign_key "ai_chats", "users"
   add_foreign_key "categories", "categories", column: "parent_id"
   add_foreign_key "category_items", "categories"
+  add_foreign_key "external_links", "users", column: "submitted_by_id"
   add_foreign_key "list_items", "lists"
   add_foreign_key "list_penalties", "lists"
   add_foreign_key "list_penalties", "penalties"

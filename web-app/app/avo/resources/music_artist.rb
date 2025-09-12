@@ -25,6 +25,7 @@ class Avo::Resources::MusicArtist < Avo::BaseResource
     field :credits, as: :has_many
     field :images, as: :has_many
     field :primary_image, as: :has_one, readonly: true
+    field :external_links, as: :has_many
 
     # Additional info
     field :created_at, as: :date_time, readonly: true
