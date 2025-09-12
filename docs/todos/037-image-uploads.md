@@ -89,6 +89,7 @@ Successfully implemented a comprehensive image upload system using Rails Active 
 - Updated blob content_type access to use `file.blob.content_type` instead of `file.content_type`
 - Corrected polymorphic fixture syntax to use `parent: fixture_name (ClassName)` format
 - Ensured metadata field was JSONB with proper accessor configuration
+- **CRITICAL FIX**: Fixed direct route to accept ActiveStorage::Blob object instead of string key (blob.key vs key)
 
 ### Deviations from Plan
 - Used `image_processing` gem alongside `ruby-vips` as both are needed for Active Storage variants
@@ -121,6 +122,11 @@ cloudflare:
   secret_access_key: <%= ENV['STORAGE_SECRET_ACCESS_KEY'] %>
   region: auto
   bucket: <%= ENV['STORAGE_BUCKET'] %>
+
+# Direct CDN route (CORRECTED)
+direct :rails_public_blob do |blob|
+  File.join("https://images-dev.thegreatestmusic.org", blob.key)
+end
 ```
 
 ### Testing Approach
