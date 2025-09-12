@@ -43,6 +43,7 @@ class Music::Membership < ApplicationRecord
 
   def artist_is_band
     return unless artist
+
     unless artist.band?
       errors.add(:artist, "must be a band")
     end
@@ -50,6 +51,7 @@ class Music::Membership < ApplicationRecord
 
   def member_is_person
     return unless member
+
     unless member.person?
       errors.add(:member, "must be a person")
     end
@@ -63,6 +65,7 @@ class Music::Membership < ApplicationRecord
 
   def date_consistency
     return unless joined_on && left_on
+
     if left_on < joined_on
       errors.add(:left_on, "cannot be before joined_on")
     end

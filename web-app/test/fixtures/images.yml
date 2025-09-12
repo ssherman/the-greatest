@@ -1,0 +1,37 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+david_bowie_photo:
+  parent: david_bowie (Music::Artist)
+  notes: "Profile photo of David Bowie"
+  metadata: {}
+  primary: true
+
+david_bowie_photo_alt:
+  parent: david_bowie (Music::Artist)
+  notes: "Alternative photo of David Bowie"
+  metadata: {}
+  primary: false
+
+dark_side_cover:
+  parent: dark_side_of_the_moon (Music::Album)  
+  notes: "Album cover for The Dark Side of the Moon"
+  metadata: {}
+  primary: true
+
+dark_side_alt_cover:
+  parent: dark_side_of_the_moon (Music::Album)
+  notes: "Alternative cover for The Dark Side of the Moon"
+  metadata: {}
+  primary: false
+
+dark_side_original_release_cover:
+  parent: dark_side_original (Music::Release)
+  notes: "Original 1973 release cover artwork"
+  metadata: {}
+  primary: true
+
+dark_side_remaster_cover:
+  parent: dark_side_remaster (Music::Release)
+  notes: "2011 remaster cover artwork"
+  metadata: {}
+  primary: true

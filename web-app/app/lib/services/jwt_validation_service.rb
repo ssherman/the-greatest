@@ -17,6 +17,7 @@ module Services
       if project_id && payload["aud"] != project_id
         raise JWT::InvalidAudError, "Invalid audience: #{payload["aud"]}"
       end
+
       payload
     end
 
@@ -30,6 +31,7 @@ module Services
       certs = JSON.parse(response.body)
       cert_pem = certs[kid]
       raise JWT::DecodeError, "Unknown key ID" unless cert_pem
+
       OpenSSL::X509::Certificate.new(cert_pem)
     end
   end

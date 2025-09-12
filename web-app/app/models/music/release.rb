@@ -45,6 +45,10 @@ class Music::Release < ApplicationRecord
   has_many :identifiers, as: :identifiable, dependent: :destroy
   has_many :song_relationships, class_name: "Music::SongRelationship", foreign_key: :source_release_id, dependent: :nullify
 
+  # Image associations
+  has_many :images, as: :parent, dependent: :destroy
+  has_one :primary_image, -> { where(primary: true) }, as: :parent, class_name: "Image"
+
   # Validations
   validates :album, presence: true
   validates :format, presence: true
