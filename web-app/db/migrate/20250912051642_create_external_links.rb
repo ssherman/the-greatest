@@ -18,8 +18,5 @@ class CreateExternalLinks < ActiveRecord::Migration[8.0]
     end
 
     add_index :external_links, [:parent_type, :parent_id]
-    add_index :external_links, :source
-    add_index :external_links, :public
-    add_index :external_links, :click_count, order: :desc
   end
 end

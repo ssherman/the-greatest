@@ -26,9 +26,6 @@ Rails.application.routes.draw do
 
   mount_avo
 
-  # External link tracking and redirect
-  get "/link/:id", to: "external_links#redirect", as: :external_link_redirect
-
   # Health check
   get "up" => "rails/health#show", :as => :rails_health_check
 
