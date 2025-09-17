@@ -6,9 +6,9 @@ module DataImporters
       # Main importer for Music::Artist records
       # Orchestrates finding existing artists and importing from providers
       class Importer < DataImporters::ImporterBase
-        def self.call(name: nil, musicbrainz_id: nil, **options)
+        def self.call(name: nil, musicbrainz_id: nil, force_providers: false, **options)
           query = ImportQuery.new(name: name, musicbrainz_id: musicbrainz_id, **options)
-          super(query: query)
+          super(query: query, force_providers: force_providers)
         end
 
         protected

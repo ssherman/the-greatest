@@ -4,11 +4,11 @@ module DataImporters
   # Base class for all importers
   # Orchestrates the import process: find existing, create new, run providers, save
   class ImporterBase
-    def self.call(query:)
-      new.call(query: query)
+    def self.call(query:, force_providers: false)
+      new.call(query: query, force_providers: force_providers)
     end
 
-    def call(query:)
+    def call(query:, force_providers: false)
       validate_query!(query)
 
       if multi_item_import?
@@ -25,7 +25,7 @@ module DataImporters
         # Standard single-item import flow
         # Try to find existing record
         existing = finder.call(query: query)
-        if existing
+        if existing && !force_providers
           return ImportResult.new(
             item: existing,
             provider_results: [],
@@ -33,14 +33,14 @@ module DataImporters
           )
         end
 
-        # Initialize new record
-        item = initialize_item(query)
+        # Use existing item or create new one
+        item = existing || initialize_item(query)
 
-        # Run all providers to populate data
-        provider_results = run_providers(item, query)
+        # Run all providers to populate data, saving after each successful provider
+        provider_results = run_providers_with_saving(item, query, existing.present?)
 
-        # Save if valid and any provider succeeded
-        success = save_item_if_valid(item, provider_results)
+        # Overall success if any provider succeeded
+        success = provider_results.any?(&:success?)
 
         # Return aggregated results
         ImportResult.new(
@@ -88,15 +88,34 @@ module DataImporters
       end
     end
 
-    def save_item_if_valid(item, provider_results)
-      return false unless item.valid?
-      return false unless provider_results.any?(&:success?)
+    def run_providers_with_saving(item, query, is_existing_item)
+      provider_results = []
 
-      item.save!
-      true
-    rescue => e
-      Rails.logger.error "Failed to save imported item: #{e.message}"
-      false
+      providers.each do |provider|
+        result = provider.populate(item, query: query)
+        provider_results << result
+
+        # Save after each successful provider (for new items) or always save for existing items
+        if result.success? && item.valid?
+          begin
+            item.save! if item.changed?
+          rescue => e
+            Rails.logger.error "Failed to save item after provider #{provider.class.name}: #{e.message}"
+            # Convert to failure result
+            provider_results[-1] = ProviderResult.failure(
+              provider: provider.class.name,
+              errors: ["Save failed: #{e.message}"]
+            )
+          end
+        end
+      rescue => e
+        provider_results << ProviderResult.failure(
+          provider: provider.class.name,
+          errors: ["Provider error: #{e.message}"]
+        )
+      end
+
+      provider_results
     end
   end
 end

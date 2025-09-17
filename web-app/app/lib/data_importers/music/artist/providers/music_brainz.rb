@@ -139,7 +139,7 @@ module DataImporters
           def create_identifiers(artist, artist_data)
             # Create MusicBrainz identifier
             if artist_data["id"]
-              artist.identifiers.build(
+              artist.identifiers.find_or_initialize_by(
                 identifier_type: :music_musicbrainz_artist_id,
                 value: artist_data["id"]
               )
@@ -148,7 +148,7 @@ module DataImporters
             # Create ISNI identifiers if present
             if artist_data["isnis"]&.any?
               artist_data["isnis"].each do |isni|
-                artist.identifiers.build(
+                artist.identifiers.find_or_initialize_by(
                   identifier_type: :music_isni,
                   value: isni
                 )

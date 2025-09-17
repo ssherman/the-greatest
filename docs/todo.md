@@ -17,6 +17,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-09-16] [DataImporter Background Job Refactoring](todos/040-dataimporter-background-refactor.md)
 - ✅ [2025-09-12] [External Links System Implementation](todos/038-external-links.md)
 - ✅ [2025-09-11] [Image Upload System Implementation](todos/037-image-uploads.md)
 - ✅ [2025-09-10] [Implement Item Rankings](todos/036-implement-item-rankings.md)

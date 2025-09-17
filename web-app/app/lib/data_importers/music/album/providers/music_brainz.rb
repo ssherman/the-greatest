@@ -198,7 +198,7 @@ module DataImporters
           def create_identifiers(album, release_group_data)
             # Create MusicBrainz release group identifier
             if release_group_data["id"]
-              album.identifiers.build(
+              album.identifiers.find_or_initialize_by(
                 identifier_type: :music_musicbrainz_release_group_id,
                 value: release_group_data["id"]
               )

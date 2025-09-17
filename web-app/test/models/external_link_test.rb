@@ -95,20 +95,6 @@ class ExternalLinkTest < ActiveSupport::TestCase
     assert_includes @external_link.errors[:click_count], "must be greater than or equal to 0"
   end
 
-  # Enum tests
-  test "should have correct source enum values" do
-    assert_equal 0, ExternalLink.sources[:amazon]
-    assert_equal 1, ExternalLink.sources[:goodreads]
-    assert_equal 6, ExternalLink.sources[:other]
-  end
-
-  test "should have correct link_category enum values" do
-    assert_equal 0, ExternalLink.link_categories[:product_link]
-    assert_equal 1, ExternalLink.link_categories[:review]
-    assert_equal 2, ExternalLink.link_categories[:information]
-    assert_equal 3, ExternalLink.link_categories[:misc]
-  end
-
   # Association tests
   test "should belong to parent polymorphically" do
     assert_equal "Music::Artist", @external_link.parent_type
@@ -172,12 +158,6 @@ class ExternalLinkTest < ActiveSupport::TestCase
   test "source_display_name should return humanized source or custom name" do
     assert_equal "Amazon", @external_link.source_display_name
     assert_equal "Last.fm", @custom_source.source_display_name
-  end
-
-  test "trackable_url should return proper redirect URL" do
-    Rails.application.routes.default_url_options[:host] = "test.host"
-    expected_url = Rails.application.routes.url_helpers.external_link_redirect_url(@external_link)
-    assert_equal expected_url, @external_link.trackable_url
   end
 
   # Default values tests

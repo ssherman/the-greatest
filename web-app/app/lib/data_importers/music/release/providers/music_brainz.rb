@@ -84,14 +84,14 @@ module DataImporters
 
           def create_identifiers(release, release_data)
             # Create MusicBrainz release identifier
-            release.identifiers.create!(
+            release.identifiers.find_or_create_by(
               identifier_type: :music_musicbrainz_release_id,
               value: release_data["id"]
             )
 
             # Create ASIN identifier if present
             if release_data["asin"].present?
-              release.identifiers.create!(
+              release.identifiers.find_or_create_by(
                 identifier_type: :music_asin,
                 value: release_data["asin"]
               )

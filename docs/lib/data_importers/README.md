@@ -45,18 +45,35 @@ else
 end
 ```
 
+### Re-enriching Existing Items
+```ruby
+# Run providers on existing items to add new data sources
+result = DataImporters::Music::Artist::Importer.call(
+  name: "Pink Floyd", 
+  force_providers: true
+)
+
+if result.success?
+  puts "Updated artist with new provider data"
+  puts "Providers that ran: #{result.provider_results.map(&:provider_name).join(', ')}"
+end
+```
+
 ### Import Flow
 1. **Input**: Domain-specific query object with required parameters
 2. **Find Existing**: Use identifier-based and AI-assisted matching
-3. **Initialize**: Create new record if none found
-4. **Populate**: All providers contribute data to the same item
-5. **Validate & Save**: Save if valid and any provider succeeded
+3. **Early Return**: Skip providers if existing item found (unless force_providers: true)
+4. **Initialize**: Create new record if none found
+5. **Populate & Save**: Each provider contributes data, item saved after each successful provider
 6. **Return Results**: Detailed ImportResult with provider feedback
 
 ## Key Features
 
-### Provider Aggregation
-Multiple providers can enrich the same record rather than stopping at first success. This allows combining data from different sources for more complete records.
+### Provider Aggregation with Incremental Saving
+Multiple providers can enrich the same record rather than stopping at first success. Items are saved after each successful provider, enabling:
+- **Background job compatibility**: Items are persisted immediately, allowing async providers
+- **Fast user feedback**: Users see results after first provider, subsequent providers enhance over time
+- **Reliable incremental updates**: Each provider's data is saved immediately upon success
 
 ### Intelligent Duplicate Detection
 Uses external identifiers (MusicBrainz IDs, ISBNs, etc.) for reliable duplicate detection, falling back to name matching and future AI-assisted matching.
@@ -72,7 +89,23 @@ Domain-specific query objects ensure proper input validation and provide clear A
 ### Adding New Providers
 1. Create new provider class inheriting from `ProviderBase`
 2. Implement `populate(item, query:)` method
-3. Add to domain-specific importer's `providers` array
+3. Use `find_or_initialize_by` for identifiers to prevent duplicates
+4. Add to domain-specific importer's `providers` array
+
+**Important**: When creating identifiers in providers, always use `find_or_initialize_by`:
+```ruby
+# ✅ Correct - prevents duplicates
+item.identifiers.find_or_initialize_by(
+  identifier_type: :music_musicbrainz_artist_id,
+  value: external_id
+)
+
+# ❌ Wrong - creates duplicates on re-runs
+item.identifiers.build(
+  identifier_type: :music_musicbrainz_artist_id,
+  value: external_id
+)
+```
 
 ### Adding New Media Types
 1. Create domain namespace (e.g., `DataImporters::Books::Book`)

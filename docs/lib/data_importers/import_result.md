@@ -1,90 +1,108 @@
 # DataImporters::ImportResult
 
 ## Summary
-Aggregates results from all providers for an import operation. Provides detailed feedback about what succeeded, what failed, and overall import status.
+Aggregated results from all providers for an import operation. Contains the final item and comprehensive feedback about provider execution, success/failure status, and detailed error reporting.
+
+## Attributes
+
+### `item`
+- Type: ActiveRecord model or nil
+- Purpose: The imported item (Music::Artist, Music::Album, etc.) or nil for multi-item imports
+
+### `provider_results`
+- Type: Array<ProviderResult>
+- Purpose: Results from each provider that was executed
+
+### `success`
+- Type: Boolean
+- Purpose: Overall success status of the import operation
 
 ## Public Methods
 
-### `.new(item:, provider_results:, success:)`
-Constructor for creating import results
-- Parameters:
-  - item (ActiveRecord model) - The item that was imported/attempted
-  - provider_results (Array<ProviderResult>) - Results from each provider
-  - success (Boolean) - Overall import success status
-
 ### `#success?`
-- Returns: Boolean - True if import succeeded
-- Purpose: Quick check for overall import success
+- Returns: Boolean - true if the overall import operation succeeded
 
 ### `#failure?`
-- Returns: Boolean - True if import failed
-- Purpose: Inverse of success? for convenience
+- Returns: Boolean - true if the overall import operation failed
 
 ### `#successful_providers`
-- Returns: Array<ProviderResult> - Only providers that succeeded
-- Purpose: Identify which data sources contributed successfully
+- Returns: Array<ProviderResult> - Provider results that succeeded
 
 ### `#failed_providers`
-- Returns: Array<ProviderResult> - Only providers that failed
-- Purpose: Identify which data sources had problems
+- Returns: Array<ProviderResult> - Provider results that failed
 
 ### `#all_errors`
 - Returns: Array<String> - All error messages from failed providers
-- Purpose: Complete list of what went wrong during import
 
 ### `#summary`
-- Returns: Hash with comprehensive import statistics
-- Purpose: Detailed breakdown for logging and debugging
+- Returns: Hash - Comprehensive summary of the import operation
+- Hash structure:
+  ```ruby
+  {
+    success: Boolean,
+    item_saved: Boolean,
+    providers_run: Integer,
+    providers_succeeded: Integer,
+    providers_failed: Integer,
+    data_populated: Array<String>,
+    errors: Array<String>
+  }
+  ```
 
-## Summary Hash Structure
-```ruby
-{
-  success: true/false,
-  item_saved: true/false,
-  providers_run: Integer,
-  providers_succeeded: Integer,
-  providers_failed: Integer,
-  data_populated: Array<Symbol>,  # Unique fields populated across all providers
-  errors: Array<String>
-}
-```
+## Usage Examples
 
-## Attributes
-- `item` - The ActiveRecord model that was imported
-- `provider_results` - Array of ProviderResult objects
-- `success` - Boolean indicating overall success
-
-## Usage Patterns
-
-### Success Checking
+### Checking Import Success
 ```ruby
 result = DataImporters::Music::Artist::Importer.call(name: "Pink Floyd")
 
 if result.success?
-  puts "Imported #{result.item.name}"
-  puts "Data sources: #{result.successful_providers.map(&:provider_name).join(', ')}"
+  puts "Import succeeded!"
+  puts "Artist: #{result.item.name}"
+  puts "Data populated: #{result.summary[:data_populated].join(', ')}"
 else
-  puts "Import failed: #{result.all_errors.join(', ')}"
+  puts "Import failed!"
+  puts "Errors: #{result.all_errors.join(', ')}"
 end
 ```
 
-### Detailed Analysis
+### Analyzing Provider Results
 ```ruby
-summary = result.summary
-puts "Providers run: #{summary[:providers_run]}"
-puts "Success rate: #{summary[:providers_succeeded]}/#{summary[:providers_run]}"
-puts "Fields populated: #{summary[:data_populated].join(', ')}"
+result = DataImporters::Music::Artist::Importer.call(name: "Pink Floyd")
+
+puts "Providers run: #{result.provider_results.count}"
+puts "Successful: #{result.successful_providers.count}"
+puts "Failed: #{result.failed_providers.count}"
+
+result.successful_providers.each do |provider|
+  puts "✅ #{provider.provider_name}: #{provider.data_populated.join(', ')}"
+end
+
+result.failed_providers.each do |provider|
+  puts "❌ #{provider.provider_name}: #{provider.errors.join(', ')}"
+end
 ```
 
-## Success Criteria
-Import is considered successful if:
-1. At least one provider succeeded
-2. The final item passed validation
-3. The item was successfully saved to database
+### Using Summary for Monitoring
+```ruby
+result = DataImporters::Music::Artist::Importer.call(name: "Pink Floyd")
+summary = result.summary
 
-## Error Aggregation
-Errors from all failed providers are collected and deduplicated. This provides complete visibility into what went wrong during the import process.
+# Log structured data for monitoring
+Rails.logger.info "Import completed", summary
+
+# Example summary output:
+# {
+#   success: true,
+#   item_saved: true,
+#   providers_run: 2,
+#   providers_succeeded: 2,
+#   providers_failed: 0,
+#   data_populated: ["name", "country", "kind", "identifiers", "categories"],
+#   errors: []
+# }
+```
 
 ## Dependencies
-- ProviderResult objects for individual provider feedback
-- ActiveRecord models with persisted? method for save status checking
+- ProviderResult class for individual provider feedback
+- ActiveRecord models for item persistence checking
+- Created and returned by ImporterBase implementations
