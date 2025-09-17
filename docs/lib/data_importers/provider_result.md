@@ -1,101 +1,93 @@
 # DataImporters::ProviderResult
 
 ## Summary
-Represents the result of a single provider's import attempt. Tracks success/failure status, data populated, and error details for individual external data sources.
+Represents the result of a single provider's import attempt. Standardized response object used by all providers to communicate success/failure status and detailed feedback.
 
 ## Public Methods
 
 ### `.success(provider:, data_populated: [])`
-Class method to create successful result
+Creates a successful provider result
 - Parameters:
-  - provider (String) - Provider class name for identification
-  - data_populated (Array<Symbol>) - List of fields that were populated
-- Returns: ProviderResult with success: true
-- Purpose: Consistent success result creation
+  - provider (String) - Provider class name
+  - data_populated (Array, optional) - List of fields/attributes that were populated
+- Returns: ProviderResult instance with success: true
 
 ### `.failure(provider:, errors:)`
-Class method to create failed result
+Creates a failed provider result
 - Parameters:
-  - provider (String) - Provider class name for identification
-  - errors (Array<String>) - List of error messages
-- Returns: ProviderResult with success: false
-- Purpose: Consistent failure result creation
+  - provider (String) - Provider class name
+  - errors (String|Array) - Error messages describing what went wrong
+- Returns: ProviderResult instance with success: false
 
 ### `#success?`
-- Returns: Boolean - True if provider succeeded
-- Purpose: Quick success check
+- Returns: Boolean - true if provider execution was successful
 
 ### `#failure?`
-- Returns: Boolean - True if provider failed
-- Purpose: Inverse of success? for convenience
+- Returns: Boolean - true if provider execution failed
 
 ## Attributes
-- `provider_name` (String) - Name of the provider class for identification
-- `success` (Boolean) - Whether the provider operation succeeded
-- `data_populated` (Array<Symbol>) - Fields that were successfully populated
-- `errors` (Array<String>) - Error messages if operation failed
 
-## Usage Patterns
+### `provider_name`
+- Type: String
+- Purpose: Name of the provider class that generated this result
 
-### Creating Success Results
+### `success`
+- Type: Boolean
+- Purpose: Whether the provider execution succeeded
+
+### `data_populated`
+- Type: Array<String>
+- Purpose: List of fields/attributes that were populated by the provider
+- Usage: Helps track what data was contributed by each provider
+
+### `errors`
+- Type: Array<String>
+- Purpose: Error messages if provider execution failed
+- Usage: Detailed feedback for debugging and user display
+
+## Usage Examples
+
+### Successful Provider Result
 ```ruby
-# In a provider class
-def populate(artist, query:)
-  # ... fetch and populate data ...
-  
-  success_result(data_populated: [:name, :kind, :country, :musicbrainz_id])
-end
+# From a provider's populate method
+result = ProviderResult.success(
+  provider: "DataImporters::Music::Artist::Providers::MusicBrainz",
+  data_populated: %w[name country kind identifiers categories]
+)
+
+puts result.success?        # => true
+puts result.provider_name   # => "DataImporters::Music::Artist::Providers::MusicBrainz"
+puts result.data_populated  # => ["name", "country", "kind", "identifiers", "categories"]
 ```
 
-### Creating Failure Results
+### Failed Provider Result
 ```ruby
-# In a provider class
-def populate(artist, query:)
-  search_result = api_client.search(query.name)
-  return failure_result(errors: ["Network timeout"]) unless search_result.success?
-  
-  # ... continue processing ...
-rescue => e
-  failure_result(errors: ["API error: #{e.message}"])
-end
+# From a provider's populate method when API fails
+result = ProviderResult.failure(
+  provider: "DataImporters::Music::Artist::Providers::MusicBrainz",
+  errors: ["API rate limit exceeded", "Network timeout after 30s"]
+)
+
+puts result.failure?    # => true
+puts result.errors      # => ["API rate limit exceeded", "Network timeout after 30s"]
 ```
 
-### Analyzing Results
+### Usage in Provider Base Classes
 ```ruby
-provider_results.each do |result|
-  if result.success?
-    puts "#{result.provider_name}: populated #{result.data_populated.join(', ')}"
-  else
-    puts "#{result.provider_name}: failed - #{result.errors.join(', ')}"
+class MyProvider < DataImporters::ProviderBase
+  def populate(item, query:)
+    # Do work...
+    
+    if api_success
+      success_result(data_populated: %w[name description])
+    else
+      failure_result(errors: ["API returned error: #{api_error}"])
+    end
   end
 end
 ```
 
-## Data Population Tracking
-The `data_populated` array tracks which fields were successfully populated by this provider. This allows:
-- Detailed reporting of what each provider contributed
-- Debugging when data is missing or incorrect
-- Analytics on provider effectiveness
-
-Common field names:
-- `:name` - Basic entity name
-- `:kind` - Entity type/classification
-- `:country` - Geographic information
-- `:life_span_data` - Date information
-- `:musicbrainz_id` - External identifier
-- `:isni` - International identifier
-
-## Error Reporting
-Errors should be descriptive and actionable:
-- Include API response codes when relevant
-- Mention specific fields that failed validation
-- Provide context about what operation was attempted
-
-## Array Handling
-Both `data_populated` and `errors` are automatically converted to arrays:
-- Single values become single-element arrays
-- Nil values become empty arrays
-- Arrays are passed through unchanged
-
 ## Dependencies
-Used by ImporterBase and consumed by ImportResult for aggregated reporting.
+- No external dependencies - standalone data structure
+- Used by all Provider classes
+- Consumed by ImporterBase for result aggregation

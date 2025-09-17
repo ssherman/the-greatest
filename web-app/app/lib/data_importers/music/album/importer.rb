@@ -5,9 +5,9 @@ module DataImporters
     module Album
       # Main importer for Music::Album records
       class Importer < DataImporters::ImporterBase
-        def self.call(artist: nil, release_group_musicbrainz_id: nil, **options)
+        def self.call(artist: nil, release_group_musicbrainz_id: nil, force_providers: false, **options)
           query = ImportQuery.new(artist: artist, release_group_musicbrainz_id: release_group_musicbrainz_id, **options)
-          super(query: query)
+          super(query: query, force_providers: force_providers)
         end
 
         protected

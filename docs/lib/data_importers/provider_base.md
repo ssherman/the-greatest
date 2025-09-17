@@ -1,60 +1,41 @@
 # DataImporters::ProviderBase
 
 ## Summary
-Abstract base class for all external data providers (MusicBrainz, TMDB, etc.). Defines the interface for fetching and populating data from specific external sources.
+Abstract base class for all external data providers. Defines the interface for fetching and populating data from external sources like MusicBrainz, Amazon, etc.
 
 ## Public Methods
 
-### `#populate(item, query:)`
-Main method to populate item with data from external source (must be implemented by subclasses)
-- Parameters:
+### `#populate(item, query:)` 
+**Must be implemented by subclasses**
+- Parameters: 
   - item (ActiveRecord model) - The item to populate with data
-  - query (ImportQuery) - Domain-specific query parameters
-- Returns: ProviderResult - Success/failure status with details
-- Purpose: Fetch external data and populate the provided item
+  - query (ImportQuery) - Domain-specific query object with search parameters
+- Returns: ProviderResult - Success/failure status with provider feedback
+- Purpose: Fetch data from external source and populate the item
 
 ## Protected Methods
 
 ### `#success_result(data_populated: [])`
-Creates successful ProviderResult
-- Parameters: data_populated (Array<Symbol>) - List of fields populated
-- Returns: ProviderResult with success: true
-- Purpose: Consistent success response format
+Creates successful provider result
+- Parameters:
+  - data_populated (Array, optional) - List of fields/attributes populated
+- Returns: ProviderResult with success: true and provider name
 
 ### `#failure_result(errors:)`
-Creates failed ProviderResult
-- Parameters: errors (Array<String>) - List of error messages
-- Returns: ProviderResult with success: false
-- Purpose: Consistent failure response format
-
-## Provider Responsibilities
-Each provider should:
-1. **Search external API** for relevant data
-2. **Validate response** and handle API errors
-3. **Map external data** to domain model attributes
-4. **Create identifiers** for future duplicate detection
-5. **Return detailed results** showing what was accomplished
-
-## Data Population Strategy
-Providers should:
-- Only populate blank/nil fields (preserve existing data)
-- Create external identifiers for reliable duplicate detection
-- Handle partial data gracefully (some fields missing)
-- Map external data formats to internal conventions
-
-## Error Handling
-- Network failures should return ProviderResult.failure
-- Partial data should still return success if core fields populated
-- Invalid responses should be logged and return failure
-- Exceptions should be caught and converted to failure results
-
-## Dependencies
-- External API client libraries
-- Domain-specific mapping logic
-- Identifier model for creating external ID records
+Creates failed provider result
+- Parameters:
+  - errors (Array) - Error messages describing what went wrong
+- Returns: ProviderResult with success: false and provider name
 
 ## Usage Pattern
-This class is never used directly. Domain-specific providers implement the data fetching:
+
+Subclasses implement the populate method to:
+1. Fetch data from external API using query parameters
+2. Populate item attributes with fetched data
+3. Create identifiers using `find_or_initialize_by` to prevent duplicates
+4. Return success_result() or failure_result() based on outcome
+
+## Implementation Example
 
 ```ruby
 module DataImporters
@@ -62,17 +43,26 @@ module DataImporters
     module Artist
       module Providers
         class MusicBrainz < DataImporters::ProviderBase
-          def populate(artist, query:)
-            search_result = search_for_artist(query.name)
-            return failure_result(errors: search_result[:errors]) unless search_result[:success]
+          def populate(item, query:)
+            # Fetch from MusicBrainz API
+            api_data = fetch_artist_data(query)
             
-            artist_data = search_result[:data]["artists"].first
-            populate_artist_data(artist, artist_data)
-            create_identifiers(artist, artist_data)
+            # Populate item attributes
+            item.assign_attributes(
+              name: api_data["name"],
+              country: api_data["country"]
+            )
             
-            success_result(data_populated: [:name, :kind, :country])
+            # Create identifiers safely
+            item.identifiers.find_or_initialize_by(
+              identifier_type: :music_musicbrainz_artist_id,
+              value: api_data["id"]
+            )
+            
+            # Return success
+            success_result(data_populated: %w[name country identifiers])
           rescue => e
-            failure_result(errors: ["MusicBrainz error: #{e.message}"])
+            failure_result(errors: [e.message])
           end
         end
       end
@@ -81,9 +71,41 @@ module DataImporters
 end
 ```
 
-## Provider Result Details
-ProviderResult includes:
-- **Provider name**: For debugging and reporting
-- **Success status**: Boolean indicating overall success
-- **Data populated**: Array of field names that were populated
-- **Errors**: Array of error messages for failures
+## Best Practices
+
+### Identifier Creation
+Always use `find_or_initialize_by` or `find_or_create_by` to prevent duplicate identifiers:
+```ruby
+# ✅ Correct - prevents duplicates
+item.identifiers.find_or_initialize_by(
+  identifier_type: :music_musicbrainz_artist_id,
+  value: external_id
+)
+
+# ❌ Wrong - creates duplicates on re-runs
+item.identifiers.build(
+  identifier_type: :music_musicbrainz_artist_id,
+  value: external_id
+)
+```
+
+### Error Handling
+- Catch and handle external API errors gracefully
+- Return failure_result() with descriptive error messages
+- Don't raise exceptions unless critical failure
+
+### Async Patterns (Future)
+For slow APIs, providers can launch background jobs:
+```ruby
+def populate(item, query:)
+  SlowApiEnrichmentJob.perform_async(item.id, query.to_h)
+  success_result(data_populated: %w[background_job_queued])
+end
+```
+
+## Dependencies
+- External API clients (Music::Musicbrainz, etc.)
+- ActiveRecord models for item manipulation
+- Identifier model for external ID management
+- ProviderResult class for standardized responses
+- Background job framework (Sidekiq) for async providers

@@ -5,19 +5,21 @@ Abstract base class that orchestrates the data import process across all media t
 
 ## Public Methods
 
-### `.call(query:)`
+### `.call(query:, force_providers: false)`
 Main entry point for import operations
-- Parameters: query (ImportQuery) - Domain-specific query object with validation
+- Parameters: 
+  - query (ImportQuery) - Domain-specific query object with validation
+  - force_providers (Boolean) - Run providers even if existing item found (default: false)
 - Returns: ImportResult - Aggregated results from all providers
 - Raises: ArgumentError if query is invalid
 
-### `#call(query:)`
+### `#call(query:, force_providers: false)`
 Instance method that performs the complete import workflow:
 1. Validates the query object
 2. Attempts to find existing record via finder
-3. Initializes new item if none found
-4. Runs all providers to populate data
-5. Saves item if valid and any provider succeeded
+3. Returns early if existing item found (unless force_providers is true)
+4. Initializes new item if none found
+5. Runs all providers to populate data, saving after each successful provider
 6. Returns detailed results
 
 ## Protected Methods (Must be implemented by subclasses)
@@ -37,13 +39,23 @@ Instance method that performs the complete import workflow:
 
 ## Workflow Details
 
-### Provider Aggregation
-All providers run against the same item instance, allowing multiple data sources to contribute different pieces of information. The import succeeds if any provider succeeds and the final item is valid.
+### Provider Aggregation and Saving
+All providers run against the same item instance, allowing multiple data sources to contribute different pieces of information. Items are saved immediately after each successful provider that makes changes, enabling:
+- Background job compatibility (items are persisted before async providers run)
+- Incremental updates from multiple providers
+- Fast failure recovery (first provider saves basic item, later providers enhance it)
+
+### Force Providers Option
+When `force_providers: true` is passed:
+- Existing items found by finder are still processed by providers
+- Useful for re-enriching existing items with new provider data
+- Enables adding new providers to previously imported items
 
 ### Error Handling
 - Individual provider failures don't stop the import
-- Validation failures prevent saving
+- Items are saved after each successful provider if valid and changed
 - Database save failures are logged and gracefully handled
+- Failed saves convert provider success to failure result
 
 ### Result Tracking
 Returns comprehensive ImportResult showing:
@@ -51,7 +63,7 @@ Returns comprehensive ImportResult showing:
 - Which providers succeeded/failed
 - All data fields populated
 - Complete error list
-- Item persistence status
+- Item persistence status (items are saved incrementally during import)
 
 ## Dependencies
 - Domain-specific Finder classes

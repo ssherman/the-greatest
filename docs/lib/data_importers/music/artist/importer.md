@@ -1,112 +1,109 @@
 # DataImporters::Music::Artist::Importer
 
 ## Summary
-Main importer for Music::Artist records. Orchestrates finding existing artists and importing from external providers, specifically designed for music artist data import from sources like MusicBrainz.
+Main orchestration class for Music::Artist imports from external sources. Coordinates finder and providers to import artists by name or MusicBrainz ID, with support for provider re-execution.
 
 ## Public Methods
 
-### `.call(name:, **options)`
-Class method entry point for artist import
+### `.call(name: nil, musicbrainz_id: nil, force_providers: false, **options)`
+Main entry point for artist imports
 - Parameters:
-  - name (String) - Artist name to import (required)
-  - options (Hash) - Additional import options (optional)
-- Returns: ImportResult or existing artist if found
-- Purpose: Convenient API for importing artists by name
-
-Example:
-```ruby
-result = DataImporters::Music::Artist::Importer.call(name: "Pink Floyd")
-result = DataImporters::Music::Artist::Importer.call(name: "David Bowie", country: "GB")
-```
+  - name (String, optional) - Artist name to search for
+  - musicbrainz_id (String, optional) - MusicBrainz artist ID for direct lookup
+  - force_providers (Boolean) - Run providers even if existing artist found (default: false)
+  - **options - Additional options passed to ImportQuery
+- Returns: ImportResult with success/failure status and detailed provider feedback
+- Raises: ArgumentError if neither name nor musicbrainz_id provided, or if musicbrainz_id format invalid
 
 ## Protected Methods
 
 ### `#finder`
 - Returns: DataImporters::Music::Artist::Finder instance
-- Purpose: Provides artist-specific finding logic with MusicBrainz ID and name matching
+- Purpose: Provides artist-specific logic for finding existing records
 
 ### `#providers`
 - Returns: Array of provider instances
 - Current providers:
-  - `Providers::MusicBrainz` - Fetches data from MusicBrainz API
-- Purpose: List of external data sources for artist information
+  - DataImporters::Music::Artist::Providers::MusicBrainz
 
 ### `#initialize_item(query)`
-- Parameters: query (ImportQuery) - Validated artist import query
-- Returns: New Music::Artist instance with name pre-populated
-- Purpose: Creates empty artist model ready for data population
-
-## Import Workflow
-
-### 1. Query Creation
-Creates ImportQuery with name validation and optional parameters.
-
-### 2. Existing Artist Search
-Uses Finder to check for existing artists via:
-- MusicBrainz ID lookup (most reliable)
-- Exact name matching (fallback)
-- Future: AI-assisted fuzzy matching
-
-### 3. Data Population
-Runs all configured providers to populate artist data:
-- Basic information (name, kind, country)
-- Temporal data (formation/birth dates, disbandment/death dates)
-- External identifiers (MusicBrainz ID, ISNI)
-
-### 4. Validation & Save
-Validates populated artist model and saves if valid and any provider succeeded.
-
-## Provider Configuration
-Currently configured with MusicBrainz provider. Future providers can be added:
-```ruby
-def providers
-  @providers ||= [
-    Providers::MusicBrainz.new,
-    # Future providers:
-    # Providers::Discogs.new,
-    # Providers::AllMusic.new,
-    # Providers::Wikipedia.new
-  ]
-end
-```
-
-## Return Values
-
-### Existing Artist Found
-Returns the existing Music::Artist instance directly (not wrapped in ImportResult).
-
-### New Artist Import
-Returns ImportResult with:
-- `item` - The created Music::Artist instance
-- `success?` - True if artist was successfully created and saved
-- `provider_results` - Array showing what each provider accomplished
-- `all_errors` - Any errors encountered during import
-
-## Error Handling
-- Network failures from external APIs are graceful (logged but don't prevent import)
-- Validation failures prevent saving but provide clear error messages
-- Individual provider failures don't stop other providers from running
-
-## Dependencies
-- DataImporters::Music::Artist::Finder for duplicate detection
-- DataImporters::Music::Artist::Providers::MusicBrainz for data fetching
-- DataImporters::Music::Artist::ImportQuery for input validation
-- Music::Artist model for persistence
+- Parameters: query (ImportQuery) - Validated artist query object
+- Returns: New Music::Artist instance with name from query
+- Purpose: Creates empty artist instance for population
 
 ## Usage Examples
 
-### Basic Import
+### Import by Name
 ```ruby
 result = DataImporters::Music::Artist::Importer.call(name: "Pink Floyd")
+
 if result.success?
-  puts "Created #{result.item.name} (#{result.item.kind})"
-else
-  puts "Failed: #{result.all_errors.join(', ')}"
+  artist = result.item
+  puts "Created artist: #{artist.name} (#{artist.kind})"
+  puts "Country: #{artist.country}"
+  puts "MusicBrainz ID: #{artist.identifiers.find_by(identifier_type: :music_musicbrainz_artist_id)&.value}"
 end
 ```
 
-### Existing Artist
+### Import by MusicBrainz ID
 ```ruby
-existing = DataImporters::Music::Artist::Importer.call(name: "Pink Floyd")
-# Returns existing Music::Artist instance if already in database
+# Direct import using MusicBrainz ID for precise matching
+result = DataImporters::Music::Artist::Importer.call(
+  musicbrainz_id: "83d91898-7763-47d7-b03b-b92132375c47"
+)
+
+if result.success?
+  puts "Imported: #{result.item.name}"
+  puts "Genres: #{result.item.categories.where(category_type: 'genre').pluck(:name).join(', ')}"
+end
 ```
+
+### Re-enrich Existing Artist
+```ruby
+# Run providers on existing artist to add new data
+result = DataImporters::Music::Artist::Importer.call(
+  name: "Pink Floyd",
+  force_providers: true
+)
+
+if result.success?
+  puts "Updated artist with fresh provider data"
+  puts "Providers that ran: #{result.successful_providers.map(&:provider_name).join(', ')}"
+end
+```
+
+## Import Flow
+
+1. **Query Validation**: Creates and validates ImportQuery with provided parameters
+2. **Find Existing**: Uses Finder to search by MusicBrainz ID (if provided) or name
+3. **Early Return**: Returns existing artist unless force_providers is true
+4. **Initialize**: Creates new Music::Artist with name if none found
+5. **Provider Execution**: Runs MusicBrainz provider to populate data, saving after success
+6. **Result Return**: Returns ImportResult with artist and provider feedback
+
+## Data Populated
+
+The MusicBrainz provider populates:
+- **Basic Info**: name, kind (person/band), country
+- **Dates**: year_formed, year_disbanded (bands) or born_on, year_died (persons)
+- **Identifiers**: MusicBrainz artist ID, ISNI (if available)
+- **Categories**: Genre and location categories from MusicBrainz tags
+
+## Error Handling
+
+- **Missing Parameters**: Raises ArgumentError if neither name nor musicbrainz_id provided
+- **Invalid MusicBrainz ID**: Raises ArgumentError if musicbrainz_id format invalid
+- **API Failures**: MusicBrainz API errors logged but don't stop import
+- **Validation Failures**: Artist validation errors prevent saving
+- **Duplicate Detection**: Uses MusicBrainz ID for reliable duplicate prevention
+
+## Dependencies
+
+- DataImporters::ImporterBase (parent class)
+- DataImporters::Music::Artist::ImportQuery
+- DataImporters::Music::Artist::Finder
+- DataImporters::Music::Artist::Providers::MusicBrainz
+- Music::Artist model
+- Music::Musicbrainz::Search::ArtistSearch for API integration
+- Identifier model for external ID storage
+- Music::Category model for genre/location categorization
