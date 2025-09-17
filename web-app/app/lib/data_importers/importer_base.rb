@@ -95,10 +95,10 @@ module DataImporters
         result = provider.populate(item, query: query)
         provider_results << result
 
-        # Save after each successful provider (for new items) or always save for existing items
+        # Save after each successful provider to persist both attribute changes and associations
         if result.success? && item.valid?
           begin
-            item.save! if item.changed?
+            item.save!
           rescue => e
             Rails.logger.error "Failed to save item after provider #{provider.class.name}: #{e.message}"
             # Convert to failure result

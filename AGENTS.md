@@ -95,10 +95,11 @@ bin/rails test test/models/books/ # Books namespace only
 
 ## DataImporter System
 
-### Key Architecture Changes (2025-09-15)
+### Key Architecture Changes (2025-09-16)
 - **Incremental saving**: Items saved after each successful provider (enables background jobs)
 - **Force providers**: Use `force_providers: true` to re-enrich existing items
 - **Background job ready**: Async providers can launch Sidekiq jobs and return success immediately
+- **Association persistence**: Items saved after every successful provider to persist both attribute changes and associations
 
 ### Usage Examples
 ```ruby

@@ -132,10 +132,16 @@ Refactor the DataImporter system to support background job processing and provid
 **Validation Dependencies**: Some items (like artists imported by MusicBrainz ID only) need provider data to pass validation.
 - **Solution**: Incremental saving approach handles this naturally - items saved only when valid and changed
 
+**Association Persistence Issue**: Initial implementation only saved when `item.changed?` was true, but providers that only add associations (identifiers, categories) don't modify item attributes, causing new associations to be lost.
+- **Problem**: `force_providers` would silently drop new identifiers/categories if no attributes changed
+- **Solution**: Save after every successful provider regardless of `item.changed?` to persist both attribute changes and associations
+- **Testing**: Added comprehensive test case to verify associations persist even when no attributes change
+
 ### Testing Approach
 
-- **Comprehensive Test Coverage**: All 188 DataImporter tests continue passing
+- **Comprehensive Test Coverage**: All 189 DataImporter tests continue passing
 - **Force Providers Testing**: Added specific test case demonstrating duplicate prevention works correctly
+- **Association Persistence Testing**: Added test verifying associations persist even when no attributes change
 - **Backward Compatibility**: Verified all existing functionality remains unchanged
 - **Error Scenarios**: Tested provider failures, validation errors, and API timeouts
 

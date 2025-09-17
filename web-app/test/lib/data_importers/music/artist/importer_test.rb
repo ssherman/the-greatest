@@ -324,6 +324,52 @@ module DataImporters
           isni_identifiers = new_artist.identifiers.where(identifier_type: :music_isni)
           assert_equal 1, isni_identifiers.count, "Should have exactly one ISNI identifier"
         end
+
+        test "force_providers persists associations even when no attributes change" do
+          # Create an artist that already has the same name that MusicBrainz will return
+          existing_artist = ::Music::Artist.create!(name: "Test Band", kind: "band")
+          original_identifier_count = existing_artist.identifiers.count
+
+          # Mock MusicBrainz to return data that won't change attributes but will add identifiers
+          search_service = mock
+          search_service.expects(:search_by_name).with("Test Band").twice.returns(
+            success: true,
+            data: {
+              "artists" => [
+                {
+                  "id" => "test-band-mbid-456",
+                  "name" => "Test Band", # Same name - no attribute change
+                  "type" => "Group",     # Will map to "band" - no change
+                  "isnis" => ["0000000123456789"] # This will add a new identifier
+                }
+              ]
+            }
+          )
+
+          ::Music::Musicbrainz::Search::ArtistSearch.stubs(:new).returns(search_service)
+
+          # Run with force_providers to add identifiers
+          result = Importer.call(name: "Test Band", force_providers: true)
+
+          assert result.success?
+          assert_equal existing_artist, result.item
+
+          # Even though no attributes changed, the new identifiers should be persisted
+          existing_artist.reload
+          final_identifier_count = existing_artist.identifiers.count
+
+          assert final_identifier_count > original_identifier_count,
+            "Should have persisted new identifiers even when no attributes changed"
+
+          # Verify the specific identifiers were saved
+          musicbrainz_id = existing_artist.identifiers.find_by(identifier_type: :music_musicbrainz_artist_id)
+          assert_not_nil musicbrainz_id, "MusicBrainz identifier should be persisted"
+          assert_equal "test-band-mbid-456", musicbrainz_id.value
+
+          isni_id = existing_artist.identifiers.find_by(identifier_type: :music_isni)
+          assert_not_nil isni_id, "ISNI identifier should be persisted"
+          assert_equal "0000000123456789", isni_id.value
+        end
       end
     end
   end
