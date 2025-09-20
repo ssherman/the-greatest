@@ -3,4 +3,3 @@
 :queues:
   - critical
   - default
-  - search_indexing

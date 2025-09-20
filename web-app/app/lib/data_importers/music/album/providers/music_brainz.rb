@@ -14,11 +14,24 @@ module DataImporters
           #
           # Returns: Result(success:, data_populated:|errors:)
           def populate(album, query:)
-            # Use different API based on what information we have
-            api_result = if query.release_group_musicbrainz_id.present?
-              lookup_release_group_by_mbid(query.release_group_musicbrainz_id)
+            # Handle item-based import where query might be nil
+            if query.nil?
+              # For item-based import, check if album already has MusicBrainz ID
+              existing_mbid = album.identifiers.find_by(identifier_type: :music_musicbrainz_release_group_id)&.value
+              if existing_mbid.present?
+                # Use existing MusicBrainz ID for lookup
+                api_result = lookup_release_group_by_mbid(existing_mbid)
+              else
+                # Skip MusicBrainz provider for item-based import without existing MBID
+                return failure_result(errors: ["No MusicBrainz ID available for item-based import"])
+              end
             else
-              search_release_groups_by_artist(album, query)
+              # Use different API based on what information we have in query
+              api_result = if query.release_group_musicbrainz_id.present?
+                lookup_release_group_by_mbid(query.release_group_musicbrainz_id)
+              else
+                search_release_groups_by_artist(album, query)
+              end
             end
 
             return failure_result(errors: api_result[:errors]) unless api_result[:success]
@@ -30,9 +43,11 @@ module DataImporters
             release_group_data = release_groups.first
 
             # Import/find artists from artist-credit data (for lookup) or use provided artist (for search)
-            artists = if query.release_group_musicbrainz_id.present?
+            artists = if query.nil? || query.release_group_musicbrainz_id.present?
+              # For item-based import (query nil) or lookup-based import, get artists from MusicBrainz data
               import_artists_from_artist_credits(release_group_data["artist-credit"])
             else
+              # For search-based import, use provided artist
               [query.artist]
             end
 
@@ -42,6 +57,9 @@ module DataImporters
             populate_album_data(album, release_group_data, artists)
             create_identifiers(album, release_group_data)
             create_categories_from_musicbrainz_data(album, release_group_data)
+
+            # Launch cover art download job after successful import
+            ::Music::CoverArtDownloadJob.perform_async(album.id)
 
             success_result(data_populated: data_fields_populated(release_group_data))
           rescue => e

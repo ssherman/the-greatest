@@ -5,9 +5,15 @@ module DataImporters
     module Album
       # Main importer for Music::Album records
       class Importer < DataImporters::ImporterBase
-        def self.call(artist: nil, release_group_musicbrainz_id: nil, force_providers: false, **options)
-          query = ImportQuery.new(artist: artist, release_group_musicbrainz_id: release_group_musicbrainz_id, **options)
-          super(query: query, force_providers: force_providers)
+        def self.call(artist: nil, release_group_musicbrainz_id: nil, item: nil, force_providers: false, providers: nil, **options)
+          if item.present?
+            # Item-based import: use existing album
+            super(item: item, force_providers: force_providers, providers: providers)
+          else
+            # Query-based import: create query object
+            query = ImportQuery.new(artist: artist, release_group_musicbrainz_id: release_group_musicbrainz_id, **options)
+            super(query: query, force_providers: force_providers, providers: providers)
+          end
         end
 
         protected
@@ -18,7 +24,8 @@ module DataImporters
 
         def providers
           @providers ||= [
-            Providers::MusicBrainz.new
+            Providers::MusicBrainz.new,
+            Providers::Amazon.new
           ]
         end
 

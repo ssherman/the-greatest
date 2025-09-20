@@ -1,22 +1,23 @@
 # The Greatest - Todo List
 
 ## High Priority
-1. [Data Importer Service - Music Albums (Phase 1)](todos/019-import-albums.md) — In Progress (started 2025-08-05)
-2. [Movies data model implementation](todos/002-movies-object-model.md)
+1. [Movies data model implementation](todos/002-movies-object-model.md)
 
 ## Medium Priority
-3. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
-4. [Books data import from existing site](todos/002-books-data-import.md)
-5. [Additional OAuth providers (Facebook, Twitter, Apple)](todos/007-authentication.md)
-6. [Email/password authentication](todos/007-authentication.md)
-7. [Passwordless email authentication](todos/007-authentication.md)
-8. [Phone number authentication](todos/007-authentication.md)
+2. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
+3. [Books data import from existing site](todos/002-books-data-import.md)
+4. [Additional OAuth providers (Facebook, Twitter, Apple)](todos/007-authentication.md)
+5. [Email/password authentication](todos/007-authentication.md)
+6. [Passwordless email authentication](todos/007-authentication.md)
+7. [Phone number authentication](todos/007-authentication.md)
 
 ## Low Priority
-9. [Recommendation engine MVP](todos/004-recommendation-engine.md)
-10. [Admin interface with Avo](todos/007-admin-interface.md)
+8. [Recommendation engine MVP](todos/004-recommendation-engine.md)
+9. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-09-20] [Amazon Product API Integration for Music Albums](todos/039-amazon-product-api.md)
+- ✅ [2025-09-20] [Data Importer Service - Music Albums (Phase 1)](todos/019-import-albums.md)
 - ✅ [2025-09-16] [DataImporter Background Job Refactoring](todos/040-dataimporter-background-refactor.md)
 - ✅ [2025-09-12] [External Links System Implementation](todos/038-external-links.md)
 - ✅ [2025-09-11] [Image Upload System Implementation](todos/037-image-uploads.md)
