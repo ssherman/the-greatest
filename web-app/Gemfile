@@ -31,6 +31,7 @@ gem "nokogiri"
 gem "weighted_list_rank"
 gem "ruby-vips"
 gem "vacuum"
+gem "down", "~> 5.0"
 
 # Windows does not include zoneinfo files, so bundle the tzinfo-data gem
 gem "tzinfo-data", platforms: %i[windows jruby]
@@ -82,6 +83,7 @@ group :test do
   gem "capybara"
   gem "selenium-webdriver"
   gem "mocha"
+  gem "webmock"
 end
 gem "avo", ">= 3.2"
 gem "faraday"

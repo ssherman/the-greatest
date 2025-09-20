@@ -3,9 +3,13 @@ require_relative "../config/environment"
 require "rails/test_help"
 require "mocha/minitest"
 require "sidekiq/testing"
+require "webmock/minitest"
 
 # Configure Sidekiq to run jobs inline during tests
 Sidekiq::Testing.inline!
+
+# Configure WebMock to prevent real HTTP requests during tests
+WebMock.disable_net_connect!(allow_localhost: true)
 
 module ActiveSupport
   class TestCase

@@ -1,25 +1,27 @@
 # DataImporters::ImporterBase
 
 ## Summary
-Abstract base class that orchestrates the data import process across all media types. Provides the main workflow for finding existing records, running providers, and saving results.
+Abstract base class that orchestrates the data import process across all media types. Supports both traditional query-based imports (search/create) and new item-based imports (enrich existing). Provides provider filtering and flexible workflow management for both manual and automated import scenarios.
 
 ## Public Methods
 
-### `.call(query:, force_providers: false)`
-Main entry point for import operations
-- Parameters: 
-  - query (ImportQuery) - Domain-specific query object with validation
+### `.call(query: nil, item: nil, force_providers: false, providers: nil)`
+Main entry point for import operations supporting both query-based and item-based imports
+- Parameters:
+  - query (ImportQuery, optional) - Domain-specific query object for creating/finding records
+  - item (Model, optional) - Existing record to enrich (item-based import)
   - force_providers (Boolean) - Run providers even if existing item found (default: false)
+  - providers (Array, optional) - Specific provider names to run (filters available providers)
 - Returns: ImportResult - Aggregated results from all providers
-- Raises: ArgumentError if query is invalid
+- Raises: ArgumentError if parameters are invalid
 
-### `#call(query:, force_providers: false)`
+### `#call(query: nil, item: nil, force_providers: false, providers: nil)`
 Instance method that performs the complete import workflow:
-1. Validates the query object
-2. Attempts to find existing record via finder
-3. Returns early if existing item found (unless force_providers is true)
-4. Initializes new item if none found
-5. Runs all providers to populate data, saving after each successful provider
+1. Validates input parameters (exactly one of query or item required)
+2. For query-based imports: finds existing records or creates new ones
+3. For item-based imports: uses provided item directly
+4. Runs providers (all or filtered subset) to populate/enrich data
+5. Saves after each successful provider
 6. Returns detailed results
 
 ## Protected Methods (Must be implemented by subclasses)
@@ -37,9 +39,38 @@ Instance method that performs the complete import workflow:
 - Returns: New domain model instance
 - Purpose: Creates empty model instance for population
 
-## Workflow Details
+## Import Modes
 
-### Provider Aggregation and Saving
+### Query-Based Import (Traditional)
+Standard workflow for creating new records:
+- Uses ImportQuery object with domain-specific validation
+- Searches for existing records via finder
+- Creates new items if none found
+- Runs providers to populate data from external sources
+
+### Item-Based Import (New)
+Enhanced workflow for enriching existing records:
+- Accepts existing model instance directly
+- Skips search/creation logic entirely
+- Runs providers to add/update data
+- Enables re-enrichment of previously imported items
+
+### Multi-Item Import
+Special mode for importers that create multiple related items:
+- Providers handle all creation logic
+- Item parameter not supported (must use query)
+- Used for complex imports like release collections
+
+## Provider Management
+
+### Provider Filtering
+New `providers` parameter enables selective execution:
+- Accepts array of provider names (symbols or strings)
+- Converts symbols to class names (`:amazon` → "Amazon", `:music_brainz` → "MusicBrainz")
+- Runs only specified providers instead of all available
+- Useful for targeted re-enrichment workflows
+
+### Provider Execution and Saving
 All providers run against the same item instance, allowing multiple data sources to contribute different pieces of information. Items are saved immediately after each successful provider that makes changes, enabling:
 - Background job compatibility (items are persisted before async providers run)
 - Incremental updates from multiple providers
@@ -71,24 +102,72 @@ Returns comprehensive ImportResult showing:
 - ImportResult and ProviderResult classes
 - Rails logger for error reporting
 
-## Usage Pattern
-This class is never used directly. Instead, domain-specific subclasses implement the required methods:
+## Usage Examples
+
+### Query-Based Import (Create New)
+```ruby
+DataImporters::Music::Album::Importer.call(
+  artist: artist_instance,
+  title: "Album Title"
+)
+```
+
+### Item-Based Import (Enrich Existing)
+```ruby
+DataImporters::Music::Album::Importer.call(
+  item: existing_album
+)
+```
+
+### Selective Provider Execution
+```ruby
+DataImporters::Music::Album::Importer.call(
+  item: existing_album,
+  providers: [:amazon, :music_brainz]
+)
+```
+
+### Force Provider Execution
+```ruby
+DataImporters::Music::Album::Importer.call(
+  artist: artist_instance,
+  title: "Album Title",
+  force_providers: true
+)
+```
+
+## Subclass Implementation Pattern
+This class is never used directly. Domain-specific subclasses implement the required methods:
 
 ```ruby
 module DataImporters
   module Music
-    module Artist
+    module Album
       class Importer < DataImporters::ImporterBase
+        def self.call(artist: nil, item: nil, force_providers: false, providers: nil, **options)
+          if item.present?
+            # Item-based import: use existing album
+            super(item: item, force_providers: force_providers, providers: providers)
+          else
+            # Query-based import: create query object
+            query = ImportQuery.new(artist: artist, **options)
+            super(query: query, force_providers: force_providers, providers: providers)
+          end
+        end
+
         def finder
           @finder ||= Finder.new
         end
 
         def providers
-          @providers ||= [Providers::MusicBrainz.new]
+          @providers ||= [
+            Providers::MusicBrainz.new,
+            Providers::Amazon.new
+          ]
         end
 
         def initialize_item(query)
-          ::Music::Artist.new(name: query.name)
+          ::Music::Album.new(title: query.title)
         end
       end
     end

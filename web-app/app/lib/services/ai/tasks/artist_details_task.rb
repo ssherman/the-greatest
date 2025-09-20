@@ -6,7 +6,7 @@ module Services
 
         def task_provider = :openai
 
-        def task_model = "gpt-4o"
+        def task_model = "gpt-5"
 
         def system_message
           <<~SYSTEM_MESSAGE

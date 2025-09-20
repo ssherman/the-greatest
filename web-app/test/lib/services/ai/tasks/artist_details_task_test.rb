@@ -23,7 +23,7 @@ module Services
 
         test "should have correct provider and model" do
           assert_equal :openai, @task.send(:task_provider)
-          assert_equal "gpt-4o", @task.send(:task_model)
+          assert_equal "gpt-5", @task.send(:task_model)
         end
 
         test "should generate correct system message" do
@@ -327,7 +327,7 @@ module Services
           assert_not_nil ai_chat
           assert_equal @artist, ai_chat.parent
           assert_equal "analysis", ai_chat.chat_type
-          assert_equal "gpt-4o", ai_chat.model
+          assert_equal "gpt-5", ai_chat.model
           assert_equal "openai", ai_chat.provider
           assert_equal 0.2, ai_chat.temperature
           assert ai_chat.json_mode

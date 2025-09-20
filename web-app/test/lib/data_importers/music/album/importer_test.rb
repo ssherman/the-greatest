@@ -10,6 +10,12 @@ module DataImporters
           @artist = music_artists(:pink_floyd)
           # Stub the release import job since we're testing album importing
           ::Music::ImportAlbumReleasesJob.stubs(:perform_async)
+          # Stub the cover art download job since we're testing album importing
+          ::Music::CoverArtDownloadJob.stubs(:perform_async)
+
+          # Stub Amazon API requests to prevent real HTTP calls during album import
+          stub_request(:post, "https://webservices.amazon.com/paapi5/searchitems")
+            .to_return(status: 200, body: '{"SearchResult": {"Items": []}}', headers: {"Content-Type" => "application/json"})
         end
 
         test "call with artist and title creates and imports new album" do
@@ -402,6 +408,125 @@ module DataImporters
           assert_includes category_names, "Hip Hop"
           assert_includes category_names, "Gangsta Rap"
           assert_includes category_names, "Electronic"
+        end
+
+        # Tests for new item-based import functionality
+        test "call with item parameter enriches existing album" do
+          existing_album = music_albums(:dark_side_of_the_moon)
+
+          # Mock MusicBrainz provider to return success
+          mock_musicbrainz_provider_success
+
+          result = Importer.call(item: existing_album)
+
+          assert result.success?
+          assert_equal existing_album, result.item
+          assert result.provider_results.any?(&:success?)
+        end
+
+        test "call with item parameter and specific providers runs only selected providers" do
+          existing_album = music_albums(:dark_side_of_the_moon)
+
+          # Mock MusicBrainz provider to return success
+          mock_musicbrainz_provider_success
+
+          result = Importer.call(item: existing_album, providers: [:music_brainz])
+
+          assert result.success?
+          assert_equal existing_album, result.item
+          # Should have run at least one provider
+          assert result.provider_results.any?
+        end
+
+        test "call with item parameter skips Amazon provider when specified" do
+          existing_album = music_albums(:dark_side_of_the_moon)
+
+          # Mock MusicBrainz provider to return success
+          mock_musicbrainz_provider_success
+
+          # Should not make Amazon API calls since we're only running MusicBrainz
+          assert_not_requested :post, /webservices\.amazon\.com/
+
+          result = Importer.call(item: existing_album, providers: [:music_brainz])
+
+          assert result.success?
+        end
+
+        test "call raises error when neither item nor query provided" do
+          error = assert_raises(ArgumentError) do
+            Importer.call
+          end
+
+          assert_equal "Invalid query object", error.message
+        end
+
+        test "call with item parameter ignores query parameters" do
+          existing_album = music_albums(:dark_side_of_the_moon)
+
+          # Mock MusicBrainz provider to return success
+          mock_musicbrainz_provider_success
+
+          # When item is provided, artist/title parameters should be ignored
+          result = Importer.call(item: existing_album, artist: @artist, title: "Test")
+
+          assert result.success?
+          assert_equal existing_album, result.item
+        end
+
+        test "call with providers parameter filters providers correctly" do
+          existing_album = music_albums(:dark_side_of_the_moon)
+
+          # Mock only MusicBrainz provider
+          mock_musicbrainz_provider_success
+
+          result = Importer.call(item: existing_album, providers: [:music_brainz])
+
+          assert result.success?
+          assert_equal existing_album, result.item
+
+          # Should have results from MusicBrainz provider
+          assert result.provider_results.any? { |r| r.success? }
+        end
+
+        test "call with item parameter works with force_providers" do
+          existing_album = music_albums(:dark_side_of_the_moon)
+
+          # Mock MusicBrainz provider to return success
+          mock_musicbrainz_provider_success
+
+          result = Importer.call(item: existing_album, force_providers: true)
+
+          assert result.success?
+          assert_equal existing_album, result.item
+        end
+
+        private
+
+        def mock_musicbrainz_provider_success
+          # Mock MusicBrainz search service to return album data
+          search_service = mock
+          search_service.stubs(:lookup_by_release_group_mbid).returns(
+            success: true,
+            data: {
+              "release-groups" => [
+                {
+                  "id" => "test-mbid",
+                  "title" => "Test Album",
+                  "first-release-date" => "1973-03-01",
+                  "artist-credit" => [
+                    {
+                      "artist" => {
+                        "id" => "83d91898-7763-47d7-b03b-b92132375c47",
+                        "name" => "Pink Floyd"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          )
+
+          ::Music::Musicbrainz::Search::ReleaseGroupSearch.stubs(:new).returns(search_service)
         end
       end
     end
