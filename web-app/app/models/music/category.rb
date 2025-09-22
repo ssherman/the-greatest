@@ -33,9 +33,9 @@
 module Music
   class Category < ::Category
     # Music-specific associations
-    has_many :albums, through: :category_items, source: :item, source_type: "Music::Album"
-    has_many :songs, through: :category_items, source: :item, source_type: "Music::Song"
-    has_many :artists, through: :category_items, source: :item, source_type: "Music::Artist"
+    has_many :albums, through: :category_items, source: :item, source_type: "Music::Album", inverse_of: :categories
+    has_many :songs, through: :category_items, source: :item, source_type: "Music::Song", inverse_of: :categories
+    has_many :artists, through: :category_items, source: :item, source_type: "Music::Artist", inverse_of: :categories
 
     # Music-specific scopes
     scope :by_album_ids, ->(album_ids) { joins(:category_items).where(category_items: {item_type: "Music::Album", item_id: album_ids}) }

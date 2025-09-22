@@ -10,16 +10,14 @@ class Avo::Resources::RankedItem < Avo::BaseResource
     field :id, as: :id
     field :rank, as: :number, sortable: true
     field :score, as: :number, format_using: -> { record.score&.round(3) }
-    field :item, as: :text, readonly: true,
-      format_using: -> {
-        if record.item.respond_to?(:title)
-          "#{record.item.title} (#{record.item_type})"
-        elsif record.item.respond_to?(:name)
-          "#{record.item.name} (#{record.item_type})"
-        else
-          "#{record.item_type} ##{record.item_id}"
-        end
-      }
+
+    # Polymorphic association linking to the appropriate resource
+    field :item, as: :belongs_to, polymorphic_as: :item, types: [
+      ::Music::Album,
+      ::Music::Song,
+      ::Movies::Movie
+    ]
+
     field :ranking_configuration, as: :belongs_to
     field :created_at, as: :date_time, readonly: true
     field :updated_at, as: :date_time, readonly: true

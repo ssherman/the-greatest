@@ -48,6 +48,7 @@ gem "openai"
 gem "opensearch-ruby"
 gem "sidekiq"
 gem "sidekiq-cron"
+gem "pagy", "~> 9.3" # omit patch digit
 
 # Load environment variables from .env file
 # gem "dotenv-rails"

@@ -31,8 +31,8 @@ class Music::Album < ApplicationRecord
   has_many :identifiers, as: :identifiable, dependent: :destroy
 
   # Category associations
-  has_many :category_items, as: :item, dependent: :destroy
-  has_many :categories, through: :category_items, class_name: "Music::Category"
+  has_many :category_items, as: :item, dependent: :destroy, inverse_of: :item
+  has_many :categories, through: :category_items, class_name: "Music::Category", inverse_of: :albums
 
   # Image associations
   has_many :images, as: :parent, dependent: :destroy
@@ -40,6 +40,10 @@ class Music::Album < ApplicationRecord
 
   # External link associations
   has_many :external_links, as: :parent, dependent: :destroy
+
+  # List associations
+  has_many :list_items, as: :listable, dependent: :destroy
+  has_many :lists, through: :list_items
 
   # Validations
   validates :title, presence: true

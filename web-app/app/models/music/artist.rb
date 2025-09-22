@@ -42,8 +42,8 @@ class Music::Artist < ApplicationRecord
   has_many :identifiers, as: :identifiable, dependent: :destroy
 
   # Category associations
-  has_many :category_items, as: :item, dependent: :destroy
-  has_many :categories, through: :category_items, class_name: "Music::Category"
+  has_many :category_items, as: :item, dependent: :destroy, inverse_of: :item
+  has_many :categories, through: :category_items, class_name: "Music::Category", inverse_of: :artists
 
   # Image associations
   has_many :images, as: :parent, dependent: :destroy

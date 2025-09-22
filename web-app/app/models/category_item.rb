@@ -21,7 +21,7 @@
 #  fk_rails_...  (category_id => categories.id)
 #
 class CategoryItem < ApplicationRecord
-  belongs_to :category, counter_cache: :item_count
+  belongs_to :category, counter_cache: :item_count, inverse_of: :category_items
   belongs_to :item, polymorphic: true
 
   # Search indexing callbacks - reindex the associated item when categories change

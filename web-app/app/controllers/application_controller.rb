@@ -4,6 +4,8 @@ class ApplicationController < ActionController::Base
 
   include ApplicationHelper
 
+  rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
+
   before_action :set_current_domain
 
   private
@@ -38,4 +40,8 @@ class ApplicationController < ActionController::Base
   attr_reader :domain_settings
 
   helper_method :current_domain, :domain_settings
+
+  def render_not_found
+    render file: "#{Rails.root}/public/404.html", status: :not_found, layout: false
+  end
 end
