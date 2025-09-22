@@ -1,4 +1,9 @@
 Rails.application.routes.draw do
+  # Album rankings routes with optional ranking configuration and page
+  scope "(/rc/:ranking_configuration_id)" do
+    get "albums", to: "music/albums/ranked_items#index"
+    get "albums/page/:page", to: "music/albums/ranked_items#index", constraints: {page: /\d+|__pagy_page__/}
+  end
   require "sidekiq/web"
   require "sidekiq/cron/web"
 

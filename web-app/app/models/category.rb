@@ -43,7 +43,7 @@ class Category < ApplicationRecord
   # Associations
   belongs_to :parent, class_name: "Category", optional: true
   has_many :child_categories, class_name: "Category", foreign_key: :parent_id, dependent: :nullify
-  has_many :category_items, dependent: :destroy
+  has_many :category_items, dependent: :destroy, inverse_of: :category
   has_many :ai_chats, as: :parent, dependent: :destroy
 
   # Validations
