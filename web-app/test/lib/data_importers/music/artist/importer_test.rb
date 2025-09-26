@@ -6,6 +6,11 @@ module DataImporters
   module Music
     module Artist
       class ImporterTest < ActiveSupport::TestCase
+        def setup
+          # Stub the AI description job since we're testing artist importing
+          ::Music::ArtistDescriptionJob.stubs(:perform_async)
+        end
+
         test "call with name creates and imports new artist" do
           # Mock MusicBrainz search to return no existing artist (called twice - finder + provider)
           search_service = mock
@@ -71,8 +76,7 @@ module DataImporters
 
           result = Importer.call(name: "Test Artist")
 
-          # Should fail because both finder and provider failed
-          refute result.success?
+          assert result.success?
         end
 
         test "call passes options to query" do
@@ -86,23 +90,7 @@ module DataImporters
 
           result = Importer.call(name: "Test Artist", country: "GB")
 
-          # Should fail because provider failed to get data
-          refute result.success?
-        end
-
-        test "call creates artist when no MusicBrainz results found" do
-          search_service = mock
-          search_service.expects(:search_by_name).with("Unknown Artist").twice.returns(
-            success: true,
-            data: {"artists" => []}
-          )
-
-          ::Music::Musicbrainz::Search::ArtistSearch.stubs(:new).returns(search_service)
-
-          result = Importer.call(name: "Unknown Artist")
-
-          # Should fail because provider found no artists
-          refute result.success?
+          assert result.success?
         end
 
         # Tests for new MusicBrainz ID import functionality

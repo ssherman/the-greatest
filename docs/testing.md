@@ -77,6 +77,20 @@ test/
 - Mock AI service responses
 - Never mock what you don't own
 
+### What NOT to Test (Common Mistakes)
+- **Never test exact log message content** - Logger messages change frequently and testing exact strings is brittle
+  ```ruby
+  # ❌ Bad - brittle string assertion
+  Rails.logger.expects(:info).with("User created with ID: #{user.id}")
+  
+  # ✅ Good - just verify logging happens
+  Rails.logger.expects(:info)
+  ```
+- **Never test exact error message strings** - Focus on behavior, not message content
+- **Never test system message or prompt content for AI tasks** - These change frequently as prompts are refined
+- **Never test private method implementation details** - Test public interface only
+- **Never test specific validation error messages** - Test that validation fails, not the exact wording
+
 ### Multi-Domain Testing
 - Test each domain's functionality in isolation
 - Integration tests should verify cross-domain features

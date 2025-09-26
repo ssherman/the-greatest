@@ -156,7 +156,7 @@ module Music
         kind: "person"
       })
 
-      Services::Ai::Tasks::ArtistDetailsTask.expects(:new).with(parent: @person).returns(mock_task)
+      Services::Ai::Tasks::ArtistDescriptionTask.expects(:new).with(parent: @person).returns(mock_task)
       mock_task.expects(:call).returns(mock_result).with do
         # Simulate the process_and_persist behavior
         @person.update!(
@@ -196,7 +196,7 @@ module Music
       mock_result.stubs(:success?).returns(false)
       mock_result.stubs(:error).returns("AI service unavailable")
 
-      Services::Ai::Tasks::ArtistDetailsTask.expects(:new).with(parent: @person).returns(mock_task)
+      Services::Ai::Tasks::ArtistDescriptionTask.expects(:new).with(parent: @person).returns(mock_task)
       mock_task.expects(:call).returns(mock_result)
 
       # Store original values
@@ -222,7 +222,7 @@ module Music
 
     test "should handle AI task exceptions gracefully" do
       # Mock the AI task to raise an exception
-      Services::Ai::Tasks::ArtistDetailsTask.expects(:new).with(parent: @person).raises(StandardError.new("Task creation failed"))
+      Services::Ai::Tasks::ArtistDescriptionTask.expects(:new).with(parent: @person).raises(StandardError.new("Task creation failed"))
 
       # Store original values
       original_description = @person.description
@@ -259,7 +259,7 @@ module Music
       })
 
       # Ensure the mock is properly applied and simulates the full task behavior
-      Services::Ai::Tasks::ArtistDetailsTask.expects(:new).with(parent: @band).returns(mock_task)
+      Services::Ai::Tasks::ArtistDescriptionTask.expects(:new).with(parent: @band).returns(mock_task)
       mock_task.expects(:call).returns(mock_result).with do
         # Simulate the process_and_persist behavior
         @band.update!(
@@ -305,7 +305,7 @@ module Music
         kind: "person"
       })
 
-      Services::Ai::Tasks::ArtistDetailsTask.expects(:new).with(parent: @person).returns(mock_task)
+      Services::Ai::Tasks::ArtistDescriptionTask.expects(:new).with(parent: @person).returns(mock_task)
       mock_task.expects(:call).returns(mock_result).with do
         # Simulate the process_and_persist behavior
         @person.update!(

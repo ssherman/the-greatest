@@ -30,9 +30,9 @@ Returns true if the artist is a band
 - Returns: Boolean
 
 ### `#populate_details_with_ai!`
-Populates artist details using AI services
-- Returns: Services::Ai::Tasks::ArtistDetailsTask result object
-- Side effects: Updates artist attributes with AI-generated data
+Populates artist description using AI services
+- Returns: Services::Ai::Tasks::ArtistDescriptionTask result object
+- Side effects: Updates artist description with AI-generated content
 
 ### `#as_indexed_json`
 Returns the data structure for OpenSearch indexing
@@ -60,6 +60,6 @@ Returns the data structure for OpenSearch indexing
 
 ## Dependencies
 - FriendlyId gem for slug generation and lookup from name
-- Services::Ai::Tasks::ArtistDetailsTask for AI-powered data enrichment
+- Services::Ai::Tasks::ArtistDescriptionTask for AI-powered description generation
 - `SearchIndexable` concern for automatic OpenSearch indexing
 - `Search::Music::ArtistIndex` for OpenSearch operations

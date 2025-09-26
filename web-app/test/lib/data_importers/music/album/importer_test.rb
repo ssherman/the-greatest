@@ -12,6 +12,8 @@ module DataImporters
           ::Music::ImportAlbumReleasesJob.stubs(:perform_async)
           # Stub the cover art download job since we're testing album importing
           ::Music::CoverArtDownloadJob.stubs(:perform_async)
+          # Stub the AI description job since we're testing album importing
+          ::Music::AlbumDescriptionJob.stubs(:perform_async)
 
           # Stub Amazon API requests to prevent real HTTP calls during album import
           stub_request(:post, "https://webservices.amazon.com/paapi5/searchitems")

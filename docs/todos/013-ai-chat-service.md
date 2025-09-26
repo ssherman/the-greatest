@@ -527,7 +527,7 @@ end
 
 # Easy provider switching
 Services::Ai::ProviderRegistry.use!(:openai)
-result = ArtistDetailsTask.new(parent: artist).call
+result = ArtistDescriptionTask.new(parent: artist).call
 ```
 
 ### Testing Approach

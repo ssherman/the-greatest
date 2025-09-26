@@ -22,7 +22,7 @@ class Services::Ai::Providers::OpenaiStrategyTest < ActiveSupport::TestCase
   end
 
   test "should have correct default model" do
-    assert_equal "gpt-5", @strategy.default_model
+    assert_equal "gpt-5-mini", @strategy.default_model
   end
 
   test "should have correct provider key" do
