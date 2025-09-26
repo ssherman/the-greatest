@@ -25,7 +25,8 @@ module DataImporters
         def providers
           @providers ||= [
             Providers::MusicBrainz.new,
-            Providers::Amazon.new
+            Providers::Amazon.new,
+            Providers::AiDescription.new
           ]
         end
 

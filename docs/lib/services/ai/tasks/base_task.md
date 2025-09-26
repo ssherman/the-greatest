@@ -129,7 +129,8 @@ end
 ```
 
 ## Subclasses
-- `Services::Ai::Tasks::ArtistDetailsTask` - Artist information extraction
+- `Services::Ai::Tasks::ArtistDescriptionTask` - Artist description generation
+- `Services::Ai::Tasks::AlbumDescriptionTask` - Album description generation
 - Additional task classes for other domains (books, movies, etc.)
 
 ## Dependencies

@@ -19,7 +19,8 @@ module DataImporters
 
         def providers
           @providers ||= [
-            Providers::MusicBrainz.new
+            Providers::MusicBrainz.new,
+            Providers::AiDescription.new
             # Future: Add more providers here
             # Providers::Discogs.new,
             # Providers::AllMusic.new,

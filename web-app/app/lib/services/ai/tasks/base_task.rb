@@ -73,7 +73,7 @@ module Services
         end
 
         def temperature
-          0.2
+          1.0
         end
 
         def process_and_persist(raw) = raw

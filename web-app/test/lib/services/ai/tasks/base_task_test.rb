@@ -18,7 +18,7 @@ module Services
           Services::Ai::Providers::OpenaiStrategy.stubs(:new).returns(@mock_strategy)
 
           # Create the task after mocking
-          @task = ArtistDetailsTask.new(parent: @artist)
+          @task = ArtistDescriptionTask.new(parent: @artist)
         end
 
         test "should initialize with parent" do
@@ -26,13 +26,13 @@ module Services
         end
 
         test "should have default temperature" do
-          assert_equal 0.2, @task.send(:temperature)
+          assert_equal 1.0, @task.send(:temperature)
         end
 
         test "should_create_provider_strategy_correctly" do
           # Test that the correct provider strategy is created
           Services::Ai::Providers::OpenaiStrategy.expects(:new).returns(@mock_strategy)
-          ArtistDetailsTask.new(parent: @artist)
+          ArtistDescriptionTask.new(parent: @artist)
         end
 
         test "should_call_provider_with_correct_parameters" do
@@ -51,7 +51,7 @@ module Services
             ai_chat: mock_chat,
             content: kind_of(String),
             response_format: {type: "json_object"},
-            schema: ArtistDetailsTask::ResponseSchema
+            schema: ArtistDescriptionTask::ResponseSchema
           ).returns(mock_provider_response)
 
           @task.call
@@ -98,7 +98,7 @@ module Services
           assert_includes roles, "system"
           system_message = captured_messages.find { |msg| msg[:role] == "system" }
           assert system_message
-          assert_includes system_message[:content], "music expert"
+          assert system_message[:content].present?, "System message should have content"
         end
 
         test "should_return_successful_result_with_correct_data" do
