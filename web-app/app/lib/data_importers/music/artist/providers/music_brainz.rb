@@ -24,7 +24,7 @@ module DataImporters
             return failure_result(errors: api_result[:errors]) unless api_result[:success]
 
             artists_data = api_result[:data]["artists"]
-            return failure_result(errors: ["No artists found"]) if artists_data.empty?
+            return success_result(data_populated: []) if artists_data.empty?
 
             # Take the first result (top match by score or single lookup result)
             artist_data = artists_data.first

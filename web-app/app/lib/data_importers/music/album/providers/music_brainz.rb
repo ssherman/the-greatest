@@ -37,7 +37,7 @@ module DataImporters
             return failure_result(errors: api_result[:errors]) unless api_result[:success]
 
             release_groups = api_result[:data]["release-groups"]
-            return failure_result(errors: ["No albums found"]) if release_groups.empty?
+            return success_result(data_populated: []) if release_groups.empty?
 
             # Take the first result (single lookup result or highest search relevance score)
             release_group_data = release_groups.first

@@ -33,9 +33,9 @@ module DataImporters
           assert_equal true, query.primary_albums_only
         end
 
-        test "valid? returns true when artist is present and persisted" do
+        test "valid? returns false when artist is present but no title or MusicBrainz ID" do
           query = ImportQuery.new(artist: @artist)
-          assert query.valid?
+          refute query.valid?
         end
 
         test "valid? returns false when artist is nil" do
@@ -60,13 +60,24 @@ module DataImporters
           refute query.valid?
         end
 
-        test "valid? returns true when title is nil" do
+        test "valid? returns false when title is nil and no MusicBrainz ID" do
           query = ImportQuery.new(artist: @artist, title: nil)
+          refute query.valid?
+        end
+
+        test "valid? returns false when title is empty string and no MusicBrainz ID" do
+          query = ImportQuery.new(artist: @artist, title: "")
+          refute query.valid?
+        end
+
+        test "valid? returns true when artist and title are provided" do
+          query = ImportQuery.new(artist: @artist, title: "Test Album")
           assert query.valid?
         end
 
-        test "valid? returns true when title is empty string" do
-          query = ImportQuery.new(artist: @artist, title: "")
+        test "valid? returns true when only release_group_musicbrainz_id is provided" do
+          mbid = "f5093c06-23e3-404f-aeaa-40f72885ee3a"
+          query = ImportQuery.new(release_group_musicbrainz_id: mbid)
           assert query.valid?
         end
 
@@ -213,7 +224,8 @@ module DataImporters
             query.validate!
           end
 
-          assert_includes error.message, "Either artist or release_group_musicbrainz_id is required"
+          assert_includes error.message, "Artist is required when no MusicBrainz Release Group ID is provided"
+          assert_includes error.message, "Title is required when no MusicBrainz Release Group ID is provided"
         end
 
         test "validate! raises error when release_group_musicbrainz_id format is invalid" do

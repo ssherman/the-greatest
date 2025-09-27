@@ -178,12 +178,68 @@ end
 - AI prompt engineering requires iterative refinement for optimal results
 - Async provider pattern provides excellent separation of concerns
 
+### Post-Implementation Issues and Resolution
+
+#### Critical Issue Discovered
+After implementation, the AI code review agent identified a critical flaw: async providers (AI Description, Amazon) were queuing Sidekiq jobs with `nil` IDs when preceding MusicBrainz providers failed. This caused `ActiveRecord::RecordNotFound` errors and infinite job retries.
+
+#### Root Cause Analysis
+The issue stemmed from treating MusicBrainz providers as **validation gates** rather than **enhancement services**:
+- When MusicBrainz returned "not found", it was treated as a failure
+- Failed providers prevented item persistence (`ImporterBase` only saves after successful providers)
+- Async providers then queued jobs with `nil` IDs for unpersisted items
+
+#### Solution: Architectural Philosophy Change
+Changed MusicBrainz providers to treat "not found" as success with empty data:
+- **Before**: `ProviderResult.failure(errors: ["No artists found"])`
+- **After**: `ProviderResult.success(data_populated: [])`
+
+This philosophical shift makes MusicBrainz an **enhancement service** that enriches existing data rather than a **validation gate** that blocks creation.
+
+#### Additional Changes Required
+1. **Provider Behavior Updates**:
+   - `DataImporters::Music::Artist::Providers::MusicBrainz`: Returns success on "not found"
+   - `DataImporters::Music::Album::Providers::MusicBrainz`: Returns success on "not found"
+
+2. **Test Updates**:
+   - Updated `music_brainz_test.rb` files to expect success on empty results
+   - Fixed `importer_test.rb` test that incorrectly expected success when all providers fail
+   - Updated `import_query_test.rb` to match new validation requiring either `artist` + `title` OR `release_group_musicbrainz_id`
+
+3. **Validation Logic**:
+   - Single album imports now require either `artist` + `title` OR `release_group_musicbrainz_id`
+   - Bulk discovery operations moved to separate `BulkImporter` class
+
+4. **New Class Created**:
+   - `DataImporters::Music::Album::BulkImporter`: Handles bulk album discovery separately from single album imports
+
+#### Impact and Benefits
+- **Reliability**: No more `nil` ID job failures and infinite retries
+- **User Experience**: Items can be created with basic user data even when external services are unavailable
+- **Data Integrity**: Items saved incrementally as providers succeed
+- **Graceful Degradation**: System continues working when MusicBrainz is unavailable
+
+#### Files Modified During Resolution
+- `web-app/app/lib/data_importers/music/artist/providers/music_brainz.rb`
+- `web-app/app/lib/data_importers/music/album/providers/music_brainz.rb`
+- `web-app/app/lib/data_importers/music/album/bulk_importer.rb` (new)
+- `web-app/app/lib/data_importers/music/album/import_query.rb`
+- `web-app/test/lib/data_importers/music/artist/providers/music_brainz_test.rb`
+- `web-app/test/lib/data_importers/music/album/providers/music_brainz_test.rb`
+- `web-app/test/lib/data_importers/music/album/importer_test.rb`
+- `web-app/test/lib/data_importers/music/album/import_query_test.rb`
+
 ### Related PRs
-- All changes implemented in single session
+- All changes implemented in single session with post-implementation fixes
 
 ### Documentation Updated
 - [x] Updated testing.md with "What NOT to Test" section
 - [x] Updated todo status and completion markers
+- [x] Created current-progress.md documenting the issue resolution
+- [x] Updated data_importers.md with graceful fallback behavior
+- [x] Updated MusicBrainz provider documentation
+- [x] Updated importer documentation
+- [x] Created BulkImporter documentation
 - [ ] Update artist.md and album.md model documentation (future task)
 - [ ] Update AI tasks documentation (future task)
 - [ ] Update AVO actions documentation (future task)

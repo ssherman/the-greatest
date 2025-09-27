@@ -80,6 +80,9 @@ end
 
 ### Provider Capabilities
 - **MusicBrainz Integration**: Artist, album, and release data import
+- **Graceful Fallback**: MusicBrainz "not found" treated as success, enabling creation of items not yet in database
+- **Enhancement Philosophy**: External providers enrich data rather than gate creation
+- **Async Provider Support**: AI Description and Amazon providers queue background jobs
 - **Identifier Management**: MusicBrainz IDs, ISNIs, ASINs with duplicate prevention
 - **Category Population**: Genre and location categories from MusicBrainz tags
 - **Relationship Handling**: Artist credits, album associations, release metadata

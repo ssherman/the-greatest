@@ -65,7 +65,7 @@ module DataImporters
           assert_equal existing_artist, result.item
         end
 
-        test "call handles MusicBrainz failures gracefully" do
+        test "call creates artist with basic info when MusicBrainz fails" do
           # Mock MusicBrainz search to fail (called twice)
           search_service = mock
           search_service.expects(:search_by_name).with("Test Artist").twice.raises(StandardError, "Network error")
@@ -76,10 +76,14 @@ module DataImporters
 
           result = Importer.call(name: "Test Artist")
 
+          # Should still succeed because MusicBrainz failure doesn't prevent artist creation
+          # The artist will be created with basic info, just without MusicBrainz enrichment
           assert result.success?
+          assert_equal "Test Artist", result.item.name
+          assert result.item.persisted?
         end
 
-        test "call passes options to query" do
+        test "call creates artist with basic info when MusicBrainz finds no results" do
           search_service = mock
           search_service.expects(:search_by_name).with("Test Artist").twice.returns(
             success: false,
@@ -90,7 +94,10 @@ module DataImporters
 
           result = Importer.call(name: "Test Artist", country: "GB")
 
+          # Should succeed because MusicBrainz finding no results doesn't prevent artist creation
           assert result.success?
+          assert_equal "Test Artist", result.item.name
+          assert result.item.persisted?
         end
 
         # Tests for new MusicBrainz ID import functionality

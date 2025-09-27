@@ -35,6 +35,19 @@ Populates a `::Music::Artist` with MusicBrainz data and categories
 - `::Identifier` — stores external IDs
 - `::Music::Category`, `::CategoryItem` — categories and associations
 
+## Error Handling
+- **Network failures**: Return failure result with error details
+- **Invalid API responses**: Return failure result with parsing errors  
+- **Empty search results**: Return success result with empty data (allows artist creation with basic info)
+- **Provider exceptions**: Caught and returned as failure results
+
+### Enhancement Philosophy
+This provider operates as an **enhancement service** rather than a **validation gate**:
+- "Not found in MusicBrainz" returns success with empty `data_populated`
+- Allows artists not yet in the database to be created with basic user-provided information
+- Prevents blocking of async providers (AI Description, Amazon) that depend on persisted items
+- Enables graceful degradation when MusicBrainz is unavailable
+
 ## Private Methods
 
 ### `#search_for_artist(name)`

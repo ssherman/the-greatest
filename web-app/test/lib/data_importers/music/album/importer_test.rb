@@ -68,7 +68,7 @@ module DataImporters
           assert_equal existing_album, result.item
         end
 
-        test "call handles MusicBrainz failures gracefully" do
+        test "call fails when all providers fail" do
           # Mock MusicBrainz search to fail (called twice - finder + provider)
           search_service = mock
           search_service.expects(:search_by_artist_mbid_and_title)
@@ -82,71 +82,39 @@ module DataImporters
 
           result = Importer.call(artist: @artist, title: "Test Album")
 
-          # Should fail because both finder and provider failed
+          # Should fail because all providers failed
+          # Album is created in memory but never saved since no provider succeeded
           refute result.success?
+          assert_equal "Test Album", result.item.title
+          refute result.item.persisted?
+          assert_includes result.all_errors.join(", "), "Network error"
         end
 
-        test "call passes options to query" do
-          search_service = mock
-          search_service.expects(:search_primary_albums_only)
-            .with("83d91898-7763-47d7-b03b-b92132375c47")
-            .twice
-            .returns(
-              success: true,
-              data: {"release-groups" => []}
-            )
+        test "call fails when no title provided and no MusicBrainz ID" do
+          # Single album importer requires either title+artist or MusicBrainz ID
+          # For bulk discovery, use BulkImporter instead
 
-          ::Music::Musicbrainz::Search::ReleaseGroupSearch.stubs(:new).returns(search_service)
-
-          result = Importer.call(artist: @artist, primary_albums_only: true)
-
-          # Should fail because provider found no albums
-          refute result.success?
+          assert_raises(ArgumentError) do
+            Importer.call(artist: @artist, primary_albums_only: true)
+          end
         end
 
-        test "call creates album when no MusicBrainz results found" do
-          search_service = mock
-          search_service.expects(:search_by_artist_mbid)
-            .with("83d91898-7763-47d7-b03b-b92132375c47")
-            .twice
-            .returns(
-              success: true,
-              data: {"release-groups" => []}
-            )
+        test "call fails when no title or MusicBrainz ID provided" do
+          # Single album importer requires either title+artist or MusicBrainz ID
+          # For bulk discovery, use BulkImporter instead
 
-          ::Music::Musicbrainz::Search::ReleaseGroupSearch.stubs(:new).returns(search_service)
-
-          result = Importer.call(artist: @artist)
-
-          # Should fail because provider found no albums
-          refute result.success?
+          assert_raises(ArgumentError) do
+            Importer.call(artist: @artist)
+          end
         end
 
-        test "call imports all albums when no title specified" do
-          search_service = mock
-          search_service.expects(:search_by_artist_mbid)
-            .with("83d91898-7763-47d7-b03b-b92132375c47")
-            .twice
-            .returns(
-              success: true,
-              data: {
-                "release-groups" => [
-                  {
-                    "id" => "first-album-mbid",
-                    "title" => "First Album",
-                    "first-release-date" => "1970"
-                  }
-                ]
-              }
-            )
+        test "call imports all albums when no title specified should use BulkImporter" do
+          # This test demonstrates that bulk operations should use BulkImporter
+          # The single Importer now requires specific album info
 
-          ::Music::Musicbrainz::Search::ReleaseGroupSearch.stubs(:new).returns(search_service)
-
-          result = Importer.call(artist: @artist)
-
-          assert result.success?
-          assert_equal "First Album", result.item.title
-          assert_equal 1970, result.item.release_year
+          assert_raises(ArgumentError) do
+            Importer.call(artist: @artist)
+          end
         end
 
         test "call fails when artist has no MusicBrainz ID" do
@@ -158,30 +126,13 @@ module DataImporters
           assert_includes result.all_errors.join(", "), "Artist has no MusicBrainz ID"
         end
 
-        test "call handles primary albums only search" do
-          search_service = mock
-          search_service.expects(:search_primary_albums_only)
-            .with("83d91898-7763-47d7-b03b-b92132375c47")
-            .twice
-            .returns(
-              success: true,
-              data: {
-                "release-groups" => [
-                  {
-                    "id" => "studio-album-mbid",
-                    "title" => "Studio Album",
-                    "first-release-date" => "1975"
-                  }
-                ]
-              }
-            )
+        test "call handles primary albums only search should use BulkImporter" do
+          # Primary albums only is a bulk discovery operation
+          # The single Importer doesn't handle this anymore
 
-          ::Music::Musicbrainz::Search::ReleaseGroupSearch.stubs(:new).returns(search_service)
-
-          result = Importer.call(artist: @artist, primary_albums_only: true)
-
-          assert result.success?
-          assert_equal "Studio Album", result.item.title
+          assert_raises(ArgumentError) do
+            Importer.call(artist: @artist, primary_albums_only: true)
+          end
         end
 
         # Tests for new MusicBrainz Release Group ID functionality
