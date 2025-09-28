@@ -14,8 +14,9 @@ Validates album data and launches background Amazon enrichment job
 - Side Effects: Launches `Music::AmazonProductEnrichmentJob` background job
 
 ## Validations
-- Album must have a title (used for Amazon API search)
-- Album must have at least one artist (used for Amazon API search)
+- **Album title**: Must be present and non-blank (used for Amazon API search)
+- **Album artists**: Must have at least one associated artist (used for Amazon API search)
+- **Album persistence**: Must be persisted (saved to database) before queuing job
 
 ## Dependencies
 - `Music::AmazonProductEnrichmentJob` - Background job for actual Amazon API processing
@@ -29,9 +30,18 @@ This provider implements the async pattern where:
 4. Enrichment happens asynchronously in serial queue
 
 ## Error Handling
-- Returns failure result for missing album title or artists
-- Catches and wraps any unexpected exceptions
+- **Missing title**: Returns failure with "Album title required for Amazon search"
+- **No artists**: Returns failure with "Album must have at least one artist for Amazon search"
+- **Not persisted**: Returns failure with "Album must be persisted before queuing Amazon enrichment job"
+- **Provider exceptions**: Caught and returned as failure results
 - Background job handles Amazon API errors separately
+
+### Critical Persistence Validation
+The persistence validation prevents a critical issue where:
+1. Preceding providers (MusicBrainz) fail
+2. Album is not saved (ImporterBase only saves after successful providers)
+3. Amazon provider queues job with `album.id` (which is `nil`)
+4. Background job crashes with `ActiveRecord::RecordNotFound`
 
 ## Background Processing
 The actual Amazon integration happens in `Music::AmazonProductEnrichmentJob` which:

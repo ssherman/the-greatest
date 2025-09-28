@@ -65,7 +65,7 @@ class Music::Artist < ApplicationRecord
 
   # AI Methods
   def populate_details_with_ai!
-    Services::Ai::Tasks::ArtistDetailsTask.new(parent: self).call
+    Services::Ai::Tasks::ArtistDescriptionTask.new(parent: self).call
   end
 
   # Search Methods

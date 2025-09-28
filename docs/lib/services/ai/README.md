@@ -40,7 +40,8 @@ Task Request → Provider Selection → Chat Creation → AI API Call → Respon
 - **Google AI Strategy** (planned) - Basic capabilities with fallbacks
 
 ### Task Types
-- **Artist Details** (`tasks/artist_details_task.md`) - Extract artist information and metadata
+- **Artist Description** (`tasks/artist_description_task.md`) - Generate descriptive content for music artists
+- **Album Description** (`tasks/album_description_task.md`) - Generate descriptive content for music albums
 - **Author Information** (planned) - Book author details and validation
 - **Content Analysis** (planned) - Media content analysis and summarization
 - **Duplicate Detection** (planned) - Identify duplicate entries across catalogs
@@ -88,7 +89,7 @@ Central registry manages active provider:
 Services::Ai::ProviderRegistry.use!(:anthropic)
 
 # Tasks can override per-instance
-task = ArtistDetailsTask.new(parent: artist, provider: :openai)
+task = ArtistDescriptionTask.new(parent: artist, provider: :openai)
 ```
 
 ## Task System
@@ -151,7 +152,7 @@ end
 ### Explicit Success/Failure
 All AI operations return `Result` objects:
 ```ruby
-result = ArtistDetailsTask.new(parent: artist).call
+result = ArtistDescriptionTask.new(parent: artist).call
 
 if result.success?
   puts "Data: #{result.data}"
@@ -181,7 +182,8 @@ end
 
 ### Task Framework
 - [`tasks/base_task.md`](tasks/base_task.md) - Task template and workflow
-- [`tasks/artist_details_task.md`](tasks/artist_details_task.md) - Artist information extraction
+- [`tasks/artist_description_task.md`](tasks/artist_description_task.md) - Artist description generation
+- [`tasks/album_description_task.md`](tasks/album_description_task.md) - Album description generation
 
 ## Performance Optimizations
 - **Provider Memoization**: Reuse API clients across requests
@@ -213,10 +215,10 @@ The architecture supports easy addition of:
 ### Basic Task Execution
 ```ruby
 # Use default provider
-result = ArtistDetailsTask.new(parent: artist).call
+result = ArtistDescriptionTask.new(parent: artist).call
 
 # Override provider
-result = ArtistDetailsTask.new(parent: artist, provider: :openai).call
+result = ArtistDescriptionTask.new(parent: artist, provider: :openai).call
 
 # Check results
 if result.success?
@@ -232,7 +234,7 @@ end
 Services::Ai::ProviderRegistry.use!(:anthropic)
 
 # All tasks now use Anthropic by default
-result = ArtistDetailsTask.new(parent: artist).call
+result = ArtistDescriptionTask.new(parent: artist).call
 ```
 
 ### Custom Task Creation

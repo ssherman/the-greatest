@@ -1,7 +1,7 @@
 class Services::Ai::Providers::OpenaiStrategy < Services::Ai::Providers::BaseStrategy
   def capabilities = %i[json_mode json_schema function_calls]
 
-  def default_model = "gpt-5"
+  def default_model = "gpt-5-mini"
 
   def provider_key = :openai
 

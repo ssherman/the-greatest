@@ -6,6 +6,10 @@ class Avo::Resources::MusicArtist < Avo::BaseResource
   #   query: -> { query.ransack(id_eq: params[:q], m: "or").result(distinct: false) }
   # }
 
+  def actions
+    action Avo::Actions::Music::GenerateArtistDescription
+  end
+
   def fields
     field :id, as: :id
     field :name, as: :text

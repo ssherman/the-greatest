@@ -31,9 +31,14 @@ module DataImporters
         def validation_errors
           errors = []
 
-          # Either artist OR release_group_musicbrainz_id is required
-          if artist.blank? && release_group_musicbrainz_id.blank?
-            errors << "Either artist or release_group_musicbrainz_id is required"
+          # Either artist+title OR release_group_musicbrainz_id is required for single album import
+          if release_group_musicbrainz_id.blank?
+            if artist.blank?
+              errors << "Artist is required when no MusicBrainz Release Group ID is provided"
+            end
+            if title.blank?
+              errors << "Title is required when no MusicBrainz Release Group ID is provided"
+            end
           end
 
           # Validate artist when provided

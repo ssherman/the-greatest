@@ -3,7 +3,8 @@
 module DataImporters
   module Music
     module Album
-      # Main importer for Music::Album records
+      # Main importer for single Music::Album records
+      # For bulk album discovery, use BulkImporter instead
       class Importer < DataImporters::ImporterBase
         def self.call(artist: nil, release_group_musicbrainz_id: nil, item: nil, force_providers: false, providers: nil, **options)
           if item.present?
@@ -25,7 +26,8 @@ module DataImporters
         def providers
           @providers ||= [
             Providers::MusicBrainz.new,
-            Providers::Amazon.new
+            Providers::Amazon.new,
+            Providers::AiDescription.new
           ]
         end
 

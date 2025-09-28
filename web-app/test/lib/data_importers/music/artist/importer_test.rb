@@ -6,6 +6,11 @@ module DataImporters
   module Music
     module Artist
       class ImporterTest < ActiveSupport::TestCase
+        def setup
+          # Stub the AI description job since we're testing artist importing
+          ::Music::ArtistDescriptionJob.stubs(:perform_async)
+        end
+
         test "call with name creates and imports new artist" do
           # Mock MusicBrainz search to return no existing artist (called twice - finder + provider)
           search_service = mock
@@ -60,7 +65,7 @@ module DataImporters
           assert_equal existing_artist, result.item
         end
 
-        test "call handles MusicBrainz failures gracefully" do
+        test "call fails when all providers fail" do
           # Mock MusicBrainz search to fail (called twice)
           search_service = mock
           search_service.expects(:search_by_name).with("Test Artist").twice.raises(StandardError, "Network error")
@@ -71,38 +76,33 @@ module DataImporters
 
           result = Importer.call(name: "Test Artist")
 
-          # Should fail because both finder and provider failed
+          # Should fail because all providers failed:
+          # - MusicBrainz fails (network error)
+          # - AI Description fails (artist not persisted due to MusicBrainz failure)
           refute result.success?
+          assert_equal "Test Artist", result.item.name
+          refute result.item.persisted?
+          assert_includes result.all_errors.join(", "), "Network error"
         end
 
-        test "call passes options to query" do
+        test "call succeeds when MusicBrainz finds no results but returns success" do
           search_service = mock
           search_service.expects(:search_by_name).with("Test Artist").twice.returns(
-            success: false,
-            errors: ["No results"]
-          )
-
-          ::Music::Musicbrainz::Search::ArtistSearch.stubs(:new).returns(search_service)
-
-          result = Importer.call(name: "Test Artist", country: "GB")
-
-          # Should fail because provider failed to get data
-          refute result.success?
-        end
-
-        test "call creates artist when no MusicBrainz results found" do
-          search_service = mock
-          search_service.expects(:search_by_name).with("Unknown Artist").twice.returns(
             success: true,
             data: {"artists" => []}
           )
 
           ::Music::Musicbrainz::Search::ArtistSearch.stubs(:new).returns(search_service)
 
-          result = Importer.call(name: "Unknown Artist")
+          result = Importer.call(name: "Test Artist", country: "GB")
 
-          # Should fail because provider found no artists
-          refute result.success?
+          # Should succeed because:
+          # - MusicBrainz returns success (empty results, but success)
+          # - Artist gets saved after MusicBrainz provider succeeds
+          # - AI Description provider can then run successfully
+          assert result.success?
+          assert_equal "Test Artist", result.item.name
+          assert result.item.persisted?
         end
 
         # Tests for new MusicBrainz ID import functionality

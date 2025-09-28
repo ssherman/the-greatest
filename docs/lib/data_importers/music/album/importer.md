@@ -1,13 +1,16 @@
 # DataImporters::Music::Album::Importer
 
 ## Summary
-Main entry point for importing album data from external sources including MusicBrainz and Amazon Product API. Orchestrates the find-or-create workflow using Finder and Provider classes. Supports query-based imports (artist+title, MusicBrainz Release Group ID) and item-based imports for enriching existing albums.
+Main entry point for importing **single album** data from external sources including MusicBrainz, Amazon Product API, and AI Description generation. Orchestrates the find-or-create workflow using Finder and Provider classes. Supports query-based imports (artist+title, MusicBrainz Release Group ID) and item-based imports for enriching existing albums.
+
+**Note**: For bulk album discovery operations, use `DataImporters::Music::Album::BulkImporter` instead.
 
 ## Associations
 - Inherits from `DataImporters::ImporterBase`
 - Uses `DataImporters::Music::Album::Finder` for existing album detection
 - Uses `DataImporters::Music::Album::Providers::MusicBrainz` for MusicBrainz data population
 - Uses `DataImporters::Music::Album::Providers::Amazon` for Amazon Product API integration
+- Uses `DataImporters::Music::Album::Providers::AiDescription` for AI-generated album descriptions
 
 ## Public Methods
 
@@ -41,6 +44,7 @@ Class method that creates and executes an import operation supporting both query
 - `DataImporters::Music::Album::Finder` — existing album detection
 - `DataImporters::Music::Album::Providers::MusicBrainz` — data population from MusicBrainz
 - `DataImporters::Music::Album::Providers::Amazon` — asynchronous Amazon Product API integration
+- `DataImporters::Music::Album::Providers::AiDescription` — asynchronous AI-generated album descriptions
 - `Music::Album` — target model for import
 
 ## Import Workflow
@@ -182,7 +186,15 @@ result = DataImporters::Music::Album::Importer.call
 ## Import Sources
 - **MusicBrainz**: Primary music metadata (artists, albums, genres, release dates)
 - **Amazon Product API**: Commercial product data, pricing, external purchase links, album artwork
+- **AI Description Service**: AI-generated album descriptions via background job
 - **MusicBrainz Cover Art Archive**: High-quality album artwork (via background job)
+
+## Provider Philosophy
+All providers operate as **enhancement services** rather than **validation gates**:
+- MusicBrainz "not found" returns success with empty data (allows album creation with basic info)
+- Amazon and AI Description providers queue background jobs asynchronously
+- Individual provider failures don't prevent album creation or other providers from running
+- Items are saved incrementally after each successful provider
 
 ## Performance Considerations
 - **Query-Based**: Uses Finder to avoid duplicate imports

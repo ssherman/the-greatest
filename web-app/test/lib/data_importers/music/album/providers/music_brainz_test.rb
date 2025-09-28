@@ -115,7 +115,7 @@ module DataImporters
             assert_equal ["Network timeout"], result.errors
           end
 
-          test "populate returns failure when no albums found" do
+          test "populate returns success when no albums found" do
             search_service = mock
             search_service.expects(:search_by_artist_mbid_and_title)
               .with("83d91898-7763-47d7-b03b-b92132375c47", "Nonexistent Album")
@@ -129,8 +129,8 @@ module DataImporters
             query = ImportQuery.new(artist: @artist, title: "Nonexistent Album")
             result = @provider.populate(@album, query: query)
 
-            refute result.success?
-            assert_equal ["No albums found"], result.errors
+            assert result.success?
+            assert_equal [], result.data_populated
           end
 
           test "populate handles exceptions gracefully" do

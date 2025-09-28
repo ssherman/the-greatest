@@ -25,6 +25,7 @@ Main entry point for artist imports
 - Returns: Array of provider instances
 - Current providers:
   - DataImporters::Music::Artist::Providers::MusicBrainz
+  - DataImporters::Music::Artist::Providers::AiDescription
 
 ### `#initialize_item(query)`
 - Parameters: query (ImportQuery) - Validated artist query object
@@ -78,16 +79,20 @@ end
 2. **Find Existing**: Uses Finder to search by MusicBrainz ID (if provided) or name
 3. **Early Return**: Returns existing artist unless force_providers is true
 4. **Initialize**: Creates new Music::Artist with name if none found
-5. **Provider Execution**: Runs MusicBrainz provider to populate data, saving after success
+5. **Provider Execution**: Runs MusicBrainz and AI Description providers to populate data, saving after each success
 6. **Result Return**: Returns ImportResult with artist and provider feedback
 
 ## Data Populated
 
-The MusicBrainz provider populates:
+### MusicBrainz Provider
 - **Basic Info**: name, kind (person/band), country
 - **Dates**: year_formed, year_disbanded (bands) or born_on, year_died (persons)
 - **Identifiers**: MusicBrainz artist ID, ISNI (if available)
 - **Categories**: Genre and location categories from MusicBrainz tags
+
+### AI Description Provider
+- **Descriptions**: AI-generated artist descriptions via background job
+- **Asynchronous**: Queues `Music::ArtistDescriptionJob` for processing
 
 ## Error Handling
 
@@ -97,12 +102,20 @@ The MusicBrainz provider populates:
 - **Validation Failures**: Artist validation errors prevent saving
 - **Duplicate Detection**: Uses MusicBrainz ID for reliable duplicate prevention
 
+## Provider Philosophy
+All providers operate as **enhancement services** rather than **validation gates**:
+- MusicBrainz "not found" returns success with empty data (allows artist creation with basic info)
+- AI Description provider queues background job asynchronously
+- Individual provider failures don't prevent artist creation or other providers from running
+- Artists are saved incrementally after each successful provider
+
 ## Dependencies
 
 - DataImporters::ImporterBase (parent class)
 - DataImporters::Music::Artist::ImportQuery
 - DataImporters::Music::Artist::Finder
 - DataImporters::Music::Artist::Providers::MusicBrainz
+- DataImporters::Music::Artist::Providers::AiDescription
 - Music::Artist model
 - Music::Musicbrainz::Search::ArtistSearch for API integration
 - Identifier model for external ID storage

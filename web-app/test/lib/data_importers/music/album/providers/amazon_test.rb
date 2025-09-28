@@ -69,6 +69,19 @@ module DataImporters
             assert result.success?
             assert_equal [:amazon_enrichment_queued], result.data_populated
           end
+
+          test "populate returns failure when album is not persisted" do
+            # Create a new, non-persisted album with artists
+            unpersisted_album = ::Music::Album.new(title: "New Album")
+            unpersisted_album.album_artists.build(artist: @artist, position: 1)
+            # Stub the artists association to return the artist (simulates the association being loaded)
+            unpersisted_album.stubs(:artists).returns([@artist])
+
+            result = @provider.populate(unpersisted_album, query: @query)
+
+            refute result.success?
+            assert_includes result.errors, "Album must be persisted before queuing Amazon enrichment job"
+          end
         end
       end
     end

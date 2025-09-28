@@ -67,7 +67,7 @@ puts "Capabilities: #{provider.capabilities}"
 ```ruby
 # Switch to OpenAI for tasks requiring JSON schema
 Services::Ai::ProviderRegistry.use!(:openai)
-artist_task = ArtistDetailsTask.new(parent: artist)
+artist_task = ArtistDescriptionTask.new(parent: artist)
 result = artist_task.call
 
 # Switch to Anthropic for general conversations

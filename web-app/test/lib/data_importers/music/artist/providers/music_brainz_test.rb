@@ -108,7 +108,7 @@ module DataImporters
             assert_equal ["Network timeout"], result.errors
           end
 
-          test "populate returns failure when no artists found" do
+          test "populate returns success when no artists found" do
             search_service = mock
             search_service.expects(:search_by_name).with("Unknown Artist").returns(
               success: true,
@@ -120,8 +120,8 @@ module DataImporters
             query = ImportQuery.new(name: "Unknown Artist")
             result = @provider.populate(@artist, query: query)
 
-            refute result.success?
-            assert_equal ["No artists found"], result.errors
+            assert result.success?
+            assert_equal [], result.data_populated
           end
 
           test "populate handles exceptions gracefully" do
