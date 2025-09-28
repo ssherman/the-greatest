@@ -6,23 +6,21 @@ module DataImporters
   module Music
     module Album
       module Providers
-        class AmazonTest < ActiveSupport::TestCase
+        class AiDescriptionTest < ActiveSupport::TestCase
           def setup
-            @provider = Amazon.new
+            @provider = AiDescription.new
             @artist = music_artists(:pink_floyd)
             @query = ImportQuery.new(artist: @artist, title: "The Wall")
             @album = music_albums(:dark_side_of_the_moon) # Use existing album from fixtures
-            # Stub the release import job since we're testing the provider
-            ::Music::ImportAlbumReleasesJob.stubs(:perform_async)
           end
 
-          test "populate launches AmazonProductEnrichmentJob and returns success" do
-            ::Music::AmazonProductEnrichmentJob.expects(:perform_async).with(@album.id)
+          test "populate launches AlbumDescriptionJob and returns success" do
+            ::Music::AlbumDescriptionJob.expects(:perform_async).with(@album.id)
 
             result = @provider.populate(@album, query: @query)
 
             assert result.success?
-            assert_equal [:amazon_enrichment_queued], result.data_populated
+            assert_equal [:ai_description_queued], result.data_populated
           end
 
           test "populate returns failure when album has no title" do
@@ -31,7 +29,7 @@ module DataImporters
             result = @provider.populate(@album, query: @query)
 
             refute result.success?
-            assert_includes result.errors, "Album title required for Amazon search"
+            assert_includes result.errors, "Album title required for AI description"
           end
 
           test "populate returns failure when album has blank title" do
@@ -40,7 +38,7 @@ module DataImporters
             result = @provider.populate(@album, query: @query)
 
             refute result.success?
-            assert_includes result.errors, "Album title required for Amazon search"
+            assert_includes result.errors, "Album title required for AI description"
           end
 
           test "populate returns failure when album has no artists" do
@@ -49,7 +47,7 @@ module DataImporters
             result = @provider.populate(@album, query: @query)
 
             refute result.success?
-            assert_includes result.errors, "Album must have at least one artist for Amazon search"
+            assert_includes result.errors, "Album must have at least one artist for AI description"
           end
 
           test "populate returns failure when album artists collection is empty" do
@@ -58,16 +56,7 @@ module DataImporters
             result = @provider.populate(@album, query: @query)
 
             refute result.success?
-            assert_includes result.errors, "Album must have at least one artist for Amazon search"
-          end
-
-          test "populate works with item-based import when query is nil" do
-            ::Music::AmazonProductEnrichmentJob.expects(:perform_async).with(@album.id)
-
-            result = @provider.populate(@album, query: nil)
-
-            assert result.success?
-            assert_equal [:amazon_enrichment_queued], result.data_populated
+            assert_includes result.errors, "Album must have at least one artist for AI description"
           end
 
           test "populate returns failure when album is not persisted" do
@@ -80,7 +69,16 @@ module DataImporters
             result = @provider.populate(unpersisted_album, query: @query)
 
             refute result.success?
-            assert_includes result.errors, "Album must be persisted before queuing Amazon enrichment job"
+            assert_includes result.errors, "Album must be persisted before queuing AI description job"
+          end
+
+          test "populate works with item-based import when query is nil" do
+            ::Music::AlbumDescriptionJob.expects(:perform_async).with(@album.id)
+
+            result = @provider.populate(@album, query: nil)
+
+            assert result.success?
+            assert_equal [:ai_description_queued], result.data_populated
           end
         end
       end

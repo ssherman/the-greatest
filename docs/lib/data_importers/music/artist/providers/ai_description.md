@@ -1,53 +1,95 @@
 # DataImporters::Music::Artist::Providers::AiDescription
 
 ## Summary
-DataImporter provider that queues AI description generation for music artists. Follows the async provider pattern to enable background processing without blocking the import flow.
+Asynchronous provider that queues AI-generated artist descriptions via background job. This provider validates required data and item persistence before queuing the job to prevent crashes from nil IDs.
 
 ## Associations
-- Inherits from `DataImporters::ProviderBase`
-- Works with `Music::Artist` models
-- Queues `Music::ArtistDescriptionJob` for processing
+- Uses `::Music::Artist` model (no direct associations inside provider)
+- Queues `::Music::ArtistDescriptionJob` for background processing
 
 ## Public Methods
 
 ### `#populate(artist, query:)`
-Queues AI description generation job for the artist
-- Parameters: 
-  - artist (Music::Artist) - The artist to generate description for
-  - query (Hash) - Import query context (not used for AI descriptions)
+Validates artist data and queues AI description generation job
+- Parameters:
+  - `artist` (Music::Artist) — Target artist for AI description
+  - `query` (ImportQuery) — Query object (can be nil for item-based imports)
 - Returns: ProviderResult with success status and data_populated
-- Side effects: Queues Sidekiq job for background processing
+- Side effects: Queues `Music::ArtistDescriptionJob.perform_async(artist.id)`
 
-## Provider Configuration
-- Provider name: "AiDescription"
-- Data populated: `[:ai_description_queued]`
-- Async pattern: Returns success immediately after queuing job
+## Validations
+- **Artist name**: Must be present and non-blank
+- **Artist persistence**: Must be persisted (saved to database) before queuing job
+
+## Scopes
+- None
+
+## Constants
+- None
+
+## Callbacks
+- None
 
 ## Dependencies
-- Music::ArtistDescriptionJob for background processing
-- DataImporters::ProviderBase for common functionality
-- Sidekiq for job queuing
+- `::Music::ArtistDescriptionJob` — Background job for AI description generation
+- `DataImporters::ProviderBase` — Parent class providing result methods
 
-## Usage Pattern
+## Async Provider Pattern
+This provider follows the async provider pattern:
+1. **Immediate validation** of required data and persistence
+2. **Background job queuing** with persisted item ID
+3. **Success result** returned immediately (actual work happens in background)
+4. **Failure prevention** through persistence validation
+
+## Error Handling
+- **Missing name**: Returns failure with "Artist name required for AI description"
+- **Not persisted**: Returns failure with "Artist must be persisted before queuing AI description job"
+- **Provider exceptions**: Caught and returned as failure results
+
+### Critical Persistence Validation
+The persistence validation prevents a critical issue where:
+1. Preceding providers (MusicBrainz) fail
+2. Artist is not saved (ImporterBase only saves after successful providers)
+3. AI Description provider queues job with `artist.id` (which is `nil`)
+4. Background job crashes with `ActiveRecord::RecordNotFound`
+
+## Usage Examples
+
+### Successful Queuing
 ```ruby
-# Used automatically by Artist importer
-DataImporters::Music::Artist::Importer.call(name: "Pink Floyd")
+# Artist must be persisted and have required data
+artist = Music::Artist.create!(name: "Test Artist")
 
-# Can be used with force_providers for re-enrichment
-DataImporters::Music::Artist::Importer.call(
-  name: "Pink Floyd", 
-  force_providers: true
-)
+provider = DataImporters::Music::Artist::Providers::AiDescription.new
+result = provider.populate(artist, query: query)
+
+if result.success?
+  puts "AI description job queued"
+  puts result.data_populated # => [:ai_description_queued]
+end
 ```
 
-## Integration Points
-- Included in `DataImporters::Music::Artist::Importer` provider list
-- Executes independently of MusicBrainz providers
-- Enables background AI enrichment during import process
+### Validation Failures
+```ruby
+# Non-persisted artist will fail
+artist = Music::Artist.new(name: "Test Artist")
+result = provider.populate(artist, query: query)
+# => failure: "Artist must be persisted before queuing AI description job"
 
-## Design Pattern
-Follows the async provider pattern established by Amazon provider:
-1. Validates required data exists
-2. Queues background job immediately
-3. Returns success with queued status
-4. Background job handles actual AI processing
+# Artist without name will fail
+artist = Music::Artist.create!(name: "")
+result = provider.populate(artist, query: query)
+# => failure: "Artist name required for AI description"
+```
+
+## Testing
+Comprehensive test coverage in `test/lib/data_importers/music/artist/providers/ai_description_test.rb`:
+- **Success scenarios**: Proper job queuing with persisted artists
+- **Validation failures**: Name and persistence requirements
+- **Item-based imports**: Works with nil query parameter
+- **Job stubbing**: Uses Mocha to verify job queuing without real execution
+
+## Related Classes
+- `DataImporters::Music::Album::Providers::AiDescription` — Similar provider for albums
+- `DataImporters::Music::Album::Providers::Amazon` — Another async provider with same validation pattern
+- `Services::Ai::Tasks::ArtistDescriptionTask` — The actual AI task executed by the background job

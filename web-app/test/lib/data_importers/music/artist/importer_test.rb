@@ -65,7 +65,7 @@ module DataImporters
           assert_equal existing_artist, result.item
         end
 
-        test "call creates artist with basic info when MusicBrainz fails" do
+        test "call fails when all providers fail" do
           # Mock MusicBrainz search to fail (called twice)
           search_service = mock
           search_service.expects(:search_by_name).with("Test Artist").twice.raises(StandardError, "Network error")
@@ -76,25 +76,30 @@ module DataImporters
 
           result = Importer.call(name: "Test Artist")
 
-          # Should still succeed because MusicBrainz failure doesn't prevent artist creation
-          # The artist will be created with basic info, just without MusicBrainz enrichment
-          assert result.success?
+          # Should fail because all providers failed:
+          # - MusicBrainz fails (network error)
+          # - AI Description fails (artist not persisted due to MusicBrainz failure)
+          refute result.success?
           assert_equal "Test Artist", result.item.name
-          assert result.item.persisted?
+          refute result.item.persisted?
+          assert_includes result.all_errors.join(", "), "Network error"
         end
 
-        test "call creates artist with basic info when MusicBrainz finds no results" do
+        test "call succeeds when MusicBrainz finds no results but returns success" do
           search_service = mock
           search_service.expects(:search_by_name).with("Test Artist").twice.returns(
-            success: false,
-            errors: ["No results"]
+            success: true,
+            data: {"artists" => []}
           )
 
           ::Music::Musicbrainz::Search::ArtistSearch.stubs(:new).returns(search_service)
 
           result = Importer.call(name: "Test Artist", country: "GB")
 
-          # Should succeed because MusicBrainz finding no results doesn't prevent artist creation
+          # Should succeed because:
+          # - MusicBrainz returns success (empty results, but success)
+          # - Artist gets saved after MusicBrainz provider succeeds
+          # - AI Description provider can then run successfully
           assert result.success?
           assert_equal "Test Artist", result.item.name
           assert result.item.persisted?

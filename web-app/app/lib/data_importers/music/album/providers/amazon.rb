@@ -12,6 +12,10 @@ module DataImporters
             return failure_result(errors: ["Album title required for Amazon search"]) if album.title.blank?
             return failure_result(errors: ["Album must have at least one artist for Amazon search"]) if album.artists.empty?
 
+            # Validate album is persisted before queuing background job
+            # This prevents jobs from running with nil IDs when preceding providers fail
+            return failure_result(errors: ["Album must be persisted before queuing Amazon enrichment job"]) unless album.persisted?
+
             # Launch background job for Amazon API processing
             # Job will handle API calls, AI validation, external links, and image download
             ::Music::AmazonProductEnrichmentJob.perform_async(album.id)

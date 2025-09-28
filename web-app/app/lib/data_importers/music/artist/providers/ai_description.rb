@@ -11,6 +11,10 @@ module DataImporters
             # Validate we have required data for AI description
             return failure_result(errors: ["Artist name required for AI description"]) if artist.name.blank?
 
+            # Validate artist is persisted before queuing background job
+            # This prevents jobs from running with nil IDs when preceding providers fail
+            return failure_result(errors: ["Artist must be persisted before queuing AI description job"]) unless artist.persisted?
+
             # Launch background job for AI description processing
             # Job will handle AI task execution and description update
             ::Music::ArtistDescriptionJob.perform_async(artist.id)
