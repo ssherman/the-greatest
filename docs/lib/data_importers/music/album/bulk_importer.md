@@ -92,6 +92,23 @@ result = DataImporters::Music::Album::BulkImporter.call(
 )
 ```
 
+### Collaborative Albums Handling
+```ruby
+# When importing albums for multiple artists, existing albums are enriched
+# Example: Import albums for each member of a supergroup
+supergroup_members = ["David Bowie", "Freddie Mercury", "Annie Lennox"]
+
+supergroup_members.each do |artist_name|
+  artist = Music::Artist.find_by(name: artist_name)
+  result = DataImporters::Music::Album::BulkImporter.call(artist: artist)
+  
+  # Existing collaborative albums will:
+  # 1. Add this artist to their artist associations
+  # 2. Re-run all providers (AI descriptions, Amazon data, etc.)
+  # 3. Update with any new data from this artist's perspective
+end
+```
+
 ## Relationship to Album::Importer
 
 ### Clear Separation of Concerns
@@ -101,18 +118,20 @@ result = DataImporters::Music::Album::BulkImporter.call(
 ### Integration Pattern
 ```ruby
 # BulkImporter delegates to Album::Importer for each found album
+# Passes artist and force_providers to handle collaborative albums correctly
 result = DataImporters::Music::Album::Importer.call(
-  artist: @artist,
   release_group_musicbrainz_id: album_mbid,
-  title: album_title
+  artist: @artist,
+  force_providers: true
 )
 ```
 
 This ensures:
-- Consistent album creation logic
-- Full provider chain execution (MusicBrainz, Amazon, AI Description)
-- Proper validation and error handling
-- Incremental saving after each successful provider
+- **Consistent album creation logic** for new albums
+- **Collaborative album support**: Existing albums get additional artist associations
+- **Full provider enrichment**: All providers run even on existing albums (AI descriptions, Amazon data)
+- **Proper validation and error handling** through single Album::Importer
+- **Incremental saving** after each successful provider
 
 ## Performance Considerations
 - **Sequential Processing**: Albums imported one at a time for reliability

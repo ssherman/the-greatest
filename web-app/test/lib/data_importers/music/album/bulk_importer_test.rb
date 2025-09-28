@@ -46,21 +46,34 @@ module DataImporters
           ::Music::Musicbrainz::Search::ReleaseGroupSearch.stubs(:new).returns(search_service)
 
           # Expect calls to single Album::Importer for each found album
-          Importer.expects(:call).with(release_group_musicbrainz_id: "album-1-mbid").returns(
+          # Now includes artist and force_providers for proper enrichment
+          Importer.expects(:call).with(
+            release_group_musicbrainz_id: "album-1-mbid",
+            artist: @artist,
+            force_providers: true
+          ).returns(
             DataImporters::ImportResult.new(
               item: ::Music::Album.new(title: "The Dark Side of the Moon"),
               provider_results: [],
               success: true
             )
           )
-          Importer.expects(:call).with(release_group_musicbrainz_id: "album-2-mbid").returns(
+          Importer.expects(:call).with(
+            release_group_musicbrainz_id: "album-2-mbid",
+            artist: @artist,
+            force_providers: true
+          ).returns(
             DataImporters::ImportResult.new(
               item: ::Music::Album.new(title: "The Wall"),
               provider_results: [],
               success: true
             )
           )
-          Importer.expects(:call).with(release_group_musicbrainz_id: "album-3-mbid").returns(
+          Importer.expects(:call).with(
+            release_group_musicbrainz_id: "album-3-mbid",
+            artist: @artist,
+            force_providers: true
+          ).returns(
             DataImporters::ImportResult.new(
               item: ::Music::Album.new(title: "Wish You Were Here"),
               provider_results: [],
@@ -97,7 +110,11 @@ module DataImporters
 
           ::Music::Musicbrainz::Search::ReleaseGroupSearch.stubs(:new).returns(search_service)
 
-          Importer.expects(:call).with(release_group_musicbrainz_id: "primary-album-mbid").returns(
+          Importer.expects(:call).with(
+            release_group_musicbrainz_id: "primary-album-mbid",
+            artist: @artist,
+            force_providers: true
+          ).returns(
             DataImporters::ImportResult.new(
               item: ::Music::Album.new(title: "The Dark Side of the Moon"),
               provider_results: [],
@@ -204,7 +221,11 @@ module DataImporters
           ::Music::Musicbrainz::Search::ReleaseGroupSearch.stubs(:new).returns(search_service)
 
           # First album succeeds
-          Importer.expects(:call).with(release_group_musicbrainz_id: "success-album-mbid").returns(
+          Importer.expects(:call).with(
+            release_group_musicbrainz_id: "success-album-mbid",
+            artist: @artist,
+            force_providers: true
+          ).returns(
             DataImporters::ImportResult.new(
               item: ::Music::Album.new(title: "Successful Album"),
               provider_results: [],
@@ -213,7 +234,11 @@ module DataImporters
           )
 
           # Second album fails
-          Importer.expects(:call).with(release_group_musicbrainz_id: "fail-album-mbid").returns(
+          Importer.expects(:call).with(
+            release_group_musicbrainz_id: "fail-album-mbid",
+            artist: @artist,
+            force_providers: true
+          ).returns(
             DataImporters::ImportResult.new(
               item: nil,
               provider_results: [
@@ -254,7 +279,11 @@ module DataImporters
 
           ::Music::Musicbrainz::Search::ReleaseGroupSearch.stubs(:new).returns(search_service)
 
-          Importer.expects(:call).with(release_group_musicbrainz_id: "fail-album-mbid").returns(
+          Importer.expects(:call).with(
+            release_group_musicbrainz_id: "fail-album-mbid",
+            artist: @artist,
+            force_providers: true
+          ).returns(
             DataImporters::ImportResult.new(
               item: nil,
               provider_results: [
@@ -377,6 +406,46 @@ module DataImporters
           BulkImporter.expects(:new).with(artist: @artist, primary_albums_only: true).returns(instance)
 
           BulkImporter.call(artist: @artist, primary_albums_only: true)
+        end
+
+        test "call passes artist and force_providers to ensure existing albums are enriched" do
+          # This test verifies the fix for collaborative albums issue
+          search_service = mock
+          search_service.expects(:search_by_artist_mbid)
+            .with("83d91898-7763-47d7-b03b-b92132375c47")
+            .returns(
+              success: true,
+              data: {
+                "release-groups" => [
+                  {
+                    "id" => "collaborative-album-mbid",
+                    "title" => "Collaborative Album"
+                  }
+                ]
+              }
+            )
+
+          ::Music::Musicbrainz::Search::ReleaseGroupSearch.stubs(:new).returns(search_service)
+
+          # The key assertion: Importer is called with artist and force_providers: true
+          # This ensures existing albums get the new artist association and provider enrichment
+          Importer.expects(:call).with(
+            release_group_musicbrainz_id: "collaborative-album-mbid",
+            artist: @artist,
+            force_providers: true
+          ).returns(
+            DataImporters::ImportResult.new(
+              item: ::Music::Album.new(title: "Collaborative Album"),
+              provider_results: [],
+              success: true
+            )
+          )
+
+          result = BulkImporter.call(artist: @artist)
+
+          assert result.success?
+          assert_equal 1, result.total_found
+          assert_equal 1, result.successful_imports
         end
       end
     end

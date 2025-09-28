@@ -27,9 +27,15 @@ module DataImporters
           return failure_result("No albums found in MusicBrainz") if albums_data.empty?
 
           # Import each album using the single Album::Importer
+          # Pass artist and force_providers to ensure existing albums are enriched
+          # and artist associations are updated for collaborative albums
           import_results = []
           albums_data.each do |album_data|
-            result = Importer.call(release_group_musicbrainz_id: album_data["id"])
+            result = Importer.call(
+              release_group_musicbrainz_id: album_data["id"],
+              artist: @artist,
+              force_providers: true
+            )
             import_results << result
           end
 
