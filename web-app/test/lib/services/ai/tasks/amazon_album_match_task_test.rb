@@ -115,8 +115,9 @@ module Services
         test "ResponseSchema has correct structure" do
           schema = AmazonAlbumMatchTask::ResponseSchema
 
-          assert_equal "AmazonAlbumMatch", schema.name
-          assert schema.respond_to?(:array)
+          # OpenAI::BaseModel uses the full class name
+          assert_includes schema.name, "ResponseSchema"
+          assert schema < OpenAI::BaseModel
         end
 
         test "task accepts custom provider and model" do

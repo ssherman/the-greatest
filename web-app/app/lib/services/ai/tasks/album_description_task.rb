@@ -50,14 +50,10 @@ module Services
         end
 
         # Internal schema class
-        class ResponseSchema < RubyLLM::Schema
-          def self.name
-            "AlbumDescription"
-          end
-
-          string :description, required: false, description: "Brief description of the album using only provided context"
-          boolean :abstained, required: true, description: "Whether the AI abstained from providing a description"
-          string :abstain_reason, required: false, description: "Reason for abstaining if abstained is true"
+        class ResponseSchema < OpenAI::BaseModel
+          required :description, String, nil?: true, doc: "Brief description of the album using only provided context"
+          required :abstained, OpenAI::Boolean, doc: "Whether the AI abstained from providing a description"
+          required :abstain_reason, String, nil?: true, doc: "Reason for abstaining if abstained is true"
         end
       end
     end

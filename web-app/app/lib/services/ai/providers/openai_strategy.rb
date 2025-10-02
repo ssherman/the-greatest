@@ -12,30 +12,66 @@ class Services::Ai::Providers::OpenaiStrategy < Services::Ai::Providers::BaseStr
   end
 
   def make_api_call(parameters)
-    client.chat.completions.create(parameters)
+    client.responses.create(parameters)
   end
 
   def format_response(response, schema)
-    # Return structured response wrapper
-    choice = response.choices.first
+    # Extract from Responses API structure
+    # output is an array that may contain reasoning and message items
+    # Find the message item (type: :message)
+    message_item = response.output.find { |item| item.type == :message }
+
+    # Get the first content item from the message
+    content_item = message_item.content.first
+
     {
-      content: choice.message.content,  # Raw JSON string from API
-      parsed: parse_response(choice.message.content, schema),  # Parsed and validated data
+      content: content_item.text,  # Raw text from API
+      parsed: content_item.parsed,  # Already parsed and validated by OpenAI
       id: response.id,
       model: response.model,
       usage: response.usage
     }
   end
 
-  def build_parameters(model:, messages:, temperature:, response_format:, schema:)
-    parameters = super
+  def build_parameters(model:, messages:, temperature:, response_format:, schema:, reasoning: nil)
+    # Separate system messages from conversation messages
+    system_messages = messages.select { |m| (m[:role] || m["role"]) == "system" }
+    conversation_messages = messages.reject { |m| (m[:role] || m["role"]) == "system" }
 
-    # Use RubyLLM schema if provided
-    if schema && schema < RubyLLM::Schema
-      parameters[:response_format] = {
-        type: "json_schema",
-        json_schema: JSON.parse(schema.new.to_json)
+    # Clean messages: strip timestamps and other non-standard fields
+    clean_messages = conversation_messages.map do |msg|
+      {
+        role: msg[:role] || msg["role"],
+        content: msg[:content] || msg["content"]
       }
+    end
+
+    parameters = {
+      model: model,
+      temperature: temperature,
+      service_tier: "flex"
+    }
+
+    # Add instructions if there's a system message
+    if system_messages.any?
+      system_content = system_messages.first[:content] || system_messages.first["content"]
+      parameters[:instructions] = system_content
+    end
+
+    # Add input (just the conversation messages)
+    # Use string for single message, array for multiple
+    parameters[:input] = if clean_messages.length == 1 && clean_messages.first[:role] == "user"
+      clean_messages.first[:content]
+    else
+      clean_messages
+    end
+
+    # Add reasoning parameter if provided (OpenAI-specific)
+    parameters[:reasoning] = reasoning if reasoning
+
+    # Use OpenAI::BaseModel with Responses API 'text' parameter
+    if schema && schema < OpenAI::BaseModel
+      parameters[:text] = schema
     elsif response_format
       parameters[:response_format] = response_format
     end

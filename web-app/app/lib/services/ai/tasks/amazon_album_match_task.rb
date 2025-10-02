@@ -104,19 +104,15 @@ module Services
         end
 
         # Internal schema class
-        class ResponseSchema < RubyLLM::Schema
-          def self.name
-            "AmazonAlbumMatch"
-          end
+        class MatchResult < OpenAI::BaseModel
+          required :asin, String, doc: "Amazon ASIN of the matching product"
+          required :title, String, doc: "Product title from Amazon"
+          required :artist, String, doc: "Artist name from Amazon"
+          required :explanation, String, doc: "Brief explanation of why this is a match"
+        end
 
-          array :matching_results do
-            object do
-              string :asin, required: true, description: "Amazon ASIN of the matching product"
-              string :title, required: true, description: "Product title from Amazon"
-              string :artist, required: true, description: "Artist name from Amazon"
-              string :explanation, required: true, description: "Brief explanation of why this is a match"
-            end
-          end
+        class ResponseSchema < OpenAI::BaseModel
+          required :matching_results, OpenAI::ArrayOf[MatchResult]
         end
       end
     end

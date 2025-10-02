@@ -91,7 +91,7 @@ module DataImporters
         end
 
         test "call returns nil when artist has no MusicBrainz ID" do
-          artist_without_mbid = music_artists(:david_bowie) # Assuming this has no MusicBrainz ID
+          artist_without_mbid = music_artists(:roger_waters) # This artist has no MusicBrainz ID
           query = ImportQuery.new(artist: artist_without_mbid, title: "Heroes")
 
           result = @finder.call(query: query)

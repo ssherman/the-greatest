@@ -60,19 +60,27 @@ Array of message objects with structure:
 ```
 
 ### `raw_responses`
-Array of raw API response metadata:
+Array of complete provider response objects with timestamps. Each entry contains the full response hash returned by the provider strategy:
 ```json
 {
-  "provider_response_id": "chatcmpl-123",
-  "model": "gpt-4",
+  "content": "David Bowie was an innovative English singer...",
+  "parsed": {
+    "description": "Innovative English singer-songwriter and actor",
+    "born_on": "1947-01-08",
+    "year_died": 2016,
+    "country": "GB"
+  },
+  "id": "chatcmpl-123",
+  "model": "gpt-4o",
   "usage": {
-    "prompt_tokens": 10,
-    "completion_tokens": 5,
-    "total_tokens": 15
+    "prompt_tokens": 150,
+    "completion_tokens": 85,
+    "total_tokens": 235
   },
   "timestamp": "2024-01-01T10:00:00Z"
 }
 ```
+This stores the complete provider response for debugging and analysis, not just selected fields.
 
 ### `response_schema`
 JSON schema used for structured responses (when using json_schema mode):
@@ -87,6 +95,36 @@ JSON schema used for structured responses (when using json_schema mode):
   }
 }
 ```
+
+### `parameters`
+The exact parameters that will be sent to the AI provider API. This is saved BEFORE making the API call, so we capture the request even if it fails:
+```json
+{
+  "model": "gpt-5-mini",
+  "temperature": 1.0,
+  "service_tier": "flex",
+  "input": "Describe David Bowie as a music artist...",
+  "instructions": "You are a music expert...",
+  "text": "ArtistDescriptionTask::ResponseSchema",
+  "reasoning": {
+    "effort": "low"
+  }
+}
+```
+
+**Common parameters:**
+- `model` - AI model used for the request
+- `temperature` - Temperature setting for response generation
+- `input` - The actual user input/messages sent to the API
+
+**Provider-specific parameters:**
+- `service_tier` - (OpenAI) Service tier, typically "flex" for cost optimization
+- `reasoning` - (OpenAI) Reasoning effort configuration
+- `instructions` - (OpenAI) System instructions for Responses API
+- `text` - (OpenAI) Schema class name for structured outputs
+- `response_format` - Response format specification
+
+These are the raw parameters sent to the provider's API, captured for debugging and observability.
 
 ## Scopes
 - `by_provider(provider)` - Filter by AI provider

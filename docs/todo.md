@@ -16,6 +16,7 @@
 9. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-10-01] [Refactor AI Agent Integration: OpenAI Responses API & Flex Processing](todos/043-refactor-ai-agent-integration.md)
 - ✅ [2025-09-26] [Artist and Album Description AI Agents](todos/042-artist-album-description-ai-agents.md)
 - ✅ [2025-09-20] [UI Album Rankings Implementation](todos/041-ui-album-rankings.md)
 - ✅ [2025-09-20] [Amazon Product API Integration for Music Albums](todos/039-amazon-product-api.md)

@@ -15,9 +15,20 @@ Creates a new task instance
 
 ### `#call`
 Executes the complete AI task workflow
+
+**Flow:**
+1. Creates AiChat record with task configuration
+2. Calls provider's `send_message!` (which saves parameters before API call)
+3. Updates chat with provider response (stores complete response in raw_responses)
+4. Calls task-specific `process_and_persist` to handle the result
+
 - Returns: Services::Ai::Result with success/failure, data, and ai_chat
-- Side effects: Creates AiChat, sends messages, processes response, updates parent
-- Error handling: Catches all StandardError and returns failure result
+- Side effects:
+  - Creates AiChat record
+  - Provider saves parameters to ai_chat before making API call
+  - Updates ai_chat with messages and raw_responses
+  - May update parent entity (depends on task implementation)
+- Error handling: Catches all StandardError and returns failure result with error message
 
 ## Protected Methods (Abstract)
 
@@ -82,9 +93,13 @@ Adds user message to the chat
 - Side effects: Updates chat messages and saves
 
 ### `#update_chat_with_response(provider_response)`
-Adds AI response to chat history
-- Parameters: provider_response (Hash) - Provider response data
-- Side effects: Updates chat messages and raw_responses, saves
+Adds AI response to chat history and stores complete provider response
+- Parameters: provider_response (Hash) - Complete provider response hash with `:content`, `:parsed`, `:id`, `:model`, `:usage` keys
+- Side effects:
+  - Appends assistant message to `chat.messages`
+  - Appends **entire provider_response** to `chat.raw_responses` (not just selected fields)
+  - Saves chat to database
+- Note: The complete response is stored for debugging, not just token counts
 
 ### `#validate_parent!`
 Validates that parent is present

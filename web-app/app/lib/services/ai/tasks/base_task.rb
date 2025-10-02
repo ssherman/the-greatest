@@ -15,15 +15,13 @@ module Services
           # Create the chat when we actually need it
           @chat = create_chat!
 
-          # Add user message to chat
-          add_user_message(user_prompt_with_fallbacks)
-
-          # Get response from provider
+          # Get response from provider (it will add the user message)
           provider_response = @provider.send_message!(
             ai_chat: @chat,
             content: user_prompt_with_fallbacks,
             response_format: supports?(:json_mode) ? response_format : nil,
-            schema: supports?(:json_schema) ? response_schema : nil
+            schema: supports?(:json_schema) ? response_schema : nil,
+            reasoning: reasoning
           )
 
           # Update chat with response data
@@ -76,6 +74,10 @@ module Services
           1.0
         end
 
+        def reasoning
+          nil
+        end
+
         def process_and_persist(raw) = raw
 
         def create_provider_from_task
@@ -117,9 +119,19 @@ module Services
             provider: @provider.provider_key,
             temperature: temperature,
             json_mode: response_format&.dig(:type) == "json_object",
-            response_schema: response_schema&.new&.to_json_schema,
+            response_schema: response_schema ? schema_to_json(response_schema) : nil,
             messages: system_message ? [{role: "system", content: system_message, timestamp: Time.current}] : []
           )
+        end
+
+        def schema_to_json(schema)
+          if schema < OpenAI::BaseModel
+            # OpenAI::BaseModel has to_json_schema class method
+            schema.to_json_schema.to_json
+          else
+            # Fallback for RubyLLM or other schema types
+            schema.new.to_json_schema
+          end
         end
 
         def add_user_message(content)
@@ -137,14 +149,9 @@ module Services
             timestamp: Time.current
           }
 
-          # Store raw response data
+          # Store the entire raw provider response with timestamp
           @chat.raw_responses ||= []
-          @chat.raw_responses << {
-            provider_response_id: provider_response[:id],
-            model: provider_response[:model],
-            usage: provider_response[:usage],
-            timestamp: Time.current
-          }
+          @chat.raw_responses << provider_response.merge(timestamp: Time.current)
 
           @chat.save!
         end

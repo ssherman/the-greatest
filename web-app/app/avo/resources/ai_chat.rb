@@ -25,6 +25,7 @@ class Avo::Resources::AiChat < Avo::BaseResource
     field :provider, as: :select, enum: ::AiChat.providers, readonly: true
     field :temperature, as: :number, readonly: true
     field :json_mode, as: :boolean, readonly: true
+    field :parameters, as: :code, format: :json, pretty_generated: true, height: "300px", readonly: true
     field :response_schema, as: :code, format: :json, pretty_generated: true, height: "400px", readonly: true
     field :messages, as: :code, format: :json, pretty_generated: true, height: "600px", readonly: true
     field :raw_responses, as: :code, format: :json, pretty_generated: true, height: "400px", readonly: true

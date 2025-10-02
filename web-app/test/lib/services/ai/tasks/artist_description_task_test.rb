@@ -101,9 +101,9 @@ module Services
         test "ResponseSchema has correct structure" do
           schema = ArtistDescriptionTask::ResponseSchema
 
-          assert_equal "ArtistDescription", schema.name
-          assert schema.respond_to?(:string)
-          assert schema.respond_to?(:boolean)
+          # OpenAI::BaseModel uses the full class name
+          assert_includes schema.name, "ResponseSchema"
+          assert schema < OpenAI::BaseModel
         end
 
         test "task accepts custom provider and model" do
