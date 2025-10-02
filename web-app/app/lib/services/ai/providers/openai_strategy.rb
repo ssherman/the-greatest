@@ -24,9 +24,19 @@ class Services::Ai::Providers::OpenaiStrategy < Services::Ai::Providers::BaseStr
     # Get the first content item from the message
     content_item = message_item.content.first
 
+    # For typed responses (with text: parameter), OpenAI provides parsed data
+    # For regular responses, we need to manually parse the JSON
+    parsed_data = if content_item.respond_to?(:parsed) && !content_item.parsed.nil?
+      # Typed response with schema validation - use OpenAI's parsed data
+      content_item.parsed
+    else
+      # Regular response - manually parse JSON
+      parse_response(content_item.text, schema)
+    end
+
     {
       content: content_item.text,  # Raw text from API
-      parsed: content_item.parsed,  # Already parsed and validated by OpenAI
+      parsed: parsed_data,  # Parsed data (from OpenAI or manual parsing)
       id: response.id,
       model: response.model,
       usage: response.usage

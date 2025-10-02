@@ -31,12 +31,15 @@ Makes Responses API call to OpenAI
 - API: Uses `client.responses.create(parameters)`
 
 ### `#format_response(response, schema)`
-Formats OpenAI response into standard structure
+Formats OpenAI response into standard structure with intelligent parsing
 - Parameters:
   - `response` - OpenAI responses response
-  - `schema` (Class, optional) - RubyLLM::Schema (not used, data is pre-parsed)
+  - `schema` (Class, optional) - Schema class for validation
 - Returns: Hash with `:content`, `:parsed`, `:id`, `:model`, `:usage` keys
-- Processing: Extracts from `response.output.first.content.first.parsed` (already validated by OpenAI)
+- Processing:
+  - **Typed responses** (with `text:` parameter): Uses OpenAI's pre-parsed and validated data
+  - **Regular responses**: Manually parses JSON from text content
+  - Falls back gracefully if `parsed` attribute is unavailable
 
 ### `#build_parameters(model:, messages:, temperature:, response_format:, schema:, reasoning:)`
 Builds OpenAI-specific API parameters for Responses API

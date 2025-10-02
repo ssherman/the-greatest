@@ -320,3 +320,40 @@ end
 - Both user and assistant messages now properly stored
 - Complete conversation history maintained
 - Documentation updated to reflect proper flow
+
+---
+
+## Critical Bug Fix #2 (2025-10-02)
+
+### Issue Discovered
+AI code reviewer identified that `format_response` assumed `content_item.parsed` would always be available, but the Responses API only populates this attribute when using typed responses (with `text:` parameter). For regular responses or those using `response_format`, the parsed attribute is nil/unavailable, causing `NoMethodError` in production.
+
+### Impact
+- Any task without typed responses would crash with NoMethodError
+- Tasks using `response_format` instead of `text:` would fail
+- Plain text responses would be unparseable
+
+### Fix Applied
+Added intelligent fallback in `format_response` to handle both typed and regular responses:
+```ruby
+def format_response(response, schema)
+  content_item = message_item.content.first
+
+  # Check if parsed data is available (typed responses only)
+  parsed_data = if content_item.respond_to?(:parsed) && !content_item.parsed.nil?
+    # Use OpenAI's pre-parsed data
+    content_item.parsed
+  else
+    # Manually parse JSON for regular responses
+    parse_response(content_item.text, schema)
+  end
+
+  { content: content_item.text, parsed: parsed_data, ... }
+end
+```
+
+### Verification
+- All 1228 tests passing
+- Both typed responses and regular responses handled correctly
+- Graceful fallback to manual JSON parsing
+- Documentation updated
