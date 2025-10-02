@@ -146,13 +146,17 @@ end
 ### Standard Task Flow
 1. **Task Initialization**: Parent entity provided, provider/model selected
 2. **Chat Creation**: AiChat record created with task configuration
-3. **Parameter Building**: Provider builds request parameters
-4. **Parameter Saving**: Parameters saved to AiChat **before** API call
-5. **API Call**: Provider makes request to AI service
-6. **Response Processing**: Provider formats response to standard structure
-7. **Response Storage**: Complete response saved to `raw_responses`
-8. **Task Processing**: Task-specific `process_and_persist` handles result
-9. **Result Return**: Success/failure result with data and ai_chat reference
+3. **User Message Storage**: User prompt added to `chat.messages` array
+4. **Parameter Building**: Provider builds request parameters
+5. **Parameter Saving**: Parameters saved to AiChat **before** API call
+6. **API Call**: Provider makes request to AI service
+7. **Response Processing**: Provider formats response to standard structure
+8. **Assistant Message Storage**: Assistant response added to `chat.messages` array
+9. **Response Storage**: Complete response saved to `raw_responses`
+10. **Task Processing**: Task-specific `process_and_persist` handles result
+11. **Result Return**: Success/failure result with data and ai_chat reference
+
+**Important**: Both user and assistant messages are stored in the conversation history, ensuring complete audit trail and enabling multi-turn conversations.
 
 ### Parameter Building (Provider-Specific)
 OpenAI example:

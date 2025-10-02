@@ -18,17 +18,21 @@ Executes the complete AI task workflow
 
 **Flow:**
 1. Creates AiChat record with task configuration
-2. Calls provider's `send_message!` (which saves parameters before API call)
-3. Updates chat with provider response (stores complete response in raw_responses)
-4. Calls task-specific `process_and_persist` to handle the result
+2. Adds user message to chat.messages (persisted)
+3. Calls provider's `send_message!` (which saves parameters before API call)
+4. Updates chat with provider response (stores complete response in raw_responses)
+5. Calls task-specific `process_and_persist` to handle the result
 
 - Returns: Services::Ai::Result with success/failure, data, and ai_chat
 - Side effects:
   - Creates AiChat record
+  - Adds user message to ai_chat.messages
   - Provider saves parameters to ai_chat before making API call
-  - Updates ai_chat with messages and raw_responses
+  - Adds assistant message to ai_chat.messages
+  - Stores complete provider response in ai_chat.raw_responses
   - May update parent entity (depends on task implementation)
 - Error handling: Catches all StandardError and returns failure result with error message
+- Note: Both user and assistant messages are stored for complete conversation history
 
 ## Protected Methods (Abstract)
 

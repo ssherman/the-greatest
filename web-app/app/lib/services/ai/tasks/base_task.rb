@@ -15,10 +15,14 @@ module Services
           # Create the chat when we actually need it
           @chat = create_chat!
 
-          # Get response from provider (it will add the user message)
+          # Add user message to chat history
+          user_content = user_prompt_with_fallbacks
+          add_user_message(user_content)
+
+          # Get response from provider
           provider_response = @provider.send_message!(
             ai_chat: @chat,
-            content: user_prompt_with_fallbacks,
+            content: user_content,
             response_format: supports?(:json_mode) ? response_format : nil,
             schema: supports?(:json_schema) ? response_schema : nil,
             reasoning: reasoning

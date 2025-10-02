@@ -287,3 +287,36 @@ This todo successfully migrated all AI integrations from OpenAI's Completions AP
 - `docs/todo.md` - Marked complete
 
 All objectives achieved with additional enhancements for better debugging and observability.
+
+---
+
+## Critical Bug Fix (2025-10-02)
+
+### Issue Discovered
+AI code reviewer identified that user messages were not being stored in `ai_chat.messages` after refactoring. The `add_user_message` call was removed under the assumption that `BaseStrategy#send_message!` would handle it, but the provider only builds a local messages array - it never updates the AiChat record.
+
+### Impact
+- AiChat records only contained assistant responses, not the user prompts that produced them
+- Multi-turn conversations would be broken (missing user context)
+- Audit trail incomplete (can't see what users asked)
+- Conversation history useless for debugging
+
+### Fix Applied
+Restored `add_user_message` call in `BaseTask#call` to properly save user messages:
+```ruby
+def call
+  @chat = create_chat!
+
+  # Add user message to chat history (CRITICAL)
+  user_content = user_prompt_with_fallbacks
+  add_user_message(user_content)
+
+  # Provider call...
+end
+```
+
+### Verification
+- All 1228 tests passing
+- Both user and assistant messages now properly stored
+- Complete conversation history maintained
+- Documentation updated to reflect proper flow
