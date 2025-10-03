@@ -17,9 +17,30 @@ class Services::Ai::Providers::OpenaiStrategy < Services::Ai::Providers::BaseStr
 
   def format_response(response, schema)
     # Extract from Responses API structure
-    # output is an array that may contain reasoning and message items
+    # output is an array that may contain reasoning, message, and tool_call items
     # Find the message item (type: :message)
     message_item = response.output.find { |item| item.type == :message }
+
+    # Handle cases where there's no message (e.g., tool calls only)
+    unless message_item
+      # Look for tool_call items
+      tool_calls = response.output.select { |item| item.type == :tool_call }
+
+      if tool_calls.any?
+        # Return structured response for tool calls
+        return {
+          content: nil,
+          parsed: nil,
+          tool_calls: tool_calls.map { |tc| {id: tc.id, name: tc.name, arguments: tc.arguments} },
+          id: response.id,
+          model: response.model,
+          usage: response.usage
+        }
+      else
+        # No message and no tool calls - this shouldn't happen, but handle gracefully
+        raise "OpenAI response contains neither message nor tool_call items"
+      end
+    end
 
     # Get the first content item from the message
     content_item = message_item.content.first

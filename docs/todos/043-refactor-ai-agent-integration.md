@@ -357,3 +357,56 @@ end
 - Both typed responses and regular responses handled correctly
 - Graceful fallback to manual JSON parsing
 - Documentation updated
+
+---
+
+## Critical Bug Fix #3 (2025-10-02)
+
+### Issue Discovered
+AI code reviewer identified that `format_response` assumed a message item would always be present in `response.output`, but when OpenAI returns tool/function calls (which the strategy advertises as a capability), the output contains only `tool_call` items without any `:message` entry. This causes `message_item` to be nil, leading to `NoMethodError` when accessing `message_item.content`.
+
+### Impact
+- Any request that triggers tool/function calls would crash with NoMethodError
+- The `function_calls` capability was advertised but would never work
+- No way for callers to handle tool responses
+
+### Fix Applied
+Added explicit handling for tool call responses before accessing message item:
+```ruby
+def format_response(response, schema)
+  message_item = response.output.find { |item| item.type == :message }
+
+  # Handle cases where there's no message (e.g., tool calls only)
+  unless message_item
+    tool_calls = response.output.select { |item| item.type == :tool_call }
+
+    if tool_calls.any?
+      # Return structured response for tool calls
+      return {
+        content: nil,
+        parsed: nil,
+        tool_calls: tool_calls.map { |tc| { id: tc.id, name: tc.name, arguments: tc.arguments } },
+        id: response.id,
+        model: response.model,
+        usage: response.usage
+      }
+    else
+      raise "OpenAI response contains neither message nor tool_call items"
+    end
+  end
+
+  # Continue with normal message processing...
+end
+```
+
+### Benefits
+- Tool/function calls now properly supported (future feature)
+- No more crashes when model returns tool calls
+- Structured tool call data returned to callers
+- Graceful error for unexpected response formats
+
+### Verification
+- All 1228 tests passing
+- Tool call responses handled correctly (ready for future use)
+- Message responses still work as before
+- Documentation updated

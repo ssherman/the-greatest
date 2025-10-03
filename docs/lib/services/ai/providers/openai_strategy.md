@@ -31,15 +31,18 @@ Makes Responses API call to OpenAI
 - API: Uses `client.responses.create(parameters)`
 
 ### `#format_response(response, schema)`
-Formats OpenAI response into standard structure with intelligent parsing
+Formats OpenAI response into standard structure with intelligent parsing and tool call support
 - Parameters:
   - `response` - OpenAI responses response
   - `schema` (Class, optional) - Schema class for validation
-- Returns: Hash with `:content`, `:parsed`, `:id`, `:model`, `:usage` keys
+- Returns: Hash with response data (format depends on response type)
 - Processing:
-  - **Typed responses** (with `text:` parameter): Uses OpenAI's pre-parsed and validated data
-  - **Regular responses**: Manually parses JSON from text content
-  - Falls back gracefully if `parsed` attribute is unavailable
+  - **Message responses**: Returns `:content`, `:parsed`, `:id`, `:model`, `:usage`
+    - Typed responses (with `text:` parameter): Uses OpenAI's pre-parsed data
+    - Regular responses: Manually parses JSON from text content
+  - **Tool call responses**: Returns `:tool_calls`, `:id`, `:model`, `:usage` (content and parsed are nil)
+  - **Empty responses**: Raises error if neither message nor tool calls present
+- Note: Tool calls are supported but not currently used by any tasks
 
 ### `#build_parameters(model:, messages:, temperature:, response_format:, schema:, reasoning:)`
 Builds OpenAI-specific API parameters for Responses API
