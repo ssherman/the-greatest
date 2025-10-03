@@ -18,7 +18,7 @@ module Services
           Services::Ai::Providers::OpenaiStrategy.stubs(:new).returns(@mock_strategy)
 
           # Create the task after mocking
-          @task = ArtistDescriptionTask.new(parent: @artist)
+          @task = Music::ArtistDescriptionTask.new(parent: @artist)
         end
 
         test "should initialize with parent" do
@@ -32,7 +32,7 @@ module Services
         test "should_create_provider_strategy_correctly" do
           # Test that the correct provider strategy is created
           Services::Ai::Providers::OpenaiStrategy.expects(:new).returns(@mock_strategy)
-          ArtistDescriptionTask.new(parent: @artist)
+          Music::ArtistDescriptionTask.new(parent: @artist)
         end
 
         test "should_call_provider_with_correct_parameters" do
@@ -44,6 +44,7 @@ module Services
           mock_chat.stubs(:provider_key).returns("openai")
           mock_chat.stubs(:temperature).returns(0.2)
           mock_chat.stubs(:raw_responses).returns([])
+          mock_chat.stubs(:parameters=)
           AiChat.stubs(:create!).returns(mock_chat)
 
           # Expect the provider to be called with correct parameters
@@ -51,7 +52,8 @@ module Services
             ai_chat: mock_chat,
             content: kind_of(String),
             response_format: {type: "json_object"},
-            schema: ArtistDescriptionTask::ResponseSchema
+            schema: Music::ArtistDescriptionTask::ResponseSchema,
+            reasoning: nil
           ).returns(mock_provider_response)
 
           @task.call
@@ -80,6 +82,7 @@ module Services
           mock_chat.stubs(:provider_key).returns("openai")
           mock_chat.stubs(:temperature).returns(0.2)
           mock_chat.stubs(:raw_responses).returns([])
+          mock_chat.stubs(:parameters=)
           AiChat.stubs(:create!).returns(mock_chat)
 
           # Capture the messages passed to AiChat.create!
@@ -114,6 +117,7 @@ module Services
           mock_chat.stubs(:provider_key).returns("openai")
           mock_chat.stubs(:temperature).returns(0.2)
           mock_chat.stubs(:raw_responses).returns([])
+          mock_chat.stubs(:parameters=)
           AiChat.stubs(:create!).returns(mock_chat)
 
           result = @task.call
@@ -142,7 +146,13 @@ module Services
             parsed: final_data,
             id: "chatcmpl-123",
             model: "gpt-4o",
-            usage: {prompt_tokens: 10, completion_tokens: 5, total_tokens: 15}
+            usage: {prompt_tokens: 10, completion_tokens: 5, total_tokens: 15},
+            parameters: {
+              model: "gpt-4o",
+              temperature: 1.0,
+              service_tier: "flex",
+              input: "Test prompt"
+            }
           }
         end
       end

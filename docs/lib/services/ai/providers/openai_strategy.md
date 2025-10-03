@@ -1,7 +1,7 @@
 # Services::Ai::Providers::OpenaiStrategy
 
 ## Summary
-OpenAI API implementation of the AI provider strategy. Handles chat completions using OpenAI's GPT models with support for JSON mode, JSON schema, and function calling.
+OpenAI API implementation of the AI provider strategy. Uses OpenAI's Responses API with support for structured outputs, flex processing for cost optimization, and optional reasoning parameter.
 
 ## Public Methods
 
@@ -25,62 +25,95 @@ Returns memoized OpenAI client instance
 - Memoized: Yes, creates client once and reuses
 
 ### `#make_api_call(parameters)`
-Makes chat completion API call to OpenAI
-- Parameters: parameters (Hash) - API parameters including model, messages, temperature, etc.
-- Returns: OpenAI chat completion response object
-- API: Uses `client.chat.completions.create(parameters)`
+Makes Responses API call to OpenAI
+- Parameters: parameters (Hash) - API parameters including model, input, temperature, service_tier, etc.
+- Returns: OpenAI responses response object
+- API: Uses `client.responses.create(parameters)`
 
 ### `#format_response(response, schema)`
-Formats OpenAI response into standard structure
-- Parameters: 
-  - `response` - OpenAI chat completion response
-  - `schema` (Class, optional) - RubyLLM::Schema for parsing
-- Returns: Hash with `:content`, `:parsed`, `:id`, `:model`, `:usage` keys
-- Processing: Extracts first choice, parses JSON content, validates against schema
+Formats OpenAI response into standard structure with intelligent parsing and tool call support
+- Parameters:
+  - `response` - OpenAI responses response
+  - `schema` (Class, optional) - Schema class for validation
+- Returns: Hash with response data (format depends on response type)
+- Processing:
+  - **Message responses**: Returns `:content`, `:parsed`, `:id`, `:model`, `:usage`
+    - Typed responses (with `text:` parameter): Uses OpenAI's pre-parsed data
+    - Regular responses: Manually parses JSON from text content
+  - **Tool call responses**: Returns `:tool_calls`, `:id`, `:model`, `:usage` (content and parsed are nil)
+  - **Empty responses**: Raises error if neither message nor tool calls present
+- Note: Tool calls are supported but not currently used by any tasks
 
-### `#build_parameters(model:, messages:, temperature:, response_format:, schema:)`
-Builds OpenAI-specific API parameters
-- Parameters: 
+### `#build_parameters(model:, messages:, temperature:, response_format:, schema:, reasoning:)`
+Builds OpenAI-specific API parameters for Responses API
+- Parameters:
   - `model` (String) - GPT model identifier
-  - `messages` (Array) - Chat message history
+  - `messages` (Array) - Chat message history with roles
   - `temperature` (Float) - Response randomness (0-2)
-  - `response_format` (Hash, optional) - Response format options
+  - `response_format` (Hash, optional) - Ignored (Responses API uses `text` instead)
   - `schema` (Class, optional) - RubyLLM::Schema class
-- Returns: Hash with OpenAI API parameters
-- OpenAI-specific: Adds `response_format` with JSON schema or JSON mode
+  - `reasoning` (Hash, optional) - Reasoning configuration (e.g., `{effort: "low"}`)
+- Returns: Hash with OpenAI Responses API parameters
+- OpenAI-specific transformations:
+  - System messages → `instructions` parameter
+  - User/assistant messages → `input` (array or string)
+  - Single user message → simple string `input`
+  - Multiple messages → array `input`
+  - Adds `service_tier: "flex"` by default
+  - Strips timestamps from messages
 
 ## Response Format Handling
 
-### JSON Schema Mode
+### Structured Outputs with Responses API
 When `schema` is provided and inherits from `RubyLLM::Schema`:
 ```ruby
-parameters[:response_format] = {
-  type: "json_schema",
-  json_schema: JSON.parse(schema.new.to_json)
+schema_hash = JSON.parse(schema.new.to_json)
+parameters[:text] = {
+  format: {
+    type: "json_schema",
+    name: schema_hash["name"],
+    strict: schema_hash["schema"]["strict"],
+    schema: schema_hash["schema"]
+  }
 }
+# Wraps RubyLLM::Schema in Responses API format structure
+# OpenAI Responses API handles schema natively
+# Response data is automatically parsed and validated
 ```
 
-### JSON Mode
-When `response_format` is provided without schema:
+### Flex Processing
+All requests use flex service tier by default:
 ```ruby
-parameters[:response_format] = response_format
-# e.g., { type: "json_object" }
+parameters[:service_tier] = "flex"
+# Uses OpenAI's spare capacity for cost savings
+```
+
+### Reasoning Parameter (Optional)
+Tasks can override the `reasoning` method to control reasoning effort:
+```ruby
+def reasoning
+  { effort: "low" }  # or "medium", "high"
+end
+# Only supported by OpenAI, ignored by other providers
 ```
 
 ## Usage Examples
 
-### Basic chat completion
+### Basic request with system message
 ```ruby
+# Chat with system message: [{role: "system", content: "You are helpful"}]
 strategy = Services::Ai::Providers::OpenaiStrategy.new
 response = strategy.send_message!(
   ai_chat: chat,
   content: "Hello, world!",
   response_format: nil,
-  schema: nil
+  schema: nil,
+  reasoning: nil
 )
+# API call: { instructions: "You are helpful", input: "Hello, world!", ... }
 ```
 
-### With JSON schema
+### With structured outputs (JSON schema)
 ```ruby
 class MySchema < RubyLLM::Schema
   string :name, required: true
@@ -91,30 +124,60 @@ response = strategy.send_message!(
   ai_chat: chat,
   content: "Extract person details",
   response_format: nil,
-  schema: MySchema
+  schema: MySchema,
+  reasoning: nil
 )
+# API call: { text: MySchema, input: "Extract...", ... }
+# Returns pre-parsed and validated data in response[:parsed]
 ```
 
-### With JSON mode
+### With reasoning parameter
 ```ruby
 response = strategy.send_message!(
   ai_chat: chat,
-  content: "Return JSON",
-  response_format: { type: "json_object" },
+  content: "Complex problem solving task",
+  response_format: nil,
+  schema: MySchema,
+  reasoning: { effort: "high" }
+)
+# API call: { reasoning: {effort: "high"}, ... }
+# Uses extended reasoning for better quality
+```
+
+### Multi-turn conversation
+```ruby
+# Chat with history: [
+#   {role: "system", content: "You are helpful"},
+#   {role: "user", content: "Hello"},
+#   {role: "assistant", content: "Hi there!"}
+# ]
+response = strategy.send_message!(
+  ai_chat: chat,
+  content: "What's the weather?",
+  response_format: nil,
   schema: nil
 )
+# API call: {
+#   instructions: "You are helpful",
+#   input: [
+#     {role: "user", content: "Hello"},
+#     {role: "assistant", content: "Hi there!"},
+#     {role: "user", content: "What's the weather?"}
+#   ],
+#   ...
+# }
 ```
 
 ## Error Handling
 - Network errors: Propagated from OpenAI::Client
-- JSON parsing errors: Handled by parent class `parse_response`
 - API errors: Propagated with OpenAI error details
-- Invalid parameters: Validated by OpenAI API
+- Invalid parameters: Validated by OpenAI Responses API
+- Schema validation: Handled automatically by OpenAI (no manual JSON parsing needed)
 
 ## Dependencies
-- OpenAI gem (`openai` gem)
-- OpenAI::Client class
-- RubyLLM::Schema for structured responses
+- OpenAI gem (`openai` gem v7.0+)
+- OpenAI::Client class with Responses API support
+- RubyLLM::Schema for structured outputs
 - Services::Ai::Providers::BaseStrategy (parent class)
 
 ## Configuration
@@ -122,12 +185,19 @@ Uses OpenAI gem's default configuration:
 - API key from `OPENAI_API_KEY` environment variable
 - Default API base URL
 - Default timeout and retry settings
+- Flex processing enabled by default for cost optimization
 
 ## Models Supported
-- GPT-4 (default)
+- gpt-5-mini (default)
 - GPT-4 Turbo
-- GPT-3.5 Turbo
-- Any OpenAI chat completion model
+- GPT-4
+- Any OpenAI model supporting Responses API
 
 ## Design Notes
-This strategy leverages OpenAI's native JSON schema support for structured outputs when available, falling back to JSON mode for simpler structured responses. The client is memoized to avoid repeated instantiation while maintaining thread safety. 
+This strategy uses OpenAI's Responses API which provides:
+1. **Native structured outputs**: Schema validation happens server-side, data arrives pre-parsed
+2. **Flex processing**: Uses spare compute capacity for ~50% cost reduction with minimal latency impact
+3. **Reasoning parameter**: Optional per-task control over reasoning effort (OpenAI-only feature)
+4. **Cleaner API**: `input` instead of `messages`, `text` instead of complex `response_format` wrappers
+
+The client is memoized to avoid repeated instantiation while maintaining thread safety. 

@@ -7,6 +7,7 @@
 #  json_mode       :boolean          default(FALSE), not null
 #  messages        :jsonb
 #  model           :string           not null
+#  parameters      :jsonb
 #  parent_type     :string
 #  provider        :integer          default("openai"), not null
 #  raw_responses   :jsonb

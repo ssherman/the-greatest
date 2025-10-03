@@ -158,7 +158,7 @@ module Services
         ai_result.stubs(:data).returns(nil)
         ai_task.stubs(:call).returns(ai_result)
 
-        Services::Ai::Tasks::AmazonAlbumMatchTask.stubs(:new).returns(ai_task)
+        Services::Ai::Tasks::Music::AmazonAlbumMatchTask.stubs(:new).returns(ai_task)
 
         result = AmazonProductService.call(album: @album)
 
@@ -255,7 +255,7 @@ module Services
         ai_result.stubs(:data).returns({matching_results: matching_results})
         ai_task.stubs(:call).returns(ai_result)
 
-        Services::Ai::Tasks::AmazonAlbumMatchTask.stubs(:new).returns(ai_task)
+        Services::Ai::Tasks::Music::AmazonAlbumMatchTask.stubs(:new).returns(ai_task)
       end
     end
   end

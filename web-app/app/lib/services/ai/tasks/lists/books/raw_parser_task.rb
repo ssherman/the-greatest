@@ -50,19 +50,15 @@ module Services
               ResponseSchema
             end
 
-            class ResponseSchema < RubyLLM::Schema
-              def self.name
-                "Books"
-              end
+            class Book < OpenAI::BaseModel
+              required :rank, Integer, nil?: true, doc: "Rank position in the list"
+              required :title, String, doc: "Book title"
+              required :authors, OpenAI::ArrayOf[String], doc: "Author name(s)"
+              required :publication_year, Integer, nil?: true, doc: "Year the book was published"
+            end
 
-              array :books do
-                object do
-                  integer :rank, required: false, description: "Rank position in the list"
-                  string :title, required: true, description: "Book title"
-                  array :authors, of: :string, description: "Author name(s)"
-                  integer :publication_year, required: false, description: "Year the book was published"
-                end
-              end
+            class ResponseSchema < OpenAI::BaseModel
+              required :books, OpenAI::ArrayOf[Book]
             end
           end
         end

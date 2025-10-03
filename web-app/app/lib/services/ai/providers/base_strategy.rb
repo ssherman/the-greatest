@@ -4,7 +4,7 @@ module Services
       class BaseStrategy
         include Services::Ai::ProviderStrategy
 
-        def send_message!(ai_chat:, content:, response_format:, schema:)
+        def send_message!(ai_chat:, content:, response_format:, schema:, reasoning: nil)
           messages = ai_chat.messages + [{role: "user", content: content}]
 
           parameters = build_parameters(
@@ -12,8 +12,13 @@ module Services
             messages: messages,
             temperature: ai_chat.temperature.to_f,
             response_format: response_format,
-            schema: schema
+            schema: schema,
+            reasoning: reasoning
           )
+
+          # Save parameters to ai_chat BEFORE making API call
+          ai_chat.parameters = parameters
+          ai_chat.save!
 
           response = make_api_call(parameters)
 
@@ -39,7 +44,7 @@ module Services
         end
 
         # Can be overridden by subclasses for provider-specific parameter building
-        def build_parameters(model:, messages:, temperature:, response_format:, schema:)
+        def build_parameters(model:, messages:, temperature:, response_format:, schema:, reasoning: nil)
           {
             model: model,
             messages: messages,
