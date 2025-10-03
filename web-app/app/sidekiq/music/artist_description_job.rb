@@ -4,7 +4,7 @@ class Music::ArtistDescriptionJob
   def perform(artist_id)
     artist = Music::Artist.find(artist_id)
 
-    result = Services::Ai::Tasks::ArtistDescriptionTask.new(parent: artist).call
+    result = Services::Ai::Tasks::Music::ArtistDescriptionTask.new(parent: artist).call
 
     if result.success?
       Rails.logger.info "Artist description generated for #{artist.name} (ID: #{artist_id})"

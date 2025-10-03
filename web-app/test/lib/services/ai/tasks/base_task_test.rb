@@ -18,7 +18,7 @@ module Services
           Services::Ai::Providers::OpenaiStrategy.stubs(:new).returns(@mock_strategy)
 
           # Create the task after mocking
-          @task = ArtistDescriptionTask.new(parent: @artist)
+          @task = Music::ArtistDescriptionTask.new(parent: @artist)
         end
 
         test "should initialize with parent" do
@@ -32,7 +32,7 @@ module Services
         test "should_create_provider_strategy_correctly" do
           # Test that the correct provider strategy is created
           Services::Ai::Providers::OpenaiStrategy.expects(:new).returns(@mock_strategy)
-          ArtistDescriptionTask.new(parent: @artist)
+          Music::ArtistDescriptionTask.new(parent: @artist)
         end
 
         test "should_call_provider_with_correct_parameters" do
@@ -52,7 +52,7 @@ module Services
             ai_chat: mock_chat,
             content: kind_of(String),
             response_format: {type: "json_object"},
-            schema: ArtistDescriptionTask::ResponseSchema,
+            schema: Music::ArtistDescriptionTask::ResponseSchema,
             reasoning: nil
           ).returns(mock_provider_response)
 

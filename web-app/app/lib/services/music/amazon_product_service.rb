@@ -107,7 +107,7 @@ module Services
       def validate_matches_with_ai(search_results)
         return [] if search_results.empty?
 
-        ai_task = Services::Ai::Tasks::AmazonAlbumMatchTask.new(
+        ai_task = Services::Ai::Tasks::Music::AmazonAlbumMatchTask.new(
           parent: @album,
           search_results: search_results
         )

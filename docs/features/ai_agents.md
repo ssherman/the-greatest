@@ -34,10 +34,16 @@ Services::Ai::Providers::
 ```
 Services::Ai::Tasks::
   - BaseTask (abstract)
-  - ArtistDescriptionTask
-  - AlbumDescriptionTask
-  - AmazonAlbumMatchTask
-  - Lists::RawParserTask (Books, Movies, Games, Music variants)
+  - Music::
+      - ArtistDescriptionTask
+      - AlbumDescriptionTask
+      - AmazonAlbumMatchTask
+  - Lists::
+      - Books::RawParserTask
+      - Movies::RawParserTask
+      - Games::RawParserTask
+      - Music::AlbumsRawParserTask
+      - Music::SongsRawParserTask
 ```
 
 ### Key Features
@@ -85,12 +91,12 @@ Different providers support different features. The system handles this graceful
 ### Supported Tasks
 
 #### Content Generation
-- **ArtistDescriptionTask** - Generate artist biographies and metadata
-- **AlbumDescriptionTask** - Generate album descriptions and context
+- **Music::ArtistDescriptionTask** - Generate artist biographies and metadata
+- **Music::AlbumDescriptionTask** - Generate album descriptions and context
 - Auto-abstention when AI lacks confidence
 
 #### Data Matching
-- **AmazonAlbumMatchTask** - Match albums to Amazon products
+- **Music::AmazonAlbumMatchTask** - Match albums to Amazon products
 - Fuzzy matching with confidence scores
 - Structured output with match reasoning
 
@@ -106,7 +112,7 @@ Different providers support different features. The system handles this graceful
 ### Basic Task Execution
 ```ruby
 # Generate artist description
-result = Services::Ai::Tasks::ArtistDescriptionTask.new(
+result = Services::Ai::Tasks::Music::ArtistDescriptionTask.new(
   parent: artist
 ).call
 
@@ -119,7 +125,7 @@ end
 ### With Custom Provider/Model
 ```ruby
 # Use specific provider and model
-result = Services::Ai::Tasks::AlbumDescriptionTask.new(
+result = Services::Ai::Tasks::Music::AlbumDescriptionTask.new(
   parent: album,
   provider: :openai,
   model: "gpt-4o"
@@ -194,17 +200,19 @@ All providers return standardized format:
 ### Structured Output Pattern
 Tasks define response schemas as internal classes:
 ```ruby
-class ArtistDescriptionTask < BaseTask
-  private
+module Services::Ai::Tasks::Music
+  class ArtistDescriptionTask < BaseTask
+    private
 
-  def response_schema
-    ResponseSchema
-  end
+    def response_schema
+      ResponseSchema
+    end
 
-  class ResponseSchema < OpenAI::BaseModel
-    string :description, required: false
-    boolean :abstained, required: true
-    string :abstain_reason, required: false
+    class ResponseSchema < OpenAI::BaseModel
+      required :description, String, nil?: true
+      required :abstained, OpenAI::Boolean
+      required :abstain_reason, String, nil?: true
+    end
   end
 end
 ```
@@ -376,6 +384,6 @@ For data model:
 - [AiChat](../models/ai_chat.md) - Conversation storage and history
 
 For specific tasks:
-- [ArtistDescriptionTask](../lib/services/ai/tasks/artist_description_task.md) - Artist content generation
-- [AlbumDescriptionTask](../lib/services/ai/tasks/album_description_task.md) - Album content generation
-- [AmazonAlbumMatchTask](../lib/services/ai/tasks/amazon_album_match_task.md) - Product matching
+- Music::ArtistDescriptionTask - Artist content generation
+- Music::AlbumDescriptionTask - Album content generation
+- Music::AmazonAlbumMatchTask - Product matching

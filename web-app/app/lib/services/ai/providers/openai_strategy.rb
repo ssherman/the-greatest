@@ -48,8 +48,9 @@ class Services::Ai::Providers::OpenaiStrategy < Services::Ai::Providers::BaseStr
     # For typed responses (with text: parameter), OpenAI provides parsed data
     # For regular responses, we need to manually parse the JSON
     parsed_data = if content_item.respond_to?(:parsed) && !content_item.parsed.nil?
-      # Typed response with schema validation - use OpenAI's parsed data
-      content_item.parsed
+      # Typed response with schema validation - OpenAI returns a schema instance
+      # Convert to hash to maintain consistent interface for tasks
+      content_item.parsed.to_h.deep_symbolize_keys
     else
       # Regular response - manually parse JSON
       parse_response(content_item.text, schema)
@@ -57,7 +58,7 @@ class Services::Ai::Providers::OpenaiStrategy < Services::Ai::Providers::BaseStr
 
     {
       content: content_item.text,  # Raw text from API
-      parsed: parsed_data,  # Parsed data (from OpenAI or manual parsing)
+      parsed: parsed_data,  # Parsed data as hash (from OpenAI or manual parsing)
       id: response.id,
       model: response.model,
       usage: response.usage

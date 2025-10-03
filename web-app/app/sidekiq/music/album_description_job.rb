@@ -4,7 +4,7 @@ class Music::AlbumDescriptionJob
   def perform(album_id)
     album = Music::Album.find(album_id)
 
-    result = Services::Ai::Tasks::AlbumDescriptionTask.new(parent: album).call
+    result = Services::Ai::Tasks::Music::AlbumDescriptionTask.new(parent: album).call
 
     if result.success?
       Rails.logger.info "Album description generated for #{album.title} (ID: #{album_id})"

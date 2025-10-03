@@ -13,7 +13,7 @@ class Music::AlbumDescriptionJobTest < ActiveSupport::TestCase
     mock_result.stubs(:success?).returns(true)
     mock_task.stubs(:call).returns(mock_result)
 
-    Services::Ai::Tasks::AlbumDescriptionTask.expects(:new).with(parent: @album).returns(mock_task)
+    Services::Ai::Tasks::Music::AlbumDescriptionTask.expects(:new).with(parent: @album).returns(mock_task)
 
     @job.perform(@album.id)
   end
@@ -24,7 +24,7 @@ class Music::AlbumDescriptionJobTest < ActiveSupport::TestCase
     mock_result.stubs(:success?).returns(true)
     mock_task.stubs(:call).returns(mock_result)
 
-    Services::Ai::Tasks::AlbumDescriptionTask.stubs(:new).returns(mock_task)
+    Services::Ai::Tasks::Music::AlbumDescriptionTask.stubs(:new).returns(mock_task)
     Rails.logger.expects(:info)
 
     @job.perform(@album.id)
@@ -37,7 +37,7 @@ class Music::AlbumDescriptionJobTest < ActiveSupport::TestCase
     mock_result.stubs(:error).returns("AI service unavailable")
     mock_task.stubs(:call).returns(mock_result)
 
-    Services::Ai::Tasks::AlbumDescriptionTask.stubs(:new).returns(mock_task)
+    Services::Ai::Tasks::Music::AlbumDescriptionTask.stubs(:new).returns(mock_task)
     Rails.logger.expects(:error)
 
     @job.perform(@album.id)
@@ -47,7 +47,7 @@ class Music::AlbumDescriptionJobTest < ActiveSupport::TestCase
     Music::Album.expects(:find).with(@album.id).returns(@album)
 
     # Mock the task to avoid actual execution
-    Services::Ai::Tasks::AlbumDescriptionTask.stubs(:new).returns(mock.tap { |m| m.stubs(:call).returns(mock.tap { |r| r.stubs(:success?).returns(true) }) })
+    Services::Ai::Tasks::Music::AlbumDescriptionTask.stubs(:new).returns(mock.tap { |m| m.stubs(:call).returns(mock.tap { |r| r.stubs(:success?).returns(true) }) })
 
     @job.perform(@album.id)
   end

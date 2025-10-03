@@ -262,20 +262,36 @@ This todo successfully migrated all AI integrations from OpenAI's Completions AP
 3. ✅ Reasoning parameter support added
 4. ✅ Parameters field saves request params before API call
 5. ✅ Complete provider responses stored in raw_responses
-6. ✅ All tests passing (1228 tests, 3568 assertions, 0 failures)
-7. ✅ Comprehensive documentation updated
+6. ✅ Five critical bugs fixed (user messages, parsed fallback, tool calls, schema conversion, namespacing)
+7. ✅ Music-specific tasks properly namespaced under Services::Ai::Tasks::Music::
+8. ✅ All tests passing (1228 tests, 3568 assertions, 0 failures)
+9. ✅ Comprehensive documentation updated
 
 ### Files Modified
 - `app/lib/services/ai/providers/base_strategy.rb` - Parameters saving before API call
-- `app/lib/services/ai/providers/openai_strategy.rb` - Responses API implementation
-- `app/lib/services/ai/tasks/base_task.rb` - Complete response storage
+- `app/lib/services/ai/providers/openai_strategy.rb` - Responses API implementation with bug fixes
+- `app/lib/services/ai/tasks/base_task.rb` - User message storage, complete response storage
+- `app/lib/services/ai/tasks/music/artist_description_task.rb` - Moved and namespaced
+- `app/lib/services/ai/tasks/music/album_description_task.rb` - Moved and namespaced
+- `app/lib/services/ai/tasks/music/amazon_album_match_task.rb` - Moved and namespaced
 - `app/models/ai_chat.rb` - Schema annotation updated
+- `app/models/music/artist.rb` - Updated namespace reference
+- `app/lib/services/music/amazon_product_service.rb` - Updated namespace reference
+- `app/sidekiq/music/artist_description_job.rb` - Updated namespace reference
+- `app/sidekiq/music/album_description_job.rb` - Updated namespace reference
 - `app/avo/resources/ai_chat.rb` - Parameters field display
 - `db/migrate/20251002005541_add_parameters_to_ai_chats.rb` - New migration
 
 ### Tests Updated
-- `test/lib/services/ai/tasks/base_task_test.rb` - Parameters in mock responses
+- `test/lib/services/ai/tasks/base_task_test.rb` - Parameters in mock responses, namespace updates
+- `test/lib/services/ai/tasks/artist_description_task_test.rb` - Added Music namespace
+- `test/lib/services/ai/tasks/album_description_task_test.rb` - Added Music namespace
+- `test/lib/services/ai/tasks/amazon_album_match_task_test.rb` - Added Music namespace
 - `test/lib/services/ai/providers/openai_strategy_test.rb` - Parameters and save! stubs
+- `test/sidekiq/music/artist_description_job_test.rb` - Updated namespace references
+- `test/sidekiq/music/album_description_job_test.rb` - Updated namespace references
+- `test/models/music/artist_test.rb` - Updated namespace references
+- `test/lib/services/music/amazon_product_service_test.rb` - Updated namespace references
 
 ### Documentation Created/Updated
 - `docs/features/ai_agents.md` - High-level feature overview (NEW)
@@ -409,4 +425,106 @@ end
 - All 1228 tests passing
 - Tool call responses handled correctly (ready for future use)
 - Message responses still work as before
+- Documentation updated
+
+---
+
+## Critical Bug Fix #4 (2025-10-02)
+
+### Issue Discovered
+AI code reviewer identified that when a schema subclassing `OpenAI::BaseModel` is used, the `format_response` method returns `parsed: content_item.parsed` directly. However, the typed Responses API returns an instance of the schema class, not a hash. Downstream tasks expect parsed data to be a hash and use hash indexing (e.g., `provider_response[:parsed][:description]`), which would fail with NoMethodError.
+
+### Impact
+- Any task using `OpenAI::BaseModel` schemas would crash when accessing parsed data
+- All music tasks (AlbumDescriptionTask, ArtistDescriptionTask, AmazonAlbumMatchTask) use BaseModel
+- Hash-style access to parsed data would fail: `data[:description]` → NoMethodError
+
+### Fix Applied
+Convert schema instance to hash with symbolized keys in `format_response`:
+```ruby
+def format_response(response, schema)
+  content_item = message_item.content.first
+
+  parsed_data = if content_item.respond_to?(:parsed) && !content_item.parsed.nil?
+    # Convert OpenAI::BaseModel instance to hash
+    content_item.parsed.to_h.deep_symbolize_keys
+  else
+    # Manual parsing already returns hash
+    parse_response(content_item.text, schema)
+  end
+
+  { content: content_item.text, parsed: parsed_data, ... }
+end
+```
+
+### Benefits
+- Tasks can reliably use hash indexing on parsed data
+- Schema instances properly converted to hashes
+- Symbolized keys for consistency with manual parsing
+- All downstream task code works without changes
+
+### Verification
+- All 1228 tests passing
+- Schema instances converted to hashes
+- Tasks accessing parsed[:field] work correctly
+- Both typed and manual parsing return consistent hash format
+- Documentation updated
+
+---
+
+## Refactoring #5 (2025-10-02)
+
+### Issue Discovered
+AI code reviewer noticed that music-specific AI tasks (ArtistDescriptionTask, AlbumDescriptionTask, AmazonAlbumMatchTask) were all located in the base `Services::Ai::Tasks` directory instead of being properly namespaced under a Music module. This violates domain organization principles and makes it unclear which tasks are domain-specific vs. general-purpose.
+
+### Impact
+- Poor code organization and discoverability
+- Unclear separation between general AI tasks and music-specific tasks
+- Harder to maintain domain boundaries
+- Future domain-specific tasks would continue this anti-pattern
+
+### Refactoring Applied
+1. **Created Music namespace directory**: `app/lib/services/ai/tasks/music/`
+2. **Moved and namespaced three task files**:
+   - `artist_description_task.rb` → `music/artist_description_task.rb` (added `module Music`)
+   - `album_description_task.rb` → `music/album_description_task.rb` (added `module Music`)
+   - `amazon_album_match_task.rb` → `music/amazon_album_match_task.rb` (added `module Music`)
+3. **Updated all references** across codebase:
+   - `app/lib/services/music/amazon_product_service.rb` - Updated to `Services::Ai::Tasks::Music::AmazonAlbumMatchTask`
+   - `app/models/music/artist.rb` - Updated to `Services::Ai::Tasks::Music::ArtistDescriptionTask`
+   - `app/sidekiq/music/artist_description_job.rb` - Updated reference
+   - `app/sidekiq/music/album_description_job.rb` - Updated reference
+4. **Updated all test files**:
+   - `test/lib/services/ai/tasks/artist_description_task_test.rb` - Added `module Music`
+   - `test/lib/services/ai/tasks/album_description_task_test.rb` - Added `module Music`
+   - `test/lib/services/ai/tasks/amazon_album_match_task_test.rb` - Added `module Music`
+   - `test/sidekiq/music/artist_description_job_test.rb` - Updated mocks
+   - `test/sidekiq/music/album_description_job_test.rb` - Updated mocks
+   - `test/models/music/artist_test.rb` - Updated mocks
+   - `test/lib/services/music/amazon_product_service_test.rb` - Updated mocks
+   - `test/lib/services/ai/tasks/base_task_test.rb` - Updated example task references
+5. **Deleted old files**: Removed original task files from base directory
+
+### New Structure
+```
+app/lib/services/ai/tasks/
+├── base_task.rb                           # Base class
+└── music/                                 # Domain-specific namespace
+    ├── artist_description_task.rb         # Music::ArtistDescriptionTask
+    ├── album_description_task.rb          # Music::AlbumDescriptionTask
+    └── amazon_album_match_task.rb         # Music::AmazonAlbumMatchTask
+```
+
+### Benefits
+- Clear domain organization (music-specific tasks in Music namespace)
+- Better code discoverability and maintainability
+- Sets pattern for future domain-specific tasks (games, movies, books, etc.)
+- Follows Rails conventions for domain-driven design
+- Clearer separation of concerns
+
+### Verification
+- All 1228 tests passing (including 9 assertions for namespace changes)
+- No functionality changes, pure refactoring
+- All references updated correctly
+- Old files removed from base directory
 - Documentation updated
