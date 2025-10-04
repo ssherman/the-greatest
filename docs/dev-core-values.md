@@ -138,10 +138,18 @@
 - **Secure defaults**: Start with restrictive permissions
 
 ## 14. Background Processing
-- **Sidekiq queues**: Domain-specific queues
+- **Default queue**: Always use the default queue unless specifically needed
   ```ruby
   class Books::ImportJob
-    queue_as :books_import
+    include Sidekiq::Job
+    # No queue_as needed - uses default queue
+  end
+  ```
+- **Special queues**: ONLY use named queues for serial jobs that interact with rate-limited external APIs (AI services, etc.)
+  ```ruby
+  class Ai::DescriptionJob
+    include Sidekiq::Job
+    queue_as :ai_serial  # Special queue for rate-limited AI API calls
   end
   ```
 - **Idempotent jobs**: All jobs must be safely retryable

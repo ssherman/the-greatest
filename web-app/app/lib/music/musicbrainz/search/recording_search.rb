@@ -158,6 +158,24 @@ module Music
           search(query, options)
         end
 
+        # Lookup recording by MusicBrainz ID using direct lookup API
+        # Uses MusicBrainz lookup endpoint (/ws/2/recording/{mbid}) for direct access
+        # @param mbid [String] the MusicBrainz ID (UUID format)
+        # @param options [Hash] additional options (inc parameter, etc.)
+        # @return [Hash] lookup results with complete recording data
+        def lookup_by_mbid(mbid, options = {})
+          validate_mbid!(mbid)
+
+          enhanced_options = options.merge(inc: "artist-credits")
+
+          begin
+            response = client.get("recording/#{mbid}", enhanced_options)
+            process_lookup_response(response)
+          rescue Music::Musicbrainz::Error => e
+            handle_browse_error(e, {recording_mbid: mbid}, options)
+          end
+        end
+
         # Perform a general search query with custom Lucene syntax
         # @param query [String] the search query
         # @param options [Hash] additional search options
@@ -196,6 +214,24 @@ module Music
 
           query = query_parts.join(" AND ")
           search(query, options)
+        end
+
+        private
+
+        def process_lookup_response(response)
+          return response unless response[:success]
+
+          if response[:data]
+            recording_data = response[:data]
+            response[:data] = {
+              "count" => 1,
+              "offset" => 0,
+              "recordings" => [recording_data],
+              "created" => Time.current.iso8601
+            }
+          end
+
+          response
         end
       end
     end

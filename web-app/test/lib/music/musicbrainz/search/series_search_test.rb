@@ -277,6 +277,54 @@ class Music::Musicbrainz::Search::SeriesSearchTest < ActiveSupport::TestCase
     assert_equal({series_mbid: series_mbid}, result[:metadata][:browse_params])
   end
 
+  test "browse_series_with_recordings uses direct lookup with inc parameter" do
+    series_mbid = "28cbc99a-875f-4139-b8b0-f1dd520ec62c"
+
+    @mock_client.expects(:get)
+      .with("series/#{series_mbid}", {inc: "recording-rels"})
+      .returns(successful_browse_recordings_response)
+
+    result = @search.browse_series_with_recordings(series_mbid)
+
+    assert result[:success]
+    assert_equal 1, result[:data]["count"]
+    assert result[:data]["results"].first["relations"]
+  end
+
+  test "browse_series_with_recordings includes additional options" do
+    series_mbid = "28cbc99a-875f-4139-b8b0-f1dd520ec62c"
+    options = {limit: 50, offset: 10}
+
+    @mock_client.expects(:get)
+      .with("series/#{series_mbid}", {inc: "recording-rels", limit: 50, offset: 10})
+      .returns(successful_browse_recordings_response)
+
+    result = @search.browse_series_with_recordings(series_mbid, options)
+
+    assert result[:success]
+  end
+
+  test "browse_series_with_recordings validates MBID format" do
+    invalid_mbid = "not-a-valid-mbid"
+
+    assert_raises(Music::Musicbrainz::QueryError) do
+      @search.browse_series_with_recordings(invalid_mbid)
+    end
+  end
+
+  test "browse_series_with_recordings handles API errors gracefully" do
+    series_mbid = "28cbc99a-875f-4139-b8b0-f1dd520ec62c"
+
+    @mock_client.expects(:get)
+      .raises(Music::Musicbrainz::NetworkError.new("Series not found"))
+
+    result = @search.browse_series_with_recordings(series_mbid)
+
+    refute result[:success]
+    assert_includes result[:errors], "Series not found"
+    assert_equal({series_mbid: series_mbid}, result[:metadata][:browse_params])
+  end
+
   test "find_by_mbid uses correct MBID field" do
     valid_mbid = "28cbc99a-875f-4139-b8b0-f1dd520ec62c"
 
@@ -395,6 +443,83 @@ class Music::Musicbrainz::Search::SeriesSearchTest < ActiveSupport::TestCase
                       "id" => "618b6900-94b6-47cc-8b76-1b5e2a8fd5b1",
                       "name" => "The Beach Boys",
                       "sort-name" => "Beach Boys, The"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "created" => "2025-09-02T10:30:45.123Z"
+      },
+      errors: [],
+      metadata: {
+        endpoint: "series/28cbc99a-875f-4139-b8b0-f1dd520ec62c",
+        response_time: 0.267
+      }
+    }
+  end
+
+  def successful_browse_recordings_response
+    {
+      success: true,
+      data: {
+        "series" => {
+          "id" => "28cbc99a-875f-4139-b8b0-f1dd520ec62c",
+          "name" => "Rolling Stone's 500 Greatest Songs of All Time",
+          "disambiguation" => "music magazine ranking",
+          "type" => "Recording series",
+          "type-id" => "cbfd8e5b-fdaa-4c06-abc9-7a62c9d3f61b",
+          "relations" => [
+            {
+              "type" => "part of",
+              "type-id" => "ea6f0698-6782-30d6-b16d-293081b66774",
+              "direction" => "backward",
+              "target-type" => "recording",
+              "attribute-values" => {
+                "number" => "1"
+              },
+              "begin" => nil,
+              "end" => nil,
+              "ended" => false,
+              "recording" => {
+                "id" => "375c5bba-9f88-4f9c-a82f-80b871af1100",
+                "title" => "Like a Rolling Stone",
+                "length" => 369000,
+                "artist-credit" => [
+                  {
+                    "name" => "Bob Dylan",
+                    "artist" => {
+                      "id" => "72c536dc-7137-4477-a521-567eeb840fa8",
+                      "name" => "Bob Dylan",
+                      "sort-name" => "Dylan, Bob"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type" => "part of",
+              "type-id" => "ea6f0698-6782-30d6-b16d-293081b66774",
+              "direction" => "backward",
+              "target-type" => "recording",
+              "attribute-values" => {
+                "number" => "2"
+              },
+              "begin" => nil,
+              "end" => nil,
+              "ended" => false,
+              "recording" => {
+                "id" => "6b9a9e04-abd7-4666-86ba-bb220ef4c3b2",
+                "title" => "Satisfaction",
+                "length" => 224000,
+                "artist-credit" => [
+                  {
+                    "name" => "The Rolling Stones",
+                    "artist" => {
+                      "id" => "b071f9fa-14b0-4217-8e97-eb41da73f598",
+                      "name" => "The Rolling Stones",
+                      "sort-name" => "Rolling Stones, The"
                     }
                   }
                 ]

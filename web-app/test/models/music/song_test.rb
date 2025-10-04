@@ -156,6 +156,76 @@ module Music
       assert_not_includes songs_after_1974, music_songs(:time)
     end
 
+    test "should find songs by identifier" do
+      song = music_songs(:time)
+      mbid = "6b9a9e04-abd7-4666-86ba-bb220ef4c3b2"
+
+      # Create identifier for the song
+      song.identifiers.create!(
+        identifier_type: :music_musicbrainz_recording_id,
+        value: mbid
+      )
+
+      result = Music::Song.with_identifier(:music_musicbrainz_recording_id, mbid)
+
+      assert_includes result, song
+    end
+
+    test "should not find songs without matching identifier" do
+      song = music_songs(:time)
+      mbid = "6b9a9e04-abd7-4666-86ba-bb220ef4c3b2"
+
+      # Create identifier for the song
+      song.identifiers.create!(
+        identifier_type: :music_musicbrainz_recording_id,
+        value: mbid
+      )
+
+      # Search for different MBID
+      result = Music::Song.with_identifier(:music_musicbrainz_recording_id, "different-mbid")
+
+      assert_not_includes result, song
+      assert_equal 0, result.count
+    end
+
+    test "should find songs by ISRC identifier" do
+      song = music_songs(:time)
+      isrc = "USPR37300012"
+
+      song.identifiers.create!(
+        identifier_type: :music_isrc,
+        value: isrc
+      )
+
+      result = Music::Song.with_identifier(:music_isrc, isrc)
+
+      assert_includes result, song
+    end
+
+    test "should handle multiple songs with different identifiers" do
+      song1 = music_songs(:time)
+      song2 = music_songs(:money)
+      mbid1 = "6b9a9e04-abd7-4666-86ba-bb220ef4c3b2"
+      mbid2 = "7c8b8f05-bce8-5777-97cb-cc331fe5d4c3"
+
+      song1.identifiers.create!(
+        identifier_type: :music_musicbrainz_recording_id,
+        value: mbid1
+      )
+      song2.identifiers.create!(
+        identifier_type: :music_musicbrainz_recording_id,
+        value: mbid2
+      )
+
+      result1 = Music::Song.with_identifier(:music_musicbrainz_recording_id, mbid1)
+      result2 = Music::Song.with_identifier(:music_musicbrainz_recording_id, mbid2)
+
+      assert_includes result1, song1
+      assert_not_includes result1, song2
+      assert_includes result2, song2
+      assert_not_includes result2, song1
+    end
+
     # FriendlyId
     test "should find by slug" do
       found = Music::Song.friendly.find(@song.slug)

@@ -67,6 +67,10 @@ class Music::Song < ApplicationRecord
   scope :released_before, ->(year) { where("release_year <= ?", year) }
   scope :released_after, ->(year) { where("release_year >= ?", year) }
 
+  scope :with_identifier, ->(identifier_type, value) {
+    joins(:identifiers).where(identifiers: {identifier_type: identifier_type, value: value})
+  }
+
   # Helper methods for each relationship type
   def covers
     related_songs.merge(Music::SongRelationship.covers)

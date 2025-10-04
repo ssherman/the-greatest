@@ -1,162 +1,141 @@
 # Music::Musicbrainz::Search::SeriesSearch
 
 ## Summary
-Provides search and browse functionality for MusicBrainz Series API. Specialized in finding and retrieving series data, particularly "Release group series" lists like music rankings and "best of" compilations. Core component for importing ranked music lists with associated release groups and rankings.
+Provides search functionality for MusicBrainz series entities. Handles both recording series (for song lists) and release group series (for album lists) with support for direct lookups and complex queries.
 
 ## Inheritance
-- Inherits from `Music::Musicbrainz::Search::BaseSearch`
-- Follows established MusicBrainz search class patterns
+Inherits from `Music::Musicbrainz::Search::BaseSearch`
 
 ## Public Methods
 
-### Search Methods
+### `.entity_type`
+Returns the MusicBrainz entity type for series searches.
+- Returns: `"series"`
 
-#### `#search_by_name(name, options = {})`
-Search for series by name using the "series" field
-- Parameters: name (String) - the series name to search for, options (Hash) - additional search options
-- Returns: Hash - search results with series data
-- Usage: Finding series like "Rolling Stone's 500 Greatest Albums"
+### `.mbid_field`
+Returns the MBID field name for series queries.
+- Returns: `"sid"` (series ID)
 
-#### `#search_by_name_with_diacritics(name, options = {})`
-Search for series by name preserving diacritics using "seriesaccent" field
-- Parameters: name (String) - series name with diacritics, options (Hash) - additional options
-- Returns: Hash - search results
-- Usage: Searching for non-English series names
+### `.available_fields`
+Returns list of searchable fields for series.
+- Returns: Array of field names: `["series", "seriesaccent", "alias", "comment", "sid", "tag", "type"]`
 
-#### `#search_by_alias(alias_name, options = {})`
-Search for series by alias/alternate names
-- Parameters: alias_name (String) - the alias to search for, options (Hash) - additional options
-- Returns: Hash - search results
-- Usage: Finding series by common nicknames or shortened names
+### `#search_by_name(name, options = {})`
+Searches for series by name.
+- Parameters:
+  - `name` (String): Series name to search for
+  - `options` (Hash): Additional search options (limit, offset, etc.)
+- Returns: Hash with `:success`, `:data`, `:errors`, `:metadata`
 
-#### `#search_by_type(type, options = {})`
-Search for series by type, focusing on "Release group series"
-- Parameters: type (String) - the series type, options (Hash) - additional options
-- Returns: Hash - search results
-- Usage: Filtering to specific series types like album rankings
+### `#search_by_type(type, options = {})`
+Searches for series by type (e.g., "Release group series", "Recording series").
+- Parameters:
+  - `type` (String): Series type
+  - `options` (Hash): Additional search options
+- Returns: Hash with search results
 
-#### `#search_by_tag(tag, options = {})`
-Search for series by associated tags
-- Parameters: tag (String) - the tag to search for, options (Hash) - additional options
-- Returns: Hash - search results
-- Usage: Finding series tagged with "ranking", "best-of", etc.
+### `#browse_series_with_release_groups(series_mbid, options = {})`
+Fetches series with all related release groups using direct lookup API.
+- Parameters:
+  - `series_mbid` (String): MusicBrainz series ID (UUID format)
+  - `options` (Hash): Additional options (limit, offset)
+- Returns: Hash with series data including `relations` array
+- API Endpoint: `/ws/2/series/{mbid}?inc=release-group-rels`
+- Validates MBID format (raises `QueryError` if invalid)
 
-#### `#search_by_comment(comment, options = {})`
-Search for series by disambiguation comment
-- Parameters: comment (String) - the disambiguation comment, options (Hash) - additional options
-- Returns: Hash - search results
-- Usage: Distinguishing between similar series names
+### `#browse_series_with_recordings(series_mbid, options = {})`
+Fetches series with all related recordings using direct lookup API.
+- Parameters:
+  - `series_mbid` (String): MusicBrainz series ID (UUID format)
+  - `options` (Hash): Additional options (limit, offset)
+- Returns: Hash with series data including `relations` array with recording data
+- API Endpoint: `/ws/2/series/{mbid}?inc=recording-rels`
+- Validates MBID format (raises `QueryError` if invalid)
+- Added in: Task 044 (song series import feature)
 
-### Browse Methods
+### `#search_release_group_series(name = nil, options = {})`
+Convenience method for searching release group series specifically.
+- Parameters:
+  - `name` (String, optional): Series name filter
+  - `options` (Hash): Additional search options
+- Returns: Hash with search results filtered to "Release group series" type
 
-#### `#browse_series_with_release_groups(series_mbid, options = {})`
-Browse series details with release group relationships using MusicBrainz browse API
-- Parameters: series_mbid (String) - the series MusicBrainz ID, options (Hash) - additional options
-- Returns: Hash - browse results with release group relationships and ordering information
-- Usage: Getting complete ranked list with release groups and their positions
-- API: Uses `/ws/2/series/{mbid}?inc=release-group-rels`
+### `#search_with_criteria(criteria, options = {})`
+Builds complex queries with multiple search criteria.
+- Parameters:
+  - `criteria` (Hash): Field-value pairs (e.g., `{series: "Vice's 100", type: "Release group series"}`)
+  - `options` (Hash): Additional search options
+- Returns: Hash with search results
+- Raises: `QueryError` if invalid fields or no criteria provided
 
-### Convenience Methods
+## API Response Transformation
 
-#### `#search_release_group_series(name = nil, options = {})`
-Search specifically for "Release group series" type, optionally filtered by name
-- Parameters: name (String, optional) - series name filter, options (Hash) - additional options
-- Returns: Hash - search results filtered to release group series
-- Usage: Most common use case for finding music album rankings
+### Browse Response Processing
+The `browse_series_with_release_groups` and `browse_series_with_recordings` methods transform single series objects into search-compatible format:
 
-#### `#search_by_name_and_type(name, type, options = {})`
-Combined search by both name and type
-- Parameters: name (String) - series name, type (String) - series type, options (Hash) - additional options
-- Returns: Hash - search results matching both criteria
-- Usage: Precise searches when you know both name and type
-
-### Inherited Methods
-
-#### `#search(query, options = {})`
-Perform general search with custom Lucene syntax
-- Parameters: query (String) - Lucene query string, options (Hash) - additional options
-- Returns: Hash - search results
-- Usage: Complex queries with custom syntax
-
-#### `#search_with_criteria(criteria, options = {})`
-Build complex queries with multiple search criteria
-- Parameters: criteria (Hash) - field/value pairs for search, options (Hash) - additional options
-- Returns: Hash - search results
-- Usage: Multi-field searches with validation
-
-#### `#find_by_mbid(mbid, options = {})`
-Find series by MusicBrainz ID
-- Parameters: mbid (String) - the series MBID, options (Hash) - additional options
-- Returns: Hash - search results
-- Usage: Direct lookup when you have the MBID
-
-## Entity Configuration
-
-### `#entity_type`
-Returns "series" - the MusicBrainz entity type for API requests
-
-### `#mbid_field`
-Returns "sid" - the MBID field name for series (series ID)
-
-### `#available_fields`
-Returns available search fields: `["series", "seriesaccent", "alias", "comment", "sid", "tag", "type"]`
-
-## Response Processing
-
-### Browse Response Transformation
-The class includes custom `process_browse_response` method that:
-- Transforms single series object from browse API to match search API format
-- Creates consistent response structure with `count`, `offset`, `results` array
-- Preserves relationship data with ordering keys for rankings
-
-## Error Handling
-- Custom error handling for browse operations with proper metadata structure
-- Inherits standard search error handling from BaseSearch
-- Validates MBID format for browse operations
-- Graceful handling of network errors and API failures
-
-## Dependencies
-- Music::Musicbrainz::BaseClient for HTTP requests
-- Music::Musicbrainz::Search::BaseSearch parent class
-- Music::Musicbrainz exception classes for error handling
-- Time class for timestamp generation
-
-## Usage Examples
-
-```ruby
-# Initialize
-series_search = Music::Musicbrainz::Search::SeriesSearch.new(client)
-
-# Find ranking lists
-results = series_search.search_by_name("Vice's 100 Greatest Albums")
-results = series_search.search_release_group_series("Rolling Stone")
-
-# Get detailed ranking with release groups
-details = series_search.browse_series_with_release_groups("28cbc99a-875f-4139-b8b0-f1dd520ec62c")
-# Returns release groups with ordering-key for position in ranking
-
-# Complex search
-results = series_search.search_with_criteria({
-  type: "Release group series",
-  tag: "ranking"
-})
+**Input (from MusicBrainz):**
+```json
+{
+  "series": {
+    "id": "...",
+    "name": "...",
+    "relations": [...]
+  }
+}
 ```
 
-## API Integration Patterns
+**Output (transformed):**
+```json
+{
+  "count": 1,
+  "offset": 0,
+  "results": [{...}],
+  "created": "2025-10-03T..."
+}
+```
 
-### Search vs Browse APIs
-- **Search API** (`/ws/2/series/?query=...`): Used for finding series by various criteria
-- **Browse API** (`/ws/2/series/{mbid}?inc=release-group-rels`): Used for getting detailed relationships
+## Usage Patterns
 
-### Response Formats
-- **Search responses**: Returns array of series in `results` field
-- **Browse responses**: Returns single series object, transformed to match search format
-- **Relationship data**: Includes `ordering-key` field for ranking positions
+### Album Series Import
+```ruby
+search = SeriesSearch.new
+result = search.browse_series_with_release_groups("28cbc99a-875f-4139-b8b0-f1dd520ec62c")
 
-## Key Features
-- Comprehensive search functionality across all series fields
-- Specialized support for "Release group series" (music rankings)
-- Browse API integration for complete relationship data
-- Response format consistency between search and browse operations
-- Robust error handling and validation
-- Full pagination support
+if result[:success]
+  relations = result[:data]["results"].first["relations"]
+  # Process release groups...
+end
+```
+
+### Song Series Import
+```ruby
+search = SeriesSearch.new
+result = search.browse_series_with_recordings("b3484a66-a4de-444d-93d3-c99a73656905")
+
+if result[:success]
+  relations = result[:data]["results"].first["relations"]
+  # Process recordings...
+end
+```
+
+## Validations
+- MBID format: Must be valid UUID format (validated by `validate_mbid!` from BaseSearch)
+- Search criteria: At least one criterion required when using `search_with_criteria`
+- Field names: Must be in `available_fields` list
+
+## Dependencies
+- `Music::Musicbrainz::Client` for API communication
+- `Music::Musicbrainz::Search::BaseSearch` for common search functionality
+- Handles `Music::Musicbrainz::Error` exceptions
+
+## Error Handling
+- Network errors wrapped with context (series_mbid, options)
+- Invalid MBID format raises `QueryError`
+- Empty criteria raises `QueryError`
+- Returns failure hash with `:errors` array on API errors
+
+## Related Classes
+- `Music::Musicbrainz::Search::ReleaseGroupSearch` - For fetching release group details
+- `Music::Musicbrainz::Search::RecordingSearch` - For fetching recording details
+- `DataImporters::Music::Lists::ImportFromMusicbrainzSeries` - Uses browse methods
+- `DataImporters::Music::Lists::ImportSongsFromMusicbrainzSeries` - Uses `browse_series_with_recordings`

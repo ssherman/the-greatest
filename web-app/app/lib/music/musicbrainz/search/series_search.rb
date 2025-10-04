@@ -92,6 +92,26 @@ module Music
           end
         end
 
+        # Browse series with recording relationships
+        # Uses the browse API to get series details with recording relationships
+        # @param series_mbid [String] the series MusicBrainz ID
+        # @param options [Hash] additional options
+        # @return [Hash] browse results with recording relationships
+        def browse_series_with_recordings(series_mbid, options = {})
+          validate_mbid!(series_mbid)
+
+          # Use direct lookup API for series with recording relationships
+          # This uses /ws/2/series/{mbid}?inc=recording-rels
+          enhanced_options = options.merge(inc: "recording-rels")
+
+          begin
+            response = client.get("series/#{series_mbid}", enhanced_options)
+            process_browse_response(response)
+          rescue Music::Musicbrainz::Error => e
+            handle_browse_error(e, {series_mbid: series_mbid}, options)
+          end
+        end
+
         # Search for "Release group series" specifically (most common use case)
         # @param name [String] optional series name to search for
         # @param options [Hash] additional search options
