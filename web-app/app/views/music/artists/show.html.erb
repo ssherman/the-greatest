@@ -8,7 +8,7 @@
     <div class="lg:col-span-1">
       <div class="card bg-base-100 shadow-xl sticky top-8">
         <figure class="px-4 pt-4">
-          <% if @artist.primary_image %>
+          <% if @artist.primary_image&.file&.attached? %>
             <%= image_tag rails_public_blob_url(@artist.primary_image.file),
                 alt: @artist.name,
                 class: "rounded-xl w-full aspect-square object-cover" %>
