@@ -1,8 +1,21 @@
 Rails.application.routes.draw do
-  # Album rankings routes with optional ranking configuration and page
-  scope "(/rc/:ranking_configuration_id)" do
-    get "albums", to: "music/albums/ranked_items#index"
-    get "albums/page/:page", to: "music/albums/ranked_items#index", constraints: {page: /\d+|__pagy_page__/}
+  # Music domain routes (scoped within domain constraint)
+  constraints DomainConstraint.new(Rails.application.config.domains[:music]) do
+    # All music routes with optional ranking configuration parameter
+    scope "(/rc/:ranking_configuration_id)" do
+      # Album routes
+      get "albums", to: "music/albums/ranked_items#index", as: :albums
+      get "albums/page/:page", to: "music/albums/ranked_items#index", constraints: {page: /\d+|__pagy_page__/}
+      get "albums/:id", to: "music/albums#show", as: :album
+
+      # Song routes
+      get "songs", to: "music/songs/ranked_items#index", as: :songs
+      get "songs/page/:page", to: "music/songs/ranked_items#index", constraints: {page: /\d+|__pagy_page__/}
+      get "songs/:id", to: "music/songs#show", as: :song
+
+      # Artist routes
+      get "artists/:id", to: "music/artists#show", as: :artist
+    end
   end
   require "sidekiq/web"
   require "sidekiq/cron/web"

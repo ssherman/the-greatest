@@ -1,0 +1,102 @@
+<%
+  content_for :page_title, "#{@song.title} - #{@artist_names} | The Greatest Music"
+  content_for :meta_description, "Why #{@song.title} by #{@artist_names} ranks among the greatest songs ever. Analysis, rankings, and the story behind this iconic track."
+%>
+
+<div class="container mx-auto px-4 py-8">
+  <div class="max-w-4xl mx-auto">
+    <div class="mb-6">
+      <h1 class="text-4xl font-bold text-base-content mb-3">
+        <%= @song.title %>
+      </h1>
+      <p class="text-2xl text-base-content/80 mb-4">
+        by
+        <% @song.artists.each_with_index do |artist, index| %>
+          <%= link_to_artist artist, class: "hover:text-primary" %><%= index < @song.artists.count - 1 ? ", " : "" %>
+        <% end %>
+      </p>
+
+      <div class="flex flex-wrap gap-4 mb-6">
+        <% if @song.release_year %>
+          <div class="badge badge-primary badge-lg">
+            Released: <%= @song.release_year %>
+          </div>
+        <% end %>
+
+        <% if @song.duration_secs %>
+          <div class="badge badge-ghost badge-lg">
+            <%= Time.at(@song.duration_secs).utc.strftime("%M:%S") %>
+          </div>
+        <% end %>
+      </div>
+
+      <% if @song.description.present? %>
+        <div class="prose max-w-none mb-6">
+          <p class="text-base-content/70">
+            <%= @song.description %>
+          </p>
+        </div>
+      <% end %>
+    </div>
+
+    <% if @categories_by_type.any? %>
+      <div class="card bg-base-100 shadow-md mb-6">
+        <div class="card-body">
+          <h2 class="card-title text-xl mb-4">Categories</h2>
+          <% @categories_by_type.each do |category_type, categories| %>
+            <div class="mb-4 last:mb-0">
+              <h3 class="text-sm font-semibold text-base-content/70 mb-2 uppercase">
+                <%= category_type.to_s.titleize %>
+              </h3>
+              <div class="flex flex-wrap gap-2">
+                <% categories.each do |category| %>
+                  <span class="badge badge-lg badge-ghost">
+                    <%= category.name %>
+                  </span>
+                <% end %>
+              </div>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    <% end %>
+
+    <% if @albums.any? %>
+      <div class="card bg-base-100 shadow-md">
+        <div class="card-body">
+          <h2 class="card-title text-xl mb-4">Appears On</h2>
+          <div class="space-y-3">
+            <% @albums.each do |album| %>
+              <%= link_to_album album, nil, class: "flex items-center gap-4 p-3 bg-base-200 rounded-lg hover:bg-base-300 transition-colors" do %>
+                <% if album.primary_image&.file&.attached? %>
+                  <%= image_tag rails_public_blob_url(album.primary_image.file),
+                      alt: album.title,
+                      class: "rounded-lg w-16 h-16 object-cover flex-shrink-0" %>
+                <% else %>
+                  <div class="bg-base-300 rounded-lg w-16 h-16 flex items-center justify-center flex-shrink-0">
+                    <span class="text-2xl">🎵</span>
+                  </div>
+                <% end %>
+                <div class="flex-1 min-w-0">
+                  <h3 class="font-semibold text-base">
+                    <%= album.title %>
+                  </h3>
+                  <p class="text-sm text-base-content/80">
+                    <% album.artists.each_with_index do |artist, index| %>
+                      <span class="hover:text-primary"><%= artist.name %></span><%= index < album.artists.count - 1 ? ", " : "" %>
+                    <% end %>
+                  </p>
+                  <% if album.release_year %>
+                    <p class="text-sm text-base-content/60">
+                      <%= album.release_year %>
+                    </p>
+                  <% end %>
+                </div>
+              <% end %>
+            <% end %>
+          </div>
+        </div>
+      </div>
+    <% end %>
+  </div>
+</div>

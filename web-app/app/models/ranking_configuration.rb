@@ -82,10 +82,19 @@ class RankingConfiguration < ApplicationRecord
   scope :published, -> { where.not(published_at: nil) }
   scope :by_type, ->(type) { where(type: type) }
 
+  # Class methods
+  def self.default_primary
+    global.primary.first
+  end
+
   # Callbacks
   before_save :ensure_only_one_primary_per_type, if: :primary?
 
   # Instance methods
+  def default_primary?
+    self.class.default_primary&.id == id
+  end
+
   def published?
     published_at.present?
   end
