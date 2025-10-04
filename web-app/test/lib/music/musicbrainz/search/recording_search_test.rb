@@ -310,6 +310,70 @@ class Music::Musicbrainz::Search::RecordingSearchTest < ActiveSupport::TestCase
     assert result[:success]
   end
 
+  test "lookup_by_mbid uses direct lookup with inc parameter" do
+    recording_mbid = "e3f3c2d4-55c2-4d28-bb47-71f42f2a5ccc"
+
+    @mock_client.expects(:get)
+      .with("recording/#{recording_mbid}", {inc: "artist-credits"})
+      .returns(successful_lookup_response)
+
+    result = @search.lookup_by_mbid(recording_mbid)
+
+    assert result[:success]
+    assert_equal 1, result[:data]["count"]
+    assert_equal "Come Together", result[:data]["recordings"].first["title"]
+  end
+
+  test "lookup_by_mbid merges additional options with default inc" do
+    recording_mbid = "e3f3c2d4-55c2-4d28-bb47-71f42f2a5ccc"
+    options = {limit: 10}
+
+    @mock_client.expects(:get)
+      .with("recording/#{recording_mbid}", {inc: "artist-credits", limit: 10})
+      .returns(successful_lookup_response)
+
+    result = @search.lookup_by_mbid(recording_mbid, options)
+
+    assert result[:success]
+  end
+
+  test "lookup_by_mbid validates MBID format" do
+    invalid_mbid = "not-a-valid-mbid"
+
+    assert_raises(Music::Musicbrainz::QueryError) do
+      @search.lookup_by_mbid(invalid_mbid)
+    end
+  end
+
+  test "lookup_by_mbid handles API errors gracefully" do
+    recording_mbid = "e3f3c2d4-55c2-4d28-bb47-71f42f2a5ccc"
+
+    @mock_client.expects(:get)
+      .raises(Music::Musicbrainz::NetworkError.new("Recording not found"))
+
+    result = @search.lookup_by_mbid(recording_mbid)
+
+    refute result[:success]
+    assert_includes result[:errors], "Recording not found"
+    assert_equal({recording_mbid: recording_mbid}, result[:metadata][:browse_params])
+  end
+
+  test "lookup_by_mbid transforms single recording to array format" do
+    recording_mbid = "e3f3c2d4-55c2-4d28-bb47-71f42f2a5ccc"
+
+    @mock_client.expects(:get)
+      .with("recording/#{recording_mbid}", {inc: "artist-credits"})
+      .returns(successful_lookup_response)
+
+    result = @search.lookup_by_mbid(recording_mbid)
+
+    assert result[:success]
+    # Should transform single object to recordings array
+    assert result[:data]["recordings"].is_a?(Array)
+    assert_equal 1, result[:data]["count"]
+    assert_equal 0, result[:data]["offset"]
+  end
+
   private
 
   def successful_recording_response
@@ -340,6 +404,34 @@ class Music::Musicbrainz::Search::RecordingSearchTest < ActiveSupport::TestCase
       metadata: {
         endpoint: "recording",
         response_time: 0.123
+      }
+    }
+  end
+
+  def successful_lookup_response
+    {
+      success: true,
+      data: {
+        "id" => "e3f3c2d4-55c2-4d28-bb47-71f42f2a5ccc",
+        "title" => "Come Together",
+        "length" => 259000,
+        "artist-credit" => [
+          {
+            "name" => "The Beatles",
+            "artist" => {
+              "id" => "b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d",
+              "name" => "The Beatles",
+              "sort-name" => "Beatles, The"
+            }
+          }
+        ],
+        "isrcs" => ["GBUM71505078"],
+        "first-release-date" => "1969-09-26"
+      },
+      errors: [],
+      metadata: {
+        endpoint: "recording/e3f3c2d4-55c2-4d28-bb47-71f42f2a5ccc",
+        response_time: 0.145
       }
     }
   end

@@ -4,6 +4,12 @@ class Avo::Resources::MusicSongsList < Avo::Resources::List
   def fields
     super
 
-    field :musicbrainz_series_id, as: :text, help: "MusicBrainz Series ID (albums only for now)", readonly: true
+    field :musicbrainz_series_id, as: :text, help: "MusicBrainz Series ID for importing songs from series", show_on: [:show, :edit, :new]
+  end
+
+  def actions
+    super
+
+    action Avo::Actions::Lists::ImportFromMusicbrainzSeries
   end
 end

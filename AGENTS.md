@@ -125,6 +125,47 @@ item.identifiers.find_or_initialize_by(
 # Never use build() as it creates duplicates on provider re-runs
 ```
 
+## Background Jobs
+
+### Generating Sidekiq Jobs
+**CRITICAL:** Always use the `sidekiq:job` generator (NOT `job` or ActiveJob):
+```bash
+cd web-app
+bin/rails generate sidekiq:job music/import_song_list_from_musicbrainz_series
+```
+
+This creates:
+- `app/sidekiq/music/import_song_list_from_musicbrainz_series_job.rb`
+- `test/sidekiq/music/import_song_list_from_musicbrainz_series_job_test.rb`
+
+**DO NOT** use `bin/rails generate job` as it creates ActiveJob instead of Sidekiq jobs.
+
+### Queue Usage
+**CRITICAL:** Always use the default queue unless specifically needed:
+```ruby
+# ✅ Correct - uses default queue
+class Music::ImportSongListJob
+  include Sidekiq::Job
+  # No queue_as needed
+end
+
+# ❌ Wrong - unnecessary custom queue
+class Music::ImportSongListJob
+  include Sidekiq::Job
+  queue_as :music_import  # Don't do this
+end
+
+# ✅ Correct - custom queue for rate-limited API
+class Ai::DescriptionJob
+  include Sidekiq::Job
+  queue_as :ai_serial  # OK for serial AI API calls
+end
+```
+
+**Only use named queues for:**
+- Serial jobs that interact with rate-limited external APIs (AI services, etc.)
+- Jobs that must be processed sequentially to avoid API throttling
+
 ## Code Quality
 
 ### Required Commands Before Committing

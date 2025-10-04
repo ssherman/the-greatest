@@ -15,7 +15,7 @@ class Avo::Resources::RankingConfiguration < Avo::BaseResource
     field :global, as: :boolean
     field :primary, as: :boolean
     field :archived, as: :boolean
-    field :published_at, as: :datetime
+    field :published_at, as: :date_time
     field :algorithm_version, as: :number
     field :exponent, as: :number
     field :bonus_pool_percentage, as: :number
