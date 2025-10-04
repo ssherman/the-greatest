@@ -1,0 +1,82 @@
+<%
+  content_for :page_title, "Top 100 Greatest Songs of All Time | The Greatest Music"
+  content_for :meta_description, "Our definitive ranking of the 100 greatest songs ever recorded. From classic rock to modern masterpieces, discover the songs that changed music."
+%>
+
+<div class="container mx-auto px-4 py-8">
+  <div class="mb-8">
+    <h1 class="text-4xl font-bold text-base-content mb-2">Top Songs</h1>
+    <% if @ranking_configuration %>
+      <p class="text-base-content/70">
+        <%= @ranking_configuration.name %>
+        <% if @ranking_configuration.description.present? %>
+          - <%= @ranking_configuration.description %>
+        <% end %>
+      </p>
+    <% end %>
+  </div>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body p-0">
+      <div class="overflow-x-auto">
+        <table class="table">
+          <thead>
+            <tr>
+              <th class="w-20 text-center">Rank</th>
+              <th>Song</th>
+              <th class="hidden lg:table-cell">Year</th>
+              <th class="hidden lg:table-cell">Genres</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% @songs.each do |ranked_item| %>
+              <% song = ranked_item.item %>
+              <tr class="hover">
+                <td class="text-center">
+                  <div class="badge badge-primary badge-lg font-bold">
+                    #<%= ranked_item.rank %>
+                  </div>
+                </td>
+                <td>
+                  <%= link_to_song song, @ranking_configuration, class: "font-bold text-lg hover:text-primary" %>
+                  <div class="text-sm text-base-content/70">
+                    by
+                    <% song.artists.each_with_index do |artist, index| %>
+                      <%= link_to_artist artist, class: "hover:text-primary" %><%= index < song.artists.count - 1 ? ", " : "" %>
+                    <% end %>
+                  </div>
+                </td>
+                <td class="hidden lg:table-cell text-base-content/60">
+                  <%= song.release_year %>
+                </td>
+                <td class="hidden lg:table-cell">
+                  <% song.categories.where(category_type: :genre).limit(2).each do |category| %>
+                    <span class="badge badge-ghost badge-sm mr-1">
+                      <%= category.name %>
+                    </span>
+                  <% end %>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <% if @songs.empty? %>
+    <div class="text-center py-16">
+      <div class="text-6xl mb-4">🎵</div>
+      <h2 class="text-2xl font-bold text-base-content mb-2">No songs found</h2>
+      <p class="text-base-content/70">
+        This ranking configuration doesn't have any songs yet.
+      </p>
+    </div>
+  <% end %>
+
+  <% if @pagy.pages > 1 %>
+    <div class="flex justify-center mt-8">
+      <%== pagy_nav(@pagy) %>
+    </div>
+  <% end %>
+</div>

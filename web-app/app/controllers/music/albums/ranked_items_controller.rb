@@ -6,8 +6,8 @@ class Music::Albums::RankedItemsController < Music::RankedItemsController
   before_action :find_ranking_configuration
   before_action :validate_ranking_configuration_type
 
-  def self.expected_ranking_configuration_type
-    "Music::Albums::RankingConfiguration"
+  def self.ranking_configuration_class
+    Music::Albums::RankingConfiguration
   end
 
   def index

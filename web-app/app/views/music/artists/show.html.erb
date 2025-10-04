@@ -1,0 +1,205 @@
+<%
+  content_for :page_title, "#{@artist.name} - Songs & Albums | The Greatest Music"
+  content_for :meta_description, "Complete guide to #{@artist.name}'s greatest songs and albums. Rankings, reviews, and essential listening from their legendary discography."
+%>
+
+<div class="container mx-auto px-4 py-8">
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div class="lg:col-span-1">
+      <div class="card bg-base-100 shadow-xl sticky top-8">
+        <figure class="px-4 pt-4">
+          <% if @artist.primary_image&.file&.attached? %>
+            <%= image_tag rails_public_blob_url(@artist.primary_image.file),
+                alt: @artist.name,
+                class: "rounded-xl w-full aspect-square object-cover" %>
+          <% else %>
+            <div class="bg-base-200 rounded-xl w-full aspect-square flex items-center justify-center">
+              <span class="text-6xl">🎤</span>
+            </div>
+          <% end %>
+        </figure>
+
+        <div class="card-body">
+          <div class="space-y-2 text-sm">
+            <% if @artist.kind %>
+              <div class="badge badge-primary">
+                <%= @artist.kind.titleize %>
+              </div>
+            <% end %>
+
+            <% if @artist.country %>
+              <p><strong>Country:</strong> <%= @artist.country %></p>
+            <% end %>
+
+            <% if @artist.person? && @artist.born_on %>
+              <p><strong>Born:</strong> <%= @artist.born_on.year %></p>
+            <% end %>
+
+            <% if @artist.person? && @artist.year_died %>
+              <p><strong>Died:</strong> <%= @artist.year_died %></p>
+            <% end %>
+
+            <% if @artist.band? && @artist.year_formed %>
+              <p><strong>Formed:</strong> <%= @artist.year_formed %></p>
+            <% end %>
+
+            <% if @artist.band? && @artist.year_disbanded %>
+              <p><strong>Disbanded:</strong> <%= @artist.year_disbanded %></p>
+            <% end %>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="lg:col-span-2">
+      <div class="mb-6">
+        <h1 class="text-4xl font-bold text-base-content mb-4">
+          <%= @artist.name %>
+        </h1>
+
+        <% if @artist.description.present? %>
+          <div class="prose max-w-none">
+            <p class="text-base-content/70">
+              <%= @artist.description %>
+            </p>
+          </div>
+        <% end %>
+      </div>
+
+      <% if @categories_by_type.any? %>
+        <div class="card bg-base-100 shadow-md mb-6">
+          <div class="card-body">
+            <h2 class="card-title text-xl mb-4">Categories</h2>
+            <% @categories_by_type.each do |category_type, categories| %>
+              <div class="mb-4 last:mb-0">
+                <h3 class="text-sm font-semibold text-base-content/70 mb-2 uppercase">
+                  <%= category_type.to_s.titleize %>
+                </h3>
+                <div class="flex flex-wrap gap-2">
+                  <% categories.each do |category| %>
+                    <span class="badge badge-lg badge-ghost">
+                      <%= category.name %>
+                    </span>
+                  <% end %>
+                </div>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+
+      <% if @greatest_albums.any? %>
+        <div class="mb-6">
+          <div class="divider">
+            <h2 class="text-2xl font-bold">Greatest Albums</h2>
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <% @greatest_albums.each do |album| %>
+              <%= link_to_album album, @album_rc, class: "card bg-base-100 shadow-md hover:shadow-xl transition-shadow" do %>
+                <figure class="px-2 pt-2">
+                  <% if album.primary_image&.file&.attached? %>
+                    <%= image_tag rails_public_blob_url(album.primary_image.file),
+                        alt: album.title,
+                        class: "rounded-lg w-full aspect-square object-cover" %>
+                  <% else %>
+                    <div class="bg-base-200 rounded-lg w-full aspect-square flex items-center justify-center">
+                      <span class="text-base-content/50">🎵</span>
+                    </div>
+                  <% end %>
+                </figure>
+                <div class="card-body p-3">
+                  <h3 class="font-semibold text-sm line-clamp-2">
+                    <%= album.title %>
+                  </h3>
+                  <% if album.release_year %>
+                    <p class="text-xs text-base-content/60">
+                      <%= album.release_year %>
+                    </p>
+                  <% end %>
+                </div>
+              <% end %>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+
+      <% if @greatest_songs.any? %>
+        <div class="mb-6">
+          <div class="divider">
+            <h2 class="text-2xl font-bold">Greatest Songs</h2>
+          </div>
+          <div class="card bg-base-100 shadow-md">
+            <div class="card-body">
+              <div class="overflow-x-auto">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th class="w-16">#</th>
+                      <th>Title</th>
+                      <th class="hidden md:table-cell">Artists</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <% @greatest_songs.each_with_index do |song, index| %>
+                      <tr class="hover">
+                        <td class="text-base-content/60"><%= index + 1 %></td>
+                        <td>
+                          <%= link_to_song song, @song_rc, class: "font-medium hover:text-primary" %>
+                        </td>
+                        <td class="hidden md:table-cell text-base-content/80">
+                          <% song.artists.each_with_index do |artist, idx| %>
+                            <%= link_to_artist artist, class: "hover:text-primary" %><%= idx < song.artists.count - 1 ? ", " : "" %>
+                          <% end %>
+                        </td>
+                      </tr>
+                    <% end %>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      <% end %>
+
+      <% if @all_albums.any? %>
+        <div>
+          <div class="divider">
+            <h2 class="text-2xl font-bold">All Albums</h2>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <% @all_albums.each do |album| %>
+              <%= link_to_album album, nil, class: "card bg-base-100 shadow-md hover:shadow-xl transition-shadow" do %>
+                <div class="card-body p-4">
+                  <div class="flex gap-4">
+                    <% if album.primary_image&.file&.attached? %>
+                      <%= image_tag rails_public_blob_url(album.primary_image.file),
+                          alt: album.title,
+                          class: "rounded-lg w-20 h-20 object-cover flex-shrink-0" %>
+                    <% else %>
+                      <div class="bg-base-200 rounded-lg w-20 h-20 flex items-center justify-center flex-shrink-0">
+                        <span class="text-2xl">🎵</span>
+                      </div>
+                    <% end %>
+                    <div class="flex-1 min-w-0">
+                      <h3 class="font-semibold text-base line-clamp-2">
+                        <%= album.title %>
+                      </h3>
+                      <p class="text-sm text-base-content/80">
+                        <%= album.artists.map(&:name).join(", ") %>
+                      </p>
+                      <% if album.release_year %>
+                        <p class="text-sm text-base-content/60">
+                          <%= album.release_year %>
+                        </p>
+                      <% end %>
+                    </div>
+                  </div>
+                </div>
+              <% end %>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</div>

@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html data-theme="light">
   <head>
-    <title><%= domain_name %></title>
+    <title><%= content_for?(:page_title) ? yield(:page_title) : "Greatest Songs & Albums Ranked | The Greatest Music" %></title>
+    <meta name="description" content="<%= content_for?(:meta_description) ? yield(:meta_description) : "Discover definitive rankings of the greatest songs and albums of all time. Expert reviews, curated lists, and comprehensive music analysis." %>">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
@@ -20,21 +21,19 @@
             </svg>
           </div>
           <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
-            <li><a>Albums</a></li>
-            <li><a>Artists</a></li>
-            <li><a>Genres</a></li>
+            <li><%= link_to "Albums", albums_path %></li>
+            <li><%= link_to "Songs", songs_path %></li>
           </ul>
         </div>
-        <a class="btn btn-ghost text-xl">
+        <%= link_to "/", class: "btn btn-ghost text-xl" do %>
           <span class="text-2xl mr-2">🎵</span>
           <%= domain_name %>
-        </a>
+        <% end %>
       </div>
       <div class="navbar-center hidden lg:flex">
         <ul class="menu menu-horizontal px-1">
-          <li><a>Albums</a></li>
-          <li><a>Artists</a></li>
-          <li><a>Genres</a></li>
+          <li><%= link_to "Albums", albums_path %></li>
+          <li><%= link_to "Songs", songs_path %></li>
         </ul>
       </div>
       <div class="navbar-end">

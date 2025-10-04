@@ -1,30 +1,25 @@
 class RankedItemsController < ApplicationController
-  def self.expected_ranking_configuration_type
-    nil
+  def self.ranking_configuration_class
+    RankingConfiguration
   end
 
   private
 
   def find_ranking_configuration
-    if params[:ranking_configuration_id].present?
-      @ranking_configuration = RankingConfiguration.find(params[:ranking_configuration_id])
+    @ranking_configuration = if params[:ranking_configuration_id].present?
+      RankingConfiguration.find(params[:ranking_configuration_id])
     else
-      expected_type = self.class.expected_ranking_configuration_type
-      @ranking_configuration = if expected_type
-        RankingConfiguration.where(type: expected_type).global.primary.first
-      else
-        RankingConfiguration.global.primary.first
-      end
+      self.class.ranking_configuration_class.default_primary
     end
 
     raise ActiveRecord::RecordNotFound unless @ranking_configuration
   end
 
   def validate_ranking_configuration_type
-    expected_type = self.class.expected_ranking_configuration_type
-    return unless expected_type
+    expected_class = self.class.ranking_configuration_class
+    return if expected_class == RankingConfiguration
 
-    unless @ranking_configuration.type == expected_type
+    unless @ranking_configuration.is_a?(expected_class)
       raise ActiveRecord::RecordNotFound
     end
   end
