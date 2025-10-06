@@ -16,6 +16,7 @@
 9. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-10-05] [Fix Song Import Missing Artists Bug](todos/046-fix-song-import-missing-artists-bug.md)
 - ✅ [2025-10-03] [Import Song Lists from MusicBrainz Series](todos/044-import-song-lists-by-series.md)
 - ✅ [2025-10-01] [Refactor AI Agent Integration: OpenAI Responses API & Flex Processing](todos/043-refactor-ai-agent-integration.md)
 - ✅ [2025-09-26] [Artist and Album Description AI Agents](todos/042-artist-album-description-ai-agents.md)

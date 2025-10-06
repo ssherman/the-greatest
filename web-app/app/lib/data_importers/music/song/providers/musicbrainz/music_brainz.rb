@@ -5,9 +5,10 @@ module DataImporters
     module Song
       module Providers
         module Musicbrainz
-          class Recording < DataImporters::ProviderBase
+          # MusicBrainz provider for Music::Song data
+          class MusicBrainz < DataImporters::ProviderBase
             def populate(song, query:)
-              Rails.logger.info "[SONG_IMPORT] Recording provider starting for MBID: #{query.musicbrainz_recording_id || query.title}"
+              Rails.logger.info "[SONG_IMPORT] MusicBrainz provider starting for MBID: #{query.musicbrainz_recording_id || query.title}"
 
               api_result = if query.musicbrainz_recording_id.present?
                 lookup_recording_by_mbid(query.musicbrainz_recording_id)
@@ -16,13 +17,13 @@ module DataImporters
               end
 
               unless api_result[:success]
-                Rails.logger.error "[SONG_IMPORT] Recording provider API failed: #{api_result[:errors]}"
+                Rails.logger.error "[SONG_IMPORT] MusicBrainz provider API failed: #{api_result[:errors]}"
                 return failure_result(errors: api_result[:errors])
               end
 
               recordings_data = api_result[:data]["recordings"]
               if recordings_data.empty?
-                Rails.logger.warn "[SONG_IMPORT] Recording provider found no recordings"
+                Rails.logger.warn "[SONG_IMPORT] MusicBrainz provider found no recordings"
                 return success_result(data_populated: [])
               end
 
@@ -36,10 +37,10 @@ module DataImporters
               Rails.logger.info "[SONG_IMPORT] Song after populate - persisted: #{song.persisted?}, valid: #{song.valid?}, errors: #{song.errors.full_messages}"
               Rails.logger.info "[SONG_IMPORT] Song associations - identifiers: #{song.identifiers.count}, song_artists: #{song.song_artists.count}"
 
-              Rails.logger.info "[SONG_IMPORT] Recording provider SUCCESS - populated #{data_fields_populated(recording_data).join(", ")}"
+              Rails.logger.info "[SONG_IMPORT] MusicBrainz provider SUCCESS - populated #{data_fields_populated(recording_data).join(", ")}"
               success_result(data_populated: data_fields_populated(recording_data))
             rescue => e
-              Rails.logger.error "[SONG_IMPORT] Recording provider ERROR: #{e.class} - #{e.message}"
+              Rails.logger.error "[SONG_IMPORT] MusicBrainz provider ERROR: #{e.class} - #{e.message}"
               Rails.logger.error "[SONG_IMPORT] Backtrace: #{e.backtrace.first(3).join("\n")}"
               failure_result(errors: ["MusicBrainz recording error: #{e.message}"])
             end
@@ -122,7 +123,8 @@ module DataImporters
                   musicbrainz_id: artist_mbid
                 )
 
-                if artist_result.success? && artist_result.item
+                # Only create SongArtist if artist import succeeded AND artist is persisted
+                if artist_result.success? && artist_result.item&.persisted?
                   song.song_artists.find_or_initialize_by(
                     artist: artist_result.item,
                     position: index + 1

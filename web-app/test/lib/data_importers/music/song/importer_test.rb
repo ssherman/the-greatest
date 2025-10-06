@@ -343,6 +343,59 @@ module DataImporters
           assert_equal "Song with Failed Artist", result.item.title
           # But no artists should be associated
           assert_equal 0, result.item.artists.count
+          # And no orphaned song_artists records
+          assert_equal 0, result.item.song_artists.count
+        end
+
+        test "call does not create song_artist when artist import returns unpersisted artist" do
+          mbid = "6b9a9e04-abd7-4666-86ba-bb220ef4c3b6"
+
+          # Mock MusicBrainz recording lookup
+          search_service = mock
+          search_service.expects(:lookup_by_mbid)
+            .with(mbid)
+            .returns(
+              success: true,
+              data: {
+                "recordings" => [
+                  {
+                    "id" => mbid,
+                    "title" => "Song with Unpersisted Artist",
+                    "length" => 200_000,
+                    "artist-credit" => [
+                      {
+                        "artist" => {
+                          "id" => "unpersisted-artist-id",
+                          "name" => "Unpersisted Artist"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            )
+
+          ::Music::Musicbrainz::Search::RecordingSearch.stubs(:new).returns(search_service)
+
+          # Mock artist importer to return success but with unpersisted artist (simulates validation failure)
+          unpersisted_artist = ::Music::Artist.new(name: "Unpersisted Artist")
+          artist_result = DataImporters::ImportResult.new(
+            item: unpersisted_artist,
+            provider_results: [],
+            success: true
+          )
+          DataImporters::Music::Artist::Importer.stubs(:call).returns(artist_result)
+
+          result = Importer.call(musicbrainz_recording_id: mbid)
+
+          # Song import should succeed (has title and duration)
+          assert result.success?
+          assert result.item.persisted?
+          assert_equal "Song with Unpersisted Artist", result.item.title
+
+          # Critical: Should NOT have any artists or song_artists because artist wasn't persisted
+          assert_equal 0, result.item.artists.count, "Should not associate unpersisted artists"
+          assert_equal 0, result.item.song_artists.count, "Should not create SongArtist for unpersisted artists"
         end
       end
     end
