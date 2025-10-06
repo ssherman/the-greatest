@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "faraday"
+require "faraday/follow_redirects"
 require "json"
 
 module Music
@@ -42,6 +43,9 @@ module Music
         Faraday.new(url: config.api_url) do |conn|
           conn.options.timeout = config.timeout
           conn.options.open_timeout = config.open_timeout
+
+          # Follow redirects automatically (for MusicBrainz recording redirects)
+          conn.response :follow_redirects, limit: 3
 
           # Add logging if logger is available
           if config.logger
