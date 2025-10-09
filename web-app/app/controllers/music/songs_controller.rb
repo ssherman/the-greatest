@@ -8,7 +8,12 @@ class Music::SongsController < ApplicationController
   end
 
   def show
-    @song = Music::Song.includes(:artists, :categories)
+    @song = Music::Song.includes(
+      :artists,
+      :categories,
+      albums: [:artists, {primary_image: {file_attachment: {blob: {variant_records: {image_attachment: :blob}}}}}],
+      lists: :list_items
+    )
       .friendly
       .find(params[:id])
 
@@ -19,10 +24,8 @@ class Music::SongsController < ApplicationController
 
     @albums = @song.albums
       .distinct
-      .includes(:artists)
-      .with_primary_image_for_display
       .order(release_year: :desc)
 
-    @lists = @song.lists.includes(:list_items).to_a
+    @lists = @song.lists.to_a
   end
 end
