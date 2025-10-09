@@ -41,6 +41,16 @@
           <% end %>
         </p>
 
+        <% if @ranked_item %>
+          <p class="text-lg text-base-content/70 mb-4">
+            <% if @ranked_item.rank == 1 %>
+              The <strong>greatest</strong> album of all time
+            <% else %>
+              The <strong><%= @ranked_item.rank.ordinalize %></strong> greatest album of all time
+            <% end %>
+          </p>
+        <% end %>
+
         <% if @album.description.present? %>
           <div class="prose max-w-none">
             <p class="text-base-content/70">

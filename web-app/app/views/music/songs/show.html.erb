@@ -17,12 +17,13 @@
       </p>
 
       <% if @ranked_item %>
-        <div class="alert alert-info mb-4">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-          <span>
-            The <strong><%= @ranked_item.rank == 1 ? "greatest" : @ranked_item.rank.ordinalize %></strong> greatest song of all time
-          </span>
-        </div>
+        <p class="text-lg text-base-content/70 mb-4">
+          <% if @ranked_item.rank == 1 %>
+            The <strong>greatest</strong> song of all time
+          <% else %>
+            The <strong><%= @ranked_item.rank.ordinalize %></strong> greatest song of all time
+          <% end %>
+        </p>
       <% end %>
 
       <div class="flex flex-wrap gap-4 mb-6">
