@@ -1,0 +1,162 @@
+<%
+  title = "#{@list.name} - Album List | The Greatest Music"
+  description = "Explore #{@list.name}, featuring #{@list.list_items.count} albums."
+  description += " #{truncate(@list.description, length: 90)}" if @list.description.present?
+  description += " Source: #{@list.source}." if @list.source.present?
+
+  content_for :title, truncate(title, length: 60)
+  content_for :meta_description, truncate(description, length: 160)
+%>
+
+<div class="container mx-auto px-4 py-8">
+  <div class="mb-8">
+    <h1 class="text-4xl font-bold text-base-content mb-4">
+      <%= @list.name %>
+    </h1>
+
+    <div class="flex flex-wrap gap-3 mb-4">
+      <% if @list.source.present? %>
+        <div class="badge badge-lg badge-ghost">
+          Source: <%= @list.source %>
+        </div>
+      <% end %>
+
+      <% if @list.year_published.present? %>
+        <div class="badge badge-lg badge-ghost">
+          Year: <%= @list.year_published %>
+        </div>
+      <% end %>
+
+      <% if @ranked_list %>
+        <div class="badge badge-lg badge-ghost">
+          Weight: <%= @ranked_list.weight %>
+        </div>
+      <% end %>
+
+      <div class="badge badge-lg badge-ghost">
+        <%= @list.list_items.count %> albums
+      </div>
+
+      <% if @list.number_of_voters.present? %>
+        <div class="badge badge-lg badge-ghost">
+          <%= number_with_delimiter(@list.number_of_voters) %> voters
+        </div>
+      <% end %>
+    </div>
+
+    <% if @list.description.present? %>
+      <div class="prose max-w-none mb-4">
+        <p class="text-base-content/80">
+          <%= @list.description %>
+        </p>
+      </div>
+    <% end %>
+
+    <% if @list.url.present? %>
+      <div class="mt-4">
+        <%= link_to @list.url, target: "_blank", rel: "noopener noreferrer",
+            class: "btn btn-primary btn-sm" do %>
+          View Original List
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+          </svg>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+
+  <% if @list.list_items.any? %>
+    <div class="space-y-4">
+      <% @list.list_items.each do |list_item| %>
+        <% album = list_item.item %>
+        <% next unless album %>
+        <div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow">
+          <div class="card-body">
+            <!-- Row 1: Rank, Title, Artists -->
+            <div class="mb-4">
+              <h3 class="text-2xl font-bold">
+                <% if list_item.position.present? %>
+                  <span class="text-primary">#<%= list_item.position %></span>
+                  <span class="text-base-content/40 mx-2">—</span>
+                <% end %>
+                <%= link_to album.title, album_path(album, ranking_configuration_id: params[:ranking_configuration_id]),
+                    class: "text-base-content hover:text-primary" %>
+                <span class="text-base-content/60 font-normal text-lg ml-2">by</span>
+                <% artists = album.artists.to_a %>
+                <% artists.each_with_index do |artist, index| %>
+                  <%= link_to_artist artist, class: "text-base-content hover:text-primary font-medium" %><%= index < artists.size - 1 ? ", " : "" %>
+                <% end %>
+              </h3>
+            </div>
+
+            <!-- Row 2: Two columns -->
+            <div class="flex gap-6">
+              <!-- Column 1: Album Cover -->
+              <div class="flex-shrink-0">
+                <%= link_to album_path(album, ranking_configuration_id: params[:ranking_configuration_id]) do %>
+                  <% begin %>
+                    <% if album.primary_image&.file&.attached? %>
+                      <% variant = album.primary_image.file.variant(:medium) %>
+                      <%= image_tag rails_public_blob_url(variant),
+                          alt: album.title,
+                          class: "w-32 h-32 rounded-lg object-cover shadow-lg" %>
+                    <% else %>
+                      <div class="w-32 h-32 bg-base-200 rounded-lg flex items-center justify-center shadow-lg">
+                        <span class="text-base-content/50 text-4xl">🎵</span>
+                      </div>
+                    <% end %>
+                  <% rescue => e %>
+                    <div class="w-32 h-32 bg-base-200 rounded-lg flex items-center justify-center shadow-lg">
+                      <span class="text-base-content/50 text-4xl">🎵</span>
+                    </div>
+                  <% end %>
+                <% end %>
+              </div>
+
+              <!-- Column 2: Metadata -->
+              <div class="flex-1 min-w-0">
+                <!-- Release Year -->
+                <% if album.release_year %>
+                  <div class="mb-3 flex items-center">
+                    <span class="text-sm font-semibold text-base-content/60 uppercase">Released:</span>
+                    <span class="badge badge-ghost ml-2"><%= album.release_year %></span>
+                  </div>
+                <% end %>
+
+                <!-- Categories -->
+                <% categories = album.categories.to_a %>
+                <% if categories.any? %>
+                  <div class="mb-3">
+                    <span class="text-sm font-semibold text-base-content/60 uppercase">Genres:</span>
+                    <div class="flex flex-wrap gap-2 mt-1">
+                      <% categories.each do |category| %>
+                        <span class="badge badge-outline"><%= category.name %></span>
+                      <% end %>
+                    </div>
+                  </div>
+                <% end %>
+
+                <!-- Description -->
+                <% if album.description.present? %>
+                  <div>
+                    <p class="text-base-content/70 text-sm line-clamp-3">
+                      <%= album.description %>
+                    </p>
+                  </div>
+                <% end %>
+              </div>
+            </div>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  <% else %>
+    <div class="text-center py-16">
+      <div class="text-6xl mb-4">📋</div>
+      <h2 class="text-2xl font-bold text-base-content mb-2">No albums in this list</h2>
+      <p class="text-base-content/70">
+        This list doesn't have any albums yet.
+      </p>
+    </div>
+  <% end %>
+</div>

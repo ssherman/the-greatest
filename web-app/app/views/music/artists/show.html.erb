@@ -147,8 +147,9 @@
                           <%= link_to_song song, @song_rc, class: "font-medium hover:text-primary" %>
                         </td>
                         <td class="hidden md:table-cell text-base-content/80">
-                          <% song.artists.each_with_index do |artist, idx| %>
-                            <%= link_to_artist artist, class: "hover:text-primary" %><%= idx < song.artists.count - 1 ? ", " : "" %>
+                          <% artists = song.artists.to_a %>
+                          <% artists.each_with_index do |artist, idx| %>
+                            <%= link_to_artist artist, class: "hover:text-primary" %><%= idx < artists.size - 1 ? ", " : "" %>
                           <% end %>
                         </td>
                       </tr>

@@ -1,0 +1,97 @@
+<% content_for :title, "Greatest Album Lists & Rankings | The Greatest Music" %>
+<% content_for :meta_description, "Explore curated lists of the greatest albums of all time. Discover expert rankings, critical favorites, and authoritative album collections." %>
+
+<div class="container mx-auto px-4 py-8">
+  <div class="mb-8">
+    <h1 class="text-4xl font-bold text-base-content mb-2">Greatest Album Lists</h1>
+    <% if @ranking_configuration %>
+      <p class="text-base-content/70">
+        <%= @ranking_configuration.name %>
+        <% if @ranking_configuration.description.present? %>
+          - <%= @ranking_configuration.description %>
+        <% end %>
+      </p>
+    <% end %>
+
+    <div class="flex gap-2 mt-4">
+      <%= link_to "Weight", music_albums_lists_path(ranking_configuration_id: params[:ranking_configuration_id]),
+          class: "btn btn-sm #{params[:sort] != 'created_at' ? 'btn-primary' : 'btn-ghost'}" %>
+      <%= link_to "Newest", music_albums_lists_path(ranking_configuration_id: params[:ranking_configuration_id], sort: "created_at"),
+          class: "btn btn-sm #{params[:sort] == 'created_at' ? 'btn-primary' : 'btn-ghost'}" %>
+    </div>
+  </div>
+
+  <% if @ranked_lists.any? %>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <% @ranked_lists.each do |ranked_list| %>
+        <% list = ranked_list.list %>
+        <%= link_to music_album_list_path(list, ranking_configuration_id: params[:ranking_configuration_id]),
+            class: "card bg-base-100 shadow-lg hover:shadow-xl transition-shadow" do %>
+          <div class="card-body">
+            <div class="flex items-start justify-between mb-3">
+              <div class="badge badge-primary">
+                Weight: <%= ranked_list.weight %>
+              </div>
+              <div class="badge badge-ghost">
+                <%= list.list_items.size %> albums
+              </div>
+            </div>
+
+            <h2 class="card-title text-xl mb-2">
+              <%= list.name %>
+            </h2>
+
+            <div class="space-y-2 mb-3">
+              <% if list.source.present? %>
+                <div class="text-sm">
+                  <span class="font-semibold text-base-content">Source:</span>
+                  <span class="text-base-content/80"><%= list.source %></span>
+                </div>
+              <% end %>
+
+              <% if list.year_published.present? %>
+                <div class="text-sm">
+                  <span class="font-semibold text-base-content">Year:</span>
+                  <span class="text-base-content/80"><%= list.year_published %></span>
+                </div>
+              <% end %>
+
+              <% if list.number_of_voters.present? %>
+                <div class="text-sm">
+                  <span class="font-semibold text-base-content">Voters:</span>
+                  <span class="text-base-content/80"><%= number_with_delimiter(list.number_of_voters) %></span>
+                </div>
+              <% end %>
+            </div>
+
+            <% if list.description.present? %>
+              <p class="text-sm text-base-content/80 line-clamp-3 mb-3">
+                <%= list.description %>
+              </p>
+            <% end %>
+
+            <% if list.url.present? %>
+              <div class="card-actions justify-end">
+                <span class="text-xs text-primary font-medium">View List →</span>
+              </div>
+            <% end %>
+          </div>
+        <% end %>
+      <% end %>
+    </div>
+
+    <% if @pagy.pages > 1 %>
+      <div class="flex justify-center mt-8">
+        <%== pagy_nav(@pagy) %>
+      </div>
+    <% end %>
+  <% else %>
+    <div class="text-center py-16">
+      <div class="text-6xl mb-4">📋</div>
+      <h2 class="text-2xl font-bold text-base-content mb-2">No album lists found</h2>
+      <p class="text-base-content/70">
+        This ranking configuration doesn't have any album lists yet.
+      </p>
+    </div>
+  <% end %>
+</div>

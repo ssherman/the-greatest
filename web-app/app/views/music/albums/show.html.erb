@@ -78,7 +78,7 @@
             <h2 class="card-title text-xl mb-4">Appears On These Lists</h2>
             <div class="space-y-3">
               <% @album.lists.each do |list| %>
-                <div class="flex items-start justify-between p-3 bg-base-200 rounded-lg">
+                <%= link_to_album_list list, @ranking_configuration, class: "block p-3 bg-base-200 rounded-lg hover:bg-base-300 transition-colors" do %>
                   <div>
                     <h3 class="font-semibold text-base-content">
                       <%= list.name %>
@@ -89,7 +89,7 @@
                       </p>
                     <% end %>
                   </div>
-                </div>
+                <% end %>
               <% end %>
             </div>
           </div>

@@ -1,6 +1,12 @@
 class Music::SongsController < ApplicationController
   layout "music/application"
 
+  before_action :load_ranking_configuration, only: [:show]
+
+  def self.ranking_configuration_class
+    Music::Songs::RankingConfiguration
+  end
+
   def show
     @song = Music::Song.includes(:artists, :categories)
       .friendly
@@ -9,17 +15,14 @@ class Music::SongsController < ApplicationController
     @categories_by_type = @song.categories.group_by(&:category_type)
     @artist_names = @song.artists.map(&:name).join(", ")
 
-    @ranking_configuration = if params[:ranking_configuration_id].present?
-      RankingConfiguration.find(params[:ranking_configuration_id])
-    else
-      Music::Songs::RankingConfiguration.default_primary
-    end
-
     @ranked_item = @ranking_configuration&.ranked_items&.find_by(item: @song)
 
     @albums = @song.albums
       .distinct
-      .includes(:artists, :primary_image)
+      .includes(:artists)
+      .with_primary_image_for_display
       .order(release_year: :desc)
+
+    @lists = @song.lists.includes(:list_items).to_a
   end
 end

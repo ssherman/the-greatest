@@ -40,4 +40,54 @@ module Music::DefaultHelper
       link_to artist.name, artist_path(artist), **options
     end
   end
+
+  def music_albums_lists_path_with_rc(ranking_configuration = nil)
+    if ranking_configuration && !ranking_configuration.default_primary?
+      music_albums_lists_path(ranking_configuration_id: ranking_configuration.id)
+    else
+      music_albums_lists_path
+    end
+  end
+
+  def music_songs_lists_path_with_rc(ranking_configuration = nil)
+    if ranking_configuration && !ranking_configuration.default_primary?
+      music_songs_lists_path(ranking_configuration_id: ranking_configuration.id)
+    else
+      music_songs_lists_path
+    end
+  end
+
+  def music_album_list_path_with_rc(list, ranking_configuration = nil)
+    if ranking_configuration && !ranking_configuration.default_primary?
+      music_album_list_path(list, ranking_configuration_id: ranking_configuration.id)
+    else
+      music_album_list_path(list)
+    end
+  end
+
+  def music_song_list_path_with_rc(list, ranking_configuration = nil)
+    if ranking_configuration && !ranking_configuration.default_primary?
+      music_song_list_path(list, ranking_configuration_id: ranking_configuration.id)
+    else
+      music_song_list_path(list)
+    end
+  end
+
+  def link_to_album_list(list, ranking_configuration = nil, **options, &block)
+    path = music_album_list_path_with_rc(list, ranking_configuration)
+    if block_given?
+      link_to path, **options, &block
+    else
+      link_to list.name, path, **options
+    end
+  end
+
+  def link_to_song_list(list, ranking_configuration = nil, **options, &block)
+    path = music_song_list_path_with_rc(list, ranking_configuration)
+    if block_given?
+      link_to path, **options, &block
+    else
+      link_to list.name, path, **options
+    end
+  end
 end

@@ -58,6 +58,10 @@ class Music::Album < ApplicationRecord
     with_identifier("music_musicbrainz_release_group_id", mbid)
   }
 
+  scope :with_primary_image_for_display, -> {
+    includes(primary_image: {file_attachment: {blob: {variant_records: {image_attachment: :blob}}}})
+  }
+
   # Callbacks
   after_commit :queue_release_import, on: :create
 
