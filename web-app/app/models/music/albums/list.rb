@@ -39,7 +39,21 @@
 module Music
   module Albums
     class List < ::List
-      # Music Albums-specific logic can be added here
+      # Default ordering for list_items association
+      has_many :list_items, -> { order(:position) }, foreign_key: :list_id, dependent: :destroy
+
+      # Scopes for eager loading list items with albums and all associations
+      scope :with_albums_for_display, -> {
+        includes(
+          list_items: {
+            listable: [
+              :artists,
+              :categories,
+              {primary_image: {file_attachment: {blob: {variant_records: {image_attachment: :blob}}}}}
+            ]
+          }
+        )
+      }
     end
   end
 end

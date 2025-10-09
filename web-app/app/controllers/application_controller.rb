@@ -44,4 +44,34 @@ class ApplicationController < ActionController::Base
   def render_not_found
     render file: "#{Rails.root}/public/404.html", status: :not_found, layout: false
   end
+
+  # Load ranking configuration based on controller class configuration
+  # Controllers should define self.ranking_configuration_class to use this
+  #
+  # @param config_class [Class] Override the ranking configuration class (useful for multi-config controllers)
+  # @param instance_var [Symbol] Instance variable name to store the config (defaults to @ranking_configuration)
+  def load_ranking_configuration(config_class: nil, instance_var: :@ranking_configuration)
+    # Use provided class or fall back to controller's ranking_configuration_class
+    config_class ||= begin
+      return unless respond_to?(:ranking_configuration_class, true) || self.class.respond_to?(:ranking_configuration_class)
+      self.class.ranking_configuration_class
+    end
+
+    return unless config_class
+
+    ranking_config = if params[:ranking_configuration_id].present?
+      RankingConfiguration.find(params[:ranking_configuration_id])
+    else
+      config_class.default_primary
+    end
+
+    raise ActiveRecord::RecordNotFound unless ranking_config
+
+    # Validate the ranking configuration is of the expected type
+    unless config_class == RankingConfiguration || ranking_config.is_a?(config_class)
+      raise ActiveRecord::RecordNotFound
+    end
+
+    instance_variable_set(instance_var, ranking_config)
+  end
 end

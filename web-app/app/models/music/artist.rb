@@ -63,6 +63,10 @@ class Music::Artist < ApplicationRecord
   scope :bands, -> { where(kind: :band) }
   scope :active, -> { where(year_disbanded: nil) }
 
+  scope :with_primary_image_for_display, -> {
+    includes(primary_image: {file_attachment: {blob: {variant_records: {image_attachment: :blob}}}})
+  }
+
   # AI Methods
   def populate_details_with_ai!
     Services::Ai::Tasks::Music::ArtistDescriptionTask.new(parent: self).call

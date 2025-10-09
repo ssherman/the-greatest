@@ -76,6 +76,9 @@ group :development do
   gem "web-console"
   gem "annotaterb"
   gem "rack-mini-profiler"
+  gem "flamegraph"
+  gem "stackprof"
+  gem "memory_profiler"
   gem "standard", ">= 1.35.1"
 end
 

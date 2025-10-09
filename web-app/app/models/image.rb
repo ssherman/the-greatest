@@ -20,9 +20,9 @@ class Image < ApplicationRecord
   belongs_to :parent, polymorphic: true
 
   has_one_attached :file do |attachable|
-    attachable.variant :small, resize_to_limit: [100, 100]
-    attachable.variant :medium, resize_to_limit: [150, 150]
-    attachable.variant :large, resize_to_limit: [250, 250]
+    attachable.variant :small, resize_to_limit: [100, 100], preprocessed: true
+    attachable.variant :medium, resize_to_limit: [150, 150], preprocessed: true
+    attachable.variant :large, resize_to_limit: [250, 250], preprocessed: true
   end
 
   store :metadata, accessors: [:analyzed, :identified], coder: ActiveRecord::Coders::JSON

@@ -1,0 +1,129 @@
+<%
+  list_items_array = @list.list_items.to_a
+  title = "#{@list.name} - Song List | The Greatest Music"
+  description = "Explore #{@list.name}, featuring #{list_items_array.size} songs."
+  description += " #{truncate(@list.description, length: 90)}" if @list.description.present?
+  description += " Source: #{@list.source}." if @list.source.present?
+
+  content_for :title, truncate(title, length: 60)
+  content_for :meta_description, truncate(description, length: 160)
+%>
+
+<div class="container mx-auto px-4 py-8">
+  <div class="mb-8">
+    <h1 class="text-4xl font-bold text-base-content mb-4">
+      <%= @list.name %>
+    </h1>
+
+    <div class="flex flex-wrap gap-3 mb-4">
+      <% if @list.source.present? %>
+        <div class="badge badge-lg badge-ghost">
+          Source: <%= @list.source %>
+        </div>
+      <% end %>
+
+      <% if @list.year_published.present? %>
+        <div class="badge badge-lg badge-ghost">
+          Year: <%= @list.year_published %>
+        </div>
+      <% end %>
+
+      <% if @ranked_list %>
+        <div class="badge badge-lg badge-ghost">
+          Weight: <%= @ranked_list.weight %>
+        </div>
+      <% end %>
+
+      <div class="badge badge-lg badge-ghost">
+        <%= list_items_array.size %> songs
+      </div>
+
+      <% if @list.number_of_voters.present? %>
+        <div class="badge badge-lg badge-ghost">
+          <%= number_with_delimiter(@list.number_of_voters) %> voters
+        </div>
+      <% end %>
+    </div>
+
+    <% if @list.description.present? %>
+      <div class="prose max-w-none mb-4">
+        <p class="text-base-content/80">
+          <%= @list.description %>
+        </p>
+      </div>
+    <% end %>
+
+    <% if @list.url.present? %>
+      <div class="mt-4">
+        <%= link_to @list.url, target: "_blank", rel: "noopener noreferrer",
+            class: "btn btn-primary btn-sm" do %>
+          View Original List
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+          </svg>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+
+  <% if list_items_array.any? %>
+    <div class="card bg-base-100 shadow-xl">
+      <div class="card-body p-0">
+        <div class="overflow-x-auto">
+          <table class="table">
+            <thead>
+              <tr>
+                <th class="w-16">Rank</th>
+                <th>Song</th>
+                <th>Artists</th>
+                <th class="w-24 text-center">Year</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% list_items_array.each do |list_item| %>
+                <% song = list_item.item %>
+                <% next unless song %>
+                <tr class="hover">
+                  <td class="font-bold text-lg">
+                    <% if list_item.position.present? %>
+                      #<%= list_item.position %>
+                    <% else %>
+                      -
+                    <% end %>
+                  </td>
+                  <td>
+                    <%= link_to song_path(song, ranking_configuration_id: params[:ranking_configuration_id]),
+                        class: "font-semibold text-base-content hover:text-primary" do %>
+                      <%= song.title %>
+                    <% end %>
+                  </td>
+                  <td>
+                    <% artists = song.artists.to_a %>
+                    <% artists.each_with_index do |artist, index| %>
+                      <%= link_to_artist artist, class: "text-base-content/80 hover:text-primary" %><%= index < artists.size - 1 ? ", " : "" %>
+                    <% end %>
+                  </td>
+                  <td class="text-center">
+                    <% if song.release_year %>
+                      <span class="badge badge-ghost"><%= song.release_year %></span>
+                    <% else %>
+                      <span class="text-base-content/50">-</span>
+                    <% end %>
+                  </td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  <% else %>
+    <div class="text-center py-16">
+      <div class="text-6xl mb-4">📋</div>
+      <h2 class="text-2xl font-bold text-base-content mb-2">No songs in this list</h2>
+      <p class="text-base-content/70">
+        This list doesn't have any songs yet.
+      </p>
+    </div>
+  <% end %>
+</div>

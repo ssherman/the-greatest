@@ -1,0 +1,119 @@
+<% content_for :title, "Greatest Music Lists - Albums & Songs | The Greatest Music" %>
+<% content_for :meta_description, "Browse curated lists of the greatest albums and songs. Discover expert rankings, user favorites, and authoritative music collections from trusted sources." %>
+
+<div class="container mx-auto px-4 py-8">
+  <div class="mb-8">
+    <h1 class="text-4xl font-bold text-base-content mb-2">Greatest Music Lists</h1>
+    <p class="text-base-content/70">
+      Explore curated lists of the greatest albums and songs from trusted sources
+    </p>
+  </div>
+
+  <div class="mb-12">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-2xl font-bold text-base-content">Top Album Lists</h2>
+      <%= link_to "View All Album Lists", music_albums_lists_path, class: "btn btn-primary btn-sm" %>
+    </div>
+
+    <% if @albums_ranked_lists.any? %>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <% @albums_ranked_lists.each do |ranked_list| %>
+          <% list = ranked_list.list %>
+          <%= link_to music_album_list_path(list), class: "card bg-base-100 shadow-lg hover:shadow-xl transition-shadow" do %>
+            <div class="card-body">
+              <div class="flex items-start justify-between mb-2">
+                <div class="badge badge-primary badge-sm">
+                  Weight: <%= ranked_list.weight %>
+                </div>
+                <div class="badge badge-ghost badge-sm">
+                  <%= list.list_items.size %> albums
+                </div>
+              </div>
+
+              <h3 class="card-title text-lg">
+                <%= list.name %>
+              </h3>
+
+              <% if list.source.present? %>
+                <p class="text-sm text-base-content/70">
+                  Source: <%= list.source %>
+                </p>
+              <% end %>
+
+              <% if list.description.present? %>
+                <p class="text-sm text-base-content/80 line-clamp-2">
+                  <%= list.description %>
+                </p>
+              <% end %>
+
+              <% if list.url.present? %>
+                <div class="card-actions justify-end">
+                  <span class="text-xs text-primary">View original →</span>
+                </div>
+              <% end %>
+            </div>
+          <% end %>
+        <% end %>
+      </div>
+    <% else %>
+      <div class="text-center py-8">
+        <p class="text-base-content/70">No album lists available</p>
+      </div>
+    <% end %>
+  </div>
+
+  <div class="divider"></div>
+
+  <div>
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-2xl font-bold text-base-content">Top Song Lists</h2>
+      <%= link_to "View All Song Lists", music_songs_lists_path, class: "btn btn-primary btn-sm" %>
+    </div>
+
+    <% if @songs_ranked_lists.any? %>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <% @songs_ranked_lists.each do |ranked_list| %>
+          <% list = ranked_list.list %>
+          <%= link_to music_song_list_path(list), class: "card bg-base-100 shadow-lg hover:shadow-xl transition-shadow" do %>
+            <div class="card-body">
+              <div class="flex items-start justify-between mb-2">
+                <div class="badge badge-primary badge-sm">
+                  Weight: <%= ranked_list.weight %>
+                </div>
+                <div class="badge badge-ghost badge-sm">
+                  <%= list.list_items.size %> songs
+                </div>
+              </div>
+
+              <h3 class="card-title text-lg">
+                <%= list.name %>
+              </h3>
+
+              <% if list.source.present? %>
+                <p class="text-sm text-base-content/70">
+                  Source: <%= list.source %>
+                </p>
+              <% end %>
+
+              <% if list.description.present? %>
+                <p class="text-sm text-base-content/80 line-clamp-2">
+                  <%= list.description %>
+                </p>
+              <% end %>
+
+              <% if list.url.present? %>
+                <div class="card-actions justify-end">
+                  <span class="text-xs text-primary">View original →</span>
+                </div>
+              <% end %>
+            </div>
+          <% end %>
+        <% end %>
+      </div>
+    <% else %>
+      <div class="text-center py-8">
+        <p class="text-base-content/70">No song lists available</p>
+      </div>
+    <% end %>
+  </div>
+</div>

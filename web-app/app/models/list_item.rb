@@ -26,6 +26,7 @@
 class ListItem < ApplicationRecord
   belongs_to :list
   belongs_to :listable, polymorphic: true, optional: true
+  alias_method :item, :listable
 
   # Validations
   validates :list, presence: true

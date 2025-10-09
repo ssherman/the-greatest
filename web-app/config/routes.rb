@@ -1,16 +1,23 @@
 Rails.application.routes.draw do
   # Music domain routes (scoped within domain constraint)
   constraints DomainConstraint.new(Rails.application.config.domains[:music]) do
+    # Lists overview (no ranking configuration support)
+    get "lists", to: "music/lists#index", as: :music_lists
+
     # All music routes with optional ranking configuration parameter
     scope "(/rc/:ranking_configuration_id)" do
       # Album routes
       get "albums", to: "music/albums/ranked_items#index", as: :albums
       get "albums/page/:page", to: "music/albums/ranked_items#index", constraints: {page: /\d+|__pagy_page__/}
+      get "albums/lists", to: "music/albums/lists#index", as: :music_albums_lists
+      get "albums/lists/:id", to: "music/albums/lists#show", as: :music_album_list
       get "albums/:id", to: "music/albums#show", as: :album
 
       # Song routes
       get "songs", to: "music/songs/ranked_items#index", as: :songs
       get "songs/page/:page", to: "music/songs/ranked_items#index", constraints: {page: /\d+|__pagy_page__/}
+      get "songs/lists", to: "music/songs/lists#index", as: :music_songs_lists
+      get "songs/lists/:id", to: "music/songs/lists#show", as: :music_song_list
       get "songs/:id", to: "music/songs#show", as: :song
 
       # Artist routes
