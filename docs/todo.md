@@ -1,7 +1,8 @@
 # The Greatest - Todo List
 
 ## High Priority
-1. [Movies data model implementation](todos/002-movies-object-model.md)
+1. [Production Deployment Infrastructure](todos/048-production-deployment-infrastructure.md)
+2. [Movies data model implementation](todos/002-movies-object-model.md)
 
 ## Medium Priority
 2. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
@@ -12,8 +13,9 @@
 7. [Phone number authentication](todos/007-authentication.md)
 
 ## Low Priority
-8. [Recommendation engine MVP](todos/004-recommendation-engine.md)
-9. [Admin interface with Avo](todos/007-admin-interface.md)
+8. [Cloudflare Caching Strategy for Ranking Pages](todos/049-cloudflare-caching-strategy.md)
+9. [Recommendation engine MVP](todos/004-recommendation-engine.md)
+10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
 - ✅ [2025-10-05] [Fix Song Import Missing Artists Bug](todos/046-fix-song-import-missing-artists-bug.md)

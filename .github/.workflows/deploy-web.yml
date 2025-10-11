@@ -1,0 +1,22 @@
+name: Deploy To Production
+
+on:
+  repository_dispatch:
+    types: [image-built-event]
+
+jobs:
+  deploy-web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH and Run Commands on Web Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_WEB_HOST }}
+          username: deploy
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /home/deploy/apps/the-greatest
+            docker system prune -f
+            git pull
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d
