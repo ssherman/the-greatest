@@ -29,7 +29,7 @@ services:
     logging: *default-logging
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/up"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/up"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -67,7 +67,7 @@ services:
     environment:
       - NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx/conf.d
       - WEB_HOST=web
-      - WEB_PORT=80
+      - WEB_PORT=3000
       - CERT_PATH=/etc/letsencrypt/live
       - KEY_PATH=/etc/letsencrypt/live
     volumes:
