@@ -363,7 +363,27 @@ Will implement **individual domain certificates with SAN** because:
 - Logs accumulated until disk filled completely
 - Solution: Configure log rotation at docker-compose level using json-file driver with size limits
 
-*Additional challenges to be documented during implementation*
+**Code Review Issues Found (2025-10-15)**:
+
+*P0 - SSL Certificate Volume Mounting*:
+- **Issue**: Used Docker-managed named volumes (`letsencrypt-certs:/etc/letsencrypt:ro`) for nginx SSL certificates, but `generate-certs.sh` writes certificates to `/etc/letsencrypt` on the host filesystem
+- **Impact**: Certificates generated on host would never appear in the nginx container, causing nginx to fail at startup with "SSL certificate not found" errors
+- **Root Cause**: Docker-managed volumes are isolated from the host filesystem - the two are completely separate locations
+- **Solution**: Changed to bind mounts matching working books site setup:
+  - `/etc/letsencrypt/live:/etc/letsencrypt/live:ro`
+  - `/etc/letsencrypt/archive:/etc/letsencrypt/archive:ro`
+  - `/etc/letsencrypt/renewal:/etc/letsencrypt/renewal:ro`
+  - `/var/www/certbot:/var/www/certbot:ro`
+- **Files Changed**: docker-compose.prod.yml:77-80, removed unused named volumes
+- **Reference**: Confirmed correct approach by examining working production setup for books site
+
+*P1 - Missing Docker Compose Plugin*:
+- **Issue**: Deployment workflow uses `docker compose` (Compose V2 plugin syntax) but cloud-init only installed `docker.io` package
+- **Impact**: First deployment would fail with `docker: 'compose' is not a docker command` error on fresh Ubuntu 24.04 instances
+- **Root Cause**: Docker Compose V2 plugin (`docker-compose-plugin`) is a separate package from `docker.io`
+- **Solution**: Added `docker-compose-plugin` to cloud-init packages list
+- **Files Changed**: deployment/terraform/web-cloud-init.yaml:20
+- **Note**: This is the modern, recommended approach for Docker Compose installation (plugin vs standalone binary)
 
 ### Deviations from Plan
 *To be documented during implementation*

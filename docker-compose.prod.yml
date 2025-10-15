@@ -74,8 +74,10 @@ services:
       - KEY_PATH=/etc/letsencrypt/live
     volumes:
       - ./deployment/nginx/the-greatest.conf.template:/etc/nginx/templates/the-greatest.conf.template:ro
-      - letsencrypt-certs:/etc/letsencrypt:ro
-      - letsencrypt-webroot:/var/www/certbot:ro
+      - /etc/letsencrypt/live:/etc/letsencrypt/live:ro
+      - /etc/letsencrypt/archive:/etc/letsencrypt/archive:ro
+      - /etc/letsencrypt/renewal:/etc/letsencrypt/renewal:ro
+      - /var/www/certbot:/var/www/certbot:ro
       - nginx-cache:/var/cache/nginx
     networks:
       - the-greatest
@@ -97,10 +99,6 @@ volumes:
     name: tg_prod_rails_storage
   rails-log:
     name: tg_prod_rails_log
-  letsencrypt-certs:
-    name: tg_prod_letsencrypt_certs
-  letsencrypt-webroot:
-    name: tg_prod_letsencrypt_webroot
   nginx-cache:
     name: tg_prod_nginx_cache
 

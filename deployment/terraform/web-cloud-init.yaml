@@ -17,6 +17,7 @@ packages:
   - fail2ban
   - ufw
   - docker.io
+  - docker-compose-plugin
   - git
   - python3-pip
   - ca-certificates   # helpful for HTTPS git clones
