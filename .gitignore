@@ -1,4 +1,10 @@
 .env
+web-app/.env
+
+# SOPS decrypted files
+secrets/*.decrypted
+secrets/*.plain
+secrets/*.tmp
 
 # Local .terraform directories
 **/.terraform/*

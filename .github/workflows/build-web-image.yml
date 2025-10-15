@@ -54,9 +54,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            RAILS_MASTER_KEY=${{ secrets.RAILS_MASTER_KEY }}
-            SECRET_KEY_BASE=${{ secrets.SECRET_KEY_BASE }}
       
       - name: Delete old untagged images
         uses: actions/delete-package-versions@v5

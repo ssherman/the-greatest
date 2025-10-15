@@ -1,0 +1,6 @@
+creation_rules:
+  - path_regex: secrets/\.env\.production$
+    age: age1dnc82r63zyqtqlet84l2naxhjrdcdrc3gaxp592y69u0pg0m2u3q9j02zf
+
+  - path_regex: secrets/\.env\.staging$
+    age: age1dnc82r63zyqtqlet84l2naxhjrdcdrc3gaxp592y69u0pg0m2u3q9j02zf
