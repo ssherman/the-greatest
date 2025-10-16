@@ -18,7 +18,8 @@ server {
 }
 
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name www.thegreatestmusic.org;
 
     ssl_certificate ${CERT_PATH}/thegreatestmusic.org/fullchain.pem;
@@ -30,7 +31,8 @@ server {
 }
 
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name thegreatestmusic.org;
 
     ssl_certificate ${CERT_PATH}/thegreatestmusic.org/fullchain.pem;
@@ -62,7 +64,8 @@ server {
 }
 
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name www.thegreatest.games;
 
     ssl_certificate ${CERT_PATH}/thegreatest.games/fullchain.pem;
@@ -74,7 +77,8 @@ server {
 }
 
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name thegreatest.games;
 
     ssl_certificate ${CERT_PATH}/thegreatest.games/fullchain.pem;
@@ -106,7 +110,8 @@ server {
 }
 
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name www.thegreatestmovies.org;
 
     ssl_certificate ${CERT_PATH}/thegreatestmovies.org/fullchain.pem;
@@ -118,7 +123,8 @@ server {
 }
 
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name thegreatestmovies.org;
 
     ssl_certificate ${CERT_PATH}/thegreatestmovies.org/fullchain.pem;

@@ -275,6 +275,17 @@ docker-compose -f docker-compose.prod.yml pull
    - **Result**: Nginx uses latest config files without rebuilding, bad bot blocking active on all domains
    - **Deployment note**: After pulling updated code, run `docker compose -f docker-compose.prod.yml restart nginx` to pick up new configs
 
+6. **Nginx HTTP/2 Deprecation Warnings** (2025-10-16 - COMPLETED)
+   - **Problem**: `the "listen ... http2" directive is deprecated, use the "http2" directive instead`
+   - **Root cause**: Using old nginx syntax `listen 443 ssl http2;` deprecated in nginx 1.25.1+
+   - **Solution**: Update to modern nginx syntax with separate `http2 on;` directive
+   - **Changes made**:
+     - Changed all 6 SSL server blocks from `listen 443 ssl http2;` to `listen 443 ssl;` + `http2 on;`
+     - Updated: 3 www redirect blocks + 3 main domain blocks
+   - **Files updated**:
+     - `deployment/nginx/the-greatest.conf.template` - Updated all 6 SSL server blocks
+   - **Result**: No more deprecation warnings, modern nginx syntax throughout
+
 ### Approach Taken
 
 **Issue 1 - Workflow Timing:**
@@ -305,9 +316,9 @@ docker-compose -f docker-compose.prod.yml pull
 - `web-app/app/lib/music/musicbrainz/search/*.rb` - Updated 7 search classes (21 references)
 - `web-app/test/lib/music/musicbrainz/**/*_test.rb` - Updated 10 test files (27 references)
 
-**Nginx Configuration (Bad-Bot-Blocker Fix):**
+**Nginx Configuration (Bad-Bot-Blocker Fix + HTTP/2 Syntax Update):**
 - `deployment/nginx/nginx.conf` - Removed bot blocker includes from http level (lines 46-47 deleted)
-- `deployment/nginx/the-greatest.conf.template` - Added bot blocker includes to 3 server blocks (lines 41-42, 85-86, 129-130)
+- `deployment/nginx/the-greatest.conf.template` - Added bot blocker includes to 3 server blocks + updated HTTP/2 syntax in 6 server blocks
 - `docker-compose.prod.yml` - Added volume mounts for nginx.conf and snippet files to override Docker build cache (lines 76-79)
 
 ### Manual Steps Required
@@ -372,6 +383,12 @@ docker-compose -f docker-compose.prod.yml pull
    - Additional fix: Added volume mounts in docker-compose.prod.yml to override baked-in nginx config from Docker build
    - Why volume mounts needed: nginx.conf is COPY'd during Docker build, so container had old version cached
    - Reference: nginx-ultimate-bad-bot-blocker documentation specifies server-level inclusion
+
+6. **Nginx HTTP/2 Deprecation Warnings** (2025-10-16)
+   - Warning: `the "listen ... http2" directive is deprecated, use the "http2" directive instead`
+   - Issue: Using old nginx syntax `listen 443 ssl http2;` from pre-1.25.1 versions
+   - Solution: Updated to modern syntax with separate `http2 on;` directive
+   - Changed in all 6 SSL server blocks (3 www redirects + 3 main domains)
 
 ### Deviations from Plan
 *To be documented during implementation*
