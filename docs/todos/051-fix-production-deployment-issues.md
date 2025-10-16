@@ -224,11 +224,16 @@ docker-compose -f docker-compose.prod.yml pull
      - Removed redundant `repository` parameter
    - **Pending**: Need to create REPO_DISPATCH_PAT secret in GitHub settings
 
-2. **Docker Compose Plugin Testing** (2025-10-16 - PENDING MANUAL TESTING)
-   - Need to verify if `docker-compose-plugin` package installation works
-   - Previous server may not have had Terraform applied with this package
-   - Backing out verification code until manual test on fresh server
-   - Will add verification loop if needed after confirming base installation works
+2. **Docker Compose Plugin Installation** (2025-10-16 - COMPLETED)
+   - **Problem identified**: Ubuntu's default `docker.io` package is outdated and doesn't include compose plugin
+   - **Solution**: Install Docker from official Docker repository instead
+   - **Changes made**:
+     - Removed `docker.io` and `docker-compose-plugin` from packages list
+     - Added Docker's official GPG key setup
+     - Added Docker's official apt repository
+     - Install `docker-ce`, `docker-ce-cli`, `containerd.io`, `docker-buildx-plugin`, `docker-compose-plugin`
+     - Explicitly add deploy user to docker group with `usermod -aG docker deploy`
+   - **Result**: Fresh installs will get latest Docker with full compose plugin support
 
 ### Approach Taken
 
@@ -239,21 +244,35 @@ docker-compose -f docker-compose.prod.yml pull
 - This is the cleanest solution with no race conditions possible
 
 **Issue 2 - Docker Compose Plugin:**
-- Waiting for manual testing on fresh Terraform-provisioned server
-- Cloud-init already has `docker-compose-plugin` in packages list (line 20)
-- Need to verify if plugin installation works without additional changes
-- Will add verification/fallback if needed based on test results
+- Identified that Ubuntu's `docker.io` package doesn't include compose plugin
+- Switched to official Docker repository for latest versions
+- Installs Docker CE with all plugins (compose, buildx)
+- Properly adds deploy user to docker group
 
 ### Key Files Changed
 - `.github/workflows/deploy-production.yml`:4-6 - Removed `push` trigger (only workflow_dispatch and repository_dispatch remain)
 - `.github/workflows/build-web-image.yml`:76-80 - Upgraded repository-dispatch to v4, fixed PAT secret name
+- `deployment/terraform/web-cloud-init.yaml`:16-22 - Removed Ubuntu docker packages
+- `deployment/terraform/web-cloud-init.yaml`:47-57 - Added official Docker repository setup and installation
 
 ### Manual Steps Required
 1. **Create GitHub Personal Access Token**:
-   - Go to: https://github.com/settings/tokens/new
+
+   **Option A - Classic PAT (Recommended for simplicity):**
+   - Go to: https://github.com/settings/tokens (NOT /tokens?type=beta)
+   - Click "Generate new token" → "Generate new token (classic)"
    - Note: `the-greatest-repository-dispatch`
    - Expiration: Choose preference (recommend 1 year)
-   - Scopes: Check `repo` (full control of private repositories)
+   - Scopes: Check `repo` (or `public_repo` for public repos only)
+
+   **Option B - Fine-Grained PAT (More restrictive):**
+   - Go to: https://github.com/settings/tokens?type=beta
+   - Click "Generate new token"
+   - Repository access: Select "Only select repositories" → choose `the-greatest`
+   - Repository permissions:
+     - **Contents**: Read and write
+     - **Metadata**: Read-only (auto-selected)
+     - **Actions**: Read and write (REQUIRED to trigger workflows!)
 
 2. **Add Secret to Repository**:
    - Go to: https://github.com/ssherman/the-greatest/settings/secrets/actions
