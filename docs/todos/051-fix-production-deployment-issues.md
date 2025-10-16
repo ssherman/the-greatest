@@ -259,6 +259,19 @@ docker-compose -f docker-compose.prod.yml pull
      - 10 test files in `test/lib/music/musicbrainz/`
    - **Result**: Zeitwerk can properly autoload exception classes without conflicts
 
+5. **Nginx Bad-Bot-Blocker Configuration** (2025-10-16 - COMPLETED)
+   - **Problem**: `"if" directive is not allowed here in /etc/nginx/bots.d/blockbots.conf:62`
+   - **Root cause**: `blockbots.conf` and `ddos.conf` were included at `http` level in `nginx.conf`, but these files contain `if` directives that must be at `server` block level
+   - **Solution**: Move bot blocker includes from http level to server block level
+   - **Changes made**:
+     - Removed `include /etc/nginx/bots.d/blockbots.conf;` and `include /etc/nginx/bots.d/ddos.conf;` from `nginx.conf` (http level)
+     - Added both includes to each of the 3 main server blocks in `the-greatest.conf.template`
+     - Now included in: thegreatestmusic.org, thegreatest.games, and thegreatestmovies.org server blocks
+   - **Files updated**:
+     - `deployment/nginx/nginx.conf` - Removed http-level bot blocker includes
+     - `deployment/nginx/the-greatest.conf.template` - Added server-level bot blocker includes (3 locations)
+   - **Result**: Nginx can start without errors, bad bot blocking active on all domains
+
 ### Approach Taken
 
 **Issue 1 - Workflow Timing:**
@@ -288,6 +301,10 @@ docker-compose -f docker-compose.prod.yml pull
 - `web-app/app/lib/music/musicbrainz/base_client.rb` - Updated 9 exception references to use `Exceptions::` prefix
 - `web-app/app/lib/music/musicbrainz/search/*.rb` - Updated 7 search classes (21 references)
 - `web-app/test/lib/music/musicbrainz/**/*_test.rb` - Updated 10 test files (27 references)
+
+**Nginx Configuration (Bad-Bot-Blocker Fix):**
+- `deployment/nginx/nginx.conf` - Removed bot blocker includes from http level (lines 46-47 deleted)
+- `deployment/nginx/the-greatest.conf.template` - Added bot blocker includes to 3 server blocks (lines 41-42, 85-86, 129-130)
 
 ### Manual Steps Required
 1. **Create GitHub Personal Access Token**:
@@ -342,6 +359,13 @@ docker-compose -f docker-compose.prod.yml pull
    - Zeitwerk expects filename to match constant name
    - Initial mistake: Tried to use `collapse()` to work around it - wrong approach
    - Correct solution: Properly namespace exceptions and update all 57 references across 17 files
+
+5. **Nginx Bad-Bot-Blocker Configuration** (2025-10-16)
+   - Error: `"if" directive is not allowed here in /etc/nginx/bots.d/blockbots.conf:62`
+   - Issue: Bot blocker config files were included at `http` level in nginx.conf
+   - Problem: blockbots.conf and ddos.conf contain `if` directives that only work at `server` block level
+   - Solution: Moved includes from http level to each individual server block
+   - Reference: nginx-ultimate-bad-bot-blocker documentation specifies server-level inclusion
 
 ### Deviations from Plan
 *To be documented during implementation*
