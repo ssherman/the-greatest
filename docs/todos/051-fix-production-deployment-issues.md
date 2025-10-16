@@ -27,10 +27,12 @@ Additionally, the production server's cloud-init installs `docker-compose-plugin
 ## Requirements
 
 ### Issue 1: Workflow Timing (Race Condition)
-- [ ] Remove duplicate triggers from `deploy-production.yml` that cause race conditions
-- [ ] Ensure deployment ONLY triggers via `repository_dispatch` after image build completes
+- [x] Remove duplicate triggers from `deploy-production.yml` that cause race conditions
+- [x] Ensure deployment ONLY triggers via `repository_dispatch` after image build completes
+- [x] Upgrade repository-dispatch action to v4
+- [x] Fix PAT token secret name and configuration
+- [ ] Create REPO_DISPATCH_PAT secret in GitHub (manual step)
 - [ ] Verify build workflow successfully triggers deploy workflow
-- [ ] Add appropriate delays or status checks if needed
 
 ### Issue 2: Docker Compose Plugin Installation
 - [ ] Verify Docker Compose V2 plugin installation in cloud-init
@@ -209,13 +211,18 @@ docker-compose -f docker-compose.prod.yml pull
 
 ### Completed Steps
 
-1. **GitHub Actions Race Condition Fix** (2025-10-16 - COMPLETED)
+1. **GitHub Actions Race Condition Fix** (2025-10-16 - IN PROGRESS)
    - Removed `push` trigger from `.github/workflows/deploy-production.yml`
    - Deploy workflow now ONLY triggers via:
      - `workflow_dispatch` (manual triggers)
      - `repository_dispatch` with `image-built-event` type (from build workflow)
    - This ensures build workflow completes before deployment starts
    - Sequential execution: push → build → dispatch event → deploy
+   - **Updated repository-dispatch action**:
+     - Upgraded from v3 to v4
+     - Changed token secret from `PAT` to `REPO_DISPATCH_PAT` (clearer naming)
+     - Removed redundant `repository` parameter
+   - **Pending**: Need to create REPO_DISPATCH_PAT secret in GitHub settings
 
 2. **Docker Compose Plugin Testing** (2025-10-16 - PENDING MANUAL TESTING)
    - Need to verify if `docker-compose-plugin` package installation works
@@ -239,6 +246,21 @@ docker-compose -f docker-compose.prod.yml pull
 
 ### Key Files Changed
 - `.github/workflows/deploy-production.yml`:4-6 - Removed `push` trigger (only workflow_dispatch and repository_dispatch remain)
+- `.github/workflows/build-web-image.yml`:76-80 - Upgraded repository-dispatch to v4, fixed PAT secret name
+
+### Manual Steps Required
+1. **Create GitHub Personal Access Token**:
+   - Go to: https://github.com/settings/tokens/new
+   - Note: `the-greatest-repository-dispatch`
+   - Expiration: Choose preference (recommend 1 year)
+   - Scopes: Check `repo` (full control of private repositories)
+
+2. **Add Secret to Repository**:
+   - Go to: https://github.com/ssherman/the-greatest/settings/secrets/actions
+   - Click "New repository secret"
+   - Name: `REPO_DISPATCH_PAT`
+   - Value: Paste the PAT created above
+   - Click "Add secret"
 
 ### Challenges Encountered
 *To be documented during implementation*
