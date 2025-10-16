@@ -1,0 +1,64 @@
+#cloud-config
+users:
+  - name: deploy
+    groups: [sudo, docker]
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${primary_ssh_key}
+
+package_update: true          # apt-get update
+package_upgrade: true         # apt-get -y upgrade
+
+ssh_pwauth: false
+disable_root: true
+package_update: true
+packages:
+  - fail2ban
+  - ufw
+  - docker.io
+  - docker-compose-plugin
+  - git
+  - python3-pip
+  - ca-certificates   # helpful for HTTPS git clones
+  - age               # age encryption tool for SOPS
+
+write_files:
+  - path: /usr/local/bin/gb-clone-or-pull.sh
+    owner: root:root
+    permissions: '0755'
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      REPO_URL="https://github.com/ssherman/the-greatest.git"
+      APP_DIR="$HOME/apps/the-greatest"  # $HOME == /home/deploy when run as -u deploy -H
+
+      mkdir -p "$APP_DIR"
+      if [ -d "$APP_DIR/.git" ]; then
+        git -C "$APP_DIR" fetch --prune --tags
+        git -C "$APP_DIR" reset --hard origin/HEAD
+      else
+        git clone --depth=1 "$REPO_URL" "$APP_DIR"
+      fi
+
+runcmd:
+  # firewall + fail2ban (your originals)
+  - ufw allow OpenSSH && ufw allow 80 && ufw allow 443 && ufw --force enable
+  - systemctl enable --now fail2ban
+
+  # install SOPS
+  - curl -LO https://github.com/getsops/sops/releases/download/v3.11.0/sops-v3.11.0.linux.amd64
+  - mv sops-v3.11.0.linux.amd64 /usr/local/bin/sops
+  - chmod +x /usr/local/bin/sops
+
+  # ensure the base folder exists and is owned by deploy
+  - install -d -o deploy -g deploy /home/deploy/apps
+
+  # clone/update as deploy (HOME=/home/deploy thanks to -H). retry in case network isn't ready
+  - bash -lc 'for i in 1 2 3; do sudo -u deploy -H /usr/local/bin/gb-clone-or-pull.sh && break || sleep 5; done'
+
+  # create secrets directory with proper permissions
+  - install -d -m 0750 -o deploy -g deploy /home/deploy/apps/the-greatest/secrets
+
+  # final ownership safety (harmless if already correct)
+  - chown -R deploy:deploy /home/deploy/apps

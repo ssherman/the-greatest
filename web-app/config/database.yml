@@ -84,6 +84,8 @@ test:
 #
 production:
   <<: *default
-  database: the_greatest_production
-  username: the_greatest
+  host: <%= ENV.fetch("POSTGRES_HOST", "localhost") %>
+  port: <%= ENV.fetch("POSTGRES_PORT", "5432") %>
+  database: <%= ENV.fetch("POSTGRES_DATABASE", "the_greatest_production") %>
+  username: <%= ENV.fetch("POSTGRES_USER", "the_greatest") %>
   password: <%= ENV["POSTGRES_PASSWORD"] %>

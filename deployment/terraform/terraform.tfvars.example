@@ -1,0 +1,9 @@
+linode_token    = "your-linode-api-token"
+authorized_keys = ["ssh-ed25519 AAAA... your-public-key"]
+root_password   = "your-secure-root-password"
+
+# Optional: Override defaults
+# instance_label  = "thegreatest-web"
+# instance_region = "us-central"
+# instance_type   = "g6-nanode-1"
+
