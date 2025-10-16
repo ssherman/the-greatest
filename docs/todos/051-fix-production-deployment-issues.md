@@ -262,15 +262,18 @@ docker-compose -f docker-compose.prod.yml pull
 5. **Nginx Bad-Bot-Blocker Configuration** (2025-10-16 - COMPLETED)
    - **Problem**: `"if" directive is not allowed here in /etc/nginx/bots.d/blockbots.conf:62`
    - **Root cause**: `blockbots.conf` and `ddos.conf` were included at `http` level in `nginx.conf`, but these files contain `if` directives that must be at `server` block level
-   - **Solution**: Move bot blocker includes from http level to server block level
+   - **Solution**: Move bot blocker includes from http level to server block level, AND mount nginx config files as volumes to avoid stale cached builds
    - **Changes made**:
      - Removed `include /etc/nginx/bots.d/blockbots.conf;` and `include /etc/nginx/bots.d/ddos.conf;` from `nginx.conf` (http level)
      - Added both includes to each of the 3 main server blocks in `the-greatest.conf.template`
      - Now included in: thegreatestmusic.org, thegreatest.games, and thegreatestmovies.org server blocks
+     - Added volume mounts in `docker-compose.prod.yml` for all nginx config files to override baked-in files from Docker build
    - **Files updated**:
      - `deployment/nginx/nginx.conf` - Removed http-level bot blocker includes
      - `deployment/nginx/the-greatest.conf.template` - Added server-level bot blocker includes (3 locations)
-   - **Result**: Nginx can start without errors, bad bot blocking active on all domains
+     - `docker-compose.prod.yml` - Added 4 volume mounts for nginx configs (nginx.conf, template, 2 snippet files)
+   - **Result**: Nginx uses latest config files without rebuilding, bad bot blocking active on all domains
+   - **Deployment note**: After pulling updated code, run `docker compose -f docker-compose.prod.yml restart nginx` to pick up new configs
 
 ### Approach Taken
 
@@ -305,6 +308,7 @@ docker-compose -f docker-compose.prod.yml pull
 **Nginx Configuration (Bad-Bot-Blocker Fix):**
 - `deployment/nginx/nginx.conf` - Removed bot blocker includes from http level (lines 46-47 deleted)
 - `deployment/nginx/the-greatest.conf.template` - Added bot blocker includes to 3 server blocks (lines 41-42, 85-86, 129-130)
+- `docker-compose.prod.yml` - Added volume mounts for nginx.conf and snippet files to override Docker build cache (lines 76-79)
 
 ### Manual Steps Required
 1. **Create GitHub Personal Access Token**:
@@ -365,6 +369,8 @@ docker-compose -f docker-compose.prod.yml pull
    - Issue: Bot blocker config files were included at `http` level in nginx.conf
    - Problem: blockbots.conf and ddos.conf contain `if` directives that only work at `server` block level
    - Solution: Moved includes from http level to each individual server block
+   - Additional fix: Added volume mounts in docker-compose.prod.yml to override baked-in nginx config from Docker build
+   - Why volume mounts needed: nginx.conf is COPY'd during Docker build, so container had old version cached
    - Reference: nginx-ultimate-bad-bot-blocker documentation specifies server-level inclusion
 
 ### Deviations from Plan

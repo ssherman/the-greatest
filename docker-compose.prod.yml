@@ -73,7 +73,10 @@ services:
       - CERT_PATH=/etc/letsencrypt/live
       - KEY_PATH=/etc/letsencrypt/live
     volumes:
+      - ./deployment/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./deployment/nginx/the-greatest.conf.template:/etc/nginx/templates/the-greatest.conf.template:ro
+      - ./deployment/nginx/snippets/ssl-params.conf:/etc/nginx/snippets/ssl-params.conf:ro
+      - ./deployment/nginx/snippets/proxy-params.conf:/etc/nginx/snippets/proxy-params.conf:ro
       - /etc/letsencrypt/live:/etc/letsencrypt/live:ro
       - /etc/letsencrypt/archive:/etc/letsencrypt/archive:ro
       - /etc/letsencrypt/renewal:/etc/letsencrypt/renewal:ro
