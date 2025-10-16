@@ -2,48 +2,50 @@
 
 module Music
   module Musicbrainz
-    class Error < StandardError; end
+    module Exceptions
+      class Error < StandardError; end
 
-    class ConfigurationError < Error; end
+      class ConfigurationError < Error; end
 
-    class NetworkError < Error
-      attr_reader :original_error
+      class NetworkError < Error
+        attr_reader :original_error
 
-      def initialize(message, original_error = nil)
-        super(message)
-        @original_error = original_error
+        def initialize(message, original_error = nil)
+          super(message)
+          @original_error = original_error
+        end
       end
-    end
 
-    class TimeoutError < NetworkError; end
+      class TimeoutError < NetworkError; end
 
-    class HttpError < Error
-      attr_reader :status_code, :response_body
+      class HttpError < Error
+        attr_reader :status_code, :response_body
 
-      def initialize(message, status_code, response_body = nil)
-        super(message)
-        @status_code = status_code
-        @response_body = response_body
+        def initialize(message, status_code, response_body = nil)
+          super(message)
+          @status_code = status_code
+          @response_body = response_body
+        end
       end
-    end
 
-    class ClientError < HttpError; end      # 4xx errors
+      class ClientError < HttpError; end      # 4xx errors
 
-    class ServerError < HttpError; end      # 5xx errors
+      class ServerError < HttpError; end      # 5xx errors
 
-    class NotFoundError < ClientError; end  # 404 errors
+      class NotFoundError < ClientError; end  # 404 errors
 
-    class BadRequestError < ClientError; end # 400 errors
+      class BadRequestError < ClientError; end # 400 errors
 
-    class ParseError < Error
-      attr_reader :response_body
+      class ParseError < Error
+        attr_reader :response_body
 
-      def initialize(message, response_body = nil)
-        super(message)
-        @response_body = response_body
+        def initialize(message, response_body = nil)
+          super(message)
+          @response_body = response_body
+        end
       end
-    end
 
-    class QueryError < Error; end # Invalid Lucene queries
+      class QueryError < Error; end # Invalid Lucene queries
+    end
   end
 end

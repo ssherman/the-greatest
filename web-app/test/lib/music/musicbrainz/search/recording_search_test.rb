@@ -261,7 +261,7 @@ class Music::Musicbrainz::Search::RecordingSearchTest < ActiveSupport::TestCase
   test "search_with_criteria raises error for invalid fields" do
     criteria = {invalid_field: "value"}
 
-    assert_raises(Music::Musicbrainz::QueryError) do
+    assert_raises(Music::Musicbrainz::Exceptions::QueryError) do
       @search.search_with_criteria(criteria)
     end
   end
@@ -269,7 +269,7 @@ class Music::Musicbrainz::Search::RecordingSearchTest < ActiveSupport::TestCase
   test "search_with_criteria raises error when no criteria provided" do
     criteria = {title: "", artist: nil}
 
-    assert_raises(Music::Musicbrainz::QueryError) do
+    assert_raises(Music::Musicbrainz::Exceptions::QueryError) do
       @search.search_with_criteria(criteria)
     end
   end
@@ -289,7 +289,7 @@ class Music::Musicbrainz::Search::RecordingSearchTest < ActiveSupport::TestCase
 
   test "search handles API errors gracefully" do
     @mock_client.expects(:get)
-      .raises(Music::Musicbrainz::NetworkError.new("Connection failed"))
+      .raises(Music::Musicbrainz::Exceptions::NetworkError.new("Connection failed"))
 
     result = @search.search("title:Come Together")
 
@@ -340,7 +340,7 @@ class Music::Musicbrainz::Search::RecordingSearchTest < ActiveSupport::TestCase
   test "lookup_by_mbid validates MBID format" do
     invalid_mbid = "not-a-valid-mbid"
 
-    assert_raises(Music::Musicbrainz::QueryError) do
+    assert_raises(Music::Musicbrainz::Exceptions::QueryError) do
       @search.lookup_by_mbid(invalid_mbid)
     end
   end
@@ -349,7 +349,7 @@ class Music::Musicbrainz::Search::RecordingSearchTest < ActiveSupport::TestCase
     recording_mbid = "e3f3c2d4-55c2-4d28-bb47-71f42f2a5ccc"
 
     @mock_client.expects(:get)
-      .raises(Music::Musicbrainz::NetworkError.new("Recording not found"))
+      .raises(Music::Musicbrainz::Exceptions::NetworkError.new("Recording not found"))
 
     result = @search.lookup_by_mbid(recording_mbid)
 

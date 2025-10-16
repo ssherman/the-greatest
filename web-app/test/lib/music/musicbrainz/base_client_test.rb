@@ -65,7 +65,7 @@ class Music::Musicbrainz::BaseClientTest < ActiveSupport::TestCase
 
     start_time = Time.current
 
-    assert_raises(Music::Musicbrainz::ParseError) do
+    assert_raises(Music::Musicbrainz::Exceptions::ParseError) do
       @client.send(:parse_success_response, mock_response, "artist", {query: "test"}, Time.current - start_time)
     end
   end
@@ -75,19 +75,19 @@ class Music::Musicbrainz::BaseClientTest < ActiveSupport::TestCase
 
     # Test 400 Bad Request
     mock_400 = OpenStruct.new(status: 400, body: "Bad Request")
-    assert_raises(Music::Musicbrainz::BadRequestError) do
+    assert_raises(Music::Musicbrainz::Exceptions::BadRequestError) do
       @client.send(:parse_response, mock_400, "artist", {}, start_time)
     end
 
     # Test 404 Not Found
     mock_404 = OpenStruct.new(status: 404, body: "Not Found")
-    assert_raises(Music::Musicbrainz::NotFoundError) do
+    assert_raises(Music::Musicbrainz::Exceptions::NotFoundError) do
       @client.send(:parse_response, mock_404, "artist", {}, start_time)
     end
 
     # Test 500 Server Error
     mock_500 = OpenStruct.new(status: 500, body: "Server Error")
-    assert_raises(Music::Musicbrainz::ServerError) do
+    assert_raises(Music::Musicbrainz::Exceptions::ServerError) do
       @client.send(:parse_response, mock_500, "artist", {}, start_time)
     end
   end

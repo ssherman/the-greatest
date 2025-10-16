@@ -87,7 +87,7 @@ module Music
           begin
             response = client.get("series/#{series_mbid}", enhanced_options)
             process_browse_response(response)
-          rescue Music::Musicbrainz::Error => e
+          rescue Music::Musicbrainz::Exceptions::Error => e
             handle_browse_error(e, {series_mbid: series_mbid}, options)
           end
         end
@@ -107,7 +107,7 @@ module Music
           begin
             response = client.get("series/#{series_mbid}", enhanced_options)
             process_browse_response(response)
-          rescue Music::Musicbrainz::Error => e
+          rescue Music::Musicbrainz::Exceptions::Error => e
             handle_browse_error(e, {series_mbid: series_mbid}, options)
           end
         end
@@ -143,7 +143,7 @@ module Music
           begin
             response = client.get(entity_type, params)
             process_search_response(response)
-          rescue Music::Musicbrainz::Error => e
+          rescue Music::Musicbrainz::Exceptions::Error => e
             handle_search_error(e, query, options)
           end
         end
@@ -161,12 +161,12 @@ module Music
             if available_fields.include?(field.to_s)
               query_parts << build_field_query(field.to_s, value)
             else
-              raise QueryError, "Invalid search field: #{field}"
+              raise Exceptions::QueryError, "Invalid search field: #{field}"
             end
           end
 
           if query_parts.empty?
-            raise QueryError, "At least one search criterion must be provided"
+            raise Exceptions::QueryError, "At least one search criterion must be provided"
           end
 
           query = query_parts.join(" AND ")

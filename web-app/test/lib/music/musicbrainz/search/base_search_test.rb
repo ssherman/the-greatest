@@ -94,7 +94,7 @@ class Music::Musicbrainz::Search::BaseSearchTest < ActiveSupport::TestCase
     ]
 
     invalid_mbids.each do |mbid|
-      assert_raises(Music::Musicbrainz::QueryError) do
+      assert_raises(Music::Musicbrainz::Exceptions::QueryError) do
         @search.send(:validate_mbid!, mbid)
       end
     end
@@ -109,27 +109,27 @@ class Music::Musicbrainz::Search::BaseSearchTest < ActiveSupport::TestCase
   end
 
   test "validate_search_params! rejects invalid limit" do
-    assert_raises(Music::Musicbrainz::QueryError) do
+    assert_raises(Music::Musicbrainz::Exceptions::QueryError) do
       @search.send(:validate_search_params!, {query: "test", limit: 0})
     end
 
-    assert_raises(Music::Musicbrainz::QueryError) do
+    assert_raises(Music::Musicbrainz::Exceptions::QueryError) do
       @search.send(:validate_search_params!, {query: "test", limit: 101})
     end
   end
 
   test "validate_search_params! rejects negative offset" do
-    assert_raises(Music::Musicbrainz::QueryError) do
+    assert_raises(Music::Musicbrainz::Exceptions::QueryError) do
       @search.send(:validate_search_params!, {query: "test", offset: -1})
     end
   end
 
   test "validate_search_params! rejects blank query" do
-    assert_raises(Music::Musicbrainz::QueryError) do
+    assert_raises(Music::Musicbrainz::Exceptions::QueryError) do
       @search.send(:validate_search_params!, {query: ""})
     end
 
-    assert_raises(Music::Musicbrainz::QueryError) do
+    assert_raises(Music::Musicbrainz::Exceptions::QueryError) do
       @search.send(:validate_search_params!, {query: nil})
     end
   end
@@ -161,7 +161,7 @@ class Music::Musicbrainz::Search::BaseSearchTest < ActiveSupport::TestCase
   end
 
   test "handle_search_error returns structured error response" do
-    error = Music::Musicbrainz::NetworkError.new("Connection failed")
+    error = Music::Musicbrainz::Exceptions::NetworkError.new("Connection failed")
     query = "test query"
     options = {limit: 10}
 
@@ -173,7 +173,7 @@ class Music::Musicbrainz::Search::BaseSearchTest < ActiveSupport::TestCase
     assert_equal "test-entity", result[:metadata][:entity_type]
     assert_equal query, result[:metadata][:query]
     assert_equal options, result[:metadata][:options]
-    assert_equal "Music::Musicbrainz::NetworkError", result[:metadata][:error_type]
+    assert_equal "Music::Musicbrainz::Exceptions::NetworkError", result[:metadata][:error_type]
   end
 
   test "process_search_response returns response unchanged for successful responses" do

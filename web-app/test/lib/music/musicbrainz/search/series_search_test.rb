@@ -148,7 +148,7 @@ class Music::Musicbrainz::Search::SeriesSearchTest < ActiveSupport::TestCase
   test "browse_series_with_release_groups validates MBID format" do
     invalid_mbid = "not-a-valid-mbid"
 
-    assert_raises(Music::Musicbrainz::QueryError) do
+    assert_raises(Music::Musicbrainz::Exceptions::QueryError) do
       @search.browse_series_with_release_groups(invalid_mbid)
     end
   end
@@ -210,7 +210,7 @@ class Music::Musicbrainz::Search::SeriesSearchTest < ActiveSupport::TestCase
   test "search_with_criteria raises error for invalid fields" do
     criteria = {invalid_field: "value"}
 
-    assert_raises(Music::Musicbrainz::QueryError) do
+    assert_raises(Music::Musicbrainz::Exceptions::QueryError) do
       @search.search_with_criteria(criteria)
     end
   end
@@ -218,7 +218,7 @@ class Music::Musicbrainz::Search::SeriesSearchTest < ActiveSupport::TestCase
   test "search_with_criteria raises error when no criteria provided" do
     criteria = {series: "", type: nil}
 
-    assert_raises(Music::Musicbrainz::QueryError) do
+    assert_raises(Music::Musicbrainz::Exceptions::QueryError) do
       @search.search_with_criteria(criteria)
     end
   end
@@ -255,7 +255,7 @@ class Music::Musicbrainz::Search::SeriesSearchTest < ActiveSupport::TestCase
 
   test "search handles API errors gracefully" do
     @mock_client.expects(:get)
-      .raises(Music::Musicbrainz::NetworkError.new("Connection failed"))
+      .raises(Music::Musicbrainz::Exceptions::NetworkError.new("Connection failed"))
 
     result = @search.search("series:Vice")
 
@@ -268,7 +268,7 @@ class Music::Musicbrainz::Search::SeriesSearchTest < ActiveSupport::TestCase
     series_mbid = "28cbc99a-875f-4139-b8b0-f1dd520ec62c"
 
     @mock_client.expects(:get)
-      .raises(Music::Musicbrainz::NetworkError.new("Series not found"))
+      .raises(Music::Musicbrainz::Exceptions::NetworkError.new("Series not found"))
 
     result = @search.browse_series_with_release_groups(series_mbid)
 
@@ -307,7 +307,7 @@ class Music::Musicbrainz::Search::SeriesSearchTest < ActiveSupport::TestCase
   test "browse_series_with_recordings validates MBID format" do
     invalid_mbid = "not-a-valid-mbid"
 
-    assert_raises(Music::Musicbrainz::QueryError) do
+    assert_raises(Music::Musicbrainz::Exceptions::QueryError) do
       @search.browse_series_with_recordings(invalid_mbid)
     end
   end
@@ -316,7 +316,7 @@ class Music::Musicbrainz::Search::SeriesSearchTest < ActiveSupport::TestCase
     series_mbid = "28cbc99a-875f-4139-b8b0-f1dd520ec62c"
 
     @mock_client.expects(:get)
-      .raises(Music::Musicbrainz::NetworkError.new("Series not found"))
+      .raises(Music::Musicbrainz::Exceptions::NetworkError.new("Series not found"))
 
     result = @search.browse_series_with_recordings(series_mbid)
 

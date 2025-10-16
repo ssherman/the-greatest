@@ -62,7 +62,7 @@ module Music
           begin
             response = client.get(entity_type, params)
             process_search_response(response)
-          rescue Music::Musicbrainz::Error => e
+          rescue Music::Musicbrainz::Exceptions::Error => e
             handle_search_error(e, query, options)
           end
         end
@@ -78,7 +78,7 @@ module Music
           begin
             response = client.get(entity_type, params)
             process_search_response(response)
-          rescue Music::Musicbrainz::Error => e
+          rescue Music::Musicbrainz::Exceptions::Error => e
             handle_browse_error(e, browse_params, options)
           end
         end
@@ -151,7 +151,7 @@ module Music
         end
 
         # Handle search errors with context
-        # @param error [Music::Musicbrainz::Error] the error that occurred
+        # @param error [Music::Musicbrainz::Exceptions::Error] the error that occurred
         # @param query [String] the search query
         # @param options [Hash] search options
         # @return [Hash] error response
@@ -170,7 +170,7 @@ module Music
         end
 
         # Handle browse errors with context
-        # @param error [Music::Musicbrainz::Error] the error that occurred
+        # @param error [Music::Musicbrainz::Exceptions::Error] the error that occurred
         # @param browse_params [Hash] the browse parameters
         # @param options [Hash] browse options
         # @return [Hash] error response
@@ -196,7 +196,7 @@ module Music
           uuid_pattern = /\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i
 
           unless mbid.match?(uuid_pattern)
-            raise QueryError, "Invalid MBID format: #{mbid}"
+            raise Exceptions::QueryError, "Invalid MBID format: #{mbid}"
           end
         end
 
@@ -204,15 +204,15 @@ module Music
         # @param params [Hash] the parameters to validate
         def validate_search_params!(params)
           if params[:limit] && (params[:limit] < 1 || params[:limit] > 100)
-            raise QueryError, "Limit must be between 1 and 100"
+            raise Exceptions::QueryError, "Limit must be between 1 and 100"
           end
 
           if params[:offset] && params[:offset] < 0
-            raise QueryError, "Offset must be non-negative"
+            raise Exceptions::QueryError, "Offset must be non-negative"
           end
 
           if params[:query].blank?
-            raise QueryError, "Query cannot be blank"
+            raise Exceptions::QueryError, "Query cannot be blank"
           end
         end
 
@@ -220,17 +220,17 @@ module Music
         # @param params [Hash] the parameters to validate
         def validate_browse_params!(params)
           if params[:limit] && (params[:limit] < 1 || params[:limit] > 100)
-            raise QueryError, "Limit must be between 1 and 100"
+            raise Exceptions::QueryError, "Limit must be between 1 and 100"
           end
 
           if params[:offset] && params[:offset] < 0
-            raise QueryError, "Offset must be non-negative"
+            raise Exceptions::QueryError, "Offset must be non-negative"
           end
 
           # Browse operations need at least one browse parameter (not query)
           browse_keys = params.keys - [:limit, :offset, :inc, :fmt]
           if browse_keys.empty?
-            raise QueryError, "At least one browse parameter must be provided"
+            raise Exceptions::QueryError, "At least one browse parameter must be provided"
           end
         end
 

@@ -447,7 +447,7 @@ class Music::Musicbrainz::Search::ReleaseSearchTest < ActiveSupport::TestCase
   test "search_with_criteria raises error for invalid fields" do
     criteria = {invalid_field: "value"}
 
-    assert_raises(Music::Musicbrainz::QueryError) do
+    assert_raises(Music::Musicbrainz::Exceptions::QueryError) do
       @search.search_with_criteria(criteria)
     end
   end
@@ -455,7 +455,7 @@ class Music::Musicbrainz::Search::ReleaseSearchTest < ActiveSupport::TestCase
   test "search_with_criteria raises error when no criteria provided" do
     criteria = {release: "", artist: nil}
 
-    assert_raises(Music::Musicbrainz::QueryError) do
+    assert_raises(Music::Musicbrainz::Exceptions::QueryError) do
       @search.search_with_criteria(criteria)
     end
   end
@@ -475,7 +475,7 @@ class Music::Musicbrainz::Search::ReleaseSearchTest < ActiveSupport::TestCase
 
   test "search handles API errors gracefully" do
     @mock_client.expects(:get)
-      .raises(Music::Musicbrainz::NetworkError.new("Connection failed"))
+      .raises(Music::Musicbrainz::Exceptions::NetworkError.new("Connection failed"))
 
     result = @search.search("release:Abbey\\ Road")
 

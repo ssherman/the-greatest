@@ -235,6 +235,30 @@ docker-compose -f docker-compose.prod.yml pull
      - Explicitly add deploy user to docker group with `usermod -aG docker deploy`
    - **Result**: Fresh installs will get latest Docker with full compose plugin support
 
+3. **Environment Variables Issue** (2025-10-16 - DISCOVERED)
+   - **Problem**: Rails containers restarting with `key must be 16 bytes (ArgumentError)`
+   - **Root cause**: Issues with SECRET_KEY_BASE or RAILS_MASTER_KEY in .env file
+   - **Status**: Pending investigation - need to verify .env file contents on server
+   - **Next steps**: Check decrypted secrets, verify key lengths and formats
+
+4. **Zeitwerk Autoloading Issue** (2025-10-16 - COMPLETED)
+   - **Problem**: `uninitialized constant Music::Musicbrainz::Exceptions (NameError)`
+   - **Root cause**: File named `exceptions.rb` but didn't define `Exceptions` module - Zeitwerk expects filename to match module name
+   - **Solution**: Properly namespace all exception classes under `Music::Musicbrainz::Exceptions` module
+   - **Changes made**:
+     - Wrapped all exception classes in `exceptions.rb` with `module Exceptions`
+     - Updated all references across codebase (57 updates in 17 files):
+       - `Music::Musicbrainz::Error` → `Music::Musicbrainz::Exceptions::Error`
+       - `Music::Musicbrainz::NetworkError` → `Music::Musicbrainz::Exceptions::NetworkError`
+       - And 9 other exception classes
+     - Fixed bare references in `base_client.rb` (e.g., `raise TimeoutError` → `raise Exceptions::TimeoutError`)
+   - **Files updated**:
+     - `app/lib/music/musicbrainz/exceptions.rb` - Added `module Exceptions` wrapper
+     - `app/lib/music/musicbrainz/base_client.rb` - Fixed 9 bare exception references
+     - 7 search classes in `app/lib/music/musicbrainz/search/`
+     - 10 test files in `test/lib/music/musicbrainz/`
+   - **Result**: Zeitwerk can properly autoload exception classes without conflicts
+
 ### Approach Taken
 
 **Issue 1 - Workflow Timing:**
@@ -250,10 +274,20 @@ docker-compose -f docker-compose.prod.yml pull
 - Properly adds deploy user to docker group
 
 ### Key Files Changed
+
+**GitHub Actions:**
 - `.github/workflows/deploy-production.yml`:4-6 - Removed `push` trigger (only workflow_dispatch and repository_dispatch remain)
 - `.github/workflows/build-web-image.yml`:76-80 - Upgraded repository-dispatch to v4, fixed PAT secret name
+
+**Infrastructure:**
 - `deployment/terraform/web-cloud-init.yaml`:16-22 - Removed Ubuntu docker packages
 - `deployment/terraform/web-cloud-init.yaml`:47-57 - Added official Docker repository setup and installation
+
+**Application Code (Zeitwerk Fix):**
+- `web-app/app/lib/music/musicbrainz/exceptions.rb` - Added `module Exceptions` wrapper around all exception classes
+- `web-app/app/lib/music/musicbrainz/base_client.rb` - Updated 9 exception references to use `Exceptions::` prefix
+- `web-app/app/lib/music/musicbrainz/search/*.rb` - Updated 7 search classes (21 references)
+- `web-app/test/lib/music/musicbrainz/**/*_test.rb` - Updated 10 test files (27 references)
 
 ### Manual Steps Required
 1. **Create GitHub Personal Access Token**:
@@ -282,7 +316,32 @@ docker-compose -f docker-compose.prod.yml pull
    - Click "Add secret"
 
 ### Challenges Encountered
-*To be documented during implementation*
+
+1. **PAT Token Confusion** (2025-10-16)
+   - Initial error: `Parameter token or opts.auth is required`
+   - Issue: Missing `REPO_DISPATCH_PAT` secret in GitHub Actions
+   - Then: `Resource not accessible by personal access token`
+   - Root cause: Need to use Classic PAT with `repo` scope, OR fine-grained PAT with `Actions: Read and write` permission
+   - Fine-grained tokens need specific permissions: Contents (R/W), Metadata (R), and **Actions (R/W)**
+   - Recommended solution: Use Classic PAT for simplicity
+
+2. **Terraform Template Syntax Error** (2025-10-16)
+   - Error: `Invalid character; This character is not used within the language`
+   - Issue: YAML multi-line `|` character in cloud-init caused Terraform templatefile() to fail
+   - Solution: Changed from multi-line format to single-line string with proper escaping
+   - Had to escape `$` as `$$` for Terraform (e.g., `$${UBUNTU_CODENAME}`)
+
+3. **Secret Key Error** (2025-10-16)
+   - Error: `key must be 16 bytes (ArgumentError)` in ActiveSupport::MessageEncryptor
+   - Indicates issue with Rails secrets (SECRET_KEY_BASE or RAILS_MASTER_KEY)
+   - Status: Pending investigation - need to verify decrypted .env contents on server
+
+4. **Zeitwerk Autoloading** (2025-10-16)
+   - Error: `uninitialized constant Music::Musicbrainz::Exceptions`
+   - Issue: File named `exceptions.rb` but didn't define `Exceptions` module
+   - Zeitwerk expects filename to match constant name
+   - Initial mistake: Tried to use `collapse()` to work around it - wrong approach
+   - Correct solution: Properly namespace exceptions and update all 57 references across 17 files
 
 ### Deviations from Plan
 *To be documented during implementation*

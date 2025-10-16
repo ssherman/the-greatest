@@ -218,7 +218,7 @@ class Music::Musicbrainz::Search::ReleaseGroupSearchTest < ActiveSupport::TestCa
   test "search_with_criteria raises error for invalid fields" do
     criteria = {invalid_field: "value"}
 
-    assert_raises(Music::Musicbrainz::QueryError) do
+    assert_raises(Music::Musicbrainz::Exceptions::QueryError) do
       @search.search_with_criteria(criteria)
     end
   end
@@ -226,7 +226,7 @@ class Music::Musicbrainz::Search::ReleaseGroupSearchTest < ActiveSupport::TestCa
   test "search_with_criteria raises error when no criteria provided" do
     criteria = {title: "", artist: nil}
 
-    assert_raises(Music::Musicbrainz::QueryError) do
+    assert_raises(Music::Musicbrainz::Exceptions::QueryError) do
       @search.search_with_criteria(criteria)
     end
   end
@@ -265,7 +265,7 @@ class Music::Musicbrainz::Search::ReleaseGroupSearchTest < ActiveSupport::TestCa
 
   test "search handles API errors gracefully" do
     @mock_client.expects(:get)
-      .raises(Music::Musicbrainz::NetworkError.new("Connection failed"))
+      .raises(Music::Musicbrainz::Exceptions::NetworkError.new("Connection failed"))
 
     result = @search.search("title:Abbey Road")
 
@@ -415,7 +415,7 @@ class Music::Musicbrainz::Search::ReleaseGroupSearchTest < ActiveSupport::TestCa
   test "lookup_by_release_group_mbid validates MBID format" do
     invalid_mbid = "not-a-valid-uuid"
 
-    assert_raises(Music::Musicbrainz::QueryError) do
+    assert_raises(Music::Musicbrainz::Exceptions::QueryError) do
       @search.lookup_by_release_group_mbid(invalid_mbid)
     end
   end
@@ -424,7 +424,7 @@ class Music::Musicbrainz::Search::ReleaseGroupSearchTest < ActiveSupport::TestCa
     valid_mbid = "6b9a9e04-abd7-4666-86ba-bb220ef4c3b2"
 
     @mock_client.expects(:get)
-      .raises(Music::Musicbrainz::NetworkError.new("Not found"))
+      .raises(Music::Musicbrainz::Exceptions::NetworkError.new("Not found"))
 
     result = @search.lookup_by_release_group_mbid(valid_mbid)
 

@@ -30,11 +30,11 @@ module Music
 
         parse_response(response, endpoint, params, start_time)
       rescue Faraday::TimeoutError => e
-        raise TimeoutError.new("Request timed out", e)
+        raise Exceptions::TimeoutError.new("Request timed out", e)
       rescue Faraday::ConnectionFailed => e
-        raise NetworkError.new("Connection failed: #{e.message}", e)
+        raise Exceptions::NetworkError.new("Connection failed: #{e.message}", e)
       rescue Faraday::Error => e
-        raise NetworkError.new("Network error: #{e.message}", e)
+        raise Exceptions::NetworkError.new("Network error: #{e.message}", e)
       end
 
       private
@@ -69,15 +69,15 @@ module Music
         when 200
           parse_success_response(response, endpoint, params, response_time)
         when 400
-          raise BadRequestError.new("Bad request", response.status, response.body)
+          raise Exceptions::BadRequestError.new("Bad request", response.status, response.body)
         when 404
-          raise NotFoundError.new("Not found", response.status, response.body)
+          raise Exceptions::NotFoundError.new("Not found", response.status, response.body)
         when 400..499
-          raise ClientError.new("Client error: #{response.status}", response.status, response.body)
+          raise Exceptions::ClientError.new("Client error: #{response.status}", response.status, response.body)
         when 500..599
-          raise ServerError.new("Server error: #{response.status}", response.status, response.body)
+          raise Exceptions::ServerError.new("Server error: #{response.status}", response.status, response.body)
         else
-          raise HttpError.new("Unexpected status: #{response.status}", response.status, response.body)
+          raise Exceptions::HttpError.new("Unexpected status: #{response.status}", response.status, response.body)
         end
       end
 
@@ -85,7 +85,7 @@ module Music
         begin
           parsed_body = JSON.parse(response.body)
         rescue JSON::ParserError => e
-          raise ParseError.new("Failed to parse JSON response: #{e.message}", response.body)
+          raise Exceptions::ParseError.new("Failed to parse JSON response: #{e.message}", response.body)
         end
 
         {
