@@ -1,4 +1,4 @@
-# 049 - Cloudflare Caching Strategy for Ranking Pages
+# 050 - Cloudflare Caching Strategy for Ranking Pages
 
 ## Status
 - **Status**: Not Started

@@ -13,7 +13,7 @@
 7. [Phone number authentication](todos/007-authentication.md)
 
 ## Low Priority
-8. [Cloudflare Caching Strategy for Ranking Pages](todos/049-cloudflare-caching-strategy.md)
+8. [Cloudflare Caching Strategy for Ranking Pages](todos/050-cloudflare-caching-strategy.md)
 9. [Recommendation engine MVP](todos/004-recommendation-engine.md)
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
