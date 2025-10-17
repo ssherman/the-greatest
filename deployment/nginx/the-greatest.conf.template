@@ -47,7 +47,6 @@ server {
     ssl_certificate_key ${KEY_PATH}/thegreatestmusic.org/privkey.pem;
 
     include /etc/nginx/snippets/ssl-params.conf;
-    include /etc/nginx/snippets/proxy-params.conf;
     include /etc/nginx/bots.d/blockbots.conf;
     include /etc/nginx/bots.d/ddos.conf;
 
@@ -63,6 +62,7 @@ server {
     location / {
         proxy_pass http://rails_app;
         proxy_redirect off;
+        include /etc/nginx/snippets/proxy-params.conf;
     }
 }
 
@@ -88,7 +88,6 @@ server {
     ssl_certificate_key ${KEY_PATH}/thegreatest.games/privkey.pem;
 
     include /etc/nginx/snippets/ssl-params.conf;
-    include /etc/nginx/snippets/proxy-params.conf;
     include /etc/nginx/bots.d/blockbots.conf;
     include /etc/nginx/bots.d/ddos.conf;
 
@@ -104,6 +103,7 @@ server {
     location / {
         proxy_pass http://rails_app;
         proxy_redirect off;
+        include /etc/nginx/snippets/proxy-params.conf;
     }
 }
 
@@ -129,7 +129,6 @@ server {
     ssl_certificate_key ${KEY_PATH}/thegreatestmovies.org/privkey.pem;
 
     include /etc/nginx/snippets/ssl-params.conf;
-    include /etc/nginx/snippets/proxy-params.conf;
     include /etc/nginx/bots.d/blockbots.conf;
     include /etc/nginx/bots.d/ddos.conf;
 
@@ -145,5 +144,6 @@ server {
     location / {
         proxy_pass http://rails_app;
         proxy_redirect off;
+        include /etc/nginx/snippets/proxy-params.conf;
     }
 }

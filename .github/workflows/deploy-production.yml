@@ -42,6 +42,7 @@ jobs:
             # Clean up age key
             rm -f ~/.config/sops/age/keys.txt
 
-            # Pull and restart services
+            # Pull web/worker images and rebuild nginx
             docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml build --no-cache nginx
             docker compose -f docker-compose.prod.yml up -d
