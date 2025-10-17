@@ -1,16 +1,17 @@
-FROM nginx:alpine
+FROM nginx:latest
 
-RUN apk add --no-cache bash curl wget
+RUN apt-get update
+RUN apt-get install -y wget
+
+# Create directories
+RUN mkdir -p /etc/nginx/snippets /etc/nginx/templates
 
 # Install nginx-ultimate-bad-bot-blocker using automated installer
 # Reference: https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker
-RUN wget https://raw.githubusercontent.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker/master/install-ngxblocker -O /usr/local/sbin/install-ngxblocker && \
-    chmod +x /usr/local/sbin/install-ngxblocker && \
-    /usr/local/sbin/install-ngxblocker -x && \
-    /usr/local/sbin/setup-ngxblocker -x -e conf
-
-# Create additional directories
-RUN mkdir -p /etc/nginx/snippets /etc/nginx/templates
+RUN wget https://raw.githubusercontent.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker/master/install-ngxblocker -O /usr/local/sbin/install-ngxblocker
+RUN chmod +x /usr/local/sbin/install-ngxblocker
+RUN /usr/local/sbin/install-ngxblocker -x
+RUN /usr/local/sbin/setup-ngxblocker -x -e conf
 
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY snippets/ssl-params.conf /etc/nginx/snippets/ssl-params.conf
