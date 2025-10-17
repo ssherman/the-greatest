@@ -60,11 +60,6 @@ server {
     }
 
     location / {
-        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-        add_header X-Frame-Options "SAMEORIGIN" always;
-        add_header X-Content-Type-Options "nosniff" always;
-        add_header Permissions-Policy "geolocation=(self), microphone=()" always;
-
         proxy_pass http://rails_app;
         proxy_redirect off;
         include /etc/nginx/snippets/proxy-params.conf;
@@ -106,11 +101,6 @@ server {
     }
 
     location / {
-        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-        add_header X-Frame-Options "SAMEORIGIN" always;
-        add_header X-Content-Type-Options "nosniff" always;
-        add_header Permissions-Policy "geolocation=(self), microphone=()" always;
-
         proxy_pass http://rails_app;
         proxy_redirect off;
         include /etc/nginx/snippets/proxy-params.conf;
@@ -152,11 +142,6 @@ server {
     }
 
     location / {
-        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-        add_header X-Frame-Options "SAMEORIGIN" always;
-        add_header X-Content-Type-Options "nosniff" always;
-        add_header Permissions-Policy "geolocation=(self), microphone=()" always;
-
         proxy_pass http://rails_app;
         proxy_redirect off;
         include /etc/nginx/snippets/proxy-params.conf;
