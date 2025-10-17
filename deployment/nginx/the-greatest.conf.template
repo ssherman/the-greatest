@@ -56,13 +56,8 @@ server {
 
     client_max_body_size 20M;
 
-    location ~ ^/__/auth/ {
-        proxy_pass https://thegreatestmusic-org.firebaseapp.com;
-        proxy_ssl_server_name on;
-        proxy_set_header Host thegreatestmusic-org.firebaseapp.com;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+    location /__/auth {
+        proxy_pass https://the-greatest-books.firebaseapp.com;
     }
 
     location / {
@@ -102,13 +97,8 @@ server {
 
     client_max_body_size 20M;
 
-    location ~ ^/__/auth/ {
-        proxy_pass https://thegreatest-games.firebaseapp.com;
-        proxy_ssl_server_name on;
-        proxy_set_header Host thegreatest-games.firebaseapp.com;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+    location /__/auth {
+        proxy_pass https://the-greatest-books.firebaseapp.com;
     }
 
     location / {
@@ -148,13 +138,8 @@ server {
 
     client_max_body_size 20M;
 
-    location ~ ^/__/auth/ {
-        proxy_pass https://thegreatestmovies-org.firebaseapp.com;
-        proxy_ssl_server_name on;
-        proxy_set_header Host thegreatestmovies-org.firebaseapp.com;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+    location /__/auth {
+        proxy_pass https://the-greatest-books.firebaseapp.com;
     }
 
     location / {
