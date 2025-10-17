@@ -13,7 +13,15 @@ server {
     }
 
     location / {
-        return 301 https://$host$request_uri;
+        # Only redirect if not already HTTPS (check Cloudflare header)
+        if ($http_x_forwarded_proto != "https") {
+            return 301 https://$host$request_uri;
+        }
+
+        # If already HTTPS via Cloudflare, proxy to Rails
+        proxy_pass http://rails_app;
+        proxy_redirect off;
+        include /etc/nginx/snippets/proxy-params.conf;
     }
 }
 
