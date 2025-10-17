@@ -1,11 +1,11 @@
 # 051 - Fix Production Deployment Issues
 
 ## Status
-- **Status**: In Progress
+- **Status**: Completed
 - **Priority**: High
 - **Created**: 2025-10-16
 - **Started**: 2025-10-16
-- **Completed**:
+- **Completed**: 2025-10-17
 - **Developer**: Shane Sherman
 
 ## Overview
@@ -459,13 +459,54 @@ docker-compose -f docker-compose.prod.yml pull
 - Consider blue-green deployments for zero-downtime
 
 ### Lessons Learned
-*To be documented during implementation*
+
+1. **Alpine vs Debian Docker images**: Alpine quirks (missing /usr/local/sbin) aren't worth the small size savings for nginx. Stick with Debian-based images.
+
+2. **Automated installers > Manual downloads**: The nginx-ultimate-bad-bot-blocker automated installer is much simpler than manually tracking 10 files.
+
+3. **Cloudflare proxy requires special handling**: When using Cloudflare's orange cloud proxy, check X-Forwarded-Proto header to avoid redirect loops.
+
+4. **Docker entrypoint argument matching**: Be careful with argument position checks in entrypoint scripts - `CMD ["./bin/rails", "server", "-b", "0.0.0.0"]` has 3 args, not 2.
+
+5. **Nginx template processing**: NGINX_ENVSUBST_OUTPUT_DIR must not conflict with conf.d where bot blocker files live. Use separate directories.
+
+6. **Volume mounts override Docker COPY**: Mounting config files as volumes lets you update nginx config without rebuilding images.
+
+7. **Domain environment variables**: Rails domain routing needs production domains in environment variables, not just nginx config.
+
+8. **SSL certificates via DNS**: Certbot with Cloudflare DNS only creates TXT records for validation - you still need to manually add A records.
 
 ### Related PRs
-*To be documented when PRs are created*
+- Changes included in deployment branch
 
 ### Documentation Updated
-- [ ] This task file with implementation notes
-- [ ] Task 048 updated with fixes and corrections
-- [ ] Task 049 updated if deployment process changes
-- [ ] deployment/TROUBLESHOOTING.md with common issues (when created)
+- [x] This task file with complete implementation notes
+- [x] deployment/scripts/README.md - Added certbot Docker documentation
+- [x] deployment/MANUAL_DEPLOY.md - Updated for Docker-based certbot
+- [x] docs/sub-agents.md - Documented all sub-agent types
+
+### Additional Issues Fixed
+
+8. **Nginx Template Output Directory Conflict** (2025-10-17 - COMPLETED)
+   - **Problem**: Template processing to `/etc/nginx/conf.d` overwrote bot blocker files
+   - **Solution**: Changed NGINX_ENVSUBST_OUTPUT_DIR to `/etc/nginx/sites-enabled`
+   - **Files updated**: docker-compose.prod.yml, nginx.conf, Dockerfile
+
+9. **Nginx Sites-Enabled Directory Permissions** (2025-10-17 - COMPLETED)
+   - **Problem**: `/etc/nginx/sites-enabled not writable` error during template processing
+   - **Solution**: Added proper permissions in Dockerfile: `chown -R nginx:nginx /etc/nginx/sites-enabled`
+
+10. **Cloudflare Redirect Loop** (2025-10-17 - COMPLETED)
+    - **Problem**: Endless 301 redirects due to Cloudflare proxy sending HTTP to origin
+    - **Solution**: Check X-Forwarded-Proto header before redirecting to HTTPS
+    - **Files updated**: deployment/nginx/the-greatest.conf.template
+
+11. **Rails Database Not Prepared** (2025-10-17 - COMPLETED)
+    - **Problem**: Docker entrypoint db:prepare check failed due to `-b 0.0.0.0` argument
+    - **Solution**: Changed check from position-based to pattern matching: `[[ "$*" == *"rails server"* ]]`
+    - **Files updated**: web-app/bin/docker-entrypoint
+
+12. **Production Domain Configuration** (2025-10-17 - COMPLETED)
+    - **Problem**: Rails using dev domains (dev.thegreatestmusic.org) in production
+    - **Solution**: Added MUSIC_DOMAIN, MOVIES_DOMAIN, GAMES_DOMAIN to secrets/.env.production
+    - **Files updated**: secrets/.env.production (via SOPS)

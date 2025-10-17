@@ -1,9 +1,8 @@
 # The Greatest - Todo List
 
 ## High Priority
-1. [Fix Production Deployment Issues](todos/051-fix-production-deployment-issues.md)
-2. [Production Deployment Infrastructure](todos/048-production-deployment-infrastructure.md)
-3. [Movies data model implementation](todos/002-movies-object-model.md)
+1. [Production Deployment Infrastructure](todos/048-production-deployment-infrastructure.md)
+2. [Movies data model implementation](todos/002-movies-object-model.md)
 
 ## Medium Priority
 2. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
@@ -19,6 +18,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-10-17] [Fix Production Deployment Issues](todos/051-fix-production-deployment-issues.md)
 - ✅ [2025-10-05] [Fix Song Import Missing Artists Bug](todos/046-fix-song-import-missing-artists-bug.md)
 - ✅ [2025-10-03] [Import Song Lists from MusicBrainz Series](todos/044-import-song-lists-by-series.md)
 - ✅ [2025-10-01] [Refactor AI Agent Integration: OpenAI Responses API & Flex Processing](todos/043-refactor-ai-agent-integration.md)
