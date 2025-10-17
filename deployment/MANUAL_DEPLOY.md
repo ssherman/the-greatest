@@ -48,10 +48,10 @@ sudo apt-get install -y \
     docker.io \
     docker-compose \
     fail2ban \
-    ufw \
-    certbot \
-    python3-certbot-dns-cloudflare
+    ufw
 ```
+
+Note: certbot is no longer required on the host system. The scripts use the `certbot/dns-cloudflare` Docker image instead.
 
 Enable and start Docker:
 ```bash
@@ -136,26 +136,26 @@ Save and exit (Ctrl+X, Y, Enter).
 
 ### 7. Generate SSL Certificates
 
-Set Cloudflare API token:
-```bash
-export CLOUDFLARE_API_TOKEN=your_cloudflare_token_here
-```
+The certificate generation script now uses Docker and automatically pulls the Cloudflare API token from the `.env` file (managed via SOPS).
 
 Run certificate generation script:
 ```bash
-sudo -E ./deployment/scripts/generate-certs.sh
+sudo ./deployment/scripts/generate-certs.sh
 ```
 
 This will:
-- Install certbot with Cloudflare DNS plugin
-- Create Cloudflare credentials file
-- Generate certificates for all domains
+- Read `CLOUDFLARE_API_TOKEN` from `.env` file
+- Pull `certbot/dns-cloudflare` Docker image
+- Generate certificates for all domains using Cloudflare DNS validation
 - Store certificates in `/etc/letsencrypt/live/`
+- Reload nginx
 
 Verify certificates:
 ```bash
 sudo ls -l /etc/letsencrypt/live/
 ```
+
+Note: The script no longer requires manual installation of certbot or passing environment variables.
 
 ### 8. Login to GitHub Container Registry
 
@@ -249,17 +249,28 @@ Should return `301 Moved Permanently` to non-www version.
 
 ### 15. Set Up Certificate Renewal
 
-Create cron job for certificate renewal:
+Create cron job for certificate renewal (runs weekly on Monday at 3am):
 ```bash
 sudo crontab -e
 ```
 
 Add:
 ```
-0 3 * * 1 CLOUDFLARE_API_TOKEN=your_cloudflare_token /home/deploy/apps/the-greatest/deployment/scripts/renew-certs.sh >> /var/log/cert-renewal.log 2>&1
+0 3 * * 1 /home/deploy/apps/the-greatest/deployment/scripts/renew-certs.sh >> /var/log/cert-renewal.log 2>&1
 ```
 
 Save and exit.
+
+The renewal script:
+- Automatically reads `CLOUDFLARE_API_TOKEN` from `/home/deploy/apps/the-greatest/.env`
+- Uses Docker to run certbot (no system installation required)
+- Only renews certificates within 30 days of expiration
+- Reloads nginx after successful renewal
+
+Test the renewal manually:
+```bash
+sudo /home/deploy/apps/the-greatest/deployment/scripts/renew-certs.sh
+```
 
 ### 16. Configure Auto-Start
 
