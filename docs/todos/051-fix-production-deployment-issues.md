@@ -286,6 +286,25 @@ docker-compose -f docker-compose.prod.yml pull
      - `deployment/nginx/the-greatest.conf.template` - Updated all 6 SSL server blocks
    - **Result**: No more deprecation warnings, modern nginx syntax throughout
 
+7. **Nginx Bad-Bot-Blocker Missing Files** (2025-10-17 - COMPLETED)
+   - **Problem**: `nginx: [emerg] unknown "bad_bot" variable`
+   - **Root cause**: Dockerfile only downloaded `blockbots.conf` and `ddos.conf`, but missing the critical `globalblacklist.conf` file that defines the `$bad_bot`, `$bad_referer`, and `$bad_words` variables using map directives
+   - **Solution**: Use the automated installer script instead of manually downloading individual files
+   - **Changes made**:
+     - Replaced manual curl downloads with automated `install-ngxblocker` script
+     - Script downloads and configures all 10 required files automatically:
+       - 2 files in `/etc/nginx/conf.d/`: `globalblacklist.conf`, `botblocker-nginx-settings.conf`
+       - 8 files in `/etc/nginx/bots.d/`: blockbots, ddos, whitelists, blacklists, custom rules
+     - Runs `setup-ngxblocker -x -e conf` to configure includes in nginx config
+   - **How it works**:
+     - nginx.conf line 46 includes `/etc/nginx/conf.d/*.conf` which loads globalblacklist.conf (defines variables at http level)
+     - Server blocks include `blockbots.conf` and `ddos.conf` which use those variables
+     - Variables must be defined before they're used, which is why http-level include comes first
+   - **Files updated**:
+     - `deployment/nginx/Dockerfile` - Replaced manual downloads with automated installer script (same approach as books site)
+   - **Result**: Nginx can now start successfully with full bad-bot-blocker functionality
+   - **Reference**: https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker
+
 ### Approach Taken
 
 **Issue 1 - Workflow Timing:**
@@ -389,6 +408,17 @@ docker-compose -f docker-compose.prod.yml pull
    - Issue: Using old nginx syntax `listen 443 ssl http2;` from pre-1.25.1 versions
    - Solution: Updated to modern syntax with separate `http2 on;` directive
    - Changed in all 6 SSL server blocks (3 www redirects + 3 main domains)
+
+7. **Nginx Bad-Bot-Blocker Missing Files** (2025-10-17)
+   - Error: `unknown "bad_bot" variable`
+   - Issue: Dockerfile only downloaded `blockbots.conf` and `ddos.conf` but not the `globalblacklist.conf` file that defines the variables
+   - Problem: The bot blocker requires 10 files total (2 in conf.d/, 8 in bots.d/)
+   - Research findings: Used web-search-researcher agent to discover nginx-ultimate-bad-bot-blocker has automated installer
+   - Solution: Use `install-ngxblocker` automated installer script (same approach as books site) instead of manually downloading files
+   - Installer automatically downloads all 10 required files and configures nginx
+   - Much simpler and more maintainable than manual downloads
+   - How it works: nginx.conf includes `/etc/nginx/conf.d/*.conf` at http level (defines variables), then server blocks include `bots.d/*.conf` files (uses variables)
+   - Reference: https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker/blob/master/AUTO-CONFIGURATION.md
 
 ### Deviations from Plan
 *To be documented during implementation*

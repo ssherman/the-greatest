@@ -1,13 +1,16 @@
 FROM nginx:alpine
 
-RUN apk add --no-cache bash curl
+RUN apk add --no-cache bash curl wget
 
-RUN mkdir -p /etc/nginx/bots.d && \
-    cd /etc/nginx/bots.d && \
-    curl -O https://raw.githubusercontent.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker/master/bots.d/blockbots.conf && \
-    curl -O https://raw.githubusercontent.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker/master/bots.d/ddos.conf
+# Install nginx-ultimate-bad-bot-blocker using automated installer
+# Reference: https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker
+RUN wget https://raw.githubusercontent.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker/master/install-ngxblocker -O /usr/local/sbin/install-ngxblocker && \
+    chmod +x /usr/local/sbin/install-ngxblocker && \
+    /usr/local/sbin/install-ngxblocker -x && \
+    /usr/local/sbin/setup-ngxblocker -x -e conf
 
-RUN mkdir -p /etc/nginx/conf.d /etc/nginx/snippets /etc/nginx/templates
+# Create additional directories
+RUN mkdir -p /etc/nginx/snippets /etc/nginx/templates
 
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY snippets/ssl-params.conf /etc/nginx/snippets/ssl-params.conf
