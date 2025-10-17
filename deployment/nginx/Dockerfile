@@ -4,7 +4,7 @@ RUN apt-get update
 RUN apt-get install -y wget
 
 # Create directories
-RUN mkdir -p /etc/nginx/snippets /etc/nginx/templates
+RUN mkdir -p /etc/nginx/snippets /etc/nginx/templates /etc/nginx/sites-enabled
 
 # Install nginx-ultimate-bad-bot-blocker using automated installer
 # Reference: https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker

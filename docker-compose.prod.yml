@@ -67,7 +67,7 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      - NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx/conf.d
+      - NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx/sites-enabled
       - WEB_HOST=web
       - WEB_PORT=3000
       - CERT_PATH=/etc/letsencrypt/live
