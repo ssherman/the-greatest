@@ -5,12 +5,13 @@
 2. [Movies data model implementation](todos/002-movies-object-model.md)
 
 ## Medium Priority
-2. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
-3. [Books data import from existing site](todos/002-books-data-import.md)
-4. [Additional OAuth providers (Facebook, Twitter, Apple)](todos/007-authentication.md)
-5. [Email/password authentication](todos/007-authentication.md)
-6. [Passwordless email authentication](todos/007-authentication.md)
-7. [Phone number authentication](todos/007-authentication.md)
+2. [Items JSON Viewer Resource Tool](todos/053-items-json-viewer-resource-tool.md)
+3. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
+4. [Books data import from existing site](todos/002-books-data-import.md)
+5. [Additional OAuth providers (Facebook, Twitter, Apple)](todos/007-authentication.md)
+6. [Email/password authentication](todos/007-authentication.md)
+7. [Passwordless email authentication](todos/007-authentication.md)
+8. [Phone number authentication](todos/007-authentication.md)
 
 ## Low Priority
 8. [Cloudflare Caching Strategy for Ranking Pages](todos/050-cloudflare-caching-strategy.md)
