@@ -18,6 +18,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-10-18] [Enrich Album List items_json with MusicBrainz Data](todos/052-import-list-from-musicbrainz-non-series.md)
 - ✅ [2025-10-17] [Fix Production Deployment Issues](todos/051-fix-production-deployment-issues.md)
 - ✅ [2025-10-05] [Fix Song Import Missing Artists Bug](todos/046-fix-song-import-missing-artists-bug.md)
 - ✅ [2025-10-03] [Import Song Lists from MusicBrainz Series](todos/044-import-song-lists-by-series.md)
