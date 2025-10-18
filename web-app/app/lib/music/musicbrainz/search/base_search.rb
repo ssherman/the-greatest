@@ -238,15 +238,17 @@ module Music
         # @param query [String] the query to escape
         # @return [String] escaped query
         def escape_lucene_query(query)
-          # For now, just escape the most common problematic characters
-          # This can be improved later for full Lucene compliance
           escaped = query.dup
 
-          # Escape basic special characters
-          escaped.gsub!("\\", "\\\\\\\\")  # Each \ becomes \\
+          # Escape spaces FIRST, then special chars
           escaped.gsub!(" ", '\\ ')
-          escaped.gsub!(":", '\\:')
-          escaped.gsub!("-", '\\-')
+
+          special_chars = ["\\", "+", "-", "&", "|", "!", "(", ")", "{", "}",
+            "[", "]", "^", '"', "~", "*", "?", ":", "/"]
+
+          special_chars.each do |char|
+            escaped.gsub!(char, "\\#{char}")
+          end
 
           escaped
         end

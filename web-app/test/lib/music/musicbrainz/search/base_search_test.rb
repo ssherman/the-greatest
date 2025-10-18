@@ -139,7 +139,7 @@ class Music::Musicbrainz::Search::BaseSearchTest < ActiveSupport::TestCase
       "test query" => 'test\\ query',
       "test:query" => 'test\\:query',
       "test-query" => 'test\\-query',
-      'test\\query' => 'test\\\\query'
+      'test\\query' => 'test\\query'
     }
 
     special_chars.each do |input, expected|

@@ -1,7 +1,7 @@
 class Avo::Actions::Lists::Music::Albums::EnrichItemsJson < Avo::BaseAction
   self.name = "Enrich items_json with MusicBrainz data"
   self.message = "This will enrich the items_json field with MusicBrainz metadata for the selected list(s) in the background."
-  self.confirm_button_label = "Enrich items_json"
+  self.confirm_button_label = "Enrich items json"
 
   def handle(query:, fields:, current_user:, resource:, **args)
     query.pluck(:id)

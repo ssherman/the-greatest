@@ -5,8 +5,7 @@
 2. [Movies data model implementation](todos/002-movies-object-model.md)
 
 ## Medium Priority
-2. [Items JSON Viewer Resource Tool](todos/053-items-json-viewer-resource-tool.md)
-3. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
+2. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
 4. [Books data import from existing site](todos/002-books-data-import.md)
 5. [Additional OAuth providers (Facebook, Twitter, Apple)](todos/007-authentication.md)
 6. [Email/password authentication](todos/007-authentication.md)
@@ -19,6 +18,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-10-18] [Items JSON Viewer Resource Tool](todos/053-items-json-viewer-resource-tool.md)
 - ✅ [2025-10-18] [Enrich Album List items_json with MusicBrainz Data](todos/052-import-list-from-musicbrainz-non-series.md)
 - ✅ [2025-10-17] [Fix Production Deployment Issues](todos/051-fix-production-deployment-issues.md)
 - ✅ [2025-10-05] [Fix Song Import Missing Artists Bug](todos/046-fix-song-import-missing-artists-bug.md)
