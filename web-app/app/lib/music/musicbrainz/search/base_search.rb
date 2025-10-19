@@ -240,15 +240,16 @@ module Music
         def escape_lucene_query(query)
           escaped = query.dup
 
-          # Escape spaces FIRST, then special chars
-          escaped.gsub!(" ", '\\ ')
-
+          # Escape backslash first, then other special chars, then spaces last
           special_chars = ["\\", "+", "-", "&", "|", "!", "(", ")", "{", "}",
             "[", "]", "^", '"', "~", "*", "?", ":", "/"]
 
           special_chars.each do |char|
-            escaped.gsub!(char, "\\#{char}")
+            escaped.gsub!(char, "\\\\#{char}")
           end
+
+          # Escape spaces last to avoid double-escaping the backslash
+          escaped.gsub!(" ", '\\ ')
 
           escaped
         end
