@@ -54,7 +54,7 @@
           <% albums.sort_by { |a| a["rank"] || 0 }.each do |album| %>
             <% has_mb_data = album["mb_release_group_id"].present? %>
             <% ai_flagged_invalid = album["ai_match_invalid"] == true %>
-            <tr class="<%= 'bg-gray-100' unless has_mb_data %> <%= 'bg-red-100' if ai_flagged_invalid %>">
+            <tr class="<%= 'bg-gray-100' unless has_mb_data %> <%= 'bg-gray-100' if ai_flagged_invalid %>">
               <td class="text-center border border-gray-300">
                 <% if ai_flagged_invalid %>
                   <span class="badge badge-error badge-sm">⚠ Invalid</span>
