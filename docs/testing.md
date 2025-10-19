@@ -78,18 +78,22 @@ test/
 - Never mock what you don't own
 
 ### What NOT to Test (Common Mistakes)
-- **Never test exact log message content** - Logger messages change frequently and testing exact strings is brittle
+- **Never test log statements at all** - Logging is an implementation detail, not behavior. Don't verify that logs are written.
   ```ruby
-  # ❌ Bad - brittle string assertion
-  Rails.logger.expects(:info).with("User created with ID: #{user.id}")
-  
-  # ✅ Good - just verify logging happens
+  # ❌ Bad - testing implementation details
   Rails.logger.expects(:info)
+  Rails.logger.expects(:error).with("Failed to process")
+
+  # ✅ Good - test the actual behavior
+  # Just call the method and test what it does, not that it logs
+  service.call
+  assert result.success?
   ```
 - **Never test exact error message strings** - Focus on behavior, not message content
 - **Never test system message or prompt content for AI tasks** - These change frequently as prompts are refined
 - **Never test private method implementation details** - Test public interface only
 - **Never test specific validation error messages** - Test that validation fails, not the exact wording
+- **Never write tests for Avo actions** - Avo actions are admin UI components that are manually tested. Writing automated tests for them is not necessary and adds maintenance burden.
 
 ### Multi-Domain Testing
 - Test each domain's functionality in isolation

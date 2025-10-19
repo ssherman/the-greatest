@@ -4,6 +4,9 @@
   <% enriched_count = albums.count { |album| album["mb_release_group_id"].present? } %>
   <% missing_count = total_count - enriched_count %>
   <% enrichment_percentage = total_count > 0 ? (enriched_count.to_f / total_count * 100).round : 0 %>
+  <% ai_validated_count = albums.count { |album| album.key?("ai_match_invalid") } %>
+  <% ai_invalid_count = albums.count { |album| album["ai_match_invalid"] == true } %>
+  <% ai_valid_count = ai_validated_count - ai_invalid_count %>
 
   <%= render Avo::PanelComponent.new(title: "Items JSON Viewer") do |c| %>
     <% c.with_body do %>
@@ -25,6 +28,12 @@
         <div class="stat-value text-error"><%= missing_count %></div>
         <div class="stat-desc"><%= 100 - enrichment_percentage %>% remaining</div>
       </div>
+
+      <div class="stat">
+        <div class="stat-title">AI Validated</div>
+        <div class="stat-value text-info"><%= ai_validated_count %></div>
+        <div class="stat-desc"><%= ai_invalid_count %> flagged as invalid</div>
+      </div>
     </div>
 
     <div class="overflow-x-auto">
@@ -44,9 +53,12 @@
         <tbody>
           <% albums.sort_by { |a| a["rank"] || 0 }.each do |album| %>
             <% has_mb_data = album["mb_release_group_id"].present? %>
-            <tr class="<%= 'bg-gray-100' unless has_mb_data %>">
+            <% ai_flagged_invalid = album["ai_match_invalid"] == true %>
+            <tr class="<%= 'bg-gray-100' unless has_mb_data %> <%= 'bg-red-100' if ai_flagged_invalid %>">
               <td class="text-center border border-gray-300">
-                <% if has_mb_data %>
+                <% if ai_flagged_invalid %>
+                  <span class="badge badge-error badge-sm">⚠ Invalid</span>
+                <% elsif has_mb_data %>
                   <span class="badge badge-success badge-sm">✓</span>
                 <% else %>
                   <span class="badge badge-error badge-sm">✗</span>
