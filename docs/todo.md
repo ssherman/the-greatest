@@ -6,11 +6,11 @@
 
 ## Medium Priority
 2. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
-3. [Books data import from existing site](todos/002-books-data-import.md)
-4. [Additional OAuth providers (Facebook, Twitter, Apple)](todos/007-authentication.md)
-5. [Email/password authentication](todos/007-authentication.md)
-6. [Passwordless email authentication](todos/007-authentication.md)
-7. [Phone number authentication](todos/007-authentication.md)
+4. [Books data import from existing site](todos/002-books-data-import.md)
+5. [Additional OAuth providers (Facebook, Twitter, Apple)](todos/007-authentication.md)
+6. [Email/password authentication](todos/007-authentication.md)
+7. [Passwordless email authentication](todos/007-authentication.md)
+8. [Phone number authentication](todos/007-authentication.md)
 
 ## Low Priority
 8. [Cloudflare Caching Strategy for Ranking Pages](todos/050-cloudflare-caching-strategy.md)
@@ -18,6 +18,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-10-18] [Items JSON Viewer Resource Tool](todos/053-items-json-viewer-resource-tool.md)
 - ✅ [2025-10-18] [Enrich Album List items_json with MusicBrainz Data](todos/052-import-list-from-musicbrainz-non-series.md)
 - ✅ [2025-10-17] [Fix Production Deployment Issues](todos/051-fix-production-deployment-issues.md)
 - ✅ [2025-10-05] [Fix Song Import Missing Artists Bug](todos/046-fix-song-import-missing-artists-bug.md)

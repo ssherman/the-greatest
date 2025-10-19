@@ -104,6 +104,35 @@ This project uses specialized Claude Code sub-agents to handle specific types of
 
 ---
 
+### 6. avo-engineer
+**Purpose**: Expert in the Avo admin framework for Ruby on Rails
+**Best for**: Creating/configuring Avo resources, actions, filters, and dashboards
+**Tools**: All tools (inherits full toolset)
+
+**When to use**:
+- "Create an Avo resource for the Music::Artist model"
+- "Add a custom action to bulk import artists"
+- "Configure authorization for the admin panel"
+- "Build a dashboard for ranking statistics"
+- Any Avo-specific implementation or configuration
+
+**What it does**:
+- Creates and maintains Avo resources following domain namespacing
+- Implements custom actions, filters, and scopes
+- Configures Pundit authorization for admin access
+- Builds dashboards and custom tools
+- Ensures Avo resources mirror ActiveRecord models
+- Follows Avo 3.x best practices and patterns
+
+**Knowledge Base**:
+- Complete Avo 3.x documentation embedded in agent
+- Deep understanding of field types and configurations
+- Authorization patterns with Pundit
+- Custom component development
+- Performance optimization strategies
+
+---
+
 ## Common Sub-Agent Workflows
 
 ### Finding and Understanding Code
@@ -120,6 +149,11 @@ This project uses specialized Claude Code sub-agents to handle specific types of
 1. **web-search-researcher** → Research best practices/APIs
 2. **codebase-pattern-finder** → Find how similar things are done
 3. **technical-writer** → Document decisions and implementation
+
+### Avo Admin Development
+1. **codebase-analyzer** → Understand the model structure and associations
+2. **avo-engineer** → Create Avo resources, actions, and authorization
+3. **technical-writer** → Document the admin interface capabilities
 
 ---
 
