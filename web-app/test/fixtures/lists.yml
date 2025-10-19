@@ -121,6 +121,15 @@ music_albums_list_with_items_json:
   year_published: 2023
   items_json: {"albums":[{"rank":1,"title":"The Queen Is Dead","artists":["The Smiths"],"release_year":null},{"rank":2,"title":"Revolver","artists":["The Beatles"],"release_year":null}]}
 
+music_albums_list_for_import:
+  type: Music::Albums::List
+  name: Music Albums List for Import Testing
+  description: A music albums list for testing the importer (no list_items)
+  source: Test Source
+  status: 3
+  estimated_quality: 80
+  year_published: 2023
+
 # Additional music album lists for ranking tests
 rolling_stone_albums:
   type: Music::Albums::List
