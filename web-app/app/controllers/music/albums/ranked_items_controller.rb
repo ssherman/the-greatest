@@ -17,6 +17,6 @@ class Music::Albums::RankedItemsController < Music::RankedItemsController
       .where(item_type: "Music::Album")
       .order(:rank)
 
-    @pagy, @albums = pagy(albums_query, limit: 25)
+    @pagy, @albums = pagy(albums_query, limit: 100)
   end
 end
