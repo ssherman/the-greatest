@@ -3,6 +3,7 @@
 ## High Priority
 1. [Production Deployment Infrastructure](todos/048-production-deployment-infrastructure.md)
 2. [Movies data model implementation](todos/002-movies-object-model.md)
+3. [Calculated Weight Details Field](todos/058-calculated-weight-details.md)
 
 ## Medium Priority
 2. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
