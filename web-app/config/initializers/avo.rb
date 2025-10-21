@@ -2,7 +2,7 @@
 # The values disaplayed here are the default ones. Uncomment and change them to fit your needs.
 Avo.configure do |config|
   ## == Routing ==
-  config.root_path = "/avo"
+  config.root_path = "/admin"
   # used only when you have custom `map` configuration in your config.ru
   # config.prefix_path = "/internal"
 
@@ -18,9 +18,19 @@ Avo.configure do |config|
   end
 
   ## == Authentication ==
-  # config.current_user_method = :current_user
-  # config.authenticate_with do
-  # end
+  config.current_user_method do
+    user_id = session[:user_id]
+    @current_user ||= User.find_by(id: user_id) if user_id.present?
+  end
+
+  config.authenticate_with do
+    user_id = session[:user_id]
+    user = User.find_by(id: user_id) if user_id.present?
+
+    unless user&.admin? || user&.editor?
+      render file: Rails.public_path.join("403.html"), status: :forbidden, layout: false
+    end
+  end
 
   ## == Authorization ==
   # config.is_admin_method = :is_admin
