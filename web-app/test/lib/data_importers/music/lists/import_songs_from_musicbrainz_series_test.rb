@@ -243,6 +243,91 @@ module DataImporters
           assert_equal 0, result[:imported_count]
           assert_equal initial_count, @list.reload.list_items.count
         end
+
+        test "call enriches existing songs without artists" do
+          song = music_songs(:time)
+          song.song_artists.destroy_all
+          song.identifiers.create!(
+            identifier_type: :music_musicbrainz_recording_id,
+            value: "recording-1"
+          )
+
+          series_search = mock
+          series_search.expects(:browse_series_with_recordings)
+            .with("test-series-mbid-123")
+            .returns(
+              success: true,
+              data: {
+                "relations" => [
+                  {
+                    "target-type" => "recording",
+                    "recording" => {
+                      "id" => "recording-1",
+                      "title" => "Time"
+                    },
+                    "attribute-values" => {
+                      "number" => "1"
+                    }
+                  }
+                ]
+              }
+            )
+
+          ::Music::Musicbrainz::Search::SeriesSearch.stubs(:new).returns(series_search)
+
+          enriched_result = DataImporters::ImportResult.new(
+            item: song,
+            provider_results: [],
+            success: true
+          )
+
+          DataImporters::Music::Song::Importer.expects(:call)
+            .with(musicbrainz_recording_id: "recording-1", force_providers: true)
+            .returns(enriched_result)
+
+          result = ImportSongsFromMusicbrainzSeries.call(list: @list)
+
+          assert result[:success]
+          assert_equal "Imported 1 of 1 songs", result[:message]
+        end
+
+        test "call does not enrich existing songs that already have artists" do
+          song = music_songs(:time)
+          song.identifiers.create!(
+            identifier_type: :music_musicbrainz_recording_id,
+            value: "recording-1"
+          )
+
+          series_search = mock
+          series_search.expects(:browse_series_with_recordings)
+            .with("test-series-mbid-123")
+            .returns(
+              success: true,
+              data: {
+                "relations" => [
+                  {
+                    "target-type" => "recording",
+                    "recording" => {
+                      "id" => "recording-1",
+                      "title" => "Time"
+                    },
+                    "attribute-values" => {
+                      "number" => "1"
+                    }
+                  }
+                ]
+              }
+            )
+
+          ::Music::Musicbrainz::Search::SeriesSearch.stubs(:new).returns(series_search)
+
+          DataImporters::Music::Song::Importer.expects(:call).never
+
+          result = ImportSongsFromMusicbrainzSeries.call(list: @list)
+
+          assert result[:success]
+          assert_equal "Imported 1 of 1 songs", result[:message]
+        end
       end
     end
   end

@@ -207,7 +207,7 @@ module DataImporters
             {songs_created: songs_created, tracks_created: tracks_created, errors: errors}
           end
 
-          # Find existing song by MusicBrainz recording ID or create new one
+          # Find existing song by MusicBrainz recording ID or create new one with artist associations
           # @param recording_data [Hash] the MusicBrainz recording data
           # @return [Music::Song] the found or created song
           def find_or_create_song(recording_data)
@@ -224,23 +224,17 @@ module DataImporters
 
             return existing_song if existing_song
 
-            # Create new song from recording data
-            song = ::Music::Song.new(
-              title: recording_data["title"],
-              duration_secs: parse_duration_secs(recording_data["length"]),
-              release_year: parse_release_year(recording_data["first-release-date"]),
-              notes: recording_data["disambiguation"].presence
+            # Use Song::Importer to create song WITH artist associations
+            result = DataImporters::Music::Song::Importer.call(
+              musicbrainz_recording_id: recording_mbid
             )
 
-            if song.save
-              # Create MusicBrainz recording identifier
-              song.identifiers.create!(
-                identifier_type: :music_musicbrainz_recording_id,
-                value: recording_mbid
-              )
+            unless result.success? && result.item&.persisted?
+              Rails.logger.error "[RELEASE_IMPORT] Failed to import song #{recording_mbid}: #{result.all_errors.join(", ")}"
+              raise "Failed to import song: #{result.all_errors.join(", ")}"
             end
 
-            song
+            result.item
           end
 
           # Create track record linking release to song
