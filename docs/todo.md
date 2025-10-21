@@ -18,6 +18,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-10-21] [Song Import Missing Artists Investigation and Fix](todos/057-song-import-missing-artists-investigation.md)
 - ✅ [2025-10-20] [Avo Admin Authentication and Custom Path](todos/056-avo-authentication-and-path.md)
 - ✅ [2025-10-19] [Import Albums and Create list_items from items_json](todos/055-import-items-from-list-items-json.md)
 - ✅ [2025-10-19] [AI Task to Find Invalid items_json Matches](todos/054-ai-task-to-find-invalid-items-json.md)

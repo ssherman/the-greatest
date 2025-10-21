@@ -110,8 +110,17 @@ module DataImporters
         def import_song(recording_id)
           song = ::Music::Song.with_identifier("music_musicbrainz_recording_id", recording_id).first
           if song
-            Rails.logger.info "[SONG_SERIES_IMPORT] Found existing song: '#{song.title}' (#{recording_id})"
-            return song
+            if song.song_artists.empty?
+              Rails.logger.info "[SONG_SERIES_IMPORT] Found existing song without artists, enriching: '#{song.title}' (#{recording_id})"
+              result = DataImporters::Music::Song::Importer.call(
+                musicbrainz_recording_id: recording_id,
+                force_providers: true
+              )
+              return (result.success? && result.item&.persisted?) ? result.item : song
+            else
+              Rails.logger.info "[SONG_SERIES_IMPORT] Found existing song: '#{song.title}' (#{recording_id})"
+              return song
+            end
           end
 
           Rails.logger.info "[SONG_SERIES_IMPORT] Calling Song::Importer for #{recording_id}"

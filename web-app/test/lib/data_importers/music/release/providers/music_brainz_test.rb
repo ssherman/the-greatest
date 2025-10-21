@@ -329,6 +329,51 @@ module DataImporters
             assert_equal ["EMI", "Harvest"], labels
             assert_equal 2, labels.length
           end
+
+          test "populate creates songs with artist associations via Song::Importer" do
+            recording_id = "test-recording-123"
+
+            musicbrainz_releases = [{
+              "id" => "release-with-tracks",
+              "title" => "Test Album",
+              "status" => "Official",
+              "media" => [{
+                "format" => "CD",
+                "tracks" => [{
+                  "id" => "track-1",
+                  "position" => 1,
+                  "recording" => {
+                    "id" => recording_id,
+                    "title" => "Test Song"
+                  }
+                }]
+              }]
+            }]
+
+            search_service = mock
+            search_service.expects(:search_by_release_group_mbid_with_recordings)
+              .returns({data: {"releases" => musicbrainz_releases}})
+
+            ::Music::Musicbrainz::Search::ReleaseSearch.stubs(:new).returns(search_service)
+
+            mock
+            song_import_result = mock
+            song = ::Music::Song.new(
+              title: "Test Song",
+              id: 999
+            )
+            song.stubs(:persisted?).returns(true)
+            song_import_result.stubs(:success?).returns(true)
+            song_import_result.stubs(:item).returns(song)
+
+            DataImporters::Music::Song::Importer.expects(:call)
+              .with(musicbrainz_recording_id: recording_id)
+              .returns(song_import_result)
+
+            result = @provider.populate(nil, query: @query)
+
+            assert result.success?
+          end
         end
       end
     end
