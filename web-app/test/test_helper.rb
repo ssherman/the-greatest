@@ -22,3 +22,15 @@ module ActiveSupport
     # Add more helper methods to be used by all tests here...
   end
 end
+
+module ActionDispatch
+  class IntegrationTest
+    def sign_in_as(user)
+      post auth_sign_in_path, params: {
+        jwt: "test_token",
+        provider: "google",
+        user_data: {email: user.email, name: user.name}
+      }, as: :json
+    end
+  end
+end
