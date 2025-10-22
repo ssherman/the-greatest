@@ -27,11 +27,6 @@
         </div>
       <% end %>
 
-      <% if @ranked_list %>
-        <div class="badge badge-lg badge-ghost">
-          Weight: <%= @ranked_list.weight %>
-        </div>
-      <% end %>
 
       <div class="badge badge-lg badge-ghost">
         <%= @list.list_items.count %> albums
@@ -43,6 +38,22 @@
         </div>
       <% end %>
     </div>
+
+    <% if @ranked_list %>
+      <div class="card bg-base-200 shadow-xl mb-6">
+        <div class="card-body">
+          <h2 class="card-title">
+            Weight: <%= @ranked_list.weight %>%
+          </h2>
+          <p class="text-sm text-base-content/70 mt-1">
+            How much this list influences our overall rankings. Higher weight means more reliable data.
+          </p>
+
+          <%= render partial: "music/lists/simple_penalty_summary",
+                     locals: { ranked_list: @ranked_list } %>
+        </div>
+      </div>
+    <% end %>
 
     <% if @list.description.present? %>
       <div class="prose max-w-none mb-4">

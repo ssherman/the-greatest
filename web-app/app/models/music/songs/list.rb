@@ -40,7 +40,7 @@ module Music
   module Songs
     class List < ::List
       # Default ordering for list_items association
-      has_many :list_items, -> { order(:position) }, foreign_key: :list_id, dependent: :destroy
+      has_many :list_items, -> { order(:position) }, foreign_key: :list_id, dependent: :destroy, inverse_of: :list
 
       # Scopes for eager loading list items with songs and all associations
       scope :with_songs_for_display, -> {

@@ -16,16 +16,18 @@ Creates a new V1 weight calculator instance for the specified ranked list.
 ## Private Methods
 
 ### `#calculate_weight`
-Main weight calculation algorithm implementation for V1.
+Main weight calculation algorithm implementation for V1. Also captures detailed breakdown of the calculation and stores it in `ranked_list.calculated_weight_details`.
 - Returns: Integer - calculated weight
+- Side Effects: Sets `ranked_list.calculated_weight_details` with complete breakdown
 - Algorithm:
   1. Starts with base weight (100)
-  2. Calculates total penalty percentage from all sources
+  2. Calculates total penalty percentage from all sources (capturing details)
   3. Applies quality source bonus (reduces penalties by 1/3 if high quality)
   4. Ensures penalty doesn't exceed 100%
   5. Applies penalty to starting weight
   6. Applies minimum weight floor
-  7. Returns rounded integer
+  7. Stores complete calculation details in `calculated_weight_details`
+  8. Returns rounded integer
 
 ### `#calculate_total_penalty_percentage`
 Aggregates penalty percentages from all sources.
@@ -129,14 +131,56 @@ Where exponent defaults to 2.0 for a quadratic curve.
 ### Median Voter Count
 Uses `ranking_configuration.median_voter_count` to determine the baseline for voter count penalties. Lists at or above median get no voter count penalty.
 
+## Calculation Details Capture
+
+As of the latest version, WeightCalculatorV1 automatically captures and stores a complete breakdown of the weight calculation in `ranked_list.calculated_weight_details`. This provides full transparency into:
+
+- All penalties applied (with IDs, names, values)
+- Dynamic penalty calculation inputs (voter counts, ratios, formulas)
+- Quality bonus application
+- All intermediate calculation steps
+- Final weight derivation
+
+The details are stored as JSONB and include:
+- `calculation_version`: Algorithm version (1)
+- `timestamp`: When the calculation was performed
+- `base_values`: Base weight, minimum weight, high quality source flag
+- `penalties`: Array of all penalties with full details
+- `penalty_summary`: Totals by penalty type
+- `quality_bonus`: Whether and how quality bonus was applied
+- `final_calculation`: All final steps (capping, flooring, rounding)
+
+### Details Capture Methods
+
+These private methods build the calculation details:
+
+- `build_base_values`: Captures base weight, minimum weight, and high quality flag
+- `calculate_static_penalties_with_details(details)`: Captures static penalties and appends to details
+- `calculate_voter_count_penalty_with_details(details)`: Captures voter penalties with calculation inputs
+- `calculate_attribute_penalties_with_details(details)`: Captures attribute penalties
+- `apply_quality_bonus_with_details(penalty)`: Returns quality bonus application details
+- `build_final_calculation(starting_weight, penalty_percentage)`: Returns final calculation steps
+
 ## Usage Examples
 ```ruby
 # Create calculator for a ranked list
 calculator = Rankings::WeightCalculatorV1.new(ranked_list)
 
-# Calculate weight (automatically uses V1 algorithm)
+# Calculate weight (automatically uses V1 algorithm and captures details)
 weight = calculator.call
 
-# Weight is saved to ranked_list.weight
-puts ranked_list.weight
+# Weight and details are saved to ranked_list
+puts ranked_list.weight  # => 75
+puts ranked_list.calculated_weight_details["penalty_summary"]
+# => {"total_static_penalties"=>20.0, "total_voter_count_penalties"=>5.0, ...}
+
+# Access penalty details
+ranked_list.calculated_weight_details["penalties"].each do |penalty|
+  puts "#{penalty['penalty_name']}: #{penalty['value']}%"
+end
+
+# Check if quality bonus was applied
+if ranked_list.calculated_weight_details["quality_bonus"]["applied"]
+  puts "High quality source bonus reduced penalties"
+end
 ``` 
