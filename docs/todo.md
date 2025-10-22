@@ -3,7 +3,6 @@
 ## High Priority
 1. [Production Deployment Infrastructure](todos/048-production-deployment-infrastructure.md)
 2. [Movies data model implementation](todos/002-movies-object-model.md)
-3. [Calculated Weight Details Field](todos/058-calculated-weight-details.md)
 
 ## Medium Priority
 2. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
@@ -19,6 +18,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-10-21] [Calculated Weight Details Field](todos/058-calculated-weight-details.md)
 - ✅ [2025-10-21] [Song Import Missing Artists Investigation and Fix](todos/057-song-import-missing-artists-investigation.md)
 - ✅ [2025-10-20] [Avo Admin Authentication and Custom Path](todos/056-avo-authentication-and-path.md)
 - ✅ [2025-10-19] [Import Albums and Create list_items from items_json](todos/055-import-items-from-list-items-json.md)

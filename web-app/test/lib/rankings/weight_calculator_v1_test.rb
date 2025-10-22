@@ -738,5 +738,252 @@ module Rankings
       # Clean list should have full weight (only gets static penalty if associated)
       assert_equal 100, clean_weight, "Clean list should have full weight"
     end
+
+    test "populates calculated_weight_details with correct structure" do
+      test_config = Music::Albums::RankingConfiguration.create!(
+        name: "Details Test Config #{SecureRandom.hex(4)}",
+        global: true,
+        min_list_weight: 10
+      )
+
+      test_list = Music::Albums::List.create!(
+        name: "Details Test List",
+        status: :approved,
+        high_quality_source: false
+      )
+
+      test_ranked_list = RankedList.create!(
+        list: test_list,
+        ranking_configuration: test_config
+      )
+
+      calculator = WeightCalculatorV1.new(test_ranked_list)
+      calculator.call
+
+      details = test_ranked_list.reload.calculated_weight_details
+
+      assert_not_nil details
+      assert_equal 1, details["calculation_version"]
+      assert_not_nil details["timestamp"]
+      assert_not_nil details["base_values"]
+      assert_not_nil details["penalties"]
+      assert_not_nil details["penalty_summary"]
+      assert_not_nil details["quality_bonus"]
+      assert_not_nil details["final_calculation"]
+    end
+
+    test "captures base values in calculated_weight_details" do
+      test_config = Music::Albums::RankingConfiguration.create!(
+        name: "Base Values Test Config #{SecureRandom.hex(4)}",
+        global: true,
+        min_list_weight: 5
+      )
+
+      test_list = Music::Albums::List.create!(
+        name: "Base Values Test List",
+        status: :approved,
+        high_quality_source: true
+      )
+
+      test_ranked_list = RankedList.create!(
+        list: test_list,
+        ranking_configuration: test_config
+      )
+
+      calculator = WeightCalculatorV1.new(test_ranked_list)
+      calculator.call
+
+      base_values = test_ranked_list.reload.calculated_weight_details["base_values"]
+
+      assert_equal 100, base_values["base_weight"]
+      assert_equal 5, base_values["minimum_weight"]
+      assert_equal true, base_values["high_quality_source"]
+    end
+
+    test "captures static penalties in calculated_weight_details" do
+      test_config = Music::Albums::RankingConfiguration.create!(
+        name: "Static Penalty Details Test #{SecureRandom.hex(4)}",
+        global: true,
+        min_list_weight: 1
+      )
+
+      test_list = Music::Albums::List.create!(
+        name: "Static Penalty Details List",
+        status: :approved
+      )
+
+      static_penalty = Music::Penalty.create!(
+        type: "Music::Penalty",
+        name: "Test Static Penalty"
+      )
+
+      PenaltyApplication.create!(
+        penalty: static_penalty,
+        ranking_configuration: test_config,
+        value: 20
+      )
+
+      ListPenalty.create!(list: test_list, penalty: static_penalty)
+
+      test_ranked_list = RankedList.create!(
+        list: test_list,
+        ranking_configuration: test_config
+      )
+
+      calculator = WeightCalculatorV1.new(test_ranked_list)
+      calculator.call
+
+      details = test_ranked_list.reload.calculated_weight_details
+      static_penalties = details["penalties"].select { |p| p["source"] == "static" }
+
+      assert_equal 1, static_penalties.size
+      penalty_detail = static_penalties.first
+      assert_equal static_penalty.id, penalty_detail["penalty_id"]
+      assert_equal "Test Static Penalty", penalty_detail["penalty_name"]
+      assert_equal 20, penalty_detail["value"]
+    end
+
+    test "captures quality bonus application in calculated_weight_details" do
+      test_config = Music::Albums::RankingConfiguration.create!(
+        name: "Quality Bonus Details Test #{SecureRandom.hex(4)}",
+        global: true,
+        min_list_weight: 1
+      )
+
+      hq_list = Music::Albums::List.create!(
+        name: "HQ List",
+        status: :approved,
+        high_quality_source: true
+      )
+
+      regular_list = Music::Albums::List.create!(
+        name: "Regular List",
+        status: :approved,
+        high_quality_source: false
+      )
+
+      hq_ranked_list = RankedList.create!(list: hq_list, ranking_configuration: test_config)
+      regular_ranked_list = RankedList.create!(list: regular_list, ranking_configuration: test_config)
+
+      WeightCalculatorV1.new(hq_ranked_list).call
+      WeightCalculatorV1.new(regular_ranked_list).call
+
+      hq_bonus = hq_ranked_list.reload.calculated_weight_details["quality_bonus"]
+      regular_bonus = regular_ranked_list.reload.calculated_weight_details["quality_bonus"]
+
+      assert_equal true, hq_bonus["applied"]
+      assert_equal false, regular_bonus["applied"]
+      assert_equal 2.0 / 3.0, hq_bonus["reduction_factor"]
+    end
+
+    test "captures final calculation steps in calculated_weight_details" do
+      test_config = Music::Albums::RankingConfiguration.create!(
+        name: "Final Calc Test #{SecureRandom.hex(4)}",
+        global: true,
+        min_list_weight: 10
+      )
+
+      test_list = Music::Albums::List.create!(
+        name: "Final Calc List",
+        status: :approved
+      )
+
+      test_ranked_list = RankedList.create!(
+        list: test_list,
+        ranking_configuration: test_config
+      )
+
+      calculator = WeightCalculatorV1.new(test_ranked_list)
+      weight = calculator.call
+
+      final_calc = test_ranked_list.reload.calculated_weight_details["final_calculation"]
+
+      assert_not_nil final_calc["total_penalty_percentage"]
+      assert_not_nil final_calc["capped_penalty_percentage"]
+      assert_not_nil final_calc["weight_after_penalty"]
+      assert_not_nil final_calc["weight_after_floor"]
+      assert_equal weight, final_calc["final_weight"]
+    end
+
+    test "captures voter count penalty details with calculation inputs" do
+      test_config = Music::Albums::RankingConfiguration.create!(
+        name: "Voter Details Test #{SecureRandom.hex(4)}",
+        global: true,
+        min_list_weight: 1
+      )
+
+      test_list = Music::Albums::List.create!(
+        name: "Voter Details List",
+        status: :approved,
+        number_of_voters: 1
+      )
+
+      voter_penalty = Global::Penalty.create!(
+        type: "Global::Penalty",
+        name: "Test Voter Penalty",
+        dynamic_type: :number_of_voters
+      )
+
+      PenaltyApplication.create!(
+        penalty: voter_penalty,
+        ranking_configuration: test_config,
+        value: 30
+      )
+
+      test_ranked_list = RankedList.create!(list: test_list, ranking_configuration: test_config)
+      calculator = WeightCalculatorV1.new(test_ranked_list)
+      calculator.call
+
+      details = test_ranked_list.reload.calculated_weight_details
+      voter_penalties = details["penalties"].select { |p| p["source"] == "dynamic_voter_count" }
+
+      assert voter_penalties.any?, "Should have voter count penalties (voter_count=1 always gets penalty)"
+      penalty_detail = voter_penalties.first
+      assert_equal "dynamic_voter_count", penalty_detail["source"]
+      assert_not_nil penalty_detail["calculation"]
+      assert_equal 1, penalty_detail["calculation"]["voter_count"]
+      assert_not_nil penalty_detail["calculation"]["median_voter_count"]
+      assert_not_nil penalty_detail["calculation"]["formula"]
+    end
+
+    test "captures attribute penalty details" do
+      test_config = Music::Albums::RankingConfiguration.create!(
+        name: "Attribute Details Test #{SecureRandom.hex(4)}",
+        global: true,
+        min_list_weight: 1
+      )
+
+      test_list = Music::Albums::List.create!(
+        name: "Attribute Details List",
+        status: :approved,
+        category_specific: true
+      )
+
+      category_penalty = Global::Penalty.create!(
+        type: "Global::Penalty",
+        name: "Category Penalty",
+        dynamic_type: :category_specific
+      )
+
+      PenaltyApplication.create!(
+        penalty: category_penalty,
+        ranking_configuration: test_config,
+        value: 15
+      )
+
+      test_ranked_list = RankedList.create!(list: test_list, ranking_configuration: test_config)
+      calculator = WeightCalculatorV1.new(test_ranked_list)
+      calculator.call
+
+      details = test_ranked_list.reload.calculated_weight_details
+      attribute_penalties = details["penalties"].select { |p| p["source"] == "dynamic_attribute" }
+
+      assert_equal 1, attribute_penalties.size
+      penalty_detail = attribute_penalties.first
+      assert_equal "dynamic_attribute", penalty_detail["source"]
+      assert_equal "category_specific", penalty_detail["dynamic_type"]
+      assert_equal true, penalty_detail["attribute_value"]
+      assert_equal 15, penalty_detail["value"]
+    end
   end
 end

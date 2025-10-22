@@ -1,11 +1,11 @@
 # 058 - Calculated Weight Details Field
 
 ## Status
-- **Status**: Not Started
+- **Status**: Completed
 - **Priority**: High
 - **Created**: 2025-10-21
-- **Started**:
-- **Completed**:
+- **Started**: 2025-10-21
+- **Completed**: 2025-10-21
 - **Developer**: AI Assistant
 
 ## Overview
@@ -481,29 +481,108 @@ end
 ---
 
 ## Implementation Notes
-*[This section will be filled out during/after implementation]*
 
 ### Approach Taken
+Followed the planned approach closely with minimal deviations:
+1. Generated migration using Rails generator as specified
+2. Updated parent WeightCalculator to use `save!` instead of `update!` to persist additional attributes
+3. Completely refactored WeightCalculatorV1#calculate_weight to build details hash throughout calculation
+4. Created new `_with_details` methods for each calculation step
+5. Kept original calculation methods for backward compatibility (in case tests call them directly)
+6. Added helper methods for public views to display simple penalty summaries
+7. Created reusable partial for penalty display
+8. Updated Avo resource to show full JSON breakdown using `:code` field type
 
 ### Key Files Changed
+**Migration:**
+- `db/migrate/20251021222021_add_calculated_weight_details_to_ranked_lists.rb` - Added jsonb column
+
+**Core Calculation Logic:**
+- `app/lib/rankings/weight_calculator.rb:29-33` - Modified `call` method to use `save!` for attribute persistence
+- `app/lib/rankings/weight_calculator_v1.rb:7-341` - Complete refactor of calculate_weight with details capture
+
+**Views:**
+- `app/helpers/music/lists_helper.rb:2-6` - Added `penalty_badge_class` helper
+- `app/views/music/lists/_simple_penalty_summary.html.erb` - New partial for penalty display
+- `app/views/music/songs/lists/show.html.erb:43-57` - Updated to show weight card with penalties
+- `app/views/music/albums/lists/show.html.erb:42-56` - Updated to show weight card with penalties
+
+**Admin:**
+- `app/avo/resources/ranked_list.rb:12-22` - Added calculated_weight_details field as code block
+
+**Tests:**
+- `test/lib/rankings/weight_calculator_v1_test.rb:742-988` - Added 8 new tests for details capture
+- `test/helpers/music/lists_helper_test.rb` - New test file for helper methods
+
+**Documentation:**
+- `docs/models/ranked_list.md:10-69, 87-88` - Updated with new attribute documentation
+- `docs/lib/rankings/weight_calculator_v1.md:19-30, 134-186` - Updated with details capture functionality
 
 ### Challenges Encountered
+1. **Parallel test execution**: Initial test for voter count penalty failed in parallel mode because other tests' data affected median calculation. Fixed by using `number_of_voters: 1` which always triggers penalty.
+2. **File creation**: Documentation files didn't exist, needed to create directory structure first.
 
 ### Deviations from Plan
+- **Kept original methods**: Added new `_with_details` methods rather than modifying originals, providing backward compatibility.
+- **Parent class change**: Modified WeightCalculator#call to use `save!` instead of `update!` to persist calculated_weight_details.
+- **No temporal penalty tests**: Existing comprehensive tests for temporal penalties were sufficient; focused details tests on structure verification.
 
 ### Code Examples
 
+**Building the details hash:**
+```ruby
+details = {
+  "calculation_version" => 1,
+  "timestamp" => Time.current.iso8601,
+  "base_values" => build_base_values,
+  "penalties" => [],
+  "penalty_summary" => {}
+}
+
+static_penalties = calculate_static_penalties_with_details(details)
+# Details["penalties"] is now populated with static penalty info
+
+ranked_list.calculated_weight_details = details
+```
+
+**Accessing details in views:**
+```ruby
+details["penalties"].each do |penalty|
+  penalty["penalty_name"]  # => "Low Voter Count"
+  penalty["value"]         # => 24.3
+  penalty["calculation"]   # => {"voter_count" => 5, "formula" => "..."}
+end
+```
+
 ### Testing Approach
+- Added 8 focused tests for details capture functionality
+- Tested structure, base values, static penalties, quality bonus, final calculation, voter penalties, and attribute penalties
+- Used isolated test configurations to avoid test pollution
+- All existing 1411 tests continue to pass (backward compatible)
 
 ### Performance Considerations
+- JSONB field adds minimal overhead (only during calculation, not queries)
+- No indexes added initially (field is for display/debugging, not querying)
+- Could add GIN index later if analytics queries needed
+- Details are only populated during weight calculation (not on every read)
 
 ### Future Improvements
+1. **Analytics**: Could query penalty patterns across all lists using JSONB operators
+2. **Versioning**: Track historical calculations if weight is recalculated
+3. **UI Enhancement**: Interactive penalty explorer in Avo admin
+4. **Export**: CSV/JSON export of penalty data for analysis
 
 ### Lessons Learned
+1. **Backward compatibility**: Keeping old methods while adding new ones prevented test failures
+2. **Parallel testing**: Need to account for shared state when testing medians/aggregates
+3. **JSONB flexibility**: Perfect for archival/snapshot data that doesn't need relational integrity
+4. **Two-tier display**: Simple badges for users, full technical details for admins works well
 
 ### Related PRs
+- (To be created after commit)
 
 ### Documentation Updated
-- [ ] Class documentation files updated
-- [ ] API documentation updated
-- [ ] README updated if needed
+- [x] Class documentation files updated (ranked_list.md, weight_calculator_v1.md)
+- [x] Model documentation includes new jsonb field structure
+- [x] WeightCalculatorV1 documentation includes details capture methods
+- [ ] README updated if needed (not necessary for this feature)

@@ -20,6 +20,7 @@ docs/
 │   │   └── director.md
 │   ├── user.md
 │   ├── list.md
+│   ├── ranked_list.md
 │   ├── penalty.md
 │   └── review.md
 ├── lib/
@@ -41,6 +42,9 @@ docs/
 │   ├── books/
 │   │   └── books_controller.md
 │   └── application_controller.md
+├── helpers/
+│   └── music/
+│       └── lists_helper.md
 └── features/
     └── rankings.md
 ```
@@ -71,30 +75,38 @@ Each class documentation file should include:
 - Explain the purpose of each relationship
 - Note any polymorphic associations
 
-### 3. Public Methods
+### 3. Attributes
+- Document important attributes, especially:
+  - JSONB fields with their structure and purpose
+  - Enum fields with possible values
+  - Calculated or derived fields
+  - Fields with special meaning or constraints
+- For JSONB fields, include example structure and access patterns
+
+### 4. Public Methods
 - Method name and signature
 - Purpose/description
 - Parameters with types
 - Return value
 - Important side effects
 
-### 4. Validations
+### 5. Validations
 - List all validations
 - Business rules enforced
 
-### 5. Scopes
+### 6. Scopes
 - Available scopes and their purpose
 - Common usage patterns
 
-### 6. Constants
+### 7. Constants
 - Any constants defined
 - Their purpose and usage
 
-### 7. Callbacks
+### 8. Callbacks
 - Before/after callbacks
 - Their purpose and order
 
-### 8. Dependencies
+### 9. Dependencies
 - Required services or modules
 - External API dependencies
 

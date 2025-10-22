@@ -27,9 +27,10 @@ module Rankings
 
     # Main entry point - calculates and saves the weight
     def call
-      calculated_weight = calculate_weight
-      ranked_list.update!(weight: calculated_weight)
-      calculated_weight
+      weight = calculate_weight
+      ranked_list.weight = weight
+      ranked_list.save!
+      weight
     end
 
     protected

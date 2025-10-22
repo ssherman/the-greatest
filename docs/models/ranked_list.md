@@ -7,11 +7,66 @@ Represents the association between a list and a ranking configuration with an op
 - `belongs_to :list` - The list being ranked (uses STI for different media types)
 - `belongs_to :ranking_configuration` - The ranking configuration that defines the algorithm parameters
 
+## Attributes
+
+### weight (integer)
+The final calculated weight for this list in this ranking, ranging from the minimum weight (typically 1-10) to 100. Higher weights indicate higher quality/reliability.
+
+### calculated_weight_details (jsonb)
+Complete breakdown of the weight calculation, stored as JSON. Provides full transparency into how the weight was calculated, including all penalties applied, calculation inputs, and intermediate values. This field is populated automatically when Rankings::WeightCalculatorV1 calculates the weight.
+
+**Structure:**
+```json
+{
+  "calculation_version": 1,
+  "timestamp": "2025-10-21T12:34:56Z",
+  "base_values": {
+    "base_weight": 100,
+    "minimum_weight": 10,
+    "high_quality_source": false
+  },
+  "penalties": [
+    {
+      "source": "static|dynamic_voter_count|dynamic_attribute|dynamic_temporal",
+      "penalty_id": 123,
+      "penalty_name": "Low Voter Count",
+      "value": 24.3,
+      "calculation": {...}
+    }
+  ],
+  "penalty_summary": {
+    "total_static_penalties": 20.0,
+    "total_voter_count_penalties": 24.3,
+    "total_attribute_penalties": 15.0,
+    "total_temporal_penalties": 16.0,
+    "total_before_quality_bonus": 75.3
+  },
+  "quality_bonus": {
+    "applied": false,
+    "reduction_factor": 0.6666666666666666,
+    "penalty_before": 75.3,
+    "penalty_after": 75.3
+  },
+  "final_calculation": {
+    "total_penalty_percentage": 75.3,
+    "capped_penalty_percentage": 75.3,
+    "weight_after_penalty": 24.7,
+    "weight_after_floor": 24.7,
+    "final_weight": 25
+  }
+}
+```
+
 ## Public Methods
 
 ### `#weight`
 Returns the weight assigned to this list in the ranking configuration
 - Returns: Integer or nil (nullable weight field)
+
+### `#calculated_weight_details`
+Returns the complete calculation breakdown as a Hash
+- Returns: Hash or nil (nullable jsonb field)
+- Access details via: `ranked_list.calculated_weight_details["penalties"]`
 
 ## Validations
 - `list_id` - presence (required)
@@ -30,6 +85,7 @@ Returns the weight assigned to this list in the ranking configuration
 CREATE TABLE ranked_lists (
   id bigint PRIMARY KEY,
   weight integer,
+  calculated_weight_details jsonb,
   list_id bigint NOT NULL,
   ranking_configuration_id bigint NOT NULL,
   created_at timestamp NOT NULL,
