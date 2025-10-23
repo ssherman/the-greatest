@@ -637,9 +637,9 @@
   integrity sha512-Vvn3zZrhQZkkBE8LSuW3em98c0FwgO4nxzv6OdSxPKJIEKY2bGbHn+mhGIPerzI4twdxaP8/0+06HBpwf345Lw==
 
 "@rails/actioncable@>=7.0":
-  version "8.0.300"
-  resolved "https://registry.yarnpkg.com/@rails/actioncable/-/actioncable-8.0.300.tgz#ae78fbb42ae688f66852206ba02fea3518749791"
-  integrity sha512-X+jxLnyYciTciEeM9crFFsR6DCodCsnoQIzv4hEST6Lx1rEBEjNQbBopnyDT4gr7lBeHJNfb6fEcvZuWFxUSQg==
+  version "8.1.0"
+  resolved "https://registry.yarnpkg.com/@rails/actioncable/-/actioncable-8.1.0.tgz#cd884d50a34af9a8c9149ec4e256fbb99a67b37f"
+  integrity sha512-9WSbN548dplVkfCFJFi/CKrJ+P4runAHZLlpXFn0xL+Y6tFJvo3zp92fr4ON9WOhNt8inetu8NJG1xDDAJ8N8g==
 
 "@rollup/plugin-node-resolve@^16.0.1":
   version "16.0.3"
@@ -947,9 +947,9 @@ color-name@~1.1.4:
   integrity sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==
 
 daisyui@^5.0.43:
-  version "5.3.7"
-  resolved "https://registry.yarnpkg.com/daisyui/-/daisyui-5.3.7.tgz#9dd8c8fc773e5cac60deb6ebeffd51ef75702a0f"
-  integrity sha512-0+8PaSGift0HlIQABCeZzWOBV5Nx/vsI2TihB9hbaEyZENPlZZz+se2JnAH5rz9gBYTyDLB7NJup8hkREr6WBw==
+  version "5.3.8"
+  resolved "https://registry.yarnpkg.com/daisyui/-/daisyui-5.3.8.tgz#8e85174d911c1319f67475eca6ac4f964e44464c"
+  integrity sha512-ihDXb07IzM/2ugkwBWdy2LFCaepdn1oGsKIsR3gNG/VuTAmS60+HUG9rskjR5BzyJOVVUDDpWoiX3PBDIT3DYQ==
 
 deepmerge@^4.2.2:
   version "4.3.1"
