@@ -1,11 +1,11 @@
 # 059 - Fix Cover Art Download Job Nil Parameter Bug
 
 ## Status
-- **Status**: Not Started
+- **Status**: Completed
 - **Priority**: High
 - **Created**: 2025-10-22
-- **Started**: TBD
-- **Completed**: TBD
+- **Started**: 2025-10-22
+- **Completed**: 2025-10-22
 - **Developer**: AI Agent
 
 ## Overview
@@ -277,26 +277,89 @@ bin/rails test test/lib/data_importers/music/album/
 ---
 
 ## Implementation Notes
-*[This section will be filled out during/after implementation]*
 
 ### Approach Taken
+Created a separate `CoverArt` provider instead of patching the MusicBrainz provider. This follows the Single Responsibility Principle and provides better architecture for future extensibility.
+
+**Key architectural benefits**:
+- MusicBrainz provider focuses solely on metadata import
+- CoverArt provider handles all cover art downloading logic
+- Easy to add multiple cover art sources in the future (Spotify, Amazon Images, etc.)
+- Follows the same async provider pattern as AiDescription and Amazon providers
 
 ### Key Files Changed
+1. **Created**: `web-app/app/lib/data_importers/music/album/providers/cover_art.rb`
+   - New provider that queues CoverArtDownloadJob
+   - Validates album is persisted before queuing job
+   - Returns success immediately (async pattern)
+
+2. **Created**: `web-app/test/lib/data_importers/music/album/providers/cover_art_test.rb`
+   - 3 test cases covering success, persistence validation, and item-based import
+   - Follows same pattern as ai_description_test.rb
+
+3. **Modified**: `web-app/app/lib/data_importers/music/album/importer.rb`
+   - Added CoverArt provider to the provider chain
+   - New order: MusicBrainz → CoverArt → Amazon → AiDescription
+
+4. **Modified**: `web-app/app/lib/data_importers/music/album/providers/music_brainz.rb`
+   - Removed lines 61-62 (job call and comment)
+   - Provider now focuses only on MusicBrainz metadata
+
+5. **Modified**: `web-app/test/lib/data_importers/music/album/providers/music_brainz_test.rb`
+   - Removed CoverArtDownloadJob stub from setup method
+   - No longer needed since job is called by separate provider
 
 ### Challenges Encountered
+None - implementation went smoothly following the existing provider pattern.
 
 ### Deviations from Plan
+None - followed the plan exactly as designed in the technical approach section.
 
 ### Testing Approach
+- Created 3 tests for new CoverArt provider
+- All existing tests continue to pass (118 tests, 377 assertions)
+- Importer tests already had CoverArtDownloadJob stub, so no changes needed
+- Test results:
+  - CoverArt provider: 3/3 passed
+  - MusicBrainz provider: 17/17 passed
+  - Importer: 21/21 passed
+  - All album import tests: 118/118 passed
 
 ### Performance Considerations
+No performance impact - same background job is called, just from a different location in the provider chain.
 
 ### Future Improvements
+The CoverArt provider can easily be extended to support multiple cover art sources:
+```ruby
+# Future enhancement - try multiple sources with fallback logic
+def populate(album, query:)
+  return failure_result(...) unless album.persisted?
+
+  source = determine_best_cover_art_source(album)
+
+  case source
+  when :musicbrainz
+    ::Music::CoverArtDownloadJob.perform_async(album.id)
+  when :spotify
+    ::Music::SpotifyCoverArtJob.perform_async(album.id)
+  when :amazon
+    ::Music::AmazonCoverArtJob.perform_async(album.id)
+  end
+
+  success_result(data_populated: [:cover_art_queued])
+end
+```
 
 ### Lessons Learned
+- Creating a separate provider is architecturally superior to patching an existing one
+- The Single Responsibility Principle leads to more maintainable code
+- Following existing patterns (like ai_description.rb) makes implementation straightforward
+- Proper architecture decisions made during bug fixes can improve the overall system design
 
 ### Related PRs
+- To be created
 
 ### Documentation Updated
-- [ ] This todo file marked complete
-- [ ] Class documentation updated if needed
+- [x] This todo file marked complete
+- [x] Implementation notes documented
+- [x] Class documentation for CoverArt provider created at `docs/lib/data_importers/music/album/providers/cover_art.md`

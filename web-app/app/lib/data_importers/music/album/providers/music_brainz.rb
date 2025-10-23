@@ -58,9 +58,6 @@ module DataImporters
             create_identifiers(album, release_group_data)
             create_categories_from_musicbrainz_data(album, release_group_data)
 
-            # Launch cover art download job after successful import
-            ::Music::CoverArtDownloadJob.perform_async(album.id)
-
             success_result(data_populated: data_fields_populated(release_group_data))
           rescue => e
             failure_result(errors: ["MusicBrainz error: #{e.message}"])

@@ -13,9 +13,6 @@ module DataImporters
             @query = ImportQuery.new(artist: @artist, title: "The Wall")
             @album = ::Music::Album.new(title: "The Wall")
             @album.album_artists.build(artist: @artist, position: 1)
-            # Stub the cover art download job since we're testing album provider
-            ::Music::CoverArtDownloadJob.stubs(:perform_async)
-            # Stub the release import job since we're testing album provider
             ::Music::ImportAlbumReleasesJob.stubs(:perform_async)
           end
 
