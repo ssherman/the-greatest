@@ -18,6 +18,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-10-24] [Album Merge Feature](todos/060-album-merge-feature.md)
 - ✅ [2025-10-22] [Fix Cover Art Download Job Nil Parameter Bug](todos/059-fix-cover-art-job-nil-parameter-bug.md)
 - ✅ [2025-10-21] [Calculated Weight Details Field](todos/058-calculated-weight-details.md)
 - ✅ [2025-10-21] [Song Import Missing Artists Investigation and Fix](todos/057-song-import-missing-artists-investigation.md)

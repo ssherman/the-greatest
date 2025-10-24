@@ -8,6 +8,7 @@ class Avo::Resources::MusicAlbum < Avo::BaseResource
 
   def actions
     action Avo::Actions::Music::GenerateAlbumDescription
+    action Avo::Actions::Music::MergeAlbum
   end
 
   def fields
