@@ -68,6 +68,31 @@ class Music::Album < ApplicationRecord
   # Callbacks
   after_commit :queue_release_import, on: :create
 
+  # Class Methods
+  def self.find_duplicates
+    duplicate_titles = Music::Album
+      .select(:title)
+      .group(:title)
+      .having("COUNT(*) > 1")
+      .pluck(:title)
+
+    duplicates = []
+
+    duplicate_titles.each do |title|
+      albums_with_title = Music::Album.where(title: title).includes(:artists)
+
+      grouped_by_artists = albums_with_title.group_by do |album|
+        album.artists.pluck(:id).sort
+      end
+
+      grouped_by_artists.each do |artist_ids, albums|
+        duplicates << albums if albums.count > 1
+      end
+    end
+
+    duplicates
+  end
+
   # Search Methods
   def as_indexed_json
     {
