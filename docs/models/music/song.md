@@ -15,6 +15,9 @@ Represents a musical composition independent of any specific recording. This is 
 - `has_many :inverse_song_relationships, class_name: "Music::SongRelationship", foreign_key: :related_song_id, dependent: :destroy` — Inbound relationships (other songs cover/remix this one)
 - `has_many :original_songs, through: :inverse_song_relationships, source: :song` — Songs that relate to this song
 - `has_many :identifiers, as: :identifiable, dependent: :destroy` — External identifiers for data import and deduplication
+- `has_many :list_items, as: :listable, dependent: :destroy` — Polymorphic association for list membership (user and editorial lists)
+- `has_many :lists, through: :list_items` — All lists containing this song
+- `has_many :ranked_items, as: :item, dependent: :destroy` — **NEW (Oct 2025)**: Rankings of this song in various ranking configurations
 - `has_many :category_items, as: :item, dependent: :destroy` — Polymorphic association for category assignments
 - `has_many :categories, through: :category_items, class_name: "Music::Category"` — All categories this song belongs to
 - `has_many :external_links, as: :parent, dependent: :destroy` — **NEW (Sept 2025)**: External links (purchase, information, reviews) for this song

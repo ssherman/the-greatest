@@ -45,6 +45,9 @@ class Music::Album < ApplicationRecord
   has_many :list_items, as: :listable, dependent: :destroy
   has_many :lists, through: :list_items
 
+  # Ranking associations
+  has_many :ranked_items, as: :item, dependent: :destroy
+
   # Validations
   validates :title, presence: true
   validates :release_year, numericality: {only_integer: true, allow_nil: true}

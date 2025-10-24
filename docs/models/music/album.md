@@ -14,6 +14,9 @@ Represents a canonical album/work (e.g., "Dark Side of the Moon"). This is the c
 - `has_many :images, as: :parent, dependent: :destroy` — **NEW (Sept 2025)**: All images for this album (covers, artwork, liner notes, etc.)
 - `has_one :primary_image, -> { where(primary: true) }, as: :parent, class_name: "Image"` — **NEW (Sept 2025)**: Primary image for ranking views and display
 - `has_many :external_links, as: :parent, dependent: :destroy` — **NEW (Sept 2025)**: External links (purchase, information, reviews) for this album
+- `has_many :list_items, as: :listable, dependent: :destroy` — Polymorphic association for list membership (user and editorial lists)
+- `has_many :lists, through: :list_items` — All lists containing this album
+- `has_many :ranked_items, as: :item, dependent: :destroy` — **NEW (Oct 2025)**: Rankings of this album in various ranking configurations
 
 ## Public Methods
 
@@ -58,3 +61,29 @@ None
 - FriendlyId gem for slug generation and lookup
 - `SearchIndexable` concern for automatic OpenSearch indexing
 - `Search::Music::AlbumIndex` for OpenSearch operations
+
+## Album Merging
+
+**NEW (Oct 2025)**: Albums can be merged when duplicate entries are found (e.g., from multiple MusicBrainz imports).
+
+### Merge Process
+Use the `Music::Album::Merger` service to combine two album records:
+
+```ruby
+result = Music::Album::Merger.call(
+  source: duplicate_album,
+  target: canonical_album
+)
+```
+
+### What Gets Merged
+- Releases, identifiers, categories, images, external links, list items
+- Target album's artists are preserved (source artists are NOT merged)
+- Source album's ranked_items are destroyed (target rankings preserved)
+- Search index automatically updated for both albums
+- Ranking configurations recalculated via background jobs
+
+### Admin Interface
+Available as "Merge Another Album Into This One" action in Avo admin for Music::Album resources.
+
+See [Music::Album::Merger](../../lib/music/album/merger.md) for complete merge documentation.
