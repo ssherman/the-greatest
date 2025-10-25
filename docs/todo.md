@@ -1,8 +1,9 @@
 # The Greatest - Todo List
 
 ## High Priority
-1. [Production Deployment Infrastructure](todos/048-production-deployment-infrastructure.md)
-2. [Movies data model implementation](todos/002-movies-object-model.md)
+1. [Artist Rankings Implementation](todos/061-artist-rankings.md)
+2. [Production Deployment Infrastructure](todos/048-production-deployment-infrastructure.md)
+3. [Movies data model implementation](todos/002-movies-object-model.md)
 
 ## Medium Priority
 2. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
