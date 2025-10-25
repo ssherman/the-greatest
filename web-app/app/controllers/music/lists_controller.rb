@@ -9,14 +9,14 @@ class Music::ListsController < ApplicationController
       .where(lists: {type: "Music::Albums::List"})
       .includes(list: :list_items)
       .order(weight: :desc)
-      .limit(10)
+      .limit(50)
 
     @songs_ranked_lists = @songs_ranking_configuration.ranked_lists
       .joins(:list)
       .where(lists: {type: "Music::Songs::List"})
       .includes(list: :list_items)
       .order(weight: :desc)
-      .limit(10)
+      .limit(50)
   end
 
   private
