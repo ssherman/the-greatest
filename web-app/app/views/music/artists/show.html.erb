@@ -21,6 +21,16 @@
 
         <div class="card-body">
           <div class="space-y-2 text-sm">
+            <% if @artist.ranked_items.joins(:ranking_configuration).where(ranking_configurations: { primary: true }).exists? %>
+              <% ranked_item = @artist.ranked_items.joins(:ranking_configuration).where(ranking_configurations: { primary: true }).first %>
+              <div class="alert alert-info py-2 px-3 text-sm">
+                <div class="flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                  <span><strong>Ranked #<%= ranked_item.rank %></strong> of The Greatest Artists</span>
+                </div>
+              </div>
+            <% end %>
+
             <% if @artist.kind %>
               <div class="badge badge-primary">
                 <%= @artist.kind.titleize %>

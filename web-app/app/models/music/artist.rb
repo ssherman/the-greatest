@@ -41,6 +41,9 @@ class Music::Artist < ApplicationRecord
   has_many :ai_chats, as: :parent, dependent: :destroy
   has_many :identifiers, as: :identifiable, dependent: :destroy
 
+  # Ranking associations
+  has_many :ranked_items, as: :item, dependent: :destroy
+
   # Category associations
   has_many :category_items, as: :item, dependent: :destroy, inverse_of: :item
   has_many :categories, through: :category_items, class_name: "Music::Category", inverse_of: :artists

@@ -18,6 +18,7 @@ Represents a musical artist, which can be either an individual person or a band.
 - `has_many :images, as: :parent, dependent: :destroy` — **NEW (Sept 2025)**: All images for this artist (photos, promotional materials, etc.)
 - `has_one :primary_image, -> { where(primary: true) }, as: :parent, class_name: "Image"` — **NEW (Sept 2025)**: Primary image for ranking views and display
 - `has_many :external_links, as: :parent, dependent: :destroy` — **NEW (Sept 2025)**: External links (purchase, information, reviews) for this artist
+- `has_many :ranked_items, as: :item, dependent: :destroy` — **NEW (Oct 2025)**: Artist rankings from various ranking configurations (used by "The Greatest Artists" feature)
 
 ## Public Methods
 

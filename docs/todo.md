@@ -1,8 +1,7 @@
 # The Greatest - Todo List
 
 ## High Priority
-1. [Artist Rankings Implementation](todos/061-artist-rankings.md)
-2. [Production Deployment Infrastructure](todos/048-production-deployment-infrastructure.md)
+1. [Production Deployment Infrastructure](todos/048-production-deployment-infrastructure.md)
 3. [Movies data model implementation](todos/002-movies-object-model.md)
 
 ## Medium Priority
@@ -19,6 +18,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-10-25] [Artist Rankings Implementation](todos/061-artist-rankings.md)
 - ✅ [2025-10-24] [Album Merge Feature](todos/060-album-merge-feature.md)
 - ✅ [2025-10-22] [Fix Cover Art Download Job Nil Parameter Bug](todos/059-fix-cover-art-job-nil-parameter-bug.md)
 - ✅ [2025-10-21] [Calculated Weight Details Field](todos/058-calculated-weight-details.md)

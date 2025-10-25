@@ -3,16 +3,17 @@
   content_for :meta_description, "Discover definitive rankings of the greatest songs and albums of all time. Expert reviews, curated lists, and comprehensive music analysis."
 %>
 
-<div class="hero min-h-[60vh] bg-gradient-to-r from-purple-600 to-blue-600">
-  <div class="hero-content text-center text-white">
-    <div class="max-w-2xl">
-      <h1 class="mb-6 text-6xl font-bold">The Greatest Music</h1>
-      <p class="mb-8 text-xl">
-        Discover definitive rankings of the greatest songs and albums of all time.
+<div class="bg-gradient-to-r from-purple-600 to-blue-600 py-16">
+  <div class="container mx-auto px-4">
+    <div class="text-center text-white max-w-3xl mx-auto">
+      <h1 class="mb-4 text-4xl md:text-5xl font-bold">The Greatest Music</h1>
+      <p class="mb-6 text-lg">
+        Discover definitive rankings of the greatest songs, albums, and artists of all time.
       </p>
-      <div class="flex gap-4 justify-center">
-        <%= link_to "Top Albums", albums_path, class: "btn btn-primary btn-lg" %>
-        <%= link_to "Top Songs", songs_path, class: "btn btn-outline btn-lg text-white border-white hover:bg-white hover:text-purple-600" %>
+      <div class="flex flex-wrap gap-3 justify-center">
+        <%= link_to "Top Albums", albums_path, class: "btn btn-primary btn-md" %>
+        <%= link_to "Top Songs", songs_path, class: "btn btn-outline btn-md text-white border-white hover:bg-white hover:text-purple-600" %>
+        <%= link_to "Top Artists", artists_path, class: "btn btn-outline btn-md text-white border-white hover:bg-white hover:text-purple-600" %>
       </div>
     </div>
   </div>

@@ -165,3 +165,18 @@ books_inherited:
   max_list_dates_penalty_percentage: 80
   inherit_penalties: true
   inherited_from: books_global
+
+music_artists_global:
+  type: Music::Artists::RankingConfiguration
+  name: "Global Music Artists Ranking"
+  description: "The main ranking configuration for music artists based on their albums and songs"
+  global: true
+  primary: true
+  archived: false
+  published_at: 2025-07-09 23:38:50
+  algorithm_version: 1
+  exponent: 3.0
+  bonus_pool_percentage: 3.0
+  min_list_weight: 1
+  apply_list_dates_penalty: false
+  inherit_penalties: false

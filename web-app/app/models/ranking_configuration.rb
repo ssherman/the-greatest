@@ -146,6 +146,8 @@ class RankingConfiguration < ApplicationRecord
       ItemRankings::Music::Albums::Calculator.new(self)
     when "Music::Songs::RankingConfiguration"
       ItemRankings::Music::Songs::Calculator.new(self)
+    when "Music::Artists::RankingConfiguration"
+      ItemRankings::Music::Artists::Calculator.new(self)
     else
       raise "Unknown ranking configuration type: #{type}"
     end
