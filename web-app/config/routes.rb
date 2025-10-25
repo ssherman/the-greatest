@@ -4,6 +4,10 @@ Rails.application.routes.draw do
     # Lists overview (no ranking configuration support)
     get "lists", to: "music/lists#index", as: :music_lists
 
+    # Artist rankings (outside rc scope - always uses default primary configs for both albums and songs)
+    get "artists", to: "music/artists/ranked_items#index", as: :artists
+    get "artists/page/:page", to: "music/artists/ranked_items#index"
+
     # All music routes with optional ranking configuration parameter
     scope "(/rc/:ranking_configuration_id)" do
       # Album routes

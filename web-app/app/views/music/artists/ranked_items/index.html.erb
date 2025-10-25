@@ -1,0 +1,83 @@
+<%
+  content_for :page_title, "Greatest Artists of All Time Ranked | The Greatest Music"
+  content_for :meta_description, "Discover our definitive ranking of the greatest music artists of all time. Based on their acclaimed albums and songs, explore the artists who shaped music history."
+%>
+
+<div class="container mx-auto px-4 py-8">
+  <div class="mb-8">
+    <h1 class="text-4xl font-bold text-base-content mb-2">The Greatest Artists</h1>
+    <% if @ranking_configuration %>
+      <p class="text-base-content/70">
+        <%= @ranking_configuration.name %>
+        <% if @ranking_configuration.description.present? %>
+          - <%= @ranking_configuration.description %>
+        <% end %>
+      </p>
+    <% end %>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+    <% @artists.each do |ranked_item| %>
+      <% artist = ranked_item.item %>
+      <%= link_to_artist artist, class: "card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow" do %>
+        <figure class="px-4 pt-4">
+          <% if artist.primary_image&.file&.attached? %>
+            <%= image_tag rails_public_blob_url(artist.primary_image.file),
+                alt: artist.name,
+                class: "rounded-xl w-full aspect-square object-cover" %>
+          <% else %>
+            <div class="bg-base-200 rounded-xl w-full aspect-square flex items-center justify-center">
+              <span class="text-base-content/50">No Image</span>
+            </div>
+          <% end %>
+        </figure>
+
+        <div class="card-body p-4">
+          <div class="flex items-start justify-between mb-2">
+            <div class="badge badge-primary badge-lg font-bold">
+              #<%= ranked_item.rank %>
+            </div>
+            <div class="text-right text-sm text-base-content/70">
+              <%= artist.kind.titleize %>
+            </div>
+          </div>
+
+          <h2 class="card-title text-lg font-bold text-base-content mb-1">
+            <%= artist.name %>
+          </h2>
+
+          <% if artist.categories.any? %>
+            <div class="flex flex-wrap gap-1 mt-3">
+              <% artist.categories.limit(3).each do |category| %>
+                <span class="badge badge-ghost badge-sm">
+                  <%= category.name %>
+                </span>
+              <% end %>
+              <% if artist.categories.count > 3 %>
+                <span class="badge badge-ghost badge-sm">
+                  +<%= artist.categories.count - 3 %> more
+                </span>
+              <% end %>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
+    <% end %>
+  </div>
+
+  <% if @artists.empty? %>
+    <div class="text-center py-16">
+      <div class="text-6xl mb-4">🎵</div>
+      <h2 class="text-2xl font-bold text-base-content mb-2">No artists found</h2>
+      <p class="text-base-content/70">
+        Artist rankings haven't been calculated yet.
+      </p>
+    </div>
+  <% end %>
+
+  <% if @pagy && @pagy.pages > 1 %>
+    <div class="flex justify-center mt-8">
+      <%== pagy_nav(@pagy) %>
+    </div>
+  <% end %>
+</div>

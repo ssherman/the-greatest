@@ -8,6 +8,8 @@ class Avo::Resources::MusicArtist < Avo::BaseResource
 
   def actions
     action Avo::Actions::Music::GenerateArtistDescription
+    action Avo::Actions::Music::RefreshArtistRanking
+    action Avo::Actions::Music::RefreshAllArtistsRankings
   end
 
   def fields
