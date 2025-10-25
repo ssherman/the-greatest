@@ -2,6 +2,7 @@
 
 ## High Priority
 1. [Production Deployment Infrastructure](todos/048-production-deployment-infrastructure.md)
+2. [Music Category Show Page](todos/062-music-category-show-page.md)
 3. [Movies data model implementation](todos/002-movies-object-model.md)
 
 ## Medium Priority
