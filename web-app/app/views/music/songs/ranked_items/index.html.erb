@@ -51,9 +51,7 @@
                 </td>
                 <td class="hidden lg:table-cell">
                   <% song.categories.where(category_type: :genre).limit(2).each do |category| %>
-                    <span class="badge badge-ghost badge-sm mr-1">
-                      <%= category.name %>
-                    </span>
+                    <%= link_to_category category, @ranking_configuration, class: "badge badge-ghost badge-sm mr-1 hover:badge-primary transition-colors" %>
                   <% end %>
                 </td>
               </tr>

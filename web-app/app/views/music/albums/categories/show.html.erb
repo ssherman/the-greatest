@@ -1,0 +1,55 @@
+<% content_for :page_title, "#{@category.name} Albums | The Greatest Music" %>
+<%
+  meta_desc = case @category.category_type.to_sym
+  when :genre
+    "Browse all #{@category.name} albums. Comprehensive rankings of the greatest #{@category.name} albums of all time."
+  when :location
+    "Browse all albums from #{@category.name}. Comprehensive rankings of the greatest albums from this region."
+  else
+    "Browse all #{@category.name} albums."
+  end
+%>
+<% content_for :meta_description, meta_desc %>
+
+<div class="container mx-auto px-4 py-8">
+  <div class="mb-8">
+    <div class="flex items-center gap-3 mb-3">
+      <%= link_to music_category_path(@category), class: "btn btn-ghost btn-sm" do %>
+        ← Back to <%= @category.name %>
+      <% end %>
+    </div>
+    <div class="flex items-center gap-3 mb-3">
+      <h1 class="text-4xl font-bold text-base-content"><%= @category.name %> Albums</h1>
+      <span class="badge badge-primary badge-lg"><%= @category.category_type.titleize %></span>
+    </div>
+    <% if @ranking_configuration %>
+      <p class="text-base-content/70">
+        <%= @ranking_configuration.name %>
+        <% if @ranking_configuration.description.present? %>
+          - <%= @ranking_configuration.description %>
+        <% end %>
+      </p>
+    <% end %>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+    <% @albums.each do |ranked_item| %>
+      <%= render Music::Albums::RankedCardComponent.new(ranked_item: ranked_item, ranking_configuration: @ranking_configuration) %>
+    <% end %>
+  </div>
+
+  <% if @albums.empty? %>
+    <div class="text-center py-16">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-24 w-24 mx-auto text-base-content/30 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+      </svg>
+      <p class="text-xl text-base-content/70">No ranked albums found for this category.</p>
+    </div>
+  <% end %>
+
+  <% if @pagy && @pagy.pages > 1 %>
+    <div class="flex justify-center mt-8">
+      <%== pagy_nav(@pagy) %>
+    </div>
+  <% end %>
+</div>

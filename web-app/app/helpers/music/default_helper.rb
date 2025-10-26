@@ -90,4 +90,33 @@ module Music::DefaultHelper
       link_to list.name, path, **options
     end
   end
+
+  def music_category_path_with_rc(category, ranking_configuration = nil)
+    music_category_path(category)
+  end
+
+  def music_artist_category_path_with_rc(category, ranking_configuration = nil)
+    if ranking_configuration && !ranking_configuration.default_primary?
+      music_artist_category_path(category, ranking_configuration_id: ranking_configuration.id)
+    else
+      music_artist_category_path(category)
+    end
+  end
+
+  def music_album_category_path_with_rc(category, ranking_configuration = nil)
+    if ranking_configuration && !ranking_configuration.default_primary?
+      music_album_category_path(category, ranking_configuration_id: ranking_configuration.id)
+    else
+      music_album_category_path(category)
+    end
+  end
+
+  def link_to_category(category, ranking_configuration = nil, **options, &block)
+    path = music_category_path_with_rc(category, ranking_configuration)
+    if block_given?
+      link_to path, **options, &block
+    else
+      link_to category.name, path, **options
+    end
+  end
 end

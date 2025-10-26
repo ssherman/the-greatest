@@ -1,11 +1,27 @@
+<% content_for :page_title, "#{@category.name} Artists | The Greatest Music" %>
 <%
-  content_for :page_title, "Greatest Artists of All Time Ranked | The Greatest Music"
-  content_for :meta_description, "Discover our definitive ranking of the greatest music artists of all time. Based on their acclaimed albums and songs, explore the artists who shaped music history."
+  meta_desc = case @category.category_type.to_sym
+  when :genre
+    "Browse all #{@category.name} artists. Comprehensive rankings of the greatest #{@category.name} musicians and bands."
+  when :location
+    "Browse all artists from #{@category.name}. Comprehensive rankings of the greatest musicians from this region."
+  else
+    "Browse all #{@category.name} artists."
+  end
 %>
+<% content_for :meta_description, meta_desc %>
 
 <div class="container mx-auto px-4 py-8">
   <div class="mb-8">
-    <h1 class="text-4xl font-bold text-base-content mb-2">The Greatest Artists</h1>
+    <div class="flex items-center gap-3 mb-3">
+      <%= link_to music_category_path(@category), class: "btn btn-ghost btn-sm" do %>
+        ← Back to <%= @category.name %>
+      <% end %>
+    </div>
+    <div class="flex items-center gap-3 mb-3">
+      <h1 class="text-4xl font-bold text-base-content"><%= @category.name %> Artists</h1>
+      <span class="badge badge-primary badge-lg"><%= @category.category_type.titleize %></span>
+    </div>
     <% if @ranking_configuration %>
       <p class="text-base-content/70">
         <%= @ranking_configuration.name %>
@@ -19,7 +35,7 @@
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
     <% @artists.each do |ranked_item| %>
       <% artist = ranked_item.item %>
-      <%= link_to_artist artist, class: "card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow" do %>
+      <%= link_to artist_path(artist), class: "card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow" do %>
         <figure class="px-4 pt-4">
           <% if artist.primary_image&.file&.attached? %>
             <%= image_tag rails_public_blob_url(artist.primary_image.file),
@@ -33,13 +49,8 @@
         </figure>
 
         <div class="card-body p-4">
-          <div class="flex items-start justify-between mb-2">
-            <div class="badge badge-primary badge-lg font-bold">
-              #<%= ranked_item.rank %>
-            </div>
-            <div class="text-right text-sm text-base-content/70">
-              <%= artist.kind.titleize %>
-            </div>
+          <div class="badge badge-primary badge-lg font-bold mb-2">
+            #<%= ranked_item.rank %>
           </div>
 
           <h2 class="card-title text-lg font-bold text-base-content mb-1">
@@ -49,7 +60,9 @@
           <% if artist.categories.any? %>
             <div class="flex flex-wrap gap-1 mt-3">
               <% artist.categories.limit(3).each do |category| %>
-                <%= link_to_category category, nil, class: "badge badge-ghost badge-sm hover:badge-primary transition-colors" %>
+                <span class="badge badge-ghost badge-sm">
+                  <%= category.name %>
+                </span>
               <% end %>
               <% if artist.categories.count > 3 %>
                 <span class="badge badge-ghost badge-sm">
@@ -65,11 +78,10 @@
 
   <% if @artists.empty? %>
     <div class="text-center py-16">
-      <div class="text-6xl mb-4">🎵</div>
-      <h2 class="text-2xl font-bold text-base-content mb-2">No artists found</h2>
-      <p class="text-base-content/70">
-        Artist rankings haven't been calculated yet.
-      </p>
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-24 w-24 mx-auto text-base-content/30 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+      </svg>
+      <p class="text-xl text-base-content/70">No ranked artists found for this category.</p>
     </div>
   <% end %>
 
