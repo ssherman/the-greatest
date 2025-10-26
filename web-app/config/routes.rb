@@ -8,6 +8,9 @@ Rails.application.routes.draw do
     get "artists", to: "music/artists/ranked_items#index", as: :artists
     get "artists/page/:page", to: "music/artists/ranked_items#index"
 
+    # Category pages (outside rc scope - always uses default primary configs for both artists and albums)
+    get "categories/:id", to: "music/categories#show", as: :music_category
+
     # All music routes with optional ranking configuration parameter
     scope "(/rc/:ranking_configuration_id)" do
       # Album routes
@@ -15,6 +18,7 @@ Rails.application.routes.draw do
       get "albums/page/:page", to: "music/albums/ranked_items#index", constraints: {page: /\d+|__pagy_page__/}
       get "albums/lists", to: "music/albums/lists#index", as: :music_albums_lists
       get "albums/lists/:id", to: "music/albums/lists#show", as: :music_album_list
+      get "albums/categories/:id", to: "music/albums/categories#show", as: :music_album_category
       get "albums/:id", to: "music/albums#show", as: :album
 
       # Song routes
@@ -25,6 +29,7 @@ Rails.application.routes.draw do
       get "songs/:id", to: "music/songs#show", as: :song
 
       # Artist routes
+      get "artists/categories/:id", to: "music/artists/categories#show", as: :music_artist_category
       get "artists/:id", to: "music/artists#show", as: :artist
     end
   end

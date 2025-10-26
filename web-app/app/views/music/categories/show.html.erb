@@ -1,0 +1,99 @@
+<% content_for :page_title, "#{@category.name} - #{@category.category_type.titleize} | The Greatest Music" %>
+<%
+  meta_desc = case @category.category_type.to_sym
+  when :genre
+    "Explore the greatest #{@category.name} music. Top ranked albums and artists in the #{@category.name} genre."
+  when :location
+    "Explore the greatest music from #{@category.name}. Top ranked albums and artists."
+  else
+    "Explore the greatest #{@category.category_type} music in #{@category.name}. Top ranked albums and artists."
+  end
+%>
+<% content_for :meta_description, meta_desc %>
+
+<div class="container mx-auto px-4 py-8">
+  <div class="mb-8">
+    <div class="flex items-center gap-3 mb-3">
+      <h1 class="text-4xl font-bold text-base-content"><%= @category.name %></h1>
+      <span class="badge badge-primary badge-lg"><%= @category.category_type.titleize %></span>
+    </div>
+    <% if @category.description.present? %>
+      <p class="text-base-content/70 text-lg"><%= @category.description %></p>
+    <% end %>
+  </div>
+
+  <% if @artists.any? %>
+    <div class="mb-12">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold text-base-content">Top Artists</h2>
+        <%= link_to "See all #{@category.name} artists →", music_artist_category_path(@category), class: "btn btn-primary" %>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <% @artists.each do |ranked_item| %>
+          <% artist = ranked_item.item %>
+          <%= link_to artist_path(artist), class: "card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow" do %>
+            <figure class="px-4 pt-4">
+              <% if artist.primary_image&.file&.attached? %>
+                <%= image_tag rails_public_blob_url(artist.primary_image.file),
+                    alt: artist.name,
+                    class: "rounded-xl w-full aspect-square object-cover" %>
+              <% else %>
+                <div class="bg-base-200 rounded-xl w-full aspect-square flex items-center justify-center">
+                  <span class="text-base-content/50">No Image</span>
+                </div>
+              <% end %>
+            </figure>
+
+            <div class="card-body p-4">
+              <div class="badge badge-primary badge-lg font-bold mb-2">
+                #<%= ranked_item.rank %>
+              </div>
+
+              <h2 class="card-title text-lg font-bold text-base-content mb-1">
+                <%= artist.name %>
+              </h2>
+
+              <% if artist.categories.any? %>
+                <div class="flex flex-wrap gap-1 mt-3">
+                  <% artist.categories.limit(3).each do |category| %>
+                    <span class="badge badge-ghost badge-sm">
+                      <%= category.name %>
+                    </span>
+                  <% end %>
+                  <% if artist.categories.count > 3 %>
+                    <span class="badge badge-ghost badge-sm">
+                      +<%= artist.categories.count - 3 %> more
+                    </span>
+                  <% end %>
+                </div>
+              <% end %>
+            </div>
+          <% end %>
+        <% end %>
+      </div>
+    </div>
+  <% end %>
+
+  <% if @albums.any? %>
+    <div class="mb-12">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold text-base-content">Top Albums</h2>
+        <%= link_to "See all #{@category.name} albums →", music_album_category_path(@category), class: "btn btn-primary" %>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <% @albums.each do |ranked_item| %>
+          <%= render Music::Albums::RankedCardComponent.new(ranked_item: ranked_item, ranking_configuration: @album_rc) %>
+        <% end %>
+      </div>
+    </div>
+  <% end %>
+
+  <% if @artists.empty? && @albums.empty? %>
+    <div class="text-center py-16">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-24 w-24 mx-auto text-base-content/30 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+      </svg>
+      <p class="text-xl text-base-content/70">No ranked items found for this category.</p>
+    </div>
+  <% end %>
+</div>

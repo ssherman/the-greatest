@@ -947,9 +947,9 @@ color-name@~1.1.4:
   integrity sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==
 
 daisyui@^5.0.43:
-  version "5.3.8"
-  resolved "https://registry.yarnpkg.com/daisyui/-/daisyui-5.3.8.tgz#8e85174d911c1319f67475eca6ac4f964e44464c"
-  integrity sha512-ihDXb07IzM/2ugkwBWdy2LFCaepdn1oGsKIsR3gNG/VuTAmS60+HUG9rskjR5BzyJOVVUDDpWoiX3PBDIT3DYQ==
+  version "5.3.10"
+  resolved "https://registry.yarnpkg.com/daisyui/-/daisyui-5.3.10.tgz#36d386fd02c2eb38934fbcc06a54fadb9421e0f1"
+  integrity sha512-vmjyPmm0hvFhA95KB6uiGmWakziB2pBv6CUcs5Ka/3iMBMn9S+C3SZYx9G9l2JrgTZ1EFn61F/HrPcwaUm2kLQ==
 
 deepmerge@^4.2.2:
   version "4.3.1"

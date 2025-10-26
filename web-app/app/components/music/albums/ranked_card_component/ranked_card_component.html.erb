@@ -1,0 +1,49 @@
+<%= link_to_album album, ranking_configuration, class: "card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow", data: { turbo_frame: "_top" } do %>
+  <figure class="px-4 pt-4">
+    <% if album.primary_image&.file&.attached? %>
+      <%= image_tag rails_public_blob_url(album.primary_image.file),
+          alt: album.title,
+          class: "rounded-xl w-full aspect-square object-cover" %>
+    <% else %>
+      <div class="bg-base-200 rounded-xl w-full aspect-square flex items-center justify-center">
+        <span class="text-base-content/50">No Image</span>
+      </div>
+    <% end %>
+  </figure>
+
+  <div class="card-body p-4">
+    <div class="flex items-start justify-between mb-2">
+      <div class="badge badge-primary badge-lg font-bold">
+        #<%= ranked_item.rank %>
+      </div>
+      <div class="text-right text-sm text-base-content/70">
+        <% if album.release_year %>
+          <%= album.release_year %>
+        <% end %>
+      </div>
+    </div>
+
+    <h2 class="card-title text-lg font-bold text-base-content mb-1">
+      <%= album.title %>
+    </h2>
+
+    <p class="text-base-content/80 mb-3">
+      by <%= album.artists.map(&:name).join(", ") %>
+    </p>
+
+    <% if album.categories.any? %>
+      <div class="flex flex-wrap gap-1">
+        <% album.categories.limit(3).each do |category| %>
+          <span class="badge badge-ghost badge-sm">
+            <%= category.name %>
+          </span>
+        <% end %>
+        <% if album.categories.count > 3 %>
+          <span class="badge badge-ghost badge-sm">
+            +<%= album.categories.count - 3 %> more
+          </span>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+<% end %>
