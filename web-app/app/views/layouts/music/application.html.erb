@@ -7,6 +7,13 @@
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
 
+    <%= favicon_link_tag "music/favicon/favicon.ico" %>
+    <link rel="icon" type="image/png" href="<%= image_path('music/favicon/favicon-96x96.png') %>" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="<%= image_path('music/favicon/favicon.svg') %>" />
+    <link rel="apple-touch-icon" sizes="180x180" href="<%= image_path('music/favicon/apple-touch-icon.png') %>" />
+    <meta name="apple-mobile-web-app-title" content="<%= domain_name %>" />
+    <link rel="manifest" href="<%= asset_path('music/favicon/site.webmanifest') %>" />
+
     <%= stylesheet_link_tag "music", "data-turbo-track": "reload" %>
     <%= javascript_include_tag "application", "data-turbo-track": "reload" %>
   </head>
@@ -28,7 +35,7 @@
           </ul>
         </div>
         <%= link_to "/", class: "btn btn-ghost text-xl" do %>
-          <span class="text-2xl mr-2">🎵</span>
+          <%= image_tag "music/logo.gif", alt: "The Greatest Music", class: "w-8 h-8 mr-2" %>
           <%= domain_name %>
         <% end %>
       </div>
