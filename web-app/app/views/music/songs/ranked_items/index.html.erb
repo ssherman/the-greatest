@@ -24,37 +24,13 @@
             <tr>
               <th class="w-20 text-center">Rank</th>
               <th>Song</th>
-              <th class="hidden lg:table-cell">Year</th>
-              <th class="hidden lg:table-cell">Genres</th>
+              <th>Artist</th>
+              <th>Year</th>
             </tr>
           </thead>
           <tbody>
             <% @songs.each do |ranked_item| %>
-              <% song = ranked_item.item %>
-              <tr class="hover">
-                <td class="text-center">
-                  <div class="badge badge-primary badge-lg font-bold">
-                    #<%= ranked_item.rank %>
-                  </div>
-                </td>
-                <td>
-                  <%= link_to_song song, @ranking_configuration, class: "font-bold text-lg hover:text-primary" %>
-                  <div class="text-sm text-base-content/70">
-                    by
-                    <% song.artists.each_with_index do |artist, index| %>
-                      <%= link_to_artist artist, class: "hover:text-primary" %><%= index < song.artists.count - 1 ? ", " : "" %>
-                    <% end %>
-                  </div>
-                </td>
-                <td class="hidden lg:table-cell text-base-content/60">
-                  <%= song.release_year %>
-                </td>
-                <td class="hidden lg:table-cell">
-                  <% song.categories.where(category_type: :genre).limit(2).each do |category| %>
-                    <%= link_to_category category, @ranking_configuration, class: "badge badge-ghost badge-sm mr-1 hover:badge-primary transition-colors" %>
-                  <% end %>
-                </td>
-              </tr>
+              <%= render Music::Songs::ListItemComponent.new(song: ranked_item.item, ranked_item: ranked_item, ranking_configuration: @ranking_configuration) %>
             <% end %>
           </tbody>
         </table>

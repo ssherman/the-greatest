@@ -1,0 +1,80 @@
+<div class="container mx-auto px-4 py-8">
+  <div class="mb-8">
+    <h1 class="text-4xl font-bold text-base-content mb-2">
+      Search Results
+      <% if @query.present? %>
+        for "<%= @query %>"
+      <% end %>
+    </h1>
+    <% if @total_count > 0 %>
+      <p class="text-base-content/70">
+        Found <%= pluralize(@total_count, "result") %>
+      </p>
+    <% end %>
+  </div>
+
+  <% if @query.blank? %>
+    <%= render Music::Search::EmptyStateComponent.new(message: "Enter a search term to find artists, albums, and songs") %>
+
+  <% elsif @total_count == 0 %>
+    <%= render Music::Search::EmptyStateComponent.new(message: "No results found for \"#{@query}\"") %>
+
+  <% else %>
+    <% if @artists.any? %>
+      <section class="mb-12">
+        <h2 class="text-2xl font-bold text-base-content mb-4 flex items-center">
+          Artists
+          <span class="badge badge-ghost badge-lg ml-2"><%= @artists.size %></span>
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <% @artists.each do |artist| %>
+            <%= render Music::Artists::CardComponent.new(artist: artist) %>
+          <% end %>
+        </div>
+      </section>
+    <% end %>
+
+    <% if @albums.any? %>
+      <section class="mb-12">
+        <h2 class="text-2xl font-bold text-base-content mb-4 flex items-center">
+          Albums
+          <span class="badge badge-ghost badge-lg ml-2"><%= @albums.size %></span>
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <% @albums.each do |album| %>
+            <%= render Music::Albums::CardComponent.new(album: album) %>
+          <% end %>
+        </div>
+      </section>
+    <% end %>
+
+    <% if @songs.any? %>
+      <section class="mb-12">
+        <h2 class="text-2xl font-bold text-base-content mb-4 flex items-center">
+          Songs
+          <span class="badge badge-ghost badge-lg ml-2"><%= @songs.size %></span>
+        </h2>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body p-0">
+            <div class="overflow-x-auto">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Song</th>
+                    <th>Artist</th>
+                    <th>Year</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% @songs.each do |song| %>
+                    <%= render Music::Songs::ListItemComponent.new(song: song) %>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+    <% end %>
+  <% end %>
+</div>

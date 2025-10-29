@@ -1,12 +1,12 @@
 # 063 - Public Search Implementation
 
 ## Status
-- **Status**: Not Started
+- **Status**: Completed
 - **Priority**: High
 - **Created**: 2025-10-26
-- **Started**:
-- **Completed**:
-- **Developer**: AI Assistant
+- **Started**: 2025-10-28
+- **Completed**: 2025-10-28
+- **Developer**: AI Assistant (Claude)
 
 ## Overview
 Implement a public-facing search feature that allows users to search across artists, albums, and songs simultaneously from a top-level search input in the header. The search should leverage the existing OpenSearch infrastructure and return combined, relevant results across all three music model types.
@@ -551,24 +551,348 @@ Usage in rankings: `<%= render Music::Songs::ListItemComponent.new(song: ranked_
 ---
 
 ## Implementation Notes
-*[This section will be filled out during/after implementation]*
 
 ### Approach Taken
 
+Implemented the public search feature by manually creating the controller (should have used generator), view, and ViewComponents. The implementation follows the planned approach with a few simplifications.
+
+**Controller Creation:**
+- Created `Music::SearchesController` manually (⚠️ mistake - should have used generator)
+- Implemented `index` action with search logic
+- Created private methods to load and convert search results
+
+**ViewComponent Creation:**
+- Generated three new components using `rails generate component`:
+  - `Music::Search::EmptyStateComponent`
+  - `Music::Artists::CardComponent`
+  - `Music::Songs::ListItemComponent`
+- Renamed existing `Music::Albums::RankedCardComponent` to `CardComponent`
+- Updated all components to support optional rank parameter
+
+**View Implementation:**
+- Created search results view with grouped sections
+- Added search form to navbar in music layout
+- Used ViewComponents for consistent rendering
+
 ### Key Files Changed
+
+**New Files:**
+- `app/controllers/music/searches_controller.rb` - Search controller
+- `app/views/music/searches/index.html.erb` - Search results view
+- `app/components/music/search/empty_state_component.rb` + template
+- `app/components/music/artists/card_component.rb` + template
+- `app/components/music/songs/list_item_component.rb` + template
+- `test/controllers/music/searches_controller_test.rb` - Controller tests
+- `docs/controllers/music/searches_controller.md` - Controller documentation
+
+**Modified Files:**
+- `config/routes.rb` - Added search route
+- `app/views/layouts/music/application.html.erb` - Added search form to navbar
+- `app/components/music/albums/ranked_card_component.rb` → `card_component.rb` (renamed)
+- `app/views/music/albums/ranked_items/index.html.erb` - Updated to use renamed component
+- `app/views/music/artists/ranked_items/index.html.erb` - Refactored to use new component
+- `app/views/music/songs/ranked_items/index.html.erb` - Refactored to use new component + removed genres column
+- `app/lib/search/music/search/artist_general.rb` - Changed match operator to "and"
+- `app/lib/search/music/search/album_general.rb` - Changed match operator to "and"
+- `app/lib/search/music/search/song_general.rb` - Changed match operator to "and"
+- `app/javascript/controllers/authentication_controller.js` - Fixed button selector
+- `test/controllers/music/default_controller_test.rb` - Simplified HTML tests
+- `docs/testing.md` - Added controller testing guidelines
+- `docs/dev-core-values.md` - Added generator usage guidelines
 
 ### Challenges Encountered
 
+#### 1. Namespace Collision (NameError)
+**Problem:** `Music::Search::Music` - Ruby looked for `Music::Search::Music::Search::ArtistGeneral` instead of `Search::Music::Search::ArtistGeneral`
+
+**Solution:** Added leading `::` to all search class references to force root namespace lookup: `::Search::Music::Search::ArtistGeneral`
+
+**Lesson:** Inside a namespaced module, always use `::` prefix for classes outside that namespace.
+
+#### 2. No Search Results Returned
+**Problem:** OpenSearch returned results but controller displayed empty arrays
+
+**Solution:** OpenSearch returns string IDs but ActiveRecord expects integers. Added `.to_i` conversion:
+```ruby
+ids = results.map { |r| r[:id].to_i }.uniq
+```
+
+**Lesson:** Always check data types when bridging OpenSearch and ActiveRecord.
+
+#### 3. Turbo Form Submission Breaking Modal
+**Problem:** Search form submission caused login modal to randomly appear and created duplicate login buttons
+
+**Solution:** Disabled Turbo for search form with `data: { turbo: false }`
+
+**Reason:** Form submission was interfering with modal state management.
+
+#### 4. Artist Card Layout Broken (Horizontal Instead of Vertical)
+**Problem:** Artist cards displayed horizontally (image left, text right) instead of vertically stacked
+
+**Solution:** Changed card structure - made `<div class="card">` the outer wrapper instead of wrapping entire card in a link. Only image and title are links now.
+
+**Lesson:** DaisyUI card structure is sensitive to which element has the `.card` class.
+
+#### 5. Duplicate Login Buttons in Navbar
+**Problem:** Search button was displaying "Login" text instead of search icon SVG
+
+**Root Cause:** `authentication_controller.js` used selector `.navbar-end .btn` which matched BOTH the search button and login button, then set textContent on the search button.
+
+**Solution:**
+- Changed JavaScript selector from `.navbar-end .btn` to `getElementById('navbar_login_button')`
+- Added explicit `id="navbar_login_button"` to login button
+- Changed search button from `button_tag` helper to plain HTML `<button>` tag
+
+**Lesson:** CSS selectors in JavaScript must be specific enough to avoid unintended matches.
+
+#### 6. Search Quality Issues - "The Cure" Returning "The Band"
+**Problem:** Searching "The Cure" returned "The Band" and "The Zombies" because search used OR logic
+
+**Solution:** Changed OpenSearch match queries from `operator: "or"` (default) to `operator: "and"` in all three search classes
+
+**Lesson:** OpenSearch defaults to OR matching. For phrase searches, require ALL terms with AND operator.
+
+#### 7. Missing Artist from Index
+**Problem:** "Depeche Mode" artist existed in database but not returning in search results
+
+**Root Cause:** Artist was missing from OpenSearch index (2070 in DB vs 2069 in index)
+
+**Solution:** Re-indexed the missing artist using `::Search::Music::ArtistIndex.index_item(artist)`
+
+**Lesson:** Always verify data is in search index, not just database.
+
+#### 8. No Tests Created Initially
+**Problem:** Manually created controller without using generator, so no test file was created
+
+**Solution:** Manually wrote comprehensive test file with 10 tests
+
+**Lesson:** ⚠️ ALWAYS use Rails generators - they automatically create test files with proper structure.
+
+#### 9. Brittle HTML Tests
+**Problem:** Initial tests checked specific CSS classes, heading sizes, and element order - too fragile for UI changes
+
+**Solution:** Simplified tests to only verify:
+- No errors/exceptions (`assert_response :success`)
+- Controller behavior (correct method parameters)
+- No HTML structure testing
+
+**Lesson:** Controller tests should validate behavior, not view implementation. "If a designer could change it, don't test it."
+
 ### Deviations from Plan
+
+#### 1. Removed Dynamic Section Ordering
+**Original Plan:** Order sections by highest relevance score (e.g., if songs score highest, show songs first)
+
+**Actual Implementation:** Fixed order - Artists → Albums → Songs
+
+**Rationale:** Simpler code, more predictable UX. Users expect consistent section ordering.
+
+**Code Removed:**
+- `determine_section_order` method
+- `@ordered_sections` logic
+- Score comparison between types
+
+#### 2. Reduced Song Result Limit
+**Original Plan:** 25 results for all types
+
+**Actual Implementation:** 25 artists, 25 albums, 10 songs
+
+**Rationale:** Songs display in table format taking more vertical space. 10 songs is sufficient without pagination.
+
+#### 3. Removed Genres Column from Song Tables
+**Discovered:** Songs don't have genres populated in the database
+
+**Change:** Updated song table headers from "Song / Year / Genres" to "Song / Artist / Year"
+
+**Files Updated:**
+- `Music::Songs::ListItemComponent` template
+- `app/views/music/songs/ranked_items/index.html.erb`
+- `app/views/music/searches/index.html.erb`
+
+#### 4. Did Not Use Generator for Controller
+**Plan:** Should have used `rails generate controller Music::Searches index`
+
+**Actual:** Manually created controller file
+
+**Impact:** Had to manually create test file afterward, missing proper generator boilerplate
+
+**Documentation Updated:** Added generator guidelines to `docs/dev-core-values.md` to prevent future mistakes
 
 ### Code Examples
 
+**Namespace Resolution:**
+```ruby
+# ❌ Wrong - causes NameError inside Music module
+Search::Music::Search::ArtistGeneral.call(@query, size: 25)
+
+# ✅ Correct - forces root namespace lookup
+::Search::Music::Search::ArtistGeneral.call(@query, size: 25)
+```
+
+**ID Conversion and Deduplication:**
+```ruby
+def load_artists(results)
+  return [] if results.empty?
+  ids = results.map { |r| r[:id].to_i }.uniq  # Convert strings to integers, remove duplicates
+  records_by_id = Music::Artist.where(id: ids)
+    .includes(:categories, :primary_image)
+    .index_by(&:id)
+  ids.map { |id| records_by_id[id] }.compact  # Preserve OpenSearch order
+end
+```
+
+**Turbo Disabling:**
+```erb
+<%= form_with url: search_path, method: :get, data: { turbo: false }, class: "flex" do |f| %>
+  <%# form fields %>
+<% end %>
+```
+
+**OpenSearch AND Operator:**
+```ruby
+# Changed in artist_general.rb, album_general.rb, song_general.rb
+::Search::Shared::Utils.build_match_query("title", cleaned_text, boost: 8.0, operator: "and")
+```
+
 ### Testing Approach
+
+**Test File:** `test/controllers/music/searches_controller_test.rb`
+
+**Coverage (10 tests):**
+1. Blank query handling
+2. Empty query parameter handling
+3. No results without error
+4. Artist results without error
+5. Album results without error
+6. Song results without error
+7. Mixed results without error
+8. Correct size parameters (25/25/10)
+9. Special characters in query
+10. Duplicate ID handling
+
+**Key Testing Decisions:**
+- Mock search classes with Mocha (`stubs(:call).returns(...)`)
+- Test controller behavior, not HTML structure
+- Only verify HTTP response codes and method parameters
+- Avoid brittle tests that break with UI changes
+
+**Additional Testing Documentation:**
+- Created `docs/testing.md` with controller testing guidelines
+- Added "what NOT to test" section with examples
+- Documented the "designer rule": If a designer could change it, don't test it
 
 ### Performance Considerations
 
+**N+1 Prevention:**
+- Eager load `:categories`, `:primary_image` for artists
+- Eager load `:artists`, `:categories`, `:primary_image` for albums
+- Eager load `:artists`, `:categories` for songs
+
+**Query Optimization:**
+- Three separate OpenSearch queries (sequential, not parallel)
+- Limited result sets (25/25/10) to prevent excessive data
+- Use `index_by(&:id)` for efficient lookup when preserving order
+
+**Search Quality:**
+- Changed to AND operator for better phrase matching
+- All words in query must match for result to appear
+
 ### Lessons Learned
 
+#### 1. Always Use Generators
+**Mistake:** Manually created controller without using `rails generate controller Music::Searches index`
+
+**Impact:**
+- No test file created automatically
+- Had to manually write tests later
+- Missed generator boilerplate and proper setup
+
+**Solution:** Updated `docs/dev-core-values.md` with explicit generator guidelines
+
+**Generators to Always Use:**
+- `rails generate controller`
+- `rails generate model`
+- `rails generate component`
+- `rails generate stimulus`
+- `rails generate avo:resource`
+
+#### 2. Test Behavior, Not Implementation
+**Mistake:** Initial tests verified specific CSS classes, exact text, element order
+
+**Impact:** Tests would break with reasonable UI changes
+
+**Solution:**
+- Simplified tests to only verify no errors and correct behavior
+- Documented guidelines in `docs/testing.md`
+- Fixed existing brittle test in `Music::DefaultControllerTest`
+
+**Rule:** "If a designer could change it without consulting a developer, don't test it"
+
+#### 3. Check Namespace Context
+**Mistake:** Used relative class names inside namespaced module causing NameError
+
+**Solution:** Always use `::` prefix for classes outside current namespace
+
+**Pattern:**
+```ruby
+module Music
+  class SearchesController
+    # Inside Music module, need :: to escape to root
+    ::Search::Music::Search::ArtistGeneral.call(...)
+  end
+end
+```
+
+#### 4. Verify Search Index Completeness
+**Mistake:** Assumed all database records were in search index
+
+**Discovery:** One artist missing from index (2070 DB vs 2069 index)
+
+**Solution:** Always verify index counts match database counts, re-index if needed
+
+#### 5. OpenSearch Defaults to OR Matching
+**Mistake:** Didn't realize OpenSearch uses OR by default for multi-word queries
+
+**Impact:** "The Cure" matched "The Band" (matched on "The")
+
+**Solution:** Explicitly set `operator: "and"` for phrase searches
+
+#### 6. JavaScript Selector Specificity Matters
+**Mistake:** Used `.navbar-end .btn` selector which matched multiple buttons
+
+**Impact:** Modified wrong button's content
+
+**Solution:** Use ID selectors or more specific CSS selectors to avoid collisions
+
 ### Related PRs
+- Not applicable (direct commits to branch)
 
 ### Documentation Updated
+- [x] Created `docs/controllers/music/searches_controller.md` - Controller class documentation
+- [x] Created `docs/testing.md` - Testing guidelines with controller test best practices
+- [x] Updated `docs/dev-core-values.md` - Added generator usage guidelines
+- [x] Updated this todo file with complete implementation notes
+
+### Future Improvements
+Based on implementation experience:
+
+**Search Quality:**
+- Add fuzzy matching for typos
+- Implement "Did you mean?" suggestions
+- Add autocomplete dropdown with top 5 results
+
+**UI Enhancements:**
+- Pagination for large result sets
+- Keyboard shortcut (/ key) to focus search
+- Highlight matching terms in results
+- Show recent searches for logged-in users
+
+**Performance:**
+- Consider parallel search execution
+- Add result caching for common queries
+- Monitor search performance metrics
+
+**Testing:**
+- Add integration tests for full search workflow
+- Consider adding system tests for UI interactions
+- Monitor test coverage (currently at controller level only)

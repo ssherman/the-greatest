@@ -93,11 +93,29 @@
 - **RESTful routes**: Maintain predictable URL patterns
 - **Testing approach**: Minitest with fixtures (see testing-guide.md)
 - **Default tools**: Prefer Rails built-ins over external gems
+- **Always use generators**: ALWAYS use Rails generators to create new files - they automatically create test files and follow conventions
+  ```bash
+  # ✅ Correct - Use generators
+  rails generate controller Music::Searches index
+  rails generate model Music::Artist name:string slug:string:uniq
+  rails generate stimulus music/player
+  rails generate component Music::Artists::Card artist
+  rails generate avo:resource Music::Artist
+
+  # ❌ Incorrect - Don't manually create files
+  touch app/controllers/music/searches_controller.rb
+  touch app/models/music/artist.rb
+  ```
+  **Why?** Generators automatically:
+  - Create test files in the correct location with proper namespacing
+  - Follow Rails naming conventions and file structure
+  - Set up boilerplate code correctly
+  - Prevent common mistakes and oversights
 -   **Rails 8 enum syntax**: Always use the new format with colon prefix
   ```ruby
   # ✅ Correct Rails 8 syntax
   enum :dynamic_type, { number_of_voters: 0, percentage_western: 1, voter_names_unknown: 2 }
-  
+
   # ❌ Old Rails syntax (will cause errors)
   enum dynamic_type: { number_of_voters: 0, percentage_western: 1, voter_names_unknown: 2 }
   ```

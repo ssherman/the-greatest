@@ -1,0 +1,24 @@
+<tr class="hover">
+  <% if show_rank? %>
+    <td class="text-center">
+      <div class="badge badge-primary badge-lg font-bold">
+        #<%= ranked_item.rank %>
+      </div>
+    </td>
+  <% elsif show_index %>
+    <td class="text-center text-base-content/60">
+      <%= show_index %>
+    </td>
+  <% end %>
+  <td>
+    <%= link_to_song song, ranking_configuration, class: "font-bold text-lg hover:text-primary" %>
+  </td>
+  <td class="text-base-content/70">
+    <% song.artists.each_with_index do |artist, index| %>
+      <%= link_to_artist artist, class: "hover:text-primary" %><%= index < song.artists.count - 1 ? ", " : "" %>
+    <% end %>
+  </td>
+  <td class="text-base-content/60">
+    <%= song.release_year %>
+  </td>
+</tr>

@@ -30,8 +30,8 @@ module Search
             # Exact match on name gets highest boost
             ::Search::Shared::Utils.build_match_phrase_query("name", cleaned_text, boost: 10.0),
 
-            # Regular match on name with high boost
-            ::Search::Shared::Utils.build_match_query("name", cleaned_text, boost: 5.0),
+            # Regular match on name with high boost (requires all words)
+            ::Search::Shared::Utils.build_match_query("name", cleaned_text, boost: 5.0, operator: "and"),
 
             # Keyword exact match for precise matches
             ::Search::Shared::Utils.build_term_query("name.keyword", cleaned_text.downcase, boost: 8.0)

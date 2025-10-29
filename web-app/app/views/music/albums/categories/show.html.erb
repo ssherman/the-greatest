@@ -34,7 +34,7 @@
 
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
     <% @albums.each do |ranked_item| %>
-      <%= render Music::Albums::RankedCardComponent.new(ranked_item: ranked_item, ranking_configuration: @ranking_configuration) %>
+      <%= render Music::Albums::CardComponent.new(ranked_item: ranked_item, ranking_configuration: @ranking_configuration) %>
     <% end %>
   </div>
 
