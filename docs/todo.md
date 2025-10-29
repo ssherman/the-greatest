@@ -3,6 +3,7 @@
 ## High Priority
 1. [Production Deployment Infrastructure](todos/048-production-deployment-infrastructure.md)
 2. [Movies data model implementation](todos/002-movies-object-model.md)
+3. [Enrich Song List items_json with MusicBrainz Data](todos/064-import-song-list-from-musicbrainz-non-series.md)
 
 ## Medium Priority
 2. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
