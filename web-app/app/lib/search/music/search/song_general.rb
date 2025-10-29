@@ -30,14 +30,14 @@ module Search
             # Exact match on title gets highest boost
             ::Search::Shared::Utils.build_match_phrase_query("title", cleaned_text, boost: 10.0),
 
-            # Regular match on title with high boost
-            ::Search::Shared::Utils.build_match_query("title", cleaned_text, boost: 8.0),
+            # Regular match on title with high boost (requires all words)
+            ::Search::Shared::Utils.build_match_query("title", cleaned_text, boost: 8.0, operator: "and"),
 
             # Keyword exact match for precise title matches
             ::Search::Shared::Utils.build_term_query("title.keyword", cleaned_text.downcase, boost: 9.0),
 
-            # Artist name match with medium boost
-            ::Search::Shared::Utils.build_match_query("artist_names", cleaned_text, boost: 5.0),
+            # Artist name match with medium boost (requires all words)
+            ::Search::Shared::Utils.build_match_query("artist_names", cleaned_text, boost: 5.0, operator: "and"),
 
             # Artist name phrase match
             ::Search::Shared::Utils.build_match_phrase_query("artist_names", cleaned_text, boost: 6.0)

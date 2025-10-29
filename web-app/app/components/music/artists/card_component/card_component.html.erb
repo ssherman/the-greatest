@@ -1,0 +1,45 @@
+<div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow">
+  <%= link_to_artist artist, data: { turbo_frame: "_top" } do %>
+    <figure class="px-4 pt-4">
+      <% if artist.primary_image&.file&.attached? %>
+        <%= image_tag rails_public_blob_url(artist.primary_image.file),
+            alt: artist.name,
+            class: "rounded-xl w-full aspect-square object-cover" %>
+      <% else %>
+        <div class="bg-base-200 rounded-xl w-full aspect-square flex items-center justify-center">
+          <span class="text-base-content/50">No Image</span>
+        </div>
+      <% end %>
+    </figure>
+  <% end %>
+
+  <div class="card-body p-4">
+    <div class="flex items-start justify-between mb-2">
+      <% if show_rank? %>
+        <div class="badge badge-primary badge-lg font-bold">
+          #<%= ranked_item.rank %>
+        </div>
+      <% end %>
+      <div class="<%= show_rank? ? 'text-right' : '' %> text-sm text-base-content/70">
+        <%= artist.kind.titleize %>
+      </div>
+    </div>
+
+    <h2 class="card-title text-lg font-bold text-base-content mb-1">
+      <%= link_to_artist artist, class: "hover:text-primary" %>
+    </h2>
+
+    <% if artist.categories.any? %>
+      <div class="flex flex-wrap gap-1 mt-3">
+        <% artist.categories.limit(3).each do |category| %>
+          <%= link_to_category category, nil, class: "badge badge-ghost badge-sm hover:badge-primary transition-colors" %>
+        <% end %>
+        <% if artist.categories.count > 3 %>
+          <span class="badge badge-ghost badge-sm">
+            +<%= artist.categories.count - 3 %> more
+          </span>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+</div>

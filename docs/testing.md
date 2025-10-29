@@ -71,6 +71,90 @@ test/
 - One assertion per test when possible
 - Setup common test data in `setup` method
 
+## Controller Testing Best Practices
+
+Controller tests should verify that controllers handle requests correctly and return appropriate responses. **Do not test view implementation details.**
+
+### ✅ DO: Test Controller Behavior
+
+```ruby
+test "should handle search with results without error" do
+  artist = music_artists(:the_beatles)
+  artist_results = [{ id: artist.id.to_s, score: 10.0, source: { name: artist.name } }]
+
+  ::Search::Music::Search::ArtistGeneral.stubs(:call).returns(artist_results)
+  ::Search::Music::Search::AlbumGeneral.stubs(:call).returns([])
+  ::Search::Music::Search::SongGeneral.stubs(:call).returns([])
+
+  get search_path(q: "Beatles")
+  assert_response :success
+end
+```
+
+**Why?** This verifies the controller handles requests without errors. A designer can completely redesign the page and the test still passes.
+
+### ❌ DON'T: Test Specific HTML Structure
+
+```ruby
+# BAD - Brittle, fragile test
+test "should display search results" do
+  get search_path(q: "Beatles")
+  assert_response :success
+  assert_select ".card-title", "The Beatles"
+  assert_select "h2.text-2xl", "Artists"
+  assert_select ".badge.badge-ghost", "1"
+  assert_select "a[href=?]", albums_path, text: "Top Albums"
+end
+```
+
+**Why not?** This breaks when a designer changes CSS classes, heading sizes, badge styles, or link text. These are all reasonable UI changes that shouldn't require updating tests.
+
+### ✅ DO: Test HTTP Response Codes
+
+```ruby
+test "should return 404 for non-existent resource" do
+  get artist_path("non-existent-slug")
+  assert_response :not_found
+end
+
+test "should redirect after successful update" do
+  patch admin_artist_path(@artist), params: { artist: { name: "New Name" } }
+  assert_redirected_to admin_artist_path(@artist)
+end
+```
+
+### ✅ DO: Test Method Parameters (Business Logic)
+
+```ruby
+test "should call search with correct size parameters" do
+  ::Search::Music::Search::ArtistGeneral.expects(:call).with("test", size: 25).returns([])
+  ::Search::Music::Search::AlbumGeneral.expects(:call).with("test", size: 25).returns([])
+  ::Search::Music::Search::SongGeneral.expects(:call).with("test", size: 10).returns([])
+
+  get search_path(q: "test")
+  assert_response :success
+end
+```
+
+**Why?** This tests important business logic (result limits) that should remain consistent.
+
+### Rule of Thumb
+**If a designer could reasonably change it without consulting a developer, don't test it.**
+
+Examples of what designers can change:
+- CSS classes and styling
+- Exact text content and copy
+- Element order and layout
+- Typography and spacing
+- Colors and visual design
+
+Examples of what should be tested:
+- HTTP response codes
+- No errors/exceptions
+- Business logic parameters
+- Data transformations
+- Authentication/authorization
+
 ### Mocking with Mocha
 - Mock external API calls
 - Stub time-sensitive methods
@@ -94,6 +178,7 @@ test/
 - **Never test private method implementation details** - Test public interface only
 - **Never test specific validation error messages** - Test that validation fails, not the exact wording
 - **Never write tests for Avo actions** - Avo actions are admin UI components that are manually tested. Writing automated tests for them is not necessary and adds maintenance burden.
+- **Never test HTML structure, CSS classes, or UI layout in controller tests** - These are fragile and break when designers make reasonable UI changes. Test controller behavior, not view implementation.
 
 ### Multi-Domain Testing
 - Test each domain's functionality in isolation

@@ -120,7 +120,7 @@ export default class extends Controller {
 
   // Update navbar button based on auth state
   updateNavbarButton(user) {
-    const navbarButton = document.querySelector('.navbar-end .btn')
+    const navbarButton = document.getElementById('navbar_login_button')
     if (navbarButton) {
       if (user) {
         navbarButton.textContent = 'Logout'

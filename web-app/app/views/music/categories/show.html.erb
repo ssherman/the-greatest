@@ -30,45 +30,7 @@
       </div>
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         <% @artists.each do |ranked_item| %>
-          <% artist = ranked_item.item %>
-          <%= link_to artist_path(artist), class: "card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow" do %>
-            <figure class="px-4 pt-4">
-              <% if artist.primary_image&.file&.attached? %>
-                <%= image_tag rails_public_blob_url(artist.primary_image.file),
-                    alt: artist.name,
-                    class: "rounded-xl w-full aspect-square object-cover" %>
-              <% else %>
-                <div class="bg-base-200 rounded-xl w-full aspect-square flex items-center justify-center">
-                  <span class="text-base-content/50">No Image</span>
-                </div>
-              <% end %>
-            </figure>
-
-            <div class="card-body p-4">
-              <div class="badge badge-primary badge-lg font-bold mb-2">
-                #<%= ranked_item.rank %>
-              </div>
-
-              <h2 class="card-title text-lg font-bold text-base-content mb-1">
-                <%= artist.name %>
-              </h2>
-
-              <% if artist.categories.any? %>
-                <div class="flex flex-wrap gap-1 mt-3">
-                  <% artist.categories.limit(3).each do |category| %>
-                    <span class="badge badge-ghost badge-sm">
-                      <%= category.name %>
-                    </span>
-                  <% end %>
-                  <% if artist.categories.count > 3 %>
-                    <span class="badge badge-ghost badge-sm">
-                      +<%= artist.categories.count - 3 %> more
-                    </span>
-                  <% end %>
-                </div>
-              <% end %>
-            </div>
-          <% end %>
+          <%= render Music::Artists::CardComponent.new(artist: ranked_item.item, ranked_item: ranked_item) %>
         <% end %>
       </div>
     </div>
@@ -82,7 +44,7 @@
       </div>
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         <% @albums.each do |ranked_item| %>
-          <%= render Music::Albums::RankedCardComponent.new(ranked_item: ranked_item, ranking_configuration: @album_rc) %>
+          <%= render Music::Albums::CardComponent.new(ranked_item: ranked_item, ranking_configuration: @album_rc) %>
         <% end %>
       </div>
     </div>
