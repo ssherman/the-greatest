@@ -3,7 +3,6 @@
 ## High Priority
 1. [Production Deployment Infrastructure](todos/048-production-deployment-infrastructure.md)
 2. [Movies data model implementation](todos/002-movies-object-model.md)
-3. [Enrich Song List items_json with MusicBrainz Data](todos/064-import-song-list-from-musicbrainz-non-series.md)
 
 ## Medium Priority
 2. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
@@ -19,6 +18,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-10-29] [Enrich Song List items_json with MusicBrainz Data](todos/064-import-song-list-from-musicbrainz-non-series.md)
 - ✅ [2025-10-28] [Public Search Implementation](todos/063-public-search-implementation.md)
 - ✅ [2025-10-26] [Music Category Show Page](todos/062-music-category-show-page.md)
 - ✅ [2025-10-25] [Artist Rankings Implementation](todos/061-artist-rankings.md)

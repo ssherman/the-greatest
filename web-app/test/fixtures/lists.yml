@@ -167,6 +167,16 @@ music_songs_list:
   status: 1
   estimated_quality: 70
 
+music_songs_list_with_items_json:
+  type: Music::Songs::List
+  name: Music Songs List with Items JSON
+  description: A music songs list with items_json populated
+  source: Test Source
+  status: 3
+  estimated_quality: 80
+  year_published: 2023
+  items_json: {"songs":[{"rank":1,"title":"Come Together","artists":["The Beatles"],"release_year":1969},{"rank":2,"title":"Bohemian Rhapsody","artists":["Queen"],"release_year":1975}]}
+
 games_list:
   type: Games::List
   name: Games Test List
