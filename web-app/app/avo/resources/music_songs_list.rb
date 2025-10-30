@@ -11,5 +11,6 @@ class Avo::Resources::MusicSongsList < Avo::Resources::List
     super
 
     action Avo::Actions::Lists::ImportFromMusicbrainzSeries
+    action Avo::Actions::Lists::Music::Songs::EnrichItemsJson
   end
 end
