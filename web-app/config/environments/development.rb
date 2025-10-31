@@ -30,7 +30,7 @@ Rails.application.configure do
 
   # Store uploaded files on the local file system (see config/storage.yml for options).
   config.active_storage.service = :cloudflare
-  config.active_record.strict_loading_by_default = true
+  # config.active_record.strict_loading_by_default = true
 
   # Print deprecation notices to the Rails logger.
   config.active_support.deprecation = :log

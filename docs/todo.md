@@ -18,6 +18,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-10-30] [Import Songs and Create list_items from items_json](todos/066-import-songs-from-items-json.md)
 - ✅ [2025-10-30] [Items JSON Viewer and AI Validation for Song Lists](todos/065-items-json-viewer-songs.md)
 - ✅ [2025-10-29] [Enrich Song List items_json with MusicBrainz Data](todos/064-import-song-list-from-musicbrainz-non-series.md)
 - ✅ [2025-10-28] [Public Search Implementation](todos/063-public-search-implementation.md)
