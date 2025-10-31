@@ -92,7 +92,52 @@ None
 - `after_save :queue_for_indexing` - Queues for background indexing when created or updated
 - `after_destroy :queue_for_unindexing` - Queues for background removal from search index
 
+## Merge Capabilities
+
+**NEW (October 2025)**: Songs can be merged to consolidate duplicate entries using the `Music::Song::Merger` service.
+
+### When to Merge Songs
+- Same song imported via different routes (series import, album import, manual)
+- Multiple MusicBrainz recording IDs for the same canonical song
+- Merging old incomplete record into new enriched version
+- Consolidating when better metadata becomes available
+
+### Merge Behavior
+When merging songs via `Music::Song::Merger.call(source: song_a, target: song_b)`:
+
+**Associations Transferred to Target**:
+- All tracks (song appearances on releases)
+- All identifiers (MusicBrainz recording IDs, ISRCs, etc.)
+- All category_items (genres/styles) - duplicates skipped via find_or_create
+- All external_links (purchase/review/info links)
+- All list_items (list appearances) - duplicates skipped, position preserved
+- Forward song_relationships (songs this song relates to) - self-references skipped
+- Inverse song_relationships (songs that relate to this song) - self-references destroyed
+
+**Associations NOT Transferred**:
+- song_artists - Target's artists preserved, source's destroyed
+- credits - Not currently populated; deferred for future
+- ai_chats - Not valuable to preserve; destroyed with source
+- ranked_items - Source's destroyed; target's preserved; triggers recalculation
+
+**Additional Actions**:
+- Source song destroyed after successful merge
+- Target song touched to trigger search reindexing
+- Ranking recalculation jobs scheduled for affected configurations
+- All operations in single database transaction (atomic)
+
+### Admin Access
+Merge action available in Avo admin interface:
+- Navigate to target song (the one to keep)
+- Click "Merge Another Song Into This One" action
+- Enter source song ID (the duplicate to delete)
+- Confirm action cannot be undone
+- Review merge results
+
+See `docs/lib/music/song/merger.md` for detailed merge service documentation.
+
 ## Dependencies
 - FriendlyId gem for slug generation and lookup
 - `SearchIndexable` concern for automatic OpenSearch indexing
 - `Search::Music::SongIndex` for OpenSearch operations
+- `Music::Song::Merger` service for merging duplicate songs (Oct 2025)

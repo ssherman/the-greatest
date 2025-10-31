@@ -1,11 +1,11 @@
 # 067 - Song Merge Feature
 
 ## Status
-- **Status**: Not Started
+- **Status**: Completed
 - **Priority**: Medium
 - **Created**: 2025-10-31
-- **Started**:
-- **Completed**:
+- **Started**: 2025-10-31
+- **Completed**: 2025-10-31
 - **Developer**: AI Agent (Claude Code)
 
 ## Overview
@@ -814,34 +814,132 @@ Must update both directions to maintain referential integrity.
 
 ## Implementation Notes
 
-*This section will be filled out during/after implementation*
-
 ### Approach Taken
+
+Followed the established Album::Merger pattern exactly, adapting it for song-specific associations. The implementation uses:
+
+1. **Service Object Pattern**: `Music::Song::Merger` service with Result struct for success/failure
+2. **Database Transaction**: All operations wrapped in single transaction for atomicity
+3. **Automatic Search Indexing**: Leveraged SearchIndexable concern's callbacks (touch + destroy)
+4. **Smart Relationship Handling**: Prevented self-references during merge
 
 ### Files Created
 
+- `web-app/app/lib/music/song/merger.rb` - Main merge service (138 lines)
+- `web-app/app/avo/actions/music/merge_song.rb` - Avo admin action (58 lines)
+- `web-app/test/lib/music/song/merger_test.rb` - Comprehensive test suite (365 lines, 23 tests)
+
 ### Files Modified
+
+- `web-app/app/avo/resources/music_song.rb` - Added merge action to actions list
 
 ### Challenges Encountered
 
+**Self-Reference Prevention**: The initial implementation didn't account for relationships that would create self-references after merging. For example:
+- Source song covers Target song → After merge, would be Target covers Target (invalid!)
+
+**Solution**:
+- Forward relationships: Skip relationships where `related_song_id == target_song.id`
+- Inverse relationships: Destroy relationships where `song_id == target_song.id` instead of updating them
+
+**Test Failures**: Initial tests failed due to incorrect fixture attribute names:
+- ExternalLink uses `link_category` not `link_type`
+- Music::Release uses `release_name` not `title`, and has no `release_type` attribute
+- Touch timing issues required small sleep to ensure timestamp difference
+
 ### Deviations from Plan
+
+**Minor**: The spec suggested using `update_all` for inverse_song_relationships, but we needed `find_each` to handle self-reference detection. This is safer and handles edge cases better.
+
+**Avo Action**: Originally included non-existent `GenerateSongDescription` action - removed in favor of only `MergeSong` action.
 
 ### Code Examples
 
+**Self-Reference Prevention in Forward Relationships**:
+```ruby
+def merge_song_relationships
+  count = 0
+  source_song.song_relationships.find_each do |relationship|
+    next if relationship.related_song_id == target_song.id  # Skip self-refs
+
+    target_song.song_relationships.find_or_create_by!(
+      related_song_id: relationship.related_song_id,
+      relation_type: relationship.relation_type
+    ) do |new_relationship|
+      new_relationship.source_release_id = relationship.source_release_id
+    end
+    count += 1
+  end
+  @stats[:song_relationships] = count
+end
+```
+
+**Self-Reference Handling in Inverse Relationships**:
+```ruby
+def merge_inverse_song_relationships
+  inverse_relationships = Music::SongRelationship.where(related_song_id: source_song.id)
+
+  inverse_relationships.find_each do |relationship|
+    if relationship.song_id == target_song.id
+      relationship.destroy!  # Would create self-reference
+    else
+      relationship.update!(related_song_id: target_song.id)
+    end
+  end
+
+  @stats[:inverse_song_relationships] = inverse_relationships.count
+end
+```
+
 ### Testing Approach
+
+Created 23 comprehensive tests covering:
+- ✅ Basic merge success/failure
+- ✅ All association types (tracks, identifiers, categories, external links, lists, relationships)
+- ✅ Self-reference edge cases (mutual relationships)
+- ✅ Transaction rollback on errors
+- ✅ Search indexing via touch
+- ✅ Ranking job scheduling
+- ✅ Artist preservation (target's kept, source's destroyed)
+- ✅ Songs with no associations
+- ✅ Songs with many tracks
+
+All tests passing: **23 runs, 55 assertions, 0 failures, 0 errors**
+
+Full test suite: **1570 runs, 4536 assertions, 0 failures, 0 errors**
 
 ### Performance Considerations
 
+- Uses `update_all` for simple reassignments (tracks, identifiers, external_links) - single SQL query
+- Uses `find_each` for batch processing to avoid loading all records into memory
+- Uses `find_or_create_by!` for associations with unique constraints
+- Transaction ensures all-or-nothing - no partial merges on failure
+- Ranking jobs scheduled after transaction commits (fire-and-forget)
+
 ### Future Improvements
+
+1. **Bulk Merge UI**: Add ability to merge multiple songs at once with preview
+2. **Merge Preview**: Show what will be merged before confirmation
+3. **Undo Functionality**: Consider creating a merge log table for potential rollback
+4. **Similarity Detection**: Auto-suggest potential duplicates for merging
+5. **Credits Merging**: When credits are populated, add merge logic
 
 ### Lessons Learned
 
+1. **Self-References Are Tricky**: Always consider what happens when source and target already have relationships to each other
+2. **Transaction Safety**: Wrapping everything in a transaction makes error handling much simpler
+3. **Test Fixture Names Matter**: Never assume `users(:one)` exists - always check the fixture file
+4. **Follow Established Patterns**: Using Album::Merger as reference saved significant time
+5. **Touch for Reindexing**: SearchIndexable concern's callbacks handle reindexing automatically - no manual SearchIndexRequest needed
+
 ### Related PRs
 
+*To be created when pushing to repository*
+
 ### Documentation Updated
-- [ ] Create `docs/lib/music/song/merger.md` - Complete service documentation
-- [ ] Update `docs/models/music/song.md` - Add merge section
-- [ ] No Avo action documentation needed (per testing guide - manually test admin UI)
+- [x] Created `docs/lib/music/song/merger.md` - Complete service documentation
+- [x] Updated `docs/models/music/song.md` - Added merge capabilities section
+- [x] No Avo action documentation needed (per testing guide - manually test admin UI)
 
 ---
 
