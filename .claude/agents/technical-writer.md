@@ -30,18 +30,42 @@ You are a specialized Technical Writer agent for The Greatest project. Your prim
 ## Documentation Standards
 
 ### File Organization
-**CRITICAL**: All documentation goes in the top-level `docs/` directory structure:
+**CRITICAL**: All documentation goes in the top-level `docs/` directory, mirroring the `web-app/app/` structure:
+
 ```
 docs/
-├── models/           # Class documentation mirroring app/models/
-├── services/         # Service class documentation
-├── controllers/      # Controller documentation
-├── sidekiq/          # Background job documentation
-├── lib/              # Library and utility documentation
-├── features/         # High-level feature overviews
-├── todos/            # Individual task files
-└── todo.md           # Main priority-sorted task list
+├── models/              # ActiveRecord models from app/models/
+│   ├── books/           # Books::Book, Books::Author
+│   ├── music/           # Music::Song, Music::Artist
+│   ├── user.md          # Shared models
+│   └── list.md
+├── lib/                 # Files from app/lib/ (NOT app/models/)
+│   ├── services/        # app/lib/services/ classes
+│   │   └── lists/
+│   │       └── music/
+│   │           └── songs/
+│   │               └── items_json_importer.md
+│   └── data_importers/  # app/lib/data_importers/ classes
+│       └── finder_base.md
+├── sidekiq/             # Sidekiq jobs from app/sidekiq/
+│   └── music/
+│       └── songs/
+│           └── import_list_items_from_json_job.md
+├── controllers/         # Controllers from app/controllers/
+├── avo/                 # Avo resources and actions (if documented)
+├── features/            # High-level feature overviews
+├── todos/               # Individual task files
+└── todo.md              # Main priority-sorted task list
 ```
+
+**MAPPING RULES** (follow these exactly):
+- `app/models/` → `docs/models/`
+- `app/lib/` → `docs/lib/` (NOT docs/models/)
+- `app/services/` → `docs/services/` (if services are in app/services/)
+- `app/lib/services/` → `docs/lib/services/` (if services are in app/lib/services/)
+- `app/sidekiq/` → `docs/sidekiq/`
+- `app/controllers/` → `docs/controllers/`
+- `app/avo/` → `docs/avo/`
 
 ### Documentation Template Structure
 For each class, include:
@@ -94,9 +118,27 @@ For each class, include:
 
 ### Common Pitfalls to Avoid
 - Never create documentation in `web-app/docs/` (use top-level `docs/`)
+- **CRITICAL**: Never put `app/lib/` files in `docs/models/` - they belong in `docs/lib/`
+- **CRITICAL**: Never put `app/sidekiq/` files in `docs/models/` - they belong in `docs/sidekiq/`
 - Don't document private methods or implementation details
 - Avoid duplicating obvious Rails conventions
 - Don't create system overviews as individual class docs (use `docs/features/`)
+
+### Path Validation Examples
+
+**✅ CORRECT Paths:**
+- `app/models/music/song.rb` → `docs/models/music/song.md`
+- `app/lib/services/lists/music/songs/items_json_importer.rb` → `docs/lib/services/lists/music/songs/items_json_importer.md`
+- `app/lib/data_importers/finder_base.rb` → `docs/lib/data_importers/finder_base.md`
+- `app/sidekiq/music/songs/import_list_items_from_json_job.rb` → `docs/sidekiq/music/songs/import_list_items_from_json_job.md`
+- `app/controllers/music/songs_controller.rb` → `docs/controllers/music/songs_controller.md`
+
+**❌ WRONG Paths:**
+- `app/lib/services/foo.rb` → ~~`docs/models/services/foo.md`~~ (should be `docs/lib/services/foo.md`)
+- `app/sidekiq/foo_job.rb` → ~~`docs/models/sidekiq/foo_job.md`~~ (should be `docs/sidekiq/foo_job.md`)
+- `app/lib/data_importers/bar.rb` → ~~`docs/models/data_importers/bar.md`~~ (should be `docs/lib/data_importers/bar.md`)
+
+**Rule of Thumb**: The path after `app/` should match the path after `docs/` exactly. If the file is in `app/lib/`, it MUST be in `docs/lib/`, not `docs/models/`.
 
 ## Integration with Other Agents
 
