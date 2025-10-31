@@ -54,9 +54,20 @@ module Music
       end
 
       def merge_identifiers
-        count = source_song.identifiers.update_all(
-          identifiable_id: target_song.id
-        )
+        count = 0
+        source_song.identifiers.find_each do |identifier|
+          existing = target_song.identifiers.find_by(
+            identifier_type: identifier.identifier_type,
+            value: identifier.value
+          )
+
+          if existing
+            identifier.destroy!
+          else
+            identifier.update!(identifiable_id: target_song.id)
+            count += 1
+          end
+        end
         @stats[:identifiers] = count
       end
 

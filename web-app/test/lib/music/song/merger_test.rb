@@ -43,6 +43,38 @@ module Music
         assert_equal "Music::Song", identifier.identifiable_type
       end
 
+      test "should handle duplicate identifiers when merging" do
+        shared_id = "shared-musicbrainz-id"
+
+        source_identifier = Identifier.create!(
+          identifiable: @source_song,
+          identifier_type: :music_musicbrainz_recording_id,
+          value: shared_id
+        )
+
+        target_identifier = Identifier.create!(
+          identifiable: @target_song,
+          identifier_type: :music_musicbrainz_recording_id,
+          value: shared_id
+        )
+
+        initial_target_count = @target_song.identifiers.count
+
+        result = Music::Song::Merger.call(source: @source_song, target: @target_song)
+
+        assert result.success?
+        @target_song.reload
+
+        assert_equal initial_target_count, @target_song.identifiers.count
+        assert_not Identifier.exists?(source_identifier.id)
+        assert Identifier.exists?(target_identifier.id)
+
+        assert_equal 1, @target_song.identifiers.where(
+          identifier_type: :music_musicbrainz_recording_id,
+          value: shared_id
+        ).count
+      end
+
       test "should merge category_items with duplicate handling" do
         category = categories(:music_rock_genre)
 

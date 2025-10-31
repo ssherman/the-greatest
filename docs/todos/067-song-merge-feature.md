@@ -847,13 +847,38 @@ Followed the established Album::Merger pattern exactly, adapting it for song-spe
 - Music::Release uses `release_name` not `title`, and has no `release_type` attribute
 - Touch timing issues required small sleep to ensure timestamp difference
 
+**Duplicate Identifier Bug** (Fixed via code review): Initial implementation used `update_all` for identifiers, which would fail when both songs had the same MusicBrainz recording ID (the most common duplication scenario). Changed to use `find_each` with duplicate detection - if target already has an identifier with same type/value, source's is destroyed instead of being reassigned. This prevents unique constraint violations on `(identifiable_type, identifier_type, value, identifiable_id)`.
+
 ### Deviations from Plan
 
-**Minor**: The spec suggested using `update_all` for inverse_song_relationships, but we needed `find_each` to handle self-reference detection. This is safer and handles edge cases better.
+**Identifier Handling**: The spec suggested using direct `update_all` for identifiers, but this was changed to `find_each` with duplicate detection to handle the common case where both songs share the same MusicBrainz recording ID. This prevents unique constraint violations.
+
+**Inverse Relationships**: The spec suggested using `update_all` for inverse_song_relationships, but we needed `find_each` to handle self-reference detection. This is safer and handles edge cases better.
 
 **Avo Action**: Originally included non-existent `GenerateSongDescription` action - removed in favor of only `MergeSong` action.
 
 ### Code Examples
+
+**Duplicate Identifier Handling**:
+```ruby
+def merge_identifiers
+  count = 0
+  source_song.identifiers.find_each do |identifier|
+    existing = target_song.identifiers.find_by(
+      identifier_type: identifier.identifier_type,
+      value: identifier.value
+    )
+
+    if existing
+      identifier.destroy!  # Duplicate - keep target's copy
+    else
+      identifier.update!(identifiable_id: target_song.id)
+      count += 1
+    end
+  end
+  @stats[:identifiers] = count
+end
+```
 
 **Self-Reference Prevention in Forward Relationships**:
 ```ruby
@@ -893,9 +918,10 @@ end
 
 ### Testing Approach
 
-Created 23 comprehensive tests covering:
+Created 24 comprehensive tests covering:
 - ✅ Basic merge success/failure
 - ✅ All association types (tracks, identifiers, categories, external links, lists, relationships)
+- ✅ **Duplicate identifier handling** (same MusicBrainz ID on both songs)
 - ✅ Self-reference edge cases (mutual relationships)
 - ✅ Transaction rollback on errors
 - ✅ Search indexing via touch
@@ -904,17 +930,18 @@ Created 23 comprehensive tests covering:
 - ✅ Songs with no associations
 - ✅ Songs with many tracks
 
-All tests passing: **23 runs, 55 assertions, 0 failures, 0 errors**
+All tests passing: **24 runs, 60 assertions, 0 failures, 0 errors**
 
-Full test suite: **1570 runs, 4536 assertions, 0 failures, 0 errors**
+Full test suite: **1571 runs, 4541 assertions, 0 failures, 0 errors**
 
 ### Performance Considerations
 
-- Uses `update_all` for simple reassignments (tracks, identifiers, external_links) - single SQL query
-- Uses `find_each` for batch processing to avoid loading all records into memory
+- Uses `update_all` for simple reassignments (tracks, external_links) - single SQL query
+- Uses `find_each` for identifiers and complex associations to handle duplicates and avoid N+1 queries
 - Uses `find_or_create_by!` for associations with unique constraints
 - Transaction ensures all-or-nothing - no partial merges on failure
 - Ranking jobs scheduled after transaction commits (fire-and-forget)
+- Identifier deduplication adds minimal overhead (typically 0-5 identifiers per song)
 
 ### Future Improvements
 

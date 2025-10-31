@@ -33,10 +33,10 @@ Returns a `Result` struct with:
 
 ### Direct Reassignments (Single SQL Query)
 - **tracks** - All Music::Track records pointing to source reassigned to target
-- **identifiers** - All external system IDs (MusicBrainz recording IDs, ISRCs, etc.) moved to target
 - **external_links** - Purchase links, reviews, information links moved to target
 
 ### Find-or-Create (Handles Unique Constraints)
+- **identifiers** - External system IDs (MusicBrainz recording IDs, ISRCs, etc.); duplicates destroyed (keeps target's copy)
 - **category_items** - Genre/style categorizations merged, duplicates skipped
 - **list_items** - Appearances in user/editorial lists merged, position preserved when possible
 - **song_relationships** (forward) - Songs this song relates to (covers, remixes, samples, alternates)
@@ -47,6 +47,26 @@ Returns a `Result` struct with:
 - **credits** - Not currently populated; deferred until credits are in use
 - **ai_chats** - Historical AI conversations not valuable to preserve; destroyed automatically
 - **ranked_items** - Source's rankings destroyed; target's preserved; triggers recalculation jobs
+
+## Duplicate Identifier Handling
+
+When merging songs that share the same external identifier (common when both were imported from the same MusicBrainz recording):
+
+- Source identifier is destroyed (not reassigned)
+- Target identifier is preserved
+- Prevents unique constraint violations on `(identifiable_type, identifier_type, value, identifiable_id)`
+
+**Example**:
+```ruby
+# Both songs have the same MusicBrainz recording ID
+source.identifiers # => [musicbrainz_recording_id: "abc-123"]
+target.identifiers # => [musicbrainz_recording_id: "abc-123"]
+
+# After merge
+target.identifiers # => [musicbrainz_recording_id: "abc-123"] (only one copy)
+```
+
+This is the most common merge scenario - duplicate songs created from the same external source.
 
 ## Self-Reference Handling
 
