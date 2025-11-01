@@ -111,12 +111,19 @@ If either song has `ranked_items` in any `RankingConfiguration`:
 
 ## Error Handling
 
-Returns structured error results for:
+The service validates inputs and returns structured error results for:
+
+### Input Validation
+- **Self-merge prevention** - Returns error if `source.id == target.id` (prevents accidental data loss)
+
+### Database Errors
 - `ActiveRecord::RecordInvalid` - Validation failures
 - `ActiveRecord::RecordNotUnique` - Unique constraint violations
 - Any other exception - Generic error with message
 
-Transaction automatically rolls back on any error.
+Transaction automatically rolls back on any database error.
+
+**Important**: The service validates inputs directly and does not rely on UI validation. It's safe to call from console, rake tasks, or other services.
 
 ## Public Methods
 

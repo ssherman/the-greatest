@@ -849,6 +849,8 @@ Followed the established Album::Merger pattern exactly, adapting it for song-spe
 
 **Duplicate Identifier Bug** (Fixed via code review): Initial implementation used `update_all` for identifiers, which would fail when both songs had the same MusicBrainz recording ID (the most common duplication scenario). Changed to use `find_each` with duplicate detection - if target already has an identifier with same type/value, source's is destroyed instead of being reassigned. This prevents unique constraint violations on `(identifiable_type, identifier_type, value, identifiable_id)`.
 
+**Self-Merge Vulnerability** (Fixed via code review): Initial implementation didn't validate that source and target were different songs. If called with the same song for both arguments (e.g., from console), it would delete the song and all its data before returning success. Added early guard that checks `source.id == target.id` and returns error before any database operations. This makes the service safe to call from any context, not just the admin UI.
+
 ### Deviations from Plan
 
 **Identifier Handling**: The spec suggested using direct `update_all` for identifiers, but this was changed to `find_each` with duplicate detection to handle the common case where both songs share the same MusicBrainz recording ID. This prevents unique constraint violations.
@@ -918,10 +920,11 @@ end
 
 ### Testing Approach
 
-Created 24 comprehensive tests covering:
+Created 25 comprehensive tests covering:
 - ✅ Basic merge success/failure
 - ✅ All association types (tracks, identifiers, categories, external links, lists, relationships)
 - ✅ **Duplicate identifier handling** (same MusicBrainz ID on both songs)
+- ✅ **Self-merge prevention** (merging song with itself)
 - ✅ Self-reference edge cases (mutual relationships)
 - ✅ Transaction rollback on errors
 - ✅ Search indexing via touch
@@ -930,9 +933,9 @@ Created 24 comprehensive tests covering:
 - ✅ Songs with no associations
 - ✅ Songs with many tracks
 
-All tests passing: **24 runs, 60 assertions, 0 failures, 0 errors**
+All tests passing: **25 runs, 64 assertions, 0 failures, 0 errors**
 
-Full test suite: **1571 runs, 4541 assertions, 0 failures, 0 errors**
+Full test suite: **1572 runs, 4545 assertions, 0 failures, 0 errors**
 
 ### Performance Considerations
 
@@ -953,11 +956,13 @@ Full test suite: **1571 runs, 4541 assertions, 0 failures, 0 errors**
 
 ### Lessons Learned
 
-1. **Self-References Are Tricky**: Always consider what happens when source and target already have relationships to each other
-2. **Transaction Safety**: Wrapping everything in a transaction makes error handling much simpler
-3. **Test Fixture Names Matter**: Never assume `users(:one)` exists - always check the fixture file
-4. **Follow Established Patterns**: Using Album::Merger as reference saved significant time
-5. **Touch for Reindexing**: SearchIndexable concern's callbacks handle reindexing automatically - no manual SearchIndexRequest needed
+1. **Validate Inputs in Services**: Don't rely on UI validation - services should validate their own inputs (self-merge check, duplicate identifiers)
+2. **Self-References Are Tricky**: Always consider what happens when source and target already have relationships to each other
+3. **Transaction Safety**: Wrapping everything in a transaction makes error handling much simpler
+4. **Code Review Catches Critical Bugs**: Both major bugs (duplicate identifiers, self-merge) were caught by code review agent
+5. **Test Fixture Names Matter**: Never assume `users(:one)` exists - always check the fixture file
+6. **Follow Established Patterns**: Using Album::Merger as reference saved significant time
+7. **Touch for Reindexing**: SearchIndexable concern's callbacks handle reindexing automatically - no manual SearchIndexRequest needed
 
 ### Related PRs
 

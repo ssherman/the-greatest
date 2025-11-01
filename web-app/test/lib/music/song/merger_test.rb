@@ -361,6 +361,16 @@ module Music
         assert_operator @target_song.tracks.count, :>=, initial_track_count
       end
 
+      test "should prevent merging a song with itself" do
+        result = Music::Song::Merger.call(source: @source_song, target: @source_song)
+
+        assert_not result.success?
+        assert_nil result.data
+        assert_equal ["Cannot merge a song with itself"], result.errors
+
+        assert Music::Song.exists?(@source_song.id)
+      end
+
       test "should handle mutual song relationships" do
         song_a = @source_song
         song_b = @target_song

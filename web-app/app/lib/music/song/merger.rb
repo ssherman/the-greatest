@@ -17,6 +17,14 @@ module Music
       end
 
       def call
+        if source_song.id == target_song.id
+          return Result.new(
+            success?: false,
+            data: nil,
+            errors: ["Cannot merge a song with itself"]
+          )
+        end
+
         ActiveRecord::Base.transaction do
           collect_affected_ranking_configurations
           merge_all_associations
