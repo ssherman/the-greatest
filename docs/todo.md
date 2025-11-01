@@ -6,7 +6,7 @@
 
 ## Medium Priority
 2. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
-3. [Books data import from existing site](todos/002-books-data-import.md)
+4. [Books data import from existing site](todos/002-books-data-import.md)
 5. [Additional OAuth providers (Facebook, Twitter, Apple)](todos/007-authentication.md)
 6. [Email/password authentication](todos/007-authentication.md)
 7. [Passwordless email authentication](todos/007-authentication.md)
@@ -18,6 +18,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-10-31] [Song Merge Feature](todos/067-song-merge-feature.md)
 - ✅ [2025-10-30] [Import Songs and Create list_items from items_json](todos/066-import-songs-from-items-json.md)
 - ✅ [2025-10-30] [Items JSON Viewer and AI Validation for Song Lists](todos/065-items-json-viewer-songs.md)
 - ✅ [2025-10-29] [Enrich Song List items_json with MusicBrainz Data](todos/064-import-song-list-from-musicbrainz-non-series.md)
