@@ -26,6 +26,26 @@ Returns the data structure for OpenSearch indexing
 - Used by `Search::Music::AlbumIndex` for indexing operations
 - **Updated August 2025**: Now returns arrays of artist names and IDs instead of single primary artist
 
+## Class Methods
+
+### `self.find_duplicates`
+**NEW (October 2025)**: Finds duplicate albums based on case-insensitive title matching and identical artist sets.
+
+- Returns: Array of Arrays - Each inner array contains duplicate Music::Album records
+- Matching criteria:
+  - Title matches (case-insensitive: "Abbey Road" == "abbey road" == "ABBEY ROAD")
+  - Artists match (same set of artist IDs, order-independent)
+  - **IMPORTANT**: Albums without any artist data are excluded to prevent false positives
+- Safety guard: Skips albums with no artists that may be different albums sharing a title
+- Used by: `music:albums:find_duplicates` rake task
+- Example:
+  ```ruby
+  duplicates = Music::Album.find_duplicates
+  duplicates.each do |group|
+    puts "Found #{group.count} duplicates of '#{group.first.title}'"
+  end
+  ```
+
 ## Validations
 - `title` — presence
 - `slug` — presence, uniqueness
@@ -83,7 +103,14 @@ result = Music::Album::Merger.call(
 - Search index automatically updated for both albums
 - Ranking configurations recalculated via background jobs
 
-### Admin Interface
+### Admin Access
+
+**Avo Admin Interface**:
 Available as "Merge Another Album Into This One" action in Avo admin for Music::Album resources.
+
+**Rake Task** (for bulk operations):
+- Find duplicates: `bin/rails music:albums:find_duplicates` (dry-run)
+- Auto-merge: `MERGE=true bin/rails music:albums:find_duplicates`
+- See `lib/tasks/music/albums.rake` for implementation
 
 See [Music::Album::Merger](../../lib/music/album/merger.md) for complete merge documentation.

@@ -69,6 +69,26 @@ Returns an array of album IDs that contain this song
 - Returns: Array of Integer - All album IDs through releases and tracks
 - Used for OpenSearch indexing to enable album-based filtering
 
+## Class Methods
+
+### `self.find_duplicates`
+**NEW (October 2025)**: Finds duplicate songs based on case-insensitive title matching and identical artist sets.
+
+- Returns: Array of Arrays - Each inner array contains duplicate Music::Song records
+- Matching criteria:
+  - Title matches (case-insensitive: "Imagine" == "imagine" == "IMAGINE")
+  - Artists match (same set of artist IDs, order-independent)
+  - **IMPORTANT**: Songs without any artist data are excluded to prevent false positives
+- Safety guard: Skips songs with no artists (e.g., "Intro", "Outro") that may be different songs
+- Used by: `music:songs:find_duplicates` rake task
+- Example:
+  ```ruby
+  duplicates = Music::Song.find_duplicates
+  duplicates.each do |group|
+    puts "Found #{group.count} duplicates of '#{group.first.title}'"
+  end
+  ```
+
 ## Validations
 - `title` — presence
 - `slug` — presence, uniqueness
@@ -127,12 +147,18 @@ When merging songs via `Music::Song::Merger.call(source: song_a, target: song_b)
 - All operations in single database transaction (atomic)
 
 ### Admin Access
-Merge action available in Avo admin interface:
+
+**Avo Admin Interface**:
 - Navigate to target song (the one to keep)
 - Click "Merge Another Song Into This One" action
 - Enter source song ID (the duplicate to delete)
 - Confirm action cannot be undone
 - Review merge results
+
+**Rake Task** (for bulk operations):
+- Find duplicates: `bin/rails music:songs:find_duplicates` (dry-run)
+- Auto-merge: `MERGE=true bin/rails music:songs:find_duplicates`
+- See `lib/tasks/music/songs.rake` for implementation
 
 See `docs/lib/music/song/merger.md` for detailed merge service documentation.
 

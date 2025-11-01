@@ -109,6 +109,39 @@ class Music::Song < ApplicationRecord
     original_songs.merge(Music::SongRelationship.alternates)
   end
 
+  # Class Methods
+  def self.find_duplicates
+    # Use LOWER() for case-insensitive grouping
+    duplicate_titles = Music::Song
+      .group("LOWER(title)")
+      .having("COUNT(*) > 1")
+      .pluck("LOWER(title)")
+
+    duplicates = []
+
+    duplicate_titles.each do |normalized_title|
+      # Find all songs with this title (case-insensitive)
+      songs_with_title = Music::Song
+        .where("LOWER(title) = ?", normalized_title)
+        .includes(:artists)
+
+      # Group by artist IDs (sorted for comparison)
+      grouped_by_artists = songs_with_title.group_by do |song|
+        song.artists.pluck(:id).sort
+      end
+
+      # Only keep groups with > 1 song (actual duplicates)
+      # SKIP groups where artist_ids is empty to prevent merging different songs
+      # that happen to share a title but have no artist data (e.g., "Intro", "Outro")
+      grouped_by_artists.each do |artist_ids, songs|
+        next if artist_ids.empty? # Skip songs without artists
+        duplicates << songs if songs.count > 1
+      end
+    end
+
+    duplicates
+  end
+
   # Search Methods
   def as_indexed_json
     {

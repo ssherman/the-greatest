@@ -70,22 +70,29 @@ class Music::Album < ApplicationRecord
 
   # Class Methods
   def self.find_duplicates
+    # Use LOWER() for case-insensitive grouping
     duplicate_titles = Music::Album
-      .select(:title)
-      .group(:title)
+      .group("LOWER(title)")
       .having("COUNT(*) > 1")
-      .pluck(:title)
+      .pluck("LOWER(title)")
 
     duplicates = []
 
-    duplicate_titles.each do |title|
-      albums_with_title = Music::Album.where(title: title).includes(:artists)
+    duplicate_titles.each do |normalized_title|
+      # Find all albums with this title (case-insensitive)
+      albums_with_title = Music::Album
+        .where("LOWER(title) = ?", normalized_title)
+        .includes(:artists)
 
       grouped_by_artists = albums_with_title.group_by do |album|
         album.artists.pluck(:id).sort
       end
 
+      # Only keep groups with > 1 album (actual duplicates)
+      # SKIP groups where artist_ids is empty to prevent merging different albums
+      # that happen to share a title but have no artist data
       grouped_by_artists.each do |artist_ids, albums|
+        next if artist_ids.empty? # Skip albums without artists
         duplicates << albums if albums.count > 1
       end
     end
