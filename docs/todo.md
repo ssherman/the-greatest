@@ -2,8 +2,7 @@
 
 ## High Priority
 1. [Production Deployment Infrastructure](todos/048-production-deployment-infrastructure.md)
-2. [OpenSearch Song Matching for items_json Enhancement](todos/069-opensearch-song-matching-for-items-json.md)
-3. [Movies data model implementation](todos/002-movies-object-model.md)
+2. [Movies data model implementation](todos/002-movies-object-model.md)
 
 ## Medium Priority
 2. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
@@ -19,6 +18,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-11-01] [OpenSearch Song Matching for items_json Enhancement](todos/069-opensearch-song-matching-for-items-json.md)
 - ✅ [2025-10-31] [Song Duplicate Finder and Auto-Merge Rake Tasks](todos/068-song-duplicate-finder-rake-tasks.md)
 - ✅ [2025-10-31] [Song Merge Feature](todos/067-song-merge-feature.md)
 - ✅ [2025-10-30] [Import Songs and Create list_items from items_json](todos/066-import-songs-from-items-json.md)
