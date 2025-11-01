@@ -55,16 +55,21 @@ For each duplicate song, show:
 Songs are considered duplicates when:
 1. **Title matches** (case-insensitive: "Imagine" == "imagine" == "IMAGINE")
 2. **Artists match** (same set of artist IDs, order-independent)
+3. **Has at least one artist** (songs without artists are excluded for safety)
 
 **Example**:
 - Song A: "Bohemian Rhapsody" by [Queen]
 - Song B: "bohemian rhapsody" by [Queen]
-- Result: Duplicates (case-insensitive title match)
+- Result: Duplicates (case-insensitive title match + same artists)
 
-**Counter-example**:
+**Counter-examples**:
 - Song A: "Imagine" by [John Lennon]
 - Song B: "Imagine" by [John Lennon, Yoko Ono]
 - Result: NOT duplicates (different artist sets)
+
+- Song A: "Intro" by []
+- Song B: "Intro" by []
+- Result: NOT duplicates (no artists - cannot verify they're the same song)
 
 ### Non-Functional Requirements
 - [ ] Handle songs with no artists gracefully (group separately)
@@ -666,12 +671,23 @@ None - implementation matched the spec exactly. The code examples in the todo pr
 - Batch processing happens at the title level (not per-song), keeping memory usage low
 - No performance issues detected with current dataset size
 
+### Code Review Findings
+
+**P1 Critical Bug - Fixed**: Songs without artist data could be incorrectly merged
+- **Issue**: Songs sharing only a title but with no artists (e.g., multiple "Intro" tracks) would be treated as duplicates
+- **Impact**: Could delete legitimate different songs, causing data loss
+- **Fix**: Added `next if artist_ids.empty?` guard in both song and album `find_duplicates` methods
+- **Result**: Songs/albums without artists are now excluded from duplicate detection
+- **User Notification**: Rake task displays count of skipped songs without artists
+
 ### Lessons Learned
 
-1. **PostgreSQL Column Aliases**: When using `pluck` with SQL functions, pass the full SQL expression directly rather than trying to create and reference aliases
-2. **Pattern Reuse**: Following the established album pattern made implementation trivial and ensured consistency
-3. **Case-Insensitive Matching is Essential**: Found significant duplicates that differ only in capitalization
-4. **Documentation Quality Matters**: Having detailed spec with SQL examples made implementation error-free
+1. **Validate All Assumptions**: Don't assume all records have required data - models may allow nil associations
+2. **PostgreSQL Column Aliases**: When using `pluck` with SQL functions, pass the full SQL expression directly rather than trying to create and reference aliases
+3. **Pattern Reuse**: Following the established album pattern made implementation trivial and ensured consistency
+4. **Case-Insensitive Matching is Essential**: Found significant duplicates that differ only in capitalization
+5. **Code Review is Critical**: The artist guard bug was caught by code review before production use
+6. **Documentation Quality Matters**: Having detailed spec with SQL examples made implementation error-free
 
 ### Related PRs
 

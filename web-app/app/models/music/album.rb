@@ -88,7 +88,11 @@ class Music::Album < ApplicationRecord
         album.artists.pluck(:id).sort
       end
 
+      # Only keep groups with > 1 album (actual duplicates)
+      # SKIP groups where artist_ids is empty to prevent merging different albums
+      # that happen to share a title but have no artist data
       grouped_by_artists.each do |artist_ids, albums|
+        next if artist_ids.empty? # Skip albums without artists
         duplicates << albums if albums.count > 1
       end
     end

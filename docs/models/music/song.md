@@ -78,6 +78,8 @@ Returns an array of album IDs that contain this song
 - Matching criteria:
   - Title matches (case-insensitive: "Imagine" == "imagine" == "IMAGINE")
   - Artists match (same set of artist IDs, order-independent)
+  - **IMPORTANT**: Songs without any artist data are excluded to prevent false positives
+- Safety guard: Skips songs with no artists (e.g., "Intro", "Outro") that may be different songs
 - Used by: `music:songs:find_duplicates` rake task
 - Example:
   ```ruby

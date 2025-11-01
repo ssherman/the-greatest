@@ -14,8 +14,18 @@ namespace :music do
 
       duplicates = Music::Song.find_duplicates
 
+      # Count songs without artists for informational message (efficient query)
+      songs_without_artists_count = Music::Song
+        .left_joins(:song_artists)
+        .where(music_song_artists: {id: nil})
+        .count
+
       if duplicates.empty?
         puts "No duplicate songs found!"
+        if songs_without_artists_count > 0
+          puts "\nNote: #{songs_without_artists_count} songs without artist data were skipped"
+          puts "(These cannot be auto-merged safely as they may be different songs)"
+        end
       else
         puts "Found #{duplicates.count} duplicate song groups:\n\n"
 
@@ -70,6 +80,11 @@ namespace :music do
         puts "=" * 80
         puts "Total duplicate songs found: #{duplicates.sum(&:count)}"
         puts "Duplicate groups: #{duplicates.count}"
+
+        if songs_without_artists_count > 0
+          puts "\nNote: #{songs_without_artists_count} songs without artist data were skipped"
+          puts "(These cannot be auto-merged safely as they may be different songs)"
+        end
 
         if auto_merge
           puts "MERGE RESULTS:"

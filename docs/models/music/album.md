@@ -35,6 +35,8 @@ Returns the data structure for OpenSearch indexing
 - Matching criteria:
   - Title matches (case-insensitive: "Abbey Road" == "abbey road" == "ABBEY ROAD")
   - Artists match (same set of artist IDs, order-independent)
+  - **IMPORTANT**: Albums without any artist data are excluded to prevent false positives
+- Safety guard: Skips albums with no artists that may be different albums sharing a title
 - Used by: `music:albums:find_duplicates` rake task
 - Example:
   ```ruby

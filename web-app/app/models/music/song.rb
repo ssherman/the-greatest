@@ -131,7 +131,10 @@ class Music::Song < ApplicationRecord
       end
 
       # Only keep groups with > 1 song (actual duplicates)
+      # SKIP groups where artist_ids is empty to prevent merging different songs
+      # that happen to share a title but have no artist data (e.g., "Intro", "Outro")
       grouped_by_artists.each do |artist_ids, songs|
+        next if artist_ids.empty? # Skip songs without artists
         duplicates << songs if songs.count > 1
       end
     end
