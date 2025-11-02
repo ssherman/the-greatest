@@ -10,6 +10,8 @@ module Services
           end
 
           test "call successfully enriches items_json with MusicBrainz data" do
+            ::Search::Music::Search::SongByTitleAndArtists.stubs(:call).returns([])
+
             search_service = mock
 
             beatles_response = {
@@ -68,6 +70,8 @@ module Services
             assert_equal 2, result[:enriched_count]
             assert_equal 0, result[:skipped_count]
             assert_equal 2, result[:total_count]
+            assert_equal 0, result[:opensearch_matches]
+            assert_equal 2, result[:musicbrainz_matches]
 
             enriched_data = @list.reload.items_json["songs"]
 
@@ -76,6 +80,7 @@ module Services
             assert_equal "Come Together", first_song["mb_recording_name"]
             assert_equal ["b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d"], first_song["mb_artist_ids"]
             assert_equal ["The Beatles"], first_song["mb_artist_names"]
+            assert_equal true, first_song["musicbrainz_match"]
             assert_nil first_song["song_id"]
 
             second_song = enriched_data[1]
@@ -83,9 +88,12 @@ module Services
             assert_equal "Bohemian Rhapsody", second_song["mb_recording_name"]
             assert_equal ["0383dadf-2a4e-4d10-a46a-e9e041da8eb3"], second_song["mb_artist_ids"]
             assert_equal ["Queen"], second_song["mb_artist_names"]
+            assert_equal true, second_song["musicbrainz_match"]
           end
 
           test "call enriches items_json with song_id when song exists in database" do
+            ::Search::Music::Search::SongByTitleAndArtists.stubs(:call).returns([])
+
             existing_song = music_songs(:time)
 
             existing_song.identifiers.create!(
@@ -143,6 +151,8 @@ module Services
           end
 
           test "call handles multi-artist songs by joining names" do
+            ::Search::Music::Search::SongByTitleAndArtists.stubs(:call).returns([])
+
             @list.update!(
               items_json: {
                 "songs" => [
@@ -199,6 +209,8 @@ module Services
           end
 
           test "call skips entries without MusicBrainz matches and logs warnings" do
+            ::Search::Music::Search::SongByTitleAndArtists.stubs(:call).returns([])
+
             search_service = mock
 
             search_service.expects(:search_by_artist_and_title)
@@ -281,6 +293,8 @@ module Services
           end
 
           test "call handles empty recordings array" do
+            ::Search::Music::Search::SongByTitleAndArtists.stubs(:call).returns([])
+
             search_service = mock
 
             search_service.expects(:search_by_artist_and_title)
@@ -297,6 +311,8 @@ module Services
           end
 
           test "call handles missing artist-credit in response" do
+            ::Search::Music::Search::SongByTitleAndArtists.stubs(:call).returns([])
+
             search_service = mock
 
             search_response = {
@@ -329,6 +345,215 @@ module Services
             enriched_song = @list.reload.items_json["songs"][0]
             assert_equal [], enriched_song["mb_artist_ids"]
             assert_equal [], enriched_song["mb_artist_names"]
+          end
+
+          test "call finds song via OpenSearch and skips MusicBrainz" do
+            existing_song = music_songs(:time)
+
+            @list.update!(
+              items_json: {
+                "songs" => [
+                  {
+                    "rank" => 1,
+                    "title" => "Time",
+                    "artists" => ["Pink Floyd"],
+                    "release_year" => 1973
+                  }
+                ]
+              }
+            )
+
+            opensearch_result = [
+              {
+                id: existing_song.id.to_s,
+                score: 15.5,
+                source: {"title" => "Time"}
+              }
+            ]
+
+            ::Search::Music::Search::SongByTitleAndArtists.expects(:call)
+              .with(
+                title: "Time",
+                artists: ["Pink Floyd"],
+                size: 1,
+                min_score: 5.0
+              )
+              .returns(opensearch_result)
+
+            ::Music::Musicbrainz::Search::RecordingSearch.expects(:new).never
+
+            result = ItemsJsonEnricher.call(list: @list)
+
+            assert result[:success]
+            assert_equal 1, result[:enriched_count]
+            assert_equal 1, result[:opensearch_matches]
+            assert_equal 0, result[:musicbrainz_matches]
+
+            enriched_song = @list.reload.items_json["songs"][0]
+            assert_equal existing_song.id, enriched_song["song_id"]
+            assert_equal existing_song.title, enriched_song["song_name"]
+            assert_equal true, enriched_song["opensearch_match"]
+            assert_equal 15.5, enriched_song["opensearch_score"]
+            assert_nil enriched_song["mb_recording_id"]
+          end
+
+          test "call falls back to MusicBrainz when OpenSearch finds no match" do
+            ::Search::Music::Search::SongByTitleAndArtists.stubs(:call).returns([])
+
+            search_service = mock
+            search_service.expects(:search_by_artist_and_title)
+              .with("The Beatles", "Come Together")
+              .returns(
+                success: true,
+                data: {
+                  "recordings" => [
+                    {
+                      "id" => "test-id",
+                      "title" => "Come Together",
+                      "artist-credit" => [
+                        {"artist" => {"id" => "artist-id", "name" => "The Beatles"}}
+                      ]
+                    }
+                  ]
+                }
+              )
+
+            search_service.expects(:search_by_artist_and_title)
+              .with("Queen", "Bohemian Rhapsody")
+              .returns(
+                success: true,
+                data: {
+                  "recordings" => [
+                    {
+                      "id" => "test-id-2",
+                      "title" => "Bohemian Rhapsody",
+                      "artist-credit" => [
+                        {"artist" => {"id" => "artist-id-2", "name" => "Queen"}}
+                      ]
+                    }
+                  ]
+                }
+              )
+
+            ::Music::Musicbrainz::Search::RecordingSearch.stubs(:new).returns(search_service)
+
+            result = ItemsJsonEnricher.call(list: @list)
+
+            assert result[:success]
+            assert_equal 2, result[:enriched_count]
+            assert_equal 0, result[:opensearch_matches]
+            assert_equal 2, result[:musicbrainz_matches]
+          end
+
+          test "call handles OpenSearch errors gracefully and falls back to MusicBrainz" do
+            ::Search::Music::Search::SongByTitleAndArtists.stubs(:call).raises(StandardError.new("OpenSearch error"))
+
+            search_service = mock
+            search_service.expects(:search_by_artist_and_title)
+              .twice
+              .returns(
+                success: true,
+                data: {
+                  "recordings" => [
+                    {
+                      "id" => "test-id",
+                      "title" => "Test Song",
+                      "artist-credit" => [
+                        {"artist" => {"id" => "artist-id", "name" => "Test Artist"}}
+                      ]
+                    }
+                  ]
+                }
+              )
+
+            ::Music::Musicbrainz::Search::RecordingSearch.stubs(:new).returns(search_service)
+
+            result = ItemsJsonEnricher.call(list: @list)
+
+            assert result[:success]
+            assert_equal 2, result[:enriched_count]
+            assert_equal 0, result[:opensearch_matches]
+            assert_equal 2, result[:musicbrainz_matches]
+          end
+
+          test "call tracks mixed OpenSearch and MusicBrainz matches" do
+            existing_song = music_songs(:time)
+
+            @list.update!(
+              items_json: {
+                "songs" => [
+                  {
+                    "rank" => 1,
+                    "title" => "Time",
+                    "artists" => ["Pink Floyd"],
+                    "release_year" => 1973
+                  },
+                  {
+                    "rank" => 2,
+                    "title" => "Unknown Song",
+                    "artists" => ["Unknown Artist"],
+                    "release_year" => 2020
+                  }
+                ]
+              }
+            )
+
+            opensearch_result = [
+              {
+                id: existing_song.id.to_s,
+                score: 15.5,
+                source: {"title" => "Time"}
+              }
+            ]
+
+            ::Search::Music::Search::SongByTitleAndArtists.expects(:call)
+              .with(
+                title: "Time",
+                artists: ["Pink Floyd"],
+                size: 1,
+                min_score: 5.0
+              )
+              .returns(opensearch_result)
+
+            ::Search::Music::Search::SongByTitleAndArtists.expects(:call)
+              .with(
+                title: "Unknown Song",
+                artists: ["Unknown Artist"],
+                size: 1,
+                min_score: 5.0
+              )
+              .returns([])
+
+            search_service = mock
+            search_service.expects(:search_by_artist_and_title)
+              .with("Unknown Artist", "Unknown Song")
+              .returns(
+                success: true,
+                data: {
+                  "recordings" => [
+                    {
+                      "id" => "mb-id",
+                      "title" => "Unknown Song",
+                      "artist-credit" => [
+                        {"artist" => {"id" => "mb-artist-id", "name" => "Unknown Artist"}}
+                      ]
+                    }
+                  ]
+                }
+              )
+
+            ::Music::Musicbrainz::Search::RecordingSearch.stubs(:new).returns(search_service)
+
+            result = ItemsJsonEnricher.call(list: @list)
+
+            assert result[:success]
+            assert_equal 2, result[:enriched_count]
+            assert_equal 1, result[:opensearch_matches]
+            assert_equal 1, result[:musicbrainz_matches]
+
+            enriched_data = @list.reload.items_json["songs"]
+            assert_equal true, enriched_data[0]["opensearch_match"]
+            assert_equal true, enriched_data[1]["musicbrainz_match"]
           end
         end
       end

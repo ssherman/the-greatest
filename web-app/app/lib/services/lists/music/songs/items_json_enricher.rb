@@ -16,6 +16,8 @@ module Services
 
             enriched_count = 0
             skipped_count = 0
+            opensearch_matches = 0
+            musicbrainz_matches = 0
 
             songs_data = @list.items_json["songs"]
 
@@ -24,6 +26,13 @@ module Services
 
               if enrichment[:success]
                 enriched_count += 1
+
+                if enrichment[:source] == :opensearch
+                  opensearch_matches += 1
+                elsif enrichment[:source] == :musicbrainz
+                  musicbrainz_matches += 1
+                end
+
                 song_entry.merge(enrichment[:data])
               else
                 skipped_count += 1
@@ -34,7 +43,7 @@ module Services
 
             @list.update!(items_json: {"songs" => enriched_songs})
 
-            success_result(enriched_count, skipped_count, songs_data.length)
+            success_result(enriched_count, skipped_count, songs_data.length, opensearch_matches, musicbrainz_matches)
           rescue ArgumentError
             raise
           rescue => e
@@ -53,9 +62,27 @@ module Services
           end
 
           def enrich_song_entry(song_entry)
-            artist_name = song_entry["artists"].join(", ")
             title = song_entry["title"]
+            artists = song_entry["artists"]
 
+            opensearch_match = find_local_song(title, artists)
+
+            if opensearch_match
+              Rails.logger.info "Found local song via OpenSearch: #{opensearch_match[:song].title} (ID: #{opensearch_match[:song].id}, score: #{opensearch_match[:score]})"
+
+              enrichment_data = {
+                "song_id" => opensearch_match[:song].id,
+                "song_name" => opensearch_match[:song].title,
+                "opensearch_match" => true,
+                "opensearch_score" => opensearch_match[:score]
+              }
+
+              return {success: true, data: enrichment_data, source: :opensearch}
+            end
+
+            Rails.logger.info "No local song found via OpenSearch, trying MusicBrainz for: #{title} by #{artists.join(", ")}"
+
+            artist_name = artists.join(", ")
             search_result = search_service.search_by_artist_and_title(artist_name, title)
 
             unless search_result[:success] && search_result[:data]["recordings"]&.any?
@@ -78,7 +105,8 @@ module Services
               "mb_recording_id" => mb_recording_id,
               "mb_recording_name" => mb_recording_name,
               "mb_artist_ids" => mb_artist_ids,
-              "mb_artist_names" => mb_artist_names
+              "mb_artist_names" => mb_artist_names,
+              "musicbrainz_match" => true
             }
 
             if song_id
@@ -86,22 +114,50 @@ module Services
               enrichment_data["song_name"] = song_name
             end
 
-            {success: true, data: enrichment_data}
+            {success: true, data: enrichment_data, source: :musicbrainz}
           rescue => e
             {success: false, error: e.message}
+          end
+
+          def find_local_song(title, artists)
+            return nil if title.blank? || artists.blank?
+
+            search_results = ::Search::Music::Search::SongByTitleAndArtists.call(
+              title: title,
+              artists: artists,
+              size: 1,
+              min_score: 5.0
+            )
+
+            return nil if search_results.empty?
+
+            result = search_results.first
+            song_id = result[:id].to_i
+            score = result[:score]
+
+            song = ::Music::Song.find_by(id: song_id)
+
+            return nil unless song
+
+            {song: song, score: score}
+          rescue => e
+            Rails.logger.error "Error searching OpenSearch for local song: #{e.message}"
+            nil
           end
 
           def search_service
             @search_service ||= ::Music::Musicbrainz::Search::RecordingSearch.new
           end
 
-          def success_result(enriched_count, skipped_count, total_count)
+          def success_result(enriched_count, skipped_count, total_count, opensearch_matches, musicbrainz_matches)
             {
               success: true,
-              message: "Enriched #{enriched_count} of #{total_count} songs (#{skipped_count} skipped)",
+              message: "Enriched #{enriched_count} of #{total_count} songs (#{opensearch_matches} from OpenSearch, #{musicbrainz_matches} from MusicBrainz, #{skipped_count} skipped)",
               enriched_count: enriched_count,
               skipped_count: skipped_count,
-              total_count: total_count
+              total_count: total_count,
+              opensearch_matches: opensearch_matches,
+              musicbrainz_matches: musicbrainz_matches
             }
           end
 
