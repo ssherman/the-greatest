@@ -985,5 +985,79 @@ module Rankings
       assert_equal true, penalty_detail["attribute_value"]
       assert_equal 15, penalty_detail["value"]
     end
+
+    test "applies penalty for estimated voter count" do
+      estimated_voters_list = Books::List.create!(
+        name: "Estimated Voters List",
+        status: :approved,
+        voter_count_estimated: true
+      )
+
+      estimated_penalty = Global::Penalty.create!(
+        type: "Global::Penalty",
+        name: "Estimated Voter Count",
+        dynamic_type: :voter_count_estimated
+      )
+
+      PenaltyApplication.create!(
+        penalty: estimated_penalty,
+        ranking_configuration: @books_config,
+        value: 10
+      )
+
+      clean_list = Books::List.create!(
+        name: "Clean List",
+        status: :approved,
+        voter_count_estimated: false
+      )
+
+      estimated_ranked = RankedList.create!(list: estimated_voters_list, ranking_configuration: @books_config)
+      clean_ranked = RankedList.create!(list: clean_list, ranking_configuration: @books_config)
+
+      estimated_weight = WeightCalculatorV1.new(estimated_ranked).call
+      clean_weight = WeightCalculatorV1.new(clean_ranked).call
+
+      assert_operator clean_weight, :>, estimated_weight
+    end
+
+    test "captures voter_count_estimated penalty details" do
+      test_config = Music::Albums::RankingConfiguration.create!(
+        name: "Estimated Voter Details Test #{SecureRandom.hex(4)}",
+        global: true,
+        min_list_weight: 1
+      )
+
+      test_list = Music::Albums::List.create!(
+        name: "Estimated Voter Details List",
+        status: :approved,
+        voter_count_estimated: true
+      )
+
+      estimated_penalty = Global::Penalty.create!(
+        type: "Global::Penalty",
+        name: "Estimated Voter Count Penalty",
+        dynamic_type: :voter_count_estimated
+      )
+
+      PenaltyApplication.create!(
+        penalty: estimated_penalty,
+        ranking_configuration: test_config,
+        value: 10
+      )
+
+      test_ranked_list = RankedList.create!(list: test_list, ranking_configuration: test_config)
+      calculator = WeightCalculatorV1.new(test_ranked_list)
+      calculator.call
+
+      details = test_ranked_list.reload.calculated_weight_details
+      attribute_penalties = details["penalties"].select { |p| p["source"] == "dynamic_attribute" && p["dynamic_type"] == "voter_count_estimated" }
+
+      assert_equal 1, attribute_penalties.size
+      penalty_detail = attribute_penalties.first
+      assert_equal "dynamic_attribute", penalty_detail["source"]
+      assert_equal "voter_count_estimated", penalty_detail["dynamic_type"]
+      assert_equal true, penalty_detail["attribute_value"]
+      assert_equal 10, penalty_detail["value"]
+    end
   end
 end

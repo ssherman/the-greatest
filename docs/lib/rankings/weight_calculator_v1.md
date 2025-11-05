@@ -59,7 +59,7 @@ Calculates penalties based on list attributes.
 ### `#calculate_unknown_data_penalties`
 Penalties for lists with missing voter information.
 - Returns: Float - penalty percentage
-- Applied when: voter_names_unknown or voter_count_unknown
+- Applied when: voter_names_unknown, voter_count_unknown, or voter_count_estimated
 
 ### `#calculate_bias_penalties`
 Penalties for lists with geographic or category bias.
@@ -114,9 +114,15 @@ None (service object)
 ### Penalty Sources
 1. **Static Penalties**: Fixed values from PenaltyApplication and ListPenalty
 2. **Voter Count Penalties**: Dynamic penalties based on median voter count
-3. **Unknown Data Penalties**: For missing voter information
+3. **Unknown Data Penalties**: For missing voter information (voter_names_unknown, voter_count_unknown, voter_count_estimated)
 4. **Bias Penalties**: For category/location-specific lists
 5. **Temporal Coverage Penalties**: For lists with limited time coverage (num_years_covered)
+
+### Voter Count Penalty Hierarchy
+The calculator applies different severity levels for voter count reliability:
+- **voter_count_unknown**: Most severe penalty (we have no information)
+- **voter_count_estimated**: Moderate penalty (estimated from contextual information like award descriptions, historical records)
+- **No penalty**: Exact voter count is known
 
 ### Quality Source Bonus
 High quality sources (lists marked as `high_quality_source: true`) get a 33% reduction in total penalty percentage applied after all penalties are calculated.

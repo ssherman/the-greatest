@@ -19,6 +19,7 @@
 #  status                :integer          default("unapproved"), not null
 #  type                  :string           not null
 #  url                   :string
+#  voter_count_estimated :boolean
 #  voter_count_unknown   :boolean
 #  voter_names_unknown   :boolean
 #  year_published        :integer

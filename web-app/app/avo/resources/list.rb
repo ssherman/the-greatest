@@ -23,6 +23,7 @@ class Avo::Resources::List < Avo::BaseResource
     field :yearly_award, as: :boolean
     field :number_of_voters, as: :number
     field :voter_count_unknown, as: :boolean
+    field :voter_count_estimated, as: :boolean
     field :voter_names_unknown, as: :boolean
     field :num_years_covered, as: :number, help: "Number of years this list covers (e.g., 10 for 'Best Albums of the 2010s', 1 for 'Best Albums of 2020')"
     field :formatted_text, as: :textarea
