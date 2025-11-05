@@ -42,6 +42,20 @@ module Search
         assert_equal "", Search::Shared::Utils.normalize_search_text(nil)
       end
 
+      test "normalize_search_text normalizes smart quotes to straight quotes" do
+        result = Search::Shared::Utils.normalize_search_text("\u2018Don\u2019t Stop Believin\u2019")
+        assert_equal "'don't stop believin'", result
+
+        result = Search::Shared::Utils.normalize_search_text("\u201CThe Time\u201D")
+        assert_equal "the time", result
+      end
+
+      test "cleanup_for_indexing normalizes smart quotes to straight quotes" do
+        text_array = ["\u2018Don\u2019t Stop\u2019", "\u201CThe Wall\u201D"]
+        result = Search::Shared::Utils.cleanup_for_indexing(text_array)
+        assert_equal ["'Don't Stop'", "\"The Wall\""], result
+      end
+
       test "build_match_query creates correct match query structure" do
         result = Search::Shared::Utils.build_match_query("title", "test query", boost: 2.0, operator: "and")
 

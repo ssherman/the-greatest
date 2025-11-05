@@ -10,8 +10,9 @@ module Search
           text_array.map do |text|
             next if text.blank?
 
-            # Remove special characters and normalize
-            cleaned = text.to_s
+            normalized = Services::Text::QuoteNormalizer.call(text.to_s)
+
+            cleaned = normalized
               .strip
               .gsub(/[^\w\s\-'"]/, " ")  # Replace special chars with space
               .gsub(/\s+/, " ")          # Collapse multiple spaces
@@ -24,7 +25,9 @@ module Search
         def normalize_search_text(text)
           return "" if text.blank?
 
-          text.to_s
+          normalized = Services::Text::QuoteNormalizer.call(text.to_s)
+
+          normalized
             .strip
             .downcase
             .gsub(/[^\w\s\-']/, " ")  # Replace special chars with space

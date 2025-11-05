@@ -61,6 +61,9 @@ class Music::Artist < ApplicationRecord
   validates :country, length: {is: 2}, allow_blank: true
   validate :date_consistency
 
+  # Callbacks
+  before_validation :normalize_name
+
   # Scopes
   scope :people, -> { where(kind: :person) }
   scope :bands, -> { where(kind: :band) }
@@ -84,6 +87,10 @@ class Music::Artist < ApplicationRecord
   end
 
   private
+
+  def normalize_name
+    self.name = Services::Text::QuoteNormalizer.call(name) if name.present?
+  end
 
   def date_consistency
     if person?
