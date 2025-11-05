@@ -2,7 +2,8 @@
 
 ## High Priority
 1. [Production Deployment Infrastructure](todos/048-production-deployment-infrastructure.md)
-2. [Movies data model implementation](todos/002-movies-object-model.md)
+2. [Quote Normalization Service (Music Domain)](todos/071-music-name-title-normalization.md)
+3. [Movies data model implementation](todos/002-movies-object-model.md)
 
 ## Medium Priority
 2. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
