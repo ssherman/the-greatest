@@ -100,6 +100,7 @@ Domain-specific list for games content.
 - `yearly_award` - Whether list is a yearly award (boolean)
 - `number_of_voters` - Number of voters in the list (integer)
 - `voter_count_unknown` - Whether voter count is unknown (boolean)
+- `voter_count_estimated` - Whether voter count was estimated from contextual information (boolean)
 - `voter_names_unknown` - Whether voter names are unknown (boolean)
 - `num_years_covered` - Number of years this list covers for temporal penalty calculations (integer)
 - `formatted_text` - Formatted text content (text)
@@ -115,6 +116,18 @@ Domain-specific list for games content.
 - `0` - unapproved
 - `1` - approved
 - `2` - rejected
+
+## Voter Count Field Semantics
+The voter-related boolean fields have distinct meanings and can be combined:
+- `voter_count_unknown: true` - We have no information about voter count
+- `voter_count_estimated: true` - We estimated voter count from contextual information (e.g., award descriptions, historical records, publication circulation)
+- `voter_names_unknown: true` - We don't know who the individual voters were
+
+**Important Notes:**
+- When `voter_count_estimated: true`, the `number_of_voters` field contains the estimated value
+- When `voter_count_unknown: true`, the `number_of_voters` field should be NULL
+- Lists can have multiple flags set (e.g., `voter_count_estimated: true` AND `voter_names_unknown: true`)
+- These fields affect weight calculations via `Rankings::WeightCalculatorV1` - estimated counts receive a penalty, but less severe than completely unknown counts
 
 ## Usage Examples
 ```ruby

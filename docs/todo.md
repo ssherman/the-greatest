@@ -7,7 +7,7 @@
 ## Medium Priority
 2. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
 3. [Books data import from existing site](todos/002-books-data-import.md)
-5. [Additional OAuth providers (Facebook, Twitter, Apple)](todos/007-authentication.md)
+4. [Additional OAuth providers (Facebook, Twitter, Apple)](todos/007-authentication.md)
 6. [Email/password authentication](todos/007-authentication.md)
 7. [Passwordless email authentication](todos/007-authentication.md)
 8. [Phone number authentication](todos/007-authentication.md)
@@ -18,6 +18,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-11-05] [Voter Count Estimated Dynamic Penalty](todos/070-voter-count-estimated-penalty.md)
 - ✅ [2025-11-01] [OpenSearch Song Matching for items_json Enhancement](todos/069-opensearch-song-matching-for-items-json.md)
 - ✅ [2025-10-31] [Song Duplicate Finder and Auto-Merge Rake Tasks](todos/068-song-duplicate-finder-rake-tasks.md)
 - ✅ [2025-10-31] [Song Merge Feature](todos/067-song-merge-feature.md)

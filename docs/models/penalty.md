@@ -47,7 +47,24 @@ Returns true if the penalty is static (fixed value, no dynamic calculation).
 - `by_dynamic_type(dynamic_type)` - Filter by specific dynamic penalty type
 
 ## Constants
-- Enum: `dynamic_type` (number_of_voters, percentage_western, voter_names_unknown, voter_count_unknown, category_specific, location_specific)
+
+### Dynamic Type Enum
+The `dynamic_type` enum determines how the penalty is calculated at runtime by `Rankings::WeightCalculatorV1`:
+
+- `number_of_voters` (0) - Penalty based on list's voter count relative to median
+- `percentage_western` (1) - Penalty based on Western content percentage
+- `voter_names_unknown` (2) - Penalty when voter identities are unknown
+- `voter_count_unknown` (3) - Penalty when exact voter count is unknown
+- `voter_count_estimated` (7) - Penalty when voter count is estimated from contextual information (less severe than unknown)
+- `category_specific` (4) - Penalty for genre/category-specific lists
+- `location_specific` (5) - Penalty for location-specific lists
+- `num_years_covered` (6) - Penalty based on number of years list covers
+
+**Voter Count Penalty Hierarchy:**
+The voter-related penalties form a severity hierarchy:
+1. `voter_count_unknown` - Most severe (we have no information)
+2. `voter_count_estimated` - Moderate (we made an educated guess from context)
+3. No penalty - Least severe (we have exact voter count)
 
 ## Callbacks
 None defined.

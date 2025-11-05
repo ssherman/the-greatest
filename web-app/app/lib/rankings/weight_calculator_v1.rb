@@ -183,6 +183,19 @@ module Rankings
         end
       end
 
+      if list.voter_count_estimated?
+        penalty_value, penalty_info = find_penalty_details_by_dynamic_type(:voter_count_estimated)
+        if penalty_value > 0
+          penalty += penalty_value
+          details["penalties"] << penalty_info.merge(
+            "source" => "dynamic_attribute",
+            "dynamic_type" => "voter_count_estimated",
+            "attribute_value" => true,
+            "value" => penalty_value
+          )
+        end
+      end
+
       penalty
     end
 
@@ -436,6 +449,11 @@ module Rankings
       # Penalty for unknown voter count
       if list.voter_count_unknown?
         penalty += find_penalty_value_by_dynamic_type(:voter_count_unknown)
+      end
+
+      # Penalty for estimated voter count
+      if list.voter_count_estimated?
+        penalty += find_penalty_value_by_dynamic_type(:voter_count_estimated)
       end
 
       penalty
