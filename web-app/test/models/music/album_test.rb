@@ -64,6 +64,30 @@ module Music
       assert_includes @album.errors[:release_year], "is not a number"
     end
 
+    # Quote Normalization
+    test "should normalize smart quotes in title on create" do
+      Music::ImportAlbumReleasesJob.stubs(:perform_async)
+      album = Music::Album.create!(title: "\u201CThe Wall\u201D")
+      assert_equal "\"The Wall\"", album.title
+    end
+
+    test "should normalize smart quotes in title on update" do
+      @album.update!(title: "\u2018Wish You Were Here\u2019")
+      assert_equal "'Wish You Were Here'", @album.title
+    end
+
+    test "should not modify title if no smart quotes present" do
+      @album.update!(title: "The Wall")
+      assert_equal "The Wall", @album.title
+    end
+
+    test "should normalize quotes for new albums with proper slug generation" do
+      Music::ImportAlbumReleasesJob.stubs(:perform_async)
+      album = Music::Album.create!(title: "\u201CTest Unique Album\u201D")
+      assert_equal "\"Test Unique Album\"", album.title
+      assert_equal "test-unique-album", album.slug
+    end
+
     # Associations
     test "should have many artists through album_artists" do
       assert_respond_to @album, :artists

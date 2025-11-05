@@ -115,6 +115,28 @@ module Music
       assert_includes @song.errors[:release_year], "is not a number"
     end
 
+    # Quote Normalization
+    test "should normalize smart quotes in title on create" do
+      song = Music::Song.create!(title: "\u2018Don\u2019t Stop Believin\u2019\u201D")
+      assert_equal "'Don't Stop Believin'\"", song.title
+    end
+
+    test "should normalize smart quotes in title on update" do
+      @song.update!(title: "\u201CThe Time\u201D")
+      assert_equal "\"The Time\"", @song.title
+    end
+
+    test "should not modify title if no smart quotes present" do
+      @song.update!(title: "Don't Stop")
+      assert_equal "Don't Stop", @song.title
+    end
+
+    test "should normalize quotes for new songs with proper slug generation" do
+      song = Music::Song.create!(title: "\u2018New Title\u2019")
+      assert_equal "'New Title'", song.title
+      assert_equal "new-title", song.slug
+    end
+
     # Scopes
     test "should filter songs with lyrics" do
       songs_with_lyrics = Music::Song.with_lyrics

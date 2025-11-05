@@ -63,6 +63,9 @@ class Music::Song < ApplicationRecord
   validates :isrc, length: {is: 12}, allow_blank: true
   validates :isrc, uniqueness: {allow_blank: true}
 
+  # Callbacks
+  before_validation :normalize_title
+
   # Scopes
   scope :with_lyrics, -> { where.not(lyrics: [nil, ""]) }
   scope :with_notes, -> { where.not(notes: [nil, ""]) }
@@ -151,5 +154,11 @@ class Music::Song < ApplicationRecord
       album_ids: albums.map(&:id),
       category_ids: categories.active.pluck(:id)
     }
+  end
+
+  private
+
+  def normalize_title
+    self.title = Services::Text::QuoteNormalizer.call(title) if title.present?
   end
 end

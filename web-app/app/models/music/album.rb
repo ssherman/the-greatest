@@ -52,6 +52,10 @@ class Music::Album < ApplicationRecord
   validates :title, presence: true
   validates :release_year, numericality: {only_integer: true, allow_nil: true}
 
+  # Callbacks
+  before_validation :normalize_title
+  after_commit :queue_release_import, on: :create
+
   # Scopes
   scope :with_identifier, ->(identifier_type, value) {
     joins(:identifiers).where(identifiers: {identifier_type: identifier_type, value: value})
@@ -64,9 +68,6 @@ class Music::Album < ApplicationRecord
   scope :with_primary_image_for_display, -> {
     includes(primary_image: {file_attachment: {blob: {variant_records: {image_attachment: :blob}}}})
   }
-
-  # Callbacks
-  after_commit :queue_release_import, on: :create
 
   # Class Methods
   def self.find_duplicates
@@ -111,6 +112,10 @@ class Music::Album < ApplicationRecord
   end
 
   private
+
+  def normalize_title
+    self.title = Services::Text::QuoteNormalizer.call(title) if title.present?
+  end
 
   def queue_release_import
     Music::ImportAlbumReleasesJob.perform_async(id)

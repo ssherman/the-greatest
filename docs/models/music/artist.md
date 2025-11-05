@@ -55,9 +55,10 @@ Returns the data structure for OpenSearch indexing
 - `enum :kind, { person: 0, band: 1 }` — Distinguishes between people and bands
 
 ## Callbacks
+- `before_validation :normalize_name` - Normalizes Unicode smart quotes to ASCII straight quotes (e.g., ' → ', " → ") via `Services::Text::QuoteNormalizer`
 - Includes `SearchIndexable` concern for automatic OpenSearch indexing
-- `after_save :queue_for_indexing` - Queues for background indexing when created or updated
-- `after_destroy :queue_for_unindexing` - Queues for background removal from search index
+- `after_commit :queue_for_indexing` - Queues for background indexing when created or updated
+- `after_commit :queue_for_unindexing` - Queues for background removal from search index
 
 ## Dependencies
 - FriendlyId gem for slug generation and lookup from name

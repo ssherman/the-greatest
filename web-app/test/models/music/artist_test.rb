@@ -75,6 +75,28 @@ module Music
       assert @person.valid?
     end
 
+    # Quote Normalization
+    test "should normalize smart quotes in name on create" do
+      artist = Music::Artist.create!(name: "\u2018Guns N\u2019 Roses\u2019", kind: :band)
+      assert_equal "'Guns N' Roses'", artist.name
+    end
+
+    test "should normalize smart quotes in name on update" do
+      @person.update!(name: "\u201CDavid \u2018Ziggy\u2019 Stardust\u201D")
+      assert_equal "\"David 'Ziggy' Stardust\"", @person.name
+    end
+
+    test "should not modify name if no smart quotes present" do
+      @band.update!(name: "Pink Floyd")
+      assert_equal "Pink Floyd", @band.name
+    end
+
+    test "should normalize quotes for new artists with proper slug generation" do
+      artist = Music::Artist.create!(name: "Guns N\u2019 Roses", kind: :band)
+      assert_equal "Guns N' Roses", artist.name
+      assert_equal "guns-n-roses", artist.slug
+    end
+
     # Date consistency validations
     test "person cannot have band dates" do
       @person.year_formed = 1965

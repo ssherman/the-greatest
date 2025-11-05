@@ -9,6 +9,7 @@ Utility methods for text processing and OpenSearch query building. Provides comm
 Cleans and normalizes an array of text values for indexing
 - Parameters: text_array (Array) - Array of text values to clean
 - Returns: Array - Cleaned text values with special characters removed
+- **NEW (Nov 2025)**: Normalizes Unicode smart quotes to ASCII straight quotes via `Services::Text::QuoteNormalizer`
 - Removes special characters, normalizes whitespace, filters out blanks
 - Used when preparing data for indexing
 
@@ -16,6 +17,7 @@ Cleans and normalizes an array of text values for indexing
 Normalizes search text for consistent querying
 - Parameters: text (String) - Raw search text from user input
 - Returns: String - Normalized text ready for search queries
+- **NEW (Nov 2025)**: Normalizes Unicode smart quotes to ASCII straight quotes via `Services::Text::QuoteNormalizer`
 - Converts to lowercase, removes special characters, normalizes whitespace
 
 ### `.build_match_query(field, query, boost: 1.0, operator: "or")`
@@ -61,6 +63,7 @@ Builds a complex OpenSearch bool query combining multiple conditions
 None
 
 ## Dependencies
+- `Services::Text::QuoteNormalizer` - For Unicode quote normalization (Nov 2025)
 - Date/DateTime/Time - For date parsing operations
 - String manipulation methods
 
