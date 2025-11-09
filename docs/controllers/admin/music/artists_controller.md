@@ -200,7 +200,18 @@ JSON autocomplete endpoint for artist search.
 **Behavior:**
 - Calls OpenSearch with size limit of 10
 - Preserves relevance order
+- Returns empty array `[]` if no results (prevents `ArgumentError` from `in_order_of`)
 - Used for autocomplete/typeahead components
+
+**Error Handling:**
+```ruby
+# Guard against empty results
+if artist_ids.empty?
+  render json: []
+  return
+end
+```
+Without this guard, `in_order_of(:id, [])` would raise `ArgumentError`.
 
 ## Private Methods
 
@@ -222,6 +233,20 @@ Shared method that loads artists with search, sorting, pagination, and N+1 preve
 - Always includes categories and aggregates album counts
 - Applies pagination with Pagy (25 items per page)
 
+**Error Handling:**
+Protects against empty search results:
+```ruby
+if artist_ids.empty?
+  @artists = Music::Artist.none
+else
+  @artists = Music::Artist.in_order_of(:id, artist_ids)
+end
+```
+
+Without this guard, searching for a nonexistent artist would cause:
+- `in_order_of(:id, [])` raises `ArgumentError: empty order list`
+- Results in 500 error instead of showing "No artists found" empty state
+
 **Used by:**
 - `index` action
 - `bulk_action` turbo stream response (to refresh table)
@@ -229,6 +254,7 @@ Shared method that loads artists with search, sorting, pagination, and N+1 preve
 **Why extracted:**
 - DRY principle - shared logic between index and bulk_action
 - Ensures consistent N+1 prevention across both actions
+- Ensures consistent error handling for empty results
 - Makes testing easier (can test the method directly)
 
 ### `sortable_column(column)`
@@ -380,8 +406,41 @@ result.status    # => :success, :error, or :warning
 - `/app/views/admin/music/artists/_table.html.erb`
 
 ## Testing
-- Controller tests: `/test/controllers/admin/music/artists_controller_test.rb` (32 tests)
-- Covers: CRUD operations, search, pagination, actions, authorization, SQL injection prevention
+- Controller tests: `/test/controllers/admin/music/artists_controller_test.rb` (34 tests)
+- Covers: CRUD operations, search, pagination, actions, authorization, SQL injection prevention, empty search results
+
+### Error Handling Tests
+Two specific tests verify empty search result handling:
+
+1. **Empty Search Results in Index**
+   ```ruby
+   test "should handle empty search results without error" do
+     # Mock OpenSearch returning empty results
+     ::Search::Music::Search::ArtistGeneral.stubs(:call).returns([])
+
+     # Should not raise ArgumentError from in_order_of
+     assert_nothing_raised do
+       get admin_artists_path(q: "nonexistentartist")
+     end
+
+     assert_response :success  # Shows "No artists found" empty state
+   end
+   ```
+
+2. **Empty Autocomplete Results**
+   ```ruby
+   test "should return empty JSON array when search has no results" do
+     ::Search::Music::Search::ArtistGeneral.stubs(:call).returns([])
+
+     assert_nothing_raised do
+       get search_admin_artists_path(q: "nonexistentartist"), as: :json
+     end
+
+     assert_response :success
+     json_response = JSON.parse(response.body)
+     assert_equal [], json_response  # Returns empty array, not 500
+   end
+   ```
 
 ### Security Tests
 Two specific tests verify SQL injection protection:

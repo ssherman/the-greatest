@@ -91,6 +91,12 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
     search_results = ::Search::Music::Search::ArtistGeneral.call(params[:q], size: 10)
     artist_ids = search_results.map { |r| r[:id].to_i }
 
+    # Guard against empty results - in_order_of raises ArgumentError with empty array
+    if artist_ids.empty?
+      render json: []
+      return
+    end
+
     # Load artist records preserving search order
     artists = Music::Artist.in_order_of(:id, artist_ids)
 
@@ -109,13 +115,18 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
       search_results = ::Search::Music::Search::ArtistGeneral.call(params[:q], size: 1000)
       artist_ids = search_results.map { |r| r[:id].to_i }
 
-      # Preserve search order using Rails 7+ in_order_of
-      @artists = Music::Artist
-        .includes(:categories)
-        .left_joins(:albums)
-        .select("music_artists.*, COUNT(DISTINCT music_albums.id) as albums_count")
-        .group("music_artists.id")
-        .in_order_of(:id, artist_ids)
+      # Guard against empty results - in_order_of raises ArgumentError with empty array
+      @artists = if artist_ids.empty?
+        Music::Artist.none
+      else
+        # Preserve search order using Rails 7+ in_order_of
+        Music::Artist
+          .includes(:categories)
+          .left_joins(:albums)
+          .select("music_artists.*, COUNT(DISTINCT music_albums.id) as albums_count")
+          .group("music_artists.id")
+          .in_order_of(:id, artist_ids)
+      end
     else
       # Normal database query for browsing
       sort_column = sortable_column(params[:sort])

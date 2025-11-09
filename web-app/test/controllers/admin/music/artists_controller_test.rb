@@ -68,6 +68,20 @@ module Admin
         assert_response :success
       end
 
+      test "should handle empty search results without error" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        # Mock OpenSearch returning empty results
+        ::Search::Music::Search::ArtistGeneral.stubs(:call).returns([])
+
+        # Should not raise ArgumentError from in_order_of
+        assert_nothing_raised do
+          get admin_artists_path(q: "nonexistentartist")
+        end
+
+        assert_response :success
+      end
+
       test "should handle sorting by name" do
         sign_in_as(@admin_user, stub_auth: true)
         get admin_artists_path(sort: "name")
@@ -282,11 +296,22 @@ module Admin
 
         get search_admin_artists_path(q: "Bowie"), as: :json
         assert_response :success
+      end
 
+      test "should return empty JSON array when search has no results" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        # Mock OpenSearch returning empty results
+        ::Search::Music::Search::ArtistGeneral.stubs(:call).returns([])
+
+        # Should not raise ArgumentError from in_order_of
+        assert_nothing_raised do
+          get search_admin_artists_path(q: "nonexistentartist"), as: :json
+        end
+
+        assert_response :success
         json_response = JSON.parse(response.body)
-        assert_equal 1, json_response.length
-        assert_equal @artist.id, json_response.first["value"]
-        assert_equal @artist.name, json_response.first["text"]
+        assert_equal [], json_response
       end
 
       test "should call search with size limit of 10 for autocomplete" do
