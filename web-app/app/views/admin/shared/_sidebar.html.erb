@@ -1,0 +1,115 @@
+<aside class="flex flex-col h-full bg-base-100 w-80">
+  <!-- Logo/Title -->
+  <div class="p-6 border-b border-base-300">
+    <div class="flex items-center gap-3">
+      <%= image_tag "music/logo.gif", alt: "The Greatest Music", class: "w-10 h-10" %>
+      <div>
+        <h1 class="text-xl font-bold">The Greatest Music</h1>
+        <p class="text-sm text-base-content/70">Admin</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Navigation Menu -->
+  <div class="flex-1 overflow-y-auto">
+    <ul class="menu p-4 gap-2">
+      <!-- Music Section -->
+      <li>
+        <details open>
+          <summary class="font-semibold">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+            </svg>
+            Music
+          </summary>
+          <ul>
+            <li>
+              <%= link_to admin_artists_path, class: "flex items-center gap-2" do %>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                Artists
+              <% end %>
+            </li>
+            <li>
+              <a href="#" class="flex items-center gap-2 text-base-content/50">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                </svg>
+                Albums
+              </a>
+            </li>
+            <li>
+              <a href="#" class="flex items-center gap-2 text-base-content/50">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                </svg>
+                Songs
+              </a>
+            </li>
+            <li>
+              <a href="#" class="flex items-center gap-2 text-base-content/50">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                </svg>
+                Categories
+              </a>
+            </li>
+          </ul>
+        </details>
+      </li>
+
+      <!-- Global Section -->
+      <li>
+        <details>
+          <summary class="font-semibold">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+            </svg>
+            Global
+          </summary>
+          <ul>
+            <li>
+              <a href="#" class="flex items-center gap-2 text-base-content/50">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                Penalties
+              </a>
+            </li>
+            <li>
+              <a href="#" class="flex items-center gap-2 text-base-content/50">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                Users
+              </a>
+            </li>
+          </ul>
+        </details>
+      </li>
+    </ul>
+  </div>
+
+  <!-- User Info (Sticky at bottom) -->
+  <div class="sticky bottom-0 p-4 border-t border-base-300 bg-base-100">
+    <div class="flex items-center gap-3">
+      <div class="avatar placeholder">
+        <div class="bg-primary text-primary-content rounded-full w-10">
+          <span class="text-sm"><%= current_user&.email&.first&.upcase || "A" %></span>
+        </div>
+      </div>
+      <div class="flex-1 min-w-0">
+        <p class="text-sm font-medium truncate"><%= current_user&.email || "Admin User" %></p>
+        <div class="flex items-center gap-2">
+          <span class="badge badge-primary badge-sm">Admin</span>
+        </div>
+      </div>
+      <button data-action="click->authentication#signOut" class="btn btn-ghost btn-sm btn-square" title="Sign out">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+        </svg>
+      </button>
+    </div>
+  </div>
+</aside>

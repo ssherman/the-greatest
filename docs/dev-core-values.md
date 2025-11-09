@@ -93,24 +93,35 @@
 - **RESTful routes**: Maintain predictable URL patterns
 - **Testing approach**: Minitest with fixtures (see testing-guide.md)
 - **Default tools**: Prefer Rails built-ins over external gems
-- **Always use generators**: ALWAYS use Rails generators to create new files - they automatically create test files and follow conventions
+
+### CRITICAL: ALWAYS Use Rails Generators
+
+**NEVER manually create controllers, models, jobs, or other Rails files.** ALWAYS use generators to ensure test files are created automatically.
+
   ```bash
-  # ✅ Correct - Use generators
-  rails generate controller Music::Searches index
+  # ✅ Correct - Use generators (creates file + test + proper structure)
+  rails generate controller Admin::Music::Artists index show new edit
   rails generate model Music::Artist name:string slug:string:uniq
+  rails generate sidekiq:job music/calculate_artist_ranking
   rails generate stimulus music/player
-  rails generate component Music::Artists::Card artist
+  rails generate component Admin::SearchComponent url placeholder
   rails generate avo:resource Music::Artist
 
-  # ❌ Incorrect - Don't manually create files
-  touch app/controllers/music/searches_controller.rb
+  # ❌ Incorrect - NEVER manually create files
+  touch app/controllers/admin/music/artists_controller.rb
   touch app/models/music/artist.rb
+  touch app/sidekiq/music/calculate_artist_ranking_job.rb
   ```
-  **Why?** Generators automatically:
-  - Create test files in the correct location with proper namespacing
-  - Follow Rails naming conventions and file structure
-  - Set up boilerplate code correctly
-  - Prevent common mistakes and oversights
+
+  **Why this is CRITICAL:**
+  - **Test files**: Generators automatically create test files in correct locations with proper namespacing
+  - **It's extremely annoying** to add test files manually after the fact
+  - **Naming conventions**: Generators follow Rails naming conventions exactly
+  - **File structure**: Proper directory structure and module nesting
+  - **Boilerplate**: Correct inheritance, includes, and module structure
+  - **Prevent mistakes**: Avoid common errors like wrong paths or missing files
+
+  **Even for custom admin controllers**, use generators first, then customize the generated files. The time saved on test file creation alone is worth it.
 -   **Rails 8 enum syntax**: Always use the new format with colon prefix
   ```ruby
   # ✅ Correct Rails 8 syntax

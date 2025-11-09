@@ -22,36 +22,36 @@ class AdminAccessControllerTest < ActionDispatch::IntegrationTest
       role: :user,
       email_verified: false
     )
+
+    # Set host to match a domain constraint (using music domain for testing)
+    host! Rails.application.config.domains[:music]
   end
 
   test "unauthenticated users cannot access admin area" do
     get "/admin"
-    assert_response :forbidden
+    assert_redirected_to music_root_path
+    assert_equal "Access denied. Admin or editor role required.", flash[:alert]
   end
 
   test "regular users cannot access admin area" do
-    Services::AuthenticationService.stubs(:call).returns({success: true, user: @regular_user})
-    sign_in_as(@regular_user)
+    sign_in_as(@regular_user, stub_auth: true)
 
     get "/admin"
-    assert_response :forbidden
+    assert_redirected_to music_root_path
+    assert_equal "Access denied. Admin or editor role required.", flash[:alert]
   end
 
   test "admin users can access admin area" do
-    Services::AuthenticationService.stubs(:call).returns({success: true, user: @admin_user})
-    sign_in_as(@admin_user)
+    sign_in_as(@admin_user, stub_auth: true)
 
     get "/admin"
-    assert_response :redirect
-    assert_redirected_to %r{/admin/}
+    assert_response :success
   end
 
   test "editor users can access admin area" do
-    Services::AuthenticationService.stubs(:call).returns({success: true, user: @editor_user})
-    sign_in_as(@editor_user)
+    sign_in_as(@editor_user, stub_auth: true)
 
     get "/admin"
-    assert_response :redirect
-    assert_redirected_to %r{/admin/}
+    assert_response :success
   end
 end

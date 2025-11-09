@@ -4,4 +4,7 @@
 
 import { application } from "./application"
 import AuthenticationController from "./authentication_controller"
+import AdminSearchController from "./admin/search_controller"
+
 application.register("authentication", AuthenticationController)
+application.register("admin--search", AdminSearchController)

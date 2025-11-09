@@ -26,7 +26,33 @@ bin/rails generate model Books::Book title:string
 
 ## Core Development Principles
 
-### 1. Namespacing Requirements
+### 1. ALWAYS Use Rails Generators
+
+**CRITICAL:** NEVER manually create controllers, models, jobs, or other Rails files. ALWAYS use generators to ensure test files are created automatically.
+
+```bash
+# ✅ Correct - Creates file + test + follows conventions
+cd web-app
+bin/rails generate controller Admin::Music::Artists index show new edit
+bin/rails generate model Music::Artist name:string slug:string:uniq
+bin/rails generate sidekiq:job music/calculate_artist_ranking
+bin/rails generate component Admin::SearchComponent url placeholder
+
+# ❌ Wrong - No test file, easy to make mistakes
+touch app/controllers/admin/music/artists_controller.rb
+touch app/models/music/artist.rb
+```
+
+**Why this matters:**
+- Generators automatically create test files in correct locations with proper namespacing
+- Follow Rails naming conventions and file structure exactly
+- Set up boilerplate code correctly (inheritance, module structure, etc.)
+- Prevent common mistakes like missing test files or wrong paths
+- **It's extremely annoying to add test files manually after the fact**
+
+**Note:** Even for admin controllers and namespaced resources, use generators first, then customize.
+
+### 2. Namespacing Requirements
 - All media-specific code MUST be namespaced: `Books::Book`, `Movies::Director`, `Games::Platform`
 - Shared models (User, List, Review) remain in global namespace
 - Service objects follow same pattern: `Books::ImportService`, `Movies::MetadataService`
@@ -256,11 +282,12 @@ Never make real API calls in tests - stub all external dependencies.
 
 ## Common Pitfalls
 
-1. **Wrong working directory:** Always `cd web-app/` first
-2. **Fixture references:** Check actual fixture names before using
-3. **Enum syntax:** Use Rails 8 format with colon prefix
-4. **Namespacing:** Media-specific code must be namespaced
-5. **Documentation location:** All docs go in top-level `docs/`, not `web-app/docs/`
+1. **Not using generators:** NEVER manually create controllers, models, or jobs - ALWAYS use `rails generate` to ensure test files are created
+2. **Wrong working directory:** Always `cd web-app/` first
+3. **Fixture references:** Check actual fixture names before using
+4. **Enum syntax:** Use Rails 8 format with colon prefix
+5. **Namespacing:** Media-specific code must be namespaced
+6. **Documentation location:** All docs go in top-level `docs/`, not `web-app/docs/`
 
 ## Related Documentation
 

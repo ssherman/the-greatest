@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <title><%= content_for?(:title) ? yield(:title) : "Admin" %> - The Greatest Music</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <%= csrf_meta_tags %>
+  <%= csp_meta_tag %>
+
+  <%= favicon_link_tag "music/favicon/favicon.ico" %>
+  <link rel="icon" type="image/png" href="<%= image_path('music/favicon/favicon-96x96.png') %>" sizes="96x96" />
+  <link rel="icon" type="image/svg+xml" href="<%= image_path('music/favicon/favicon.svg') %>" />
+  <link rel="apple-touch-icon" sizes="180x180" href="<%= image_path('music/favicon/apple-touch-icon.png') %>" />
+  <meta name="apple-mobile-web-app-title" content="Admin - The Greatest Music" />
+
+  <%= stylesheet_link_tag "music", "data-turbo-track": "reload" %>
+  <%= javascript_include_tag "application", "data-turbo-track": "reload" %>
+
+  <script>
+    window.addEventListener('auth:signout', function() {
+      window.location.href = '/';
+    });
+  </script>
+</head>
+<body class="bg-base-200" data-controller="authentication">
+  <div class="drawer lg:drawer-open">
+    <input id="admin-drawer" type="checkbox" class="drawer-toggle" />
+
+    <!-- Main content -->
+    <div class="drawer-content flex flex-col">
+      <%= render "admin/shared/navbar" %>
+
+      <div id="flash" class="mx-4 mt-4">
+        <%= render "admin/shared/flash" if flash.any? %>
+      </div>
+
+      <main class="flex-1 p-6">
+        <%= yield %>
+      </main>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="drawer-side z-40">
+      <label for="admin-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
+      <%= render "admin/shared/sidebar" %>
+    </div>
+  </div>
+</body>
+</html>

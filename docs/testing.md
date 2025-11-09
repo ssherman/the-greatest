@@ -31,6 +31,34 @@ user_penalty:
 **AI/Automation Note:**
 - When using AI agents or code generation, always instruct the agent to check the actual fixture file for valid keys before referencing them. This prevents a very common and frustrating class of test failures.
 
+## Authentication in Tests
+
+### Using `sign_in_as` Helper
+
+The `test_helper.rb` provides a `sign_in_as` helper for integration tests that handles user authentication. For most tests, you'll want to stub the authentication service to bypass JWT validation:
+
+```ruby
+# In your test
+test "admin can access dashboard" do
+  sign_in_as(@admin_user, stub_auth: true)
+  get admin_dashboard_path
+  assert_response :success
+end
+```
+
+**Parameters:**
+- `user` - The user fixture to sign in as
+- `stub_auth: true` - (Optional) Stubs the `Services::AuthenticationService` to bypass JWT validation. Use this in almost all tests to avoid real authentication.
+
+**When to use `stub_auth: true`:**
+- Admin controller tests (always)
+- Any test that needs authentication but doesn't specifically test the authentication flow
+- Tests that would fail JWT validation (most tests)
+
+**When NOT to use `stub_auth: true`:**
+- Tests specifically testing the authentication flow itself
+- Integration tests where you want to test the full authentication stack
+
 ## Test Organization
 
 ### Namespacing Requirements
