@@ -2,31 +2,7 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
   before_action :set_artist, only: [:edit, :update, :destroy, :execute_action]
 
   def index
-    if params[:q].present?
-      # Use OpenSearch for search
-      search_results = ::Search::Music::Search::ArtistGeneral.call(params[:q], size: 1000)
-      artist_ids = search_results.map { |r| r[:id].to_i }
-
-      # Preserve search order using Rails 7+ in_order_of
-      @artists = Music::Artist
-        .includes(:categories)
-        .left_joins(:albums)
-        .select("music_artists.*, COUNT(DISTINCT music_albums.id) as albums_count")
-        .group("music_artists.id")
-        .in_order_of(:id, artist_ids)
-    else
-      # Normal database query for browsing
-      sort_column = (params[:sort] == "id") ? "music_artists.id" : (params[:sort] || "music_artists.name")
-
-      @artists = Music::Artist.all
-        .includes(:categories)
-        .left_joins(:albums)
-        .select("music_artists.*, COUNT(DISTINCT music_albums.id) as albums_count")
-        .group("music_artists.id")
-        .order(sort_column)
-    end
-
-    @pagy, @artists = pagy(@artists, items: 25)
+    load_artists_for_index
   end
 
   def show
@@ -91,9 +67,12 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
 
     respond_to do |format|
       format.turbo_stream do
+        # Reload the full artist list to refresh the table
+        load_artists_for_index
+
         render turbo_stream: [
           turbo_stream.replace("flash", partial: "admin/shared/flash", locals: {result: result}),
-          turbo_stream.replace("artists_table", partial: "admin/music/artists/table", locals: {artists: @artists})
+          turbo_stream.replace("artists_table", partial: "admin/music/artists/table", locals: {artists: @artists, pagy: @pagy})
         ]
       end
       format.html { redirect_to admin_artists_path, notice: result.message }
@@ -122,6 +101,34 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
 
   def set_artist
     @artist = Music::Artist.find(params[:id])
+  end
+
+  def load_artists_for_index
+    if params[:q].present?
+      # Use OpenSearch for search
+      search_results = ::Search::Music::Search::ArtistGeneral.call(params[:q], size: 1000)
+      artist_ids = search_results.map { |r| r[:id].to_i }
+
+      # Preserve search order using Rails 7+ in_order_of
+      @artists = Music::Artist
+        .includes(:categories)
+        .left_joins(:albums)
+        .select("music_artists.*, COUNT(DISTINCT music_albums.id) as albums_count")
+        .group("music_artists.id")
+        .in_order_of(:id, artist_ids)
+    else
+      # Normal database query for browsing
+      sort_column = (params[:sort] == "id") ? "music_artists.id" : (params[:sort] || "music_artists.name")
+
+      @artists = Music::Artist.all
+        .includes(:categories)
+        .left_joins(:albums)
+        .select("music_artists.*, COUNT(DISTINCT music_albums.id) as albums_count")
+        .group("music_artists.id")
+        .order(sort_column)
+    end
+
+    @pagy, @artists = pagy(@artists, items: 25)
   end
 
   def artist_params

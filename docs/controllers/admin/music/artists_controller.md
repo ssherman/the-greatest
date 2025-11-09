@@ -149,9 +149,14 @@ Executes action on multiple selected artists.
 - `artist_ids[]` - Array of artist IDs
 
 **Behavior:**
-- Loads all artists by IDs
+- Loads selected artists by IDs
 - Executes action on collection
+- Reloads full artist list with pagination (via `load_artists_for_index`)
 - Updates both flash and table via Turbo Stream
+
+**Turbo Stream Response:**
+- Replaces `#flash` div with action result message
+- Replaces `#artists_table` with updated table (includes pagy for pagination)
 
 **Example:**
 ```ruby
@@ -196,6 +201,35 @@ JSON autocomplete endpoint for artist search.
 - Calls OpenSearch with size limit of 10
 - Preserves relevance order
 - Used for autocomplete/typeahead components
+
+## Private Methods
+
+### `set_artist`
+Before action that loads the artist for member actions.
+
+**Usage:**
+```ruby
+before_action :set_artist, only: [:edit, :update, :destroy, :execute_action]
+```
+
+### `load_artists_for_index`
+Shared method that loads artists with search, sorting, pagination, and N+1 prevention.
+
+**Behavior:**
+- Checks for `params[:q]` to determine search vs. browse mode
+- In search mode: Uses OpenSearch and preserves relevance order
+- In browse mode: Applies sorting from `params[:sort]`
+- Always includes categories and aggregates album counts
+- Applies pagination with Pagy (25 items per page)
+
+**Used by:**
+- `index` action
+- `bulk_action` turbo stream response (to refresh table)
+
+**Why extracted:**
+- DRY principle - shared logic between index and bulk_action
+- Ensures consistent N+1 prevention across both actions
+- Makes testing easier (can test the method directly)
 
 ## Strong Parameters
 
