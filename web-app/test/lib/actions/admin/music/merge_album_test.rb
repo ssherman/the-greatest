@@ -32,6 +32,17 @@ module Actions
           assert_equal "Please confirm you understand this action cannot be undone.", result.message
         end
 
+        test "should reject merge when confirmation checkbox is unchecked (string '0')" do
+          result = MergeAlbum.call(
+            user: @admin_user,
+            models: [@target_album],
+            fields: {source_album_id: @source_album.id, confirm_merge: "0"}
+          )
+
+          assert result.error?
+          assert_equal "Please confirm you understand this action cannot be undone.", result.message
+        end
+
         test "should reject merge with invalid source album id" do
           result = MergeAlbum.call(
             user: @admin_user,

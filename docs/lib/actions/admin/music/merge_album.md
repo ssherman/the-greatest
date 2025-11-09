@@ -53,7 +53,7 @@ Executes the album merge operation with extensive validation.
 **Validation Steps:**
 1. Ensures exactly one album is selected (target)
 2. Validates `source_album_id` field is present
-3. Validates `confirm_merge` checkbox is checked
+3. Validates `confirm_merge` checkbox is checked (must be "1" or true, not "0")
 4. Validates source album exists in database
 5. Prevents self-merge (source ID ≠ target ID)
 
@@ -161,14 +161,15 @@ The action requires two input fields in the UI:
 **Test File:** `test/lib/actions/admin/music/merge_album_test.rb`
 
 **Coverage:**
-- 6 unit tests
-- 14 assertions
+- 7 unit tests
+- 20 assertions
 - 100% passing
 
 **Test Categories:**
-- Validation errors (5 tests)
+- Validation errors (6 tests)
   - Missing source_album_id
-  - Missing confirmation
+  - Missing confirmation (nil)
+  - Unchecked confirmation checkbox (string "0")
   - Invalid source album ID
   - Self-merge attempt
   - Multiple album selection
@@ -184,7 +185,7 @@ The action requires two input fields in the UI:
 ## Common Gotchas
 
 1. **Field Access:** Must check both symbol and string keys for fields (`fields[:key] || fields["key"]`) due to form submission format variations
-2. **Confirmation Checkbox:** Unchecked checkboxes send no value, so falsy check is sufficient
+2. **Confirmation Checkbox:** Unchecked checkboxes post "0" string value, NOT nil/false. Must explicitly check for "1" or true to prevent destructive merge without confirmation.
 3. **Error Handling:** Merger service returns result object, not exceptions, so check `result.success?`
 4. **ID Comparison:** Use `.id` comparison to prevent type mismatches (integer vs string)
 

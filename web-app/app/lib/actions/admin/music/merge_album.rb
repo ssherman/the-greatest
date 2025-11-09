@@ -30,7 +30,7 @@ module Actions
             return error("Please enter the ID of the album to merge.")
           end
 
-          unless confirm_merge
+          unless confirm_merge == "1" || confirm_merge == true
             return error("Please confirm you understand this action cannot be undone.")
           end
 
