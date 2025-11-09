@@ -178,7 +178,7 @@
                       </td>
                       <td><%= album.release_year || "-" %></td>
                       <td>
-                        <%= link_to "View", admin_music_album_path(album), class: "btn btn-ghost btn-xs" if defined?(admin_music_album_path) %>
+                        <%= link_to "View", admin_album_path(album), class: "btn btn-ghost btn-xs", data: { turbo_frame: "_top" } %>
                       </td>
                     </tr>
                   <% end %>

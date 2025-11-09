@@ -79,4 +79,15 @@ custom_source_link:
   parent: david_bowie (Music::Artist)
   public: true
   click_count: 8
+  metadata: '{}'
+
+dark_side_wikipedia:
+  name: "Wikipedia Article"
+  description: "The Dark Side of the Moon on Wikipedia"
+  url: "https://en.wikipedia.org/wiki/The_Dark_Side_of_the_Moon"
+  source: 5  # wikipedia
+  link_category: 2  # information
+  parent: dark_side_of_the_moon (Music::Album)
+  public: true
+  click_count: 42
   metadata: '{}' 
