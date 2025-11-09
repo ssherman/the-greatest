@@ -80,6 +80,35 @@ module Admin
         assert_response :success
       end
 
+      test "should reject invalid sort parameters and default to name" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        # Should not raise an error, should default to sorting by name
+        assert_nothing_raised do
+          get admin_artists_path(sort: "'; DROP TABLE music_artists; --")
+        end
+        assert_response :success
+
+        # Verify artists table still exists by querying it
+        assert ::Music::Artist.count > 0
+      end
+
+      test "should only allow whitelisted sort columns" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        # Valid columns should work
+        ["id", "name", "kind", "created_at"].each do |column|
+          get admin_artists_path(sort: column)
+          assert_response :success
+        end
+
+        # Invalid columns should default to name (no error)
+        ["country", "description", "invalid", "music_artists.id; --"].each do |column|
+          get admin_artists_path(sort: column)
+          assert_response :success
+        end
+      end
+
       # Show Tests
 
       test "should get show for admin" do

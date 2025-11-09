@@ -118,7 +118,7 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
         .in_order_of(:id, artist_ids)
     else
       # Normal database query for browsing
-      sort_column = (params[:sort] == "id") ? "music_artists.id" : (params[:sort] || "music_artists.name")
+      sort_column = sortable_column(params[:sort])
 
       @artists = Music::Artist.all
         .includes(:categories)
@@ -129,6 +129,18 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
     end
 
     @pagy, @artists = pagy(@artists, items: 25)
+  end
+
+  def sortable_column(column)
+    # Whitelist of allowed sort columns to prevent SQL injection
+    allowed_columns = {
+      "id" => "music_artists.id",
+      "name" => "music_artists.name",
+      "kind" => "music_artists.kind",
+      "created_at" => "music_artists.created_at"
+    }
+
+    allowed_columns.fetch(column, "music_artists.name") # Default to name if invalid
   end
 
   def artist_params

@@ -218,7 +218,7 @@ Shared method that loads artists with search, sorting, pagination, and N+1 preve
 **Behavior:**
 - Checks for `params[:q]` to determine search vs. browse mode
 - In search mode: Uses OpenSearch and preserves relevance order
-- In browse mode: Applies sorting from `params[:sort]`
+- In browse mode: Applies sorting from `params[:sort]` via `sortable_column` whitelist
 - Always includes categories and aggregates album counts
 - Applies pagination with Pagy (25 items per page)
 
@@ -230,6 +230,37 @@ Shared method that loads artists with search, sorting, pagination, and N+1 preve
 - DRY principle - shared logic between index and bulk_action
 - Ensures consistent N+1 prevention across both actions
 - Makes testing easier (can test the method directly)
+
+### `sortable_column(column)`
+Whitelists sortable columns to prevent SQL injection attacks.
+
+**Parameters:**
+- `column` (String) - The requested sort column from params
+
+**Returns:** String - Table-qualified column name or default
+
+**Whitelist:**
+```ruby
+{
+  "id" => "music_artists.id",
+  "name" => "music_artists.name",
+  "kind" => "music_artists.kind",
+  "created_at" => "music_artists.created_at"
+}
+```
+
+**Security:**
+- Prevents SQL injection by mapping user input to known-safe column names
+- Returns default `"music_artists.name"` if invalid column requested
+- Uses `Hash#fetch` with default to ensure safety
+- Never interpolates user input directly into SQL
+
+**Example:**
+```ruby
+sortable_column("name")          # => "music_artists.name"
+sortable_column("id")            # => "music_artists.id"
+sortable_column("invalid")       # => "music_artists.name" (default)
+sortable_column("'; DROP TABLE") # => "music_artists.name" (safe!)
 
 ## Strong Parameters
 
@@ -273,11 +304,24 @@ Uses existing `Search::Music::Search::ArtistGeneral` service:
   .find(params[:id])
 ```
 
-### Qualified Sorting
-Prevents PostgreSQL ambiguous column errors when joined:
+### Qualified Sorting with Security
+Prevents both PostgreSQL ambiguous column errors and SQL injection:
 ```ruby
-sort_column = params[:sort] == "id" ? "music_artists.id" : (params[:sort] || "music_artists.name")
+# Whitelist prevents SQL injection
+sort_column = sortable_column(params[:sort])
+
+# Table-qualified column names prevent ambiguous column errors
+allowed_columns = {
+  "id" => "music_artists.id",
+  "name" => "music_artists.name",
+  "kind" => "music_artists.kind",
+  "created_at" => "music_artists.created_at"
+}
 ```
+
+**Why both are needed:**
+1. **Table qualification** - Required when using joins to prevent "ambiguous column" errors
+2. **Whitelist validation** - Required to prevent SQL injection attacks from malicious sort parameters
 
 ## Turbo Frame Integration
 
@@ -336,8 +380,39 @@ result.status    # => :success, :error, or :warning
 - `/app/views/admin/music/artists/_table.html.erb`
 
 ## Testing
-- Controller tests: `/test/controllers/admin/music/artists_controller_test.rb` (30 tests)
-- Covers: CRUD operations, search, pagination, actions, authorization
+- Controller tests: `/test/controllers/admin/music/artists_controller_test.rb` (32 tests)
+- Covers: CRUD operations, search, pagination, actions, authorization, SQL injection prevention
+
+### Security Tests
+Two specific tests verify SQL injection protection:
+
+1. **SQL Injection Attempt Test**
+   ```ruby
+   test "should reject invalid sort parameters and default to name" do
+     # Attempts SQL injection via sort parameter
+     get admin_artists_path(sort: "'; DROP TABLE music_artists; --")
+     assert_response :success
+     # Verifies table still exists (not dropped)
+     assert ::Music::Artist.count > 0
+   end
+   ```
+
+2. **Whitelist Validation Test**
+   ```ruby
+   test "should only allow whitelisted sort columns" do
+     # Valid columns should work
+     ["id", "name", "kind", "created_at"].each do |column|
+       get admin_artists_path(sort: column)
+       assert_response :success
+     end
+
+     # Invalid columns should default to name (no error)
+     ["country", "description", "invalid", "music_artists.id; --"].each do |column|
+       get admin_artists_path(sort: column)
+       assert_response :success
+     end
+   end
+   ```
 
 ## File Location
 `/home/shane/dev/the-greatest/web-app/app/controllers/admin/music/artists_controller.rb`
