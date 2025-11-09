@@ -98,7 +98,9 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
     end
 
     # Load artist records preserving search order
-    artists = Music::Artist.in_order_of(:id, artist_ids)
+    artists = Music::Artist
+      .where(id: artist_ids)
+      .in_order_of(:id, artist_ids)
 
     render json: artists.map { |a| {value: a.id, text: a.name} }
   end
@@ -119,8 +121,9 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
       @artists = if artist_ids.empty?
         Music::Artist.none
       else
-        # Preserve search order using Rails 7+ in_order_of
+        # Preserve search order using Rails 8+ in_order_of
         Music::Artist
+          .where(id: artist_ids)
           .includes(:categories)
           .left_joins(:albums)
           .select("music_artists.*, COUNT(DISTINCT music_albums.id) as albums_count")

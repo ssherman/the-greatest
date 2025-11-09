@@ -50,6 +50,16 @@ Rails.application.routes.draw do
           get :search
         end
       end
+
+      resources :albums do
+        member do
+          post :execute_action
+        end
+        collection do
+          post :bulk_action
+          get :search
+        end
+      end
     end
   end
   require "sidekiq/web"

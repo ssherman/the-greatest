@@ -133,8 +133,19 @@ class ExternalLinkTest < ActiveSupport::TestCase
   end
 
   test "most_clicked scope should order by click_count desc" do
-    most_clicked = ExternalLink.most_clicked.first
-    assert_equal external_links(:beatles_discogs), most_clicked
+    results = ExternalLink.most_clicked.to_a
+
+    # Verify results are ordered by click_count descending
+    assert results.length >= 2, "Should have at least 2 external links to test ordering"
+
+    results.each_cons(2) do |current, next_item|
+      assert current.click_count >= next_item.click_count,
+        "Expected #{current.name} (#{current.click_count}) to have >= clicks than #{next_item.name} (#{next_item.click_count})"
+    end
+
+    # Verify the first result has the highest click count
+    max_click_count = ExternalLink.maximum(:click_count)
+    assert_equal max_click_count, results.first.click_count
   end
 
   # Instance method tests

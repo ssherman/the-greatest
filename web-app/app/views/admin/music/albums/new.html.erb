@@ -1,0 +1,20 @@
+<% content_for :title, "New Album" %>
+
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-3xl font-bold">New Album</h1>
+      <p class="text-sm text-base-content/70 mt-1">Create a new music album</p>
+    </div>
+    <%= link_to admin_albums_path, class: "btn btn-ghost" do %>
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+        <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+      </svg>
+      <span>Back to Albums</span>
+    <% end %>
+  </div>
+
+  <!-- Form -->
+  <%= render "form" %>
+</div>

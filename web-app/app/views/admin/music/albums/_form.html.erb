@@ -1,0 +1,94 @@
+<%= form_with model: @album, url: @album.persisted? ? admin_album_path(@album) : admin_albums_path, class: "space-y-6" do |f| %>
+  <!-- Error Messages -->
+  <% if @album.errors.any? %>
+    <div class="alert alert-error">
+      <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <div>
+        <h3 class="font-bold"><%= pluralize(@album.errors.count, "error") %> prohibited this album from being saved:</h3>
+        <ul class="list-disc list-inside mt-2">
+          <% @album.errors.full_messages.each do |message| %>
+            <li><%= message %></li>
+          <% end %>
+        </ul>
+      </div>
+    </div>
+  <% end %>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">Basic Information</h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Title -->
+        <div class="form-control md:col-span-2">
+          <%= f.label :title, class: "label" do %>
+            <span class="label-text font-semibold">Title <span class="text-error">*</span></span>
+          <% end %>
+          <%= f.text_field :title,
+              class: "input input-bordered w-full #{@album.errors[:title].any? ? 'input-error' : ''}",
+              placeholder: "Enter album title",
+              required: true,
+              autofocus: true %>
+          <% if @album.errors[:title].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @album.errors[:title].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <!-- Release Year -->
+        <div class="form-control">
+          <%= f.label :release_year, class: "label" do %>
+            <span class="label-text font-semibold">Release Year</span>
+          <% end %>
+          <%= f.number_field :release_year,
+              class: "input input-bordered w-full #{@album.errors[:release_year].any? ? 'input-error' : ''}",
+              placeholder: "e.g., 1973",
+              min: 1900,
+              max: Time.current.year + 2 %>
+          <label class="label">
+            <span class="label-text-alt">Initial release year</span>
+          </label>
+          <% if @album.errors[:release_year].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @album.errors[:release_year].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <!-- Description -->
+        <div class="form-control md:col-span-2">
+          <%= f.label :description, class: "label" do %>
+            <span class="label-text font-semibold">Description</span>
+          <% end %>
+          <%= f.text_area :description,
+              class: "textarea textarea-bordered w-full h-32 #{@album.errors[:description].any? ? 'textarea-error' : ''}",
+              placeholder: "Enter a description of the album..." %>
+          <label class="label">
+            <span class="label-text-alt">Album overview, themes, production details, critical reception</span>
+          </label>
+          <% if @album.errors[:description].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @album.errors[:description].first %></span>
+            </label>
+          <% end %>
+        </div>
+      </div>
+
+      <div class="alert alert-info mt-4">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <span>Artist associations can be managed after creating the album.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Form Actions -->
+  <div class="flex flex-col sm:flex-row gap-2 justify-end">
+    <%= link_to "Cancel", @album.persisted? ? admin_album_path(@album) : admin_albums_path, class: "btn btn-ghost" %>
+    <%= f.submit @album.persisted? ? "Update Album" : "Create Album", class: "btn btn-primary" %>
+  </div>
+<% end %>
