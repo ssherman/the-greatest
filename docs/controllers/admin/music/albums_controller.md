@@ -136,6 +136,7 @@ JSON endpoint for autocomplete/search functionality.
 
 **Features:**
 - Returns up to 10 results
+- Filters to matched album IDs only (explicit `.where(id:)` for clarity)
 - Includes artist names in result text
 - Preserves OpenSearch relevance ranking
 - Empty query returns empty array
@@ -151,11 +152,13 @@ Before action callback that loads album from params[:id].
 Loads and filters albums for index page.
 
 **Logic:**
-- If `params[:q]` present: Uses OpenSearch, preserves ranking with `in_order_of`
+- If `params[:q]` present: Uses OpenSearch, filters with `where(id:)`, preserves ranking with `in_order_of`
 - Otherwise: Standard database query with sorting
 - Always paginates at 25 items per page
 
 **N+1 Prevention:** Eager loads categories and album_artists with artists
+
+**Note on `in_order_of` behavior:** Rails 8+ automatically filters records to the specified IDs when using `in_order_of`, but we explicitly add `.where(id: album_ids)` for code clarity and defensive programming.
 
 ### `#sortable_column(column)`
 Whitelists and maps sort parameters to table-qualified column names.

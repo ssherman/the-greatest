@@ -78,6 +78,29 @@ module Admin
         assert_response :success
       end
 
+      test "should only show albums matching search IDs in index" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        # Use albums that we know exist in fixtures
+        thriller = music_albums(:thriller)
+        nevermind = music_albums(:nevermind)
+
+        # OpenSearch returns only thriller album ID
+        search_results = [{id: thriller.id.to_s, score: 10.0, source: {title: thriller.title}}]
+        ::Search::Music::Search::AlbumGeneral.stubs(:call).returns(search_results)
+
+        get admin_albums_path(q: "thriller")
+        assert_response :success
+
+        # Response should include the matched album
+        assert_match thriller.title, response.body
+
+        # Response should NOT include other albums from fixtures
+        # (this will fail currently due to bug - in_order_of doesn't filter, only orders)
+        assert_no_match nevermind.title, response.body
+        assert_no_match "Abbey Road", response.body
+      end
+
       test "should handle sorting by title" do
         sign_in_as(@admin_user, stub_auth: true)
         get admin_albums_path(sort: "title")
@@ -252,6 +275,26 @@ module Admin
 
         get search_admin_albums_path(q: "test"), as: :json
         assert_response :success
+      end
+
+      test "should only return albums matching search IDs in autocomplete" do
+        sign_in_as(@admin_user, stub_auth: true)
+        album2 = music_albums(:wish_you_were_here)
+
+        # OpenSearch returns only one album ID
+        search_results = [{id: @album.id.to_s, score: 10.0, source: {title: @album.title}}]
+        ::Search::Music::Search::AlbumGeneral.stubs(:call).returns(search_results)
+
+        get search_admin_albums_path(q: "Dark"), as: :json
+        assert_response :success
+
+        json_response = JSON.parse(response.body)
+        returned_ids = json_response.map { |item| item["value"] }
+
+        # Should only include the matched album, not all albums
+        assert_includes returned_ids, @album.id
+        assert_not_includes returned_ids, album2.id
+        assert_equal 1, json_response.length
       end
 
       # Action Execution Tests

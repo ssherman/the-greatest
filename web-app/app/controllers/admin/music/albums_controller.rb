@@ -102,6 +102,7 @@ class Admin::Music::AlbumsController < Admin::Music::BaseController
     end
 
     albums = Music::Album
+      .where(id: album_ids)
       .includes(:artists)
       .in_order_of(:id, album_ids)
 
@@ -128,6 +129,7 @@ class Admin::Music::AlbumsController < Admin::Music::BaseController
         Music::Album.none
       else
         Music::Album
+          .where(id: album_ids)
           .includes(:categories, album_artists: [:artist])
           .in_order_of(:id, album_ids)
       end
