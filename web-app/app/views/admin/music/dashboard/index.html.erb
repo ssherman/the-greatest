@@ -1,0 +1,228 @@
+<% content_for :title, "Dashboard" %>
+
+<div class="space-y-6">
+  <!-- Welcome Header -->
+  <div>
+    <h1 class="text-4xl font-bold">Welcome to Music Admin</h1>
+    <p class="text-lg text-base-content/70 mt-2">Manage artists, albums, songs, and more</p>
+  </div>
+
+  <!-- Quick Stats -->
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="stats shadow">
+      <div class="stat">
+        <div class="stat-figure text-primary">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+        </div>
+        <div class="stat-title">Total Artists</div>
+        <div class="stat-value text-primary"><%= Music::Artist.count %></div>
+        <div class="stat-desc"><%= Music::Artist.where("created_at > ?", 7.days.ago).count %> added this week</div>
+      </div>
+    </div>
+
+    <div class="stats shadow">
+      <div class="stat">
+        <div class="stat-figure text-secondary">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+          </svg>
+        </div>
+        <div class="stat-title">Total Albums</div>
+        <div class="stat-value text-secondary"><%= Music::Album.count rescue 0 %></div>
+        <div class="stat-desc">Across all artists</div>
+      </div>
+    </div>
+
+    <div class="stats shadow">
+      <div class="stat">
+        <div class="stat-figure text-accent">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+          </svg>
+        </div>
+        <div class="stat-title">Total Songs</div>
+        <div class="stat-value text-accent"><%= Music::Song.count rescue 0 %></div>
+        <div class="stat-desc">In the catalog</div>
+      </div>
+    </div>
+
+    <div class="stats shadow">
+      <div class="stat">
+        <div class="stat-figure text-info">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+          </svg>
+        </div>
+        <div class="stat-title">Categories</div>
+        <div class="stat-value text-info"><%= Music::Category.count rescue 0 %></div>
+        <div class="stat-desc">Active categories</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Links -->
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <!-- Artists Card -->
+    <div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow">
+      <div class="card-body">
+        <h2 class="card-title">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          Artists
+        </h2>
+        <p class="text-base-content/70">Manage artists and bands</p>
+        <div class="card-actions justify-end mt-4">
+          <%= link_to "View All", admin_artists_path, class: "btn btn-primary btn-sm" %>
+          <%= link_to "Add New", new_admin_artist_path, class: "btn btn-outline btn-sm" %>
+        </div>
+      </div>
+    </div>
+
+    <!-- Albums Card -->
+    <div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow">
+      <div class="card-body">
+        <h2 class="card-title">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+          </svg>
+          Albums
+        </h2>
+        <p class="text-base-content/70">Manage album catalog</p>
+        <div class="card-actions justify-end mt-4">
+          <% if defined?(admin_music_albums_path) %>
+            <%= link_to "View All", admin_music_albums_path, class: "btn btn-secondary btn-sm" %>
+            <%= link_to "Add New", new_admin_music_album_path, class: "btn btn-outline btn-sm" %>
+          <% else %>
+            <span class="badge badge-ghost">Coming Soon</span>
+          <% end %>
+        </div>
+      </div>
+    </div>
+
+    <!-- Songs Card -->
+    <div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow">
+      <div class="card-body">
+        <h2 class="card-title">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+          </svg>
+          Songs
+        </h2>
+        <p class="text-base-content/70">Manage individual tracks</p>
+        <div class="card-actions justify-end mt-4">
+          <% if defined?(admin_music_songs_path) %>
+            <%= link_to "View All", admin_music_songs_path, class: "btn btn-accent btn-sm" %>
+            <%= link_to "Add New", new_admin_music_song_path, class: "btn btn-outline btn-sm" %>
+          <% else %>
+            <span class="badge badge-ghost">Coming Soon</span>
+          <% end %>
+        </div>
+      </div>
+    </div>
+
+    <!-- Categories Card -->
+    <div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow">
+      <div class="card-body">
+        <h2 class="card-title">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+          </svg>
+          Categories
+        </h2>
+        <p class="text-base-content/70">Organize by genre and style</p>
+        <div class="card-actions justify-end mt-4">
+          <% if defined?(admin_music_categories_path) %>
+            <%= link_to "View All", admin_music_categories_path, class: "btn btn-info btn-sm" %>
+            <%= link_to "Add New", new_admin_music_category_path, class: "btn btn-outline btn-sm" %>
+          <% else %>
+            <span class="badge badge-ghost">Coming Soon</span>
+          <% end %>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rankings Card -->
+    <div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow">
+      <div class="card-body">
+        <h2 class="card-title">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          Rankings
+        </h2>
+        <p class="text-base-content/70">View and manage rankings</p>
+        <div class="card-actions justify-end mt-4">
+          <span class="badge badge-ghost">Coming Soon</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Import/Export Card -->
+    <div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow">
+      <div class="card-body">
+        <h2 class="card-title">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+          </svg>
+          Import/Export
+        </h2>
+        <p class="text-base-content/70">Bulk data operations</p>
+        <div class="card-actions justify-end mt-4">
+          <span class="badge badge-ghost">Coming Soon</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Activity -->
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">Recently Added Artists</h2>
+      <% recent_artists = Music::Artist.order(created_at: :desc).limit(5) %>
+      <% if recent_artists.any? %>
+        <div class="overflow-x-auto">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Created</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% recent_artists.each do |artist| %>
+                <tr>
+                  <td>
+                    <div class="flex items-center gap-2">
+                      <% if artist.primary_image.present? && artist.primary_image.file.attached? %>
+                        <%= image_tag artist.primary_image.file.variant(:small), alt: artist.name, class: "w-8 h-8 rounded-full" %>
+                      <% end %>
+                      <%= artist.name %>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="badge <%= artist.person? ? 'badge-primary' : 'badge-secondary' %> badge-sm">
+                      <%= artist.kind.titleize %>
+                    </span>
+                  </td>
+                  <td class="text-sm text-base-content/70">
+                    <%= time_ago_in_words(artist.created_at) %> ago
+                  </td>
+                  <td>
+                    <%= link_to "View", admin_artist_path(artist), class: "btn btn-ghost btn-xs" %>
+                  </td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% else %>
+        <p class="text-base-content/70">No artists yet. <%= link_to "Add your first artist", new_admin_artist_path, class: "link link-primary" %>.</p>
+      <% end %>
+    </div>
+  </div>
+</div>

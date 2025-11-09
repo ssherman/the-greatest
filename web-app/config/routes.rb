@@ -35,6 +35,22 @@ Rails.application.routes.draw do
       get "artists/categories/:id", to: "music/artists/categories#show", as: :music_artist_category
       get "artists/:id", to: "music/artists#show", as: :artist
     end
+
+    # Admin interface for music domain
+    namespace :admin, module: "admin/music" do
+      root to: "dashboard#index"
+
+      resources :artists do
+        member do
+          post :execute_action
+        end
+        collection do
+          post :bulk_action
+          post :index_action
+          get :search
+        end
+      end
+    end
   end
   require "sidekiq/web"
   require "sidekiq/cron/web"
@@ -61,7 +77,8 @@ Rails.application.routes.draw do
     root to: "games/default#index", as: :games_root
   end
 
-  mount_avo
+  # Move Avo to /avo path
+  mount Avo::Engine, at: :avo
 
   # Health check
   get "up" => "rails/health#show", :as => :rails_health_check

@@ -1,0 +1,51 @@
+<% content_for :title, "Artists" %>
+
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <h1 class="text-3xl font-bold">Artists</h1>
+      <p class="text-sm text-base-content/70 mt-1">Manage music artists, bands, and performers</p>
+    </div>
+    <div class="flex gap-2">
+      <%= link_to new_admin_artist_path, class: "btn btn-primary" do %>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+        </svg>
+        <span>New Artist</span>
+      <% end %>
+    </div>
+  </div>
+
+  <!-- Search -->
+  <div class="card bg-base-100 shadow-sm">
+    <div class="card-body">
+      <%= render Admin::SearchComponent.new(
+        url: admin_artists_path,
+        placeholder: "Search artists by name...",
+        value: params[:q],
+        turbo_frame: "artists_table"
+      ) %>
+    </div>
+  </div>
+
+  <!-- Index Actions -->
+  <% if params[:q].blank? %>
+    <div class="flex gap-2">
+      <%= button_to "Refresh All Artists Rankings",
+          index_action_admin_artists_path(action_name: "RefreshAllArtistsRankings"),
+          method: :post,
+          class: "btn btn-sm btn-outline",
+          data: { turbo_confirm: "This will recalculate rankings for all artists. Continue?" } %>
+    </div>
+  <% end %>
+
+  <!-- Artists Table -->
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body p-0">
+      <%= turbo_frame_tag "artists_table" do %>
+        <%= render "table", artists: @artists, pagy: @pagy %>
+      <% end %>
+    </div>
+  </div>
+</div>

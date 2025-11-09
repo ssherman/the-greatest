@@ -25,7 +25,16 @@ end
 
 module ActionDispatch
   class IntegrationTest
-    def sign_in_as(user)
+    def sign_in_as(user, stub_auth: false)
+      # Stub authentication service to bypass JWT validation if requested
+      if stub_auth
+        Services::AuthenticationService.stubs(:call).returns(
+          success: true,
+          user: user,
+          provider_data: {}
+        )
+      end
+
       post auth_sign_in_path, params: {
         jwt: "test_token",
         provider: "google",
