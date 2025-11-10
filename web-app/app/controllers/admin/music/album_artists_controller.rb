@@ -33,7 +33,7 @@ class Admin::Music::AlbumArtistsController < Admin::Music::BaseController
             "flash",
             partial: "admin/shared/flash",
             locals: {flash: {error: @album_artist.errors.full_messages.join(", ")}}
-          )
+          ), status: :unprocessable_entity
         end
         format.html do
           redirect_to redirect_path, alert: @album_artist.errors.full_messages.join(", ")
@@ -70,7 +70,7 @@ class Admin::Music::AlbumArtistsController < Admin::Music::BaseController
             "flash",
             partial: "admin/shared/flash",
             locals: {flash: {error: @album_artist.errors.full_messages.join(", ")}}
-          )
+          ), status: :unprocessable_entity
         end
         format.html do
           redirect_to redirect_path, alert: @album_artist.errors.full_messages.join(", ")

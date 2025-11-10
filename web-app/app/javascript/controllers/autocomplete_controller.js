@@ -13,7 +13,9 @@ export default class extends Controller {
 
   connect() {
     this.abortController = null
+    this.lastSelectedText = ''
     this.initAutoComplete()
+    this.addInputListener()
   }
 
   disconnect() {
@@ -23,6 +25,7 @@ export default class extends Controller {
     if (this.abortController) {
       this.abortController.abort()
     }
+    this.removeInputListener()
   }
 
   initAutoComplete() {
@@ -106,6 +109,7 @@ export default class extends Controller {
             const selection = event.detail.selection.value
 
             this.inputTarget.value = selection[this.displayKeyValue]
+            this.lastSelectedText = selection[this.displayKeyValue]
 
             this.hiddenFieldTarget.value = selection[this.valueKeyValue]
 
@@ -125,6 +129,37 @@ export default class extends Controller {
         }
       }
     })
+  }
+
+  addInputListener() {
+    this.handleInput = this.handleInput.bind(this)
+    this.inputTarget.addEventListener('input', this.handleInput)
+  }
+
+  removeInputListener() {
+    if (this.handleInput) {
+      this.inputTarget.removeEventListener('input', this.handleInput)
+    }
+  }
+
+  handleInput(event) {
+    const currentValue = event.target.value.trim()
+
+    // Clear hidden field if:
+    // 1. Input is empty
+    // 2. Input is below minimum length
+    // 3. User is typing (not selecting from dropdown)
+    if (!currentValue || currentValue.length < this.minLengthValue) {
+      this.hiddenFieldTarget.value = ''
+    } else {
+      // If user is actively typing and we have a hidden field value,
+      // check if the visible text matches what was selected
+      // If not, clear the hidden field
+      const hiddenValue = this.hiddenFieldTarget.value
+      if (hiddenValue && this.inputTarget.value !== this.lastSelectedText) {
+        this.hiddenFieldTarget.value = ''
+      }
+    }
   }
 
   get csrfToken() {
