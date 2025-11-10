@@ -148,51 +148,26 @@
         </div>
       </div>
 
-      <!-- Albums -->
-      <% if @artist.albums.any? %>
-        <div class="card bg-base-100 shadow-xl">
-          <div class="card-body">
+      <!-- Albums Section -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <div class="flex justify-between items-center mb-4">
             <h2 class="card-title">
               Albums
-              <span class="badge badge-ghost"><%= @artist.albums.count %></span>
+              <div class="badge badge-primary"><%= @artist.album_artists.count %></div>
             </h2>
-            <div class="overflow-x-auto">
-              <table class="table table-sm">
-                <thead>
-                  <tr>
-                    <th>Title</th>
-                    <th>Release Year</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <% @artist.albums.limit(10).each do |album| %>
-                    <tr>
-                      <td>
-                        <div class="flex items-center gap-2">
-                          <% if album.primary_image.present? && album.primary_image.file.attached? %>
-                            <%= image_tag album.primary_image.file.variant(:small), alt: album.title, class: "w-8 h-8 rounded" %>
-                          <% end %>
-                          <%= album.title %>
-                        </div>
-                      </td>
-                      <td><%= album.release_year || "-" %></td>
-                      <td>
-                        <%= link_to "View", admin_album_path(album), class: "btn btn-ghost btn-xs", data: { turbo_frame: "_top" } %>
-                      </td>
-                    </tr>
-                  <% end %>
-                </tbody>
-              </table>
-            </div>
-            <% if @artist.albums.count > 10 %>
-              <div class="text-sm text-base-content/70 text-center pt-2">
-                Showing 10 of <%= @artist.albums.count %> albums
-              </div>
-            <% end %>
+
+            <button class="btn btn-primary btn-sm"
+                    onclick="add_album_modal.showModal()">
+              + Add Album
+            </button>
           </div>
+
+          <%= turbo_frame_tag "artist_albums_list" do %>
+            <%= render "albums_list", artist: @artist %>
+          <% end %>
         </div>
-      <% end %>
+      </div>
 
       <!-- Categories -->
       <% if @artist.categories.any? %>
@@ -323,3 +298,68 @@
     </div>
   </div>
 </div>
+
+<!-- Add Album Modal -->
+<dialog id="add_album_modal" class="modal">
+  <div class="modal-box max-w-2xl">
+    <h3 class="font-bold text-lg">Add Album to Artist</h3>
+    <p class="py-4 text-sm text-gray-500">
+      Search for an album to associate with this artist. You can set the position to control album ordering.
+    </p>
+
+    <%= form_with model: Music::AlbumArtist.new,
+                  url: admin_artist_album_artists_path(@artist),
+                  method: :post,
+                  class: "space-y-4",
+                  data: {
+                    controller: "modal-form",
+                    modal_form_modal_id_value: "add_album_modal"
+                  } do |f| %>
+
+      <div class="form-control">
+        <%= f.label :artist_id, "Artist", class: "label" do %>
+          <span class="label-text font-semibold">Artist</span>
+        <% end %>
+        <%= f.text_field :artist_id,
+            value: @artist.name,
+            disabled: true,
+            class: "input input-bordered input-disabled w-full" %>
+        <%= f.hidden_field :artist_id, value: @artist.id %>
+      </div>
+
+      <div class="form-control">
+        <%= f.label :album_id, "Album", class: "label" do %>
+          <span class="label-text font-semibold">Album <span class="text-error">*</span></span>
+        <% end %>
+        <%= render AutocompleteComponent.new(
+          name: "music_album_artist[album_id]",
+          url: search_admin_albums_path,
+          placeholder: "Search for album...",
+          required: true
+        ) %>
+      </div>
+
+      <div class="form-control">
+        <%= f.label :position, class: "label" do %>
+          <span class="label-text font-semibold">Position</span>
+        <% end %>
+        <%= f.number_field :position,
+            value: 1,
+            min: 1,
+            class: "input input-bordered w-full",
+            required: true %>
+        <label class="label">
+          <span class="label-text-alt">Position in album ordering (1 = first album)</span>
+        </label>
+      </div>
+
+      <div class="modal-action">
+        <button type="button" class="btn" onclick="add_album_modal.close()">Cancel</button>
+        <%= f.submit "Add Album", class: "btn btn-primary" %>
+      </div>
+    <% end %>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>

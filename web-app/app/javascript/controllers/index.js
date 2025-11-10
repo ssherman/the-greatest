@@ -3,8 +3,15 @@
 // ./bin/rails generate stimulus controllerName
 
 import { application } from "./application"
-import AuthenticationController from "./authentication_controller"
-import AdminSearchController from "./admin/search_controller"
 
+import Admin__SearchController from "./admin/search_controller"
+application.register("admin--search", Admin__SearchController)
+
+import AuthenticationController from "./authentication_controller"
 application.register("authentication", AuthenticationController)
-application.register("admin--search", AdminSearchController)
+
+import AutocompleteController from "./autocomplete_controller"
+application.register("autocomplete", AutocompleteController)
+
+import ModalFormController from "./modal_form_controller"
+application.register("modal-form", ModalFormController)

@@ -41,6 +41,7 @@ Rails.application.routes.draw do
       root to: "dashboard#index"
 
       resources :artists do
+        resources :album_artists, only: [:create], shallow: true
         member do
           post :execute_action
         end
@@ -52,6 +53,7 @@ Rails.application.routes.draw do
       end
 
       resources :albums do
+        resources :album_artists, only: [:create], shallow: true
         member do
           post :execute_action
         end
@@ -60,6 +62,8 @@ Rails.application.routes.draw do
           get :search
         end
       end
+
+      resources :album_artists, only: [:update, :destroy]
     end
   end
   require "sidekiq/web"

@@ -1,4 +1,5 @@
 import resolve from "@rollup/plugin-node-resolve"
+import commonjs from "@rollup/plugin-commonjs"
 
 export default [
   // Main application bundle
@@ -12,7 +13,8 @@ export default [
       sourcemap: true
     },
     plugins: [
-      resolve()
+      resolve(),
+      commonjs()
     ]
   },
   // Domain-specific bundles
@@ -26,7 +28,8 @@ export default [
       sourcemap: true
     },
     plugins: [
-      resolve()
+      resolve(),
+      commonjs()
     ]
   },
   {
@@ -39,7 +42,8 @@ export default [
       sourcemap: true
     },
     plugins: [
-      resolve()
+      resolve(),
+      commonjs()
     ]
   },
   {
@@ -52,7 +56,8 @@ export default [
       sourcemap: true
     },
     plugins: [
-      resolve()
+      resolve(),
+      commonjs()
     ]
   },
   {
@@ -65,7 +70,8 @@ export default [
       sourcemap: true
     },
     plugins: [
-      resolve()
+      resolve(),
+      commonjs()
     ]
   }
 ]

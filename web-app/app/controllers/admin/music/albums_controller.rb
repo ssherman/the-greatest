@@ -93,7 +93,7 @@ class Admin::Music::AlbumsController < Admin::Music::BaseController
   end
 
   def search
-    search_results = ::Search::Music::Search::AlbumGeneral.call(params[:q], size: 10)
+    search_results = ::Search::Music::Search::AlbumAutocomplete.call(params[:q], size: 10)
     album_ids = search_results.map { |r| r[:id].to_i }
 
     if album_ids.empty?
