@@ -111,6 +111,38 @@ module Admin
 
         assert_redirected_to admin_artist_path(@another_artist)
       end
+
+      test "should infer artist context from referer on update" do
+        patch admin_album_artist_path(@album_artist),
+          params: {music_album_artist: {position: 3}},
+          headers: {"HTTP_REFERER" => admin_artist_url(@artist)}
+
+        assert_redirected_to admin_artist_path(@artist)
+      end
+
+      test "should infer album context from referer on update" do
+        patch admin_album_artist_path(@album_artist),
+          params: {music_album_artist: {position: 3}},
+          headers: {"HTTP_REFERER" => admin_album_url(@album)}
+
+        assert_redirected_to admin_album_path(@album)
+      end
+
+      test "should infer artist context from referer on destroy" do
+        delete admin_album_artist_path(@album_artist),
+          headers: {"HTTP_REFERER" => admin_artist_url(@artist)}
+
+        assert_redirected_to admin_artist_path(@artist)
+      end
+
+      test "should infer album context from referer on destroy" do
+        album_artist = music_album_artists(:wish_you_were_here_pink_floyd)
+
+        delete admin_album_artist_path(album_artist),
+          headers: {"HTTP_REFERER" => admin_album_url(album_artist.album)}
+
+        assert_redirected_to admin_album_path(album_artist.album)
+      end
     end
   end
 end
