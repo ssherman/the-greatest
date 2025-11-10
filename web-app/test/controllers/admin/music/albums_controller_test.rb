@@ -245,7 +245,7 @@ module Admin
         sign_in_as(@admin_user, stub_auth: true)
 
         search_results = [{id: @album.id.to_s, score: 10.0, source: {title: @album.title}}]
-        ::Search::Music::Search::AlbumGeneral.stubs(:call).returns(search_results)
+        ::Search::Music::Search::AlbumAutocomplete.stubs(:call).returns(search_results)
 
         get search_admin_albums_path(q: "Dark"), as: :json
         assert_response :success
@@ -259,7 +259,7 @@ module Admin
       test "should return empty json for autocomplete with no results" do
         sign_in_as(@admin_user, stub_auth: true)
 
-        ::Search::Music::Search::AlbumGeneral.stubs(:call).returns([])
+        ::Search::Music::Search::AlbumAutocomplete.stubs(:call).returns([])
 
         get search_admin_albums_path(q: "nonexistent"), as: :json
         assert_response :success
@@ -271,7 +271,7 @@ module Admin
       test "should call OpenSearch with correct size limit for autocomplete" do
         sign_in_as(@admin_user, stub_auth: true)
 
-        ::Search::Music::Search::AlbumGeneral.expects(:call).with("test", size: 10).returns([])
+        ::Search::Music::Search::AlbumAutocomplete.expects(:call).with("test", size: 10).returns([])
 
         get search_admin_albums_path(q: "test"), as: :json
         assert_response :success
@@ -283,7 +283,7 @@ module Admin
 
         # OpenSearch returns only one album ID
         search_results = [{id: @album.id.to_s, score: 10.0, source: {title: @album.title}}]
-        ::Search::Music::Search::AlbumGeneral.stubs(:call).returns(search_results)
+        ::Search::Music::Search::AlbumAutocomplete.stubs(:call).returns(search_results)
 
         get search_admin_albums_path(q: "Dark"), as: :json
         assert_response :success

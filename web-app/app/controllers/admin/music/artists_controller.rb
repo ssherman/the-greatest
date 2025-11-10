@@ -7,7 +7,13 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
 
   def show
     @artist = Music::Artist
-      .includes(:categories, :identifiers, :primary_image, albums: [:primary_image], images: [])
+      .includes(
+        :categories,
+        :identifiers,
+        :primary_image,
+        album_artists: {album: [:primary_image]},
+        images: []
+      )
       .find(params[:id])
   end
 
@@ -87,8 +93,7 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
   end
 
   def search
-    # Use existing OpenSearch implementation
-    search_results = ::Search::Music::Search::ArtistGeneral.call(params[:q], size: 10)
+    search_results = ::Search::Music::Search::ArtistAutocomplete.call(params[:q], size: 10)
     artist_ids = search_results.map { |r| r[:id].to_i }
 
     # Guard against empty results - in_order_of raises ArgumentError with empty array

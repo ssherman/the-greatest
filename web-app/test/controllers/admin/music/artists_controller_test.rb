@@ -292,7 +292,7 @@ module Admin
         sign_in_as(@admin_user, stub_auth: true)
 
         search_results = [{id: @artist.id.to_s, score: 10.0, source: {name: @artist.name}}]
-        ::Search::Music::Search::ArtistGeneral.stubs(:call).returns(search_results)
+        ::Search::Music::Search::ArtistAutocomplete.stubs(:call).returns(search_results)
 
         get search_admin_artists_path(q: "Bowie"), as: :json
         assert_response :success
@@ -302,7 +302,7 @@ module Admin
         sign_in_as(@admin_user, stub_auth: true)
 
         # Mock OpenSearch returning empty results
-        ::Search::Music::Search::ArtistGeneral.stubs(:call).returns([])
+        ::Search::Music::Search::ArtistAutocomplete.stubs(:call).returns([])
 
         # Should not raise ArgumentError from in_order_of
         assert_nothing_raised do
@@ -317,7 +317,7 @@ module Admin
       test "should call search with size limit of 10 for autocomplete" do
         sign_in_as(@admin_user, stub_auth: true)
 
-        ::Search::Music::Search::ArtistGeneral.expects(:call).with("test", size: 10).returns([])
+        ::Search::Music::Search::ArtistAutocomplete.expects(:call).with("test", size: 10).returns([])
 
         get search_admin_artists_path(q: "test"), as: :json
         assert_response :success

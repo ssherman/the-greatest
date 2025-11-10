@@ -109,48 +109,20 @@
       <!-- Artists Section -->
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
-          <h2 class="card-title">
-            Artists
-            <div class="badge badge-primary"><%= @album.artists.count %></div>
-          </h2>
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="card-title">
+              Artists
+              <div class="badge badge-primary"><%= @album.album_artists.count %></div>
+            </h2>
 
-          <% if @album.album_artists.ordered.any? %>
-            <div class="overflow-x-auto">
-              <table class="table table-zebra">
-                <thead>
-                  <tr>
-                    <th>Position</th>
-                    <th>Name</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <% @album.album_artists.ordered.includes(:artist).each do |album_artist| %>
-                    <tr>
-                      <td><span class="badge badge-sm"><%= album_artist.position %></span></td>
-                      <td>
-                        <%= link_to album_artist.artist.name, admin_artist_path(album_artist.artist),
-                            class: "link link-hover",
-                            data: { turbo_frame: "_top" } %>
-                      </td>
-                      <td>
-                        <%= link_to admin_artist_path(album_artist.artist),
-                            class: "btn btn-ghost btn-xs",
-                            data: { turbo_frame: "_top" },
-                            title: "View Artist" do %>
-                          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                            <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                            <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
-                          </svg>
-                        <% end %>
-                      </td>
-                    </tr>
-                  <% end %>
-                </tbody>
-              </table>
-            </div>
-          <% else %>
-            <p class="text-base-content/50">No artists associated with this album yet.</p>
+            <button class="btn btn-primary btn-sm"
+                    onclick="add_artist_modal.showModal()">
+              + Add Artist
+            </button>
+          </div>
+
+          <%= turbo_frame_tag "album_artists_list" do %>
+            <%= render "artists_list", album: @album %>
           <% end %>
         </div>
       </div>
@@ -327,6 +299,71 @@
     </div>
   </div>
 </div>
+
+<!-- Add Artist Modal -->
+<dialog id="add_artist_modal" class="modal">
+  <div class="modal-box max-w-2xl">
+    <h3 class="font-bold text-lg">Add Artist to Album</h3>
+    <p class="py-4 text-sm text-gray-500">
+      Search for an artist to associate with this album. You can set the position to control artist ordering.
+    </p>
+
+    <%= form_with model: Music::AlbumArtist.new,
+                  url: admin_album_album_artists_path(@album),
+                  method: :post,
+                  class: "space-y-4",
+                  data: {
+                    controller: "modal-form",
+                    modal_form_modal_id_value: "add_artist_modal"
+                  } do |f| %>
+
+      <div class="form-control">
+        <%= f.label :album_id, "Album", class: "label" do %>
+          <span class="label-text font-semibold">Album</span>
+        <% end %>
+        <%= f.text_field :album_id,
+            value: @album.title,
+            disabled: true,
+            class: "input input-bordered input-disabled w-full" %>
+        <%= f.hidden_field :album_id, value: @album.id %>
+      </div>
+
+      <div class="form-control">
+        <%= f.label :artist_id, "Artist", class: "label" do %>
+          <span class="label-text font-semibold">Artist <span class="text-error">*</span></span>
+        <% end %>
+        <%= render AutocompleteComponent.new(
+          name: "music_album_artist[artist_id]",
+          url: search_admin_artists_path,
+          placeholder: "Search for artist...",
+          required: true
+        ) %>
+      </div>
+
+      <div class="form-control">
+        <%= f.label :position, class: "label" do %>
+          <span class="label-text font-semibold">Position</span>
+        <% end %>
+        <%= f.number_field :position,
+            value: @album.album_artists.maximum(:position).to_i + 1,
+            min: 1,
+            class: "input input-bordered w-full",
+            required: true %>
+        <label class="label">
+          <span class="label-text-alt">Position in artist ordering (1 = first artist)</span>
+        </label>
+      </div>
+
+      <div class="modal-action">
+        <button type="button" class="btn" onclick="add_artist_modal.close()">Cancel</button>
+        <%= f.submit "Add Artist", class: "btn btn-primary" %>
+      </div>
+    <% end %>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
 
 <!-- Merge Album Modal -->
 <dialog id="merge-album-modal" class="modal">

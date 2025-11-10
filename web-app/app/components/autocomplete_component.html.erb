@@ -1,0 +1,28 @@
+<div class="form-control">
+  <div data-controller="autocomplete"
+       data-autocomplete-url-value="<%= url %>"
+       data-autocomplete-min-length-value="<%= min_length %>"
+       data-autocomplete-debounce-value="<%= debounce %>"
+       data-autocomplete-display-key-value="<%= display_key %>"
+       data-autocomplete-value-key-value="<%= value_key %>"
+       class="autocomplete-container"
+       style="position: relative; width: 100%;">
+
+    <%= hidden_field_tag name, value,
+        data: { autocomplete_target: "hiddenField" },
+        required: required %>
+
+    <input type="search"
+           id="<%= autocomplete_id %>"
+           data-autocomplete-target="input"
+           value="<%= selected_text %>"
+           placeholder="<%= placeholder %>"
+           class="input input-bordered w-full <%= 'input-disabled' if disabled %>"
+           autocomplete="off"
+           <%= 'disabled' if disabled %>>
+  </div>
+
+  <label class="label">
+    <span class="label-text-alt">Start typing to search (min <%= min_length %> characters)</span>
+  </label>
+</div>

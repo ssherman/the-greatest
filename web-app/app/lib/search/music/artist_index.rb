@@ -11,10 +11,38 @@ module Search
         {
           settings: {
             analysis: {
+              filter: {
+                edge_ngram_filter: {
+                  type: "edge_ngram",
+                  min_gram: 3,
+                  max_gram: 20
+                },
+                ascii_folding_with_preserve: {
+                  type: "asciifolding",
+                  preserve_original: true
+                }
+              },
               analyzer: {
                 folding: {
                   tokenizer: "standard",
                   filter: ["lowercase", "asciifolding"]
+                },
+                autocomplete: {
+                  type: "custom",
+                  tokenizer: "standard",
+                  filter: [
+                    "lowercase",
+                    "edge_ngram_filter",
+                    "ascii_folding_with_preserve"
+                  ]
+                },
+                autocomplete_search: {
+                  type: "custom",
+                  tokenizer: "standard",
+                  filter: [
+                    "lowercase",
+                    "ascii_folding_with_preserve"
+                  ]
                 }
               }
             }
@@ -28,6 +56,11 @@ module Search
                   keyword: {
                     type: "keyword",
                     normalizer: "lowercase"
+                  },
+                  autocomplete: {
+                    type: "text",
+                    analyzer: "autocomplete",
+                    search_analyzer: "autocomplete_search"
                   }
                 }
               },
