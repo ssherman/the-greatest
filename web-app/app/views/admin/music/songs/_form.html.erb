@@ -1,0 +1,158 @@
+<%= form_with model: @song, url: @song.persisted? ? admin_song_path(@song) : admin_songs_path, class: "space-y-6" do |f| %>
+  <% if @song.errors.any? %>
+    <div class="alert alert-error">
+      <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <div>
+        <h3 class="font-bold"><%= pluralize(@song.errors.count, "error") %> prohibited this song from being saved:</h3>
+        <ul class="list-disc list-inside mt-2">
+          <% @song.errors.full_messages.each do |message| %>
+            <li><%= message %></li>
+          <% end %>
+        </ul>
+      </div>
+    </div>
+  <% end %>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">Basic Information</h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-control md:col-span-2">
+          <%= f.label :title, class: "label" do %>
+            <span class="label-text font-semibold">Title <span class="text-error">*</span></span>
+          <% end %>
+          <%= f.text_field :title,
+              class: "input input-bordered w-full #{@song.errors[:title].any? ? 'input-error' : ''}",
+              placeholder: "Enter song title",
+              required: true,
+              autofocus: true %>
+          <% if @song.errors[:title].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @song.errors[:title].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <% if @song.persisted? %>
+          <div class="form-control md:col-span-2">
+            <%= f.label :slug, class: "label" do %>
+              <span class="label-text font-semibold">Slug</span>
+            <% end %>
+            <input type="text"
+                   value="<%= @song.slug %>"
+                   class="input input-bordered w-full input-disabled"
+                   disabled />
+            <label class="label">
+              <span class="label-text-alt">Auto-generated from title</span>
+            </label>
+          </div>
+        <% end %>
+
+        <div class="form-control">
+          <%= f.label :duration_secs, class: "label" do %>
+            <span class="label-text font-semibold">Duration (seconds)</span>
+          <% end %>
+          <%= f.number_field :duration_secs,
+              class: "input input-bordered w-full #{@song.errors[:duration_secs].any? ? 'input-error' : ''}",
+              placeholder: "e.g., 240",
+              min: 0 %>
+          <label class="label">
+            <span class="label-text-alt">
+              <% if @song.duration_secs.present? %>
+                <%= format_duration(@song.duration_secs) %> (MM:SS format)
+              <% else %>
+                Enter duration in seconds (e.g., 240 for 4:00)
+              <% end %>
+            </span>
+          </label>
+          <% if @song.errors[:duration_secs].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @song.errors[:duration_secs].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <div class="form-control">
+          <%= f.label :release_year, class: "label" do %>
+            <span class="label-text font-semibold">Release Year</span>
+          <% end %>
+          <%= f.number_field :release_year,
+              class: "input input-bordered w-full #{@song.errors[:release_year].any? ? 'input-error' : ''}",
+              placeholder: "e.g., 2024",
+              min: 1800,
+              max: Time.current.year + 5 %>
+          <label class="label">
+            <span class="label-text-alt">Year the song was first released</span>
+          </label>
+          <% if @song.errors[:release_year].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @song.errors[:release_year].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <div class="form-control md:col-span-2">
+          <%= f.label :isrc, class: "label" do %>
+            <span class="label-text font-semibold">ISRC</span>
+          <% end %>
+          <%= f.text_field :isrc,
+              class: "input input-bordered w-full #{@song.errors[:isrc].any? ? 'input-error' : ''}",
+              placeholder: "e.g., USRC17607839",
+              maxlength: 12 %>
+          <label class="label">
+            <span class="label-text-alt">International Standard Recording Code (12 characters)</span>
+          </label>
+          <% if @song.errors[:isrc].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @song.errors[:isrc].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <div class="form-control md:col-span-2">
+          <%= f.label :description, class: "label" do %>
+            <span class="label-text font-semibold">Description</span>
+          <% end %>
+          <%= f.text_area :description,
+              class: "textarea textarea-bordered w-full #{@song.errors[:description].any? ? 'input-error' : ''}",
+              rows: 4,
+              placeholder: "Public description of the song" %>
+          <label class="label">
+            <span class="label-text-alt">Public-facing description</span>
+          </label>
+          <% if @song.errors[:description].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @song.errors[:description].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <div class="form-control md:col-span-2">
+          <%= f.label :notes, class: "label" do %>
+            <span class="label-text font-semibold">Internal Notes</span>
+          <% end %>
+          <%= f.text_area :notes,
+              class: "textarea textarea-bordered w-full #{@song.errors[:notes].any? ? 'input-error' : ''}",
+              rows: 3,
+              placeholder: "Internal notes (not public)" %>
+          <label class="label">
+            <span class="label-text-alt">Admin-only notes</span>
+          </label>
+          <% if @song.errors[:notes].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @song.errors[:notes].first %></span>
+            </label>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex flex-col sm:flex-row gap-2 justify-end">
+    <%= link_to "Cancel", @song.persisted? ? admin_song_path(@song) : admin_songs_path, class: "btn btn-ghost" %>
+    <%= f.submit @song.persisted? ? "Update Song" : "Create Song", class: "btn btn-primary" %>
+  </div>
+<% end %>
