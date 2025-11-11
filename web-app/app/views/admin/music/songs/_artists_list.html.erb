@@ -1,0 +1,113 @@
+<%= turbo_frame_tag "song_artists_list" do %>
+  <% if song.song_artists.any? %>
+    <div class="overflow-x-auto">
+      <table class="table table-zebra">
+        <thead>
+          <tr>
+            <th>Position</th>
+            <th>Artist</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% song.song_artists.ordered.includes(:artist).each do |song_artist| %>
+          <tr>
+            <td>
+              <span class="badge badge-sm"><%= song_artist.position %></span>
+            </td>
+            <td>
+              <%= link_to song_artist.artist.name,
+                  admin_artist_path(song_artist.artist),
+                  class: "link link-hover",
+                  data: { turbo_frame: "_top" } %>
+            </td>
+            <td>
+              <div class="flex gap-2">
+                <button class="btn btn-ghost btn-sm"
+                        onclick="edit_song_artist_<%= song_artist.id %>_modal.showModal()">
+                  Edit
+                </button>
+                <%= button_to "Remove",
+                    admin_song_artist_path(song_artist),
+                    method: :delete,
+                    class: "btn btn-ghost btn-sm text-error",
+                    data: {
+                      turbo_confirm: "Remove #{song_artist.artist.name} from this song?"
+                    } %>
+              </div>
+            </td>
+          </tr>
+
+          <dialog id="edit_song_artist_<%= song_artist.id %>_modal" class="modal">
+            <div class="modal-box max-w-2xl">
+              <h3 class="font-bold text-lg">Edit Artist Position</h3>
+              <p class="py-4 text-sm text-gray-500">
+                Update the position for this artist on the song.
+              </p>
+
+              <%= form_with model: song_artist,
+                            url: admin_song_artist_path(song_artist),
+                            method: :patch,
+                            class: "space-y-4",
+                            data: {
+                              controller: "modal-form",
+                              modal_form_modal_id_value: "edit_song_artist_#{song_artist.id}_modal",
+                              turbo_frame: "song_artists_list"
+                            } do |f| %>
+
+                <div class="form-control">
+                  <%= f.label :song_id, "Song", class: "label" do %>
+                    <span class="label-text font-semibold">Song</span>
+                  <% end %>
+                  <%= f.text_field :song_id,
+                      value: song.title,
+                      disabled: true,
+                      class: "input input-bordered input-disabled w-full" %>
+                </div>
+
+                <div class="form-control">
+                  <%= f.label :artist_id, "Artist", class: "label" do %>
+                    <span class="label-text font-semibold">Artist</span>
+                  <% end %>
+                  <%= f.text_field :artist_id,
+                      value: song_artist.artist.name,
+                      disabled: true,
+                      class: "input input-bordered input-disabled w-full" %>
+                </div>
+
+                <div class="form-control">
+                  <%= f.label :position, class: "label" do %>
+                    <span class="label-text font-semibold">Position <span class="text-error">*</span></span>
+                  <% end %>
+                  <%= f.number_field :position,
+                      value: song_artist.position,
+                      min: 1,
+                      class: "input input-bordered w-full",
+                      required: true %>
+                  <label class="label">
+                    <span class="label-text-alt">Position in artist ordering (1 = first artist)</span>
+                  </label>
+                </div>
+
+                <div class="modal-action">
+                  <button type="button"
+                          class="btn"
+                          onclick="edit_song_artist_<%= song_artist.id %>_modal.close()">
+                    Cancel
+                  </button>
+                  <%= f.submit "Update Position", class: "btn btn-primary" %>
+                </div>
+              <% end %>
+            </div>
+            <form method="dialog" class="modal-backdrop">
+              <button>close</button>
+            </form>
+          </dialog>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <p class="text-gray-500 text-sm">No artists associated with this song yet.</p>
+  <% end %>
+<% end %>

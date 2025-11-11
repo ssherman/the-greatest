@@ -42,6 +42,7 @@ Rails.application.routes.draw do
 
       resources :artists do
         resources :album_artists, only: [:create], shallow: true
+        resources :song_artists, only: [:create], shallow: true
         member do
           post :execute_action
         end
@@ -66,6 +67,7 @@ Rails.application.routes.draw do
       resources :album_artists, only: [:update, :destroy]
 
       resources :songs do
+        resources :song_artists, only: [:create], shallow: true
         member do
           post :execute_action
         end
@@ -74,6 +76,8 @@ Rails.application.routes.draw do
           get :search
         end
       end
+
+      resources :song_artists, only: [:update, :destroy]
     end
   end
   require "sidekiq/web"

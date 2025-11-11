@@ -107,43 +107,20 @@
 
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
-          <h2 class="card-title">
-            Artists
-            <div class="badge badge-primary"><%= @song.song_artists.count %></div>
-          </h2>
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="card-title">
+              Artists
+              <div class="badge badge-primary"><%= @song.song_artists.count %></div>
+            </h2>
 
-          <% if @song.song_artists.any? %>
-            <div class="overflow-x-auto">
-              <table class="table table-zebra">
-                <thead>
-                  <tr>
-                    <th>Position</th>
-                    <th>Name</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <% @song.song_artists.ordered.each do |song_artist| %>
-                    <tr>
-                      <td><%= song_artist.position %></td>
-                      <td>
-                        <%= link_to song_artist.artist.name,
-                            admin_artist_path(song_artist.artist),
-                            class: "link link-hover",
-                            data: { turbo_frame: "_top" } %>
-                      </td>
-                      <td>
-                        <%= link_to "View", admin_artist_path(song_artist.artist),
-                            class: "btn btn-sm btn-ghost",
-                            data: { turbo_frame: "_top" } %>
-                      </td>
-                    </tr>
-                  <% end %>
-                </tbody>
-              </table>
-            </div>
-          <% else %>
-            <p class="text-base-content/50">No artists associated with this song.</p>
+            <button class="btn btn-primary btn-sm"
+                    onclick="add_artist_modal.showModal()">
+              + Add Artist
+            </button>
+          </div>
+
+          <%= turbo_frame_tag "song_artists_list" do %>
+            <%= render "artists_list", song: @song %>
           <% end %>
         </div>
       </div>
@@ -397,6 +374,71 @@
       <div class="modal-action">
         <button type="button" class="btn" onclick="document.getElementById('merge-song-modal').close()">Cancel</button>
         <%= f.submit "Merge Song", class: "btn btn-warning" %>
+      </div>
+    <% end %>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
+
+<!-- Add Artist Modal -->
+<dialog id="add_artist_modal" class="modal">
+  <div class="modal-box max-w-2xl">
+    <h3 class="font-bold text-lg">Add Artist to Song</h3>
+    <p class="py-4 text-sm text-gray-500">
+      Search for an artist to associate with this song. You can set the position to control artist ordering.
+    </p>
+
+    <%= form_with model: Music::SongArtist.new,
+                  url: admin_song_song_artists_path(@song),
+                  method: :post,
+                  class: "space-y-4",
+                  data: {
+                    controller: "modal-form",
+                    modal_form_modal_id_value: "add_artist_modal"
+                  } do |f| %>
+
+      <div class="form-control">
+        <%= f.label :song_id, "Song", class: "label" do %>
+          <span class="label-text font-semibold">Song</span>
+        <% end %>
+        <%= f.text_field :song_id,
+            value: @song.title,
+            disabled: true,
+            class: "input input-bordered input-disabled w-full" %>
+        <%= f.hidden_field :song_id, value: @song.id %>
+      </div>
+
+      <div class="form-control">
+        <%= f.label :artist_id, "Artist", class: "label" do %>
+          <span class="label-text font-semibold">Artist <span class="text-error">*</span></span>
+        <% end %>
+        <%= render AutocompleteComponent.new(
+          name: "music_song_artist[artist_id]",
+          url: search_admin_artists_path,
+          placeholder: "Search for artist...",
+          required: true
+        ) %>
+      </div>
+
+      <div class="form-control">
+        <%= f.label :position, class: "label" do %>
+          <span class="label-text font-semibold">Position</span>
+        <% end %>
+        <%= f.number_field :position,
+            value: @song.song_artists.maximum(:position).to_i + 1,
+            min: 1,
+            class: "input input-bordered w-full",
+            required: true %>
+        <label class="label">
+          <span class="label-text-alt">Position in artist ordering (1 = first artist)</span>
+        </label>
+      </div>
+
+      <div class="modal-action">
+        <button type="button" class="btn" onclick="add_artist_modal.close()">Cancel</button>
+        <%= f.submit "Add Artist", class: "btn btn-primary" %>
       </div>
     <% end %>
   </div>
