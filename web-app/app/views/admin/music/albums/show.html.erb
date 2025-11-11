@@ -431,7 +431,11 @@
 
     <%= form_with url: execute_action_admin_album_path(@album),
                   method: :post,
-                  class: "space-y-4" do |f| %>
+                  class: "space-y-4",
+                  data: {
+                    controller: "modal-form",
+                    modal_form_modal_id_value: "merge-album-modal"
+                  } do |f| %>
       <%= f.hidden_field :action_name, value: "MergeAlbum" %>
 
       <div class="form-control">

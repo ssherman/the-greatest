@@ -268,7 +268,7 @@ Used `codebase-pattern-finder` sub-agent to extract patterns from Phase 1 (Artis
 - `app/helpers/application_helper.rb` - Added `format_duration`
 - `config/routes.rb` - Added songs resources
 - `app/views/admin/music/artists/show.html.erb` - Added songs section
-- `app/views/admin/music/albums/show.html.erb` - Added songs section
+- `app/views/admin/music/albums/show.html.erb` - Added songs section, updated merge modal with `modal-form` controller
 - `app/views/admin/shared/_sidebar.html.erb` - Activated Songs link
 - `app/controllers/admin/music/artists_controller.rb` - Eager load songs
 - `app/controllers/admin/music/albums_controller.rb` - Eager load tracks+songs
@@ -289,6 +289,13 @@ Used `codebase-pattern-finder` sub-agent to extract patterns from Phase 1 (Artis
 - **Issue**: Song titles on artist/album pages were plain text
 - **Solution**: Wrapped in `link_to admin_song_path(song)` with `link-hover` class
 - **Lesson**: Cross-page navigation important for usability
+
+**4. Modal Auto-Close (Post-Implementation Fix)**
+- **Issue**: Merge modal did not close automatically after successful submission
+- **Initial approach**: Added JavaScript in controller turbo_stream response (not clean)
+- **Final solution**: Added `modal-form` Stimulus controller to form with `data-modal_form_modal_id_value`
+- **Location**: `app/javascript/controllers/modal_form_controller.js` listens for `turbo:submit-end` and closes modal on success
+- **Lesson**: Use existing Stimulus controllers for UI behavior; keep controller code focused on data/response
 
 ### Deviations from Plan
 
@@ -334,8 +341,11 @@ Used `codebase-pattern-finder` sub-agent to extract patterns from Phase 1 (Artis
 
 ## Documentation Updated
 
-- [x] This task file with implementation notes
-- [x] `docs/todo.md` moved to Completed section
+- [x] This task file with implementation notes and modal fix
+- [x] `docs/todo.md` - Task already in Completed section
+- [x] `docs/controllers/admin/music/songs_controller.md` - Controller documentation
+- [x] `docs/lib/actions/admin/music/merge_song.md` - Action documentation
+- [x] `docs/helpers/application_helper.md` - Helper documentation with format_duration
 
 ---
 

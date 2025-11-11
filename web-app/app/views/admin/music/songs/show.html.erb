@@ -1,19 +1,17 @@
 <% content_for :title, @song.title %>
 
 <div class="space-y-6">
-  <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-    <div class="flex items-center gap-2">
-      <%= link_to admin_songs_path, class: "btn btn-ghost btn-sm btn-circle" do %>
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-        </svg>
-      <% end %>
-      <div>
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div class="flex-1">
+      <div class="flex items-center gap-2">
+        <%= link_to admin_songs_path, class: "btn btn-ghost btn-sm btn-circle" do %>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+        <% end %>
         <h1 class="text-3xl font-bold"><%= @song.title %></h1>
-        <p class="text-sm text-base-content/70">Song #<%= @song.id %></p>
       </div>
     </div>
-
     <div class="flex gap-2">
       <%= link_to edit_admin_song_path(@song), class: "btn btn-primary" do %>
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -60,6 +58,11 @@
           <h2 class="card-title">Basic Information</h2>
 
           <div class="grid grid-cols-2 gap-4">
+            <div>
+              <p class="text-sm font-semibold text-base-content/70">ID</p>
+              <p class="text-base font-mono"><%= @song.id %></p>
+            </div>
+
             <div>
               <p class="text-sm font-semibold text-base-content/70">Title</p>
               <p class="text-base"><%= @song.title %></p>
@@ -363,7 +366,11 @@
 
     <%= form_with url: execute_action_admin_song_path(@song),
                   method: :post,
-                  class: "space-y-4" do |f| %>
+                  class: "space-y-4",
+                  data: {
+                    controller: "modal-form",
+                    modal_form_modal_id_value: "merge-song-modal"
+                  } do |f| %>
       <%= f.hidden_field :action_name, value: "MergeSong" %>
 
       <div class="form-control">
