@@ -4951,6 +4951,8 @@
       "artists": [
         "Jan Bradley"
       ],
+      "song_id": 73707,
+      "song_name": "Nights in New York City",
       "release_year": null,
       "mb_artist_ids": [
         "c730ec17-b201-4dc3-a32b-987ab3059c08"
@@ -4959,7 +4961,6 @@
         "Jan Dahlen"
       ],
       "mb_recording_id": "ce9b2256-5a39-4ba2-89ea-a946cd638bb3",
-      "ai_match_invalid": true,
       "mb_recording_name": "New York City",
       "musicbrainz_match": true
     },
@@ -5085,8 +5086,7 @@
       "mb_artist_names": [
         "The Kodama Institute"
       ],
-      "mb_recording_id": "873e23f3-8536-4be3-9c75-b20782202221",
-      "ai_match_invalid": true,
+      "mb_recording_id": "c83f4862-38bc-4af3-86cc-3dd51ecea7f3",
       "mb_recording_name": "Title screen (the drive home)",
       "musicbrainz_match": true
     },

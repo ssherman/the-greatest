@@ -102,7 +102,7 @@ class RankedItemTest < ActiveSupport::TestCase
 
   test "should accept music songs in music songs ranking configuration" do
     # Use a song fixture that's not already ranked
-    song = music_songs(:time)
+    song = music_songs(:money)
     ranked_item = RankedItem.new(
       ranking_configuration: @music_songs_config,
       item: song
@@ -119,7 +119,7 @@ class RankedItemTest < ActiveSupport::TestCase
     ranked_item1 = RankedItem.create!(ranking_configuration: config, item: item1, rank: 2, score: 8.5)
     ranked_item2 = RankedItem.create!(ranking_configuration: config, item: item2, rank: 1, score: 9.0)
 
-    ordered = RankedItem.by_rank
+    ordered = RankedItem.where(ranking_configuration: config).by_rank
     assert_equal ranked_item2, ordered.first  # rank 1 should come first
     assert_equal ranked_item1, ordered.second # rank 2 should come second
   end
@@ -133,7 +133,7 @@ class RankedItemTest < ActiveSupport::TestCase
     ranked_item1 = RankedItem.create!(ranking_configuration: config, item: item1, rank: 1, score: 8.5)
     ranked_item2 = RankedItem.create!(ranking_configuration: config, item: item2, rank: 2, score: 9.0)
 
-    ordered = RankedItem.by_score
+    ordered = RankedItem.where(ranking_configuration: config).by_score
     assert_equal ranked_item2, ordered.first  # score 9.0 should come first
     assert_equal ranked_item1, ordered.second # score 8.5 should come second
   end
