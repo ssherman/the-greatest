@@ -164,6 +164,61 @@
         </div>
       </div>
 
+      <!-- Songs Section -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">
+            Songs
+            <div class="badge badge-primary"><%= @album.releases.sum { |r| r.tracks.count } %></div>
+          </h2>
+
+          <% if @album.releases.any? %>
+            <% @album.releases.each do |release| %>
+              <% if release.tracks.any? %>
+                <div class="mb-6">
+                  <h3 class="text-lg font-semibold mb-2"><%= release.format.titleize %> - <%= release.status.titleize %></h3>
+
+                  <div class="overflow-x-auto">
+                    <table class="table table-zebra table-sm">
+                      <thead>
+                        <tr>
+                          <th>Disc</th>
+                          <th>Track</th>
+                          <th>Title</th>
+                          <th>Duration</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <% release.tracks.ordered.includes(:song).each do |track| %>
+                          <tr>
+                            <td><%= track.medium_number %></td>
+                            <td><%= track.position %></td>
+                            <td>
+                              <%= link_to track.song.title, admin_song_path(track.song),
+                                          class: "link link-hover",
+                                          data: { turbo_frame: "_top" } %>
+                            </td>
+                            <td><%= format_duration(track.length_secs || track.song.duration_secs) %></td>
+                            <td>
+                              <%= link_to "View", admin_song_path(track.song),
+                                          class: "btn btn-xs btn-ghost",
+                                          data: { turbo_frame: "_top" } %>
+                            </td>
+                          </tr>
+                        <% end %>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              <% end %>
+            <% end %>
+          <% else %>
+            <p class="text-base-content/50">No releases with tracks found for this album.</p>
+          <% end %>
+        </div>
+      </div>
+
       <!-- Categories Section -->
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
@@ -376,7 +431,11 @@
 
     <%= form_with url: execute_action_admin_album_path(@album),
                   method: :post,
-                  class: "space-y-4" do |f| %>
+                  class: "space-y-4",
+                  data: {
+                    controller: "modal-form",
+                    modal_form_modal_id_value: "merge-album-modal"
+                  } do |f| %>
       <%= f.hidden_field :action_name, value: "MergeAlbum" %>
 
       <div class="form-control">

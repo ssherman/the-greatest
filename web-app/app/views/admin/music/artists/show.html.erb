@@ -169,6 +169,59 @@
         </div>
       </div>
 
+      <!-- Songs Section -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">
+            Songs
+            <div class="badge badge-primary"><%= @artist.song_artists.count %></div>
+          </h2>
+
+          <% if @artist.song_artists.any? %>
+            <div class="overflow-x-auto">
+              <table class="table table-zebra">
+                <thead>
+                  <tr>
+                    <th>Title</th>
+                    <th>Release Year</th>
+                    <th>Duration</th>
+                    <th>Position</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% @artist.song_artists.ordered.includes(:song).each do |song_artist| %>
+                    <tr>
+                      <td>
+                        <%= link_to song_artist.song.title, admin_song_path(song_artist.song),
+                                    class: "link link-hover",
+                                    data: { turbo_frame: "_top" } %>
+                      </td>
+                      <td><%= song_artist.song.release_year || "—" %></td>
+                      <td><%= format_duration(song_artist.song.duration_secs) %></td>
+                      <td><%= song_artist.position %></td>
+                      <td>
+                        <%= link_to "View", admin_song_path(song_artist.song),
+                                    class: "btn btn-sm btn-ghost",
+                                    data: { turbo_frame: "_top" } %>
+                      </td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+
+            <% if @artist.song_artists.count > 10 %>
+              <%= link_to "View All Songs →",
+                          admin_songs_path(artist_id: @artist.id),
+                          class: "btn btn-outline btn-sm mt-2" %>
+            <% end %>
+          <% else %>
+            <p class="text-base-content/50">No songs found for this artist.</p>
+          <% end %>
+        </div>
+      </div>
+
       <!-- Categories -->
       <% if @artist.categories.any? %>
         <div class="card bg-base-100 shadow-xl">

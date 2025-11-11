@@ -64,6 +64,16 @@ Rails.application.routes.draw do
       end
 
       resources :album_artists, only: [:update, :destroy]
+
+      resources :songs do
+        member do
+          post :execute_action
+        end
+        collection do
+          post :bulk_action
+          get :search
+        end
+      end
     end
   end
   require "sidekiq/web"

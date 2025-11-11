@@ -1,0 +1,126 @@
+<% if songs.any? %>
+  <div class="overflow-x-auto">
+    <table class="table table-zebra table-hover">
+      <thead>
+        <tr>
+          <th>
+            <label>
+              <input type="checkbox" class="checkbox checkbox-sm" />
+            </label>
+          </th>
+          <th>
+            <%= link_to admin_songs_path(sort: "id", q: params[:q]), data: { turbo_frame: "songs_table" }, class: "link link-hover" do %>
+              ID
+            <% end %>
+          </th>
+          <th>
+            <%= link_to admin_songs_path(sort: "title", q: params[:q]), data: { turbo_frame: "songs_table" }, class: "link link-hover" do %>
+              Title
+            <% end %>
+          </th>
+          <th>Artists</th>
+          <th>Duration</th>
+          <th>
+            <%= link_to admin_songs_path(sort: "release_year", q: params[:q]), data: { turbo_frame: "songs_table" }, class: "link link-hover" do %>
+              Release Year
+            <% end %>
+          </th>
+          <th>Categories</th>
+          <th>
+            <%= link_to admin_songs_path(sort: "created_at", q: params[:q]), data: { turbo_frame: "songs_table" }, class: "link link-hover" do %>
+              Created
+            <% end %>
+          </th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% songs.each do |song| %>
+          <tr>
+            <td>
+              <label>
+                <input type="checkbox"
+                       class="checkbox checkbox-sm"
+                       value="<%= song.id %>" />
+              </label>
+            </td>
+            <td class="font-mono text-sm">
+              <%= link_to song.id, admin_song_path(song),
+                  class: "link link-hover",
+                  data: { turbo_frame: "_top" } %>
+            </td>
+            <td class="font-medium">
+              <%= link_to song.title, admin_song_path(song),
+                  class: "link link-hover",
+                  data: { turbo_frame: "_top" } %>
+            </td>
+            <td class="text-sm">
+              <% if song.artists.any? %>
+                <%= song.artists.map(&:name).join(", ") %>
+              <% else %>
+                <span class="text-base-content/50">No artists</span>
+              <% end %>
+            </td>
+            <td class="text-sm">
+              <%= format_duration(song.duration_secs) %>
+            </td>
+            <td class="text-sm">
+              <%= song.release_year || "—" %>
+            </td>
+            <td>
+              <% if song.categories.any? %>
+                <div class="flex flex-wrap gap-1">
+                  <% song.categories.first(3).each do |category| %>
+                    <span class="badge badge-ghost badge-sm"><%= category.name %></span>
+                  <% end %>
+                  <% if song.categories.count > 3 %>
+                    <span class="badge badge-ghost badge-sm">+<%= song.categories.count - 3 %></span>
+                  <% end %>
+                </div>
+              <% else %>
+                <span class="text-base-content/50 text-sm">—</span>
+              <% end %>
+            </td>
+            <td class="text-sm text-base-content/70">
+              <%= song.created_at.strftime("%Y-%m-%d") %>
+            </td>
+            <td>
+              <%= link_to admin_song_path(song), class: "btn btn-ghost btn-xs", data: { turbo_frame: "_top" } do %>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                  <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
+                </svg>
+                View
+              <% end %>
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+
+  <% if defined?(pagy) && pagy %>
+    <div class="flex justify-center py-4 border-t border-base-300">
+      <%== pagy_nav(pagy) if pagy.pages > 1 %>
+    </div>
+  <% end %>
+<% else %>
+  <div class="py-12 text-center">
+    <svg class="mx-auto h-12 w-12 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+    </svg>
+    <h3 class="mt-2 text-sm font-semibold">No songs found</h3>
+    <p class="mt-1 text-sm text-base-content/50">
+      <% if params[:q].present? %>
+        Try adjusting your search terms
+      <% else %>
+        Get started by creating a new song
+      <% end %>
+    </p>
+    <% if params[:q].blank? %>
+      <div class="mt-6">
+        <%= link_to "New Song", new_admin_song_path, class: "btn btn-primary btn-sm" %>
+      </div>
+    <% end %>
+  </div>
+<% end %>

@@ -1,203 +1,223 @@
-# The Greatest - Task Management Guide
+# The Greatest — Task & Spec Guide (Agent-Ready)
 
-## Overview
-All work is tracked through markdown files that serve as both task management and historical documentation. This creates a comprehensive record of what was planned, why decisions were made, and how features were implemented.
-
-## Structure
-
-### Main Todo List
-`todo.md` - Priority-sorted list of all tasks
-```markdown
-# The Greatest - Todo List
-
-## High Priority
-1. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
-2. [Books data import from existing site](todos/002-books-data-import.md)
-3. [User authentication with Firebase](todos/003-firebase-auth.md)
-
-## Medium Priority
-4. [Recommendation engine MVP](todos/004-recommendation-engine.md)
-5. [OpenSearch integration](todos/005-opensearch-integration.md)
-
-## Low Priority
-6. [Admin interface with Avo](todos/006-admin-interface.md)
-
-## Completed
-- ✅ [2024-11-15] [Project setup and structure](todos/000-project-setup.md)
-```
-
-### Individual Task Files
-Each task has its own detailed file in `todos/` folder:
-
-```
-todos/
-├── 001-multi-domain-routing.md
-├── 002-books-data-import.md
-├── 003-firebase-auth.md
-├── completed/
-│   └── 000-project-setup.md
-└── templates/
-    └── task-template.md
-```
-
-## Task File Template
-
-```markdown
-# [Task Number] - [Task Title]
-
-## Status
-- **Status**: Not Started | In Progress | Completed
-- **Priority**: High | Medium | Low
-- **Created**: YYYY-MM-DD
-- **Started**: YYYY-MM-DD
-- **Completed**: YYYY-MM-DD
-- **Developer**: [Name/Handle]
-
-## Overview
-Brief description of what needs to be accomplished and why.
-
-## Context
-- Why is this needed?
-- What problem does it solve?
-- How does it fit into the larger system?
-
-## Requirements
-- [ ] Specific requirement 1
-- [ ] Specific requirement 2
-- [ ] Specific requirement 3
-
-## Technical Approach
-Proposed technical solution and architecture decisions.
-
-## Dependencies
-- Other tasks that must be completed first
-- External services or APIs needed
-- Gems or libraries to be added
-
-## Acceptance Criteria
-- [ ] User can...
-- [ ] System should...
-- [ ] Performance metrics...
-
-## Design Decisions
-Document any important decisions made during planning.
+> This guide defines how we write tasks/specs so AI agents (and humans) can build fast and correctly. It favors **contracts and tests** over long implementation code.
 
 ---
 
-## Implementation Notes
-*[This section is filled out during/after implementation]*
+## Core Principles
 
-### Approach Taken
-Describe how the feature was actually implemented.
+1. **Contracts > Code**
+   - Put JSON schemas, endpoint tables, pre/postconditions, invariants, and acceptance tests in the spec.
+   - Keep long implementation code in the repo and **link to it** (file paths), not pasted.
 
-### Key Files Changed
-- `app/models/user.rb` - Added authentication methods
-- `config/routes.rb` - Added auth routes
-- `app/controllers/sessions_controller.rb` - New controller
+2. **Single Source of Truth**
+   - Specs name files/classes and constraints; the **authoritative code lives in the repo**.
+   - Any snippet in a spec is **reference-only** and must be ≤40 lines.
 
-### Challenges Encountered
-Document any unexpected issues and how they were resolved.
+3. **Determinism**
+   - Specify inputs/outputs, edge cases, failure modes, auth/roles, and perf budgets.
+   - Use “golden examples” (1–2 canonical cases) to pin behavior.
 
-### Deviations from Plan
-Note any changes from the original technical approach and why.
+4. **Small, Linked, Testable**
+   - Prefer endpoint tables, JSON schemas, and Gherkin or checklist acceptance criteria.
+   - Every nontrivial reference has a **path** (e.g., `app/lib/music/song/merger.rb`).
 
-### Code Examples
+---
+
+## Repository Structure
+
+**Main list**
+```
+todo.md           # Priority-sorted links to task files
+```
+
+**Tasks**
+```
+docs/todos/
+  075-custom-admin-phase-4-songs.md
+  completed/
+    000-project-setup.md
+  templates/
+    task-template.md
+```
+
+**References**
+```
+docs/
+  sub-agents.md
+  AGENTS.md
+  dev-core-values.md
+  documentation.md
+  testing.md
+```
+
+---
+
+## `todo.md` Format
+
+Keep it short and link to tasks.
+
+```markdown
+# The Greatest — Todo
+
+## High
+1. [Custom Admin Interface – Phase 4: Songs](docs/todos/075-custom-admin-phase-4-songs.md)
+
+## Medium
+2. [OpenSearch Integration](docs/todos/005-opensearch-integration.md)
+
+## Low
+3. [Recommendation Engine MVP](docs/todos/004-recommendation-engine.md)
+
+## Completed
+- ✅ [2025-11-10] [Phase 4: Songs](docs/todos/completed/075-custom-admin-phase-4-songs.md)
+```
+
+---
+
+## Task Lifecycle
+
+**Create → Implement → Record → Close**
+
+1. Add to `todo.md` (priority section + link).
+2. Create task file from the template (see `docs/todos/templates/task-template.md`).
+3. While building, update **Implementation Notes** and **Deviations** in the task file.
+4. On completion:
+   - Fill **Acceptance Results**.
+   - Update status to “Completed” with date.
+   - Move link to “Completed” in `todo.md`.
+   - Optionally move task file into `docs/todos/completed/`.
+
+---
+
+## What Goes Into a Task Spec
+
+### Include (in the spec)
+- **Interfaces & Contracts**
+  - Endpoint table (verb, path, purpose, params/body, auth).
+  - JSON schemas for requests/responses.
+  - Event/Stimulus contracts, search contracts (fields/boosts).
+- **Behavioral rules**
+  - Preconditions & postconditions, invariants, edge cases.
+- **Non-functionals**
+  - Performance budgets, N+1 guardrails, auth/roles, responsiveness.
+- **Acceptance criteria**
+  - Checklists, pseudo-tests, or Gherkin.
+- **Golden examples**
+  - 1–2 canonical examples per feature (good/boundary).
+
+### Link (do *not* paste)
+- Full controllers, services, views.
+- Large routing blocks and migrations.
+- Anything >40 lines (unless truly unavoidable; mark as “reference, non-authoritative”).
+
+---
+
+## Agent Hand-Off Block (include in every task)
+
+```markdown
+## Agent Hand-Off
+
+### Constraints
+- Follow existing project patterns; do not introduce new architecture.
+- Respect snippet budget (≤40 lines per snippet).
+- Do not duplicate authoritative code; **link to files by path**.
+
+### Required Outputs
+- Updated files (paths must be listed in “Key Files Touched”).
+- Passing tests for the Acceptance Criteria.
+- Updated sections: “Implementation Notes”, “Deviations”, “Documentation Updated”.
+
+### Sub-Agent Plan
+1) codebase-pattern-finder → collect comparable patterns
+2) codebase-analyzer → verify data flow & integration points
+3) web-search-researcher → external docs if needed (official first)
+4) technical-writer → update docs and cross-refs
+
+### Test Seed / Fixtures
+- Provide minimal fixtures (names & paths) if needed; keep small and focused.
+```
+
+---
+
+## Sub-Agents (quick reference)
+
+See `docs/sub-agents.md` for full details.
+
+**When to use**
+- **codebase-locator**: find *where* code lives.
+- **codebase-analyzer**: understand *how* code works.
+- **codebase-pattern-finder**: find patterns to model new work after.
+- **web-search-researcher**: current info from the web; cite official docs.
+- **technical-writer**: update docs, cross-refs, and task files.
+
+**Conventions**
+- Descriptive, not prescriptive; file:line references when quoting.
+- Structured outputs for AI consumption.
+- No critique unless requested.
+
+---
+
+## Definition of Done (DoD)
+
+- [ ] All Acceptance Criteria demonstrably pass (tests/screenshots).
+- [ ] No N+1 on listed pages; sort whitelist enforced where applicable.
+- [ ] Docs updated (task file, `todo.md`, touched class docs).
+- [ ] Links to authoritative code present; no large code dumps in the spec.
+- [ ] Security/auth reviewed for new/changed paths and actions.
+- [ ] Performance constraints noted or measured.
+
+---
+
+## Useful Blocks (copy as needed)
+
+**Endpoint table**
+```markdown
+| Verb | Path | Purpose | Params/Body | Auth |
+|---|---|---|---|---|
+| POST | /admin/songs/:id/execute_action | single-record action | action_name, fields | admin |
+```
+
+**Gherkin acceptance (optional)**
+```gherkin
+Scenario: Autocomplete returns top matches quickly
+  Given 10k songs indexed
+  When I GET /admin/songs/search?q=teen
+  Then I receive ≤ 10 items in ≤ 300ms p95
+  And the top result matches exact title prefixes first
+```
+
+**Error contract (example)**
+```json
+{
+  "error": {
+    "code": "invalid_sort",
+    "message": "Sort parameter not allowed",
+    "allowed": ["title","release_year","duration_secs","created_at"]
+  }
+}
+```
+
+**Reference helper (non-authoritative, ≤40 lines)**
 ```ruby
-# Key code snippets that illustrate the implementation
+# reference only
+def format_duration(seconds)
+  return "—" if seconds.nil? || seconds.zero?
+  h, r = seconds.divmod(3600)
+  m, s = r.divmod(60)
+  h.positive? ? "%d:%02d:%02d" % [h, m, s] : "%d:%02d" % [m, s]
+end
 ```
 
-### Testing Approach
-How the feature was tested, any edge cases discovered.
+---
 
-### Performance Considerations
-Any optimizations made or needed.
+## FAQ
 
-### Future Improvements
-Potential enhancements identified during implementation.
+**Can I paste a full controller into a spec?**  
+No. Summarize responsibilities & contracts and link to the file path.
 
-### Lessons Learned
-What worked well, what could be done better next time.
+**When is a code snippet OK?**  
+If it’s a small, tricky helper that encodes an invariant and won’t drift (≤40 lines), clearly labeled “reference only”.
 
-### Related PRs
-- #123 - Initial implementation
-- #125 - Bug fix for edge case
-
-### Documentation Updated
-- [ ] Class documentation files updated
-- [ ] API documentation updated
-- [ ] README updated if needed
-```
-
-## Workflow
-
-### Creating a New Task
-1. Add entry to `todo.md` in appropriate priority section
-2. Create detailed task file in `todos/` folder
-3. Use sequential numbering (001, 002, etc.)
-4. Include all known context and requirements
-
-### During Implementation
-1. Update status to "In Progress"
-2. Add implementation notes as you work
-3. Document decisions and trade-offs
-4. Note any scope changes
-
-### After Completion
-1. Fill out Implementation Notes section completely
-2. Update status to "Completed" with date
-3. Move to Completed section in `todo.md`
-4. Consider moving file to `todos/completed/` folder
-5. Update any affected documentation
-
-## Best Practices
-
-### Task Sizing
-- Break large features into smaller tasks
-- Each task should be completable in 1-5 days
-- Create sub-tasks as separate files if needed
-
-### Documentation Detail
-- Include enough context for AI agents to understand
-- Link to relevant documentation or external resources
-- Add diagrams or mockups if helpful
-
-### Historical Value
-- Think of these as archaeological records
-- Future developers (or AI) should understand the "why"
-- Include failed approaches and why they didn't work
-
-### Cross-References
-- Link between related tasks
-- Reference class documentation files
-- Link to external resources or discussions
-
-## Benefits
-- Complete historical record of development
-- AI agents have full context for any feature
-- Easy to understand why decisions were made
-- Onboarding new developers is simpler
-- Can trace evolution of features over time
-- Helps with debugging and maintenance
-
-## Example Task Lifecycle
-
-1. **Planning**: Task identified, file created with requirements
-2. **Refinement**: Technical approach added after research
-3. **Implementation**: Status updated, notes added during coding
-4. **Review**: Implementation notes completed
-5. **Archive**: Serves as permanent documentation
-
-## Recent Example: RankedList Model Implementation
-
-**Task**: [009-ranked-list-model.md](todos/009-ranked-list-model.md)
-
-**Lifecycle**:
-1. **Planning**: Identified need for linking lists to ranking configurations with weights
-2. **Refinement**: Initially planned polymorphic association, then refined to use STI approach
-3. **Implementation**: Created model, migration, tests, and fixtures
-4. **Review**: Fixed polymorphic vs STI confusion, updated schema, all tests passing
-5. **Archive**: Documented in [ranked_list.md](models/ranked_list.md) and marked complete in todo.md
-
-**Key Learning**: Polymorphic associations are not needed when using STI - regular associations work better for same-table inheritance scenarios.
-
-This system creates a living history of the project that's invaluable for maintenance, debugging, and AI-assisted development.
+**How do I keep agents fast/cheap?**  
+Keep specs concise, front-load contracts and acceptance tests, link to code, and avoid large pasted blocks.

@@ -13,7 +13,7 @@ class Admin::Music::AlbumsController < Admin::Music::BaseController
         :primary_image,
         :external_links,
         album_artists: [:artist],
-        releases: [:primary_image],
+        releases: {tracks: [:song]},
         images: [],
         credits: [:artist]
       )

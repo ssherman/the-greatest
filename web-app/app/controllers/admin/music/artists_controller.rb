@@ -12,6 +12,7 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
         :identifiers,
         :primary_image,
         album_artists: {album: [:primary_image]},
+        song_artists: [:song],
         images: []
       )
       .find(params[:id])

@@ -24,6 +24,73 @@ bin/rails test
 bin/rails generate model Books::Book title:string
 ```
 
+## 🚨 FILE PATH CRITICAL REMINDER 🚨
+
+**YOU ARE ALWAYS IN THE `web-app/` DIRECTORY (the Rails root)**
+
+### Project Structure
+```
+<project-root>/
+├── docs/                    # Documentation (OUTSIDE Rails app)
+│   ├── todo.md
+│   ├── todos/
+│   ├── models/
+│   └── ...
+├── AGENTS.md               # This file (OUTSIDE Rails app)
+├── README.md
+└── web-app/                # Rails application (YOUR WORKING DIRECTORY)
+    ├── app/
+    ├── config/
+    ├── test/
+    └── ...
+```
+
+### Documentation Files (OUTSIDE web-app)
+Documentation lives in the **parent directory** and requires `../` prefix:
+
+```bash
+# ✅ CORRECT - Use ../ to access parent directory
+../docs/todo.md
+../docs/todos/075-something.md
+../AGENTS.md
+
+# ❌ WRONG - These paths don't exist from web-app/
+docs/todo.md
+AGENTS.md
+```
+
+### Rails Application Files (INSIDE web-app)
+Rails code is in current directory (where you always are):
+
+```bash
+# ✅ CORRECT - These are in current directory
+app/controllers/admin/music/songs_controller.rb
+app/models/music/song.rb
+config/routes.rb
+test/controllers/admin/music/songs_controller_test.rb
+```
+
+### Quick Reference Table
+
+| File Type | Location | Path From web-app/ | Example |
+|-----------|----------|-------------------|---------|
+| Documentation | Parent dir | `../docs/` | `../docs/todo.md` |
+| Task files | Parent dir | `../docs/todos/` | `../docs/todos/075-task.md` |
+| AGENTS.md | Parent dir | `../AGENTS.md` | `../AGENTS.md` |
+| Controllers | Current dir | `app/controllers/` | `app/controllers/admin/music/songs_controller.rb` |
+| Models | Current dir | `app/models/` | `app/models/music/song.rb` |
+| Tests | Current dir | `test/` | `test/controllers/admin/music/songs_controller_test.rb` |
+| Config | Current dir | `config/` | `config/routes.rb` |
+
+### Common Mistakes to Avoid
+
+1. **❌ DON'T** try to read `docs/todo.md` - it doesn't exist in web-app/
+2. **✅ DO** read `../docs/todo.md` (parent directory)
+3. **❌ DON'T** create docs in `web-app/docs/` - they belong in parent `../docs/`
+4. **✅ DO** create Rails code in `app/`, `test/`, `config/`, etc.
+
+**When in doubt: Rails code is local (no prefix), documentation needs `../` prefix**
+
 ## Core Development Principles
 
 ### 1. ALWAYS Use Rails Generators
