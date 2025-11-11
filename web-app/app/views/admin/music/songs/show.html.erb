@@ -248,14 +248,14 @@
                 <thead>
                   <tr>
                     <th>Ranking Configuration</th>
-                    <th>Position</th>
+                    <th>Rank</th>
                   </tr>
                 </thead>
                 <tbody>
                   <% @song.ranked_items.each do |ranked_item| %>
                     <tr>
                       <td><%= ranked_item.ranking_configuration.name %></td>
-                      <td>#<%= ranked_item.position %></td>
+                      <td>#<%= ranked_item.rank %></td>
                     </tr>
                   <% end %>
                 </tbody>

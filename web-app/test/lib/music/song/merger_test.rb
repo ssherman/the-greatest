@@ -6,6 +6,10 @@ module Music
       def setup
         @source_song = music_songs(:time)
         @target_song = music_songs(:money)
+
+        # Clean up any ranked_items from fixtures to ensure tests start with clean state
+        RankedItem.where(item: @source_song).destroy_all
+        RankedItem.where(item: @target_song).destroy_all
       end
 
       test "should successfully merge songs and return success result" do

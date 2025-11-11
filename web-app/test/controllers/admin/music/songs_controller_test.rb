@@ -89,6 +89,14 @@ module Admin
         assert_response :success
       end
 
+      test "should render show page with ranked_items without error" do
+        sign_in_as(@admin_user, stub_auth: true)
+        song_with_ranking = music_songs(:time)
+
+        get admin_song_path(song_with_ranking)
+        assert_response :success
+      end
+
       test "should get new for admin" do
         sign_in_as(@admin_user, stub_auth: true)
 

@@ -37,3 +37,9 @@ music_albums_unranked_item:
 music_songs_unranked_item:
   item: wish_you_were_here (Music::Song)
   ranking_configuration: music_songs_global
+
+music_songs_ranked_item:
+  item: time (Music::Song)
+  ranking_configuration: music_songs_global
+  rank: 42
+  score: 95.5
