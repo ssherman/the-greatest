@@ -143,6 +143,14 @@ module Admin
         assert_redirected_to music_root_path
       end
 
+      test "should render show page with song_artists without error" do
+        sign_in_as(@admin_user, stub_auth: true)
+        artist_with_songs = music_artists(:pink_floyd)
+
+        get admin_artist_path(artist_with_songs)
+        assert_response :success
+      end
+
       # New Tests
 
       test "should get new for admin" do
