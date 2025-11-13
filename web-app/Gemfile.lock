@@ -84,7 +84,7 @@ GEM
       activerecord (>= 6.0.0)
       activesupport (>= 6.0.0)
     ast (2.4.3)
-    avo (3.26.2)
+    avo (3.26.4)
       actionview (>= 6.1)
       active_link_to
       activerecord (>= 6.1)
@@ -163,7 +163,7 @@ GEM
     down (5.4.2)
       addressable (~> 2.8)
     drb (2.2.3)
-    erb (5.1.3)
+    erb (6.0.0)
     erubi (1.13.1)
     et-orbi (1.4.0)
       tzinfo
@@ -249,7 +249,7 @@ GEM
       logger
     mini_mime (1.1.5)
     minitest (5.26.1)
-    mocha (2.7.1)
+    mocha (2.8.0)
       ruby2_keywords (>= 0.0.5)
     msgpack (1.8.0)
     multi_json (1.17.0)
@@ -281,7 +281,7 @@ GEM
       racc (~> 1.4)
     nokogiri (1.18.10-x86_64-linux-musl)
       racc (~> 1.4)
-    openai (0.35.1)
+    openai (0.35.2)
       connection_pool
     opensearch-ruby (3.4.0)
       faraday (>= 1.0, < 3)
@@ -401,7 +401,7 @@ GEM
       ffi (~> 1.12)
       logger
     ruby2_keywords (0.0.5)
-    ruby_llm-schema (0.2.1)
+    ruby_llm-schema (0.2.5)
     rubyzip (3.2.2)
     securerandom (0.4.1)
     selenium-webdriver (4.38.0)
@@ -436,7 +436,7 @@ GEM
       rubocop-performance (~> 1.25.0)
     stimulus-rails (1.3.4)
       railties (>= 6.0.0)
-    stringio (3.1.7)
+    stringio (3.1.8)
     thor (1.4.0)
     thruster (0.1.16)
     thruster (0.1.16-aarch64-linux)
@@ -462,7 +462,8 @@ GEM
     vacuum (4.3.0)
       aws-sigv4 (~> 1.0)
       http (>= 4.0, < 6.0)
-    view_component (4.1.0)
+    view_component (4.1.1)
+      actionview (>= 7.1.0, < 8.2)
       activesupport (>= 7.1.0, < 8.2)
       concurrent-ruby (~> 1)
     web-console (4.2.1)

@@ -180,3 +180,35 @@ music_artists_global:
   min_list_weight: 1
   apply_list_dates_penalty: false
   inherit_penalties: false
+
+music_albums_secondary:
+  type: Music::Albums::RankingConfiguration
+  name: "Secondary Music Albums Ranking"
+  description: "A non-primary ranking configuration for music albums"
+  global: true
+  primary: false
+  archived: false
+  algorithm_version: 1
+  exponent: 2.5
+  bonus_pool_percentage: 4.0
+  min_list_weight: 1
+  apply_list_dates_penalty: true
+  max_list_dates_penalty_age: 30
+  max_list_dates_penalty_percentage: 65
+  inherit_penalties: true
+
+music_songs_secondary:
+  type: Music::Songs::RankingConfiguration
+  name: "Secondary Music Songs Ranking"
+  description: "A non-primary ranking configuration for music songs"
+  global: true
+  primary: false
+  archived: false
+  algorithm_version: 1
+  exponent: 2.8
+  bonus_pool_percentage: 3.5
+  min_list_weight: 1
+  apply_list_dates_penalty: true
+  max_list_dates_penalty_age: 25
+  max_list_dates_penalty_percentage: 60
+  inherit_penalties: true
