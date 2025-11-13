@@ -53,6 +53,30 @@ Rails.application.routes.draw do
         end
       end
 
+      # Ranking configuration routes must come BEFORE the albums/songs resource routes
+      # to prevent friendly_id from treating "ranking_configurations" as a slug
+      namespace :albums do
+        resources :ranking_configurations do
+          member do
+            post :execute_action
+          end
+          collection do
+            post :index_action
+          end
+        end
+      end
+
+      namespace :songs do
+        resources :ranking_configurations do
+          member do
+            post :execute_action
+          end
+          collection do
+            post :index_action
+          end
+        end
+      end
+
       resources :albums do
         resources :album_artists, only: [:create], shallow: true
         member do
@@ -78,6 +102,11 @@ Rails.application.routes.draw do
       end
 
       resources :song_artists, only: [:update, :destroy]
+
+      scope "ranking_configuration/:ranking_configuration_id", as: "ranking_configuration" do
+        resources :ranked_items, only: [:index]
+        resources :ranked_lists, only: [:index]
+      end
     end
   end
   require "sidekiq/web"

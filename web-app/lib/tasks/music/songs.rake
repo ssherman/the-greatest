@@ -97,5 +97,76 @@ namespace :music do
         end
       end
     end
+
+    desc "Diagnose list import issues - find duplicates in items_json. Usage: LIST_ID=123 bin/rails music:songs:diagnose_list_import"
+    task diagnose_list_import: :environment do
+      list_id = ENV["LIST_ID"]
+
+      unless list_id
+        puts "ERROR: Please provide LIST_ID"
+        puts "Usage: LIST_ID=123 bin/rails music:songs:diagnose_list_import"
+        exit 1
+      end
+
+      list = Music::Songs::List.find(list_id)
+
+      puts "=" * 80
+      puts "LIST IMPORT DIAGNOSTIC FOR: #{list.name}"
+      puts "=" * 80
+
+      songs = list.items_json["songs"]
+      puts "\nTotal songs in items_json: #{songs.length}"
+
+      song_ids = songs.map { |s| s["song_id"] }.compact
+      song_id_counts = song_ids.group_by(&:itself).transform_values(&:count)
+      duplicates_by_song_id = song_id_counts.select { |k, v| v > 1 }
+
+      if duplicates_by_song_id.any?
+        puts "\n🔍 DUPLICATE song_ids found:"
+        duplicates_by_song_id.each do |id, count|
+          song = Music::Song.find_by(id: id)
+          puts "  - Song ID #{id} (#{song&.title || "unknown"}) appears #{count} times"
+        end
+        total_duplicate_songs = duplicates_by_song_id.values.sum - duplicates_by_song_id.keys.length
+        puts "  Total extra occurrences: #{total_duplicate_songs}"
+      end
+
+      mb_ids = songs.map { |s| s["mb_recording_id"] }.compact
+      mb_id_counts = mb_ids.group_by(&:itself).transform_values(&:count)
+      duplicates_by_mb_id = mb_id_counts.select { |k, v| v > 1 }
+
+      if duplicates_by_mb_id.any?
+        puts "\n🔍 DUPLICATE mb_recording_ids found:"
+        duplicates_by_mb_id.each do |id, count|
+          puts "  - MusicBrainz ID #{id} appears #{count} times"
+        end
+        total_duplicate_mb = duplicates_by_mb_id.values.sum - duplicates_by_mb_id.keys.length
+        puts "  Total extra occurrences: #{total_duplicate_mb}"
+      end
+
+      existing_count = list.list_items.count
+      puts "\n📊 Current list_items in database: #{existing_count}"
+
+      missing = songs.length - existing_count
+
+      puts "\nExpected list_items (if no duplicates): #{songs.length}"
+      puts "Actual list_items: #{existing_count}"
+      puts "Missing: #{missing}"
+
+      if duplicates_by_song_id.any? || duplicates_by_mb_id.any?
+        puts "\n✅ LIKELY CAUSE: Duplicate songs in items_json"
+        puts "   The importer skips creating duplicate list_items for songs already in the list."
+      else
+        puts "\n⚠️  No duplicates found - checking other causes..."
+
+        invalid_songs = songs.select { |s| s["ai_match_invalid"] == true }
+        puts "Songs flagged as ai_match_invalid: #{invalid_songs.length}"
+
+        unenriched = songs.reject { |s| s["song_id"] || s["mb_recording_id"] }
+        puts "Songs without song_id or mb_recording_id: #{unenriched.length}"
+      end
+
+      puts "\n" + "=" * 80
+    end
   end
 end

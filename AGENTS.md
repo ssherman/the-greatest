@@ -26,70 +26,117 @@ bin/rails generate model Books::Book title:string
 
 ## 🚨 FILE PATH CRITICAL REMINDER 🚨
 
-**YOU ARE ALWAYS IN THE `web-app/` DIRECTORY (the Rails root)**
+**ALWAYS CHECK YOUR WORKING DIRECTORY FIRST WITH `pwd`**
+
+Your working directory can be EITHER the project root OR the Rails web-app directory. The correct file paths depend on where you currently are.
 
 ### Project Structure
 ```
-<project-root>/
-├── docs/                    # Documentation (OUTSIDE Rails app)
+<project-root>/                          # Sometimes you are HERE
+├── docs/                                # Documentation
 │   ├── todo.md
 │   ├── todos/
 │   ├── models/
 │   └── ...
-├── AGENTS.md               # This file (OUTSIDE Rails app)
+├── AGENTS.md                            # This file
 ├── README.md
-└── web-app/                # Rails application (YOUR WORKING DIRECTORY)
+└── web-app/                             # Sometimes you are HERE
     ├── app/
     ├── config/
     ├── test/
     └── ...
 ```
 
-### Documentation Files (OUTSIDE web-app)
-Documentation lives in the **parent directory** and requires `../` prefix:
+### Step 1: Check Where You Are
+
+**CRITICAL:** Before writing or reading files, always determine your working directory:
 
 ```bash
-# ✅ CORRECT - Use ../ to access parent directory
-../docs/todo.md
-../docs/todos/075-something.md
-../AGENTS.md
-
-# ❌ WRONG - These paths don't exist from web-app/
-docs/todo.md
-AGENTS.md
+pwd
+# Output: /home/shane/dev/the-greatest          → You are in PROJECT ROOT
+# Output: /home/shane/dev/the-greatest/web-app  → You are in RAILS ROOT
 ```
 
-### Rails Application Files (INSIDE web-app)
-Rails code is in current directory (where you always are):
+### Step 2: Use Correct Paths Based on Location
+
+#### If you are in PROJECT ROOT (`/home/shane/dev/the-greatest`)
 
 ```bash
-# ✅ CORRECT - These are in current directory
+# ✅ CORRECT - Documentation files (NO ../ prefix)
+docs/todo.md
+docs/todos/077-task.md
+docs/models/music/song.md
+AGENTS.md
+
+# ✅ CORRECT - Rails files (use web-app/ prefix)
+web-app/app/controllers/admin/music/songs_controller.rb
+web-app/app/models/music/song.rb
+web-app/config/routes.rb
+web-app/test/controllers/admin/music/songs_controller_test.rb
+
+# ❌ WRONG - Do not use ../ prefix when in project root
+../docs/todo.md           # This goes OUTSIDE the project!
+../docs/todos/077-task.md # This goes to parent directory!
+```
+
+#### If you are in RAILS ROOT (`/home/shane/dev/the-greatest/web-app`)
+
+```bash
+# ✅ CORRECT - Documentation files (use ../ prefix)
+../docs/todo.md
+../docs/todos/077-task.md
+../docs/models/music/song.md
+../AGENTS.md
+
+# ✅ CORRECT - Rails files (NO prefix, just relative path)
 app/controllers/admin/music/songs_controller.rb
 app/models/music/song.rb
 config/routes.rb
 test/controllers/admin/music/songs_controller_test.rb
+
+# ❌ WRONG - Do not use web-app/ prefix when already inside it
+web-app/app/controllers/...  # You're already IN web-app!
 ```
 
 ### Quick Reference Table
 
-| File Type | Location | Path From web-app/ | Example |
-|-----------|----------|-------------------|---------|
-| Documentation | Parent dir | `../docs/` | `../docs/todo.md` |
-| Task files | Parent dir | `../docs/todos/` | `../docs/todos/075-task.md` |
-| AGENTS.md | Parent dir | `../AGENTS.md` | `../AGENTS.md` |
-| Controllers | Current dir | `app/controllers/` | `app/controllers/admin/music/songs_controller.rb` |
-| Models | Current dir | `app/models/` | `app/models/music/song.rb` |
-| Tests | Current dir | `test/` | `test/controllers/admin/music/songs_controller_test.rb` |
-| Config | Current dir | `config/` | `config/routes.rb` |
+**When in PROJECT ROOT** (`/home/shane/dev/the-greatest`):
+
+| File Type | Path Example |
+|-----------|--------------|
+| Documentation | `docs/todo.md` |
+| Task files | `docs/todos/077-task.md` |
+| AGENTS.md | `AGENTS.md` |
+| Controllers | `web-app/app/controllers/admin/music/songs_controller.rb` |
+| Models | `web-app/app/models/music/song.rb` |
+| Tests | `web-app/test/controllers/admin/music/songs_controller_test.rb` |
+
+**When in RAILS ROOT** (`/home/shane/dev/the-greatest/web-app`):
+
+| File Type | Path Example |
+|-----------|--------------|
+| Documentation | `../docs/todo.md` |
+| Task files | `../docs/todos/077-task.md` |
+| AGENTS.md | `../AGENTS.md` |
+| Controllers | `app/controllers/admin/music/songs_controller.rb` |
+| Models | `app/models/music/song.rb` |
+| Tests | `test/controllers/admin/music/songs_controller_test.rb` |
 
 ### Common Mistakes to Avoid
 
-1. **❌ DON'T** try to read `docs/todo.md` - it doesn't exist in web-app/
-2. **✅ DO** read `../docs/todo.md` (parent directory)
-3. **❌ DON'T** create docs in `web-app/docs/` - they belong in parent `../docs/`
-4. **✅ DO** create Rails code in `app/`, `test/`, `config/`, etc.
+1. **❌ DON'T** use `../` when you're in PROJECT ROOT - it goes outside the project!
+2. **❌ DON'T** use `web-app/` prefix when you're already inside web-app/
+3. **✅ DO** run `pwd` first to check your location
+4. **✅ DO** use the correct path based on your working directory
 
-**When in doubt: Rails code is local (no prefix), documentation needs `../` prefix**
+### Emergency Fix: Check Absolute Paths
+
+If unsure, use absolute paths to verify:
+```bash
+# Check if file exists before reading
+ls -la /home/shane/dev/the-greatest/docs/todo.md
+ls -la /home/shane/dev/the-greatest/web-app/app/models/music/song.rb
+```
 
 ## Core Development Principles
 
