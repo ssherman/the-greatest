@@ -19,7 +19,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
-- ✅ [2025-11-13] [Custom Admin Interface - Phase 6: Music Ranking Configurations](todos/077-custom-admin-phase-6-ranking-configs.md)
+- ✅ [2025-11-13] [Custom Admin Interface - Phase 6: Music Ranking Configurations](todos/completed/077-custom-admin-phase-6-ranking-configs.md)
 - ✅ [2025-11-11] [Custom Admin Interface - Phase 5: Song Artists Join Table](todos/completed/076-custom-admin-phase-5-song-artists.md)
 - ✅ [2025-11-10] [Custom Admin Interface - Phase 4: Music Songs](todos/completed/075-custom-admin-phase-4-songs.md)
 - ✅ [2025-11-09] [Custom Admin Interface - Phase 3: Album Artists Join Table](todos/074-custom-admin-phase-3-album-artists.md)
