@@ -23,7 +23,7 @@ module Actions
             count += 1
           end
 
-          succeed "Weight calculation queued for #{count} #{'configuration'.pluralize(count)}."
+          succeed "Weight calculation queued for #{count} #{"configuration".pluralize(count)}."
         end
       end
     end

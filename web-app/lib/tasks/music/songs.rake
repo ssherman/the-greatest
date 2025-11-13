@@ -125,7 +125,7 @@ namespace :music do
         puts "\n🔍 DUPLICATE song_ids found:"
         duplicates_by_song_id.each do |id, count|
           song = Music::Song.find_by(id: id)
-          puts "  - Song ID #{id} (#{song&.title || 'unknown'}) appears #{count} times"
+          puts "  - Song ID #{id} (#{song&.title || "unknown"}) appears #{count} times"
         end
         total_duplicate_songs = duplicates_by_song_id.values.sum - duplicates_by_song_id.keys.length
         puts "  Total extra occurrences: #{total_duplicate_songs}"

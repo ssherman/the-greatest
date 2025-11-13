@@ -61,10 +61,10 @@ class Admin::Music::RankingConfigurationsController < Admin::Music::BaseControll
     ranking_configuration_ids = params[:ranking_configuration_ids] || []
 
     # If no IDs provided, use all configurations of this type
-    if ranking_configuration_ids.empty?
-      ranking_configurations = ranking_configuration_class.all
+    ranking_configurations = if ranking_configuration_ids.empty?
+      ranking_configuration_class.all
     else
-      ranking_configurations = ranking_configuration_class.where(id: ranking_configuration_ids)
+      ranking_configuration_class.where(id: ranking_configuration_ids)
     end
 
     action_class = "Actions::Admin::Music::#{params[:action_name]}".constantize
