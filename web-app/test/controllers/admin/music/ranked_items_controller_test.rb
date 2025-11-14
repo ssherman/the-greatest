@@ -3,7 +3,6 @@ require "test_helper"
 class Admin::Music::RankedItemsControllerTest < ActionDispatch::IntegrationTest
   setup do
     @ranking_configuration = ranking_configurations(:music_albums_global)
-    @ranked_item = ranked_items(:music_albums_ranked_item)
     @admin_user = users(:admin_user)
     @editor_user = users(:editor_user)
     @regular_user = users(:regular_user)
@@ -91,6 +90,29 @@ class Admin::Music::RankedItemsControllerTest < ActionDispatch::IntegrationTest
   test "should handle pagination with page parameter" do
     sign_in_as(@admin_user, stub_auth: true)
     get admin_ranking_configuration_ranked_items_path(ranking_configuration_id: @ranking_configuration.id, page: 1)
+    assert_response :success
+  end
+
+  test "should load ranked items for artist ranking configuration without eager loading artists association" do
+    sign_in_as(@admin_user, stub_auth: true)
+
+    # Use an artist ranking configuration
+    artist_rc = ranking_configurations(:music_artists_global)
+
+    # Create a ranked artist item
+    artist = music_artists(:pink_floyd)
+    RankedItem.create!(
+      item: artist,
+      ranking_configuration: artist_rc,
+      rank: 1,
+      score: 100.0
+    )
+
+    # This should not raise an error even though Music::Artist doesn't have an artists association
+    assert_nothing_raised do
+      get admin_ranking_configuration_ranked_items_path(ranking_configuration_id: artist_rc.id)
+    end
+
     assert_response :success
   end
 end

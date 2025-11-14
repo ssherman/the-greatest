@@ -43,15 +43,3 @@ music_songs_ranked_item:
   ranking_configuration: music_songs_global
   rank: 42
   score: 95.5
-
-music_albums_ranked_item:
-  item: dark_side_of_the_moon (Music::Album)
-  ranking_configuration: music_albums_global
-  rank: 1
-  score: 100.0
-
-music_albums_ranked_item_two:
-  item: the_wall (Music::Album)
-  ranking_configuration: music_albums_global
-  rank: 2
-  score: 98.5

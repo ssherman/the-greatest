@@ -1,0 +1,26 @@
+<% content_for :title, "Artists Ranking Configurations" %>
+
+<div class="space-y-6">
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <h1 class="text-3xl font-bold">Artists Ranking Configurations</h1>
+      <p class="text-sm text-base-content/70 mt-1">Manage artist ranking configurations (aggregated from album and song rankings)</p>
+    </div>
+    <div class="flex gap-2">
+      <%= link_to new_admin_artists_ranking_configuration_path, class: "btn btn-primary" do %>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+        </svg>
+        <span>New Ranking Configuration</span>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body p-0">
+      <%= turbo_frame_tag "ranking_configurations_table" do %>
+        <%= render "table", ranking_configurations: @ranking_configurations, pagy: @pagy %>
+      <% end %>
+    </div>
+  </div>
+</div>

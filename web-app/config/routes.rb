@@ -40,21 +40,19 @@ Rails.application.routes.draw do
     namespace :admin, module: "admin/music" do
       root to: "dashboard#index"
 
-      resources :artists do
-        resources :album_artists, only: [:create], shallow: true
-        resources :song_artists, only: [:create], shallow: true
-        member do
-          post :execute_action
-        end
-        collection do
-          post :bulk_action
-          post :index_action
-          get :search
+      # Ranking configuration routes must come BEFORE the resource routes
+      # to prevent friendly_id from treating "ranking_configurations" as a slug
+      namespace :artists do
+        resources :ranking_configurations do
+          member do
+            post :execute_action
+          end
+          collection do
+            post :index_action
+          end
         end
       end
 
-      # Ranking configuration routes must come BEFORE the albums/songs resource routes
-      # to prevent friendly_id from treating "ranking_configurations" as a slug
       namespace :albums do
         resources :ranking_configurations do
           member do
@@ -74,6 +72,19 @@ Rails.application.routes.draw do
           collection do
             post :index_action
           end
+        end
+      end
+
+      resources :artists do
+        resources :album_artists, only: [:create], shallow: true
+        resources :song_artists, only: [:create], shallow: true
+        member do
+          post :execute_action
+        end
+        collection do
+          post :bulk_action
+          post :index_action
+          get :search
         end
       end
 
