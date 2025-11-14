@@ -7,7 +7,7 @@ class Admin::Music::ListsController < Admin::Music::BaseController
 
   def show
     @list = list_class
-      .includes(:submitted_by, :penalties, list_items: {listable: [:artists, :categories, :primary_image]})
+      .includes(:submitted_by, :penalties, list_items: {listable: listable_includes})
       .find(params[:id])
   end
 
@@ -54,7 +54,7 @@ class Admin::Music::ListsController < Admin::Music::BaseController
     @lists = list_class
       .includes(:submitted_by)
       .left_joins(:list_items)
-      .select("#{list_class.table_name}.*, COUNT(DISTINCT list_items.id) as albums_count")
+      .select("#{list_class.table_name}.*, COUNT(DISTINCT list_items.id) as #{items_count_name}")
       .group("#{list_class.table_name}.id")
       .order("#{sort_column} #{sort_direction}")
 
@@ -77,7 +77,7 @@ class Admin::Music::ListsController < Admin::Music::BaseController
   end
 
   def list_params
-    params.require(:music_albums_list).permit(
+    params.require(param_key).permit(
       :name,
       :description,
       :source,
@@ -122,5 +122,17 @@ class Admin::Music::ListsController < Admin::Music::BaseController
 
   def edit_list_path(list)
     raise NotImplementedError, "Subclass must implement edit_list_path"
+  end
+
+  def param_key
+    raise NotImplementedError, "Subclass must implement param_key"
+  end
+
+  def items_count_name
+    raise NotImplementedError, "Subclass must implement items_count_name"
+  end
+
+  def listable_includes
+    raise NotImplementedError, "Subclass must implement listable_includes"
   end
 end
