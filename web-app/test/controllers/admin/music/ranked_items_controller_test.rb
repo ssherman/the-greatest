@@ -3,7 +3,6 @@ require "test_helper"
 class Admin::Music::RankedItemsControllerTest < ActionDispatch::IntegrationTest
   setup do
     @ranking_configuration = ranking_configurations(:music_albums_global)
-    @ranked_item = ranked_items(:music_albums_ranked_item)
     @admin_user = users(:admin_user)
     @editor_user = users(:editor_user)
     @regular_user = users(:regular_user)

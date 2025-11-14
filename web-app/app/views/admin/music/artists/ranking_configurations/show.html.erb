@@ -1,0 +1,264 @@
+<% content_for :title, @ranking_configuration.name %>
+
+<div class="space-y-6">
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div class="flex-1">
+      <div class="flex items-center gap-2 mb-2">
+        <%= link_to admin_artists_ranking_configurations_path, class: "btn btn-ghost btn-sm btn-circle" do %>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+          </svg>
+        <% end %>
+        <h1 class="text-3xl font-bold"><%= @ranking_configuration.name %></h1>
+        <% if @ranking_configuration.primary? %>
+          <span class="badge badge-primary">Primary</span>
+        <% end %>
+        <% if @ranking_configuration.global? %>
+          <span class="badge badge-secondary">Global</span>
+        <% end %>
+        <% if @ranking_configuration.archived? %>
+          <span class="badge badge-ghost">Archived</span>
+        <% end %>
+      </div>
+      <div class="flex items-center gap-4 text-sm text-base-content/70">
+        <span>ID: <span class="font-mono"><%= @ranking_configuration.id %></span></span>
+        <span>Created <%= time_ago_in_words(@ranking_configuration.created_at) %> ago</span>
+      </div>
+    </div>
+    <div class="flex gap-2">
+      <%= link_to edit_admin_artists_ranking_configuration_path(@ranking_configuration), class: "btn btn-primary" do %>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+        </svg>
+        <span>Edit</span>
+      <% end %>
+
+      <div class="dropdown dropdown-end">
+        <label tabindex="0" class="btn btn-outline">
+          Actions
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+          </svg>
+        </label>
+        <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow-lg bg-base-100 rounded-box w-52">
+          <li>
+            <%= button_to "Refresh Rankings",
+                execute_action_admin_artists_ranking_configuration_path(@ranking_configuration, action_name: "RefreshRankings"),
+                method: :post,
+                class: "text-left",
+                data: { turbo_confirm: "Recalculate artist rankings by aggregating album and song scores?" } %>
+          </li>
+        </ul>
+      </div>
+
+      <%= button_to admin_artists_ranking_configuration_path(@ranking_configuration),
+          method: :delete,
+          class: "btn btn-error btn-outline",
+          data: { turbo_confirm: "Are you sure you want to delete #{@ranking_configuration.name}? This cannot be undone." } do %>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+        </svg>
+        <span>Delete</span>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">Basic Information</h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Name</span>
+              </label>
+              <p class="text-lg"><%= @ranking_configuration.name %></p>
+            </div>
+
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Type</span>
+              </label>
+              <span class="badge badge-outline badge-lg"><%= @ranking_configuration.type %></span>
+            </div>
+
+            <div class="md:col-span-2">
+              <label class="label">
+                <span class="label-text font-semibold">Flags</span>
+              </label>
+              <div class="flex flex-wrap gap-2">
+                <span class="badge <%= @ranking_configuration.primary? ? 'badge-primary' : 'badge-ghost' %>">
+                  Primary: <%= @ranking_configuration.primary? ? 'Yes' : 'No' %>
+                </span>
+                <span class="badge <%= @ranking_configuration.global? ? 'badge-secondary' : 'badge-ghost' %>">
+                  Global: <%= @ranking_configuration.global? ? 'Yes' : 'No' %>
+                </span>
+                <span class="badge <%= @ranking_configuration.archived? ? 'badge-warning' : 'badge-ghost' %>">
+                  Archived: <%= @ranking_configuration.archived? ? 'Yes' : 'No' %>
+                </span>
+              </div>
+            </div>
+
+            <% if @ranking_configuration.published_at.present? %>
+              <div>
+                <label class="label">
+                  <span class="label-text font-semibold">Published At</span>
+                </label>
+                <p><%= @ranking_configuration.published_at.strftime("%B %d, %Y at %I:%M %p") %></p>
+              </div>
+            <% end %>
+
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Created At</span>
+              </label>
+              <p><%= @ranking_configuration.created_at.strftime("%B %d, %Y at %I:%M %p") %></p>
+            </div>
+
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Updated At</span>
+              </label>
+              <p><%= @ranking_configuration.updated_at.strftime("%B %d, %Y at %I:%M %p") %></p>
+            </div>
+          </div>
+
+          <% if @ranking_configuration.description.present? %>
+            <div class="mt-4">
+              <label class="label">
+                <span class="label-text font-semibold">Description</span>
+              </label>
+              <p class="text-base-content/80 whitespace-pre-wrap"><%= @ranking_configuration.description %></p>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">Ranking Algorithm</h2>
+          <div class="alert alert-info">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <span class="text-sm">Artist rankings use simple aggregation (sum) of album and song scores. Algorithm parameters inherited from the base model are not used for artist rankings.</span>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 opacity-50">
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Algorithm Version</span>
+              </label>
+              <span class="badge badge-ghost badge-lg"><%= @ranking_configuration.algorithm_version %></span>
+            </div>
+
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Exponent</span>
+              </label>
+              <p class="text-lg font-mono"><%= @ranking_configuration.exponent %> <span class="text-xs text-base-content/50">(not used)</span></p>
+            </div>
+
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Bonus Pool Percentage</span>
+              </label>
+              <p class="text-lg font-mono"><%= @ranking_configuration.bonus_pool_percentage %>% <span class="text-xs text-base-content/50">(not used)</span></p>
+            </div>
+
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Min List Weight</span>
+              </label>
+              <p class="text-lg font-mono"><%= @ranking_configuration.min_list_weight %> <span class="text-xs text-base-content/50">(not used)</span></p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <% if (primary_album_config = ::Music::Albums::RankingConfiguration.find_by(primary: true)) || (primary_song_config = ::Music::Songs::RankingConfiguration.find_by(primary: true)) %>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title">Ranking Sources</h2>
+            <p class="text-sm text-base-content/70 mb-4">Artist rankings are calculated by aggregating scores from the following configurations:</p>
+            <div class="space-y-3">
+              <% if primary_album_config %>
+                <div class="flex items-center gap-2">
+                  <span class="badge badge-primary badge-sm">Albums</span>
+                  <%= link_to primary_album_config.name, admin_albums_ranking_configuration_path(primary_album_config), class: "link link-hover" %>
+                </div>
+              <% end %>
+              <% if primary_song_config %>
+                <div class="flex items-center gap-2">
+                  <span class="badge badge-secondary badge-sm">Songs</span>
+                  <%= link_to primary_song_config.name, admin_songs_ranking_configuration_path(primary_song_config), class: "link link-hover" %>
+                </div>
+              <% end %>
+            </div>
+            <div class="alert alert-warning mt-4">
+              <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+              <span class="text-sm">If primary album or song configurations are missing, artist ranking calculation will fail.</span>
+            </div>
+          </div>
+        </div>
+      <% end %>
+
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">
+            Ranked Artists
+            <span class="badge badge-ghost"><%= @ranking_configuration.ranked_items.count %></span>
+          </h2>
+          <%= turbo_frame_tag "ranked_items_list", loading: :lazy, src: admin_ranking_configuration_ranked_items_path(@ranking_configuration) do %>
+            <div class="flex justify-center py-8">
+              <span class="loading loading-spinner loading-lg"></span>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-6">
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">Statistics</h2>
+          <div class="stats stats-vertical shadow">
+            <div class="stat">
+              <div class="stat-title">Ranked Artists</div>
+              <div class="stat-value text-primary"><%= @ranking_configuration.ranked_items.count %></div>
+            </div>
+
+            <div class="stat">
+              <div class="stat-title">Published</div>
+              <div class="stat-value text-sm">
+                <%= @ranking_configuration.published? ? 'Yes' : 'No' %>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title text-sm">Metadata</h2>
+          <div class="space-y-2 text-sm">
+            <div>
+              <span class="text-base-content/70">ID:</span>
+              <span class="font-mono"><%= @ranking_configuration.id %></span>
+            </div>
+            <div>
+              <span class="text-base-content/70">Type:</span>
+              <span class="font-mono text-xs"><%= @ranking_configuration.type %></span>
+            </div>
+            <div>
+              <span class="text-base-content/70">Created:</span>
+              <span><%= @ranking_configuration.created_at.strftime("%B %d, %Y at %I:%M %p") %></span>
+            </div>
+            <div>
+              <span class="text-base-content/70">Updated:</span>
+              <span><%= @ranking_configuration.updated_at.strftime("%B %d, %Y at %I:%M %p") %></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

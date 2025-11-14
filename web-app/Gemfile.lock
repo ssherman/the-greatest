@@ -253,8 +253,8 @@ GEM
       ruby2_keywords (>= 0.0.5)
     msgpack (1.8.0)
     multi_json (1.17.0)
-    net-http (0.7.0)
-      uri
+    net-http (0.8.0)
+      uri (>= 0.11.1)
     net-imap (0.5.12)
       date
       net-protocol
@@ -281,7 +281,7 @@ GEM
       racc (~> 1.4)
     nokogiri (1.18.10-x86_64-linux-musl)
       racc (~> 1.4)
-    openai (0.35.2)
+    openai (0.36.0)
       connection_pool
     opensearch-ruby (3.4.0)
       faraday (>= 1.0, < 3)

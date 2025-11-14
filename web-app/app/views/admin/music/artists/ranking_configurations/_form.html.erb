@@ -1,0 +1,146 @@
+<%= form_with model: @ranking_configuration, scope: :ranking_configuration, url: @ranking_configuration.persisted? ? admin_artists_ranking_configuration_path(@ranking_configuration) : admin_artists_ranking_configurations_path, class: "space-y-6" do |f| %>
+  <% if @ranking_configuration.errors.any? %>
+    <div class="alert alert-error">
+      <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <div>
+        <h3 class="font-bold"><%= pluralize(@ranking_configuration.errors.count, "error") %> prohibited this ranking configuration from being saved:</h3>
+        <ul class="list-disc list-inside mt-2">
+          <% @ranking_configuration.errors.full_messages.each do |message| %>
+            <li><%= message %></li>
+          <% end %>
+        </ul>
+      </div>
+    </div>
+  <% end %>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">Basic Information</h2>
+
+      <div class="grid grid-cols-1 gap-4">
+        <div class="form-control">
+          <%= f.label :name, class: "label" do %>
+            <span class="label-text font-semibold">Name <span class="text-error">*</span></span>
+          <% end %>
+          <%= f.text_field :name,
+              class: "input input-bordered w-full #{@ranking_configuration.errors[:name].any? ? 'input-error' : ''}",
+              placeholder: "Enter configuration name",
+              required: true,
+              autofocus: true %>
+          <% if @ranking_configuration.errors[:name].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @ranking_configuration.errors[:name].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <div class="form-control">
+          <%= f.label :description, class: "label" do %>
+            <span class="label-text font-semibold">Description</span>
+          <% end %>
+          <%= f.text_area :description,
+              class: "textarea textarea-bordered w-full h-24 #{@ranking_configuration.errors[:description].any? ? 'textarea-error' : ''}",
+              placeholder: "Enter a description of this ranking configuration..." %>
+          <label class="label">
+            <span class="label-text-alt">Optional description for this configuration</span>
+          </label>
+          <% if @ranking_configuration.errors[:description].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @ranking_configuration.errors[:description].first %></span>
+            </label>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">Configuration Flags</h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-control">
+          <label class="label cursor-pointer justify-start gap-4">
+            <%= f.check_box :primary,
+                class: "checkbox #{@ranking_configuration.errors[:primary].any? ? 'checkbox-error' : ''}" %>
+            <span class="label-text">
+              <span class="font-semibold">Primary Configuration</span>
+              <span class="block text-sm text-base-content/70">Only one primary configuration allowed per type</span>
+            </span>
+          </label>
+          <% if @ranking_configuration.errors[:primary].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @ranking_configuration.errors[:primary].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <div class="form-control">
+          <label class="label cursor-pointer justify-start gap-4">
+            <%= f.check_box :global,
+                class: "checkbox #{@ranking_configuration.errors[:global].any? ? 'checkbox-error' : ''}" %>
+            <span class="label-text">
+              <span class="font-semibold">Global Configuration</span>
+              <span class="block text-sm text-base-content/70">Available to all users</span>
+            </span>
+          </label>
+          <% if @ranking_configuration.errors[:global].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @ranking_configuration.errors[:global].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <div class="form-control">
+          <label class="label cursor-pointer justify-start gap-4">
+            <%= f.check_box :archived,
+                class: "checkbox #{@ranking_configuration.errors[:archived].any? ? 'checkbox-error' : ''}" %>
+            <span class="label-text">
+              <span class="font-semibold">Archived</span>
+              <span class="block text-sm text-base-content/70">Hide from active configurations</span>
+            </span>
+          </label>
+          <% if @ranking_configuration.errors[:archived].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @ranking_configuration.errors[:archived].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <div class="form-control">
+          <%= f.label :published_at, class: "label" do %>
+            <span class="label-text font-semibold">Published At</span>
+          <% end %>
+          <%= f.datetime_local_field :published_at,
+              class: "input input-bordered w-full #{@ranking_configuration.errors[:published_at].any? ? 'input-error' : ''}" %>
+          <label class="label">
+            <span class="label-text-alt">Leave empty for draft status</span>
+          </label>
+          <% if @ranking_configuration.errors[:published_at].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @ranking_configuration.errors[:published_at].first %></span>
+            </label>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="alert alert-info">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+    <div>
+      <h3 class="font-bold">Simplified Configuration</h3>
+      <div class="text-sm">
+        <p>Artist ranking configurations use a simplified aggregation algorithm that sums album and song scores.</p>
+        <p class="mt-1">Algorithm parameters (exponent, bonus pool, list weights) and penalty configurations are inherited from the base model schema but are not used in artist ranking calculations.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex flex-col sm:flex-row gap-2 justify-end">
+    <%= link_to "Cancel", @ranking_configuration.persisted? ? admin_artists_ranking_configuration_path(@ranking_configuration) : admin_artists_ranking_configurations_path, class: "btn btn-ghost" %>
+    <%= f.submit @ranking_configuration.persisted? ? "Update Configuration" : "Create Configuration", class: "btn btn-primary" %>
+  </div>
+<% end %>
