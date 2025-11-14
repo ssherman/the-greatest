@@ -62,6 +62,8 @@ Rails.application.routes.draw do
             post :index_action
           end
         end
+
+        resources :lists
       end
 
       namespace :songs do

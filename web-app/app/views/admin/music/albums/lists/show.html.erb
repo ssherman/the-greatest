@@ -1,0 +1,322 @@
+<% content_for :title, @list.name %>
+
+<div class="space-y-6">
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div class="flex-1">
+      <div class="flex items-center gap-2 mb-2">
+        <%= link_to admin_albums_lists_path, class: "btn btn-ghost btn-sm btn-circle" do %>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+          </svg>
+        <% end %>
+        <h1 class="text-3xl font-bold"><%= @list.name %></h1>
+        <span class="badge <%= @list.approved? ? 'badge-success' : @list.active? ? 'badge-primary' : @list.rejected? ? 'badge-error' : 'badge-ghost' %>">
+          <%= @list.status.titleize %>
+        </span>
+      </div>
+      <div class="flex items-center gap-4 text-sm text-base-content/70">
+        <span>ID: <span class="font-mono"><%= @list.id %></span></span>
+        <span>Created <%= time_ago_in_words(@list.created_at) %> ago</span>
+      </div>
+    </div>
+    <div class="flex gap-2">
+      <%= link_to edit_admin_albums_list_path(@list), class: "btn btn-primary" do %>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+        </svg>
+        <span>Edit</span>
+      <% end %>
+
+      <%= button_to admin_albums_list_path(@list),
+          method: :delete,
+          class: "btn btn-error btn-outline",
+          data: { turbo_confirm: "Are you sure you want to delete #{@list.name}? This cannot be undone." } do %>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+        </svg>
+        <span>Delete</span>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">Basic Information</h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Name</span>
+              </label>
+              <p class="text-lg"><%= @list.name %></p>
+            </div>
+
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Status</span>
+              </label>
+              <span class="badge <%= @list.approved? ? 'badge-success' : @list.active? ? 'badge-primary' : @list.rejected? ? 'badge-error' : 'badge-ghost' %> badge-lg">
+                <%= @list.status.titleize %>
+              </span>
+            </div>
+
+            <% if @list.source.present? || @list.url.present? %>
+              <div>
+                <label class="label">
+                  <span class="label-text font-semibold">Source</span>
+                </label>
+                <% if @list.url.present? %>
+                  <%= link_to (@list.source.presence || @list.url), @list.url,
+                      target: "_blank",
+                      rel: "noopener",
+                      class: "link link-primary" %>
+                <% else %>
+                  <p><%= @list.source %></p>
+                <% end %>
+              </div>
+            <% end %>
+
+            <% if @list.year_published.present? %>
+              <div>
+                <label class="label">
+                  <span class="label-text font-semibold">Year Published</span>
+                </label>
+                <p><%= @list.year_published %></p>
+              </div>
+            <% end %>
+
+            <% if @list.submitted_by.present? %>
+              <div>
+                <label class="label">
+                  <span class="label-text font-semibold">Submitted By</span>
+                </label>
+                <p><%= @list.submitted_by.email %></p>
+              </div>
+            <% end %>
+
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Created</span>
+              </label>
+              <p><%= @list.created_at.strftime("%B %d, %Y at %I:%M %p") %></p>
+            </div>
+
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Updated</span>
+              </label>
+              <p><%= @list.updated_at.strftime("%B %d, %Y at %I:%M %p") %></p>
+            </div>
+          </div>
+
+          <% if @list.description.present? %>
+            <div class="mt-4">
+              <label class="label">
+                <span class="label-text font-semibold">Description</span>
+              </label>
+              <p class="text-base-content/80 whitespace-pre-wrap"><%= @list.description %></p>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
+      <% if @list.number_of_voters.present? || @list.estimated_quality.present? || @list.num_years_covered.present? || @list.musicbrainz_series_id.present? %>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title">Metadata</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <% if @list.number_of_voters.present? %>
+                <div>
+                  <label class="label">
+                    <span class="label-text font-semibold">Number of Voters</span>
+                  </label>
+                  <p><%= number_with_delimiter(@list.number_of_voters) %></p>
+                </div>
+              <% end %>
+
+              <% if @list.estimated_quality.present? %>
+                <div>
+                  <label class="label">
+                    <span class="label-text font-semibold">Estimated Quality</span>
+                  </label>
+                  <p><%= @list.estimated_quality %></p>
+                </div>
+              <% end %>
+
+              <% if @list.num_years_covered.present? %>
+                <div>
+                  <label class="label">
+                    <span class="label-text font-semibold">Years Covered</span>
+                  </label>
+                  <p><%= @list.num_years_covered %></p>
+                </div>
+              <% end %>
+
+              <% if @list.musicbrainz_series_id.present? %>
+                <div class="md:col-span-2">
+                  <label class="label">
+                    <span class="label-text font-semibold">MusicBrainz Series ID</span>
+                  </label>
+                  <p class="font-mono"><%= @list.musicbrainz_series_id %></p>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        </div>
+      <% end %>
+
+      <% if @list.high_quality_source || @list.category_specific || @list.location_specific || @list.yearly_award || @list.voter_count_estimated || @list.voter_count_unknown || @list.voter_names_unknown %>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title">Flags</h2>
+            <div class="flex flex-wrap gap-2">
+              <% if @list.high_quality_source %>
+                <span class="badge badge-success badge-lg">High Quality Source</span>
+              <% end %>
+              <% if @list.category_specific %>
+                <span class="badge badge-info badge-lg">Category Specific</span>
+              <% end %>
+              <% if @list.location_specific %>
+                <span class="badge badge-info badge-lg">Location Specific</span>
+              <% end %>
+              <% if @list.yearly_award %>
+                <span class="badge badge-warning badge-lg">Yearly Award</span>
+              <% end %>
+              <% if @list.voter_count_estimated %>
+                <span class="badge badge-ghost badge-lg">Voter Count Estimated</span>
+              <% end %>
+              <% if @list.voter_count_unknown %>
+                <span class="badge badge-ghost badge-lg">Voter Count Unknown</span>
+              <% end %>
+              <% if @list.voter_names_unknown %>
+                <span class="badge badge-ghost badge-lg">Voter Names Unknown</span>
+              <% end %>
+            </div>
+          </div>
+        </div>
+      <% end %>
+
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="card-title">
+              Albums
+              <span class="badge badge-outline badge-lg"><%= @list.list_items.count %></span>
+            </h2>
+          </div>
+
+          <% if @list.list_items.any? %>
+            <div class="overflow-x-auto">
+              <table class="table table-zebra table-sm">
+                <thead>
+                  <tr>
+                    <th>Position</th>
+                    <th>Album</th>
+                    <th>Artists</th>
+                    <th>Year</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <%# TODO: Future enhancement - lazy load with list_items controller + pagination %>
+                  <% @list.list_items.includes(listable: [:artists]).order(:position).each do |item| %>
+                    <% album = item.listable %>
+                    <% next unless album %>
+                    <tr>
+                      <td class="font-mono text-sm"><%= item.position %></td>
+                      <td>
+                        <%= link_to album.title, admin_album_path(album),
+                            class: "link link-hover font-semibold" %>
+                      </td>
+                      <td class="text-sm text-base-content/70">
+                        <%= album.artists.first(3).map(&:name).join(", ") %>
+                      </td>
+                      <td class="text-sm">
+                        <% if album.release_year.present? %>
+                          <%= album.release_year %>
+                        <% else %>
+                          <span class="text-base-content/30">-</span>
+                        <% end %>
+                      </td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% else %>
+            <div class="text-center py-8 text-base-content/70">
+              <p>No albums in this list yet. Albums can be imported using Items JSON (future feature).</p>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
+      <% if @list.items_json.present? %>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title">Items JSON</h2>
+            <div class="alert alert-info">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+              <span>This JSON data contains <%= number_with_delimiter(count_items_json(@list.items_json)) %> items.</span>
+            </div>
+            <pre class="bg-base-200 p-4 rounded-lg overflow-x-auto max-h-96"><code class="language-json"><%= items_json_to_string(@list.items_json) %></code></pre>
+          </div>
+        </div>
+      <% end %>
+
+      <% if @list.raw_html.present? %>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title">Raw HTML</h2>
+            <div class="bg-base-200 p-4 rounded-lg overflow-x-auto max-h-96">
+              <pre class="text-xs"><%= @list.raw_html.truncate(1000) %></pre>
+            </div>
+          </div>
+        </div>
+      <% end %>
+
+      <% if @list.simplified_html.present? %>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title">Simplified HTML</h2>
+            <div class="bg-base-200 p-4 rounded-lg overflow-x-auto max-h-96">
+              <pre class="text-xs"><%= @list.simplified_html.truncate(1000) %></pre>
+            </div>
+          </div>
+        </div>
+      <% end %>
+
+      <% if @list.formatted_text.present? %>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title">Formatted Text</h2>
+            <div class="bg-base-200 p-4 rounded-lg overflow-x-auto max-h-96">
+              <pre class="text-xs"><%= @list.formatted_text.truncate(1000) %></pre>
+            </div>
+          </div>
+        </div>
+      <% end %>
+    </div>
+
+    <div class="space-y-6">
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">Statistics</h2>
+          <div class="stats stats-vertical shadow">
+            <div class="stat">
+              <div class="stat-title">Albums</div>
+              <div class="stat-value text-primary"><%= @list.list_items.count %></div>
+            </div>
+
+            <% if @list.penalties.any? %>
+              <div class="stat">
+                <div class="stat-title">Penalties</div>
+                <div class="stat-value text-error"><%= @list.penalties.count %></div>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

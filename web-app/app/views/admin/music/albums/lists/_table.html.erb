@@ -1,0 +1,207 @@
+<% if lists.any? %>
+  <div class="overflow-x-auto">
+    <table class="table table-zebra table-hover">
+      <thead>
+        <tr>
+          <th>
+            <label>
+              <input type="checkbox" class="checkbox checkbox-sm" />
+            </label>
+          </th>
+          <th>
+            <%
+              current_sort = params[:sort]
+              current_direction = params[:direction]
+              id_direction = (current_sort == "id" && current_direction != "desc") ? "desc" : "asc"
+            %>
+            <%= link_to admin_albums_lists_path(sort: "id", direction: id_direction), data: { turbo_frame: "lists_table" }, class: "link link-hover flex items-center gap-1" do %>
+              <span>ID</span>
+              <% if current_sort == "id" %>
+                <% if current_direction == "desc" %>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd" />
+                  </svg>
+                <% else %>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                  </svg>
+                <% end %>
+              <% end %>
+            <% end %>
+          </th>
+          <th>
+            <%
+              name_direction = (current_sort == "name" && current_direction != "desc") ? "desc" : "asc"
+            %>
+            <%= link_to admin_albums_lists_path(sort: "name", direction: name_direction), data: { turbo_frame: "lists_table" }, class: "link link-hover flex items-center gap-1" do %>
+              <span>Name</span>
+              <% if current_sort == "name" || current_sort.blank? %>
+                <% if current_direction == "desc" %>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd" />
+                  </svg>
+                <% else %>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                  </svg>
+                <% end %>
+              <% end %>
+            <% end %>
+          </th>
+          <th>Status</th>
+          <th>Source</th>
+          <th>
+            <%
+              year_direction = (current_sort == "year_published" && current_direction != "desc") ? "desc" : "asc"
+            %>
+            <%= link_to admin_albums_lists_path(sort: "year_published", direction: year_direction), data: { turbo_frame: "lists_table" }, class: "link link-hover flex items-center gap-1" do %>
+              <span>Year</span>
+              <% if current_sort == "year_published" %>
+                <% if current_direction == "desc" %>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd" />
+                  </svg>
+                <% else %>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                  </svg>
+                <% end %>
+              <% end %>
+            <% end %>
+          </th>
+          <th>Albums</th>
+          <th>
+            <%
+              created_direction = (current_sort == "created_at" && current_direction != "desc") ? "desc" : "asc"
+            %>
+            <%= link_to admin_albums_lists_path(sort: "created_at", direction: created_direction), data: { turbo_frame: "lists_table" }, class: "link link-hover flex items-center gap-1" do %>
+              <span>Created</span>
+              <% if current_sort == "created_at" %>
+                <% if current_direction == "desc" %>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd" />
+                  </svg>
+                <% else %>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                  </svg>
+                <% end %>
+              <% end %>
+            <% end %>
+          </th>
+          <th class="text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% lists.each do |list| %>
+          <tr>
+            <td>
+              <label>
+                <input type="checkbox"
+                       class="checkbox checkbox-sm"
+                       value="<%= list.id %>" />
+              </label>
+            </td>
+            <td class="font-mono text-sm">
+              <%= link_to list.id, admin_albums_list_path(list),
+                  class: "link link-hover",
+                  data: { turbo_frame: "_top" } %>
+            </td>
+            <td>
+              <div class="font-bold">
+                <%= link_to list.name, admin_albums_list_path(list),
+                    class: "link link-hover",
+                    data: { turbo_frame: "_top" } %>
+              </div>
+            </td>
+            <td>
+              <span class="badge <%= list.approved? ? 'badge-success' : list.active? ? 'badge-primary' : list.rejected? ? 'badge-error' : 'badge-ghost' %> badge-sm">
+                <%= list.status.titleize %>
+              </span>
+            </td>
+            <td>
+              <% if list.url.present? %>
+                <%= link_to (list.source.presence || list.url).truncate(30), list.url,
+                    target: "_blank",
+                    rel: "noopener",
+                    class: "link link-primary",
+                    title: list.source %>
+              <% elsif list.source.present? %>
+                <%= list.source.truncate(30) %>
+              <% else %>
+                <span class="text-base-content/30">-</span>
+              <% end %>
+            </td>
+            <td>
+              <% if list.year_published.present? %>
+                <span class="badge badge-ghost badge-sm"><%= list.year_published %></span>
+              <% else %>
+                <span class="text-base-content/30">-</span>
+              <% end %>
+            </td>
+            <td>
+              <span class="badge badge-outline badge-sm"><%= list.albums_count %></span>
+            </td>
+            <td class="text-sm text-base-content/70">
+              <%= time_tag list.created_at, list.created_at.strftime("%b %d, %Y") %>
+            </td>
+            <td>
+              <div class="flex justify-end gap-1">
+                <%= link_to admin_albums_list_path(list),
+                    class: "btn btn-ghost btn-xs",
+                    data: { turbo_frame: "_top" },
+                    title: "View" do %>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                    <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
+                  </svg>
+                <% end %>
+                <%= link_to edit_admin_albums_list_path(list),
+                    class: "btn btn-ghost btn-xs",
+                    data: { turbo_frame: "_top" },
+                    title: "Edit" do %>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                  </svg>
+                <% end %>
+                <%= button_to admin_albums_list_path(list),
+                    method: :delete,
+                    class: "btn btn-ghost btn-xs text-error",
+                    title: "Delete",
+                    data: { turbo_confirm: "Are you sure you want to delete #{list.name}?" } do %>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                  </svg>
+                <% end %>
+              </div>
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+
+  <% if defined?(pagy) && pagy %>
+    <div class="flex justify-center py-4 border-t border-base-300">
+      <%== pagy_nav(pagy, params: params.permit(:sort, :direction).to_h) if pagy.pages > 1 %>
+    </div>
+  <% end %>
+<% else %>
+  <div class="py-12 text-center">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-base-content/20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+    </svg>
+    <h3 class="mt-4 text-lg font-semibold">No album lists found</h3>
+    <p class="mt-2 text-sm text-base-content/70">
+      Get started by creating your first album list.
+    </p>
+    <div class="mt-6">
+      <%= link_to new_admin_albums_list_path, class: "btn btn-primary" do %>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+        </svg>
+        <span>New Album List</span>
+      <% end %>
+    </div>
+  </div>
+<% end %>
