@@ -49,6 +49,7 @@ class List < ApplicationRecord
   enum :status, {unapproved: 0, approved: 1, rejected: 2, active: 3}
 
   # Callbacks
+  before_validation :parse_items_json_if_string
   before_save :auto_simplify_html, if: :should_simplify_html?
 
   # Validations
@@ -57,6 +58,7 @@ class List < ApplicationRecord
   validates :status, presence: true
   validates :url, format: {with: URI::RFC2396_PARSER.make_regexp, allow_blank: true}
   validates :num_years_covered, numericality: {greater_than: 0, only_integer: true}, allow_nil: true
+  validate :items_json_format
 
   # Scopes
   scope :approved, -> { where(status: :approved) }
@@ -111,5 +113,27 @@ class List < ApplicationRecord
 
   def auto_simplify_html
     self.simplified_html = Services::Html::SimplifierService.call(raw_html)
+  end
+
+  def parse_items_json_if_string
+    return unless items_json.is_a?(String) && items_json.present?
+
+    begin
+      self.items_json = JSON.parse(items_json)
+    rescue JSON::ParserError
+      # Let the validation catch this
+    end
+  end
+
+  def items_json_format
+    return if items_json.blank?
+    return if items_json.is_a?(Hash) || items_json.is_a?(Array)
+
+    # If it's a string, try to parse it
+    if items_json.is_a?(String)
+      JSON.parse(items_json)
+    end
+  rescue JSON::ParserError => e
+    errors.add(:items_json, "must be valid JSON: #{e.message}")
   end
 end

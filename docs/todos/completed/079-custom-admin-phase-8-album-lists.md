@@ -840,6 +840,64 @@ User requested showing all list_items without the 100-item limit:
 **File Modified:**
 - `app/views/admin/music/albums/lists/show.html.erb` - Removed limit, added TODO
 
+#### Invalid items_json Validation (Added 2025-11-14)
+Code review agent identified that malformed JSON in `items_json` would cause 500 errors instead of validation errors.
+
+**Problem:**
+- PostgreSQL JSONB columns accept JSON strings
+- Malformed JSON strings cause database errors (500 status)
+- No validation was catching invalid JSON before save
+
+**Initial Solution (Controller-based):**
+- Created `validate_items_json` private method in `Admin::Music::ListsController`
+- Called before save in `create` and `update` actions
+- Parsed JSON strings and added errors manually
+- Added 2 tests for invalid JSON handling
+
+**Refactored Solution (Model-based):**
+Following user feedback, moved validation to model following Rails conventions:
+
+1. **Added `before_validation :parse_items_json_if_string` callback**
+   - Runs before validation
+   - Parses valid JSON strings into Hash/Array
+   - Silently fails for invalid JSON (lets validation catch it)
+   - File: `app/models/list.rb`
+
+2. **Added `validate :items_json_format` validation**
+   - Checks if `items_json` is valid (nil, Hash, Array, or parseable String)
+   - Adds user-friendly error for invalid JSON
+   - Prevents 500 errors by catching malformed JSON
+   - File: `app/models/list.rb`
+
+**Why Model-based is Better:**
+- Follows Rails conventions (business logic in model layer)
+- Validation is reusable across all contexts (admin, API, console)
+- Controllers remain thin and focused on HTTP concerns
+- Single source of truth for data integrity rules
+- Automatically tested with any model specs
+
+**Error Handling:**
+```ruby
+list.items_json = '{"albums": [invalid'
+list.valid?
+# => false
+list.errors[:items_json]
+# => ["must be valid JSON: unexpected token at '{\"albums\": [invalid'"]
+```
+
+**Files Modified:**
+- `app/models/list.rb` - Added validation and callback
+- `app/controllers/admin/music/lists_controller.rb` - Simplified (removed controller validation)
+- `test/controllers/admin/music/albums/lists_controller_test.rb` - Added 2 tests
+
+**Documentation Created:**
+- `docs/models/list.md` - Complete model documentation including validation details
+- `docs/controllers/admin/music/lists_controller.md` - Updated to note model-level validation
+
+**Test Results:**
+- 56 tests, 117 assertions, 0 failures
+- Both create and update actions properly reject invalid JSON with 422 status
+
 ---
 
 ## Deviations from Plan
@@ -895,9 +953,9 @@ bin/rails test test/controllers/admin/music/albums/lists_controller_test.rb
 ## Definition of Done
 
 - [x] All Acceptance Criteria demonstrably pass (tests/screenshots)
-  - 36 controller tests passing
+  - 38 controller tests passing (includes 2 for invalid JSON validation)
   - 18 helper tests passing
-  - Total: 54 tests, 115 assertions, 0 failures
+  - Total: 56 tests, 117 assertions, 0 failures
 - [x] No N+1 on listed pages
   - Index: Uses `.left_joins(:list_items)` with SQL aggregation for counts
   - Show: Uses `.includes(:submitted_by, :penalties, list_items: {listable: [:artists]})` for full details
@@ -906,10 +964,11 @@ bin/rails test test/controllers/admin/music/albums/lists_controller_test.rb
   - Direction whitelisted: ASC, DESC (case insensitive)
 - [x] Docs updated
   - Task file: This spec completely updated with all challenges and solutions
-  - todo.md: Will be moved to completed section
-  - Class docs: Created 3 new documentation files:
+  - todo.md: Moved to completed section
+  - Class docs: Created 4 documentation files:
     - `docs/controllers/admin/music/lists_controller.md`
     - `docs/controllers/admin/music/albums/lists_controller.md`
+    - `docs/models/list.md`
     - `docs/helpers/admin/music/lists_helper.md`
 - [x] Links to authoritative code present
   - All file paths referenced throughout spec
@@ -932,6 +991,9 @@ bin/rails test test/controllers/admin/music/albums/lists_controller_test.rb
 **Controller Documentation:**
 - `docs/controllers/admin/music/lists_controller.md` - Base controller with all shared logic
 - `docs/controllers/admin/music/albums/lists_controller.md` - Album-specific controller with path helpers
+
+**Model Documentation:**
+- `docs/models/list.md` - Complete model documentation including validations, callbacks, and design decisions
 
 **Helper Documentation:**
 - `docs/helpers/admin/music/lists_helper.md` - Helper methods with detailed examples and rationale

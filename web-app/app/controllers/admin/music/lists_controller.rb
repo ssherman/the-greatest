@@ -77,7 +77,7 @@ class Admin::Music::ListsController < Admin::Music::BaseController
   end
 
   def list_params
-    permitted_params = params.require(:music_albums_list).permit(
+    params.require(:music_albums_list).permit(
       :name,
       :description,
       :source,
@@ -100,17 +100,6 @@ class Admin::Music::ListsController < Admin::Music::BaseController
       :simplified_html,
       :formatted_text
     )
-
-    # Parse items_json if it's a string
-    if permitted_params[:items_json].is_a?(String) && permitted_params[:items_json].present?
-      begin
-        permitted_params[:items_json] = JSON.parse(permitted_params[:items_json])
-      rescue JSON::ParserError
-        # Leave as string, model validation will catch it
-      end
-    end
-
-    permitted_params
   end
 
   protected

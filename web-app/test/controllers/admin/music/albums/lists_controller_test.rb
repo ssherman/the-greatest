@@ -387,6 +387,40 @@ module Admin
           end
         end
 
+        test "should reject invalid JSON in items_json and return unprocessable_entity" do
+          sign_in_as(@admin_user, stub_auth: true)
+
+          invalid_json = '{"albums": [invalid json}'
+
+          patch admin_albums_list_path(@album_list), params: {
+            music_albums_list: {
+              items_json: invalid_json
+            }
+          }
+
+          assert_response :unprocessable_entity
+          # Verify error message appears in response body
+          assert_includes response.body, "must be valid JSON"
+        end
+
+        test "should reject invalid JSON on create and return unprocessable_entity" do
+          sign_in_as(@admin_user, stub_auth: true)
+
+          invalid_json = '{"albums": [invalid'
+
+          assert_no_difference("::Music::Albums::List.count") do
+            post admin_albums_lists_path, params: {
+              music_albums_list: {
+                name: "Invalid JSON List",
+                status: "approved",
+                items_json: invalid_json
+              }
+            }
+          end
+
+          assert_response :unprocessable_entity
+        end
+
         test "should update list with raw_html and formatted_text" do
           sign_in_as(@admin_user, stub_auth: true)
 

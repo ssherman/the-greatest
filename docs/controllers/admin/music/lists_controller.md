@@ -82,8 +82,6 @@ Whitelists and normalizes sort direction
 
 ### `#list_params`
 Strong parameters for list creation/update
-- Parses items_json from JSON string to Hash/Array before saving
-- Silent failure for invalid JSON (leaves as string for model validation)
 
 **Permitted Fields:**
 - Basic: name, description, status, source, url, year_published
@@ -91,6 +89,11 @@ Strong parameters for list creation/update
 - Flags: high_quality_source, category_specific, location_specific, yearly_award, voter_count_estimated, voter_count_unknown, voter_names_unknown
 - External IDs: musicbrainz_series_id
 - Import Data: items_json, raw_html, simplified_html, formatted_text
+
+**Note on items_json Validation:**
+- JSON validation is handled at the model level (see `app/models/list.rb`)
+- The model's `parse_items_json_if_string` callback automatically parses valid JSON strings
+- The model's `items_json_format` validation catches invalid JSON and prevents 500 errors
 
 ## Security
 - Inherits admin authentication from `Admin::Music::BaseController`
