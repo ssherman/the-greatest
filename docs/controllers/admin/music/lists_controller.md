@@ -7,7 +7,7 @@ Abstract base controller for managing music lists (albums and songs) in the admi
 - Inherits from: `Admin::Music::BaseController`
 - Subclasses:
   - `Admin::Music::Albums::ListsController` (app/controllers/admin/music/albums/lists_controller.rb:6)
-  - Future: `Admin::Music::Songs::ListsController`
+  - `Admin::Music::Songs::ListsController` (app/controllers/admin/music/songs/lists_controller.rb:6)
 
 ## Public Actions
 
@@ -19,8 +19,9 @@ Lists all lists with sorting and pagination
 
 ### `#show`
 Displays a single list with full details
-- Includes: submitted_by, penalties, list_items (with eager-loaded albums and artists)
+- Includes: submitted_by, penalties, list_items (with eager-loaded associations via `listable_includes`)
 - Performance: Uses `.includes()` to prevent N+1 queries
+- Associations: Dynamic based on subclass (albums include artists/categories/images, songs include only artists)
 
 ### `#new`
 Renders form for creating a new list
@@ -46,13 +47,13 @@ Deletes a list
 
 ## Protected Methods (Abstract)
 
-Subclasses must implement these path helper methods:
+Subclasses must implement these configuration methods:
 
 ### `#list_class`
-Returns the specific list class (e.g., `Music::Albums::List`)
+Returns the specific list class (e.g., `Music::Albums::List` or `Music::Songs::List`)
 
 ### `#lists_path`
-Returns the index path
+Returns the index path (e.g., `admin_albums_lists_path` or `admin_songs_lists_path`)
 
 ### `#list_path(list)`
 Returns the show path for a specific list
@@ -63,11 +64,26 @@ Returns the new form path
 ### `#edit_list_path(list)`
 Returns the edit form path
 
+### `#param_key`
+Returns the strong parameters key for the list type (e.g., `:music_albums_list` or `:music_songs_list`)
+
+Added in Phase 9 to support dynamic form parameter handling.
+
+### `#items_count_name`
+Returns the name for the SQL count aggregation (e.g., `"albums_count"` or `"songs_count"`)
+
+Added in Phase 9 to support dynamic count field naming in index queries.
+
+### `#listable_includes`
+Returns the array of associations to eager load for list items (e.g., `[:artists, :categories, :primary_image]` for albums, `[:artists]` for songs)
+
+Added in Phase 9 to support different eager loading strategies per list type.
+
 ## Private Methods
 
 ### `#load_lists_for_index`
 Builds the query for the index page with sorting and pagination
-- Counts albums via SQL aggregation to avoid N+1
+- Counts items via SQL aggregation (field name from `items_count_name`) to avoid N+1
 - Applies sorting with whitelisted columns and directions
 
 ### `#sortable_column(column)`
@@ -82,6 +98,8 @@ Whitelists and normalizes sort direction
 
 ### `#list_params`
 Strong parameters for list creation/update
+
+Uses `param_key` from subclass to support different form parameter structures (`:music_albums_list` vs `:music_songs_list`).
 
 **Permitted Fields:**
 - Basic: name, description, status, source, url, year_published
@@ -103,17 +121,30 @@ Strong parameters for list creation/update
 
 ## Performance Considerations
 - Uses `.includes()` and `.left_joins()` to prevent N+1 queries
-- SQL aggregation for album counts instead of Ruby iteration
+- SQL aggregation for item counts (albums/songs) instead of Ruby iteration
 - Pagination limits query results to 25 per page
+- Dynamic eager loading via `listable_includes` ensures only necessary associations are loaded
 
 ## Dependencies
 - Pagy gem for pagination
 - JSON parsing for items_json handling
 - Strong parameters for security
 
+## Implementation History
+- **Phase 8** (2025-11-14): Initial implementation for album lists
+- **Phase 9** (2025-11-14): Enhanced abstraction for song lists support
+  - Added `param_key`, `items_count_name`, and `listable_includes` abstract methods
+  - Made base controller truly reusable for different list types
+
 ## Related Files
 - Base class: `app/controllers/admin/music/base_controller.rb`
-- Subclass: `app/controllers/admin/music/albums/lists_controller.rb`
-- Views: `app/views/admin/music/albums/lists/`
+- Subclasses:
+  - `app/controllers/admin/music/albums/lists_controller.rb`
+  - `app/controllers/admin/music/songs/lists_controller.rb`
+- Views:
+  - `app/views/admin/music/albums/lists/`
+  - `app/views/admin/music/songs/lists/`
 - Helper: `app/helpers/admin/music/lists_helper.rb`
 - Model: `app/models/list.rb`
+- Tests:
+  - `test/controllers/admin/music/songs/lists_controller_test.rb`
