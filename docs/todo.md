@@ -2,6 +2,7 @@
 
 ## High Priority
 1. [Production Deployment Infrastructure](todos/048-production-deployment-infrastructure.md)
+2. [Custom Admin Interface - Phase 7: Artist Ranking Configurations](todos/078-custom-admin-phase-7-artist-ranking-configs.md)
 3. [Quote Normalization Service (Music Domain)](todos/071-music-name-title-normalization.md)
 4. [Movies data model implementation](todos/002-movies-object-model.md)
 
