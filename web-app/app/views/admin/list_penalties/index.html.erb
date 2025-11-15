@@ -1,0 +1,59 @@
+<%= turbo_frame_tag "list_penalties_list" do %>
+  <% list_penalties = local_assigns.fetch(:list_penalties, @list_penalties) %>
+  <% if list_penalties&.any? %>
+    <div class="overflow-x-auto">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% list_penalties.each do |list_penalty| %>
+            <tr>
+              <td>
+                <%= link_to list_penalty.penalty.name,
+                    admin_penalty_path(list_penalty.penalty),
+                    class: "link link-hover",
+                    data: { turbo_frame: "_top" } %>
+              </td>
+              <td>
+                <% if list_penalty.penalty.type == "Global::Penalty" %>
+                  <span class="badge badge-primary badge-sm">Global</span>
+                <% elsif list_penalty.penalty.type.start_with?("Music::") %>
+                  <span class="badge badge-secondary badge-sm">Music</span>
+                <% elsif list_penalty.penalty.type.start_with?("Books::") %>
+                  <span class="badge badge-accent badge-sm">Books</span>
+                <% elsif list_penalty.penalty.type.start_with?("Movies::") %>
+                  <span class="badge badge-info badge-sm">Movies</span>
+                <% elsif list_penalty.penalty.type.start_with?("Games::") %>
+                  <span class="badge badge-success badge-sm">Games</span>
+                <% else %>
+                  <span class="badge badge-ghost badge-sm"><%= list_penalty.penalty.type %></span>
+                <% end %>
+              </td>
+              <td>
+                <%= button_to "Delete",
+                    admin_list_penalty_path(list_penalty),
+                    method: :delete,
+                    class: "btn btn-error btn-xs",
+                    form: { data: { turbo_confirm: "Are you sure you want to detach this penalty?" } } %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <div class="py-8 text-center">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-base-content/20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      </svg>
+      <p class="mt-4 text-sm text-base-content/70">
+        No penalties attached to this list yet.
+      </p>
+    </div>
+  <% end %>
+<% end %>

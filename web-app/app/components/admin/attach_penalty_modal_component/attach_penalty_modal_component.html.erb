@@ -1,0 +1,36 @@
+<div id="attach_penalty_modal">
+  <dialog id="attach_penalty_modal_dialog" class="modal">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg">Attach Penalty</h3>
+      <%= form_with model: ListPenalty.new,
+                    url: admin_list_list_penalties_path(@list),
+                    method: :post,
+                    class: "space-y-4",
+                    data: {
+                      controller: "modal-form",
+                      modal_form_modal_id_value: "attach_penalty_modal_dialog",
+                      turbo_frame: "list_penalties_list"
+                    } do |f| %>
+
+        <div class="form-control">
+          <%= f.label :penalty_id, "Penalty", class: "label" %>
+          <%= f.select :penalty_id,
+              options_from_collection_for_select(available_penalties, :id, :name),
+              { prompt: "Select a penalty..." },
+              { class: "select select-bordered w-full", required: true } %>
+          <label class="label">
+            <span class="label-text-alt">Only compatible penalties shown (Global + <%= @list.type.split("::").first %>)</span>
+          </label>
+        </div>
+
+        <div class="modal-action">
+          <button type="button" class="btn" onclick="attach_penalty_modal_dialog.close()">Cancel</button>
+          <%= f.submit "Attach Penalty", class: "btn btn-primary" %>
+        </div>
+      <% end %>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button>close</button>
+    </form>
+  </dialog>
+</div>
