@@ -151,6 +151,11 @@ Rails.application.routes.draw do
 
   # Admin routes (global - no domain constraint)
   namespace :admin do
+    scope "list/:list_id", as: "list" do
+      resources :list_penalties, only: [:index, :create]
+    end
+
+    resources :list_penalties, only: [:destroy]
     resources :penalties
   end
 
