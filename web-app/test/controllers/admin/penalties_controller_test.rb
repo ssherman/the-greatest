@@ -62,7 +62,7 @@ class Admin::PenaltiesControllerTest < ActionDispatch::IntegrationTest
 
   test "should update penalty with valid data" do
     patch admin_penalty_url(@global_penalty), params: {
-      global_penalty: {
+      penalty: {
         name: "Updated Name"
       }
     }
@@ -73,11 +73,33 @@ class Admin::PenaltiesControllerTest < ActionDispatch::IntegrationTest
 
   test "should not update penalty with invalid data" do
     patch admin_penalty_url(@global_penalty), params: {
-      global_penalty: {
+      penalty: {
         name: ""
       }
     }
     assert_response :unprocessable_entity
+  end
+
+  test "should update penalty with form scope penalty (simulates actual form submission)" do
+    patch admin_penalty_url(@global_penalty), params: {
+      penalty: {
+        name: "Updated via Form Scope"
+      }
+    }
+    assert_redirected_to admin_penalty_url(@global_penalty)
+    @global_penalty.reload
+    assert_equal "Updated via Form Scope", @global_penalty.name
+  end
+
+  test "should update music penalty with form scope penalty" do
+    patch admin_penalty_url(@music_penalty), params: {
+      penalty: {
+        name: "Updated Music Penalty"
+      }
+    }
+    assert_redirected_to admin_penalty_url(@music_penalty)
+    @music_penalty.reload
+    assert_equal "Updated Music Penalty", @music_penalty.name
   end
 
   test "should destroy penalty" do

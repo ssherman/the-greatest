@@ -24,7 +24,7 @@ class Admin::PenaltiesController < Admin::BaseController
 
   def create
     penalty_class = get_penalty_class(params[:penalty][:type])
-    @penalty = penalty_class.new(create_penalty_params)
+    @penalty = penalty_class.new(penalty_params)
 
     if @penalty.save
       redirect_to admin_penalty_path(@penalty), notice: "Penalty created successfully."
@@ -79,12 +79,7 @@ class Admin::PenaltiesController < Admin::BaseController
     end
   end
 
-  def create_penalty_params
-    params.require(:penalty).permit(:name, :description, :dynamic_type)
-  end
-
   def penalty_params
-    param_key = @penalty.type.underscore.tr("/", "_").to_sym
-    params.require(param_key).permit(:name, :description, :dynamic_type)
+    params.require(:penalty).permit(:name, :description, :dynamic_type)
   end
 end
