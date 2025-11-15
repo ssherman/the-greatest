@@ -39,7 +39,7 @@ Uses DaisyUI modal component (`dialog.modal`) with ID `attach_penalty_modal_dial
 
 ### Penalty Selection
 - **Field**: Select dropdown for `penalty_id`
-- **Options**: Populated via `helpers.available_penalties(@list)`
+- **Options**: Populated via component's `available_penalties` method
 - **Filtering Logic**: Only shows compatible penalties (Global + matching media type)
 - **Exclusions**: Penalties already attached to the list
 - **Label Text**: Shows media type context (e.g., "Only compatible penalties shown (Global + Music)")
@@ -48,14 +48,33 @@ Uses DaisyUI modal component (`dialog.modal`) with ID `attach_penalty_modal_dial
 - **Cancel Button**: Closes modal without submission
 - **Submit Button**: "Attach Penalty" - submits form via Turbo Stream
 
-## Helper Dependencies
+## Public Methods
 
-### `available_penalties(list)`
-Provided by `Admin::ListPenaltiesHelper`, filters penalties by:
+### `#available_penalties`
+Returns an ActiveRecord::Relation of penalties available for attachment to the list.
+
+**Filtering Logic**:
 1. **Static Only**: Excludes dynamic penalties (can't be manually attached)
-2. **Media Compatibility**: Shows Global::Penalty + media-specific penalties matching list type
+2. **Media Compatibility**: Shows `Global::Penalty` + media-specific penalties matching list type
 3. **Not Already Attached**: Excludes penalties already in `list.penalties`
 4. **Ordered**: Alphabetically by penalty name
+
+**Returns**: `ActiveRecord::Relation<Penalty>`
+
+**Implementation**:
+```ruby
+def available_penalties
+  media_type = @list.type.split("::").first
+
+  Penalty
+    .static
+    .where("type IN (?, ?)", "Global::Penalty", "#{media_type}::Penalty")
+    .where.not(id: @list.penalties.pluck(:id))
+    .order(:name)
+end
+```
+
+**Design Note**: This method is self-contained within the component, making it independent of helper modules. This ensures the component works correctly even when `ActionController::Base.include_all_helpers = false` (Rails 8 best practice).
 
 ## Turbo Stream Integration
 

@@ -15,7 +15,7 @@
         <div class="form-control">
           <%= f.label :penalty_id, "Penalty", class: "label" %>
           <%= f.select :penalty_id,
-              options_from_collection_for_select(helpers.available_penalties(@list), :id, :name),
+              options_from_collection_for_select(available_penalties, :id, :name),
               { prompt: "Select a penalty..." },
               { class: "select select-bordered w-full", required: true } %>
           <label class="label">

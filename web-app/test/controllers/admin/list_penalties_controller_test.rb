@@ -53,6 +53,7 @@ module Admin
       assert_response :success
       assert_turbo_stream action: :replace, target: "flash"
       assert_turbo_stream action: :replace, target: "list_penalties_list"
+      assert_turbo_stream action: :replace, target: "attach_penalty_modal"
     end
 
     test "should prevent duplicate penalty attachment" do

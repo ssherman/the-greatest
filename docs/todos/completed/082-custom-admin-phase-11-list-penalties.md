@@ -651,13 +651,56 @@ Verify these fixtures exist and have proper data:
 
 **Files Modified**: `test/models/list_penalty_test.rb:52`
 
+### Issue 7: ViewComponent Helper Dependency (Post-Completion Code Review)
+**Problem**: The `Admin::AttachPenaltyModalComponent` template called `helpers.available_penalties(@list)`, which depends on `Admin::ListPenaltiesHelper` being available. This would fail when rendered from `Admin::Music::Albums::ListsController` or `Admin::Music::Songs::ListsController` if Rails is configured with `include_all_helpers = false` (Rails 8 best practice for performance).
+
+**Root Cause**: Component relied on external helper method instead of being self-contained. While currently working (because `include_all_helpers` defaults to `true`), this creates a fragile dependency that would break if the configuration changes.
+
+**Fix**:
+- Moved `available_penalties` logic into the component as a public method
+- Updated template to call `available_penalties` instead of `helpers.available_penalties(@list)`
+- Added comprehensive component tests (4 tests, 8 assertions) to verify:
+  - Component renders modal with form
+  - `available_penalties` returns only static penalties
+  - `available_penalties` filters by media type
+  - `available_penalties` excludes already attached penalties
+- Updated component documentation to reflect self-contained design
+
+**Benefits**:
+- Component is now self-contained and doesn't depend on helper modules
+- Works correctly regardless of `include_all_helpers` setting
+- Better encapsulation and testability
+- Future-proof for Rails 8+ best practices
+
+**Files Modified**:
+- `app/components/admin/attach_penalty_modal_component.rb` - Added `available_penalties` method
+- `app/components/admin/attach_penalty_modal_component/attach_penalty_modal_component.html.erb` - Changed `helpers.available_penalties(@list)` to `available_penalties`
+- `test/components/admin/attach_penalty_modal_component_test.rb` - Added 4 comprehensive tests
+- `docs/components/admin/attach_penalty_modal_component.md` - Updated documentation
+
+**Discovered By**: AI code review agent post-completion
+
+### Issue 8: ViewComponent in turbo_stream.replace (Investigated - Not Valid)
+**Reported Problem**: AI code review agent flagged that passing `Admin::AttachPenaltyModalComponent.new(list: @list)` as a bare positional argument to `turbo_stream.replace` would raise `ArgumentError: wrong number of arguments`.
+
+**Investigation Result**: This concern is **not valid** for this codebase. Turbo-Rails 2.0.20 has built-in ViewComponent support through the `render_template` method, which explicitly checks if the `content` parameter responds to `render_in` (which ViewComponents do) and automatically renders them.
+
+**Evidence**:
+- All controller tests passing (12 tests, 56 assertions)
+- Added assertion for modal turbo stream replacement - test passes
+- Verified in turbo-rails source code: `when content.respond_to?(:render_in) → content.render_in(@view_context, &block)`
+
+**Conclusion**: The current implementation is correct and follows modern turbo-rails conventions. No changes needed.
+
+**Files Modified**: `test/controllers/admin/list_penalties_controller_test.rb:56` - Added assertion for modal turbo stream
+
 ## Acceptance Results
 
 ### Automated Test Results
 ✅ All 12 controller tests passing:
 - GET index renders penalties list (with/without penalties)
 - POST create attaches penalty successfully
-- POST create returns turbo stream responses
+- POST create returns turbo stream responses (including modal replacement)
 - Duplicate penalty prevention
 - DELETE destroy detaches penalty successfully
 - DELETE destroy returns turbo stream responses
@@ -667,7 +710,23 @@ Verify these fixtures exist and have proper data:
 
 **Controller Test Output**:
 ```
-12 runs, 53 assertions, 0 failures, 0 errors, 0 skips
+12 runs, 56 assertions, 0 failures, 0 errors, 0 skips
+```
+
+✅ All 4 ViewComponent tests passing:
+- Component renders modal with form structure
+- `available_penalties` returns only static penalties
+- `available_penalties` filters by media type (Global + matching media)
+- `available_penalties` excludes already attached penalties
+
+**Component Test Output**:
+```
+4 runs, 8 assertions, 0 failures, 0 errors, 0 skips
+```
+
+**Combined Test Suite**:
+```
+16 runs, 64 assertions, 0 failures, 0 errors, 0 skips
 ```
 
 ✅ All 8 model tests passing:
@@ -700,6 +759,44 @@ Manual testing deferred to production/staging environment. Automated tests cover
 ### Files Created/Modified
 See "Key Files Touched" section for complete list.
 
+## Post-Completion Improvements
+
+After initial completion, the implementation underwent AI code review which identified one valid issue and one false positive:
+
+### Improvement 1: ViewComponent Self-Containment ✅
+
+**Issue**: The `Admin::AttachPenaltyModalComponent` depended on `Admin::ListPenaltiesHelper` being available, creating a fragile dependency that would break with `include_all_helpers = false` (Rails 8 best practice).
+
+**Solution Implemented**:
+- Moved `available_penalties` logic from helper into component as a public method
+- Updated template to call component method instead of helper
+- Added 4 comprehensive component tests
+- Updated component documentation
+
+**Impact**:
+- Component is now self-contained and future-proof
+- Better encapsulation and testability
+- Works correctly regardless of Rails configuration
+- Discovered via AI code review agent
+
+### Investigation 2: ViewComponent in Turbo Streams ✅
+
+**Reported**: Concern that passing ViewComponent instances to `turbo_stream.replace` would raise errors.
+
+**Investigation Result**: Not valid for this codebase. Turbo-Rails 2.0.20 has built-in ViewComponent support via `render_in` method detection. Current implementation is correct.
+
+**Verification**:
+- Added test assertion for modal turbo stream replacement
+- Verified in turbo-rails source code
+- All tests passing with current approach
+
+**Final Test Coverage**:
+- **Controller Tests**: 12 tests, 56 assertions ✅
+- **Component Tests**: 4 tests, 8 assertions ✅
+- **Model Tests**: 8 tests, 13 assertions ✅
+- **Integration Test**: WeightCalculatorV1Test passing ✅
+- **Total**: 24 tests, 77 assertions, 0 failures
+
 ## Documentation Updated
 - [x] This spec file (implementation notes, deviations, results, issues found & fixed)
 - [x] `docs/todo.md` (marked as completed)
@@ -718,7 +815,7 @@ See "Key Files Touched" section for complete list.
 ## Definition of Done
 
 - [x] All Acceptance Criteria demonstrably pass (tests/screenshots)
-  - Target: 12+ controller tests passing ✅ (12 controller, 8 model tests)
+  - Target: 12+ controller tests passing ✅ (12 controller, 4 component, 8 model tests)
 - [x] No N+1 on list show pages
   - Show: Uses `.includes(list_penalties: :penalty)` ✅
 - [x] Penalties list working
