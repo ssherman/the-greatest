@@ -1,0 +1,127 @@
+<%= form_with model: @penalty, url: @penalty.persisted? ? admin_penalty_path(@penalty) : admin_penalties_path, scope: :penalty, class: "space-y-6" do |f| %>
+  <% if @penalty.errors.any? %>
+    <div class="alert alert-error">
+      <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <div>
+        <h3 class="font-bold"><%= pluralize(@penalty.errors.count, "error") %> prohibited this penalty from being saved:</h3>
+        <ul class="list-disc list-inside mt-2">
+          <% @penalty.errors.full_messages.each do |message| %>
+            <li><%= message %></li>
+          <% end %>
+        </ul>
+      </div>
+    </div>
+  <% end %>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">Basic Information</h2>
+
+      <div class="grid grid-cols-1 gap-4">
+        <div class="form-control">
+          <%= f.label :name, class: "label" do %>
+            <span class="label-text font-semibold">Name <span class="text-error">*</span></span>
+          <% end %>
+          <%= f.text_field :name,
+              class: "input input-bordered w-full #{@penalty.errors[:name].any? ? 'input-error' : ''}",
+              placeholder: "Enter penalty name",
+              required: true,
+              autofocus: true,
+              maxlength: 255 %>
+          <% if @penalty.errors[:name].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @penalty.errors[:name].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <div class="form-control">
+          <%= f.label :description, class: "label" do %>
+            <span class="label-text font-semibold">Description</span>
+          <% end %>
+          <%= f.text_area :description,
+              class: "textarea textarea-bordered w-full #{@penalty.errors[:description].any? ? 'textarea-error' : ''}",
+              placeholder: "Enter a description of the penalty...",
+              rows: 4 %>
+          <label class="label">
+            <span class="label-text-alt">Optional description explaining this penalty</span>
+          </label>
+          <% if @penalty.errors[:description].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @penalty.errors[:description].first %></span>
+            </label>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">Type Configuration</h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-control">
+          <%= f.label :type, class: "label" do %>
+            <span class="label-text font-semibold">Penalty Type <span class="text-error">*</span></span>
+          <% end %>
+          <%= f.select :type,
+              options_for_select([
+                ["Global", "Global::Penalty"],
+                ["Music", "Music::Penalty"]
+              ], @penalty.type || "Global::Penalty"),
+              {},
+              class: "select select-bordered w-full #{@penalty.errors[:type].any? ? 'select-error' : ''}",
+              disabled: @penalty.persisted? %>
+          <label class="label">
+            <span class="label-text-alt">
+              <% if @penalty.persisted? %>
+                Type cannot be changed after creation
+              <% else %>
+                Select which domain this penalty applies to
+              <% end %>
+            </span>
+          </label>
+          <% if @penalty.errors[:type].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @penalty.errors[:type].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <div class="form-control">
+          <%= f.label :dynamic_type, class: "label" do %>
+            <span class="label-text font-semibold">Dynamic Type</span>
+          <% end %>
+          <%= f.select :dynamic_type,
+              options_for_select(
+                [["Static", nil]] + Penalty.dynamic_types.keys.map { |k| [k.humanize, k] },
+                @penalty.dynamic_type
+              ),
+              {},
+              class: "select select-bordered w-full #{@penalty.errors[:dynamic_type].any? ? 'select-error' : ''}" %>
+          <label class="label">
+            <span class="label-text-alt">Select a dynamic type for runtime calculation, or 'Static' for fixed penalties</span>
+          </label>
+          <% if @penalty.errors[:dynamic_type].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @penalty.errors[:dynamic_type].first %></span>
+            </label>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex gap-2 justify-end">
+    <%= link_to @penalty.persisted? ? admin_penalty_path(@penalty) : admin_penalties_path,
+        class: "btn btn-ghost" do %>
+      Cancel
+    <% end %>
+
+    <%= f.submit (@penalty.persisted? ? "Update Penalty" : "Create Penalty"),
+        class: "btn btn-primary" %>
+  </div>
+<% end %>

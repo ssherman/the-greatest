@@ -112,6 +112,13 @@ Using pure STI approach for:
 - `Rankings::WeightCalculatorV1` - Handles all penalty calculation logic using Penalty definitions
 - `Rankings::BulkWeightCalculator` - Processes penalty calculations for multiple rankings
 
+## Admin Interface
+Penalties can be managed through the custom admin interface at `/admin/penalties`:
+- Full CRUD operations (create, read, update, delete)
+- Type filtering (filter by Global, Music, etc.)
+- Support for creating both Global and Music penalties (other types pending implementation)
+- Type selection during creation (immutable after creation)
+
 ## Usage Examples
 ```ruby
 # Create system-wide cross-media penalty

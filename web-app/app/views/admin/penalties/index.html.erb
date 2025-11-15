@@ -1,0 +1,48 @@
+<% content_for :title, "Penalties" %>
+
+<div class="space-y-6">
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <h1 class="text-3xl font-bold">Penalties</h1>
+      <p class="text-sm text-base-content/70 mt-1">Manage penalty definitions across all domains</p>
+    </div>
+    <div class="flex gap-2">
+      <%= link_to new_admin_penalty_path, class: "btn btn-primary" do %>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+        </svg>
+        <span>New Penalty</span>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <div class="mb-4">
+        <%= form_with url: admin_penalties_path, method: :get, data: { turbo_frame: "penalties_table", turbo_action: "advance" }, class: "flex gap-2 items-center" do |f| %>
+          <label class="form-control w-full max-w-xs">
+            <div class="label">
+              <span class="label-text">Filter by Type</span>
+            </div>
+            <%= f.select :type,
+                options_for_select([
+                  ["All Types", "All"],
+                  ["Global", "Global"],
+                  ["Music", "Music"],
+                  ["Books", "Books"],
+                  ["Movies", "Movies"],
+                  ["Games", "Games"]
+                ], @selected_type),
+                {},
+                class: "select select-bordered",
+                onchange: "this.form.requestSubmit()" %>
+          </label>
+        <% end %>
+      </div>
+
+      <%= turbo_frame_tag "penalties_table" do %>
+        <%= render "table", penalties: @penalties, pagy: @pagy, selected_type: @selected_type %>
+      <% end %>
+    </div>
+  </div>
+</div>

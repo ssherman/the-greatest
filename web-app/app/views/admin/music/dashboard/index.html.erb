@@ -92,12 +92,8 @@
         </h2>
         <p class="text-base-content/70">Manage album catalog</p>
         <div class="card-actions justify-end mt-4">
-          <% if defined?(admin_music_albums_path) %>
-            <%= link_to "View All", admin_music_albums_path, class: "btn btn-secondary btn-sm" %>
-            <%= link_to "Add New", new_admin_music_album_path, class: "btn btn-outline btn-sm" %>
-          <% else %>
-            <span class="badge badge-ghost">Coming Soon</span>
-          <% end %>
+          <%= link_to "View All", admin_albums_path, class: "btn btn-secondary btn-sm" %>
+          <%= link_to "Add New", new_admin_album_path, class: "btn btn-outline btn-sm" %>
         </div>
       </div>
     </div>
@@ -113,12 +109,8 @@
         </h2>
         <p class="text-base-content/70">Manage individual tracks</p>
         <div class="card-actions justify-end mt-4">
-          <% if defined?(admin_music_songs_path) %>
-            <%= link_to "View All", admin_music_songs_path, class: "btn btn-accent btn-sm" %>
-            <%= link_to "Add New", new_admin_music_song_path, class: "btn btn-outline btn-sm" %>
-          <% else %>
-            <span class="badge badge-ghost">Coming Soon</span>
-          <% end %>
+          <%= link_to "View All", admin_songs_path, class: "btn btn-accent btn-sm" %>
+          <%= link_to "Add New", new_admin_song_path, class: "btn btn-outline btn-sm" %>
         </div>
       </div>
     </div>
@@ -154,8 +146,10 @@
           Rankings
         </h2>
         <p class="text-base-content/70">View and manage rankings</p>
-        <div class="card-actions justify-end mt-4">
-          <span class="badge badge-ghost">Coming Soon</span>
+        <div class="card-actions justify-end mt-4 flex-wrap gap-2">
+          <%= link_to "Albums", admin_albums_ranking_configurations_path, class: "btn btn-warning btn-sm" %>
+          <%= link_to "Songs", admin_songs_ranking_configurations_path, class: "btn btn-warning btn-sm" %>
+          <%= link_to "Artists", admin_artists_ranking_configurations_path, class: "btn btn-warning btn-sm" %>
         </div>
       </div>
     </div>

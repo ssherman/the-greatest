@@ -1,13 +1,13 @@
 <aside class="flex flex-col h-full bg-base-100 w-80">
   <!-- Logo/Title -->
   <div class="p-6 border-b border-base-300">
-    <div class="flex items-center gap-3">
+    <%= link_to admin_root_path, class: "flex items-center gap-3 hover:opacity-80 transition-opacity" do %>
       <%= image_tag "music/logo.gif", alt: "The Greatest Music", class: "w-10 h-10" %>
       <div>
         <h1 class="text-xl font-bold">The Greatest Music</h1>
         <p class="text-sm text-base-content/70">Admin</p>
       </div>
-    </div>
+    <% end %>
   </div>
 
   <!-- Navigation Menu -->
@@ -101,7 +101,7 @@
 
       <!-- Global Section -->
       <li>
-        <details>
+        <details open>
           <summary class="font-semibold">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
@@ -110,12 +110,12 @@
           </summary>
           <ul>
             <li>
-              <a href="#" class="flex items-center gap-2 text-base-content/50">
+              <%= link_to admin_penalties_path, class: "flex items-center gap-2" do %>
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
                 Penalties
-              </a>
+              <% end %>
             </li>
             <li>
               <a href="#" class="flex items-center gap-2 text-base-content/50">
