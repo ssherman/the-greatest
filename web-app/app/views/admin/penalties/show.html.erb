@@ -1,0 +1,168 @@
+<% content_for :title, @penalty.name %>
+
+<div class="space-y-6">
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div class="flex-1">
+      <div class="flex items-center gap-2 mb-2">
+        <%= link_to admin_penalties_path, class: "btn btn-ghost btn-sm btn-circle" do %>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+          </svg>
+        <% end %>
+        <h1 class="text-3xl font-bold"><%= @penalty.name %></h1>
+      </div>
+      <div class="flex items-center gap-4 text-sm text-base-content/70">
+        <span>ID: <span class="font-mono"><%= @penalty.id %></span></span>
+        <span>Created <%= time_ago_in_words(@penalty.created_at) %> ago</span>
+      </div>
+    </div>
+    <div class="flex gap-2">
+      <%= link_to edit_admin_penalty_path(@penalty), class: "btn btn-primary" do %>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+        </svg>
+        <span>Edit</span>
+      <% end %>
+
+      <%= button_to admin_penalty_path(@penalty),
+          method: :delete,
+          class: "btn btn-error btn-outline",
+          data: { turbo_confirm: "Are you sure you want to delete #{@penalty.name}? This cannot be undone." } do %>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+        </svg>
+        <span>Delete</span>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">Basic Information</h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Name</span>
+              </label>
+              <p class="text-lg"><%= @penalty.name %></p>
+            </div>
+
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Type</span>
+              </label>
+              <%
+                type_badge_class = case @penalty.type
+                when "Global::Penalty"
+                  "badge-info"
+                when "Music::Penalty"
+                  "badge-secondary"
+                when "Books::Penalty"
+                  "badge-success"
+                when "Movies::Penalty"
+                  "badge-warning"
+                when "Games::Penalty"
+                  "badge-error"
+                else
+                  "badge-ghost"
+                end
+              %>
+              <span class="badge <%= type_badge_class %> badge-lg">
+                <%= @penalty.type.split("::").first %>
+              </span>
+            </div>
+
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Dynamic Type</span>
+              </label>
+              <% if @penalty.dynamic_type.present? %>
+                <span class="badge badge-warning badge-lg">
+                  <%= @penalty.dynamic_type.humanize %>
+                </span>
+              <% else %>
+                <span class="badge badge-ghost badge-lg">Static</span>
+              <% end %>
+            </div>
+
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">User</span>
+              </label>
+              <% if @penalty.user_id.nil? %>
+                <span class="badge badge-ghost badge-lg">System-wide</span>
+              <% else %>
+                <p><%= @penalty.user.email %></p>
+              <% end %>
+            </div>
+
+            <% if @penalty.description.present? %>
+              <div class="md:col-span-2">
+                <label class="label">
+                  <span class="label-text font-semibold">Description</span>
+                </label>
+                <p class="text-base-content/80"><%= @penalty.description %></p>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">
+            Penalty Applications
+            <span class="badge badge-lg"><%= @penalty.penalty_applications.size %></span>
+          </h2>
+          <% if @penalty.penalty_applications.any? %>
+            <p class="text-sm text-base-content/70">
+              This penalty is used in <%= pluralize(@penalty.penalty_applications.size, "ranking configuration") %>.
+            </p>
+          <% else %>
+            <p class="text-sm text-base-content/70">
+              No ranking configurations use this penalty yet.
+            </p>
+          <% end %>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">
+            Lists
+            <span class="badge badge-lg"><%= @penalty.list_penalties.size %></span>
+          </h2>
+          <% if @penalty.list_penalties.any? %>
+            <p class="text-sm text-base-content/70">
+              This penalty is applied to <%= pluralize(@penalty.list_penalties.size, "list") %>.
+            </p>
+          <% else %>
+            <p class="text-sm text-base-content/70">
+              No lists use this penalty yet.
+            </p>
+          <% end %>
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-6">
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title text-lg">Metadata</h2>
+          <div class="space-y-3 text-sm">
+            <div>
+              <label class="label-text font-semibold">Created At</label>
+              <p class="text-base-content/70"><%= @penalty.created_at.strftime("%B %d, %Y at %I:%M %p") %></p>
+            </div>
+            <div>
+              <label class="label-text font-semibold">Updated At</label>
+              <p class="text-base-content/70"><%= @penalty.updated_at.strftime("%B %d, %Y at %I:%M %p") %></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

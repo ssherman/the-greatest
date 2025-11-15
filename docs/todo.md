@@ -19,6 +19,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-11-15] [Custom Admin Interface - Phase 10: Global Penalties](todos/completed/081-custom-admin-phase-10-global-penalties.md)
 - ✅ [2025-11-14] [Custom Admin Interface - Phase 9: Song Lists](todos/completed/080-custom-admin-phase-9-song-lists.md)
 - ✅ [2025-11-14] [Custom Admin Interface - Phase 8: Album Lists](todos/completed/079-custom-admin-phase-8-album-lists.md)
 - ✅ [2025-11-13] [Custom Admin Interface - Phase 7: Artist Ranking Configurations](todos/completed/078-custom-admin-phase-7-artist-ranking-configs.md)

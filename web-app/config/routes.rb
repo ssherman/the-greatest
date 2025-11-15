@@ -149,6 +149,11 @@ Rails.application.routes.draw do
     root to: "games/default#index", as: :games_root
   end
 
+  # Admin routes (global - no domain constraint)
+  namespace :admin do
+    resources :penalties
+  end
+
   # Move Avo to /avo path
   mount Avo::Engine, at: :avo
 
