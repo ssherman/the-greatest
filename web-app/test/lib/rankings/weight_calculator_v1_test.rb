@@ -333,10 +333,16 @@ module Rankings
 
       # Apply both cross-media and music-specific penalties to our test configuration
       cross_media_penalty = penalties(:global_penalty)  # This is a cross-media penalty (Global::Penalty)
-      music_penalty = penalties(:music_penalty)         # This is a music-specific penalty (Music::Penalty)
+      music_penalty = penalties(:music_penalty)         # This is a music-specific penalty (Music::Penalty) - dynamic
 
       PenaltyApplication.create!(penalty: cross_media_penalty, ranking_configuration: music_config, value: 15)
       PenaltyApplication.create!(penalty: music_penalty, ranking_configuration: music_config, value: 20)
+
+      # Create a static music penalty for list attachment
+      static_music_penalty = Music::Penalty.create!(
+        name: "Static Music Penalty #{SecureRandom.hex(4)}",
+        description: "A static music penalty for testing"
+      )
 
       # Create a fresh music albums list with penalties
       music_list = Music::Albums::List.create!(
@@ -346,9 +352,11 @@ module Rankings
         number_of_voters: 150
       )
 
-      # Associate penalties directly with the list
+      # Associate static penalties with the list
+      # Note: Only static penalties can be directly attached via ListPenalty
+      # Dynamic penalties are applied automatically during weight calculation
       ListPenalty.create!(list: music_list, penalty: cross_media_penalty)
-      ListPenalty.create!(list: music_list, penalty: music_penalty)
+      ListPenalty.create!(list: music_list, penalty: static_music_penalty)
 
       # Create ranked list
       music_ranked_list = RankedList.create!(

@@ -2,8 +2,8 @@
 
 ## High Priority
 1. [Production Deployment Infrastructure](todos/048-production-deployment-infrastructure.md)
-2. [Quote Normalization Service (Music Domain)](todos/071-music-name-title-normalization.md)
-3. [Movies data model implementation](todos/002-movies-object-model.md)
+3. [Quote Normalization Service (Music Domain)](todos/071-music-name-title-normalization.md)
+4. [Movies data model implementation](todos/002-movies-object-model.md)
 
 ## Medium Priority
 2. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
@@ -19,6 +19,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-11-15] [Custom Admin Interface - Phase 11: List Penalties](todos/completed/082-custom-admin-phase-11-list-penalties.md)
 - ✅ [2025-11-15] [Custom Admin Interface - Phase 10: Global Penalties](todos/completed/081-custom-admin-phase-10-global-penalties.md)
 - ✅ [2025-11-14] [Custom Admin Interface - Phase 9: Song Lists](todos/completed/080-custom-admin-phase-9-song-lists.md)
 - ✅ [2025-11-14] [Custom Admin Interface - Phase 8: Album Lists](todos/completed/079-custom-admin-phase-8-album-lists.md)

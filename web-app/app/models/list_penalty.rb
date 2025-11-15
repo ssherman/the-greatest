@@ -28,6 +28,7 @@ class ListPenalty < ApplicationRecord
   validates :list_id, presence: true, uniqueness: {scope: :penalty_id}
   validates :penalty_id, presence: true
   validate :list_and_penalty_compatibility
+  validate :penalty_must_be_static
 
   # Scopes
   scope :by_penalty_type, ->(type) { joins(:penalty).where(penalties: {type: type}) }
@@ -54,6 +55,14 @@ class ListPenalty < ApplicationRecord
   end
 
   private
+
+  def penalty_must_be_static
+    return unless penalty
+
+    if penalty.dynamic_type.present?
+      errors.add(:penalty, "dynamic penalties cannot be manually attached to lists")
+    end
+  end
 
   def list_and_penalty_compatibility
     return unless list && penalty

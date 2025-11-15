@@ -251,6 +251,26 @@
         </div>
       </div>
 
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="card-title">
+              Penalties
+              <span class="badge badge-ghost"><%= @list.list_penalties.count %></span>
+            </h2>
+            <button class="btn btn-primary btn-sm" onclick="attach_penalty_modal_dialog.showModal()">
+              + Attach Penalty
+            </button>
+          </div>
+          <%= turbo_frame_tag "list_penalties_list", loading: :lazy,
+              src: admin_list_list_penalties_path(@list) do %>
+            <div class="flex justify-center py-8">
+              <span class="loading loading-spinner loading-lg"></span>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
       <% if @list.items_json.present? %>
         <div class="card bg-base-100 shadow-xl">
           <div class="card-body">
@@ -320,3 +340,5 @@
     </div>
   </div>
 </div>
+
+<%= render Admin::AttachPenaltyModalComponent.new(list: @list) %>

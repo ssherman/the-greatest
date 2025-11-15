@@ -7,7 +7,7 @@ class Admin::Music::ListsController < Admin::Music::BaseController
 
   def show
     @list = list_class
-      .includes(:submitted_by, :penalties, list_items: {listable: listable_includes})
+      .includes(:submitted_by, list_penalties: :penalty, list_items: {listable: listable_includes})
       .find(params[:id])
   end
 
