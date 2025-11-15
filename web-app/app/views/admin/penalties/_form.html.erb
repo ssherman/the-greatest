@@ -70,7 +70,10 @@
           <%= f.select :type,
               options_for_select([
                 ["Global", "Global::Penalty"],
-                ["Music", "Music::Penalty"]
+                ["Music", "Music::Penalty"],
+                ["Books", "Books::Penalty"],
+                ["Movies", "Movies::Penalty"],
+                ["Games", "Games::Penalty"]
               ], @penalty.type || "Global::Penalty"),
               {},
               class: "select select-bordered w-full #{@penalty.errors[:type].any? ? 'select-error' : ''}",

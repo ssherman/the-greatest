@@ -187,6 +187,45 @@ class Admin::PenaltiesControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Music::Penalty", Penalty.last.type
   end
 
+  test "should create books penalty" do
+    assert_difference("Books::Penalty.count") do
+      post admin_penalties_url, params: {
+        penalty: {
+          type: "Books::Penalty",
+          name: "Test Books Penalty"
+        }
+      }
+    end
+    assert_redirected_to admin_penalty_url(Penalty.last)
+    assert_equal "Books::Penalty", Penalty.last.type
+  end
+
+  test "should create movies penalty" do
+    assert_difference("Movies::Penalty.count") do
+      post admin_penalties_url, params: {
+        penalty: {
+          type: "Movies::Penalty",
+          name: "Test Movies Penalty"
+        }
+      }
+    end
+    assert_redirected_to admin_penalty_url(Penalty.last)
+    assert_equal "Movies::Penalty", Penalty.last.type
+  end
+
+  test "should create games penalty" do
+    assert_difference("Games::Penalty.count") do
+      post admin_penalties_url, params: {
+        penalty: {
+          type: "Games::Penalty",
+          name: "Test Games Penalty"
+        }
+      }
+    end
+    assert_redirected_to admin_penalty_url(Penalty.last)
+    assert_equal "Games::Penalty", Penalty.last.type
+  end
+
   test "should allow admin access" do
     get admin_penalties_url
     assert_response :success
