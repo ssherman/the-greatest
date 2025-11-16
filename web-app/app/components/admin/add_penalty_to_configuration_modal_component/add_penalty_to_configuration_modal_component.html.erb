@@ -1,0 +1,50 @@
+<div id="add_penalty_to_configuration_modal">
+  <dialog id="add_penalty_to_configuration_modal_dialog" class="modal">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg">Add Penalty</h3>
+      <%= form_with model: PenaltyApplication.new,
+                    url: admin_ranking_configuration_penalty_applications_path(@ranking_configuration),
+                    method: :post,
+                    class: "space-y-4",
+                    data: {
+                      controller: "modal-form",
+                      modal_form_modal_id_value: "add_penalty_to_configuration_modal_dialog",
+                      turbo_frame: "penalty_applications_list"
+                    } do |f| %>
+
+        <div class="form-control">
+          <%= f.label :penalty_id, "Penalty", class: "label" %>
+          <%= f.select :penalty_id,
+              options_from_collection_for_select(available_penalties, :id, :name),
+              { prompt: "Select a penalty..." },
+              { class: "select select-bordered w-full", required: true } %>
+          <label class="label">
+            <span class="label-text-alt">Only compatible penalties shown (Global + <%= @ranking_configuration.type.split("::").first %>)</span>
+          </label>
+        </div>
+
+        <div class="form-control">
+          <%= f.label :value, "Value (%)", class: "label" %>
+          <%= f.number_field :value,
+              min: 0,
+              max: 100,
+              step: 1,
+              placeholder: "0-100",
+              class: "input input-bordered w-full",
+              required: true %>
+          <label class="label">
+            <span class="label-text-alt">Penalty percentage (0-100)</span>
+          </label>
+        </div>
+
+        <div class="modal-action">
+          <button type="button" class="btn" onclick="add_penalty_to_configuration_modal_dialog.close()">Cancel</button>
+          <%= f.submit "Add Penalty", class: "btn btn-primary" %>
+        </div>
+      <% end %>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button>close</button>
+    </form>
+  </dialog>
+</div>
