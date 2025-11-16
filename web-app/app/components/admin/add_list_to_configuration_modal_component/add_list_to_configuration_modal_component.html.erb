@@ -1,0 +1,45 @@
+<div id="add_list_to_configuration_modal">
+  <dialog id="add_list_to_configuration_modal_dialog" class="modal">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg">Add List</h3>
+      <%= form_with model: RankedList.new,
+                    url: admin_ranking_configuration_ranked_lists_path(@ranking_configuration),
+                    method: :post,
+                    class: "space-y-4",
+                    data: {
+                      controller: "modal-form",
+                      modal_form_modal_id_value: "add_list_to_configuration_modal_dialog",
+                      turbo_frame: "ranked_lists_list"
+                    } do |f| %>
+
+        <div class="form-control">
+          <%= f.label :list_id, "List", class: "label" %>
+          <% if available_lists.any? %>
+            <%= f.select :list_id,
+                options_from_collection_for_select(available_lists, :id, ->(list) { "#{list.name} (#{list.source || 'No source'})" }),
+                { prompt: "Select a list..." },
+                { class: "select select-bordered w-full", required: true } %>
+            <label class="label">
+              <span class="label-text-alt">Only compatible lists shown (not already added)</span>
+            </label>
+          <% else %>
+            <div class="alert alert-warning">
+              <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+              <span>All compatible lists already added</span>
+            </div>
+          <% end %>
+        </div>
+
+        <div class="modal-action">
+          <button type="button" class="btn" onclick="add_list_to_configuration_modal_dialog.close()">Cancel</button>
+          <% if available_lists.any? %>
+            <%= f.submit "Add List", class: "btn btn-primary" %>
+          <% end %>
+        </div>
+      <% end %>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button>close</button>
+    </form>
+  </dialog>
+</div>

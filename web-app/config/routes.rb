@@ -120,7 +120,6 @@ Rails.application.routes.draw do
 
       scope "ranking_configuration/:ranking_configuration_id", as: "ranking_configuration" do
         resources :ranked_items, only: [:index]
-        resources :ranked_lists, only: [:index]
       end
     end
   end
@@ -153,9 +152,11 @@ Rails.application.routes.draw do
   namespace :admin do
     scope "ranking_configuration/:ranking_configuration_id", as: "ranking_configuration" do
       resources :penalty_applications, only: [:index, :create]
+      resources :ranked_lists, only: [:index, :create]
     end
 
     resources :penalty_applications, only: [:update, :destroy]
+    resources :ranked_lists, only: [:show, :destroy]
 
     scope "list/:list_id", as: "list" do
       resources :list_penalties, only: [:index, :create]

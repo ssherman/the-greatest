@@ -272,11 +272,16 @@
 
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
-          <h2 class="card-title">
-            Ranked Items
-            <span class="badge badge-ghost"><%= @ranking_configuration.ranked_items.count %></span>
-          </h2>
-          <%= turbo_frame_tag "ranked_items_list", loading: :lazy, src: admin_ranking_configuration_ranked_items_path(@ranking_configuration) do %>
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="card-title">
+              Ranked Lists
+              <span class="badge badge-ghost"><%= @ranking_configuration.ranked_lists.count %></span>
+            </h2>
+            <button class="btn btn-primary btn-sm" onclick="add_list_to_configuration_modal_dialog.showModal()">
+              + Add List
+            </button>
+          </div>
+          <%= turbo_frame_tag "ranked_lists_list", loading: :lazy, src: admin_ranking_configuration_ranked_lists_path(@ranking_configuration) do %>
             <div class="flex justify-center py-8">
               <span class="loading loading-spinner loading-lg"></span>
             </div>
@@ -287,10 +292,10 @@
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
           <h2 class="card-title">
-            Ranked Lists
-            <span class="badge badge-ghost"><%= @ranking_configuration.ranked_lists.count %></span>
+            Ranked Items
+            <span class="badge badge-ghost"><%= @ranking_configuration.ranked_items.count %></span>
           </h2>
-          <%= turbo_frame_tag "ranked_lists_list", loading: :lazy, src: admin_ranking_configuration_ranked_lists_path(@ranking_configuration) do %>
+          <%= turbo_frame_tag "ranked_items_list", loading: :lazy, src: admin_ranking_configuration_ranked_items_path(@ranking_configuration) do %>
             <div class="flex justify-center py-8">
               <span class="loading loading-spinner loading-lg"></span>
             </div>
@@ -352,3 +357,4 @@
 </div>
 
 <%= render Admin::AddPenaltyToConfigurationModalComponent.new(ranking_configuration: @ranking_configuration) %>
+<%= render Admin::AddListToConfigurationModalComponent.new(ranking_configuration: @ranking_configuration) %>

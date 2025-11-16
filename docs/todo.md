@@ -19,6 +19,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-11-15] [Custom Admin Interface - Phase 13: Ranked Lists](todos/084-custom-admin-phase-13-ranked-lists.md)
 - ✅ [2025-11-15] [Custom Admin Interface - Phase 12: Penalty Applications](todos/completed/083-custom-admin-phase-12-penalty-applications.md)
 - ✅ [2025-11-15] [Custom Admin Interface - Phase 11: List Penalties](todos/completed/082-custom-admin-phase-11-list-penalties.md)
 - ✅ [2025-11-15] [Custom Admin Interface - Phase 10: Global Penalties](todos/completed/081-custom-admin-phase-10-global-penalties.md)
