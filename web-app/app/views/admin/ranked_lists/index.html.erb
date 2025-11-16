@@ -20,12 +20,27 @@
             <tr>
               <td>
                 <div class="font-semibold">
-                  <%= ranked_list.list.name %>
+                  <%= link_to ranked_list.list.name,
+                      case ranked_list.list.type
+                      when "Music::Albums::List"
+                        admin_albums_list_path(ranked_list.list)
+                      when "Music::Songs::List"
+                        admin_songs_list_path(ranked_list.list)
+                      end,
+                      class: "link link-primary",
+                      data: { turbo_frame: "_top" } %>
                 </div>
               </td>
               <td>
                 <% if ranked_list.list.source.present? %>
-                  <%= ranked_list.list.source %>
+                  <% if ranked_list.list.url.present? %>
+                    <%= link_to ranked_list.list.source, ranked_list.list.url, target: "_blank", rel: "noopener noreferrer", class: "link link-primary" %>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 inline-block ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  <% else %>
+                    <%= ranked_list.list.source %>
+                  <% end %>
                 <% else %>
                   <span class="text-base-content/30 text-xs">No source</span>
                 <% end %>
