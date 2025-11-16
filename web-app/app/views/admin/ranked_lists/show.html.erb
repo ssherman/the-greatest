@@ -1,0 +1,271 @@
+<div class="mb-6">
+  <%= link_to "← Back to Ranking Configuration",
+        case @ranked_list.ranking_configuration.type
+        when /^Music::Albums::/
+          admin_albums_ranking_configuration_path(@ranked_list.ranking_configuration)
+        when /^Music::Songs::/
+          admin_songs_ranking_configuration_path(@ranked_list.ranking_configuration)
+        else
+          music_root_path
+        end,
+        class: "btn btn-ghost btn-sm" %>
+  </div>
+
+  <h1 class="text-3xl font-bold mb-6">Ranked List Details</h1>
+
+  <% if @ranked_list.calculated_weight_details.present? %>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-2 space-y-6">
+        <!-- Basic Information Card -->
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title">Basic Information</h2>
+            <div class="space-y-2">
+              <div>
+                <span class="font-semibold">List:</span>
+                <%= link_to @ranked_list.list.name,
+                    case @ranked_list.list.type
+                    when "Music::Albums::List"
+                      admin_albums_list_path(@ranked_list.list)
+                    when "Music::Songs::List"
+                      admin_songs_list_path(@ranked_list.list)
+                    end,
+                    class: "link link-primary" %>
+              </div>
+              <div>
+                <span class="font-semibold">Ranking Configuration:</span>
+                <%= link_to @ranked_list.ranking_configuration.name,
+                    case @ranked_list.ranking_configuration.type
+                    when /^Music::Albums::/
+                      admin_albums_ranking_configuration_path(@ranked_list.ranking_configuration)
+                    when /^Music::Songs::/
+                      admin_songs_ranking_configuration_path(@ranked_list.ranking_configuration)
+                    end,
+                    class: "link link-primary" %>
+              </div>
+              <div>
+                <span class="font-semibold">Weight:</span>
+                <span class="badge badge-lg <%= @ranked_list.weight && @ranked_list.weight >= 75 ? 'badge-success' : @ranked_list.weight && @ranked_list.weight >= 50 ? 'badge-warning' : 'badge-error' %>">
+                  <%= @ranked_list.weight&.round || '-' %>
+                </span>
+              </div>
+              <div>
+                <span class="font-semibold">Calculated:</span>
+                <%= @ranked_list.calculated_weight_details['timestamp'] %>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Base Values Card -->
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title">Base Values</h2>
+            <div class="space-y-2">
+              <div>
+                <span class="font-semibold">Base Weight:</span>
+                <%= @ranked_list.calculated_weight_details.dig('base_values', 'base_weight') %>
+              </div>
+              <div>
+                <span class="font-semibold">Minimum Weight:</span>
+                <%= @ranked_list.calculated_weight_details.dig('base_values', 'minimum_weight') %>
+              </div>
+              <div>
+                <span class="font-semibold">High Quality Source:</span>
+                <% if @ranked_list.calculated_weight_details.dig('base_values', 'high_quality_source') %>
+                  <span class="badge badge-success">✓ Yes</span>
+                <% else %>
+                  <span class="badge badge-ghost">✗ No</span>
+                <% end %>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Penalties Applied Card -->
+        <% if @ranked_list.calculated_weight_details['penalties'].present? %>
+          <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+              <h2 class="card-title">Penalties Applied</h2>
+              <div class="flex flex-wrap gap-2">
+                <% @ranked_list.calculated_weight_details['penalties'].each do |penalty| %>
+                  <div class="badge <%= penalty_badge_class(penalty['value']) %> badge-lg">
+                    <%= penalty['penalty_name'] %>: <%= number_with_precision(penalty['value'], precision: 2) %>%
+                  </div>
+                <% end %>
+              </div>
+            </div>
+          </div>
+        <% end %>
+
+        <!-- Penalty Summary Card -->
+        <% if @ranked_list.calculated_weight_details['penalty_summary'].present? %>
+          <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+              <h2 class="card-title">Penalty Summary</h2>
+              <div class="space-y-2">
+                <% @ranked_list.calculated_weight_details['penalty_summary'].each do |category, value| %>
+                  <div>
+                    <span class="font-semibold"><%= category.to_s.titleize %>:</span>
+                    <%= value %>%
+                  </div>
+                <% end %>
+                <div class="divider"></div>
+                <div class="text-lg">
+                  <span class="font-bold">Total Before Quality Bonus:</span>
+                  <%= @ranked_list.calculated_weight_details['penalty_summary'].values.sum %>%
+                </div>
+              </div>
+            </div>
+          </div>
+        <% end %>
+
+        <!-- Quality Bonus Card -->
+        <% if @ranked_list.calculated_weight_details['quality_bonus'].present? %>
+          <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+              <h2 class="card-title">Quality Bonus</h2>
+              <div class="space-y-2">
+                <div>
+                  <span class="font-semibold">Applied:</span>
+                  <% if @ranked_list.calculated_weight_details.dig('quality_bonus', 'applied') %>
+                    <span class="badge badge-success">✓ Yes</span>
+                  <% else %>
+                    <span class="badge badge-ghost">✗ No</span>
+                  <% end %>
+                </div>
+                <% if @ranked_list.calculated_weight_details.dig('quality_bonus', 'applied') %>
+                  <div>
+                    <span class="font-semibold">Reduction Factor:</span>
+                    <%= (@ranked_list.calculated_weight_details.dig('quality_bonus', 'reduction_factor') * 100).round %>%
+                  </div>
+                  <div>
+                    <span class="font-semibold">Penalty Before:</span>
+                    <%= @ranked_list.calculated_weight_details.dig('quality_bonus', 'penalty_before') %>%
+                  </div>
+                  <div>
+                    <span class="font-semibold">Penalty After:</span>
+                    <%= @ranked_list.calculated_weight_details.dig('quality_bonus', 'penalty_after') %>%
+                  </div>
+                <% end %>
+              </div>
+            </div>
+          </div>
+        <% end %>
+
+        <!-- Final Calculation Card -->
+        <% if @ranked_list.calculated_weight_details['final_calculation'].present? %>
+          <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+              <h2 class="card-title">Final Calculation</h2>
+              <div class="space-y-2">
+                <div>
+                  <span class="font-semibold">Total Penalty:</span>
+                  <%= @ranked_list.calculated_weight_details.dig('final_calculation', 'total_penalty') %>%
+                </div>
+                <div>
+                  <span class="font-semibold">Weight After Penalty:</span>
+                  <%= @ranked_list.calculated_weight_details.dig('final_calculation', 'weight_after_penalty') %>
+                </div>
+                <div>
+                  <span class="font-semibold">Weight After Floor:</span>
+                  <%= @ranked_list.calculated_weight_details.dig('final_calculation', 'weight_after_floor') %>
+                </div>
+                <div class="text-lg">
+                  <span class="font-bold">Final Weight:</span>
+                  <span class="badge badge-lg badge-primary">
+                    <%= @ranked_list.calculated_weight_details.dig('final_calculation', 'final_weight') %>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        <% end %>
+
+        <!-- Raw JSON Card -->
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <details class="collapse collapse-arrow bg-base-200">
+              <summary class="collapse-title text-xl font-medium">
+                View Raw JSON
+              </summary>
+              <div class="collapse-content">
+                <pre class="text-xs overflow-auto"><%= JSON.pretty_generate(@ranked_list.calculated_weight_details) %></pre>
+              </div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div class="space-y-6">
+        <!-- Quick Stats Card -->
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title">Quick Stats</h2>
+            <div class="stats stats-vertical shadow">
+              <div class="stat">
+                <div class="stat-title">Final Weight</div>
+                <div class="stat-value text-2xl"><%= @ranked_list.weight&.round || '-' %></div>
+              </div>
+              <div class="stat">
+                <div class="stat-title">Total Penalties</div>
+                <div class="stat-value text-2xl"><%= @ranked_list.calculated_weight_details['penalties']&.count || 0 %></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Actions Card -->
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title">Actions</h2>
+            <%= button_to "Remove List",
+                admin_ranked_list_path(@ranked_list),
+                method: :delete,
+                class: "btn btn-error btn-block",
+                form: { data: { turbo_confirm: "Are you sure you want to remove this list?" } } %>
+          </div>
+        </div>
+      </div>
+    </div>
+  <% else %>
+    <div class="alert alert-warning">
+      <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+      <span>Weight has not been calculated yet. Rankings are recalculated automatically on a schedule.</span>
+    </div>
+
+    <!-- Basic info when no calculation exists -->
+    <div class="card bg-base-100 shadow-xl mt-6">
+      <div class="card-body">
+        <h2 class="card-title">Basic Information</h2>
+        <div class="space-y-2">
+          <div>
+            <span class="font-semibold">List:</span>
+            <%= link_to @ranked_list.list.name,
+                case @ranked_list.list.type
+                when "Music::Albums::List"
+                  admin_albums_list_path(@ranked_list.list)
+                when "Music::Songs::List"
+                  admin_songs_list_path(@ranked_list.list)
+                end,
+                class: "link link-primary" %>
+          </div>
+          <div>
+            <span class="font-semibold">Ranking Configuration:</span>
+            <%= link_to @ranked_list.ranking_configuration.name,
+                case @ranked_list.ranking_configuration.type
+                when /^Music::Albums::/
+                  admin_albums_ranking_configuration_path(@ranked_list.ranking_configuration)
+                when /^Music::Songs::/
+                  admin_songs_ranking_configuration_path(@ranked_list.ranking_configuration)
+                end,
+                class: "link link-primary" %>
+          </div>
+          <div>
+            <span class="font-semibold">Weight:</span>
+            <span class="badge badge-ghost">-</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  <% end %>

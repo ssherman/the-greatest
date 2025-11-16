@@ -7,7 +7,7 @@ class Admin::Music::RankingConfigurationsController < Admin::Music::BaseControll
 
   def show
     @ranking_configuration = ranking_configuration_class
-      .includes(:primary_mapped_list, :secondary_mapped_list, penalty_applications: :penalty)
+      .includes(:primary_mapped_list, :secondary_mapped_list, penalty_applications: :penalty, ranked_lists: {list: :submitted_by})
       .find(params[:id])
   end
 
