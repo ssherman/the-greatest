@@ -220,6 +220,26 @@
         </div>
       </div>
 
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="card-title">
+              Penalty Applications
+              <span class="badge badge-ghost"><%= @ranking_configuration.penalty_applications.count %></span>
+            </h2>
+            <button class="btn btn-primary btn-sm" onclick="add_penalty_to_configuration_modal_dialog.showModal()">
+              + Add Penalty
+            </button>
+          </div>
+          <%= turbo_frame_tag "penalty_applications_list", loading: :lazy,
+              src: admin_ranking_configuration_penalty_applications_path(@ranking_configuration) do %>
+            <div class="flex justify-center py-8">
+              <span class="loading loading-spinner loading-lg"></span>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
       <% if @ranking_configuration.primary_mapped_list.present? || @ranking_configuration.secondary_mapped_list.present? %>
         <div class="card bg-base-100 shadow-xl">
           <div class="card-body">
@@ -330,3 +350,5 @@
     </div>
   </div>
 </div>
+
+<%= render Admin::AddPenaltyToConfigurationModalComponent.new(ranking_configuration: @ranking_configuration) %>

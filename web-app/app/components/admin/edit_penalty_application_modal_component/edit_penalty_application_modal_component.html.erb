@@ -1,0 +1,47 @@
+<div id="edit_penalty_application_modal_<%= @penalty_application.id %>">
+  <dialog id="edit_penalty_application_modal_dialog_<%= @penalty_application.id %>" class="modal">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg">Edit Penalty Application</h3>
+      <%= form_with model: @penalty_application,
+                    url: admin_penalty_application_path(@penalty_application),
+                    method: :patch,
+                    class: "space-y-4",
+                    data: {
+                      controller: "modal-form",
+                      modal_form_modal_id_value: "edit_penalty_application_modal_dialog_#{@penalty_application.id}",
+                      turbo_frame: "penalty_applications_list"
+                    } do |f| %>
+
+        <div class="form-control">
+          <%= f.label :penalty_id, "Penalty", class: "label" %>
+          <input type="text" value="<%= @penalty_application.penalty.name %>" class="input input-bordered w-full" disabled />
+          <label class="label">
+            <span class="label-text-alt">Penalty cannot be changed</span>
+          </label>
+        </div>
+
+        <div class="form-control">
+          <%= f.label :value, "Value (%)", class: "label" %>
+          <%= f.number_field :value,
+              min: 0,
+              max: 100,
+              step: 1,
+              placeholder: "0-100",
+              class: "input input-bordered w-full",
+              required: true %>
+          <label class="label">
+            <span class="label-text-alt">Penalty percentage (0-100)</span>
+          </label>
+        </div>
+
+        <div class="modal-action">
+          <button type="button" class="btn" onclick="edit_penalty_application_modal_dialog_<%= @penalty_application.id %>.close()">Cancel</button>
+          <%= f.submit "Update Penalty", class: "btn btn-primary" %>
+        </div>
+      <% end %>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button>close</button>
+    </form>
+  </dialog>
+</div>

@@ -151,6 +151,12 @@ Rails.application.routes.draw do
 
   # Admin routes (global - no domain constraint)
   namespace :admin do
+    scope "ranking_configuration/:ranking_configuration_id", as: "ranking_configuration" do
+      resources :penalty_applications, only: [:index, :create]
+    end
+
+    resources :penalty_applications, only: [:update, :destroy]
+
     scope "list/:list_id", as: "list" do
       resources :list_penalties, only: [:index, :create]
     end
