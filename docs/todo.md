@@ -1,7 +1,8 @@
 # The Greatest - Todo List
 
 ## High Priority
-1. [Production Deployment Infrastructure](todos/048-production-deployment-infrastructure.md)
+1. [Custom Admin Interface - Phase 12: Penalty Applications](todos/083-custom-admin-phase-12-penalty-applications.md)
+2. [Production Deployment Infrastructure](todos/048-production-deployment-infrastructure.md)
 3. [Quote Normalization Service (Music Domain)](todos/071-music-name-title-normalization.md)
 4. [Movies data model implementation](todos/002-movies-object-model.md)
 
