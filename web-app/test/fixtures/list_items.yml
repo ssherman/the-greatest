@@ -29,14 +29,14 @@
 #  fk_rails_...  (list_id => lists.id)
 #
 basic_item:
-  list: basic_list
-  listable: dark_side_of_the_moon (Music::Album)
-  position: 1
+  list: music_albums_list
+  listable: thriller (Music::Album)
+  position: 10
 
 second_item:
-  list: basic_list
-  listable: wish_you_were_here (Music::Album)
-  position: 2
+  list: music_albums_list
+  listable: nevermind (Music::Album)
+  position: 11
 
 approved_item:
   list: approved_list
