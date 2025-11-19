@@ -7,19 +7,17 @@ class Admin::AddListToConfigurationModalComponent < ViewComponent::Base
 
   def available_lists
     list_type = case @ranking_configuration.type
-                when "Books::RankingConfiguration"
-                  "Books::List"
-                when "Movies::RankingConfiguration"
-                  "Movies::List"
-                when "Games::RankingConfiguration"
-                  "Games::List"
-                when "Music::Albums::RankingConfiguration"
-                  "Music::Albums::List"
-                when "Music::Songs::RankingConfiguration"
-                  "Music::Songs::List"
-                else
-                  nil
-                end
+    when "Books::RankingConfiguration"
+      "Books::List"
+    when "Movies::RankingConfiguration"
+      "Movies::List"
+    when "Games::RankingConfiguration"
+      "Games::List"
+    when "Music::Albums::RankingConfiguration"
+      "Music::Albums::List"
+    when "Music::Songs::RankingConfiguration"
+      "Music::Songs::List"
+    end
 
     return List.none if list_type.nil?
 

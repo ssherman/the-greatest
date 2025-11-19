@@ -120,7 +120,7 @@ module Music
       end
 
       test "should merge list_items with duplicate handling" do
-        list = lists(:basic_list)
+        list = lists(:music_songs_list)
 
         ListItem.create!(
           list: list,

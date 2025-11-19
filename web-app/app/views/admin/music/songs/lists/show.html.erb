@@ -202,42 +202,16 @@
           <div class="flex items-center justify-between mb-4">
             <h2 class="card-title">
               Songs
-              <span class="badge badge-outline badge-lg"><%= @list.list_items.count %></span>
+              <span class="badge badge-ghost"><%= @list.list_items.count %></span>
             </h2>
+            <button class="btn btn-primary btn-sm" onclick="add_item_to_list_modal_dialog.showModal()">
+              + Add Song
+            </button>
           </div>
-
-          <% if @list.list_items.any? %>
-            <div class="overflow-x-auto">
-              <table class="table table-zebra table-sm">
-                <thead>
-                  <tr>
-                    <th>Position</th>
-                    <th>Song</th>
-                    <th>Artists</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <%# TODO: Future enhancement - lazy load with list_items controller + pagination %>
-                  <% @list.list_items.includes(listable: [:artists]).order(:position).each do |item| %>
-                    <% song = item.listable %>
-                    <% next unless song %>
-                    <tr>
-                      <td class="font-mono text-sm"><%= item.position %></td>
-                      <td>
-                        <%= link_to song.title, admin_song_path(song),
-                            class: "link link-hover font-semibold" %>
-                      </td>
-                      <td class="text-sm text-base-content/70">
-                        <%= song.artists.first(3).map(&:name).join(", ") %>
-                      </td>
-                    </tr>
-                  <% end %>
-                </tbody>
-              </table>
-            </div>
-          <% else %>
-            <div class="text-center py-8 text-base-content/70">
-              <p>No songs in this list yet. Songs can be imported using Items JSON (future feature).</p>
+          <%= turbo_frame_tag "list_items_list", loading: :lazy,
+              src: admin_list_list_items_path(@list) do %>
+            <div class="flex justify-center py-8">
+              <span class="loading loading-spinner loading-lg"></span>
             </div>
           <% end %>
         </div>
@@ -334,3 +308,4 @@
 </div>
 
 <%= render Admin::AttachPenaltyModalComponent.new(list: @list) %>
+<%= render Admin::AddItemToListModalComponent.new(list: @list) %>

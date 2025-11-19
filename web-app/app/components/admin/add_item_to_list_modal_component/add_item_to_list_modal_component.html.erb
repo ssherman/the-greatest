@@ -1,0 +1,75 @@
+<div id="add_item_to_list_modal">
+  <dialog id="add_item_to_list_modal_dialog" class="modal">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg">Add <%= item_label %></h3>
+      <%= form_with model: ListItem.new,
+                    url: admin_list_list_items_path(@list),
+                    method: :post,
+                    class: "space-y-4",
+                    data: {
+                      controller: "modal-form",
+                      modal_form_modal_id_value: "add_item_to_list_modal_dialog",
+                      turbo_frame: "list_items_list"
+                    } do |f| %>
+
+        <%= f.hidden_field :listable_type, value: expected_listable_type %>
+
+        <% if autocomplete_url.present? %>
+          <div class="form-control">
+            <%= f.label :listable_id, item_label, class: "label" %>
+            <%= render AutocompleteComponent.new(
+              name: "list_item[listable_id]",
+              url: autocomplete_url,
+              placeholder: "Search for #{item_label.downcase}...",
+              display_key: "text",
+              value_key: "value",
+              required: true
+            ) %>
+            <label class="label">
+              <span class="label-text-alt">Search and select <%= item_label.downcase %> to add</span>
+            </label>
+          </div>
+        <% end %>
+
+        <div class="form-control">
+          <%= f.label :position, "Position", class: "label" %>
+          <%= f.number_field :position,
+              min: 1,
+              step: 1,
+              placeholder: "1",
+              class: "input input-bordered w-full",
+              required: true %>
+          <label class="label">
+            <span class="label-text-alt">Position in the list (must be > 0)</span>
+          </label>
+        </div>
+
+        <div class="form-control">
+          <%= f.label :metadata, "Metadata (JSON, optional)", class: "label" %>
+          <%= f.text_area :metadata,
+              rows: 3,
+              placeholder: '{"custom_field": "value"}',
+              class: "textarea textarea-bordered w-full" %>
+          <label class="label">
+            <span class="label-text-alt">Optional JSON metadata</span>
+          </label>
+        </div>
+
+        <div class="form-control">
+          <label class="label cursor-pointer justify-start gap-2">
+            <%= f.check_box :verified, class: "checkbox" %>
+            <span class="label-text">Mark as verified</span>
+          </label>
+        </div>
+
+        <div class="modal-action">
+          <button type="button" class="btn" onclick="add_item_to_list_modal_dialog.close()">Cancel</button>
+          <%= f.submit "Add #{item_label}", class: "btn btn-primary" %>
+        </div>
+      <% end %>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button>close</button>
+    </form>
+  </dialog>
+</div>

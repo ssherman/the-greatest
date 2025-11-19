@@ -74,9 +74,10 @@ class ListItemTest < ActiveSupport::TestCase
   end
 
   test "should allow same item in different lists" do
-    # Create item with same listable but different list
+    # Create item with same listable but different list (both Music::Albums::List)
+    # basic_item is thriller in music_albums_list, so we can add it to nme_albums
     new_item = ListItem.new(
-      list: lists(:approved_list),
+      list: lists(:nme_albums),
       listable_type: list_items(:basic_item).listable_type,
       listable_id: list_items(:basic_item).listable_id
     )
@@ -96,7 +97,7 @@ class ListItemTest < ActiveSupport::TestCase
 
   test "ordered scope should return items by position" do
     # Get items from the same list with different positions
-    list = lists(:basic_list)
+    list = lists(:music_albums_list)
     list_items = list.list_items.ordered
 
     # Should have at least 2 items with different positions
@@ -106,7 +107,7 @@ class ListItemTest < ActiveSupport::TestCase
   end
 
   test "by_list scope should return items for specific list" do
-    list = lists(:basic_list)
+    list = lists(:music_albums_list)
     list_items = ListItem.by_list(list)
 
     assert_includes list_items, list_items(:basic_item)
@@ -138,7 +139,7 @@ class ListItemTest < ActiveSupport::TestCase
   end
 
   test "list should have list_items association" do
-    list = lists(:basic_list)
+    list = lists(:music_albums_list)
     assert_includes list.list_items, list_items(:basic_item)
     assert_includes list.list_items, list_items(:second_item)
   end

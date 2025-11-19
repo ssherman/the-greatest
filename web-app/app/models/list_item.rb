@@ -32,6 +32,30 @@ class ListItem < ApplicationRecord
   validates :list, presence: true
   validates :position, numericality: {greater_than: 0}, allow_blank: true
   validates :listable_id, uniqueness: {scope: [:list_id, :listable_type], message: "is already in this list"}, allow_nil: true
+  validate :listable_type_compatible_with_list_type
+
+  private
+
+  def listable_type_compatible_with_list_type
+    return if listable_type.blank? || list.blank?
+
+    expected_type = case list.class.name
+    when "Music::Albums::List"
+      "Music::Album"
+    when "Music::Songs::List"
+      "Music::Song"
+    when "Books::List"
+      "Books::Book"
+    when "Movies::List"
+      "Movies::Movie"
+    when "Games::List"
+      "Games::Game"
+    end
+
+    if expected_type && listable_type != expected_type
+      errors.add(:listable_type, "#{listable_type} is not compatible with list type #{list.class.name}")
+    end
+  end
 
   # Scopes
   scope :ordered, -> { order(:position) }

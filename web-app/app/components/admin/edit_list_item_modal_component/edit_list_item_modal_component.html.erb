@@ -1,0 +1,67 @@
+<div id="edit_list_item_modal_<%= @list_item.id %>">
+  <dialog id="edit_list_item_modal_dialog_<%= @list_item.id %>" class="modal">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg">Edit List Item</h3>
+      <%= form_with model: @list_item,
+                    url: admin_list_item_path(@list_item),
+                    method: :patch,
+                    class: "space-y-4",
+                    data: {
+                      controller: "modal-form",
+                      modal_form_modal_id_value: "edit_list_item_modal_dialog_#{@list_item.id}",
+                      turbo_frame: "list_items_list"
+                    } do |f| %>
+
+        <div class="form-control">
+          <%= f.label :item_name, "Item", class: "label" %>
+          <div class="input input-bordered w-full bg-base-200">
+            <%= item_display_name %>
+          </div>
+          <label class="label">
+            <span class="label-text-alt">Item cannot be changed</span>
+          </label>
+        </div>
+
+        <div class="form-control">
+          <%= f.label :position, "Position", class: "label" %>
+          <%= f.number_field :position,
+              min: 1,
+              step: 1,
+              value: @list_item.position,
+              class: "input input-bordered w-full",
+              required: true %>
+          <label class="label">
+            <span class="label-text-alt">Position in the list (must be > 0)</span>
+          </label>
+        </div>
+
+        <div class="form-control">
+          <%= f.label :metadata, "Metadata (JSON, optional)", class: "label" %>
+          <%= f.text_area :metadata,
+              rows: 3,
+              value: metadata_json,
+              placeholder: '{"custom_field": "value"}',
+              class: "textarea textarea-bordered w-full" %>
+          <label class="label">
+            <span class="label-text-alt">Optional JSON metadata</span>
+          </label>
+        </div>
+
+        <div class="form-control">
+          <label class="label cursor-pointer justify-start gap-2">
+            <%= f.check_box :verified, checked: @list_item.verified, class: "checkbox" %>
+            <span class="label-text">Mark as verified</span>
+          </label>
+        </div>
+
+        <div class="modal-action">
+          <button type="button" class="btn" onclick="edit_list_item_modal_dialog_<%= @list_item.id %>.close()">Cancel</button>
+          <%= f.submit "Update Item", class: "btn btn-primary" %>
+        </div>
+      <% end %>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button>close</button>
+    </form>
+  </dialog>
+</div>
