@@ -36,6 +36,52 @@ Calculates the median number of items across all lists of a specific type
 - Returns: Numeric median count used for ranking algorithm normalization
 - Used by: ItemRankings calculator services for algorithm optimization
 
+### Wizard State Management Methods
+
+The following methods manage wizard state for the Song List Wizard feature (Music::Songs::List):
+
+#### `#wizard_current_step`
+Returns the current wizard step (0-6)
+- Returns: Integer (default: 0)
+- Steps: 0=source, 1=parse, 2=enrich, 3=validate, 4=review, 5=import, 6=complete
+
+#### `#wizard_job_status`
+Returns the current background job status
+- Returns: String - 'idle', 'running', 'completed', 'failed' (default: 'idle')
+
+#### `#wizard_job_progress`
+Returns the current job progress percentage
+- Returns: Integer (0-100, default: 0)
+
+#### `#wizard_job_error`
+Returns the error message if job failed
+- Returns: String or nil (default: nil)
+
+#### `#wizard_job_metadata`
+Returns job metadata hash with additional details
+- Returns: Hash (default: {})
+- Example: `{"total_items" => 100, "processed_items" => 50}`
+
+#### `#wizard_in_progress?`
+Returns whether wizard has been started but not completed
+- Returns: Boolean
+- True when `started_at` is present and `completed_at` is nil
+
+#### `#update_wizard_job_status(status:, progress: nil, error: nil, metadata: {})`
+Updates wizard job status atomically
+- Parameters:
+  - `status` (String, required) - 'idle', 'running', 'completed', 'failed'
+  - `progress` (Integer, optional) - 0-100, preserves existing if not provided
+  - `error` (String, optional) - Error message
+  - `metadata` (Hash, optional) - Additional job metadata (merged with existing)
+- Returns: Boolean (true if save succeeded)
+- Side effects: Updates wizard_state JSONB field
+
+#### `#reset_wizard!`
+Resets wizard to initial state
+- Returns: Boolean (true if save succeeded)
+- Side effects: Sets wizard_state to initial values with started_at timestamp
+
 **Note:** Penalty calculation logic has been moved to service objects (`Rankings::WeightCalculatorV1`) following "Skinny Models, Fat Services" principles. The model only provides data access methods.
 
 ## Validations
@@ -107,6 +153,7 @@ Domain-specific list for games content.
 - `raw_html` - Raw HTML content (text)
 - `simplified_html` - Simplified HTML content for AI parsing (text)
 - `items_json` - Structured JSON data extracted from HTML (jsonb)
+- `wizard_state` - Wizard state tracking for Song List Wizard (jsonb, default: {})
 - `musicbrainz_series_id` - MusicBrainz Series ID for automatic import (string, Music::Albums::List only)
 - `submitted_by_id` - User who submitted the list (optional, foreign key to users)
 - `created_at` - Creation timestamp

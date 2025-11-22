@@ -76,7 +76,32 @@ Rails.application.routes.draw do
           end
         end
 
-        resources :lists
+        resources :lists do
+          resource :wizard, only: [:show], controller: "list_wizard" do
+            get "step/:step", action: :show_step, as: :step
+            get "step/:step/status", action: :step_status, as: :step_status
+            post "step/:step/advance", action: :advance_step, as: :advance_step
+            post "step/:step/back", action: :back_step, as: :back_step
+            post "restart", action: :restart
+          end
+
+          resources :items, controller: "list_items_actions", only: [] do
+            member do
+              post :verify
+              post :skip
+              patch :metadata
+              post :re_enrich
+              post :manual_link
+              post :queue_import
+            end
+
+            collection do
+              post :bulk_verify
+              post :bulk_skip
+              delete :bulk_delete
+            end
+          end
+        end
       end
 
       resources :artists do

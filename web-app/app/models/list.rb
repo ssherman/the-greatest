@@ -22,6 +22,7 @@
 #  voter_count_estimated :boolean
 #  voter_count_unknown   :boolean
 #  voter_names_unknown   :boolean
+#  wizard_state          :jsonb
 #  year_published        :integer
 #  yearly_award          :boolean
 #  created_at            :datetime         not null
@@ -103,6 +104,55 @@ class List < ApplicationRecord
     else
       (counts[len / 2 - 1] + counts[len / 2]) / 2.0
     end
+  end
+
+  def wizard_current_step
+    wizard_state.fetch("current_step", 0)
+  end
+
+  def wizard_job_status
+    wizard_state.fetch("job_status", "idle")
+  end
+
+  def wizard_job_progress
+    wizard_state.fetch("job_progress", 0)
+  end
+
+  def wizard_job_error
+    wizard_state.fetch("job_error", nil)
+  end
+
+  def wizard_job_metadata
+    wizard_state.fetch("job_metadata", {})
+  end
+
+  def wizard_in_progress?
+    wizard_state.fetch("started_at", nil).present? &&
+      wizard_state.fetch("completed_at", nil).nil?
+  end
+
+  def update_wizard_job_status(status:, progress: nil, error: nil, metadata: {})
+    new_state = wizard_state.merge({
+      "job_status" => status,
+      "job_progress" => progress || wizard_job_progress,
+      "job_error" => error,
+      "job_metadata" => wizard_job_metadata.merge(metadata)
+    })
+
+    update!(wizard_state: new_state)
+  end
+
+  def reset_wizard!
+    update!(wizard_state: {
+      "current_step" => 0,
+      "started_at" => Time.current.iso8601,
+      "completed_at" => nil,
+      "job_status" => "idle",
+      "job_progress" => 0,
+      "job_error" => nil,
+      "job_metadata" => {},
+      "step_data" => {}
+    })
   end
 
   private
