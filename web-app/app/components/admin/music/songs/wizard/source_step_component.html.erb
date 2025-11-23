@@ -1,0 +1,34 @@
+<%= render(Wizard::StepComponent.new(
+  title: "Import Source",
+  description: "Choose where to import your song list from",
+  step_number: 1,
+  active: true
+)) do |step| %>
+  <% step.with_step_content do %>
+    <div class="space-y-6">
+      <div class="form-control">
+        <label class="label">
+          <span class="label-text font-bold">Select Import Source</span>
+        </label>
+
+        <div class="space-y-3">
+          <label class="flex items-center gap-3 p-4 border rounded-lg cursor-pointer hover:bg-base-200 transition-colors">
+            <input type="radio" name="import_source" value="custom_html" class="radio radio-primary">
+            <div>
+              <div class="font-semibold">Custom HTML</div>
+              <div class="text-sm text-base-content/70">Paste HTML from any source and parse song data</div>
+            </div>
+          </label>
+
+          <label class="flex items-center gap-3 p-4 border rounded-lg cursor-pointer hover:bg-base-200 transition-colors">
+            <input type="radio" name="import_source" value="musicbrainz_series" class="radio radio-primary">
+            <div>
+              <div class="font-semibold">MusicBrainz Series</div>
+              <div class="text-sm text-base-content/70">Import from a MusicBrainz series by MBID</div>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+  <% end %>
+<% end %>

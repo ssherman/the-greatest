@@ -1,0 +1,32 @@
+<%= render(Wizard::StepComponent.new(
+  title: "Complete",
+  description: "Wizard completed successfully",
+  step_number: 7,
+  active: true
+)) do |step| %>
+  <% step.with_step_content do %>
+    <div class="text-center py-8 space-y-6">
+      <div class="text-6xl">✓</div>
+
+      <div>
+        <h3 class="text-2xl font-bold text-success">Import Complete!</h3>
+        <p class="text-base-content/70 mt-2">
+          Your song list has been successfully imported.
+        </p>
+      </div>
+
+      <div class="stats shadow">
+        <div class="stat">
+          <div class="stat-title">Total Songs</div>
+          <div class="stat-value text-primary"><%= list.list_items.count %></div>
+          <div class="stat-desc">Successfully imported</div>
+        </div>
+      </div>
+
+      <div class="flex gap-3 justify-center">
+        <%= link_to "View List", admin_list_path(list), class: "btn btn-primary" %>
+        <%= link_to "Back to Lists", admin_lists_path, class: "btn btn-outline" %>
+      </div>
+    </div>
+  <% end %>
+<% end %>

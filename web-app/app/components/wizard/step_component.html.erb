@@ -1,0 +1,23 @@
+<div class="wizard-step <%= 'wizard-step-active' if active %>">
+  <div class="mb-4">
+    <% if step_number %>
+      <div class="text-sm text-base-content/60 mb-1">Step <%= step_number %></div>
+    <% end %>
+    <h2 class="text-2xl font-bold text-base-content"><%= title %></h2>
+    <% if description %>
+      <p class="text-base-content/70 mt-2"><%= description %></p>
+    <% end %>
+  </div>
+
+  <% if step_content %>
+    <div class="wizard-step-content mt-6">
+      <%= step_content %>
+    </div>
+  <% end %>
+
+  <% if actions %>
+    <div class="wizard-step-actions mt-6">
+      <%= actions %>
+    </div>
+  <% end %>
+</div>

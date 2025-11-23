@@ -1,0 +1,64 @@
+<%= render(Wizard::StepComponent.new(
+  title: "Review",
+  description: "Review and edit songs before importing",
+  step_number: 5,
+  active: true
+)) do |step| %>
+  <% step.with_step_content do %>
+    <div class="space-y-6">
+      <div class="alert alert-info">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <span>Review <%= items.count %> songs before importing. You can edit individual songs if needed.</span>
+      </div>
+
+      <% if items.any? %>
+        <div class="overflow-x-auto">
+          <table class="table table-zebra w-full">
+            <thead>
+              <tr>
+                <th>Position</th>
+                <th>Song</th>
+                <th>Artist(s)</th>
+                <th>Year</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% items.first(10).each do |item| %>
+                <tr>
+                  <td><%= item.position %></td>
+                  <td><%= item.listable&.title || "Unknown" %></td>
+                  <td>
+                    <% if item.listable.respond_to?(:artists) %>
+                      <%= item.listable.artists.map(&:name).join(", ") %>
+                    <% end %>
+                  </td>
+                  <td><%= item.listable&.release_year %></td>
+                  <td>
+                    <% if item.verified %>
+                      <span class="badge badge-success badge-sm">Verified</span>
+                    <% else %>
+                      <span class="badge badge-warning badge-sm">Unverified</span>
+                    <% end %>
+                  </td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+
+          <% if items.count > 10 %>
+            <div class="text-center text-sm text-base-content/70 mt-4">
+              Showing 10 of <%= items.count %> songs
+            </div>
+          <% end %>
+        </div>
+      <% else %>
+        <div class="text-center text-base-content/70 py-8">
+          No songs to review
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+<% end %>

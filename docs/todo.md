@@ -1,19 +1,18 @@
 # The Greatest - Todo List
 
 ## High Priority
-1. [Song List Wizard - Part 2: UI Shell & Navigation](todos/087-song-wizard-ui-shell.md)
-2. [Song List Wizard - Part 3: Step 0 - Import Source Choice](todos/088-song-wizard-step-0-source.md)
-3. [Song List Wizard - Part 4: Step 1 - Parse HTML](todos/089-song-wizard-step-1-parse.md)
-4. [Song List Wizard - Part 5: Step 2 - Enrich](todos/090-song-wizard-step-2-enrich.md)
-5. [Song List Wizard - Part 6: Step 3 - Validation](todos/091-song-wizard-step-3-validation.md)
-6. [Song List Wizard - Part 7: Step 4 - Review UI](todos/092-song-wizard-step-4-review.md)
-7. [Song List Wizard - Part 8: Step 4 - Actions](todos/093-song-wizard-step-4-actions.md)
-8. [Song List Wizard - Part 9: Step 5 - Import](todos/094-song-wizard-step-5-import.md)
-9. [Song List Wizard - Part 10: Polish & Integration](todos/095-song-wizard-polish.md)
-10. [Custom Admin Interface - Phase 14: List Items](todos/085-custom-admin-phase-14-list-items.md)
-11. [Production Deployment Infrastructure](todos/048-production-deployment-infrastructure.md)
-12. [Quote Normalization Service (Music Domain)](todos/071-music-name-title-normalization.md)
-13. [Movies data model implementation](todos/002-movies-object-model.md)
+1. [Song List Wizard - Part 3: Step 0 - Import Source Choice](todos/088-song-wizard-step-0-source.md)
+2. [Song List Wizard - Part 4: Step 1 - Parse HTML](todos/089-song-wizard-step-1-parse.md)
+3. [Song List Wizard - Part 5: Step 2 - Enrich](todos/090-song-wizard-step-2-enrich.md)
+4. [Song List Wizard - Part 6: Step 3 - Validation](todos/091-song-wizard-step-3-validation.md)
+5. [Song List Wizard - Part 7: Step 4 - Review UI](todos/092-song-wizard-step-4-review.md)
+6. [Song List Wizard - Part 8: Step 4 - Actions](todos/093-song-wizard-step-4-actions.md)
+7. [Song List Wizard - Part 9: Step 5 - Import](todos/094-song-wizard-step-5-import.md)
+8. [Song List Wizard - Part 10: Polish & Integration](todos/095-song-wizard-polish.md)
+9. [Custom Admin Interface - Phase 14: List Items](todos/085-custom-admin-phase-14-list-items.md)
+10. [Production Deployment Infrastructure](todos/048-production-deployment-infrastructure.md)
+11. [Quote Normalization Service (Music Domain)](todos/071-music-name-title-normalization.md)
+12. [Movies data model implementation](todos/002-movies-object-model.md)
 
 ## Medium Priority
 2. [Multi-domain routing setup](todos/001-multi-domain-routing.md)
@@ -29,7 +28,8 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
-- ✅ [2025-01-22] [Song List Wizard - Part 1: Infrastructure](todos/086-song-wizard-infrastructure.md)
+- ✅ [2025-01-23] [Song List Wizard - Part 2: UI Shell & Navigation](todos/completed/087-song-wizard-ui-shell.md)
+- ✅ [2025-01-22] [Song List Wizard - Part 1: Infrastructure](todos/completed/086-song-wizard-infrastructure.md)
 - ✅ [2025-11-15] [Custom Admin Interface - Phase 13: Ranked Lists](todos/084-custom-admin-phase-13-ranked-lists.md)
 - ✅ [2025-11-15] [Custom Admin Interface - Phase 12: Penalty Applications](todos/completed/083-custom-admin-phase-12-penalty-applications.md)
 - ✅ [2025-11-15] [Custom Admin Interface - Phase 11: List Penalties](todos/completed/082-custom-admin-phase-11-list-penalties.md)

@@ -1,0 +1,27 @@
+<div class="flex justify-between items-center">
+  <div>
+    <% if show_back_button? %>
+      <%= button_to "← Back",
+          { action: :back_step, step: step_name },
+          method: :post,
+          class: "btn btn-outline" %>
+    <% end %>
+  </div>
+
+  <div class="flex gap-2">
+    <%= button_to "Restart",
+        { action: :restart },
+        method: :post,
+        class: "btn btn-ghost btn-sm",
+        data: { confirm: "Are you sure you want to restart the wizard? This will reset all progress." } %>
+
+    <% if show_next_button? %>
+      <%= button_to next_label,
+          { action: :advance_step, step: step_name },
+          method: :post,
+          class: "btn btn-primary",
+          disabled: next_button_disabled?,
+          data: { wizard_step_target: "nextButton" } %>
+    <% end %>
+  </div>
+</div>

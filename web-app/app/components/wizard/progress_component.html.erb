@@ -1,0 +1,7 @@
+<ul class="steps steps-horizontal w-full">
+  <% filtered_steps.each_with_index do |step, index| %>
+    <li class="step <%= step_status(index) %>" data-content="<%= step[:icon] || '●' %>">
+      <span class="text-xs md:text-sm"><%= step[:name].titleize %></span>
+    </li>
+  <% end %>
+</ul>

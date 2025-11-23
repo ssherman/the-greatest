@@ -1,0 +1,46 @@
+<%= render(Wizard::StepComponent.new(
+  title: "Parse HTML",
+  description: "Parse song data from HTML source",
+  step_number: 2,
+  active: true
+)) do |step| %>
+  <% step.with_step_content do %>
+    <div class="space-y-6"
+         data-controller="wizard-step"
+         data-wizard-step-list-id-value="<%= list.id %>"
+         data-wizard-step-step-name-value="parse">
+
+      <% if errors.any? %>
+        <div class="alert alert-error">
+          <ul>
+            <% errors.each do |error| %>
+              <li><%= error %></li>
+            <% end %>
+          </ul>
+        </div>
+      <% end %>
+
+      <div class="form-control">
+        <label class="label">
+          <span class="label-text font-bold">HTML Content</span>
+        </label>
+        <%= form_with url: { action: :advance_step, step: "parse" }, method: :post do |f| %>
+          <%= f.text_area :html_content,
+              rows: 10,
+              placeholder: "Paste your HTML here...",
+              class: "textarea textarea-bordered w-full font-mono text-sm" %>
+
+          <div class="progress w-full mt-4 hidden" data-wizard-step-target="progressBar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+            <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%">
+              <span class="progress-text">0%</span>
+            </div>
+          </div>
+
+          <div class="mt-2 text-sm text-base-content/70" data-wizard-step-target="statusText">
+            Ready to parse
+          </div>
+        <% end %>
+      </div>
+    </div>
+  <% end %>
+<% end %>

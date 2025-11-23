@@ -15,3 +15,6 @@ application.register("autocomplete", AutocompleteController)
 
 import ModalFormController from "./modal_form_controller"
 application.register("modal-form", ModalFormController)
+
+import WizardStepController from "./wizard_step_controller"
+application.register("wizard-step", WizardStepController)
