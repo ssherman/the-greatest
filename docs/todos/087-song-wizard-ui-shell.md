@@ -1,4 +1,4 @@
-# [087] - Song Wizard UI Shell & Navigation
+# [087] - Wizard Infrastructure: Reusable Multi-Step UI Shell
 
 ## Status
 - **Status**: Planned
@@ -9,250 +9,197 @@
 - **Developer**: AI + Human
 
 ## Overview
-Build the wizard shell with navigation, progress indicators, and polling infrastructure. This provides the container and navigation framework that all wizard steps will use.
+Build reusable wizard infrastructure (controller concerns, ViewComponents, Stimulus controllers) that can be used for Songs, Books, Movies, and Games list wizards. This provides the foundation for all multi-step workflows in the admin panel.
 
 ## Context
 
 This is **Part 2 of 10** in the Song List Wizard implementation:
 
 1. [086] Infrastructure ← Done
-2. **[087] UI Shell & Navigation** ← You are here
-3. [088] Step 0: Import Source Choice
-4. [089] Step 1: Parse HTML
-5. [090] Step 2: Enrich
-6. [091] Step 3: Validation
-7. [092] Step 4: Review UI
-8. [093] Step 4: Actions
-9. [094] Step 5: Import
+2. **[087] Wizard Infrastructure** ← You are here (reusable for all domains)
+3. [088] Step 0: Import Source Choice (Songs-specific)
+4. [089] Step 1: Parse HTML (Songs-specific)
+5. [090] Step 2: Enrich (Songs-specific)
+6. [091] Step 3: Validation (Songs-specific)
+7. [092] Step 4: Review UI (Songs-specific)
+8. [093] Step 4: Actions (Songs-specific)
+9. [094] Step 5: Import (Songs-specific)
 10. [095] Polish & Integration
 
 ### What This Builds
 
-- Wizard controller with step navigation
-- Progress step indicator (visual breadcrumbs)
-- Turbo Frame structure for step content
-- Polling Stimulus controller for job status
-- Wizard layout and shell views
+**Reusable Infrastructure:**
+- `WizardController` concern - step navigation, state management
+- `MultiStepModel` concern - wizard state helpers (already in List model from 086)
+- `Wizard::BaseComponent` - shell layout with slots
+- `Wizard::StepComponent` - abstract step template
+- `Wizard::ProgressComponent` - visual progress indicator
+- `Wizard::NavigationComponent` - back/next buttons
+- `wizard_step_controller.js` - Stimulus controller for progress polling
+
+**Songs Implementation:**
+- `Admin::Music::Songs::ListWizardController` - includes WizardController
+- Song-specific step components (parse, enrich, validate, review, import)
+- Routes configuration
 
 ### What This Does NOT Build
 
-- Individual step content (covered in tasks 088-093)
+- Individual step business logic (covered in tasks 088-094)
 - Background jobs (covered in tasks 088-090, 093)
 - Service objects (covered in tasks 089, 092)
+
+### Design Principles
+
+1. **Separation of Concerns**: Wizard orchestration separate from domain logic
+2. **Reusability**: Same infrastructure for Songs, Books, Movies, Games wizards
+3. **ViewComponent Composition over Inheritance**: Following ViewComponent best practices, domain-specific components WRAP generic components rather than extending them
+4. **Configuration over Code**: DSL for defining steps, not hardcoded logic
+5. **Contracts > Code**: Define interfaces, link to implementation files
+6. **Polling for Progress**: Simple JSON polling (2s interval) instead of ActionCable/WebSockets
+
+---
 
 ## Requirements
 
 ### Functional Requirements
 
-#### FR-1: Wizard Controller
-- [ ] `show` action - Redirects to current step
-- [ ] `show_step` action - Renders specific step view
-- [ ] `step_status` action - JSON endpoint for polling
-- [ ] `advance_step` action - Moves to next step, enqueues job if needed
-- [ ] `back_step` action - Returns to previous step
-- [ ] `restart` action - Resets wizard state
+#### FR-1: WizardController Concern (Reusable)
+**Contract**: Provides step navigation and state management for any wizard
 
-#### FR-2: Step Navigation
-- [ ] Can only advance when current step's job is completed
-- [ ] Can go back to previous steps without restriction
-- [ ] Back button disabled on first step
-- [ ] Next button disabled when job is running
-- [ ] Current step stored in wizard_state and persisted
+**Interface**:
+```ruby
+module WizardController
+  # Subclasses must implement:
+  def wizard_steps        # Returns array of step names: %w[step1 step2 step3]
+  def wizard_entity       # Returns model instance (e.g., @list)
+  def step_view_component # Returns component class for step (optional)
 
-#### FR-3: Progress Indicator
-- [ ] Shows all 7 steps: Source → Parse → Enrich → Validate → Review → Import → Complete
-- [ ] If MusicBrainz series chosen, skips steps 1-5 (Source → Import → Complete)
-- [ ] Highlights completed steps
-- [ ] Shows current step
-- [ ] Shows upcoming steps (grayed out)
-- [ ] Mobile responsive (stacks vertically)
+  # Provides these actions:
+  # - show: redirects to current step
+  # - show_step: renders specific step
+  # - step_status: JSON endpoint for polling
+  # - advance_step: moves to next step, enqueues job
+  # - back_step: returns to previous step
+  # - restart: resets wizard state
+end
+```
 
-#### FR-4: Polling Infrastructure
-- [ ] Stimulus controller polls every 2 seconds
-- [ ] Updates progress bar
-- [ ] Updates status text
-- [ ] Enables next button when job completes
-- [ ] Shows error message if job fails
-- [ ] Stops polling on disconnect or completion
+**Implementation**: See `app/controllers/concerns/wizard_controller.rb`
 
-#### FR-5: Wizard Layout
-- [ ] Consistent header with list name
-- [ ] Progress indicator at top
-- [ ] Step content in Turbo Frame (no full page reload)
-- [ ] Navigation buttons at bottom
-- [ ] Mobile responsive design
+#### FR-2: ViewComponent Composition (Reusable)
 
-### Non-Functional Requirements
+**IMPORTANT**: Following ViewComponent best practices, we use **composition** instead of inheritance. Components wrap other components rather than extending them.
 
-#### NFR-1: Performance
-- [ ] Step transitions < 200ms (Turbo Frame)
-- [ ] Polling adds < 50ms overhead per request
-- [ ] Progress indicator renders in < 100ms
+**Wizard::ContainerComponent** - Main wizard shell with slots:
+```ruby
+class Wizard::ContainerComponent < ViewComponent::Base
+  renders_one :header     # Wizard title, subtitle
+  renders_one :progress   # Progress indicator
+  renders_many :steps     # Step content blocks
+  renders_one :navigation # Back/next buttons
 
-#### NFR-2: Usability
-- [ ] Clear visual feedback for disabled buttons
-- [ ] Loading states during navigation
-- [ ] Error messages are user-friendly
+  # Receives:
+  # - wizard_id: string (unique identifier)
+  # - current_step: integer
+  # - total_steps: integer
+end
+```
 
-## Acceptance Criteria
+**Wizard::StepComponent** - Generic step wrapper (used via composition, NOT inheritance):
+```ruby
+class Wizard::StepComponent < ViewComponent::Base
+  renders_one :header
+  renders_one :content
+  renders_one :actions
 
-### Controller
-- [ ] Wizard controller exists at `Admin::Music::Songs::ListWizardController`
-- [ ] All 6 actions implemented and tested
-- [ ] Step validation prevents skipping steps
-- [ ] Status endpoint returns JSON with job status
-- [ ] Advancing step enqueues appropriate job (stub for now)
+  # Receives:
+  # - title: string
+  # - description: string (optional)
+  # - step_number: integer (optional)
+  # - active: boolean (optional)
+end
+```
 
-### Navigation
-- [ ] Can navigate forward through steps
-- [ ] Can navigate backward through steps
-- [ ] Cannot skip ahead without completing jobs
-- [ ] Current step persisted to database
-- [ ] Restart resets to step 0
+**Wizard::ProgressComponent** - Progress indicator:
+```ruby
+class Wizard::ProgressComponent < ViewComponent::Base
+  # Shows step progression with icons
+  # Receives:
+  # - steps: array of {name:, icon:, step:}
+  # - current_step: integer
+  # - import_source: string (optional, for conditional steps)
+end
+```
 
-### Progress Indicator
-- [ ] All 6 steps displayed
-- [ ] Current step highlighted
-- [ ] Completed steps shown with checkmark
-- [ ] Renders correctly on mobile
+**Wizard::NavigationComponent** - Back/next buttons:
+```ruby
+class Wizard::NavigationComponent < ViewComponent::Base
+  # Receives:
+  # - list: model instance
+  # - step_name: string
+  # - step_index: integer
+  # - back_enabled: boolean
+  # - next_enabled: boolean
+  # - next_label: string (default: "Next →")
+end
+```
 
-### Polling
-- [ ] Polling starts when step loads
-- [ ] Polling stops when component disconnects
-- [ ] Progress bar updates from polling data
-- [ ] Next button enables when job completes
-- [ ] Error shown if job fails
+**Implementation**: See `app/components/wizard/` directory
 
-### Layout
-- [ ] Wizard layout consistent across all steps
-- [ ] Turbo Frame used for step content
-- [ ] Mobile responsive
+#### FR-3: Stimulus Controller for Polling
 
-## Technical Approach
+**wizard_step_controller.js** - Polls job status endpoint:
+```javascript
+export default class extends Controller {
+  static values = {
+    listId: Number,
+    stepName: String,
+    pollInterval: { type: Number, default: 2000 }
+  }
 
-### Wizard Controller
+  static targets = ["progressBar", "statusText", "nextButton"]
 
-**File**: `app/controllers/admin/music/songs/list_wizard_controller.rb`
+  // Methods:
+  // - connect(): starts polling
+  // - disconnect(): stops polling
+  // - checkJobStatus(): fetches status endpoint
+  // - updateProgress(percent, metadata): updates UI
+  // - enableNextButton(): enables navigation
+  // - showError(error): displays error
+}
+```
 
+**Implementation**: See `app/javascript/controllers/wizard_step_controller.js`
+
+#### FR-4: Routes Configuration
+
+**Route Structure**:
+```
+GET    /admin/music/songs/lists/:list_id/wizard              → show
+GET    /admin/music/songs/lists/:list_id/wizard/step/:step   → show_step
+GET    /admin/music/songs/lists/:list_id/wizard/step/:step/status → step_status (JSON)
+POST   /admin/music/songs/lists/:list_id/wizard/step/:step/advance → advance_step
+POST   /admin/music/songs/lists/:list_id/wizard/step/:step/back → back_step
+POST   /admin/music/songs/lists/:list_id/wizard/restart      → restart
+```
+
+**Implementation**: See `config/routes.rb` (lines ~79-104 added in task 086)
+
+#### FR-5: Songs Wizard Implementation
+
+**Admin::Music::Songs::ListWizardController**:
 ```ruby
 class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
-  before_action :set_list
-  before_action :initialize_wizard_state
-  before_action :validate_step, only: [:show_step, :advance_step, :back_step]
+  include WizardController
 
   STEPS = %w[source parse enrich validate review import complete].freeze
 
-  # GET /admin/music/songs/lists/:list_id/wizard
-  def show
-    current_step_name = STEPS[@list.wizard_current_step] || "source"
-    redirect_to admin_music_songs_list_wizard_step_path(@list, current_step_name)
+  def wizard_steps
+    STEPS
   end
 
-  # GET /admin/music/songs/lists/:list_id/wizard/step/:step
-  def show_step
-    @step_name = params[:step]
-    @step_index = STEPS.index(@step_name)
-
-    # Load step-specific data (to be implemented in individual step tasks)
-    case @step_name
-    when "source"
-      # Step 0: Choose import source (implemented in [088])
-    when "parse"
-      @items = @list.list_items.unverified.order(:position)
-    when "enrich"
-      @items = @list.list_items.unverified.order(:position)
-      @stats = calculate_enrichment_stats(@items) if @items.any?
-    when "validate"
-      @items = @list.list_items.unverified
-        .where("metadata->'mb_recording_id' IS NOT NULL")
-        .order(:position)
-      @stats = calculate_validation_stats(@items) if @items.any?
-    when "review"
-      @items = @list.list_items.unverified.order(:position).includes(:listable)
-      @stats = calculate_review_stats(@items) if @items.any?
-    when "import"
-      @items_to_import = @list.list_items.unverified
-        .where("metadata->>'wizard_queue_import' = 'true'")
-        .where("metadata->'mb_recording_id' IS NOT NULL")
-      @stats = calculate_import_stats(@list.list_items)
-    when "complete"
-      @stats = calculate_final_stats(@list.list_items)
-    end
-
-    render layout: "music/admin", turbo_frame: "wizard_step_content"
-  end
-
-  # GET /admin/music/songs/lists/:list_id/wizard/step/:step/status
-  def step_status
-    render json: {
-      status: @list.wizard_job_status,
-      progress: @list.wizard_job_progress,
-      error: @list.wizard_job_error,
-      metadata: @list.wizard_job_metadata
-    }
-  end
-
-  # POST /admin/music/songs/lists/:list_id/wizard/step/:step/advance
-  def advance_step
-    current_index = STEPS.index(params[:step])
-
-    # Enqueue appropriate job for this step (stubs for now, implemented in later tasks)
-    case params[:step]
-    when "source"
-      # Check which import source was chosen
-      import_source = params[:import_source]
-      if import_source == "musicbrainz_series"
-        # Skip to import step (step 5)
-        new_wizard_state = @list.wizard_state.merge(
-          "current_step" => 5,
-          "import_source" => "musicbrainz_series"
-        )
-        @list.update!(wizard_state: new_wizard_state)
-        return redirect_to admin_music_songs_list_wizard_step_path(@list, "import")
-      else
-        # Continue with custom HTML flow
-        new_wizard_state = @list.wizard_state.merge("import_source" => "custom_html")
-        @list.update!(wizard_state: new_wizard_state)
-      end
-    when "parse"
-      enqueue_parsing_job
-    when "enrich"
-      enqueue_enrichment_job
-    when "validate"
-      enqueue_validation_job
-    when "review"
-      # No job needed, user manually reviewed items
-    when "import"
-      # Check import source to determine which job to enqueue
-      if @list.wizard_state.dig("import_source") == "musicbrainz_series"
-        enqueue_musicbrainz_series_import_job
-      else
-        enqueue_import_jobs
-      end
-    end
-
-    # Update wizard state
-    new_wizard_state = @list.wizard_state.merge("current_step" => current_index + 1)
-    @list.update!(wizard_state: new_wizard_state)
-
-    redirect_to admin_music_songs_list_wizard_step_path(@list, STEPS[current_index + 1])
-  end
-
-  # POST /admin/music/songs/lists/:list_id/wizard/step/:step/back
-  def back_step
-    current_index = STEPS.index(params[:step])
-    return if current_index.zero?
-
-    new_wizard_state = @list.wizard_state.merge("current_step" => current_index - 1)
-    @list.update!(wizard_state: new_wizard_state)
-
-    redirect_to admin_music_songs_list_wizard_step_path(@list, STEPS[current_index - 1])
-  end
-
-  # POST /admin/music/songs/lists/:list_id/wizard/restart
-  def restart
-    @list.reset_wizard!
-    redirect_to admin_music_songs_list_wizard_step_path(@list, "parse")
+  def wizard_entity
+    @list
   end
 
   private
@@ -261,357 +208,317 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
     @list = Music::Songs::List.find(params[:list_id])
   end
 
-  def initialize_wizard_state
-    @list.reset_wizard! if @list.wizard_state.blank?
-  end
-
-  def validate_step
-    unless STEPS.include?(params[:step])
-      redirect_to admin_music_songs_list_wizard_path(@list),
-        alert: "Invalid step: #{params[:step]}"
-    end
-  end
-
+  # Step-specific data loading (case statement)
   # Job enqueue methods (stubs for now, implemented in later tasks)
-  def enqueue_parsing_job
-    # TODO: Implement in [089]
-    Rails.logger.info "Would enqueue parsing job for list #{@list.id}"
-  end
-
-  def enqueue_enrichment_job
-    # TODO: Implement in [090]
-    Rails.logger.info "Would enqueue enrichment job for list #{@list.id}"
-  end
-
-  def enqueue_validation_job
-    # TODO: Implement in [091]
-    Rails.logger.info "Would enqueue validation job for list #{@list.id}"
-  end
-
-  def enqueue_import_jobs
-    # TODO: Implement in [094]
-    Rails.logger.info "Would enqueue import jobs for list #{@list.id}"
-  end
-
-  def enqueue_musicbrainz_series_import_job
-    # TODO: Implement in [088]
-    Rails.logger.info "Would enqueue MusicBrainz series import job for list #{@list.id}"
-  end
-
-  # Stats calculation methods (stubs for now, implemented in later tasks)
-  def calculate_enrichment_stats(items)
-    {}
-  end
-
-  def calculate_validation_stats(items)
-    {}
-  end
-
-  def calculate_review_stats(items)
-    {}
-  end
-
-  def calculate_import_stats(items)
-    {}
-  end
-
-  def calculate_final_stats(items)
-    {}
-  end
 end
 ```
 
-### Wizard Shell View
+**Implementation**: See `app/controllers/admin/music/songs/list_wizard_controller.rb`
 
-**File**: `app/views/admin/music/songs/list_wizard/show_step.html.erb`
+**Songs-Specific Step Components** (using composition, NOT inheritance):
+- `Admin::Music::Songs::Wizard::SourceStepComponent` - wraps `Wizard::StepComponent`
+- `Admin::Music::Songs::Wizard::ParseStepComponent` - wraps `Wizard::StepComponent`
+- `Admin::Music::Songs::Wizard::EnrichStepComponent` - wraps `Wizard::StepComponent`
+- `Admin::Music::Songs::Wizard::ValidateStepComponent` - wraps `Wizard::StepComponent`
+- `Admin::Music::Songs::Wizard::ReviewStepComponent` - wraps `Wizard::StepComponent`
+- `Admin::Music::Songs::Wizard::ImportStepComponent` - wraps `Wizard::StepComponent`
+- `Admin::Music::Songs::Wizard::CompleteStepComponent` - wraps `Wizard::StepComponent`
 
-```erb
-<div class="min-h-screen bg-base-200 p-4">
-  <!-- Header -->
-  <div class="mb-6">
-    <h1 class="text-3xl font-bold"><%= @list.name %></h1>
-    <p class="text-base-content/70">List Wizard</p>
-  </div>
+Each component uses `render(Wizard::StepComponent.new(...))` pattern with slots.
 
-  <!-- Progress Steps -->
-  <%= render "admin/music/songs/list_wizard/progress_steps",
-      current_step: @step_index,
-      list: @list %>
+**Implementation**: See `app/components/admin/music/songs/wizard/` directory
 
-  <!-- Step Content (Turbo Frame) -->
-  <div class="mt-8">
-    <%= turbo_frame_tag "wizard_step_content" do %>
-      <%= render "admin/music/songs/list_wizard/steps/#{@step_name}",
-          list: @list,
-          items: @items,
-          stats: @stats %>
-    <% end %>
-  </div>
-</div>
-```
+### Non-Functional Requirements
 
-### Progress Steps Partial
+#### NFR-1: Reusability
+- [ ] Wizard infrastructure works for any domain (Books, Movies, Games)
+- [ ] No hardcoded domain-specific logic in concerns or base components
+- [ ] Configuration via method overrides, not code duplication
 
-**File**: `app/views/admin/music/songs/list_wizard/_progress_steps.html.erb`
+#### NFR-2: Performance
+- [ ] Step transitions < 200ms (Turbo Frame)
+- [ ] Polling adds < 50ms overhead per request
+- [ ] Progress indicator renders in < 100ms
 
-```erb
-<%
-  list = local_assigns.fetch(:list)
-  import_source = list.wizard_state.dig("import_source")
+#### NFR-3: Usability
+- [ ] Clear visual feedback for disabled buttons
+- [ ] Loading states during navigation
+- [ ] Error messages are user-friendly
+- [ ] Mobile responsive design
 
-  # Full wizard steps (if custom HTML chosen)
-  full_steps = [
-    { name: "Source", icon: "🎯", step: "source" },
-    { name: "Parse", icon: "📄", step: "parse" },
-    { name: "Enrich", icon: "🔍", step: "enrich" },
-    { name: "Validate", icon: "✓", step: "validate" },
-    { name: "Review", icon: "👁", step: "review" },
-    { name: "Import", icon: "⬇", step: "import" },
-    { name: "Complete", icon: "🎉", step: "complete" }
-  ]
+---
 
-  # Short wizard steps (if MusicBrainz series chosen)
-  short_steps = [
-    { name: "Source", icon: "🎯", step: "source" },
-    { name: "Import", icon: "⬇", step: "import" },
-    { name: "Complete", icon: "🎉", step: "complete" }
-  ]
+## Contracts & Schemas
 
-  # Use short steps if MusicBrainz series was chosen
-  steps = import_source == "musicbrainz_series" ? short_steps : full_steps
-  current_step = local_assigns.fetch(:current_step, 0)
-%>
+### Wizard State JSON Schema
 
-<ul class="steps steps-horizontal w-full">
-  <% steps.each_with_index do |step_info, index| %>
-    <li class="step <%= 'step-primary' if index <= current_step %>">
-      <span class="text-lg mr-2"><%= step_info[:icon] %></span>
-      <span class="hidden sm:inline"><%= step_info[:name] %></span>
-    </li>
-  <% end %>
-</ul>
-```
+**Location**: `list.wizard_state` (JSONB column)
 
-### Polling Stimulus Controller
-
-**File**: `app/javascript/controllers/wizard_step_controller.js`
-
-```javascript
-import { Controller } from "@hotwired/stimulus"
-
-export default class extends Controller {
-  static values = {
-    listId: Number,
-    stepName: String,
-    pollInterval: { type: Number, default: 2000 } // 2 seconds
-  }
-
-  static targets = ["progressBar", "statusText", "nextButton"]
-
-  connect() {
-    this.startPolling()
-  }
-
-  disconnect() {
-    this.stopPolling()
-  }
-
-  startPolling() {
-    this.poll()
-  }
-
-  stopPolling() {
-    if (this.pollTimer) {
-      clearInterval(this.pollTimer)
-      this.pollTimer = null
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["current_step", "started_at", "job_status"],
+  "properties": {
+    "current_step": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Current step index (0-based)"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO8601 timestamp when wizard started"
+    },
+    "completed_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "ISO8601 timestamp when wizard completed"
+    },
+    "job_status": {
+      "type": "string",
+      "enum": ["idle", "running", "completed", "failed"],
+      "description": "Current background job status"
+    },
+    "job_progress": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Job completion percentage"
+    },
+    "job_error": {
+      "type": ["string", "null"],
+      "description": "Error message if job failed"
+    },
+    "job_metadata": {
+      "type": "object",
+      "properties": {
+        "total_items": {"type": "integer"},
+        "processed_items": {"type": "integer"},
+        "source": {"type": "string"}
+      },
+      "description": "Step-specific metadata"
+    },
+    "step_data": {
+      "type": "object",
+      "description": "Step-specific data storage"
+    },
+    "import_source": {
+      "type": "string",
+      "enum": ["custom_html", "musicbrainz_series"],
+      "description": "Import source type (affects step flow)"
     }
-  }
-
-  poll() {
-    this.pollTimer = setInterval(() => {
-      this.checkJobStatus()
-    }, this.pollIntervalValue)
-  }
-
-  async checkJobStatus() {
-    try {
-      const response = await fetch(
-        `/admin/music/songs/lists/${this.listIdValue}/wizard/step/${this.stepNameValue}/status`
-      )
-      const data = await response.json()
-
-      // Update progress bar
-      this.updateProgress(data.progress, data.metadata)
-
-      // If completed, enable next button and stop polling
-      if (data.status === 'completed') {
-        this.stopPolling()
-        this.enableNextButton()
-      }
-
-      // If failed, show error and stop polling
-      if (data.status === 'failed') {
-        this.stopPolling()
-        this.showError(data.error)
-      }
-    } catch (error) {
-      console.error('Failed to check job status:', error)
-      // Continue polling even on error
-    }
-  }
-
-  updateProgress(percent, metadata) {
-    if (this.hasProgressBarTarget) {
-      this.progressBarTarget.style.width = `${percent}%`
-      this.progressBarTarget.textContent = `${percent}%`
-    }
-
-    if (this.hasStatusTextTarget && metadata) {
-      const processed = metadata.processed_items || 0
-      const total = metadata.total_items || 0
-      this.statusTextTarget.textContent = `Processing ${processed} of ${total} items...`
-    }
-  }
-
-  enableNextButton() {
-    if (this.hasNextButtonTarget) {
-      this.nextButtonTarget.disabled = false
-      this.nextButtonTarget.classList.remove('btn-disabled')
-    }
-  }
-
-  showError(error) {
-    const errorDiv = document.createElement('div')
-    errorDiv.className = 'alert alert-error mt-4'
-    errorDiv.innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-      <span>${error}</span>
-    `
-    this.element.appendChild(errorDiv)
   }
 }
 ```
 
-### Step Template (Example)
+### Status Endpoint Response Schema
 
-**File**: `app/views/admin/music/songs/list_wizard/steps/_source.html.erb`
+**Endpoint**: `GET /admin/music/songs/lists/:list_id/wizard/step/:step/status`
 
-```erb
-<%# This is a placeholder - full implementation in [088] %>
-
-<div class="card bg-base-100 shadow-xl">
-  <div class="card-body">
-    <h2 class="card-title">Choose Import Source</h2>
-
-    <p class="text-base-content/70 mb-6">
-      How would you like to import songs for this list?
-    </p>
-
-    <%= form_with url: advance_step_admin_music_songs_list_wizard_path(@list, step: "source"),
-        method: :post do |f| %>
-
-      <!-- Option 1: MusicBrainz Series (Fast Path) -->
-      <label class="cursor-pointer">
-        <div class="card bg-base-200 hover:bg-base-300 mb-4">
-          <div class="card-body">
-            <div class="flex items-start gap-4">
-              <%= f.radio_button :import_source, "musicbrainz_series",
-                  class: "radio radio-primary mt-1" %>
-              <div class="flex-1">
-                <h3 class="font-bold text-lg">MusicBrainz Series</h3>
-                <p class="text-sm text-base-content/70">
-                  Import from a curated MusicBrainz series (fastest, no manual review needed)
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </label>
-
-      <!-- Option 2: Custom HTML (Full Wizard) -->
-      <label class="cursor-pointer">
-        <div class="card bg-base-200 hover:bg-base-300 mb-6">
-          <div class="card-body">
-            <div class="flex items-start gap-4">
-              <%= f.radio_button :import_source, "custom_html",
-                  class: "radio radio-primary mt-1",
-                  checked: true %>
-              <div class="flex-1">
-                <h3 class="font-bold text-lg">Custom HTML List</h3>
-                <p class="text-sm text-base-content/70">
-                  Parse HTML, enrich, validate, and review manually (full control)
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </label>
-
-      <!-- Submit Button -->
-      <div class="card-actions justify-end">
-        <%= f.submit "Continue →", class: "btn btn-primary" %>
-      </div>
-    <% end %>
-  </div>
-</div>
+**Response**:
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["status", "progress"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["idle", "running", "completed", "failed"]
+    },
+    "progress": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "total_items": {"type": "integer"},
+        "processed_items": {"type": "integer"}
+      }
+    }
+  }
+}
 ```
 
-**File**: `app/views/admin/music/songs/list_wizard/steps/_parse.html.erb`
+### Endpoint Table
 
-```erb
-<%# This is a placeholder - full implementation in [089] %>
+| Verb | Path | Purpose | Params/Body | Auth | Response |
+|------|------|---------|-------------|------|----------|
+| GET | `/wizard` | Redirect to current step | - | admin | 302 redirect |
+| GET | `/wizard/step/:step` | Show step view | step (string) | admin | HTML (Turbo Frame) |
+| GET | `/wizard/step/:step/status` | Get job status | step (string) | admin | JSON (schema above) |
+| POST | `/wizard/step/:step/advance` | Move to next step | step (string), step-specific params | admin | 302 redirect |
+| POST | `/wizard/step/:step/back` | Move to previous step | step (string) | admin | 302 redirect |
+| POST | `/wizard/restart` | Reset wizard | - | admin | 302 redirect |
 
-<div class="card bg-base-100 shadow-xl"
-     data-controller="wizard-step"
-     data-wizard-step-list-id-value="<%= @list.id %>"
-     data-wizard-step-step-name-value="parse">
+---
 
-  <div class="card-body">
-    <h2 class="card-title">Parse HTML into List Items</h2>
+## Acceptance Criteria
 
-    <p class="text-base-content/70 mb-4">
-      This step will parse the HTML from your list and create unverified list items.
-    </p>
+### Reusable Infrastructure
 
-    <!-- Progress Bar -->
-    <div class="w-full bg-base-300 rounded-full h-6 mb-4">
-      <div class="bg-primary h-6 rounded-full transition-all duration-300 flex items-center justify-center text-primary-content text-sm"
-           style="width: <%= @list.wizard_job_progress %>%"
-           data-wizard-step-target="progressBar">
-        <%= @list.wizard_job_progress %>%
-      </div>
-    </div>
+- [ ] `WizardController` concern exists at `app/controllers/concerns/wizard_controller.rb`
+- [ ] `Wizard::BaseComponent` exists with 4 slots (header, progress, content, navigation)
+- [ ] `Wizard::StepComponent` exists as abstract parent
+- [ ] `Wizard::ProgressComponent` renders step indicators
+- [ ] `Wizard::NavigationComponent` renders back/next buttons
+- [ ] `wizard_step_controller.js` polls status endpoint every 2 seconds
+- [ ] All components work with any model that includes `MultiStepModel`
 
-    <!-- Status Text -->
-    <p class="mb-4" data-wizard-step-target="statusText">
-      <% if @list.wizard_job_metadata.present? %>
-        Processing <%= @list.wizard_job_metadata['processed_items'] || 0 %>
-        of <%= @list.wizard_job_metadata['total_items'] || 0 %> items...
-      <% else %>
-        Ready to parse HTML
-      <% end %>
-    </p>
+### Songs Wizard Implementation
 
-    <!-- Navigation Buttons -->
-    <div class="card-actions justify-between mt-6">
-      <%= button_to "← Back",
-          back_step_admin_music_songs_list_wizard_path(@list, step: "parse"),
-          method: :post,
-          class: "btn btn-outline",
-          disabled: true %>
+- [ ] `Admin::Music::Songs::ListWizardController` includes `WizardController`
+- [ ] Controller defines `STEPS = %w[source parse enrich validate review import complete]`
+- [ ] All 7 song-specific step components exist
+- [ ] Step components inherit from `Wizard::StepComponent`
+- [ ] Routes accessible and mapped correctly
 
-      <%= button_to "Start Parsing →",
-          advance_step_admin_music_songs_list_wizard_path(@list, step: "parse"),
-          method: :post,
-          class: "btn btn-primary",
-          disabled: @list.wizard_job_status == 'running',
-          data: { wizard_step_target: 'nextButton' } %>
-    </div>
-  </div>
-</div>
+### Navigation & State Management
+
+- [ ] Can navigate forward through steps
+- [ ] Can navigate backward through steps
+- [ ] Cannot skip ahead without completing jobs
+- [ ] Current step persisted to `wizard_state`
+- [ ] Restart resets to step 0
+- [ ] Back button disabled on first step
+- [ ] Next button disabled when job is running
+
+### Progress Tracking
+
+- [ ] Polling starts when step loads
+- [ ] Polling stops when component disconnects
+- [ ] Progress bar updates from polling data
+- [ ] Next button enables when job completes
+- [ ] Error shown if job fails
+- [ ] Status endpoint returns valid JSON schema
+
+### Layout & Responsiveness
+
+- [ ] Wizard layout consistent across all steps
+- [ ] Turbo Frame used for step content (no full page reload)
+- [ ] Mobile responsive (progress indicator stacks vertically)
+- [ ] Loading states visible during transitions
+
+---
+
+## Technical Approach
+
+### File Structure
+
 ```
+app/
+├── controllers/
+│   ├── concerns/
+│   │   └── wizard_controller.rb                    # NEW: Reusable concern
+│   └── admin/
+│       └── music/
+│           └── songs/
+│               └── list_wizard_controller.rb       # NEW: Songs implementation
+├── components/
+│   ├── wizard/
+│   │   ├── container_component.rb                  # NEW: Wizard shell with slots
+│   │   ├── container_component.html.erb
+│   │   ├── step_component.rb                       # NEW: Generic step wrapper
+│   │   ├── step_component.html.erb
+│   │   ├── progress_component.rb                   # NEW: Progress indicator
+│   │   ├── progress_component.html.erb
+│   │   ├── navigation_component.rb                 # NEW: Back/next buttons
+│   │   └── navigation_component.html.erb
+│   └── admin/
+│       └── music/
+│           └── songs/
+│               └── wizard/
+│                   ├── source_step_component.rb    # NEW: Step 0
+│                   ├── parse_step_component.rb     # NEW: Step 1
+│                   ├── enrich_step_component.rb    # NEW: Step 2
+│                   ├── validate_step_component.rb  # NEW: Step 3
+│                   ├── review_step_component.rb    # NEW: Step 4
+│                   ├── import_step_component.rb    # NEW: Step 5
+│                   └── complete_step_component.rb  # NEW: Step 6
+├── javascript/
+│   └── controllers/
+│       └── wizard_step_controller.js               # NEW: Polling controller
+└── views/
+    └── admin/
+        └── music/
+            └── songs/
+                └── list_wizard/
+                    └── show_step.html.erb          # NEW: Main view
+```
+
+### Key Implementation Files
+
+**Implementation code is ≤40 lines per snippet or linked to file paths:**
+
+1. **WizardController Concern** → `app/controllers/concerns/wizard_controller.rb`
+   - Provides 6 controller actions
+   - Validates step parameter
+   - Updates wizard_state
+   - Abstract methods for subclass configuration
+
+2. **Wizard Components** → `app/components/wizard/*.rb`
+   - ContainerComponent: Shell with slots (header, progress, steps, navigation)
+   - StepComponent: Generic step wrapper with slots (header, content, actions)
+   - ProgressComponent: DaisyUI steps component
+   - NavigationComponent: Back/next button logic
+
+3. **Songs Step Components** → `app/components/admin/music/songs/wizard/*.rb`
+   - Each step WRAPS `Wizard::StepComponent` (composition, not inheritance)
+   - Uses `render(Wizard::StepComponent.new(...))` pattern
+   - Fills slots with domain-specific content
+   - Step-specific templates in sidecar `.html.erb` files
+
+   **Example composition pattern** (≤40 lines):
+   ```ruby
+   class Admin::Music::Songs::Wizard::ParseStepComponent < ViewComponent::Base
+     def initialize(list:, errors: [])
+       @list = list
+       @errors = errors
+     end
+
+     def call
+       render(Wizard::StepComponent.new(
+         title: "Parse HTML",
+         description: "Parse your HTML into list items",
+         step_number: 1,
+         active: true
+       )) do |step|
+         step.with_content { parse_form }
+         step.with_actions { parse_buttons }
+       end
+     end
+
+     private
+
+     def parse_form
+       # Render parse-specific form
+     end
+
+     def parse_buttons
+       # Render parse-specific buttons
+     end
+   end
+   ```
+
+4. **Polling Stimulus Controller** → `app/javascript/controllers/wizard_step_controller.js`
+   - Polls status endpoint every 2 seconds
+   - Updates progress bar and status text
+   - Enables next button when job completes
+   - Shows error and stops polling on failure
+
+5. **Songs Wizard Controller** → `app/controllers/admin/music/songs/list_wizard_controller.rb`
+   - Includes `WizardController`
+   - Defines `STEPS` constant
+   - Case statement for step-specific data loading
+   - Stub methods for job enqueuing (implemented in later tasks)
+
+---
 
 ## Testing Strategy
 
@@ -620,192 +527,203 @@ export default class extends Controller {
 **File**: `test/controllers/admin/music/songs/list_wizard_controller_test.rb`
 
 ```ruby
-require "test_helper"
-
-class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::IntegrationTest
-  setup do
-    @list = lists(:music_songs_list)
-    @list.reset_wizard!
-    sign_in users(:admin_user)
-  end
-
-  test "show redirects to current step" do
-    get admin_music_songs_list_wizard_path(@list)
-
-    assert_redirected_to admin_music_songs_list_wizard_step_path(@list, "parse")
-  end
-
-  test "show_step renders parse step" do
-    get admin_music_songs_list_wizard_step_path(@list, "parse")
-
-    assert_response :success
-    assert_select "h2", text: /Parse HTML/i
-  end
-
-  test "step_status returns JSON with job status" do
-    @list.update_wizard_job_status(status: "running", progress: 50)
-
-    get step_status_admin_music_songs_list_wizard_step_path(@list, "parse"),
-      as: :json
-
-    assert_response :success
-    json = JSON.parse(response.body)
-    assert_equal "running", json["status"]
-    assert_equal 50, json["progress"]
-  end
-
-  test "advance_step moves to next step" do
-    post advance_step_admin_music_songs_list_wizard_path(@list, step: "parse")
-
-    @list.reload
-    assert_equal 1, @list.wizard_current_step
-    assert_redirected_to admin_music_songs_list_wizard_step_path(@list, "enrich")
-  end
-
-  test "back_step moves to previous step" do
-    @list.update!(wizard_state: @list.wizard_state.merge("current_step" => 2))
-
-    post back_step_admin_music_songs_list_wizard_path(@list, step: "validate")
-
-    @list.reload
-    assert_equal 1, @list.wizard_current_step
-    assert_redirected_to admin_music_songs_list_wizard_step_path(@list, "enrich")
-  end
-
-  test "back_step does nothing on first step" do
-    post back_step_admin_music_songs_list_wizard_path(@list, step: "parse")
-
-    @list.reload
-    assert_equal 0, @list.wizard_current_step
-  end
-
-  test "restart resets wizard state" do
-    @list.update!(wizard_state: @list.wizard_state.merge("current_step" => 3))
-
-    post restart_admin_music_songs_list_wizard_path(@list)
-
-    @list.reload
-    assert_equal 0, @list.wizard_current_step
-    assert_redirected_to admin_music_songs_list_wizard_step_path(@list, "parse")
-  end
-
-  test "validate_step rejects invalid step names" do
-    get admin_music_songs_list_wizard_step_path(@list, "invalid_step")
-
-    assert_redirected_to admin_music_songs_list_wizard_path(@list)
-    assert_match /invalid step/i, flash[:alert]
-  end
-end
+# Test all 6 actions:
+# - show: redirects to current step
+# - show_step: renders step view
+# - step_status: returns valid JSON
+# - advance_step: updates wizard_state, enqueues job (stub)
+# - back_step: moves backward, updates wizard_state
+# - restart: resets wizard_state
 ```
 
 ### Component Tests
 
-**File**: `test/components/wizard_progress_steps_test.rb`
+**Files**: `test/components/wizard/*.rb`
 
 ```ruby
-require "test_helper"
+# Wizard::BaseComponent
+# - renders all 4 slots
+# - passes wizard instance to slots
 
-class WizardProgressStepsTest < ViewComponent::TestCase
-  test "renders all 6 steps" do
-    render_inline Admin::Music::Songs::ListWizard::ProgressStepsComponent.new(current_step: 0)
+# Wizard::ProgressComponent
+# - renders all steps
+# - highlights current step
+# - highlights completed steps
+# - shows icons
 
-    assert_selector "li.step", count: 6
-    assert_text "Parse"
-    assert_text "Enrich"
-    assert_text "Validate"
-    assert_text "Review"
-    assert_text "Import"
-    assert_text "Complete"
-  end
-
-  test "highlights current and completed steps" do
-    render_inline Admin::Music::Songs::ListWizard::ProgressStepsComponent.new(current_step: 2)
-
-    # First 3 steps should be highlighted (0, 1, 2)
-    assert_selector "li.step.step-primary", count: 3
-  end
-end
+# Wizard::NavigationComponent
+# - disables back on first step
+# - disables next when job running
+# - shows custom next label
 ```
+
+### Stimulus Controller Tests
+
+**File**: `test/javascript/controllers/wizard_step_controller.test.js` (if using Jest)
+
+Or manual browser testing:
+- Polling starts on connect
+- Polling stops on disconnect
+- Progress bar updates
+- Next button enables on completion
+- Error displays on failure
+
+---
 
 ## Implementation Steps
 
-1. **Create wizard controller**
-   - Create file `app/controllers/admin/music/songs/list_wizard_controller.rb`
-   - Implement all 6 actions
-   - Add stub methods for job enqueuing
-   - Add stub methods for stats calculation
+### Phase 1: Reusable Infrastructure
 
-2. **Create wizard views**
-   - Create directory `app/views/admin/music/songs/list_wizard/`
-   - Create `show_step.html.erb` (shell view)
-   - Create `_progress_steps.html.erb` (progress indicator)
-   - Create `steps/` subdirectory for individual step views
+1. **Create WizardController concern**
+   - File: `app/controllers/concerns/wizard_controller.rb`
+   - Implement 6 actions (show, show_step, step_status, advance_step, back_step, restart)
+   - Define abstract methods for subclasses
+   - Add step validation
 
-3. **Create placeholder step views**
-   - Create `steps/_parse.html.erb` (placeholder)
-   - Create `steps/_enrich.html.erb` (placeholder)
-   - Create `steps/_validate.html.erb` (placeholder)
-   - Create `steps/_review.html.erb` (placeholder)
-   - Create `steps/_import.html.erb` (placeholder)
-   - Create `steps/_complete.html.erb` (placeholder)
+2. **Create base ViewComponents**
+   - `Wizard::BaseComponent` with 4 slots
+   - `Wizard::StepComponent` as abstract parent
+   - `Wizard::ProgressComponent` with DaisyUI steps
+   - `Wizard::NavigationComponent` with button logic
 
-4. **Create polling Stimulus controller**
-   - Create `app/javascript/controllers/wizard_step_controller.js`
-   - Implement polling logic
-   - Implement progress updates
-   - Implement error handling
+3. **Create Stimulus polling controller**
+   - File: `app/javascript/controllers/wizard_step_controller.js`
+   - Implement polling with 2-second interval
+   - Update UI elements (progress, status, button)
+   - Handle errors and completion
 
-5. **Write tests**
-   - Controller tests for all actions
-   - Component tests for progress indicator
-   - Manual testing of navigation flow
+### Phase 2: Songs Implementation
 
-6. **Test in browser**
+4. **Create Songs wizard controller**
+   - File: `app/controllers/admin/music/songs/list_wizard_controller.rb`
+   - Include `WizardController`
+   - Define `STEPS` constant
+   - Add step-specific data loading
+   - Add stub job enqueue methods
+
+5. **Create Songs step components**
+   - 7 components in `app/components/admin/music/songs/wizard/`
+   - Each inherits `Wizard::StepComponent`
+   - Implement `title`, `description`, `content`
+   - Create sidecar `.html.erb` templates
+
+6. **Create main wizard view**
+   - File: `app/views/admin/music/songs/list_wizard/show_step.html.erb`
+   - Render `Wizard::BaseComponent` with slots
+   - Pass step component to content slot
+   - Setup Turbo Frame
+
+### Phase 3: Testing & Validation
+
+7. **Write controller tests**
+   - All 6 actions covered
+   - State transitions validated
+   - JSON responses validated against schema
+
+8. **Write component tests**
+   - All base components tested
+   - Slot rendering verified
+   - Conditional logic tested
+
+9. **Manual browser testing**
    - Navigate through all steps
-   - Verify progress indicator updates
-   - Verify back/forward navigation works
-   - Verify restart works
+   - Verify polling updates
+   - Test back/forward navigation
+   - Test restart functionality
+   - Verify mobile responsiveness
+
+---
 
 ## Dependencies
 
 ### Depends On
-- [086] Infrastructure (wizard_state, routes, model helpers)
+- [086] Infrastructure (wizard_state, routes, model helpers) ✅ Complete
 
 ### Needed By
-- [088] Step 1: Parse (uses wizard shell)
-- [089] Step 2: Enrich (uses wizard shell)
-- [090] Step 3: Validation (uses wizard shell)
-- [091] Step 4: Review UI (uses wizard shell)
-- [093] Step 5: Import (uses wizard shell)
+- [088] Step 0: Import Source Choice
+- [089] Step 1: Parse HTML
+- [090] Step 2: Enrich
+- [091] Step 3: Validation
+- [092] Step 4: Review UI
+- [093] Step 4: Actions
+- [094] Step 5: Import
 
-## Validation
+### Future Reuse
+- Books list wizard (future task)
+- Movies list wizard (future task)
+- Games list wizard (future task)
 
-- [ ] Wizard controller exists and responds to all routes
+---
+
+## Validation Checklist
+
+- [ ] `WizardController` concern exists and tested
+- [ ] All 4 base ViewComponents exist and tested
+- [ ] Polling Stimulus controller exists and functional
+- [ ] Songs wizard controller includes `WizardController`
+- [ ] All 7 song step components exist
+- [ ] Routes accessible via `bin/rails routes | grep wizard`
 - [ ] Can navigate to wizard from list show page
-- [ ] Progress indicator renders correctly
-- [ ] Can navigate forward through steps
-- [ ] Can navigate backward through steps
-- [ ] Status endpoint returns JSON
-- [ ] Polling controller starts on connect
-- [ ] Polling controller stops on disconnect
-- [ ] All tests pass
+- [ ] Step transitions work with Turbo Frame (no full reload)
+- [ ] Progress indicator updates correctly
+- [ ] Back/next buttons enable/disable correctly
+- [ ] Polling updates progress bar
+- [ ] Status endpoint returns valid JSON
+- [ ] All tests pass (100% coverage)
+- [ ] Mobile responsive
+
+---
 
 ## Related Tasks
 
 - **Previous**: [086] Song Wizard Infrastructure
-- **Next**: [088] Song Step 1: Parse
+- **Next**: [088] Song Step 0: Import Source Choice
 - **Reference**: `docs/todos/086-polling-approach-summary.md`
+
+---
+
+## Agent Hand-Off
+
+### Constraints
+- Follow existing project patterns (ViewComponents, Stimulus, concerns)
+- Do not duplicate authoritative code; **link to files by path**
+- Respect snippet budget (≤40 lines per snippet)
+- Build reusable infrastructure first, then Songs implementation
+- Use Turbo Frames for navigation, polling for progress
+
+### Required Outputs
+- Updated files (paths listed in "File Structure" section)
+- Passing tests for all new components and controller
+- Updated sections: "Implementation Notes", "Deviations", "Documentation Updated"
+
+### Sub-Agent Plan
+1. **codebase-pattern-finder** → Find existing ViewComponent and Stimulus patterns
+2. **codebase-analyzer** → Understand List model, wizard_state structure
+3. **web-search-researcher** → Turbo Frame best practices (if needed)
+4. **technical-writer** → Update docs after implementation
+
+### Test Seed / Fixtures
+- Use existing `lists(:music_songs_list)` fixture from task 086
+- May need additional fixtures for wizard_state variations (in_progress, completed, failed)
+
+---
 
 ## Implementation Notes
 
 *To be filled during implementation*
 
+---
+
 ## Deviations from Plan
 
 *To be filled if implementation differs from spec*
 
+---
+
 ## Documentation Updated
 
 - [ ] This task file updated with implementation notes
-- [ ] Controller follows existing admin controller patterns
-- [ ] Views follow DaisyUI component conventions
+- [ ] WizardController concern documented
+- [ ] Base ViewComponents documented
+- [ ] Songs wizard controller documented
+- [ ] Step components documented
