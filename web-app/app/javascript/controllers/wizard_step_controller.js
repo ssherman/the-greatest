@@ -35,7 +35,7 @@ export default class extends Controller {
   async checkJobStatus() {
     try {
       const response = await fetch(
-        `/admin/music/songs/lists/${this.listIdValue}/wizard/step/${this.stepNameValue}/status`,
+        `/admin/songs/lists/${this.listIdValue}/wizard/step/${this.stepNameValue}/status`,
         {
           headers: {
             'Accept': 'application/json',

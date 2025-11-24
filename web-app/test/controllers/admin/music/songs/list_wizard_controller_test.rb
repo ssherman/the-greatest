@@ -44,14 +44,14 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     assert_equal({"total_items" => 100}, json_response["metadata"])
   end
 
-  test "should advance to next step" do
-    @list.update!(wizard_state: {"current_step" => 0})
+  test "should advance to next step for non-source steps" do
+    @list.update!(wizard_state: {"current_step" => 1, "import_source" => "custom_html"})
 
-    post advance_step_admin_songs_list_wizard_path(list_id: @list.id, step: "source")
+    post advance_step_admin_songs_list_wizard_path(list_id: @list.id, step: "parse")
 
     @list.reload
-    assert_equal 1, @list.wizard_current_step
-    assert_redirected_to step_admin_songs_list_wizard_path(list_id: @list.id, step: "parse")
+    assert_equal 2, @list.wizard_current_step
+    assert_redirected_to step_admin_songs_list_wizard_path(list_id: @list.id, step: "enrich")
   end
 
   test "should go back to previous step" do
@@ -102,5 +102,79 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
 
     assert_response :redirect
     assert_match %r{/admin/songs/lists/#{@list.id}/wizard}, response.location
+  end
+
+  test "source step shows import source choice" do
+    get step_admin_songs_list_wizard_path(list_id: @list.id, step: "source")
+
+    assert_response :success
+    assert_select "input[type='radio'][name='import_source']", count: 2
+  end
+
+  test "advancing from source with custom_html goes to parse step" do
+    @list.update!(wizard_state: {"current_step" => 0})
+
+    post advance_step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "source",
+      import_source: "custom_html"
+    )
+
+    @list.reload
+    assert_equal 1, @list.wizard_current_step
+    assert_equal "custom_html", @list.wizard_state["import_source"]
+    assert_redirected_to step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "parse"
+    )
+  end
+
+  test "advancing from source with musicbrainz_series goes to import step" do
+    @list.update!(wizard_state: {"current_step" => 0})
+
+    post advance_step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "source",
+      import_source: "musicbrainz_series"
+    )
+
+    @list.reload
+    assert_equal 5, @list.wizard_current_step
+    assert_equal "musicbrainz_series", @list.wizard_state["import_source"]
+    assert_redirected_to step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "import"
+    )
+  end
+
+  test "advancing from source without selection shows error" do
+    @list.update!(wizard_state: {"current_step" => 0})
+
+    post advance_step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "source"
+    )
+
+    @list.reload
+    assert_equal 0, @list.wizard_current_step
+    assert_response :redirect
+    assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/source}, response.location
+    assert_equal "Please select an import source", flash[:alert]
+  end
+
+  test "advancing from source with invalid selection shows error" do
+    @list.update!(wizard_state: {"current_step" => 0})
+
+    post advance_step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "source",
+      import_source: "invalid_option"
+    )
+
+    @list.reload
+    assert_equal 0, @list.wizard_current_step
+    assert_response :redirect
+    assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/source}, response.location
+    assert_equal "Please select an import source", flash[:alert]
   end
 end

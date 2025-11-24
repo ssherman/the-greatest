@@ -5,6 +5,14 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
 
   STEPS = %w[source parse enrich validate review import complete].freeze
 
+  def advance_step
+    if params[:step] == "source"
+      advance_from_source_step
+    else
+      super
+    end
+  end
+
   protected
 
   def wizard_steps
@@ -89,5 +97,28 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
   end
 
   def enqueue_import_job
+  end
+
+  def advance_from_source_step
+    import_source = params[:import_source]
+
+    unless %w[custom_html musicbrainz_series].include?(import_source)
+      flash[:alert] = "Please select an import source"
+      redirect_to action: :show_step, step: "source"
+      return
+    end
+
+    next_step_index = if import_source == "musicbrainz_series"
+      5
+    else
+      1
+    end
+
+    wizard_entity.update!(wizard_state: wizard_entity.wizard_state.merge(
+      "current_step" => next_step_index,
+      "import_source" => import_source
+    ))
+
+    redirect_to action: :show_step, step: wizard_steps[next_step_index]
   end
 end
