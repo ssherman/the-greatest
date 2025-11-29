@@ -107,32 +107,32 @@ class List < ApplicationRecord
   end
 
   def wizard_current_step
-    wizard_state.fetch("current_step", 0)
+    safe_wizard_state.fetch("current_step", 0)
   end
 
   def wizard_job_status
-    wizard_state.fetch("job_status", "idle")
+    safe_wizard_state.fetch("job_status", "idle")
   end
 
   def wizard_job_progress
-    wizard_state.fetch("job_progress", 0)
+    safe_wizard_state.fetch("job_progress", 0)
   end
 
   def wizard_job_error
-    wizard_state.fetch("job_error", nil)
+    safe_wizard_state.fetch("job_error", nil)
   end
 
   def wizard_job_metadata
-    wizard_state.fetch("job_metadata", {})
+    safe_wizard_state.fetch("job_metadata", {})
   end
 
   def wizard_in_progress?
-    wizard_state.fetch("started_at", nil).present? &&
-      wizard_state.fetch("completed_at", nil).nil?
+    safe_wizard_state.fetch("started_at", nil).present? &&
+      safe_wizard_state.fetch("completed_at", nil).nil?
   end
 
   def update_wizard_job_status(status:, progress: nil, error: nil, metadata: {})
-    new_state = wizard_state.merge({
+    new_state = safe_wizard_state.merge({
       "job_status" => status,
       "job_progress" => progress || wizard_job_progress,
       "job_error" => error,
@@ -156,6 +156,10 @@ class List < ApplicationRecord
   end
 
   private
+
+  def safe_wizard_state
+    wizard_state || {}
+  end
 
   def should_simplify_html?
     raw_html.present? && (new_record? || raw_html_changed?)

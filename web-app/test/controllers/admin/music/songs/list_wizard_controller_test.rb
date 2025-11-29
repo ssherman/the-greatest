@@ -45,13 +45,13 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
   end
 
   test "should advance to next step for non-source steps" do
-    @list.update!(wizard_state: {"current_step" => 1, "import_source" => "custom_html"})
+    @list.update!(wizard_state: {"current_step" => 2, "import_source" => "custom_html", "job_status" => "idle"})
 
-    post advance_step_admin_songs_list_wizard_path(list_id: @list.id, step: "parse")
+    post advance_step_admin_songs_list_wizard_path(list_id: @list.id, step: "enrich")
 
     @list.reload
-    assert_equal 2, @list.wizard_current_step
-    assert_redirected_to step_admin_songs_list_wizard_path(list_id: @list.id, step: "enrich")
+    assert_equal 3, @list.wizard_current_step
+    assert_redirected_to step_admin_songs_list_wizard_path(list_id: @list.id, step: "validate")
   end
 
   test "should go back to previous step" do
@@ -176,5 +176,56 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     assert_response :redirect
     assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/source}, response.location
     assert_equal "Please select an import source", flash[:alert]
+  end
+
+  test "parse step loads HTML preview" do
+    @list.update!(raw_html: "Test HTML content")
+    get step_admin_songs_list_wizard_path(list_id: @list.id, step: "parse")
+
+    assert_response :success
+    assert_match "Test HTML", response.body
+  end
+
+  test "advancing from parse step enqueues job when idle" do
+    @list.update!(wizard_state: {"current_step" => 1, "job_status" => "idle"})
+
+    Music::Songs::WizardParseListJob.expects(:perform_async).with(@list.id).once
+
+    post advance_step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "parse"
+    )
+
+    assert_response :redirect
+    assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/parse}, response.location
+    assert_match(/notice=Parsing\+started/, response.location)
+  end
+
+  test "advancing from parse step proceeds when job completed" do
+    @list.update!(wizard_state: {"current_step" => 1, "job_status" => "completed"})
+
+    post advance_step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "parse"
+    )
+
+    @list.reload
+    assert_equal 2, @list.wizard_current_step
+    assert_redirected_to step_admin_songs_list_wizard_path(list_id: @list.id, step: "enrich")
+  end
+
+  test "advancing from parse step blocks when job running" do
+    @list.update!(wizard_state: {"current_step" => 1, "job_status" => "running"})
+
+    post advance_step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "parse"
+    )
+
+    @list.reload
+    assert_equal 1, @list.wizard_current_step
+    assert_response :redirect
+    assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/parse}, response.location
+    assert_match(/alert=Parsing\+in\+progress/, response.location)
   end
 end

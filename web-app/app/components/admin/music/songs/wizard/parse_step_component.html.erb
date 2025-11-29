@@ -1,46 +1,135 @@
 <%= render(Wizard::StepComponent.new(
   title: "Parse HTML",
-  description: "Parse song data from HTML source",
-  step_number: 2,
+  description: "Extract song information from HTML",
+  step_number: 1,
   active: true
 )) do |step| %>
   <% step.with_step_content do %>
-    <div class="space-y-6"
-         data-controller="wizard-step"
-         data-wizard-step-list-id-value="<%= list.id %>"
-         data-wizard-step-step-name-value="parse">
+    <% if list.raw_html.blank? %>
+      <%# Step 1a: Input HTML %>
+      <%= form_with url: save_html_admin_songs_list_wizard_path(list_id: list.id), method: :post, data: { turbo_frame: "wizard_content" } do |f| %>
+        <div class="space-y-6">
+          <div class="form-control">
+            <label class="label">
+              <span class="label-text font-bold">Paste HTML Content</span>
+            </label>
+            <%= f.text_area :raw_html,
+                rows: 15,
+                placeholder: "Paste the HTML content from your source list here...\n\nFor example:\n<ol>\n  <li>Song Title - Artist Name</li>\n  <li>Another Song - Another Artist</li>\n</ol>",
+                class: "textarea textarea-bordered w-full font-mono text-sm",
+                required: true %>
+            <label class="label">
+              <span class="label-text-alt">Paste the HTML from a ranked song list. The AI will extract song titles, artists, and other metadata.</span>
+            </label>
+          </div>
 
-      <% if errors.any? %>
-        <div class="alert alert-error">
-          <ul>
-            <% errors.each do |error| %>
-              <li><%= error %></li>
-            <% end %>
-          </ul>
+          <div class="flex gap-3">
+            <%= f.submit "Save & Continue →", class: "btn btn-primary" %>
+          </div>
         </div>
       <% end %>
+    <% else %>
+      <%# Step 1b: Parse existing HTML %>
+      <div <% if list.wizard_job_status == "running" %>
+             data-controller="wizard-step"
+             data-wizard-step-status-url-value="<%= step_status_admin_songs_list_wizard_path(list_id: list.id, step: 'parse') %>"
+             data-wizard-step-step-url-value="<%= step_admin_songs_list_wizard_path(list_id: list.id, step: 'parse') %>"
+           <% end %>>
 
-      <div class="form-control">
-        <label class="label">
-          <span class="label-text font-bold">HTML Content</span>
-        </label>
-        <%= form_with url: { action: :advance_step, step: "parse" }, method: :post do |f| %>
-          <%= f.text_area :html_content,
-              rows: 10,
-              placeholder: "Paste your HTML here...",
-              class: "textarea textarea-bordered w-full font-mono text-sm" %>
+        <div class="card bg-base-200 mb-6">
+          <div class="card-body">
+            <h3 class="card-title text-sm">HTML Preview</h3>
+            <pre class="text-xs overflow-x-auto"><%= raw_html_preview %></pre>
+            <% if list.raw_html.length > 500 %>
+              <p class="text-xs text-base-content/70">... (truncated)</p>
+            <% end %>
+          </div>
+        </div>
 
-          <div class="progress w-full mt-4 hidden" data-wizard-step-target="progressBar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-            <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%">
-              <span class="progress-text">0%</span>
+        <% if list.wizard_job_status == "completed" && parsed_count > 0 %>
+          <%# Show parsed results %>
+          <div class="alert alert-success mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <div>
+              <h3 class="font-bold">Parsing Complete!</h3>
+              <div class="text-sm">Successfully parsed <%= parsed_count %> <%= "item".pluralize(parsed_count) %></div>
             </div>
           </div>
 
-          <div class="mt-2 text-sm text-base-content/70" data-wizard-step-target="statusText">
-            Ready to parse
+          <%# Show all parsed items in scrollable container %>
+          <% all_items = list.list_items.unverified.order(:position) %>
+          <% if all_items.any? %>
+            <div class="card bg-base-100 border mb-6">
+              <div class="card-body">
+                <h3 class="card-title text-sm">Parsed Items (<%= parsed_count %>)</h3>
+                <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                  <table class="table table-sm table-pin-rows">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Title</th>
+                        <th>Artists</th>
+                        <th>Album</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <% all_items.each do |item| %>
+                        <tr>
+                          <td><%= item.position %></td>
+                          <td><%= item.metadata["title"] %></td>
+                          <td><%= Array(item.metadata["artists"]).join(", ") %></td>
+                          <td><%= item.metadata["album"] || "-" %></td>
+                        </tr>
+                      <% end %>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          <% end %>
+        <% else %>
+          <%# Show progress/status when not completed %>
+          <div class="mb-6">
+            <div class="flex justify-between items-center mb-2">
+              <span class="text-sm font-medium" data-wizard-step-target="statusText">
+                <%= helpers.job_status_text(list) %>
+              </span>
+              <span class="text-sm text-base-content/70">
+                <%= list.wizard_job_progress %>%
+              </span>
+            </div>
+            <progress
+              class="progress progress-primary w-full"
+              value="<%= list.wizard_job_progress %>"
+              max="100"
+              data-wizard-step-target="progressBar">
+            </progress>
           </div>
+
+          <% if list.wizard_job_error.present? %>
+            <div class="alert alert-error mb-6">
+              <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              <span><%= list.wizard_job_error %></span>
+            </div>
+          <% end %>
         <% end %>
+
+        <div class="flex gap-3 items-center">
+          <% if list.wizard_job_status == "idle" || list.wizard_job_status == "failed" %>
+            <%= button_to "Start Parsing",
+                advance_step_admin_songs_list_wizard_path(list_id: list.id, step: "parse"),
+                method: :post,
+                class: "btn btn-primary",
+                data: {turbo_frame: "wizard_content"} %>
+          <% elsif list.wizard_job_status == "completed" %>
+            <%= button_to "Re-parse HTML",
+                reparse_admin_songs_list_wizard_path(list_id: list.id),
+                method: :post,
+                class: "btn btn-outline btn-sm",
+                data: {turbo_frame: "wizard_content", confirm: "This will delete existing parsed items and re-parse the HTML. Continue?"} %>
+          <% end %>
+        </div>
       </div>
-    </div>
+    <% end %>
   <% end %>
 <% end %>

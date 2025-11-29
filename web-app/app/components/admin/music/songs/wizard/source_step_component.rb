@@ -10,7 +10,7 @@ class Admin::Music::Songs::Wizard::SourceStepComponent < ViewComponent::Base
   end
 
   def default_import_source
-    return list.wizard_state["import_source"] if list.wizard_state["import_source"].present?
+    return list.wizard_state["import_source"] if list.wizard_state&.[]("import_source").present?
     return "musicbrainz_series" if musicbrainz_available?
     nil
   end

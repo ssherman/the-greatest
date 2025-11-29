@@ -39,7 +39,7 @@ module Admin::Music::Songs::ListWizardHelper
   def step_ready_to_advance?(step_name, list)
     case step_name
     when "source"
-      list.wizard_state["import_source"].present?
+      list.wizard_state&.[]("import_source").present?
     when "complete"
       false
     else
@@ -52,6 +52,16 @@ module Admin::Music::Songs::ListWizardHelper
     when "review" then "Import →"
     when "import" then "Complete →"
     else "Next →"
+    end
+  end
+
+  def job_status_text(list)
+    case list.wizard_job_status
+    when "idle" then "Ready to parse"
+    when "running" then "Parsing HTML..."
+    when "completed" then "Complete! Parsed #{list.wizard_job_metadata["total_items"] || 0} items"
+    when "failed" then "Parsing failed"
+    else "Unknown status"
     end
   end
 end

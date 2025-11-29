@@ -33,11 +33,11 @@ module WizardController
     next_step_index = current_step_index + 1
 
     if next_step_index < wizard_steps.length
-      wizard_entity.update!(wizard_state: wizard_entity.wizard_state.merge("current_step" => next_step_index))
+      wizard_entity.update!(wizard_state: (wizard_entity.wizard_state || {}).merge("current_step" => next_step_index))
       enqueue_step_job(wizard_steps[next_step_index]) if should_enqueue_job?(wizard_steps[next_step_index])
       redirect_to action: :show_step, step: wizard_steps[next_step_index]
     else
-      wizard_entity.update!(wizard_state: wizard_entity.wizard_state.merge("completed_at" => Time.current.iso8601))
+      wizard_entity.update!(wizard_state: (wizard_entity.wizard_state || {}).merge("completed_at" => Time.current.iso8601))
       redirect_to action: :show_step, step: wizard_steps.last
     end
   end
@@ -46,7 +46,7 @@ module WizardController
     current_step_index = wizard_steps.index(params[:step])
     previous_step_index = [current_step_index - 1, 0].max
 
-    wizard_entity.update!(wizard_state: wizard_entity.wizard_state.merge("current_step" => previous_step_index))
+    wizard_entity.update!(wizard_state: (wizard_entity.wizard_state || {}).merge("current_step" => previous_step_index))
     redirect_to action: :show_step, step: wizard_steps[previous_step_index]
   end
 

@@ -82,6 +82,8 @@ Rails.application.routes.draw do
             get "step/:step/status", action: :step_status, as: :step_status
             post "step/:step/advance", action: :advance_step, as: :advance_step
             post "step/:step/back", action: :back_step, as: :back_step
+            post "save_html", action: :save_html, as: :save_html
+            post "reparse", action: :reparse, as: :reparse
             post "restart", action: :restart
           end
 

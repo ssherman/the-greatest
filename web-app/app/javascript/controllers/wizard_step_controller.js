@@ -2,15 +2,21 @@ import { Controller } from "@hotwired/stimulus"
 
 export default class extends Controller {
   static values = {
-    listId: Number,
-    stepName: String,
-    pollInterval: { type: Number, default: 2000 }
+    pollInterval: { type: Number, default: 2000 },
+    statusUrl: String,
+    stepUrl: String
   }
 
   static targets = ["progressBar", "statusText", "nextButton"]
 
   connect() {
     this.pollTimer = null
+    // Validate required values before starting
+    if (!this.hasStatusUrlValue || !this.hasStepUrlValue) {
+      console.error('wizard-step controller missing required statusUrl or stepUrl values')
+      return
+    }
+    // Controller is only attached when job is running, so start polling immediately
     this.startPolling()
   }
 
@@ -35,7 +41,7 @@ export default class extends Controller {
   async checkJobStatus() {
     try {
       const response = await fetch(
-        `/admin/songs/lists/${this.listIdValue}/wizard/step/${this.stepNameValue}/status`,
+        this.statusUrlValue,
         {
           headers: {
             'Accept': 'application/json',
@@ -54,7 +60,7 @@ export default class extends Controller {
 
       if (data.status === 'completed') {
         this.stopPolling()
-        this.enableNextButton()
+        this.refreshWizardContent()
       }
 
       if (data.status === 'failed') {
@@ -101,5 +107,13 @@ export default class extends Controller {
       <span>${error || 'An error occurred during processing'}</span>
     `
     this.element.appendChild(errorDiv)
+  }
+
+  async refreshWizardContent() {
+    const wizardFrame = document.getElementById('wizard_content')
+    if (wizardFrame) {
+      // Use Turbo to refresh the frame by visiting the current step URL
+      wizardFrame.src = this.stepUrlValue
+    }
   }
 }

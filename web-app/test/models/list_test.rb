@@ -169,6 +169,12 @@ class ListTest < ActiveSupport::TestCase
     assert_equal simplified, list.simplified_html
   end
 
+  test "wizard_current_step returns 0 when wizard_state is nil" do
+    list = lists(:music_songs_list)
+    list.update_column(:wizard_state, nil)
+    assert_equal 0, list.wizard_current_step
+  end
+
   test "wizard_current_step returns 0 when wizard_state is empty" do
     list = lists(:music_songs_list)
     list.update!(wizard_state: {})
@@ -179,6 +185,12 @@ class ListTest < ActiveSupport::TestCase
     list = lists(:music_songs_list)
     list.update!(wizard_state: {"current_step" => 3})
     assert_equal 3, list.wizard_current_step
+  end
+
+  test "wizard_job_status returns idle when wizard_state is nil" do
+    list = lists(:music_songs_list)
+    list.update_column(:wizard_state, nil)
+    assert_equal "idle", list.wizard_job_status
   end
 
   test "wizard_job_status returns idle by default" do
@@ -193,6 +205,12 @@ class ListTest < ActiveSupport::TestCase
     assert_equal "running", list.wizard_job_status
   end
 
+  test "wizard_job_progress returns 0 when wizard_state is nil" do
+    list = lists(:music_songs_list)
+    list.update_column(:wizard_state, nil)
+    assert_equal 0, list.wizard_job_progress
+  end
+
   test "wizard_job_progress returns 0 by default" do
     list = lists(:music_songs_list)
     list.update!(wizard_state: {})
@@ -203,6 +221,12 @@ class ListTest < ActiveSupport::TestCase
     list = lists(:music_songs_list)
     list.update!(wizard_state: {"job_progress" => 75})
     assert_equal 75, list.wizard_job_progress
+  end
+
+  test "wizard_job_error returns nil when wizard_state is nil" do
+    list = lists(:music_songs_list)
+    list.update_column(:wizard_state, nil)
+    assert_nil list.wizard_job_error
   end
 
   test "wizard_job_error returns nil by default" do
@@ -217,6 +241,12 @@ class ListTest < ActiveSupport::TestCase
     assert_equal "Something went wrong", list.wizard_job_error
   end
 
+  test "wizard_job_metadata returns empty hash when wizard_state is nil" do
+    list = lists(:music_songs_list)
+    list.update_column(:wizard_state, nil)
+    assert_equal({}, list.wizard_job_metadata)
+  end
+
   test "wizard_job_metadata returns empty hash by default" do
     list = lists(:music_songs_list)
     list.update!(wizard_state: {})
@@ -227,6 +257,12 @@ class ListTest < ActiveSupport::TestCase
     list = lists(:music_songs_list)
     list.update!(wizard_state: {"job_metadata" => {"total_items" => 100}})
     assert_equal({"total_items" => 100}, list.wizard_job_metadata)
+  end
+
+  test "wizard_in_progress? returns false when wizard_state is nil" do
+    list = lists(:music_songs_list)
+    list.update_column(:wizard_state, nil)
+    assert_not list.wizard_in_progress?
   end
 
   test "wizard_in_progress? returns false when not started" do
@@ -248,6 +284,21 @@ class ListTest < ActiveSupport::TestCase
       "completed_at" => Time.current.iso8601
     })
     assert_not list.wizard_in_progress?
+  end
+
+  test "update_wizard_job_status works when wizard_state is nil" do
+    list = lists(:music_songs_list)
+    list.update_column(:wizard_state, nil)
+
+    list.update_wizard_job_status(
+      status: "running",
+      progress: 50,
+      metadata: {total_items: 100}
+    )
+
+    assert_equal "running", list.wizard_job_status
+    assert_equal 50, list.wizard_job_progress
+    assert_equal({"total_items" => 100}, list.wizard_job_metadata)
   end
 
   test "update_wizard_job_status merges new state" do

@@ -6,9 +6,11 @@
 )) do |step| %>
   <% step.with_step_content do %>
     <div class="space-y-6"
-         data-controller="wizard-step"
-         data-wizard-step-list-id-value="<%= list.id %>"
-         data-wizard-step-step-name-value="enrich">
+         <% if list.wizard_job_status == "running" %>
+           data-controller="wizard-step"
+           data-wizard-step-status-url-value="<%= step_status_admin_songs_list_wizard_path(list_id: list.id, step: 'enrich') %>"
+           data-wizard-step-step-url-value="<%= step_admin_songs_list_wizard_path(list_id: list.id, step: 'enrich') %>"
+         <% end %>>
 
       <div class="alert alert-info">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
