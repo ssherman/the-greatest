@@ -1,9 +1,8 @@
 # The Greatest - Todo List
 
 ## High Priority
-1. [Song List Wizard - Part 4: Step 1 - Parse HTML](todos/089-song-wizard-step-1-parse.md)
-2. [Song List Wizard - Part 5: Step 2 - Enrich](todos/090-song-wizard-step-2-enrich.md)
-3. [Song List Wizard - Part 6: Step 3 - Validation](todos/091-song-wizard-step-3-validation.md)
+1. [Wizard Step-Namespaced Status](todos/090a-wizard-step-namespaced-status.md)
+2. [Song List Wizard - Part 6: Step 3 - Validation](todos/091-song-wizard-step-3-validation.md)
 4. [Song List Wizard - Part 7: Step 4 - Review UI](todos/092-song-wizard-step-4-review.md)
 5. [Song List Wizard - Part 8: Step 4 - Actions](todos/093-song-wizard-step-4-actions.md)
 6. [Song List Wizard - Part 9: Step 5 - Import](todos/094-song-wizard-step-5-import.md)
@@ -27,6 +26,8 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-11-30] [Song List Wizard - Part 5: Step 2 - Enrich](todos/completed/090-song-step-2-enrich.md)
+- ✅ [2025-01-23] [Song List Wizard - Part 4: Step 1 - Parse HTML](todos/completed/089-song-wizard-step-1-parse.md)
 - ✅ [2025-01-23] [Song List Wizard - Part 3: Step 0 - Import Source Choice](todos/completed/088-song-step-0-import-source.md)
 - ✅ [2025-01-23] [Song List Wizard - Part 2: UI Shell & Navigation](todos/completed/087-song-wizard-ui-shell.md)
 - ✅ [2025-01-22] [Song List Wizard - Part 1: Infrastructure](todos/completed/086-song-wizard-infrastructure.md)

@@ -1,7 +1,8 @@
 # [090] - Song Wizard: Step 2 - Enrich
 
 ## Status
-- **Status**: Planned
+- **Status**: Completed
+- **Completed**: 2025-11-30
 - **Priority**: High
 - **Created**: 2025-01-19
 - **Part**: 5 of 10
@@ -1180,21 +1181,46 @@ test "advancing from enrich step blocks when job running"
 
 ## Implementation Notes
 
-*To be filled during implementation*
+### Files Created
+- `app/lib/services/lists/music/songs/list_item_enricher.rb` - Single item enrichment service
+- `app/sidekiq/music/songs/wizard_enrich_list_items_job.rb` - Background job for batch enrichment
+- `test/lib/services/lists/music/songs/list_item_enricher_test.rb` - 13 service tests
+- `test/sidekiq/music/songs/wizard_enrich_list_items_job_test.rb` - 10 job tests
+- `test/components/admin/music/songs/wizard/enrich_step_component_test.rb` - 15 component tests
+
+### Files Modified
+- `app/components/admin/music/songs/wizard/enrich_step_component.rb` - Added helper methods for stats and state
+- `app/components/admin/music/songs/wizard/enrich_step_component.html.erb` - Full UI with 4 states
+- `app/controllers/admin/music/songs/list_wizard_controller.rb` - Added enrich step logic
+- `test/controllers/admin/music/songs/list_wizard_controller_test.rb` - Added 6 new controller tests
+
+### Key Implementation Details
+- Service uses `artists.join(", ")` for MusicBrainz search (matches existing `ItemsJsonEnricher` pattern)
+- Added comprehensive logging for MusicBrainz calls to aid debugging
+- Preview table shows all items (not limited to 10) with scrollable container
+- Job resets previous enrichment data before re-enriching (idempotent)
+- Job status reset to "idle" when advancing between steps
+
+### Test Coverage
+- 60 new/modified tests all passing
+- 2305 total tests passing
 
 ---
 
 ## Deviations from Plan
 
-*To be filled during implementation*
+1. **Preview Table**: Changed from showing 10 items to showing all items with a scrollable container (`max-h-[32rem]`) for better visibility
+2. **Added Logging**: Added detailed INFO/WARN/ERROR logging for MusicBrainz calls to aid debugging connection issues
+3. **Job Status Reset**: Added explicit reset of job status when advancing from parse step to enrich step (not originally specified)
 
 ---
 
 ## Documentation Updated
 
-- [ ] This task file updated with implementation notes
-- [ ] Cross-references updated in related task files
-- [ ] Job documentation created (optional)
+- [x] This task file updated with implementation notes
+- [x] Cross-references updated in related task files
+- [x] Service documentation created at `docs/lib/services/lists/music/songs/list_item_enricher.md`
+- [x] Job documentation created at `docs/sidekiq/music/songs/wizard_enrich_list_items_job.md`
 
 ---
 

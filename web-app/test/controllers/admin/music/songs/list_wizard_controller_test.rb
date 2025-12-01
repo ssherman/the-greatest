@@ -44,14 +44,14 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     assert_equal({"total_items" => 100}, json_response["metadata"])
   end
 
-  test "should advance to next step for non-source steps" do
-    @list.update!(wizard_state: {"current_step" => 2, "import_source" => "custom_html", "job_status" => "idle"})
+  test "should advance to next step for non-job steps" do
+    @list.update!(wizard_state: {"current_step" => 4, "import_source" => "custom_html", "job_status" => "idle"})
 
-    post advance_step_admin_songs_list_wizard_path(list_id: @list.id, step: "enrich")
+    post advance_step_admin_songs_list_wizard_path(list_id: @list.id, step: "review")
 
     @list.reload
-    assert_equal 3, @list.wizard_current_step
-    assert_redirected_to step_admin_songs_list_wizard_path(list_id: @list.id, step: "validate")
+    assert_equal 5, @list.wizard_current_step
+    assert_redirected_to step_admin_songs_list_wizard_path(list_id: @list.id, step: "import")
   end
 
   test "should go back to previous step" do
@@ -227,5 +227,107 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     assert_response :redirect
     assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/parse}, response.location
     assert_match(/alert=Parsing\+in\+progress/, response.location)
+  end
+
+  test "enrich step loads item counts" do
+    @list.list_items.unverified.destroy_all
+    3.times do |i|
+      @list.list_items.create!(
+        listable_type: "Music::Song",
+        verified: false,
+        position: i + 1,
+        metadata: {"title" => "Song #{i + 1}", "artists" => ["Artist"]}
+      )
+    end
+
+    get step_admin_songs_list_wizard_path(list_id: @list.id, step: "enrich")
+
+    assert_response :success
+  end
+
+  test "advancing from enrich step enqueues job when idle" do
+    @list.update!(wizard_state: {"current_step" => 2, "job_status" => "idle"})
+    @list.list_items.unverified.destroy_all
+    @list.list_items.create!(
+      listable_type: "Music::Song",
+      verified: false,
+      position: 1,
+      metadata: {"title" => "Test Song", "artists" => ["Artist"]}
+    )
+
+    Music::Songs::WizardEnrichListItemsJob.expects(:perform_async).with(@list.id).once
+
+    post advance_step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "enrich"
+    )
+
+    assert_response :redirect
+    assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/enrich}, response.location
+    assert_match(/notice=Enrichment\+started/, response.location)
+  end
+
+  test "advancing from enrich step proceeds when job completed" do
+    @list.update!(wizard_state: {"current_step" => 2, "job_status" => "completed"})
+
+    post advance_step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "enrich"
+    )
+
+    @list.reload
+    assert_equal 3, @list.wizard_current_step
+    assert_redirected_to step_admin_songs_list_wizard_path(list_id: @list.id, step: "validate")
+  end
+
+  test "advancing from enrich step blocks when job running" do
+    @list.update!(wizard_state: {"current_step" => 2, "job_status" => "running"})
+
+    post advance_step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "enrich"
+    )
+
+    @list.reload
+    assert_equal 2, @list.wizard_current_step
+    assert_response :redirect
+    assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/enrich}, response.location
+    assert_match(/alert=Enrichment\+in\+progress/, response.location)
+  end
+
+  test "re-enriching from completed state starts new job" do
+    @list.update!(wizard_state: {"current_step" => 2, "job_status" => "completed"})
+
+    Music::Songs::WizardEnrichListItemsJob.expects(:perform_async).with(@list.id).once
+
+    post advance_step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "enrich",
+      reenrich: "true"
+    )
+
+    @list.reload
+    assert_equal "running", @list.wizard_job_status
+    assert_response :redirect
+    assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/enrich}, response.location
+    assert_match(/notice=Re-enrichment\+started/, response.location)
+  end
+
+  test "advancing from enrich step resets job status for next step" do
+    @list.update!(wizard_state: {
+      "current_step" => 2,
+      "job_status" => "completed",
+      "job_progress" => 100,
+      "job_metadata" => {"opensearch_matches" => 5}
+    })
+
+    post advance_step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "enrich"
+    )
+
+    @list.reload
+    assert_equal "idle", @list.wizard_job_status
+    assert_equal 0, @list.wizard_job_progress
   end
 end

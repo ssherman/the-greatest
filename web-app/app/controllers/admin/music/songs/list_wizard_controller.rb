@@ -21,6 +21,8 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
       advance_from_source_step
     elsif params[:step] == "parse"
       advance_from_parse_step
+    elsif params[:step] == "enrich"
+      advance_from_enrich_step
     else
       super
     end
@@ -87,6 +89,10 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
   end
 
   def load_enrich_step_data
+    @unverified_items = @list.list_items.unverified.ordered
+    @total_items = @unverified_items.count
+    @enriched_items = @unverified_items.where.not(listable_id: nil)
+    @enriched_count = @enriched_items.count
   end
 
   def load_validate_step_data
@@ -107,6 +113,7 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
   end
 
   def enqueue_enrich_job
+    Music::Songs::WizardEnrichListItemsJob.perform_async(wizard_entity.id)
   end
 
   def enqueue_validate_job
@@ -149,6 +156,8 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
       next_step_index = current_step_index + 1
 
       if next_step_index < wizard_steps.length
+        # Reset job status for the next step
+        wizard_entity.update_wizard_job_status(status: "idle", progress: 0, error: nil, metadata: {})
         wizard_entity.update!(wizard_state: (wizard_entity.wizard_state || {}).merge("current_step" => next_step_index))
         redirect_to action: :show_step, step: wizard_steps[next_step_index]
       else
@@ -157,6 +166,33 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
       end
     else
       redirect_to action: :show_step, step: "parse", alert: "Parsing in progress, please wait"
+    end
+  end
+
+  def advance_from_enrich_step
+    if params[:reenrich] == "true"
+      # Re-enrich: reset and start again
+      wizard_entity.update_wizard_job_status(status: "running", progress: 0, error: nil, metadata: {})
+      Music::Songs::WizardEnrichListItemsJob.perform_async(wizard_entity.id)
+      redirect_to action: :show_step, step: "enrich", notice: "Re-enrichment started"
+    elsif wizard_entity.wizard_job_status == "idle" || wizard_entity.wizard_job_status == "failed"
+      wizard_entity.update_wizard_job_status(status: "running", progress: 0, error: nil, metadata: {})
+      Music::Songs::WizardEnrichListItemsJob.perform_async(wizard_entity.id)
+      redirect_to action: :show_step, step: "enrich", notice: "Enrichment started"
+    elsif wizard_entity.wizard_job_status == "completed"
+      current_step_index = wizard_steps.index(params[:step])
+      next_step_index = current_step_index + 1
+
+      if next_step_index < wizard_steps.length
+        wizard_entity.update_wizard_job_status(status: "idle", progress: 0, error: nil, metadata: {})
+        wizard_entity.update!(wizard_state: (wizard_entity.wizard_state || {}).merge("current_step" => next_step_index))
+        redirect_to action: :show_step, step: wizard_steps[next_step_index]
+      else
+        wizard_entity.update!(wizard_state: (wizard_entity.wizard_state || {}).merge("completed_at" => Time.current.iso8601))
+        redirect_to action: :show_step, step: wizard_steps.last
+      end
+    else
+      redirect_to action: :show_step, step: "enrich", alert: "Enrichment in progress, please wait"
     end
   end
 end
