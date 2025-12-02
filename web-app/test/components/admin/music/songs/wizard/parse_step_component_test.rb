@@ -8,6 +8,21 @@ class Admin::Music::Songs::Wizard::ParseStepComponentTest < ViewComponent::TestC
     @list.update!(raw_html: "Sample HTML content for testing")
   end
 
+  # Helper to set step-namespaced wizard state for parse step
+  def set_parse_state(status:, progress: 0, error: nil, metadata: {})
+    @list.update!(wizard_state: {
+      "current_step" => 1,
+      "steps" => {
+        "parse" => {
+          "status" => status,
+          "progress" => progress,
+          "error" => error,
+          "metadata" => metadata
+        }
+      }
+    })
+  end
+
   test "renders HTML preview" do
     render_inline(Admin::Music::Songs::Wizard::ParseStepComponent.new(list: @list))
 
@@ -16,7 +31,7 @@ class Admin::Music::Songs::Wizard::ParseStepComponentTest < ViewComponent::TestC
   end
 
   test "renders progress bar with current progress" do
-    @list.update!(wizard_state: {"job_progress" => 50})
+    set_parse_state(status: "running", progress: 50)
 
     render_inline(Admin::Music::Songs::Wizard::ParseStepComponent.new(list: @list))
 
@@ -24,7 +39,7 @@ class Admin::Music::Songs::Wizard::ParseStepComponentTest < ViewComponent::TestC
   end
 
   test "renders Start Parsing button when job idle" do
-    @list.update!(wizard_state: {"job_status" => "idle"})
+    set_parse_state(status: "idle")
 
     render_inline(Admin::Music::Songs::Wizard::ParseStepComponent.new(list: @list))
 
@@ -32,7 +47,7 @@ class Admin::Music::Songs::Wizard::ParseStepComponentTest < ViewComponent::TestC
   end
 
   test "does not render Start Parsing button when job running" do
-    @list.update!(wizard_state: {"job_status" => "running"})
+    set_parse_state(status: "running")
 
     render_inline(Admin::Music::Songs::Wizard::ParseStepComponent.new(list: @list))
 
@@ -40,7 +55,7 @@ class Admin::Music::Songs::Wizard::ParseStepComponentTest < ViewComponent::TestC
   end
 
   test "renders error message when job failed" do
-    @list.update!(wizard_state: {"job_status" => "failed", "job_error" => "Test error message"})
+    set_parse_state(status: "failed", error: "Test error message")
 
     render_inline(Admin::Music::Songs::Wizard::ParseStepComponent.new(list: @list))
 
@@ -49,7 +64,7 @@ class Admin::Music::Songs::Wizard::ParseStepComponentTest < ViewComponent::TestC
   end
 
   test "uses wizard-step controller when job is running" do
-    @list.update!(wizard_state: {"job_status" => "running"})
+    set_parse_state(status: "running")
 
     render_inline(Admin::Music::Songs::Wizard::ParseStepComponent.new(list: @list))
 
@@ -57,7 +72,7 @@ class Admin::Music::Songs::Wizard::ParseStepComponentTest < ViewComponent::TestC
   end
 
   test "does not use wizard-step controller when job is idle" do
-    @list.update!(wizard_state: {"job_status" => "idle"})
+    set_parse_state(status: "idle")
 
     render_inline(Admin::Music::Songs::Wizard::ParseStepComponent.new(list: @list))
 
@@ -65,7 +80,7 @@ class Admin::Music::Songs::Wizard::ParseStepComponentTest < ViewComponent::TestC
   end
 
   test "displays status text for idle job" do
-    @list.update!(wizard_state: {"job_status" => "idle"})
+    set_parse_state(status: "idle")
 
     render_inline(Admin::Music::Songs::Wizard::ParseStepComponent.new(list: @list))
 
@@ -73,7 +88,7 @@ class Admin::Music::Songs::Wizard::ParseStepComponentTest < ViewComponent::TestC
   end
 
   test "displays status text for running job" do
-    @list.update!(wizard_state: {"job_status" => "running"})
+    set_parse_state(status: "running")
 
     render_inline(Admin::Music::Songs::Wizard::ParseStepComponent.new(list: @list))
 
@@ -81,11 +96,11 @@ class Admin::Music::Songs::Wizard::ParseStepComponentTest < ViewComponent::TestC
   end
 
   test "displays success message for completed job with parsed items" do
-    @list.update!(wizard_state: {
-      "job_status" => "completed",
-      "job_progress" => 100,
-      "job_metadata" => {"total_items" => 42}
-    })
+    set_parse_state(
+      status: "completed",
+      progress: 100,
+      metadata: {"total_items" => 42}
+    )
     # Create some unverified list items to show the parsed count
     @list.list_items.unverified.destroy_all
     5.times do |i|

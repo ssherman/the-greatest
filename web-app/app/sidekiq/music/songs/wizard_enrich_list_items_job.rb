@@ -13,7 +13,7 @@ class Music::Songs::WizardEnrichListItemsJob
       return
     end
 
-    @list.update_wizard_job_status(status: "running", progress: 0, metadata: {
+    @list.update_wizard_step_status(step: "enrich", status: "running", progress: 0, metadata: {
       "processed_items" => 0,
       "total_items" => @total,
       "opensearch_matches" => 0,
@@ -76,7 +76,8 @@ class Music::Songs::WizardEnrichListItemsJob
   def update_progress(processed)
     progress_percent = ((processed.to_f / @total) * 100).round
 
-    @list.update_wizard_job_status(
+    @list.update_wizard_step_status(
+      step: "enrich",
       status: "running",
       progress: progress_percent,
       metadata: {
@@ -93,7 +94,8 @@ class Music::Songs::WizardEnrichListItemsJob
   end
 
   def complete_job
-    @list.update_wizard_job_status(
+    @list.update_wizard_step_status(
+      step: "enrich",
       status: "completed",
       progress: 100,
       metadata: {
@@ -111,7 +113,8 @@ class Music::Songs::WizardEnrichListItemsJob
   end
 
   def handle_error(error_message)
-    @list.update_wizard_job_status(
+    @list.update_wizard_step_status(
+      step: "enrich",
       status: "failed",
       progress: 0,
       error: error_message

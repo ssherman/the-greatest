@@ -9,7 +9,7 @@ class Music::Songs::WizardParseListJob
       return
     end
 
-    list.update_wizard_job_status(status: "running", progress: 0)
+    list.update_wizard_step_status(step: "parse", status: "running", progress: 0)
 
     list.list_items.unverified.destroy_all
 
@@ -42,7 +42,8 @@ class Music::Songs::WizardParseListJob
 
     ListItem.insert_all(list_items_attrs) if list_items_attrs.any?
 
-    list.update_wizard_job_status(
+    list.update_wizard_step_status(
+      step: "parse",
       status: "completed",
       progress: 100,
       metadata: {total_items: songs.count, parsed_at: Time.current.iso8601}
@@ -61,7 +62,8 @@ class Music::Songs::WizardParseListJob
   private
 
   def handle_error(list, error_message)
-    list.update_wizard_job_status(
+    list.update_wizard_step_status(
+      step: "parse",
       status: "failed",
       progress: 0,
       error: error_message

@@ -12,8 +12,20 @@ class Admin::Music::Songs::Wizard::EnrichStepComponent < ViewComponent::Base
 
   attr_reader :list, :unverified_items, :total_items, :enriched_count
 
+  def enrich_status
+    list.wizard_step_status("enrich")
+  end
+
+  def enrich_progress
+    list.wizard_step_progress("enrich")
+  end
+
+  def enrich_error
+    list.wizard_step_error("enrich")
+  end
+
   def job_metadata
-    list.wizard_job_metadata
+    list.wizard_step_metadata("enrich")
   end
 
   def opensearch_matches
@@ -46,18 +58,18 @@ class Admin::Music::Songs::Wizard::EnrichStepComponent < ViewComponent::Base
   end
 
   def idle_or_failed?
-    %w[idle failed].include?(list.wizard_job_status)
+    %w[idle failed].include?(enrich_status)
   end
 
   def running?
-    list.wizard_job_status == "running"
+    enrich_status == "running"
   end
 
   def completed?
-    list.wizard_job_status == "completed"
+    enrich_status == "completed"
   end
 
   def failed?
-    list.wizard_job_status == "failed"
+    enrich_status == "failed"
   end
 end

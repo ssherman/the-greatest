@@ -26,11 +26,17 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
   end
 
   test "should return status as JSON" do
+    # Use step-namespaced structure
     @list.update!(wizard_state: {
-      "job_status" => "running",
-      "job_progress" => 50,
-      "job_error" => nil,
-      "job_metadata" => {"total_items" => 100}
+      "current_step" => 1,
+      "steps" => {
+        "parse" => {
+          "status" => "running",
+          "progress" => 50,
+          "error" => nil,
+          "metadata" => {"total_items" => 100}
+        }
+      }
     })
 
     get step_status_admin_songs_list_wizard_path(list_id: @list.id, step: "parse", format: :json)
@@ -187,7 +193,11 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
   end
 
   test "advancing from parse step enqueues job when idle" do
-    @list.update!(wizard_state: {"current_step" => 1, "job_status" => "idle"})
+    # Use step-namespaced structure - parse status is idle
+    @list.update!(wizard_state: {
+      "current_step" => 1,
+      "steps" => {"parse" => {"status" => "idle", "progress" => 0}}
+    })
 
     Music::Songs::WizardParseListJob.expects(:perform_async).with(@list.id).once
 
@@ -202,7 +212,11 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
   end
 
   test "advancing from parse step proceeds when job completed" do
-    @list.update!(wizard_state: {"current_step" => 1, "job_status" => "completed"})
+    # Use step-namespaced structure - parse status is completed
+    @list.update!(wizard_state: {
+      "current_step" => 1,
+      "steps" => {"parse" => {"status" => "completed", "progress" => 100}}
+    })
 
     post advance_step_admin_songs_list_wizard_path(
       list_id: @list.id,
@@ -215,7 +229,11 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
   end
 
   test "advancing from parse step blocks when job running" do
-    @list.update!(wizard_state: {"current_step" => 1, "job_status" => "running"})
+    # Use step-namespaced structure - parse status is running
+    @list.update!(wizard_state: {
+      "current_step" => 1,
+      "steps" => {"parse" => {"status" => "running", "progress" => 50}}
+    })
 
     post advance_step_admin_songs_list_wizard_path(
       list_id: @list.id,
@@ -246,7 +264,11 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
   end
 
   test "advancing from enrich step enqueues job when idle" do
-    @list.update!(wizard_state: {"current_step" => 2, "job_status" => "idle"})
+    # Use step-namespaced structure - enrich status is idle
+    @list.update!(wizard_state: {
+      "current_step" => 2,
+      "steps" => {"enrich" => {"status" => "idle", "progress" => 0}}
+    })
     @list.list_items.unverified.destroy_all
     @list.list_items.create!(
       listable_type: "Music::Song",
@@ -268,7 +290,11 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
   end
 
   test "advancing from enrich step proceeds when job completed" do
-    @list.update!(wizard_state: {"current_step" => 2, "job_status" => "completed"})
+    # Use step-namespaced structure - enrich status is completed
+    @list.update!(wizard_state: {
+      "current_step" => 2,
+      "steps" => {"enrich" => {"status" => "completed", "progress" => 100}}
+    })
 
     post advance_step_admin_songs_list_wizard_path(
       list_id: @list.id,
@@ -281,7 +307,11 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
   end
 
   test "advancing from enrich step blocks when job running" do
-    @list.update!(wizard_state: {"current_step" => 2, "job_status" => "running"})
+    # Use step-namespaced structure - enrich status is running
+    @list.update!(wizard_state: {
+      "current_step" => 2,
+      "steps" => {"enrich" => {"status" => "running", "progress" => 50}}
+    })
 
     post advance_step_admin_songs_list_wizard_path(
       list_id: @list.id,
@@ -296,7 +326,11 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
   end
 
   test "re-enriching from completed state starts new job" do
-    @list.update!(wizard_state: {"current_step" => 2, "job_status" => "completed"})
+    # Use step-namespaced structure - enrich status is completed
+    @list.update!(wizard_state: {
+      "current_step" => 2,
+      "steps" => {"enrich" => {"status" => "completed", "progress" => 100}}
+    })
 
     Music::Songs::WizardEnrichListItemsJob.expects(:perform_async).with(@list.id).once
 
@@ -307,18 +341,24 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     )
 
     @list.reload
-    assert_equal "running", @list.wizard_job_status
+    assert_equal "running", @list.wizard_step_status("enrich")
     assert_response :redirect
     assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/enrich}, response.location
     assert_match(/notice=Re-enrichment\+started/, response.location)
   end
 
-  test "advancing from enrich step resets job status for next step" do
+  test "advancing from enrich step preserves enrich status for back navigation" do
+    # With step-namespaced status, advancing should NOT reset the step status
     @list.update!(wizard_state: {
       "current_step" => 2,
-      "job_status" => "completed",
-      "job_progress" => 100,
-      "job_metadata" => {"opensearch_matches" => 5}
+      "steps" => {
+        "enrich" => {
+          "status" => "completed",
+          "progress" => 100,
+          "error" => nil,
+          "metadata" => {"opensearch_matches" => 5}
+        }
+      }
     })
 
     post advance_step_admin_songs_list_wizard_path(
@@ -327,7 +367,10 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     )
 
     @list.reload
-    assert_equal "idle", @list.wizard_job_status
-    assert_equal 0, @list.wizard_job_progress
+    # Enrich status should remain completed (not reset to idle)
+    assert_equal "completed", @list.wizard_step_status("enrich")
+    assert_equal 100, @list.wizard_step_progress("enrich")
+    # New step (validate) should be idle
+    assert_equal "idle", @list.wizard_step_status("validate")
   end
 end

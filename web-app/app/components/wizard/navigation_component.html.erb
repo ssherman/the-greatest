@@ -12,8 +12,8 @@
     <%= button_to "Restart",
         { action: :restart },
         method: :post,
-        class: "btn btn-ghost btn-sm",
-        data: { confirm: "Are you sure you want to restart the wizard? This will reset all progress." } %>
+        class: "btn btn-outline",
+        data: { turbo_confirm: "Are you sure you want to restart the wizard? This will reset all progress." } %>
 
     <% if show_next_button? %>
       <%= button_to next_label,

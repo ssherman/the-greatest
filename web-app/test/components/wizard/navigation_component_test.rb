@@ -5,7 +5,11 @@ require "test_helper"
 class Wizard::NavigationComponentTest < ViewComponent::TestCase
   setup do
     @list = lists(:music_songs_list)
-    @list.update!(wizard_state: {"job_status" => "idle"})
+    # Use step-namespaced structure (legacy wizard_job_status delegates to current step)
+    @list.update!(wizard_state: {
+      "current_step" => 0,
+      "steps" => {"source" => {"status" => "idle"}}
+    })
   end
 
   test "show_back_button? returns true when not on first step" do
@@ -61,7 +65,11 @@ class Wizard::NavigationComponentTest < ViewComponent::TestCase
   end
 
   test "next_button_disabled? returns true when job is running" do
-    @list.update!(wizard_state: {"job_status" => "running"})
+    # Use step-namespaced structure with current_step matching the step_index
+    @list.update!(wizard_state: {
+      "current_step" => 1,  # parse step
+      "steps" => {"parse" => {"status" => "running"}}
+    })
 
     component = Wizard::NavigationComponent.new(
       list: @list,

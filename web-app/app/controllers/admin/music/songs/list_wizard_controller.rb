@@ -11,7 +11,7 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
   end
 
   def reparse
-    wizard_entity.update_wizard_job_status(status: "idle", progress: 0, error: nil, metadata: {})
+    wizard_entity.reset_wizard_step!("parse")
     wizard_entity.list_items.unverified.destroy_all
     redirect_to action: :show_step, step: "parse", notice: "Ready to re-parse. Click 'Start Parsing' to begin."
   end
@@ -123,13 +123,10 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
   end
 
   def advance_from_source_step
-    import_source = params[:import_source]
-
-    unless %w[custom_html musicbrainz_series].include?(import_source)
-      flash[:alert] = "Please select an import source"
-      redirect_to action: :show_step, step: "source"
-      return
-    end
+    # Use provided import_source, or fall back to existing selection, or default to custom_html
+    import_source = params[:import_source].presence ||
+      wizard_entity.wizard_state&.[]("import_source") ||
+      "custom_html"
 
     next_step_index = if import_source == "musicbrainz_series"
       5
@@ -146,18 +143,19 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
   end
 
   def advance_from_parse_step
-    if wizard_entity.wizard_job_status == "idle" || wizard_entity.wizard_job_status == "failed"
+    parse_status = wizard_entity.wizard_step_status("parse")
+
+    if parse_status == "idle" || parse_status == "failed"
       # Set status to running BEFORE enqueuing so the redirect renders with polling enabled
-      wizard_entity.update_wizard_job_status(status: "running", progress: 0)
+      wizard_entity.update_wizard_step_status(step: "parse", status: "running", progress: 0)
       Music::Songs::WizardParseListJob.perform_async(wizard_entity.id)
       redirect_to action: :show_step, step: "parse", notice: "Parsing started"
-    elsif wizard_entity.wizard_job_status == "completed"
+    elsif parse_status == "completed"
       current_step_index = wizard_steps.index(params[:step])
       next_step_index = current_step_index + 1
 
       if next_step_index < wizard_steps.length
-        # Reset job status for the next step
-        wizard_entity.update_wizard_job_status(status: "idle", progress: 0, error: nil, metadata: {})
+        # Only update current_step - preserve parse status for back navigation
         wizard_entity.update!(wizard_state: (wizard_entity.wizard_state || {}).merge("current_step" => next_step_index))
         redirect_to action: :show_step, step: wizard_steps[next_step_index]
       else
@@ -170,21 +168,23 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
   end
 
   def advance_from_enrich_step
+    enrich_status = wizard_entity.wizard_step_status("enrich")
+
     if params[:reenrich] == "true"
-      # Re-enrich: reset and start again
-      wizard_entity.update_wizard_job_status(status: "running", progress: 0, error: nil, metadata: {})
+      # Re-enrich: reset step and start again
+      wizard_entity.update_wizard_step_status(step: "enrich", status: "running", progress: 0, error: nil, metadata: {})
       Music::Songs::WizardEnrichListItemsJob.perform_async(wizard_entity.id)
       redirect_to action: :show_step, step: "enrich", notice: "Re-enrichment started"
-    elsif wizard_entity.wizard_job_status == "idle" || wizard_entity.wizard_job_status == "failed"
-      wizard_entity.update_wizard_job_status(status: "running", progress: 0, error: nil, metadata: {})
+    elsif enrich_status == "idle" || enrich_status == "failed"
+      wizard_entity.update_wizard_step_status(step: "enrich", status: "running", progress: 0, error: nil, metadata: {})
       Music::Songs::WizardEnrichListItemsJob.perform_async(wizard_entity.id)
       redirect_to action: :show_step, step: "enrich", notice: "Enrichment started"
-    elsif wizard_entity.wizard_job_status == "completed"
+    elsif enrich_status == "completed"
       current_step_index = wizard_steps.index(params[:step])
       next_step_index = current_step_index + 1
 
       if next_step_index < wizard_steps.length
-        wizard_entity.update_wizard_job_status(status: "idle", progress: 0, error: nil, metadata: {})
+        # Only update current_step - preserve enrich status for back navigation
         wizard_entity.update!(wizard_state: (wizard_entity.wizard_state || {}).merge("current_step" => next_step_index))
         redirect_to action: :show_step, step: wizard_steps[next_step_index]
       else

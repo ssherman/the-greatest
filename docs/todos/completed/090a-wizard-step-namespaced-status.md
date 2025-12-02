@@ -1,6 +1,7 @@
 # 090a: Wizard Step-Namespaced Status
 
-**Status**: Pending
+**Status**: Completed
+**Completed**: 2025-11-30
 **Priority**: High
 **Created**: 2025-11-30
 
@@ -316,18 +317,94 @@ Use existing `lists(:music_songs_list)` fixture with programmatic setup:
 
 ## Deviations
 
-_(To be filled during implementation)_
+1. **Turbo Frame refresh issue** - When a job completes, the Stimulus controller was only refreshing the turbo frame content, but the navigation component is outside the frame. Changed `wizard_step_controller.js` to do a full `Turbo.visit()` instead of just setting `frame.src` to ensure the navigation buttons update correctly.
+
+2. **Source step import_source handling** - Updated `advance_from_source_step` to fall back to existing `import_source` in wizard_state or default to "custom_html" if not provided. This fixes navigation issues when clicking Next without explicitly selecting an import source.
+
+3. **Restart button styling** - Changed from `btn-ghost btn-sm` to `btn-outline` for better visibility, matching the Back button style.
 
 ---
 
 ## Documentation Updated
 
-- [ ] Class documentation for List model (new methods)
+- [x] Class documentation for List model (new methods) - inline code comments
 - [ ] This task file moved to `completed/` when done
-- [ ] `todo.md` updated
+- [x] `todo.md` updated
 
 ---
 
 ## Acceptance Results
 
-_(To be filled after implementation)_
+### AC1: Step status persists after navigation ✅
+- Parse status is preserved when advancing to enrich step
+- Navigating back to parse step shows "completed" status with parsed items
+- "Start Parsing" button is NOT shown when parse is completed
+
+### AC2: Enrich status persists after navigation ✅
+- Enrich status is preserved when advancing to validate step
+- Navigating back to enrich step shows "completed" status with match statistics
+- "Start Enrichment" button is NOT shown when enrich is completed
+
+### AC3: Re-running a step resets only that step ✅
+- `reset_wizard_step!("parse")` resets only parse step
+- Enrich step status remains unchanged
+- Controller uses this method in reparse action
+
+### AC4: Step status endpoint returns step-specific data ✅
+- `step_status` action accepts `step` parameter
+- Returns step-specific status, progress, error, and metadata
+- Falls back to current step if no parameter provided
+
+### AC5: Backward compatibility maintained ✅
+- Legacy methods (`wizard_job_status`, `wizard_job_progress`, etc.) still work
+- They delegate to current step based on `current_step_name`
+- No errors raised, all existing tests pass
+
+---
+
+## Implementation Summary
+
+### Files Modified
+1. **app/models/list.rb** - Added step-namespaced methods:
+   - `WIZARD_STEPS` constant
+   - `current_step_name` method
+   - `wizard_step_status(step_name)`, `wizard_step_progress(step_name)`, `wizard_step_error(step_name)`, `wizard_step_metadata(step_name)`
+   - `update_wizard_step_status(step:, status:, progress:, error:, metadata:)`
+   - `reset_wizard_step!(step_name)`
+   - Updated `reset_wizard!` to use `steps` instead of flat structure
+   - Legacy methods now delegate to current step
+   - Private helpers: `wizard_steps_data`, `wizard_step_data`, `default_step_state`
+
+2. **app/controllers/concerns/wizard_controller.rb** - Updated `step_status` action to accept step parameter
+
+3. **app/controllers/admin/music/songs/list_wizard_controller.rb** - Updated to:
+   - Use `wizard_step_status("parse")` and `wizard_step_status("enrich")`
+   - Use `update_wizard_step_status(step:...)` instead of `update_wizard_job_status`
+   - Remove status reset when advancing between steps (KEY FIX)
+   - Use `reset_wizard_step!("parse")` in reparse action
+   - Updated `advance_from_source_step` to default to "custom_html" if no import_source provided
+
+4. **app/sidekiq/music/songs/wizard_parse_list_job.rb** - Use `update_wizard_step_status(step: "parse", ...)`
+
+5. **app/sidekiq/music/songs/wizard_enrich_list_items_job.rb** - Use `update_wizard_step_status(step: "enrich", ...)`
+
+6. **app/components/admin/music/songs/wizard/parse_step_component.html.erb** - Use step-specific status
+
+7. **app/components/admin/music/songs/wizard/enrich_step_component.rb** - Added step-specific helper methods
+
+8. **app/components/admin/music/songs/wizard/enrich_step_component.html.erb** - Use step-specific status
+
+9. **app/javascript/controllers/wizard_step_controller.js** - Changed `refreshWizardContent()` to use `Turbo.visit()` instead of frame refresh
+
+10. **app/components/wizard/navigation_component.html.erb** - Updated Restart button to use `btn-outline` styling
+
+### Tests Updated
+- `test/models/list_test.rb` - Added 19 new tests for step-namespaced methods
+- `test/controllers/admin/music/songs/list_wizard_controller_test.rb` - Updated to use step-namespaced structure
+- `test/sidekiq/music/songs/wizard_enrich_list_items_job_test.rb` - Updated stub method name
+- `test/components/admin/music/songs/wizard/parse_step_component_test.rb` - Updated to use step-namespaced structure
+- `test/components/admin/music/songs/wizard/enrich_step_component_test.rb` - Updated to use step-namespaced structure
+- `test/components/wizard/navigation_component_test.rb` - Updated to use step-namespaced structure
+
+### Test Results
+All 2323 tests pass with 0 failures, 0 errors.

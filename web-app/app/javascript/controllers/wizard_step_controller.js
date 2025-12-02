@@ -110,10 +110,9 @@ export default class extends Controller {
   }
 
   async refreshWizardContent() {
-    const wizardFrame = document.getElementById('wizard_content')
-    if (wizardFrame) {
-      // Use Turbo to refresh the frame by visiting the current step URL
-      wizardFrame.src = this.stepUrlValue
-    }
+    // Do a full page visit to ensure navigation component is updated
+    // The navigation component is outside the turbo frame, so a frame-only
+    // refresh would leave the Next button with stale step_name
+    window.Turbo.visit(this.stepUrlValue)
   }
 }

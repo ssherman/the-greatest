@@ -65,7 +65,8 @@ class Music::Songs::WizardEnrichListItemsJobTest < ActiveSupport::TestCase
     Services::Lists::Music::Songs::ListItemEnricher.stubs(:call).returns({success: false, source: :not_found, data: {}})
 
     # Simulate an error after enrichment completes but before final update
-    Music::Songs::List.any_instance.stubs(:update_wizard_job_status).raises(StandardError.new("Database connection error")).then.returns(true)
+    # Job now uses update_wizard_step_status instead of update_wizard_job_status
+    Music::Songs::List.any_instance.stubs(:update_wizard_step_status).raises(StandardError.new("Database connection error")).then.returns(true)
 
     assert_raises(StandardError) do
       Music::Songs::WizardEnrichListItemsJob.new.perform(@list.id)

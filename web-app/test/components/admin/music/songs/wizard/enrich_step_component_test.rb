@@ -17,8 +17,23 @@ class Admin::Music::Songs::Wizard::EnrichStepComponentTest < ViewComponent::Test
     end
   end
 
+  # Helper to set step-namespaced wizard state for enrich step
+  def set_enrich_state(status:, progress: 0, error: nil, metadata: {})
+    @list.update!(wizard_state: {
+      "current_step" => 2,
+      "steps" => {
+        "enrich" => {
+          "status" => status,
+          "progress" => progress,
+          "error" => error,
+          "metadata" => metadata
+        }
+      }
+    })
+  end
+
   test "renders stats cards" do
-    @list.update!(wizard_state: {"job_status" => "idle"})
+    set_enrich_state(status: "idle")
 
     render_inline(Admin::Music::Songs::Wizard::EnrichStepComponent.new(list: @list))
 
@@ -27,11 +42,11 @@ class Admin::Music::Songs::Wizard::EnrichStepComponentTest < ViewComponent::Test
   end
 
   test "renders progress bar with current progress" do
-    @list.update!(wizard_state: {
-      "job_status" => "running",
-      "job_progress" => 50,
-      "job_metadata" => {"processed_items" => 50, "total_items" => 100}
-    })
+    set_enrich_state(
+      status: "running",
+      progress: 50,
+      metadata: {"processed_items" => 50, "total_items" => 100}
+    )
 
     render_inline(Admin::Music::Songs::Wizard::EnrichStepComponent.new(list: @list))
 
@@ -39,7 +54,7 @@ class Admin::Music::Songs::Wizard::EnrichStepComponentTest < ViewComponent::Test
   end
 
   test "renders Start Enrichment button when job idle" do
-    @list.update!(wizard_state: {"job_status" => "idle"})
+    set_enrich_state(status: "idle")
 
     render_inline(Admin::Music::Songs::Wizard::EnrichStepComponent.new(list: @list))
 
@@ -47,7 +62,7 @@ class Admin::Music::Songs::Wizard::EnrichStepComponentTest < ViewComponent::Test
   end
 
   test "does not render Start Enrichment button when job running" do
-    @list.update!(wizard_state: {"job_status" => "running", "job_progress" => 25})
+    set_enrich_state(status: "running", progress: 25)
 
     render_inline(Admin::Music::Songs::Wizard::EnrichStepComponent.new(list: @list))
 
@@ -55,7 +70,7 @@ class Admin::Music::Songs::Wizard::EnrichStepComponentTest < ViewComponent::Test
   end
 
   test "renders error message when job failed" do
-    @list.update!(wizard_state: {"job_status" => "failed", "job_error" => "MusicBrainz API error"})
+    set_enrich_state(status: "failed", error: "MusicBrainz API error")
 
     render_inline(Admin::Music::Songs::Wizard::EnrichStepComponent.new(list: @list))
 
@@ -64,7 +79,7 @@ class Admin::Music::Songs::Wizard::EnrichStepComponentTest < ViewComponent::Test
   end
 
   test "uses wizard-step controller when job is running" do
-    @list.update!(wizard_state: {"job_status" => "running", "job_progress" => 25})
+    set_enrich_state(status: "running", progress: 25)
 
     render_inline(Admin::Music::Songs::Wizard::EnrichStepComponent.new(list: @list))
 
@@ -72,7 +87,7 @@ class Admin::Music::Songs::Wizard::EnrichStepComponentTest < ViewComponent::Test
   end
 
   test "does not use wizard-step controller when job is idle" do
-    @list.update!(wizard_state: {"job_status" => "idle"})
+    set_enrich_state(status: "idle")
 
     render_inline(Admin::Music::Songs::Wizard::EnrichStepComponent.new(list: @list))
 
@@ -80,11 +95,11 @@ class Admin::Music::Songs::Wizard::EnrichStepComponentTest < ViewComponent::Test
   end
 
   test "displays item preview table when completed" do
-    @list.update!(wizard_state: {
-      "job_status" => "completed",
-      "job_progress" => 100,
-      "job_metadata" => {"opensearch_matches" => 2, "musicbrainz_matches" => 1, "not_found" => 0, "total_items" => 3}
-    })
+    set_enrich_state(
+      status: "completed",
+      progress: 100,
+      metadata: {"opensearch_matches" => 2, "musicbrainz_matches" => 1, "not_found" => 0, "total_items" => 3}
+    )
 
     render_inline(Admin::Music::Songs::Wizard::EnrichStepComponent.new(list: @list))
 
@@ -93,16 +108,16 @@ class Admin::Music::Songs::Wizard::EnrichStepComponentTest < ViewComponent::Test
   end
 
   test "shows correct match percentages in stats" do
-    @list.update!(wizard_state: {
-      "job_status" => "completed",
-      "job_progress" => 100,
-      "job_metadata" => {
+    set_enrich_state(
+      status: "completed",
+      progress: 100,
+      metadata: {
         "opensearch_matches" => 6,
         "musicbrainz_matches" => 3,
         "not_found" => 1,
         "total_items" => 10
       }
-    })
+    )
 
     render_inline(Admin::Music::Songs::Wizard::EnrichStepComponent.new(list: @list))
 
@@ -112,7 +127,7 @@ class Admin::Music::Songs::Wizard::EnrichStepComponentTest < ViewComponent::Test
   end
 
   test "renders Retry Enrichment button when job failed" do
-    @list.update!(wizard_state: {"job_status" => "failed", "job_error" => "Error"})
+    set_enrich_state(status: "failed", error: "Error")
 
     render_inline(Admin::Music::Songs::Wizard::EnrichStepComponent.new(list: @list))
 
@@ -120,11 +135,11 @@ class Admin::Music::Songs::Wizard::EnrichStepComponentTest < ViewComponent::Test
   end
 
   test "renders Re-enrich button when completed" do
-    @list.update!(wizard_state: {
-      "job_status" => "completed",
-      "job_progress" => 100,
-      "job_metadata" => {"total_items" => 3}
-    })
+    set_enrich_state(
+      status: "completed",
+      progress: 100,
+      metadata: {"total_items" => 3}
+    )
 
     render_inline(Admin::Music::Songs::Wizard::EnrichStepComponent.new(list: @list))
 
@@ -132,11 +147,11 @@ class Admin::Music::Songs::Wizard::EnrichStepComponentTest < ViewComponent::Test
   end
 
   test "shows success alert when completed" do
-    @list.update!(wizard_state: {
-      "job_status" => "completed",
-      "job_progress" => 100,
-      "job_metadata" => {"total_items" => 3}
-    })
+    set_enrich_state(
+      status: "completed",
+      progress: 100,
+      metadata: {"total_items" => 3}
+    )
 
     render_inline(Admin::Music::Songs::Wizard::EnrichStepComponent.new(list: @list))
 
@@ -145,7 +160,7 @@ class Admin::Music::Songs::Wizard::EnrichStepComponentTest < ViewComponent::Test
   end
 
   test "shows loading indicator when running" do
-    @list.update!(wizard_state: {"job_status" => "running", "job_progress" => 50})
+    set_enrich_state(status: "running", progress: 50)
 
     render_inline(Admin::Music::Songs::Wizard::EnrichStepComponent.new(list: @list))
 
@@ -165,11 +180,11 @@ class Admin::Music::Songs::Wizard::EnrichStepComponentTest < ViewComponent::Test
       "musicbrainz_match" => true
     })
 
-    @list.update!(wizard_state: {
-      "job_status" => "completed",
-      "job_progress" => 100,
-      "job_metadata" => {"total_items" => 3}
-    })
+    set_enrich_state(
+      status: "completed",
+      progress: 100,
+      metadata: {"total_items" => 3}
+    )
 
     render_inline(Admin::Music::Songs::Wizard::EnrichStepComponent.new(list: @list))
 

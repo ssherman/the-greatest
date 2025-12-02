@@ -20,11 +20,14 @@ module WizardController
   end
 
   def step_status
+    # Use step parameter if provided, otherwise fall back to current step
+    step_name = params[:step] || wizard_entity.current_step_name
+
     render json: {
-      status: wizard_entity.wizard_job_status,
-      progress: wizard_entity.wizard_job_progress,
-      error: wizard_entity.wizard_job_error,
-      metadata: wizard_entity.wizard_job_metadata
+      status: wizard_entity.wizard_step_status(step_name),
+      progress: wizard_entity.wizard_step_progress(step_name),
+      error: wizard_entity.wizard_step_error(step_name),
+      metadata: wizard_entity.wizard_step_metadata(step_name)
     }
   end
 
