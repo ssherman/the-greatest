@@ -23,6 +23,8 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
       advance_from_parse_step
     elsif params[:step] == "enrich"
       advance_from_enrich_step
+    elsif params[:step] == "validate"
+      advance_from_validate_step
     else
       super
     end
@@ -96,6 +98,14 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
   end
 
   def load_validate_step_data
+    @unverified_items = @list.list_items.unverified.ordered
+    @enriched_items = @unverified_items.select do |item|
+      item.listable_id.present? ||
+        item.metadata["song_id"].present? ||
+        item.metadata["mb_recording_id"].present?
+    end
+    @total_items = @unverified_items.count
+    @items_to_validate = @enriched_items.count
   end
 
   def load_review_step_data
@@ -117,16 +127,22 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
   end
 
   def enqueue_validate_job
+    Music::Songs::WizardValidateListItemsJob.perform_async(wizard_entity.id)
   end
 
   def enqueue_import_job
   end
 
+  VALID_IMPORT_SOURCES = %w[custom_html musicbrainz_series].freeze
+
   def advance_from_source_step
-    # Use provided import_source, or fall back to existing selection, or default to custom_html
     import_source = params[:import_source].presence ||
-      wizard_entity.wizard_state&.[]("import_source") ||
-      "custom_html"
+      wizard_entity.wizard_state&.[]("import_source")
+
+    unless import_source.present? && VALID_IMPORT_SOURCES.include?(import_source)
+      redirect_to action: :show_step, step: "source", alert: "Please select an import source"
+      return
+    end
 
     next_step_index = if import_source == "musicbrainz_series"
       5
@@ -193,6 +209,33 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
       end
     else
       redirect_to action: :show_step, step: "enrich", alert: "Enrichment in progress, please wait"
+    end
+  end
+
+  def advance_from_validate_step
+    validate_status = wizard_entity.wizard_step_status("validate")
+
+    if params[:revalidate] == "true"
+      wizard_entity.update_wizard_step_status(step: "validate", status: "running", progress: 0, error: nil, metadata: {})
+      Music::Songs::WizardValidateListItemsJob.perform_async(wizard_entity.id)
+      redirect_to action: :show_step, step: "validate", notice: "Re-validation started"
+    elsif validate_status == "idle" || validate_status == "failed"
+      wizard_entity.update_wizard_step_status(step: "validate", status: "running", progress: 0, error: nil, metadata: {})
+      Music::Songs::WizardValidateListItemsJob.perform_async(wizard_entity.id)
+      redirect_to action: :show_step, step: "validate", notice: "Validation started"
+    elsif validate_status == "completed"
+      current_step_index = wizard_steps.index(params[:step])
+      next_step_index = current_step_index + 1
+
+      if next_step_index < wizard_steps.length
+        wizard_entity.update!(wizard_state: (wizard_entity.wizard_state || {}).merge("current_step" => next_step_index))
+        redirect_to action: :show_step, step: wizard_steps[next_step_index]
+      else
+        wizard_entity.update!(wizard_state: (wizard_entity.wizard_state || {}).merge("completed_at" => Time.current.iso8601))
+        redirect_to action: :show_step, step: wizard_steps.last
+      end
+    else
+      redirect_to action: :show_step, step: "validate", alert: "Validation in progress, please wait"
     end
   end
 end

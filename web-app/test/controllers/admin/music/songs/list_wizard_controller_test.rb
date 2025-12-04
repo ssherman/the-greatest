@@ -165,7 +165,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     assert_equal 0, @list.wizard_current_step
     assert_response :redirect
     assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/source}, response.location
-    assert_equal "Please select an import source", flash[:alert]
+    assert_match(/alert=Please\+select\+an\+import\+source/, response.location)
   end
 
   test "advancing from source with invalid selection shows error" do
@@ -181,7 +181,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     assert_equal 0, @list.wizard_current_step
     assert_response :redirect
     assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/source}, response.location
-    assert_equal "Please select an import source", flash[:alert]
+    assert_match(/alert=Please\+select\+an\+import\+source/, response.location)
   end
 
   test "parse step loads HTML preview" do
@@ -372,5 +372,119 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     assert_equal 100, @list.wizard_step_progress("enrich")
     # New step (validate) should be idle
     assert_equal "idle", @list.wizard_step_status("validate")
+  end
+
+  # Validate step tests
+  test "validate step loads item counts" do
+    @list.list_items.unverified.destroy_all
+    @list.list_items.create!(
+      listable_type: "Music::Song",
+      verified: false,
+      position: 1,
+      metadata: {"title" => "Song 1", "artists" => ["Artist"], "song_id" => 123, "opensearch_match" => true}
+    )
+    @list.list_items.create!(
+      listable_type: "Music::Song",
+      verified: false,
+      position: 2,
+      metadata: {"title" => "Song 2", "artists" => ["Artist"], "mb_recording_id" => "abc", "musicbrainz_match" => true}
+    )
+    @list.list_items.create!(
+      listable_type: "Music::Song",
+      verified: false,
+      position: 3,
+      metadata: {"title" => "Song 3", "artists" => ["Artist"]}
+    )
+
+    get step_admin_songs_list_wizard_path(list_id: @list.id, step: "validate")
+
+    assert_response :success
+  end
+
+  test "advancing from validate step enqueues job when idle" do
+    @list.update!(wizard_state: {
+      "current_step" => 3,
+      "steps" => {"validate" => {"status" => "idle", "progress" => 0}}
+    })
+    @list.list_items.unverified.destroy_all
+    @list.list_items.create!(
+      listable_type: "Music::Song",
+      verified: false,
+      position: 1,
+      metadata: {"title" => "Song", "artists" => ["Artist"], "mb_recording_id" => "abc"}
+    )
+
+    Music::Songs::WizardValidateListItemsJob.expects(:perform_async).with(@list.id).once
+
+    post advance_step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "validate"
+    )
+
+    assert_response :redirect
+    assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/validate}, response.location
+    assert_match(/notice=Validation\+started/, response.location)
+  end
+
+  test "advancing from validate step proceeds when job completed" do
+    @list.update!(wizard_state: {
+      "current_step" => 3,
+      "steps" => {"validate" => {"status" => "completed", "progress" => 100}}
+    })
+
+    post advance_step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "validate"
+    )
+
+    @list.reload
+    assert_equal 4, @list.wizard_current_step
+    assert_redirected_to step_admin_songs_list_wizard_path(list_id: @list.id, step: "review")
+  end
+
+  test "advancing from validate step blocks when job running" do
+    @list.update!(wizard_state: {
+      "current_step" => 3,
+      "steps" => {"validate" => {"status" => "running", "progress" => 50}}
+    })
+
+    post advance_step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "validate"
+    )
+
+    @list.reload
+    assert_equal 3, @list.wizard_current_step
+    assert_response :redirect
+    assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/validate}, response.location
+    assert_match(/alert=Validation\+in\+progress/, response.location)
+  end
+
+  test "revalidate param triggers re-validation" do
+    @list.update!(wizard_state: {
+      "current_step" => 3,
+      "steps" => {"validate" => {"status" => "completed", "progress" => 100}}
+    })
+    @list.list_items.unverified.destroy_all
+    @list.list_items.create!(
+      listable_type: "Music::Song",
+      verified: false,
+      position: 1,
+      metadata: {"title" => "Song", "artists" => ["Artist"], "mb_recording_id" => "abc"}
+    )
+
+    Music::Songs::WizardValidateListItemsJob.expects(:perform_async).with(@list.id).once
+
+    post advance_step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "validate",
+      revalidate: "true"
+    )
+
+    @list.reload
+    assert_equal "running", @list.wizard_step_status("validate")
+    assert_response :redirect
+    assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/validate}, response.location
+    assert_match(/notice=Re-validation\+started/, response.location)
   end
 end

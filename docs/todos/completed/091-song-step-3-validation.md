@@ -1,7 +1,8 @@
 # [091] - Song Wizard: Step 3 - AI Validation
 
 ## Status
-- **Status**: Planned
+- **Status**: Completed
+- **Completed**: 2025-12-03
 - **Priority**: High
 - **Created**: 2025-01-19
 - **Part**: 6 of 10
@@ -1200,22 +1201,54 @@ test "revalidate param triggers re-validation"
 
 ## Implementation Notes
 
-(To be filled during implementation)
+### Files Created
+- `app/lib/services/ai/tasks/lists/music/songs/list_items_validator_task.rb` - AI validation service
+- `app/sidekiq/music/songs/wizard_validate_list_items_job.rb` - Background job for async validation
+- `test/lib/services/ai/tasks/lists/music/songs/list_items_validator_task_test.rb` - 21 tests
+- `test/sidekiq/music/songs/wizard_validate_list_items_job_test.rb` - 12 tests
+- `test/components/admin/music/songs/wizard/validate_step_component_test.rb` - 17 tests
+
+### Files Modified
+- `app/components/admin/music/songs/wizard/validate_step_component.rb` - Full implementation with status helpers
+- `app/components/admin/music/songs/wizard/validate_step_component.html.erb` - Full UI with 4 states
+- `app/controllers/admin/music/songs/list_wizard_controller.rb` - Added validate step logic + fixed source step validation
+- `test/controllers/admin/music/songs/list_wizard_controller_test.rb` - Added 5 validate step tests + fixed 2 source step tests
+
+### Key Implementation Details
+- Uses `gpt-5-mini` model (matching existing `ItemsJsonValidatorTask`)
+- Single AI call batches all items for validation
+- Progress: 0% → 100% (no incremental progress since single AI call)
+- Validates both OpenSearch and MusicBrainz matches (unlike Avo workflow)
+- Sets `verified = true` on valid matches
+- Clears `listable_id` on invalid OpenSearch matches
+- Job is idempotent - clears previous validation flags before re-running
+
+### Test Coverage
+- 50+ new tests for validation step functionality
+- All tests passing
 
 ---
 
 ## Deviations from Plan
 
-(To be filled during implementation)
+1. **Component preview scope**: Changed `enriched_items` to query ALL items (not just unverified) so that items marked as verified during validation still appear in the preview table.
+
+2. **Job idempotency enhancement**: Extended `clear_previous_validation_flags` to also reset `verified = false` for previously verified items that will be re-validated.
+
+3. **Fixed pre-existing source step tests**: The tests for source step validation were failing because:
+   - Controller was defaulting to `"custom_html"` instead of validating
+   - Tests were checking `flash[:alert]` but redirects encode flash in URL params
+   - Added `VALID_IMPORT_SOURCES` constant and validation logic
+   - Updated tests to check URL-encoded alert in `response.location`
 
 ---
 
 ## Documentation Updated
 
-- [ ] This task file updated with implementation notes
-- [ ] Cross-references updated in related task files
-- [ ] Service documentation created at `docs/lib/services/ai/tasks/lists/music/songs/list_items_validator_task.md`
-- [ ] Job documentation created at `docs/sidekiq/music/songs/wizard_validate_list_items_job.md`
+- [x] This task file updated with implementation notes
+- [x] Cross-references updated in related task files
+- [x] Service documentation created at `docs/lib/services/ai/tasks/lists/music/songs/list_items_validator_task.md`
+- [x] Job documentation created at `docs/sidekiq/music/songs/wizard_validate_list_items_job.md`
 
 ---
 

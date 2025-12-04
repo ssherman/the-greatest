@@ -1,8 +1,7 @@
 # The Greatest - Todo List
 
 ## High Priority
-1. [Song List Wizard - Part 6: Step 3 - Validation](todos/091-song-wizard-step-3-validation.md)
-4. [Song List Wizard - Part 7: Step 4 - Review UI](todos/092-song-wizard-step-4-review.md)
+1. [Song List Wizard - Part 7: Step 4 - Review UI](todos/092-song-wizard-step-4-review.md)
 5. [Song List Wizard - Part 8: Step 4 - Actions](todos/093-song-wizard-step-4-actions.md)
 6. [Song List Wizard - Part 9: Step 5 - Import](todos/094-song-wizard-step-5-import.md)
 7. [Song List Wizard - Part 10: Polish & Integration](todos/095-song-wizard-polish.md)
@@ -25,6 +24,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-12-03] [Song List Wizard - Part 6: Step 3 - Validation](todos/completed/091-song-step-3-validation.md)
 - ✅ [2025-12-01] [Wizard Step-Namespaced Status](todos/completed/090a-wizard-step-namespaced-status.md)
 - ✅ [2025-11-30] [Song List Wizard - Part 5: Step 2 - Enrich](todos/completed/090-song-step-2-enrich.md)
 - ✅ [2025-01-23] [Song List Wizard - Part 4: Step 1 - Parse HTML](todos/completed/089-song-wizard-step-1-parse.md)
