@@ -51,6 +51,15 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
   end
 
   test "should advance to next step for non-job steps" do
+    @list.list_items.destroy_all
+    @song = music_songs(:time)
+    @list.list_items.create!(
+      listable: @song,
+      listable_type: "Music::Song",
+      verified: true,
+      position: 1,
+      metadata: {"title" => "Valid Song", "artists" => ["Artist"]}
+    )
     @list.update!(wizard_state: {"current_step" => 4, "import_source" => "custom_html", "job_status" => "idle"})
 
     post advance_step_admin_songs_list_wizard_path(list_id: @list.id, step: "review")
@@ -486,5 +495,127 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     assert_response :redirect
     assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/validate}, response.location
     assert_match(/notice=Re-validation\+started/, response.location)
+  end
+
+  # Review step tests
+  test "review step loads all items with associations" do
+    @list.list_items.unverified.destroy_all
+    @song = music_songs(:time)
+
+    @list.list_items.create!(
+      listable: @song,
+      listable_type: "Music::Song",
+      verified: true,
+      position: 1,
+      metadata: {"title" => "Come Together", "artists" => ["The Beatles"], "opensearch_match" => true}
+    )
+    @list.list_items.create!(
+      listable_type: "Music::Song",
+      verified: false,
+      position: 2,
+      metadata: {"title" => "Imagine", "artists" => ["John Lennon"], "ai_match_invalid" => true}
+    )
+    @list.list_items.create!(
+      listable_type: "Music::Song",
+      verified: false,
+      position: 3,
+      metadata: {"title" => "Missing Song", "artists" => ["Unknown"]}
+    )
+
+    get step_admin_songs_list_wizard_path(list_id: @list.id, step: "review")
+
+    assert_response :success
+  end
+
+  test "review step calculates correct counts" do
+    @list.list_items.unverified.destroy_all
+    @song = music_songs(:time)
+
+    @list.list_items.create!(
+      listable: @song,
+      listable_type: "Music::Song",
+      verified: true,
+      position: 1,
+      metadata: {"title" => "Valid", "artists" => ["Artist"]}
+    )
+    @list.list_items.create!(
+      listable_type: "Music::Song",
+      verified: false,
+      position: 2,
+      metadata: {"title" => "Invalid", "artists" => ["Artist"], "ai_match_invalid" => true}
+    )
+    @list.list_items.create!(
+      listable_type: "Music::Song",
+      verified: false,
+      position: 3,
+      metadata: {"title" => "Missing", "artists" => ["Artist"]}
+    )
+
+    get step_admin_songs_list_wizard_path(list_id: @list.id, step: "review")
+
+    assert_response :success
+  end
+
+  test "can advance from review to import step with valid items" do
+    @list.list_items.unverified.destroy_all
+    @song = music_songs(:time)
+
+    @list.list_items.create!(
+      listable: @song,
+      listable_type: "Music::Song",
+      verified: true,
+      position: 1,
+      metadata: {"title" => "Valid Song", "artists" => ["Artist"]}
+    )
+
+    @list.update!(wizard_state: {"current_step" => 4})
+
+    post advance_step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "review"
+    )
+
+    @list.reload
+    assert_equal 5, @list.wizard_current_step
+    assert_redirected_to step_admin_songs_list_wizard_path(list_id: @list.id, step: "import")
+  end
+
+  test "cannot advance from review step without valid items" do
+    @list.list_items.unverified.destroy_all
+    @list.list_items.create!(
+      listable_type: "Music::Song",
+      verified: false,
+      position: 1,
+      metadata: {"title" => "Invalid Song", "artists" => ["Artist"], "ai_match_invalid" => true}
+    )
+    @list.list_items.create!(
+      listable_type: "Music::Song",
+      verified: false,
+      position: 2,
+      metadata: {"title" => "Missing Song", "artists" => ["Artist"]}
+    )
+
+    @list.update!(wizard_state: {"current_step" => 4})
+
+    post advance_step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "review"
+    )
+
+    @list.reload
+    assert_equal 4, @list.wizard_current_step
+    assert_response :redirect
+    assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/review}, response.location
+    assert_match(/alert=No\+valid\+items\+to\+import/, response.location)
+  end
+
+  test "can go back from review to validate step" do
+    @list.update!(wizard_state: {"current_step" => 4})
+
+    post back_step_admin_songs_list_wizard_path(list_id: @list.id, step: "review")
+
+    @list.reload
+    assert_equal 3, @list.wizard_current_step
+    assert_redirected_to step_admin_songs_list_wizard_path(list_id: @list.id, step: "validate")
   end
 end

@@ -16,5 +16,8 @@ application.register("autocomplete", AutocompleteController)
 import ModalFormController from "./modal_form_controller"
 application.register("modal-form", ModalFormController)
 
+import ReviewFilterController from "./review_filter_controller"
+application.register("review-filter", ReviewFilterController)
+
 import WizardStepController from "./wizard_step_controller"
 application.register("wizard-step", WizardStepController)

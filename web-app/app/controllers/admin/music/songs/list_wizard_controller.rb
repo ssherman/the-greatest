@@ -25,6 +25,8 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
       advance_from_enrich_step
     elsif params[:step] == "validate"
       advance_from_validate_step
+    elsif params[:step] == "review"
+      advance_from_review_step
     else
       super
     end
@@ -109,7 +111,11 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
   end
 
   def load_review_step_data
-    @items = @list.list_items.includes(listable: [:artists])
+    @items = @list.list_items.ordered.includes(listable: :artists)
+    @total_count = @items.count
+    @valid_count = @items.count(&:verified?)
+    @invalid_count = @items.count { |i| i.metadata["ai_match_invalid"] }
+    @missing_count = @total_count - @valid_count - @invalid_count
   end
 
   def load_import_step_data
@@ -236,6 +242,27 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
       end
     else
       redirect_to action: :show_step, step: "validate", alert: "Validation in progress, please wait"
+    end
+  end
+
+  def advance_from_review_step
+    items = wizard_entity.list_items
+    valid_count = items.count(&:verified?)
+
+    if valid_count.zero?
+      redirect_to action: :show_step, step: "review", alert: "No valid items to import. Please fix invalid or missing items first."
+      return
+    end
+
+    current_step_index = wizard_steps.index(params[:step])
+    next_step_index = current_step_index + 1
+
+    if next_step_index < wizard_steps.length
+      wizard_entity.update!(wizard_state: (wizard_entity.wizard_state || {}).merge("current_step" => next_step_index))
+      redirect_to action: :show_step, step: wizard_steps[next_step_index]
+    else
+      wizard_entity.update!(wizard_state: (wizard_entity.wizard_state || {}).merge("completed_at" => Time.current.iso8601))
+      redirect_to action: :show_step, step: wizard_steps.last
     end
   end
 end
