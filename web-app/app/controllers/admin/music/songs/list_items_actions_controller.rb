@@ -1,0 +1,243 @@
+# frozen_string_literal: true
+
+class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseController
+  before_action :set_list
+  before_action :set_item, only: [:verify, :metadata, :manual_link, :link_musicbrainz]
+
+  def verify
+    @item.update!(verified: true)
+
+    respond_to do |format|
+      format.turbo_stream do
+        render turbo_stream: [
+          turbo_stream.replace("item_row_#{@item.id}", partial: "item_row", locals: {item: @item}),
+          turbo_stream.append("flash_messages", partial: "flash_success", locals: {message: "Item verified"})
+        ]
+      end
+      format.html { redirect_to review_step_path, notice: "Item verified" }
+    end
+  end
+
+  def metadata
+    metadata_json = params.dig(:list_item, :metadata_json)
+
+    begin
+      metadata = JSON.parse(metadata_json)
+    rescue JSON::ParserError => e
+      respond_to do |format|
+        format.turbo_stream do
+          render turbo_stream: turbo_stream.replace(
+            "edit_metadata_modal_#{@item.id}_error",
+            partial: "error_message",
+            locals: {message: "Invalid JSON: #{e.message}"}
+          )
+        end
+        format.html { redirect_to review_step_path, alert: "Invalid JSON: #{e.message}" }
+      end
+      return
+    end
+
+    @item.update!(metadata: metadata)
+
+    respond_to do |format|
+      format.turbo_stream do
+        render turbo_stream: [
+          turbo_stream.replace("item_row_#{@item.id}", partial: "item_row", locals: {item: @item}),
+          turbo_stream.append("flash_messages", partial: "flash_success", locals: {message: "Metadata updated successfully"})
+        ]
+      end
+      format.html { redirect_to review_step_path, notice: "Metadata updated successfully" }
+    end
+  end
+
+  def manual_link
+    song_id = params[:song_id]
+
+    unless song_id.present?
+      respond_to do |format|
+        format.turbo_stream do
+          render turbo_stream: turbo_stream.replace(
+            "link_song_modal_#{@item.id}_error",
+            partial: "error_message",
+            locals: {message: "Please select a song"}
+          )
+        end
+        format.html { redirect_to review_step_path, alert: "Please select a song" }
+      end
+      return
+    end
+
+    song = Music::Song.find_by(id: song_id)
+
+    unless song
+      respond_to do |format|
+        format.turbo_stream do
+          render turbo_stream: turbo_stream.replace(
+            "link_song_modal_#{@item.id}_error",
+            partial: "error_message",
+            locals: {message: "Song not found"}
+          )
+        end
+        format.html { redirect_to review_step_path, alert: "Song not found" }
+      end
+      return
+    end
+
+    @item.update!(
+      listable: song,
+      verified: true,
+      metadata: @item.metadata.merge(
+        "song_id" => song.id,
+        "song_name" => song.title,
+        "manual_link" => true
+      )
+    )
+
+    respond_to do |format|
+      format.turbo_stream do
+        render turbo_stream: [
+          turbo_stream.replace("item_row_#{@item.id}", partial: "item_row", locals: {item: @item}),
+          turbo_stream.append("flash_messages", partial: "flash_success", locals: {message: "Song linked successfully"})
+        ]
+      end
+      format.html { redirect_to review_step_path, notice: "Song linked successfully" }
+    end
+  end
+
+  def link_musicbrainz
+    mb_recording_id = params[:mb_recording_id]
+
+    unless mb_recording_id.present?
+      respond_to do |format|
+        format.turbo_stream do
+          render turbo_stream: turbo_stream.replace(
+            "search_mb_modal_#{@item.id}_error",
+            partial: "error_message",
+            locals: {message: "Please select a recording"}
+          )
+        end
+        format.html { redirect_to review_step_path, alert: "Please select a recording" }
+      end
+      return
+    end
+
+    search = Music::Musicbrainz::Search::RecordingSearch.new
+    response = search.lookup_by_mbid(mb_recording_id)
+
+    if response[:success] && response[:data]["recordings"]&.any?
+      recording = response[:data]["recordings"].first
+
+      artist_names = extract_artist_names_from_recording(recording)
+      year = extract_year_from_recording(recording)
+
+      @item.metadata = @item.metadata.merge(
+        "mb_recording_id" => mb_recording_id,
+        "mb_recording_name" => recording["title"],
+        "mb_artist_names" => artist_names,
+        "mb_release_year" => year,
+        "musicbrainz_match" => true,
+        "manual_musicbrainz_link" => true
+      )
+      @item.verified = true
+
+      # Also link to existing song if one exists with this recording ID
+      song = Music::Song.joins(:identifiers).find_by(
+        identifiers: {
+          identifier_type: :music_musicbrainz_recording_id,
+          value: mb_recording_id
+        }
+      )
+
+      if song
+        @item.listable = song
+        @item.metadata = @item.metadata.merge(
+          "song_id" => song.id,
+          "song_name" => song.title
+        )
+      end
+
+      @item.save!
+
+      respond_to do |format|
+        format.turbo_stream do
+          render turbo_stream: [
+            turbo_stream.replace("item_row_#{@item.id}", partial: "item_row", locals: {item: @item}),
+            turbo_stream.append("flash_messages", partial: "flash_success", locals: {message: "MusicBrainz recording linked successfully"})
+          ]
+        end
+        format.html { redirect_to review_step_path, notice: "MusicBrainz recording linked successfully" }
+      end
+    else
+      error_message = response[:errors]&.first || "Recording not found"
+      respond_to do |format|
+        format.turbo_stream do
+          render turbo_stream: turbo_stream.replace(
+            "search_mb_modal_#{@item.id}_error",
+            partial: "error_message",
+            locals: {message: error_message}
+          )
+        end
+        format.html { redirect_to review_step_path, alert: error_message }
+      end
+    end
+  end
+
+  def musicbrainz_search
+    item_id = params[:item_id]
+    query = params[:q]
+
+    # Item ID is required - we need the artist MBID from metadata
+    return render json: [] if item_id.blank?
+
+    item = @list.list_items.find_by(id: item_id)
+    return render json: [] unless item
+
+    # MusicBrainz search only works with an artist MBID
+    mb_artist_ids = Array(item.metadata["mb_artist_ids"])
+    return render json: [] if mb_artist_ids.empty?
+
+    # Use the first artist MBID for searching
+    artist_mbid = mb_artist_ids.first
+    return render json: [] if query.blank? || query.length < 2
+
+    search = Music::Musicbrainz::Search::RecordingSearch.new
+    response = search.search_by_artist_mbid_and_title(artist_mbid, query, limit: 10)
+
+    return render json: [] unless response[:success]
+
+    recordings = response[:data]["recordings"] || []
+    render json: recordings.map { |r|
+      artist_names = extract_artist_names_from_recording(r)
+      year = extract_year_from_recording(r)
+      {
+        value: r["id"],
+        text: "#{r["title"]} - #{artist_names}#{" (#{year})" if year}"
+      }
+    }
+  end
+
+  private
+
+  def set_list
+    @list = Music::Songs::List.find(params[:list_id])
+  end
+
+  def set_item
+    @item = @list.list_items.includes(listable: :artists).find(params[:id])
+  end
+
+  def review_step_path
+    step_admin_songs_list_wizard_path(list_id: @list.id, step: "review")
+  end
+
+  def extract_artist_names_from_recording(recording)
+    artist_credits = recording["artist-credit"] || []
+    artist_credits.map { |ac| ac.dig("artist", "name") || ac["name"] }.compact.join(", ")
+  end
+
+  def extract_year_from_recording(recording)
+    first_release = recording["first-release-date"]
+    return nil unless first_release.present?
+    first_release.split("-").first.to_i
+  end
+end

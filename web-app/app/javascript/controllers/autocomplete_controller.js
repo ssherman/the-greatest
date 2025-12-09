@@ -45,8 +45,9 @@ export default class extends Controller {
 
           try {
             const query = this.inputTarget.value
+            const separator = this.urlValue.includes('?') ? '&' : '?'
             const response = await fetch(
-              `${this.urlValue}?q=${encodeURIComponent(query)}`,
+              `${this.urlValue}${separator}q=${encodeURIComponent(query)}`,
               {
                 signal: this.abortController.signal,
                 headers: {

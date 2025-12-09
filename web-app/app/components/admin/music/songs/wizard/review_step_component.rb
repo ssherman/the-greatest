@@ -71,22 +71,20 @@ class Admin::Music::Songs::Wizard::ReviewStepComponent < ViewComponent::Base
   end
 
   def matched_title(item)
-    if item.metadata["opensearch_match"] && item.metadata["song_name"].present?
-      item.metadata["song_name"]
-    elsif item.metadata["musicbrainz_match"] && item.metadata["mb_recording_name"].present?
-      item.metadata["mb_recording_name"]
-    elsif item.listable.present?
+    if item.listable.present?
       item.listable.title
+    elsif item.metadata["mb_recording_name"].present?
+      item.metadata["mb_recording_name"]
+    elsif item.metadata["song_name"].present?
+      item.metadata["song_name"]
     end
   end
 
   def matched_artists(item)
-    if item.metadata["opensearch_match"] && item.listable.present?
+    if item.listable.present? && item.listable.respond_to?(:artists)
       item.listable.artists.map(&:name).join(", ")
-    elsif item.metadata["musicbrainz_match"] && item.metadata["mb_artist_names"].present?
+    elsif item.metadata["mb_artist_names"].present?
       Array(item.metadata["mb_artist_names"]).join(", ")
-    elsif item.listable.present? && item.listable.respond_to?(:artists)
-      item.listable.artists.map(&:name).join(", ")
     end
   end
 
@@ -112,5 +110,9 @@ class Admin::Music::Songs::Wizard::ReviewStepComponent < ViewComponent::Base
 
   def icon_dash
     '<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd" /></svg>'.html_safe
+  end
+
+  def verify_path(item)
+    helpers.verify_admin_songs_list_item_path(list_id: list.id, id: item.id)
   end
 end
