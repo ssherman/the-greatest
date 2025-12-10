@@ -24,8 +24,8 @@
       </div>
 
       <div class="flex gap-3 justify-center">
-        <%= link_to "View List", admin_list_path(list), class: "btn btn-primary" %>
-        <%= link_to "Back to Lists", admin_lists_path, class: "btn btn-outline" %>
+        <%= link_to "View List", admin_songs_list_path(list), class: "btn btn-primary", data: { turbo_frame: "_top" } %>
+        <%= link_to "Back to Lists", admin_songs_lists_path, class: "btn btn-outline", data: { turbo_frame: "_top" } %>
       </div>
     </div>
   <% end %>

@@ -27,6 +27,8 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
       advance_from_validate_step
     elsif params[:step] == "review"
       advance_from_review_step
+    elsif params[:step] == "import"
+      advance_from_import_step
     else
       super
     end
@@ -119,6 +121,16 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
   end
 
   def load_import_step_data
+    import_source = @list.wizard_state&.dig("import_source") || "custom_html"
+
+    if import_source == "custom_html"
+      @all_items = @list.list_items.ordered
+      @linked_items = @all_items.where.not(listable_id: nil)
+      @items_to_import = @all_items.where(listable_id: nil)
+        .where("metadata->>'mb_recording_id' IS NOT NULL")
+      @items_without_match = @all_items.where(listable_id: nil)
+        .where("metadata->>'mb_recording_id' IS NULL")
+    end
   end
 
   def load_complete_step_data
@@ -137,6 +149,7 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
   end
 
   def enqueue_import_job
+    Music::Songs::WizardImportSongsJob.perform_async(wizard_entity.id)
   end
 
   VALID_IMPORT_SOURCES = %w[custom_html musicbrainz_series].freeze
@@ -263,6 +276,32 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
     else
       wizard_entity.update!(wizard_state: (wizard_entity.wizard_state || {}).merge("completed_at" => Time.current.iso8601))
       redirect_to action: :show_step, step: wizard_steps.last
+    end
+  end
+
+  def advance_from_import_step
+    import_status = wizard_entity.wizard_step_status("import")
+
+    if import_status == "idle" || import_status == "failed"
+      wizard_entity.update_wizard_step_status(step: "import", status: "running", progress: 0, error: nil, metadata: {})
+      Music::Songs::WizardImportSongsJob.perform_async(wizard_entity.id)
+      redirect_to action: :show_step, step: "import", notice: "Import started"
+    elsif import_status == "completed"
+      current_step_index = wizard_steps.index(params[:step])
+      next_step_index = current_step_index + 1
+
+      if next_step_index < wizard_steps.length
+        wizard_entity.update!(wizard_state: (wizard_entity.wizard_state || {}).merge(
+          "current_step" => next_step_index,
+          "completed_at" => Time.current.iso8601
+        ))
+        redirect_to action: :show_step, step: wizard_steps[next_step_index]
+      else
+        wizard_entity.update!(wizard_state: (wizard_entity.wizard_state || {}).merge("completed_at" => Time.current.iso8601))
+        redirect_to action: :show_step, step: wizard_steps.last
+      end
+    else
+      redirect_to action: :show_step, step: "import", alert: "Import in progress, please wait"
     end
   end
 end

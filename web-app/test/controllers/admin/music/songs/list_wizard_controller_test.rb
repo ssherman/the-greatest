@@ -618,4 +618,136 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     assert_equal 3, @list.wizard_current_step
     assert_redirected_to step_admin_songs_list_wizard_path(list_id: @list.id, step: "validate")
   end
+
+  # Import step tests
+  test "import step loads item categories correctly" do
+    @list.list_items.destroy_all
+
+    @song = music_songs(:time)
+    @list.list_items.create!(
+      listable: @song,
+      listable_type: "Music::Song",
+      verified: true,
+      position: 1,
+      metadata: {"title" => "Linked Song", "artists" => ["Artist"]}
+    )
+    @list.list_items.create!(
+      listable_type: "Music::Song",
+      verified: false,
+      position: 2,
+      metadata: {"title" => "To Import", "artists" => ["Artist"], "mb_recording_id" => "abc123"}
+    )
+    @list.list_items.create!(
+      listable_type: "Music::Song",
+      verified: false,
+      position: 3,
+      metadata: {"title" => "No Match", "artists" => ["Artist"]}
+    )
+
+    @list.update!(wizard_state: {"current_step" => 5, "import_source" => "custom_html"})
+
+    get step_admin_songs_list_wizard_path(list_id: @list.id, step: "import")
+
+    assert_response :success
+  end
+
+  test "advancing from import step enqueues job when idle" do
+    @list.update!(wizard_state: {
+      "current_step" => 5,
+      "import_source" => "custom_html",
+      "steps" => {"import" => {"status" => "idle", "progress" => 0}}
+    })
+
+    Music::Songs::WizardImportSongsJob.expects(:perform_async).with(@list.id).once
+
+    post advance_step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "import"
+    )
+
+    assert_response :redirect
+    assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/import}, response.location
+    assert_match(/notice=Import\+started/, response.location)
+  end
+
+  test "advancing from import step proceeds when job completed" do
+    @list.update!(wizard_state: {
+      "current_step" => 5,
+      "import_source" => "custom_html",
+      "steps" => {"import" => {"status" => "completed", "progress" => 100}}
+    })
+
+    post advance_step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "import"
+    )
+
+    @list.reload
+    assert_equal 6, @list.wizard_current_step
+    assert_redirected_to step_admin_songs_list_wizard_path(list_id: @list.id, step: "complete")
+  end
+
+  test "advancing from import step blocks when job running" do
+    @list.update!(wizard_state: {
+      "current_step" => 5,
+      "import_source" => "custom_html",
+      "steps" => {"import" => {"status" => "running", "progress" => 50}}
+    })
+
+    post advance_step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "import"
+    )
+
+    @list.reload
+    assert_equal 5, @list.wizard_current_step
+    assert_response :redirect
+    assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/import}, response.location
+    assert_match(/alert=Import\+in\+progress/, response.location)
+  end
+
+  test "import step handles zero items to import" do
+    @list.list_items.destroy_all
+    @list.update!(wizard_state: {"current_step" => 5, "import_source" => "custom_html"})
+
+    get step_admin_songs_list_wizard_path(list_id: @list.id, step: "import")
+
+    assert_response :success
+  end
+
+  test "advancing from import step enqueues job when failed" do
+    @list.update!(wizard_state: {
+      "current_step" => 5,
+      "import_source" => "custom_html",
+      "steps" => {"import" => {"status" => "failed", "progress" => 0, "error" => "Previous error"}}
+    })
+
+    Music::Songs::WizardImportSongsJob.expects(:perform_async).with(@list.id).once
+
+    post advance_step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "import"
+    )
+
+    @list.reload
+    assert_equal "running", @list.wizard_step_status("import")
+    assert_response :redirect
+    assert_match(/notice=Import\+started/, response.location)
+  end
+
+  test "import step sets completed_at when advancing to complete step" do
+    @list.update!(wizard_state: {
+      "current_step" => 5,
+      "import_source" => "custom_html",
+      "steps" => {"import" => {"status" => "completed", "progress" => 100}}
+    })
+
+    post advance_step_admin_songs_list_wizard_path(
+      list_id: @list.id,
+      step: "import"
+    )
+
+    @list.reload
+    assert_not_nil @list.wizard_state["completed_at"]
+  end
 end
