@@ -5,7 +5,11 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
   before_action :set_item, only: [:verify, :metadata, :manual_link, :link_musicbrainz]
 
   def verify
-    @item.update!(verified: true)
+    # Clear ai_match_invalid when admin verifies - this overrides AI decision
+    @item.update!(
+      verified: true,
+      metadata: @item.metadata.except("ai_match_invalid")
+    )
 
     respond_to do |format|
       format.turbo_stream do
@@ -83,10 +87,11 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
       return
     end
 
+    # Clear ai_match_invalid when admin manually links - this overrides AI decision
     @item.update!(
       listable: song,
       verified: true,
-      metadata: @item.metadata.merge(
+      metadata: @item.metadata.except("ai_match_invalid").merge(
         "song_id" => song.id,
         "song_name" => song.title,
         "manual_link" => true
@@ -130,7 +135,8 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
       artist_names = extract_artist_names_from_recording(recording)
       year = extract_year_from_recording(recording)
 
-      @item.metadata = @item.metadata.merge(
+      # Clear ai_match_invalid when admin manually links MusicBrainz - this overrides AI decision
+      @item.metadata = @item.metadata.except("ai_match_invalid").merge(
         "mb_recording_id" => mb_recording_id,
         "mb_recording_name" => recording["title"],
         "mb_artist_names" => artist_names,
