@@ -16,9 +16,7 @@
 
     <% wizard.with_progress do %>
       <%= render(Wizard::ProgressComponent.new(
-        steps: @wizard_steps.map.with_index { |name, idx|
-          { name: name, step: idx, icon: step_icon(name) }
-        },
+        steps: @wizard_steps.map.with_index { |name, idx| { name: name, step: idx } },
         current_step: @step_index,
         import_source: @list.wizard_state&.[]("import_source")
       )) %>

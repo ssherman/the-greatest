@@ -1,19 +1,13 @@
 # frozen_string_literal: true
 
+# View helpers for the Song List Wizard.
+# Used in the wizard step views to render components and determine UI state.
 module Admin::Music::Songs::ListWizardHelper
-  def step_icon(step_name)
-    case step_name
-    when "source" then "📁"
-    when "parse" then "📝"
-    when "enrich" then "✨"
-    when "validate" then "✓"
-    when "review" then "👁"
-    when "import" then "📥"
-    when "complete" then "✓"
-    else "●"
-    end
-  end
-
+  # Renders the appropriate step component based on the current step name.
+  #
+  # @param step_name [String] the current step (source, parse, enrich, etc.)
+  # @param list [Music::Songs::List] the list being imported
+  # @return [String] rendered HTML for the step component
   def render_step_component(step_name, list)
     case step_name
     when "source"
@@ -36,6 +30,11 @@ module Admin::Music::Songs::ListWizardHelper
     end
   end
 
+  # Determines whether the Next button should be enabled for the current step.
+  #
+  # @param step_name [String] the current step name
+  # @param list [Music::Songs::List] the list being imported
+  # @return [Boolean] true if advancement is allowed
   def step_ready_to_advance?(step_name, list)
     case step_name
     when "source"
@@ -47,6 +46,10 @@ module Admin::Music::Songs::ListWizardHelper
     end
   end
 
+  # Returns the label for the Next button based on the current step.
+  #
+  # @param step_name [String] the current step name
+  # @return [String] button label with arrow
   def next_button_label(step_name)
     case step_name
     when "review" then "Import →"
@@ -55,6 +58,10 @@ module Admin::Music::Songs::ListWizardHelper
     end
   end
 
+  # Returns human-readable status text for the parse job.
+  #
+  # @param list [Music::Songs::List] the list with wizard state
+  # @return [String] status description
   def job_status_text(list)
     case list.wizard_job_status
     when "idle" then "Ready to parse"

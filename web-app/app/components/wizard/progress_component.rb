@@ -32,6 +32,14 @@ class Wizard::ProgressComponent < ViewComponent::Base
     end
   end
 
+  def step_icon(step_index)
+    if step_index < @current_step
+      "✓" # Completed step
+    else
+      (step_index + 1).to_s # Number for pending/current steps
+    end
+  end
+
   private
 
   attr_reader :steps, :current_step, :import_source

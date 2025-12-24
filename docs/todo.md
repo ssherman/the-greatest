@@ -1,8 +1,7 @@
 # The Greatest - Todo List
 
 ## High Priority
-1. [Song List Wizard - Part 10: Polish & Integration](todos/095-song-wizard-polish.md)
-8. [Custom Admin Interface - Phase 14: List Items](todos/085-custom-admin-phase-14-list-items.md)
+1. [Custom Admin Interface - Phase 14: List Items](todos/085-custom-admin-phase-14-list-items.md)
 9. [Production Deployment Infrastructure](todos/048-production-deployment-infrastructure.md)
 10. [Quote Normalization Service (Music Domain)](todos/071-music-name-title-normalization.md)
 11. [Movies data model implementation](todos/002-movies-object-model.md)
@@ -21,6 +20,7 @@
 10. [Admin interface with Avo](todos/007-admin-interface.md)
 
 ## Completed
+- ✅ [2025-12-24] [Song List Wizard - Part 10: Polish & Integration](todos/completed/095-song-wizard-polish.md)
 - ✅ [2025-12-10] [Song List Wizard - Part 9: Step 5 - Import](todos/completed/094-song-step-5-import.md)
 - ✅ [2025-12-09] [Song List Wizard - Part 8: Step 4 - Actions](todos/completed/093-song-step-4-actions.md)
 - ✅ [2025-12-06] [Song List Wizard - Part 7: Step 4 - Review UI](todos/completed/092-song-step-4-review-ui.md)
