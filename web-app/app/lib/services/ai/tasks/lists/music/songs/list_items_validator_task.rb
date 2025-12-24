@@ -95,7 +95,8 @@ module Services
                   if invalid_indices.include?(index)
                     invalid_count += 1
                     item.metadata["ai_match_invalid"] = true
-                    item.listable_id = nil if item.metadata["opensearch_match"] && item.listable_id.present?
+                    # Clear listable_id for any invalid match to prevent incorrect rankings
+                    item.listable_id = nil if item.listable_id.present?
                   else
                     valid_count += 1
                     item.metadata.delete("ai_match_invalid")

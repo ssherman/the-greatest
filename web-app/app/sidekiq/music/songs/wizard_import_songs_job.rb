@@ -89,6 +89,7 @@ class Music::Songs::WizardImportSongsJob
       .where(listable_id: nil)
       .where("metadata->>'mb_recording_id' IS NOT NULL")
       .where("metadata->>'imported_at' IS NULL")
+      .where("metadata->>'ai_match_invalid' IS NULL OR metadata->>'ai_match_invalid' != 'true'")
       .ordered
   end
 
