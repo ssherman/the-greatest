@@ -74,13 +74,10 @@ export default class extends Controller {
 
   updateProgress(percent, metadata) {
     if (this.hasProgressBarTarget) {
-      this.progressBarTarget.style.width = `${percent}%`
+      // For native <progress> elements, set the value property directly
+      // (style.width doesn't work for native progress elements)
+      this.progressBarTarget.value = percent
       this.progressBarTarget.setAttribute('aria-valuenow', percent)
-
-      const progressText = this.progressBarTarget.querySelector('.progress-text')
-      if (progressText) {
-        progressText.textContent = `${percent}%`
-      }
     }
 
     if (this.hasStatusTextTarget && metadata) {
