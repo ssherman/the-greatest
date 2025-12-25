@@ -160,6 +160,11 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
           "song_id" => song.id,
           "song_name" => song.title
         )
+      else
+        # Clear stale listable when linking to a MusicBrainz recording that has no local song.
+        # This ensures the import step will create the new song rather than keeping a mismatched link.
+        @item.listable = nil
+        @item.metadata = @item.metadata.except("song_id", "song_name")
       end
 
       @item.save!

@@ -208,6 +208,103 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
     assert_equal mb_recording_id, @item.metadata["mb_recording_id"]
   end
 
+  test "link_musicbrainz clears stale listable when no local song matches the recording" do
+    # Setup: Item already has a listable (from OpenSearch or manual link)
+    @item.update!(
+      listable: @song,
+      verified: true,
+      metadata: @item.metadata.merge(
+        "song_id" => @song.id,
+        "song_name" => @song.title
+      )
+    )
+    assert_equal @song.id, @item.listable_id, "Precondition: item should have existing listable"
+
+    # Admin links a MusicBrainz recording that has NO matching local song
+    mb_recording_id = "new-recording-no-local-song"
+    mock_response = {
+      success: true,
+      data: {
+        "recordings" => [{
+          "id" => mb_recording_id,
+          "title" => "Different Song",
+          "artist-credit" => [{"artist" => {"name" => "Different Artist"}}],
+          "first-release-date" => "2020"
+        }]
+      }
+    }
+
+    Music::Musicbrainz::Search::RecordingSearch.any_instance
+      .stubs(:lookup_by_mbid)
+      .with(mb_recording_id)
+      .returns(mock_response)
+
+    post link_musicbrainz_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
+      params: {mb_recording_id: mb_recording_id}
+
+    assert_response :redirect
+    @item.reload
+
+    # The MusicBrainz metadata should be updated
+    assert_equal mb_recording_id, @item.metadata["mb_recording_id"]
+    assert_equal "Different Song", @item.metadata["mb_recording_name"]
+    assert @item.metadata["manual_musicbrainz_link"]
+
+    # The stale listable should be cleared since no local song matches the new recording
+    assert_nil @item.listable_id, "Stale listable_id should be cleared when no local song matches"
+    assert_nil @item.metadata["song_id"], "Stale song_id in metadata should be cleared"
+    assert_nil @item.metadata["song_name"], "Stale song_name in metadata should be cleared"
+  end
+
+  test "link_musicbrainz updates listable when local song matches the recording" do
+    # Setup: Item has one song linked
+    @item.update!(
+      listable: @song,
+      verified: true,
+      metadata: @item.metadata.merge(
+        "song_id" => @song.id,
+        "song_name" => @song.title
+      )
+    )
+
+    # Create a different song that has the MusicBrainz recording ID we'll link
+    different_song = Music::Song.create!(title: "Different Song")
+    mb_recording_id = "matching-recording-id"
+    Identifier.create!(
+      identifiable: different_song,
+      identifier_type: :music_musicbrainz_recording_id,
+      value: mb_recording_id
+    )
+
+    mock_response = {
+      success: true,
+      data: {
+        "recordings" => [{
+          "id" => mb_recording_id,
+          "title" => "Different Song",
+          "artist-credit" => [{"artist" => {"name" => "Different Artist"}}],
+          "first-release-date" => "2020"
+        }]
+      }
+    }
+
+    Music::Musicbrainz::Search::RecordingSearch.any_instance
+      .stubs(:lookup_by_mbid)
+      .with(mb_recording_id)
+      .returns(mock_response)
+
+    post link_musicbrainz_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
+      params: {mb_recording_id: mb_recording_id}
+
+    assert_response :redirect
+    @item.reload
+
+    # The listable should be updated to the new matching song
+    assert_equal different_song.id, @item.listable_id
+    assert_equal different_song.id, @item.metadata["song_id"]
+    assert_equal different_song.title, @item.metadata["song_name"]
+  end
+
   # musicbrainz_search action tests
   test "musicbrainz_search returns empty array when item_id missing" do
     get musicbrainz_search_admin_songs_list_wizard_path(list_id: @list.id), params: {q: "Come Together"}
