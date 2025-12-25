@@ -750,4 +750,54 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     @list.reload
     assert_not_nil @list.wizard_state["completed_at"]
   end
+
+  test "review step displays item counts correctly" do
+    @list.list_items.destroy_all
+
+    # Create verified items (valid) - each with a unique song
+    songs = []
+    3.times do |i|
+      songs << Music::Song.create!(title: "Valid Song #{i + 1}")
+    end
+    songs.each_with_index do |song, i|
+      @list.list_items.create!(
+        listable: song,
+        listable_type: "Music::Song",
+        verified: true,
+        position: i + 1,
+        metadata: {"title" => song.title, "artists" => ["Artist"]}
+      )
+    end
+
+    # Create invalid items (ai_match_invalid) - no listable
+    2.times do |i|
+      @list.list_items.create!(
+        listable_type: "Music::Song",
+        listable_id: nil,
+        verified: false,
+        position: 10 + i,
+        metadata: {"title" => "Invalid Song #{i + 1}", "artists" => ["Artist"], "ai_match_invalid" => true}
+      )
+    end
+
+    # Create missing items (unverified, no ai_match_invalid) - no listable
+    @list.list_items.create!(
+      listable_type: "Music::Song",
+      listable_id: nil,
+      verified: false,
+      position: 20,
+      metadata: {"title" => "Missing Song", "artists" => ["Artist"]}
+    )
+
+    @list.update!(wizard_state: {"current_step" => 4, "import_source" => "custom_html"})
+
+    get step_admin_songs_list_wizard_path(list_id: @list.id, step: "review")
+
+    assert_response :success
+    # Verify the stats are displayed correctly (Total: 6, Valid: 3, Invalid: 2, Missing: 1)
+    assert_select ".stat-value", text: "6"  # Total Items
+    assert_select ".stat-value", text: "3"  # Valid count
+    assert_select ".stat-value", text: "2"  # Invalid count
+    assert_select ".stat-value", text: "1"  # Missing count
+  end
 end
