@@ -1,0 +1,41 @@
+<div id="<%= modal_id %>">
+  <dialog id="<%= dialog_id %>" class="modal">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg">Link to Existing Song</h3>
+      <p class="text-sm text-base-content/70 mt-1"><%= item_label %></p>
+
+      <%= form_with url: form_url,
+                    method: :post,
+                    data: {
+                      controller: "modal-form",
+                      modal_form_modal_id_value: dialog_id,
+                      turbo_frame: "_top"
+                    } do |f| %>
+
+        <div class="form-control mt-4">
+          <label class="label">
+            <span class="label-text">Search for song in our database:</span>
+          </label>
+          <%= render AutocompleteComponent.new(
+            name: "song_id",
+            url: autocomplete_url,
+            placeholder: "Search for song...",
+            display_key: "text",
+            value_key: "value",
+            required: true
+          ) %>
+        </div>
+
+        <div id="<%= error_id %>" class="text-error text-sm mt-2"></div>
+
+        <div class="modal-action">
+          <button type="button" class="btn" onclick="<%= dialog_id %>.close()">Cancel</button>
+          <%= f.submit "Link", class: "btn btn-primary" %>
+        </div>
+      <% end %>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button>close</button>
+    </form>
+  </dialog>
+</div>

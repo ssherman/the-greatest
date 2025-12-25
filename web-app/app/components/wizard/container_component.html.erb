@@ -1,0 +1,23 @@
+<div class="wizard-container max-w-5xl mx-auto p-6" id="<%= wizard_id %>">
+  <% if header %>
+    <div class="wizard-header mb-6">
+      <%= header %>
+    </div>
+  <% end %>
+
+  <% if progress %>
+    <div class="wizard-progress mb-8">
+      <%= progress %>
+    </div>
+  <% end %>
+
+  <div class="wizard-content bg-base-100 rounded-lg shadow-lg p-6">
+    <%= content %>
+  </div>
+
+  <% if navigation %>
+    <div class="wizard-navigation mt-6">
+      <%= navigation %>
+    </div>
+  <% end %>
+</div>

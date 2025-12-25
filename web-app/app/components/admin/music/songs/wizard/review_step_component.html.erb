@@ -1,0 +1,142 @@
+<%= render(Wizard::StepComponent.new(
+  title: "Review",
+  description: "Review all items before importing",
+  step_number: 5,
+  active: true
+)) do |step| %>
+  <% step.with_step_content do %>
+    <div class="space-y-6" data-controller="review-filter">
+      <%# Stats Cards %>
+      <div class="stats stats-vertical lg:stats-horizontal shadow w-full">
+        <div class="stat">
+          <div class="stat-title">Total Items</div>
+          <div class="stat-value text-primary"><%= total_count %></div>
+          <div class="stat-desc">Unverified items</div>
+        </div>
+        <div class="stat">
+          <div class="stat-title">Valid</div>
+          <div class="stat-value text-success"><%= valid_count %></div>
+          <div class="stat-desc"><%= percentage(valid_count) %>% of total</div>
+        </div>
+        <div class="stat">
+          <div class="stat-title">Invalid</div>
+          <div class="stat-value text-error"><%= invalid_count %></div>
+          <div class="stat-desc"><%= percentage(invalid_count) %>% of total</div>
+        </div>
+        <div class="stat">
+          <div class="stat-title">Missing</div>
+          <div class="stat-value text-base-content/70"><%= missing_count %></div>
+          <div class="stat-desc"><%= percentage(missing_count) %>% of total</div>
+        </div>
+      </div>
+
+      <%# Filter Bar %>
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-base-200 p-4 rounded-lg">
+        <div class="flex items-center gap-2">
+          <label for="status-filter" class="text-sm font-medium">Filter:</label>
+          <select
+            id="status-filter"
+            class="select select-bordered select-sm w-40"
+            data-review-filter-target="filter"
+            data-action="change->review-filter#filter">
+            <option value="all">Show All</option>
+            <option value="valid">Valid Only</option>
+            <option value="invalid">Invalid Only</option>
+            <option value="missing">Missing Only</option>
+          </select>
+        </div>
+        <span class="text-sm text-base-content/70" data-review-filter-target="count">
+          Showing <%= total_count %> items
+        </span>
+      </div>
+
+      <%# Review Table %>
+      <% if items.any? %>
+        <div class="overflow-x-auto max-h-[32rem] min-h-[16rem] overflow-y-auto">
+          <table class="table table-sm table-pin-rows w-full">
+            <thead>
+              <tr>
+                <th class="w-[60px]">Status</th>
+                <th class="w-[50px]">#</th>
+                <th>Original</th>
+                <th>Matched</th>
+                <th class="w-[100px]">Source</th>
+                <th class="w-[100px]">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% items.each do |item| %>
+                <% status = item_status(item) %>
+                <tr
+                  id="item_row_<%= item.id %>"
+                  class="<%= row_background_class(status) %>"
+                  data-review-filter-target="row"
+                  data-status="<%= status %>"
+                  data-item-id="<%= item.id %>">
+                  <td>
+                    <span class="<%= status_badge_class(status) %>" title="<%= status.titleize %>">
+                      <%= status_badge_icon(status) %>
+                    </span>
+                  </td>
+                  <td><%= item.position %></td>
+                  <td>
+                    <div class="font-medium"><%= original_title(item) %></div>
+                    <div class="text-xs text-base-content/70"><%= original_artists(item) %></div>
+                  </td>
+                  <td>
+                    <% if matched_title(item) %>
+                      <div class="font-medium"><%= matched_title(item) %></div>
+                      <% if matched_artists(item).present? %>
+                        <div class="text-xs text-base-content/70"><%= matched_artists(item) %></div>
+                      <% end %>
+                    <% else %>
+                      <span class="text-base-content/50">-</span>
+                    <% end %>
+                  </td>
+                  <td>
+                    <% badge = source_badge(item) %>
+                    <span class="<%= badge[:class] %>" title="<%= badge[:title] %>">
+                      <%= badge[:text] %>
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      class="btn btn-ghost btn-xs"
+                      popovertarget="item_menu_<%= item.id %>"
+                      style="anchor-name: --item-anchor-<%= item.id %>">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                      </svg>
+                    </button>
+                    <ul
+                      class="dropdown menu p-2 shadow bg-base-100 rounded-box w-52"
+                      popover
+                      id="item_menu_<%= item.id %>"
+                      style="position-anchor: --item-anchor-<%= item.id %>">
+                      <% unless item.verified? %>
+                        <li>
+                          <%= button_to "Verify", verify_path(item), method: :post, class: "justify-start", data: { turbo_frame: "_top" }, form: { data: { turbo: true } } %>
+                        </li>
+                      <% end %>
+                      <li><button type="button" onclick="edit_metadata_modal_<%= item.id %>_dialog.showModal(); document.getElementById('item_menu_<%= item.id %>').hidePopover();">Edit Metadata</button></li>
+                      <li><button type="button" onclick="link_song_modal_<%= item.id %>_dialog.showModal(); document.getElementById('item_menu_<%= item.id %>').hidePopover();">Link Existing Song</button></li>
+                      <li><button type="button" onclick="search_mb_modal_<%= item.id %>_dialog.showModal(); document.getElementById('item_menu_<%= item.id %>').hidePopover();">Search MusicBrainz</button></li>
+                    </ul>
+                  </td>
+                </tr>
+                <%# Render modals for this item %>
+                <%= render(Admin::Music::Songs::Wizard::EditMetadataModalComponent.new(list_item: item)) %>
+                <%= render(Admin::Music::Songs::Wizard::LinkSongModalComponent.new(list_item: item)) %>
+                <%= render(Admin::Music::Songs::Wizard::SearchMusicbrainzModalComponent.new(list_item: item, list: list)) %>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% else %>
+        <div class="text-center text-base-content/70 py-8">
+          No items to review
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+<% end %>

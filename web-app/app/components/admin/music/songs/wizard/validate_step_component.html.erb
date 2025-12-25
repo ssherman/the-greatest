@@ -1,0 +1,189 @@
+<%= render(Wizard::StepComponent.new(
+  title: "Validate Matches",
+  description: "Use AI to validate that enriched matches are correct",
+  step_number: 4,
+  active: true
+)) do |step| %>
+  <% step.with_step_content do %>
+    <div class="space-y-6"
+         <% if running? %>
+           data-controller="wizard-step"
+           data-wizard-step-status-url-value="<%= step_status_admin_songs_list_wizard_path(list_id: list.id, step: 'validate') %>"
+           data-wizard-step-step-url-value="<%= step_admin_songs_list_wizard_path(list_id: list.id, step: 'validate') %>"
+         <% end %>>
+
+      <% if idle_or_failed? %>
+        <%# State 1 - Idle (Ready to Validate) or State 4 - Failed %>
+        <div class="alert alert-info">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          <span>AI will validate enriched matches to detect bad matches (live vs studio, covers, different artists, etc.). Valid matches will be automatically verified.</span>
+        </div>
+
+        <% if failed? && validate_error.present? %>
+          <div class="alert alert-error">
+            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span><%= validate_error %></span>
+          </div>
+        <% end %>
+
+        <div class="stats stats-vertical lg:stats-horizontal shadow w-full">
+          <div class="stat">
+            <div class="stat-title">Total Items</div>
+            <div class="stat-value text-primary"><%= total_items %></div>
+            <div class="stat-desc">Unverified items</div>
+          </div>
+          <div class="stat">
+            <div class="stat-title">Items to Validate</div>
+            <div class="stat-value text-info"><%= items_to_validate %></div>
+            <div class="stat-desc">With matches</div>
+          </div>
+        </div>
+
+        <div class="flex gap-3">
+          <%= button_to failed? ? "Retry Validation" : "Start Validation",
+              advance_step_admin_songs_list_wizard_path(list_id: list.id, step: "validate"),
+              method: :post,
+              class: "btn btn-primary",
+              data: {turbo_frame: "wizard_content"} %>
+        </div>
+
+      <% elsif running? %>
+        <%# State 2 - Running %>
+        <div class="mb-6">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-sm font-medium" data-wizard-step-target="statusText">
+              Validating matches with AI...
+            </span>
+            <span class="text-sm text-base-content/70">
+              <%= validate_progress %>%
+            </span>
+          </div>
+          <progress
+            class="progress progress-primary w-full"
+            value="<%= validate_progress %>"
+            max="100"
+            data-wizard-step-target="progressBar">
+          </progress>
+        </div>
+
+        <div class="flex items-center gap-2 text-base-content/70">
+          <span class="loading loading-spinner loading-sm"></span>
+          <span>AI validation in progress... This may take a minute.</span>
+        </div>
+
+      <% elsif completed? %>
+        <%# State 3 - Completed %>
+        <div class="alert alert-success mb-6">
+          <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div>
+            <h3 class="font-bold">Validation Complete!</h3>
+            <div class="text-sm">Validated <%= validated_items %> items</div>
+          </div>
+        </div>
+
+        <div class="stats stats-vertical lg:stats-horizontal shadow w-full mb-6">
+          <div class="stat">
+            <div class="stat-title">Valid Matches</div>
+            <div class="stat-value text-success"><%= valid_count %></div>
+            <div class="stat-desc"><%= percentage(valid_count) %>% of validated</div>
+          </div>
+          <div class="stat">
+            <div class="stat-title">Invalid Matches</div>
+            <div class="stat-value text-error"><%= invalid_count %></div>
+            <div class="stat-desc"><%= percentage(invalid_count) %>% of validated</div>
+          </div>
+          <div class="stat">
+            <div class="stat-title">Auto-Verified</div>
+            <div class="stat-value text-info"><%= verified_count %></div>
+            <div class="stat-desc">Ready to import</div>
+          </div>
+        </div>
+
+        <% if reasoning.present? %>
+          <div class="card bg-base-200 mb-6">
+            <div class="card-body py-4">
+              <h3 class="card-title text-sm">AI Analysis</h3>
+              <p class="text-sm text-base-content/80"><%= reasoning %></p>
+            </div>
+          </div>
+        <% end %>
+
+        <%# Preview table %>
+        <% items = preview_items %>
+        <% if items.any? %>
+          <div class="card bg-base-100 border mb-6">
+            <div class="card-body">
+              <h3 class="card-title text-sm">Validation Results (<%= items.count %> items)</h3>
+              <div class="overflow-x-auto max-h-[32rem] overflow-y-auto">
+                <table class="table table-sm table-pin-rows">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Original</th>
+                      <th>Matched To</th>
+                      <th>Source</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <% items.each do |item| %>
+                      <tr class="<%= item.metadata["ai_match_invalid"] ? "bg-error/10" : "" %>">
+                        <td><%= item.position %></td>
+                        <td>
+                          <div class="font-medium"><%= item.metadata["title"] %></div>
+                          <div class="text-xs text-base-content/70"><%= Array(item.metadata["artists"]).join(", ") %></div>
+                        </td>
+                        <td>
+                          <% if item.metadata["opensearch_match"] %>
+                            <div class="font-medium"><%= item.metadata["song_name"] %></div>
+                          <% elsif item.metadata["musicbrainz_match"] %>
+                            <div class="font-medium"><%= item.metadata["mb_recording_name"] %></div>
+                            <div class="text-xs text-base-content/70"><%= Array(item.metadata["mb_artist_names"]).join(", ") %></div>
+                          <% else %>
+                            <span class="text-base-content/50">-</span>
+                          <% end %>
+                        </td>
+                        <td>
+                          <% if item.metadata["opensearch_match"] %>
+                            <span class="badge badge-success badge-sm">OpenSearch</span>
+                          <% elsif item.metadata["musicbrainz_match"] %>
+                            <span class="badge badge-info badge-sm">MusicBrainz</span>
+                          <% else %>
+                            <span class="badge badge-ghost badge-sm">-</span>
+                          <% end %>
+                        </td>
+                        <td>
+                          <% if item.metadata["ai_match_invalid"] %>
+                            <span class="badge badge-error badge-sm">Invalid</span>
+                          <% elsif item.verified? %>
+                            <span class="badge badge-success badge-sm">Verified</span>
+                          <% else %>
+                            <span class="badge badge-warning badge-sm">Pending</span>
+                          <% end %>
+                        </td>
+                      </tr>
+                    <% end %>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        <% end %>
+
+        <div class="flex gap-3">
+          <%= button_to "Re-validate Items",
+              advance_step_admin_songs_list_wizard_path(list_id: list.id, step: "validate", revalidate: true),
+              method: :post,
+              class: "btn btn-outline btn-sm",
+              data: {turbo_frame: "wizard_content", turbo_confirm: "This will re-validate all items, clearing previous validation results. Continue?"} %>
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+<% end %>

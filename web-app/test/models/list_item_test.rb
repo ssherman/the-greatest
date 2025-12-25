@@ -18,6 +18,8 @@
 #  index_list_items_on_list_id                   (list_id)
 #  index_list_items_on_list_id_and_position      (list_id,position)
 #  index_list_items_on_listable                  (listable_type,listable_id)
+#  index_list_items_on_verified                  (verified)
+#  index_list_items_on_verified_and_listable_id  (verified,listable_id)
 #
 # Foreign Keys
 #

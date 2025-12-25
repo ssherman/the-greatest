@@ -1,0 +1,42 @@
+<% provide(:title, "Song List Wizard - #{@list.name}") %>
+
+<div class="container mx-auto py-8">
+  <%= render(Wizard::ContainerComponent.new(
+    wizard_id: "song_list_wizard",
+    current_step: @step_index,
+    total_steps: @wizard_steps.length
+  )) do |wizard| %>
+
+    <% wizard.with_header do %>
+      <div class="mb-4">
+        <h1 class="text-3xl font-bold"><%= @list.name %></h1>
+        <p class="text-base-content/70">Import and configure your song list</p>
+      </div>
+    <% end %>
+
+    <% wizard.with_progress do %>
+      <%= render(Wizard::ProgressComponent.new(
+        steps: @wizard_steps.map.with_index { |name, idx| { name: name, step: idx } },
+        current_step: @step_index,
+        import_source: @list.wizard_state&.[]("import_source")
+      )) %>
+    <% end %>
+
+    <%= turbo_frame_tag "wizard_content" do %>
+      <%= render_step_component(@step_name, @list) %>
+    <% end %>
+
+    <% wizard.with_navigation do %>
+      <%= render(Wizard::NavigationComponent.new(
+        list: @list,
+        step_name: @step_name,
+        step_index: @step_index,
+        total_steps: @wizard_steps.length,
+        back_enabled: @step_index > 0,
+        next_enabled: step_ready_to_advance?(@step_name, @list),
+        next_label: next_button_label(@step_name)
+      )) %>
+    <% end %>
+
+  <% end %>
+</div>

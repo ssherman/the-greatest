@@ -22,6 +22,7 @@
 #  voter_count_estimated :boolean
 #  voter_count_unknown   :boolean
 #  voter_names_unknown   :boolean
+#  wizard_state          :jsonb
 #  year_published        :integer
 #  yearly_award          :boolean
 #  created_at            :datetime         not null
@@ -166,5 +167,443 @@ class ListTest < ActiveSupport::TestCase
     list.save!
 
     assert_equal simplified, list.simplified_html
+  end
+
+  test "wizard_current_step returns 0 when wizard_state is nil" do
+    list = lists(:music_songs_list)
+    list.update_column(:wizard_state, nil)
+    assert_equal 0, list.wizard_current_step
+  end
+
+  test "wizard_current_step returns 0 when wizard_state is empty" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {})
+    assert_equal 0, list.wizard_current_step
+  end
+
+  test "wizard_current_step returns stored value" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {"current_step" => 3})
+    assert_equal 3, list.wizard_current_step
+  end
+
+  test "wizard_job_status returns idle when wizard_state is nil" do
+    list = lists(:music_songs_list)
+    list.update_column(:wizard_state, nil)
+    assert_equal "idle", list.wizard_job_status
+  end
+
+  test "wizard_job_status returns idle by default" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {})
+    assert_equal "idle", list.wizard_job_status
+  end
+
+  test "wizard_job_status returns stored value" do
+    list = lists(:music_songs_list)
+    # Legacy method now delegates to current step
+    list.update!(wizard_state: {
+      "current_step" => 0,
+      "steps" => {"source" => {"status" => "running"}}
+    })
+    assert_equal "running", list.wizard_job_status
+  end
+
+  test "wizard_job_progress returns 0 when wizard_state is nil" do
+    list = lists(:music_songs_list)
+    list.update_column(:wizard_state, nil)
+    assert_equal 0, list.wizard_job_progress
+  end
+
+  test "wizard_job_progress returns 0 by default" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {})
+    assert_equal 0, list.wizard_job_progress
+  end
+
+  test "wizard_job_progress returns stored value" do
+    list = lists(:music_songs_list)
+    # Legacy method now delegates to current step
+    list.update!(wizard_state: {
+      "current_step" => 0,
+      "steps" => {"source" => {"progress" => 75}}
+    })
+    assert_equal 75, list.wizard_job_progress
+  end
+
+  test "wizard_job_error returns nil when wizard_state is nil" do
+    list = lists(:music_songs_list)
+    list.update_column(:wizard_state, nil)
+    assert_nil list.wizard_job_error
+  end
+
+  test "wizard_job_error returns nil by default" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {})
+    assert_nil list.wizard_job_error
+  end
+
+  test "wizard_job_error returns stored value" do
+    list = lists(:music_songs_list)
+    # Legacy method now delegates to current step
+    list.update!(wizard_state: {
+      "current_step" => 0,
+      "steps" => {"source" => {"error" => "Something went wrong"}}
+    })
+    assert_equal "Something went wrong", list.wizard_job_error
+  end
+
+  test "wizard_job_metadata returns empty hash when wizard_state is nil" do
+    list = lists(:music_songs_list)
+    list.update_column(:wizard_state, nil)
+    assert_equal({}, list.wizard_job_metadata)
+  end
+
+  test "wizard_job_metadata returns empty hash by default" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {})
+    assert_equal({}, list.wizard_job_metadata)
+  end
+
+  test "wizard_job_metadata returns stored value" do
+    list = lists(:music_songs_list)
+    # Legacy method now delegates to current step
+    list.update!(wizard_state: {
+      "current_step" => 0,
+      "steps" => {"source" => {"metadata" => {"total_items" => 100}}}
+    })
+    assert_equal({"total_items" => 100}, list.wizard_job_metadata)
+  end
+
+  test "wizard_in_progress? returns false when wizard_state is nil" do
+    list = lists(:music_songs_list)
+    list.update_column(:wizard_state, nil)
+    assert_not list.wizard_in_progress?
+  end
+
+  test "wizard_in_progress? returns false when not started" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {})
+    assert_not list.wizard_in_progress?
+  end
+
+  test "wizard_in_progress? returns true when started but not completed" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {"started_at" => Time.current.iso8601})
+    assert list.wizard_in_progress?
+  end
+
+  test "wizard_in_progress? returns false when completed" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {
+      "started_at" => 1.hour.ago.iso8601,
+      "completed_at" => Time.current.iso8601
+    })
+    assert_not list.wizard_in_progress?
+  end
+
+  test "update_wizard_job_status works when wizard_state is nil" do
+    list = lists(:music_songs_list)
+    list.update_column(:wizard_state, nil)
+
+    list.update_wizard_job_status(
+      status: "running",
+      progress: 50,
+      metadata: {total_items: 100}
+    )
+
+    assert_equal "running", list.wizard_job_status
+    assert_equal 50, list.wizard_job_progress
+    assert_equal({"total_items" => 100}, list.wizard_job_metadata)
+  end
+
+  test "update_wizard_job_status merges new state" do
+    list = lists(:music_songs_list)
+    list.reset_wizard!
+
+    list.update_wizard_job_status(
+      status: "running",
+      progress: 50,
+      metadata: {total_items: 100}
+    )
+
+    assert_equal "running", list.wizard_job_status
+    assert_equal 50, list.wizard_job_progress
+    assert_equal({"total_items" => 100}, list.wizard_job_metadata)
+  end
+
+  test "update_wizard_job_status preserves existing metadata" do
+    list = lists(:music_songs_list)
+    # Set up step-namespaced metadata (legacy method delegates to current step)
+    list.update!(wizard_state: {
+      "current_step" => 0,
+      "steps" => {"source" => {"metadata" => {"total_items" => 100}}}
+    })
+
+    list.update_wizard_job_status(
+      status: "running",
+      metadata: {processed_items: 50}
+    )
+
+    expected = {"total_items" => 100, "processed_items" => 50}
+    assert_equal expected, list.wizard_job_metadata
+  end
+
+  test "update_wizard_job_status preserves progress if not provided" do
+    list = lists(:music_songs_list)
+    # Set up step-namespaced progress (legacy method delegates to current step)
+    list.update!(wizard_state: {
+      "current_step" => 0,
+      "steps" => {"source" => {"progress" => 30}}
+    })
+
+    list.update_wizard_job_status(status: "running")
+
+    assert_equal 30, list.wizard_job_progress
+  end
+
+  test "reset_wizard! sets all initial values" do
+    list = lists(:music_songs_list)
+    list.reset_wizard!
+
+    assert_equal 0, list.wizard_current_step
+    assert_equal "idle", list.wizard_job_status
+    assert_equal 0, list.wizard_job_progress
+    assert_nil list.wizard_job_error
+    assert_equal({}, list.wizard_job_metadata)
+    assert_equal({}, list.wizard_state["steps"])
+    assert list.wizard_state["started_at"].present?
+    assert_nil list.wizard_state["completed_at"]
+  end
+
+  # ============================================
+  # Step-Namespaced Status Tests (NEW)
+  # ============================================
+
+  test "current_step_name returns step name from index" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {"current_step" => 0})
+    assert_equal "source", list.current_step_name
+
+    list.update!(wizard_state: {"current_step" => 1})
+    assert_equal "parse", list.current_step_name
+
+    list.update!(wizard_state: {"current_step" => 2})
+    assert_equal "enrich", list.current_step_name
+  end
+
+  test "current_step_name returns source for invalid index" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {"current_step" => 999})
+    assert_equal "source", list.current_step_name
+  end
+
+  test "wizard_step_status returns idle by default for unknown step" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {})
+    assert_equal "idle", list.wizard_step_status("parse")
+  end
+
+  test "wizard_step_status returns stored value for step" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {
+      "steps" => {
+        "parse" => {"status" => "completed", "progress" => 100}
+      }
+    })
+    assert_equal "completed", list.wizard_step_status("parse")
+    assert_equal "idle", list.wizard_step_status("enrich")
+  end
+
+  test "wizard_step_progress returns 0 by default" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {})
+    assert_equal 0, list.wizard_step_progress("parse")
+  end
+
+  test "wizard_step_progress returns stored value for step" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {
+      "steps" => {
+        "parse" => {"status" => "running", "progress" => 75}
+      }
+    })
+    assert_equal 75, list.wizard_step_progress("parse")
+  end
+
+  test "wizard_step_error returns nil by default" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {})
+    assert_nil list.wizard_step_error("parse")
+  end
+
+  test "wizard_step_error returns stored value for step" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {
+      "steps" => {
+        "parse" => {"status" => "failed", "error" => "Something went wrong"}
+      }
+    })
+    assert_equal "Something went wrong", list.wizard_step_error("parse")
+  end
+
+  test "wizard_step_metadata returns empty hash by default" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {})
+    assert_equal({}, list.wizard_step_metadata("parse"))
+  end
+
+  test "wizard_step_metadata returns stored value for step" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {
+      "steps" => {
+        "parse" => {"status" => "completed", "metadata" => {"total_items" => 50}}
+      }
+    })
+    assert_equal({"total_items" => 50}, list.wizard_step_metadata("parse"))
+  end
+
+  test "update_wizard_step_status creates step data" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {})
+
+    list.update_wizard_step_status(
+      step: "parse",
+      status: "running",
+      progress: 50,
+      metadata: {total_items: 100}
+    )
+
+    assert_equal "running", list.wizard_step_status("parse")
+    assert_equal 50, list.wizard_step_progress("parse")
+    assert_equal({"total_items" => 100}, list.wizard_step_metadata("parse"))
+  end
+
+  test "update_wizard_step_status preserves other steps" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {
+      "steps" => {
+        "parse" => {"status" => "completed", "progress" => 100, "error" => nil, "metadata" => {"total_items" => 50}}
+      }
+    })
+
+    list.update_wizard_step_status(
+      step: "enrich",
+      status: "running",
+      progress: 25
+    )
+
+    # Parse step should be unchanged
+    assert_equal "completed", list.wizard_step_status("parse")
+    assert_equal 100, list.wizard_step_progress("parse")
+
+    # Enrich step should be updated
+    assert_equal "running", list.wizard_step_status("enrich")
+    assert_equal 25, list.wizard_step_progress("enrich")
+  end
+
+  test "update_wizard_step_status merges metadata" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {
+      "steps" => {
+        "enrich" => {"status" => "running", "progress" => 50, "metadata" => {"total_items" => 100}}
+      }
+    })
+
+    list.update_wizard_step_status(
+      step: "enrich",
+      status: "running",
+      progress: 75,
+      metadata: {processed_items: 75}
+    )
+
+    expected = {"total_items" => 100, "processed_items" => 75}
+    assert_equal expected, list.wizard_step_metadata("enrich")
+  end
+
+  test "reset_wizard_step! resets only that step" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {
+      "steps" => {
+        "parse" => {"status" => "completed", "progress" => 100, "error" => nil, "metadata" => {"total_items" => 50}},
+        "enrich" => {"status" => "completed", "progress" => 100, "error" => nil, "metadata" => {"processed_items" => 50}}
+      }
+    })
+
+    list.reset_wizard_step!("parse")
+
+    # Parse should be reset
+    assert_equal "idle", list.wizard_step_status("parse")
+    assert_equal 0, list.wizard_step_progress("parse")
+    assert_nil list.wizard_step_error("parse")
+    assert_equal({}, list.wizard_step_metadata("parse"))
+
+    # Enrich should be unchanged
+    assert_equal "completed", list.wizard_step_status("enrich")
+    assert_equal 100, list.wizard_step_progress("enrich")
+  end
+
+  test "legacy wizard_job_status delegates to current step" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {
+      "current_step" => 1, # parse step
+      "steps" => {
+        "parse" => {"status" => "running", "progress" => 50}
+      }
+    })
+
+    assert_equal "running", list.wizard_job_status
+  end
+
+  test "legacy update_wizard_job_status updates current step" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {"current_step" => 2}) # enrich step
+
+    list.update_wizard_job_status(
+      status: "running",
+      progress: 25,
+      metadata: {total_items: 100}
+    )
+
+    assert_equal "running", list.wizard_step_status("enrich")
+    assert_equal 25, list.wizard_step_progress("enrich")
+  end
+
+  test "step status persists when navigating forward" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {
+      "current_step" => 1,
+      "steps" => {
+        "parse" => {"status" => "completed", "progress" => 100, "error" => nil, "metadata" => {"total_items" => 50}}
+      }
+    })
+
+    # Simulate advancing to enrich step (just update current_step, preserve status)
+    list.update!(wizard_state: list.wizard_state.merge("current_step" => 2))
+
+    # Parse status should still be completed
+    assert_equal "completed", list.wizard_step_status("parse")
+    assert_equal 100, list.wizard_step_progress("parse")
+
+    # Enrich status should be idle (not started yet)
+    assert_equal "idle", list.wizard_step_status("enrich")
+  end
+
+  test "step status persists when navigating back" do
+    list = lists(:music_songs_list)
+    list.update!(wizard_state: {
+      "current_step" => 2,
+      "steps" => {
+        "parse" => {"status" => "completed", "progress" => 100, "error" => nil, "metadata" => {"total_items" => 50}},
+        "enrich" => {"status" => "completed", "progress" => 100, "error" => nil, "metadata" => {"processed_items" => 50}}
+      }
+    })
+
+    # Simulate going back to parse step
+    list.update!(wizard_state: list.wizard_state.merge("current_step" => 1))
+
+    # Both steps should retain their status
+    assert_equal "completed", list.wizard_step_status("parse")
+    assert_equal "completed", list.wizard_step_status("enrich")
   end
 end

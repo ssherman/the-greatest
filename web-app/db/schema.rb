@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2025_11_05_010109) do
+ActiveRecord::Schema[8.1].define(version: 2025_11_22_162059) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -167,6 +167,8 @@ ActiveRecord::Schema[8.1].define(version: 2025_11_05_010109) do
     t.index ["list_id", "position"], name: "index_list_items_on_list_id_and_position"
     t.index ["list_id"], name: "index_list_items_on_list_id"
     t.index ["listable_type", "listable_id"], name: "index_list_items_on_listable"
+    t.index ["verified", "listable_id"], name: "index_list_items_on_verified_and_listable_id"
+    t.index ["verified"], name: "index_list_items_on_verified"
   end
 
   create_table "list_penalties", force: :cascade do |t|
@@ -203,6 +205,7 @@ ActiveRecord::Schema[8.1].define(version: 2025_11_05_010109) do
     t.boolean "voter_count_estimated"
     t.boolean "voter_count_unknown"
     t.boolean "voter_names_unknown"
+    t.jsonb "wizard_state", default: {}
     t.integer "year_published"
     t.boolean "yearly_award"
     t.index ["submitted_by_id"], name: "index_lists_on_submitted_by_id"

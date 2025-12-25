@@ -22,6 +22,7 @@
 #  voter_count_estimated :boolean
 #  voter_count_unknown   :boolean
 #  voter_names_unknown   :boolean
+#  wizard_state          :jsonb
 #  year_published        :integer
 #  yearly_award          :boolean
 #  created_at            :datetime         not null
@@ -105,7 +106,123 @@ class List < ApplicationRecord
     end
   end
 
+  # Wizard step names for mapping current_step index to step name
+  WIZARD_STEPS = %w[source parse enrich validate review import complete].freeze
+
+  def wizard_current_step
+    safe_wizard_state.fetch("current_step", 0)
+  end
+
+  def current_step_name
+    WIZARD_STEPS[wizard_current_step] || "source"
+  end
+
+  # ============================================
+  # Step-Namespaced Status Methods (NEW)
+  # ============================================
+
+  def wizard_step_status(step_name)
+    wizard_step_data(step_name).fetch("status", "idle")
+  end
+
+  def wizard_step_progress(step_name)
+    wizard_step_data(step_name).fetch("progress", 0)
+  end
+
+  def wizard_step_error(step_name)
+    wizard_step_data(step_name).fetch("error", nil)
+  end
+
+  def wizard_step_metadata(step_name)
+    wizard_step_data(step_name).fetch("metadata", {})
+  end
+
+  def update_wizard_step_status(step:, status:, progress: nil, error: nil, metadata: {})
+    step_key = step.to_s
+    current_step_state = wizard_step_data(step_key)
+
+    new_step_state = {
+      "status" => status,
+      "progress" => progress || current_step_state.fetch("progress", 0),
+      "error" => error,
+      "metadata" => current_step_state.fetch("metadata", {}).merge(metadata)
+    }
+
+    steps_data = wizard_steps_data.merge(step_key => new_step_state)
+    new_state = safe_wizard_state.merge("steps" => steps_data)
+
+    update!(wizard_state: new_state)
+  end
+
+  def reset_wizard_step!(step_name)
+    step_key = step_name.to_s
+    steps_data = wizard_steps_data.merge(step_key => default_step_state)
+    new_state = safe_wizard_state.merge("steps" => steps_data)
+
+    update!(wizard_state: new_state)
+  end
+
+  # ============================================
+  # Legacy Methods (Deprecated - delegate to current step)
+  # ============================================
+
+  def wizard_job_status
+    wizard_step_status(current_step_name)
+  end
+
+  def wizard_job_progress
+    wizard_step_progress(current_step_name)
+  end
+
+  def wizard_job_error
+    wizard_step_error(current_step_name)
+  end
+
+  def wizard_job_metadata
+    wizard_step_metadata(current_step_name)
+  end
+
+  def wizard_in_progress?
+    safe_wizard_state.fetch("started_at", nil).present? &&
+      safe_wizard_state.fetch("completed_at", nil).nil?
+  end
+
+  def update_wizard_job_status(status:, progress: nil, error: nil, metadata: {})
+    update_wizard_step_status(
+      step: current_step_name,
+      status: status,
+      progress: progress,
+      error: error,
+      metadata: metadata
+    )
+  end
+
+  def reset_wizard!
+    update!(wizard_state: {
+      "current_step" => 0,
+      "started_at" => Time.current.iso8601,
+      "completed_at" => nil,
+      "steps" => {}
+    })
+  end
+
   private
+
+  def safe_wizard_state
+    wizard_state || {}
+  end
+
+  def wizard_steps_data
+    safe_wizard_state.fetch("steps", {})
+  end
+
+  def wizard_step_data(step_name)
+    wizard_steps_data.fetch(step_name.to_s, default_step_state)
+  end
+
+  def default_step_state
+    {"status" => "idle", "progress" => 0, "error" => nil, "metadata" => {}}
+  end
 
   def should_simplify_html?
     raw_html.present? && (new_record? || raw_html_changed?)
