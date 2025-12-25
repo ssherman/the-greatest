@@ -21,7 +21,11 @@ module Admin::Music::Songs::ListWizardHelper
     when "review"
       render(Admin::Music::Songs::Wizard::ReviewStepComponent.new(
         list: list,
-        items: @items || []
+        items: @items || [],
+        total_count: @total_count || 0,
+        valid_count: @valid_count || 0,
+        invalid_count: @invalid_count || 0,
+        missing_count: @missing_count || 0
       ))
     when "import"
       render(Admin::Music::Songs::Wizard::ImportStepComponent.new(list: list))
