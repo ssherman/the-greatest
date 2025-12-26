@@ -18,6 +18,9 @@ export default class extends Controller {
   }
 
   filter() {
+    // Guard against missing container (when items list is empty)
+    if (!this.hasContainerTarget) return
+
     const value = this.filterTarget.value
 
     // Single DOM write - CSS handles the rest
