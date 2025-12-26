@@ -1,9 +1,17 @@
 import { Controller } from "@hotwired/stimulus"
 
 // Connects to data-controller="review-filter"
-// Client-side filtering of review table rows by status
+// CSS-based filtering of review table rows by status for performance.
+// Instead of iterating 1000+ rows in JS, we set a data attribute on the
+// container and let CSS hide/show rows. This is O(1) instead of O(n).
 export default class extends Controller {
-  static targets = ["row", "filter", "count"]
+  static targets = ["container", "filter", "count"]
+  static values = {
+    totalCount: Number,
+    validCount: Number,
+    invalidCount: Number,
+    missingCount: Number
+  }
 
   connect() {
     this.filter()
@@ -11,15 +19,25 @@ export default class extends Controller {
 
   filter() {
     const value = this.filterTarget.value
-    let visibleCount = 0
 
-    this.rowTargets.forEach(row => {
-      const status = row.dataset.status
-      const visible = value === "all" || status === value
-      row.classList.toggle("hidden", !visible)
-      if (visible) visibleCount++
-    })
+    // Single DOM write - CSS handles the rest
+    this.containerTarget.dataset.filter = value
 
-    this.countTarget.textContent = `Showing ${visibleCount} items`
+    // Use pre-computed counts instead of iterating DOM
+    const count = this.getCountForFilter(value)
+    this.countTarget.textContent = `Showing ${count} items`
+  }
+
+  getCountForFilter(filter) {
+    switch (filter) {
+      case "valid":
+        return this.validCountValue
+      case "invalid":
+        return this.invalidCountValue
+      case "missing":
+        return this.missingCountValue
+      default:
+        return this.totalCountValue
+    }
   }
 }
