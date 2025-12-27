@@ -11,8 +11,8 @@
          data-review-filter-valid-count-value="<%= valid_count %>"
          data-review-filter-invalid-count-value="<%= invalid_count %>"
          data-review-filter-missing-count-value="<%= missing_count %>">
-      <%# Stats Cards %>
-      <div class="stats stats-vertical lg:stats-horizontal shadow w-full">
+      <%# Stats Cards - ID for Turbo Stream updates when rows change status %>
+      <div id="review_stats_<%= list.id %>" class="stats stats-vertical lg:stats-horizontal shadow w-full">
         <div class="stat">
           <div class="stat-title">Total Items</div>
           <div class="stat-value text-primary"><%= total_count %></div>

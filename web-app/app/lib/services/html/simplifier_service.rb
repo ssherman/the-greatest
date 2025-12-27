@@ -62,9 +62,6 @@ module Services
           # Navigation and structure that could confuse parsing
           "nav", "aside", "footer", "header",
 
-          # Table elements (unless they contain the actual list)
-          "table", "thead", "tbody", "tfoot", "tr", "td", "th", "caption", "colgroup", "col",
-
           # Ruby annotation (rare but could interfere)
           "ruby", "rt", "rp",
 

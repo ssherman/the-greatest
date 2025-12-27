@@ -15,6 +15,7 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
       format.turbo_stream do
         render turbo_stream: [
           turbo_stream.replace("item_row_#{@item.id}", partial: "item_row", locals: {item: @item}),
+          turbo_stream.replace("review_stats_#{@list.id}", partial: "review_stats", locals: {list: @list}),
           turbo_stream.append("flash_messages", partial: "flash_success", locals: {message: "Item verified"})
         ]
       end
@@ -47,6 +48,7 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
       format.turbo_stream do
         render turbo_stream: [
           turbo_stream.replace("item_row_#{@item.id}", partial: "item_row", locals: {item: @item}),
+          turbo_stream.replace("review_stats_#{@list.id}", partial: "review_stats", locals: {list: @list}),
           turbo_stream.append("flash_messages", partial: "flash_success", locals: {message: "Metadata updated successfully"})
         ]
       end
@@ -102,6 +104,7 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
       format.turbo_stream do
         render turbo_stream: [
           turbo_stream.replace("item_row_#{@item.id}", partial: "item_row", locals: {item: @item}),
+          turbo_stream.replace("review_stats_#{@list.id}", partial: "review_stats", locals: {list: @list}),
           turbo_stream.append("flash_messages", partial: "flash_success", locals: {message: "Song linked successfully"})
         ]
       end
@@ -173,6 +176,7 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
         format.turbo_stream do
           render turbo_stream: [
             turbo_stream.replace("item_row_#{@item.id}", partial: "item_row", locals: {item: @item}),
+            turbo_stream.replace("review_stats_#{@list.id}", partial: "review_stats", locals: {list: @list}),
             turbo_stream.append("flash_messages", partial: "flash_success", locals: {message: "MusicBrainz recording linked successfully"})
           ]
         end
