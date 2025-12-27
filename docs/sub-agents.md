@@ -71,7 +71,7 @@ This project uses specialized Claude Code sub-agents to handle specific types of
 **When to use**:
 - After creating new models, services, or controllers
 - When updating existing classes that need doc updates
-- Creating or updating task files in `docs/todos/`
+- Creating or updating spec files in `docs/specs/`
 - Ensuring documentation stays in sync with code
 
 **What it does**:
@@ -246,4 +246,4 @@ The sub-agent will complete its task and return structured findings, which the m
 - [dev-core-values.md](dev-core-values.md) - Project development principles
 - [documentation.md](documentation.md) - Documentation standards
 - [testing.md](testing.md) - Testing guidelines
-- [todo-guide.md](todo-guide.md) - Task management workflow
+- [spec-instructions.md](spec-instructions.md) - Spec management workflow

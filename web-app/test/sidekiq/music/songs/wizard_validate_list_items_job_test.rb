@@ -54,7 +54,8 @@ class Music::Songs::WizardValidateListItemsJobTest < ActiveSupport::TestCase
     Music::Songs::WizardValidateListItemsJob.new.perform(@list.id)
 
     @list.reload
-    assert_includes ["running", "completed"], @list.wizard_step_status("validate")
+    manager = @list.wizard_manager
+    assert_includes ["running", "completed"], manager.step_status("validate")
   end
 
   test "job calls ListItemsValidatorTask" do
@@ -78,10 +79,11 @@ class Music::Songs::WizardValidateListItemsJobTest < ActiveSupport::TestCase
     Music::Songs::WizardValidateListItemsJob.new.perform(@list.id)
 
     @list.reload
-    assert_equal "completed", @list.wizard_step_status("validate")
-    assert_equal 100, @list.wizard_step_progress("validate")
+    manager = @list.wizard_manager
+    assert_equal "completed", manager.step_status("validate")
+    assert_equal 100, manager.step_progress("validate")
 
-    metadata = @list.wizard_step_metadata("validate")
+    metadata = manager.step_metadata("validate")
     assert_equal 2, metadata["validated_items"]
     assert_equal 1, metadata["valid_count"]
     assert_equal 1, metadata["invalid_count"]
@@ -97,8 +99,9 @@ class Music::Songs::WizardValidateListItemsJobTest < ActiveSupport::TestCase
     Music::Songs::WizardValidateListItemsJob.new.perform(@list.id)
 
     @list.reload
-    assert_equal "failed", @list.wizard_step_status("validate")
-    assert_equal "AI service timeout", @list.wizard_step_error("validate")
+    manager = @list.wizard_manager
+    assert_equal "failed", manager.step_status("validate")
+    assert_equal "AI service timeout", manager.step_error("validate")
   end
 
   test "job handles empty list gracefully (no enriched items)" do
@@ -108,10 +111,11 @@ class Music::Songs::WizardValidateListItemsJobTest < ActiveSupport::TestCase
     Music::Songs::WizardValidateListItemsJob.new.perform(@list.id)
 
     @list.reload
-    assert_equal "completed", @list.wizard_step_status("validate")
-    assert_equal 100, @list.wizard_step_progress("validate")
+    manager = @list.wizard_manager
+    assert_equal "completed", manager.step_status("validate")
+    assert_equal 100, manager.step_progress("validate")
 
-    metadata = @list.wizard_step_metadata("validate")
+    metadata = manager.step_metadata("validate")
     assert_equal 0, metadata["validated_items"]
     assert_equal 0, metadata["valid_count"]
     assert_equal 0, metadata["invalid_count"]
@@ -166,7 +170,8 @@ class Music::Songs::WizardValidateListItemsJobTest < ActiveSupport::TestCase
     Music::Songs::WizardValidateListItemsJob.new.perform(@list.id)
 
     @list.reload
-    metadata = @list.wizard_step_metadata("validate")
+    manager = @list.wizard_manager
+    metadata = manager.step_metadata("validate")
     assert_equal 2, metadata["validated_items"]
   end
 
@@ -189,7 +194,8 @@ class Music::Songs::WizardValidateListItemsJobTest < ActiveSupport::TestCase
     Music::Songs::WizardValidateListItemsJob.new.perform(@list.id)
 
     @list.reload
-    metadata = @list.wizard_step_metadata("validate")
+    manager = @list.wizard_manager
+    metadata = manager.step_metadata("validate")
     assert_equal 2, metadata["validated_items"]
   end
 
@@ -201,7 +207,8 @@ class Music::Songs::WizardValidateListItemsJobTest < ActiveSupport::TestCase
     end
 
     @list.reload
-    assert_equal "failed", @list.wizard_step_status("validate")
-    assert_equal "Network error", @list.wizard_step_error("validate")
+    manager = @list.wizard_manager
+    assert_equal "failed", manager.step_status("validate")
+    assert_equal "Network error", manager.step_error("validate")
   end
 end

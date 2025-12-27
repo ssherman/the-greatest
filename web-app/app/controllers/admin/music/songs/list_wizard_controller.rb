@@ -46,7 +46,7 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
   # Resets the parse step to allow re-parsing.
   # Destroys all unverified list items and resets step status.
   def reparse
-    wizard_entity.reset_wizard_step!("parse")
+    wizard_entity.wizard_manager.reset_step!("parse")
     wizard_entity.list_items.unverified.destroy_all
     redirect_to action: :show_step, step: "parse", notice: "Ready to re-parse. Click 'Start Parsing' to begin."
   end
@@ -224,7 +224,7 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
   # @param config [Hash] step configuration from JOB_STEP_CONFIG
   # @return [void] redirects to appropriate page
   def advance_from_job_step(step_name, config)
-    status = wizard_entity.wizard_step_status(step_name)
+    status = wizard_entity.wizard_manager.step_status(step_name)
     job_class = config[:job_class].constantize
     action_name = config[:action_name]
     re_run_param = config[:re_run_param]
@@ -251,7 +251,7 @@ class Admin::Music::Songs::ListWizardController < Admin::Music::BaseController
   # @param step_name [String] the step to start
   # @param job_class [Class] the Sidekiq job class to enqueue
   def start_job(step_name, job_class)
-    wizard_entity.update_wizard_step_status(step: step_name, status: "running", progress: 0, error: nil, metadata: {})
+    wizard_entity.wizard_manager.update_step_status!(step: step_name, status: "running", progress: 0, error: nil, metadata: {})
     job_class.perform_async(wizard_entity.id)
   end
 

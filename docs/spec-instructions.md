@@ -26,19 +26,14 @@
 
 ## Repository Structure
 
-**Main list**
+**Specs**
 ```
-todo.md           # Priority-sorted links to task files
-```
-
-**Tasks**
-```
-docs/todos/
+docs/specs/
   075-custom-admin-phase-4-songs.md
   completed/
     000-project-setup.md
   templates/
-    task-template.md
+    spec-template.md
 ```
 
 **References**
@@ -53,40 +48,16 @@ docs/
 
 ---
 
-## `todo.md` Format
-
-Keep it short and link to tasks.
-
-```markdown
-# The Greatest — Todo
-
-## High
-1. [Custom Admin Interface – Phase 4: Songs](docs/todos/075-custom-admin-phase-4-songs.md)
-
-## Medium
-2. [OpenSearch Integration](docs/todos/005-opensearch-integration.md)
-
-## Low
-3. [Recommendation Engine MVP](docs/todos/004-recommendation-engine.md)
-
-## Completed
-- ✅ [2025-11-10] [Phase 4: Songs](docs/todos/completed/075-custom-admin-phase-4-songs.md)
-```
-
----
-
 ## Task Lifecycle
 
 **Create → Implement → Record → Close**
 
-1. Add to `todo.md` (priority section + link).
-2. Create task file from the template (see `docs/todos/templates/task-template.md`).
-3. While building, update **Implementation Notes** and **Deviations** in the task file.
-4. On completion:
+1. Create spec file from the template (see `docs/specs/templates/spec-template.md`).
+2. While building, update **Implementation Notes** and **Deviations** in the spec file.
+3. On completion:
    - Fill **Acceptance Results**.
-   - Update status to “Completed” with date.
-   - Move link to “Completed” in `todo.md`.
-   - Optionally move task file into `docs/todos/completed/`.
+   - Update status to "Completed" with date.
+   - Move spec file into `docs/specs/completed/`.
 
 ---
 
@@ -162,7 +133,7 @@ See `docs/sub-agents.md` for full details.
 
 - [ ] All Acceptance Criteria demonstrably pass (tests/screenshots).
 - [ ] No N+1 on listed pages; sort whitelist enforced where applicable.
-- [ ] Docs updated (task file, `todo.md`, touched class docs).
+- [ ] Docs updated (task file, touched class docs).
 - [ ] Links to authoritative code present; no large code dumps in the spec.
 - [ ] Security/auth reviewed for new/changed paths and actions.
 - [ ] Performance constraints noted or measured.

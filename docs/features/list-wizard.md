@@ -64,8 +64,8 @@ Displays numbered step indicator with completion status.
 
 **Key Methods**:
 - `filtered_steps` - Returns steps applicable to current import source
-- `step_status(index)` - Returns CSS class for step state
-- `step_icon(index)` - Returns checkmark or step number
+- `step_status(original_step_index)` - Returns CSS class for step state (uses original index for correct comparison)
+- `step_icon(original_step_index, display_position)` - Returns checkmark for completed, 1-based number for pending/current
 
 ### StepComponent
 
@@ -226,6 +226,55 @@ Located in [`app/components/admin/music/songs/wizard/`](/web-app/app/components/
 | `step_ready_to_advance?(step_name, list)` | Determines if Next button enabled |
 | `next_button_label(step_name)` | Dynamic button text |
 | `job_status_text(list)` | Human-readable job status |
+
+### Review Step Performance Optimization
+
+The review step uses CSS-based filtering for performance with large lists (1000+ items).
+
+**Stimulus Controller**: [`review_filter_controller.js`](/web-app/app/javascript/controllers/review_filter_controller.js)
+
+#### CSS-Based Filtering
+
+Instead of iterating 1000+ rows in JavaScript, the controller sets a single `data-filter` attribute on the container and CSS handles visibility:
+
+```css
+[data-filter="valid"] tr[data-status]:not([data-status="valid"]) {
+  display: none;
+}
+```
+
+This reduces filter operations from O(n) to O(1).
+
+#### Count Tracking
+
+Counts are passed as Stimulus values for instant filter count updates:
+- `data-review-filter-total-count-value`
+- `data-review-filter-valid-count-value`
+- `data-review-filter-invalid-count-value`
+- `data-review-filter-missing-count-value`
+
+A `MutationObserver` watches for Turbo Stream row updates and recounts when statuses change.
+
+#### Stats Turbo Stream Updates
+
+When items are modified via Turbo Stream (verify, link, metadata actions), the stats cards are updated via:
+
+```ruby
+turbo_stream.replace("review_stats_#{@list.id}", partial: "review_stats", locals: {list: @list})
+```
+
+**Partial**: [`_review_stats.html.erb`](/web-app/app/views/admin/music/songs/list_items_actions/_review_stats.html.erb)
+
+### Progress Component Step Filtering
+
+When `import_source` is `musicbrainz_series`, the parse step is filtered from display. The `ProgressComponent` uses original step indices (not filtered positions) for status calculations to ensure correct highlighting:
+
+```ruby
+# Uses step[:step] (original index) for status comparison
+step_status(step[:step])
+# Uses both original index and display position for icons
+step_icon(step[:step], index)
+```
 
 ## wizard_state Schema
 
@@ -494,6 +543,22 @@ Add wizard link to the list show page:
 | [`app/components/admin/music/songs/wizard/import_step_component.rb`](/web-app/app/components/admin/music/songs/wizard/import_step_component.rb) | Import progress |
 | [`app/components/admin/music/songs/wizard/complete_step_component.rb`](/web-app/app/components/admin/music/songs/wizard/complete_step_component.rb) | Completion |
 
+### View Partials
+
+| File | Purpose |
+|------|---------|
+| [`app/views/admin/music/songs/list_items_actions/_item_row.html.erb`](/web-app/app/views/admin/music/songs/list_items_actions/_item_row.html.erb) | Review table row (Turbo Stream target) |
+| [`app/views/admin/music/songs/list_items_actions/_review_stats.html.erb`](/web-app/app/views/admin/music/songs/list_items_actions/_review_stats.html.erb) | Stats cards (Turbo Stream target) |
+| [`app/views/admin/music/songs/list_items_actions/_flash_success.html.erb`](/web-app/app/views/admin/music/songs/list_items_actions/_flash_success.html.erb) | Success message |
+| [`app/views/admin/music/songs/list_items_actions/_error_message.html.erb`](/web-app/app/views/admin/music/songs/list_items_actions/_error_message.html.erb) | Error message |
+
+### JavaScript Controllers
+
+| File | Purpose |
+|------|---------|
+| [`app/javascript/controllers/wizard_step_controller.js`](/web-app/app/javascript/controllers/wizard_step_controller.js) | Job polling and progress updates |
+| [`app/javascript/controllers/review_filter_controller.js`](/web-app/app/javascript/controllers/review_filter_controller.js) | CSS-based row filtering with MutationObserver |
+
 ### Background Jobs
 
 | File | Purpose |
@@ -513,4 +578,4 @@ Add wizard link to the list show page:
 
 - [List Model](/docs/models/list.md) - Base model with wizard_state methods
 - [Music::Songs::List](/docs/models/music/songs/list.md) - Song list implementation
-- [Todo Guide](/docs/todo-guide.md) - Task tracking standards
+- [Spec Instructions](/docs/spec-instructions.md) - Spec tracking standards

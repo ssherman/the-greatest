@@ -71,5 +71,4 @@ docs/            - Project documentation
 - **[Developer Core Values](dev-core-values.md)** - AI-first development principles and coding standards
 - **[Testing Guide](testing.md)** - Testing philosophy, Minitest setup, and best practices
 - **[Documentation Guide](documentation.md)** - How to document classes and maintain project documentation
-- **[Task Management Guide](todo-guide.md)** - How tasks are tracked and organized using markdown files
-- **[Current Todo List](todo.md)** - Active tasks and project priorities
+- **[Spec Instructions](spec-instructions.md)** - How specs are tracked and organized using markdown files

@@ -50,10 +50,11 @@ class Music::Songs::WizardParseListJobTest < ActiveSupport::TestCase
     Music::Songs::WizardParseListJob.new.perform(@list.id)
 
     @list.reload
-    assert_equal "completed", @list.wizard_job_status
-    assert_equal 100, @list.wizard_job_progress
-    assert_equal 1, @list.wizard_job_metadata["total_items"]
-    assert @list.wizard_job_metadata["parsed_at"].present?
+    manager = @list.wizard_manager
+    assert_equal "completed", manager.step_status("parse")
+    assert_equal 100, manager.step_progress("parse")
+    assert_equal 1, manager.step_metadata("parse")["total_items"]
+    assert manager.step_metadata("parse")["parsed_at"].present?
   end
 
   test "job updates wizard_state to failed on error" do
@@ -67,9 +68,10 @@ class Music::Songs::WizardParseListJobTest < ActiveSupport::TestCase
     Music::Songs::WizardParseListJob.new.perform(@list.id)
 
     @list.reload
-    assert_equal "failed", @list.wizard_job_status
-    assert_equal 0, @list.wizard_job_progress
-    assert_includes @list.wizard_job_error, "AI service timeout"
+    manager = @list.wizard_manager
+    assert_equal "failed", manager.step_status("parse")
+    assert_equal 0, manager.step_progress("parse")
+    assert_includes manager.step_error("parse"), "AI service timeout"
   end
 
   test "job fails immediately if raw_html is blank" do
@@ -78,8 +80,9 @@ class Music::Songs::WizardParseListJobTest < ActiveSupport::TestCase
     Music::Songs::WizardParseListJob.new.perform(@list.id)
 
     @list.reload
-    assert_equal "failed", @list.wizard_job_status
-    assert_includes @list.wizard_job_error, "raw_html is blank"
+    manager = @list.wizard_manager
+    assert_equal "failed", manager.step_status("parse")
+    assert_includes manager.step_error("parse"), "raw_html is blank"
   end
 
   test "job is idempotent - clears old unverified items" do

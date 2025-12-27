@@ -147,7 +147,7 @@ Each domain has its own:
 ## 📚 Documentation
 
 - **[Development Setup](docs/dev_setup.md)** - Complete local development guide
-- **[Project Tasks](docs/todos/)** - Feature development and project management
+- **[Project Specs](docs/specs/)** - Feature development and project management
 
 ## 🧪 Testing
 

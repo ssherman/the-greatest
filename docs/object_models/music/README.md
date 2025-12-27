@@ -1,7 +1,7 @@
 # Music Object Model - Current State
 
 ## Overview
-The music object model represents the core entities and relationships for The Greatest's music domain. This documentation reflects the current implementation as of August 2025, including changes made since the original design in the [001-music-object-model.md todo](/docs/todos/001-music-object-model.md).
+The music object model represents the core entities and relationships for The Greatest's music domain. This documentation reflects the current implementation as of August 2025, including changes made since the original design in the [001-music-object-model.md spec](/docs/specs/001-music-object-model.md).
 
 ## Core Models
 

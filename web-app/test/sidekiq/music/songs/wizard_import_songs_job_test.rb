@@ -36,7 +36,8 @@ class Music::Songs::WizardImportSongsJobTest < ActiveSupport::TestCase
     Music::Songs::WizardImportSongsJob.new.perform(@list.id)
 
     @list.reload
-    assert_includes ["running", "completed"], @list.wizard_step_status("import")
+    manager = @list.wizard_manager
+    assert_includes ["running", "completed"], manager.step_status("import")
   end
 
   test "job dispatches based on import_source in wizard_state" do
@@ -146,9 +147,10 @@ class Music::Songs::WizardImportSongsJobTest < ActiveSupport::TestCase
     Music::Songs::WizardImportSongsJob.new.perform(@list.id)
 
     @list.reload
-    assert_equal "completed", @list.wizard_step_status("import")
-    assert_equal 2, @list.wizard_step_metadata("import")["imported_count"]
-    assert_equal 1, @list.wizard_step_metadata("import")["failed_count"]
+    manager = @list.wizard_manager
+    assert_equal "completed", manager.step_status("import")
+    assert_equal 2, manager.step_metadata("import")["imported_count"]
+    assert_equal 1, manager.step_metadata("import")["failed_count"]
   end
 
   test "custom_html: updates progress periodically" do
@@ -157,7 +159,8 @@ class Music::Songs::WizardImportSongsJobTest < ActiveSupport::TestCase
     Music::Songs::WizardImportSongsJob.new.perform(@list.id)
 
     @list.reload
-    assert_equal 100, @list.wizard_step_progress("import")
+    manager = @list.wizard_manager
+    assert_equal 100, manager.step_progress("import")
   end
 
   test "custom_html: updates wizard_step_status to completed with stats" do
@@ -166,11 +169,12 @@ class Music::Songs::WizardImportSongsJobTest < ActiveSupport::TestCase
     Music::Songs::WizardImportSongsJob.new.perform(@list.id)
 
     @list.reload
-    assert_equal "completed", @list.wizard_step_status("import")
-    assert_equal 100, @list.wizard_step_progress("import")
-    assert_equal 3, @list.wizard_step_metadata("import")["imported_count"]
-    assert_equal 0, @list.wizard_step_metadata("import")["failed_count"]
-    assert @list.wizard_step_metadata("import")["imported_at"].present?
+    manager = @list.wizard_manager
+    assert_equal "completed", manager.step_status("import")
+    assert_equal 100, manager.step_progress("import")
+    assert_equal 3, manager.step_metadata("import")["imported_count"]
+    assert_equal 0, manager.step_metadata("import")["failed_count"]
+    assert manager.step_metadata("import")["imported_at"].present?
   end
 
   test "custom_html: handles empty list gracefully" do
@@ -180,8 +184,9 @@ class Music::Songs::WizardImportSongsJobTest < ActiveSupport::TestCase
     Music::Songs::WizardImportSongsJob.new.perform(@list.id)
 
     @list.reload
-    assert_equal "completed", @list.wizard_step_status("import")
-    assert_equal 0, @list.wizard_step_metadata("import")["imported_count"]
+    manager = @list.wizard_manager
+    assert_equal "completed", manager.step_status("import")
+    assert_equal 0, manager.step_metadata("import")["imported_count"]
   end
 
   test "custom_html: skips items already linked" do
@@ -201,7 +206,8 @@ class Music::Songs::WizardImportSongsJobTest < ActiveSupport::TestCase
     Music::Songs::WizardImportSongsJob.new.perform(@list.id)
 
     @list.reload
-    errors = @list.wizard_step_metadata("import")["errors"]
+    manager = @list.wizard_manager
+    errors = manager.step_metadata("import")["errors"]
     assert_equal 3, errors.length
     assert errors.first.key?("item_id")
     assert errors.first.key?("title")
@@ -227,10 +233,11 @@ class Music::Songs::WizardImportSongsJobTest < ActiveSupport::TestCase
     Music::Songs::WizardImportSongsJob.new.perform(@list.id)
 
     @list.reload
-    assert_equal "completed", @list.wizard_step_status("import")
-    assert_equal 10, @list.wizard_step_metadata("import")["imported_count"]
-    assert_equal 12, @list.wizard_step_metadata("import")["total_count"]
-    assert_equal 2, @list.wizard_step_metadata("import")["failed_count"]
+    manager = @list.wizard_manager
+    assert_equal "completed", manager.step_status("import")
+    assert_equal 10, manager.step_metadata("import")["imported_count"]
+    assert_equal 12, manager.step_metadata("import")["total_count"]
+    assert_equal 2, manager.step_metadata("import")["failed_count"]
   end
 
   test "series: handles service failure gracefully" do
@@ -242,8 +249,9 @@ class Music::Songs::WizardImportSongsJobTest < ActiveSupport::TestCase
     Music::Songs::WizardImportSongsJob.new.perform(@list.id)
 
     @list.reload
-    assert_equal "failed", @list.wizard_step_status("import")
-    assert_equal "Series not found", @list.wizard_step_error("import")
+    manager = @list.wizard_manager
+    assert_equal "failed", manager.step_status("import")
+    assert_equal "Series not found", manager.step_error("import")
   end
 
   test "series: includes list_items_created in metadata" do
@@ -255,7 +263,8 @@ class Music::Songs::WizardImportSongsJobTest < ActiveSupport::TestCase
     Music::Songs::WizardImportSongsJob.new.perform(@list.id)
 
     @list.reload
-    assert_equal 15, @list.wizard_step_metadata("import")["list_items_created"]
+    manager = @list.wizard_manager
+    assert_equal 15, manager.step_metadata("import")["list_items_created"]
   end
 
   test "series: marks imported items as verified" do
@@ -287,8 +296,9 @@ class Music::Songs::WizardImportSongsJobTest < ActiveSupport::TestCase
     Music::Songs::WizardImportSongsJob.new.perform(@list.id)
 
     @list.reload
-    assert_equal "completed", @list.wizard_step_status("import")
-    assert_equal 0, @list.wizard_step_metadata("import")["imported_count"]
+    manager = @list.wizard_manager
+    assert_equal "completed", manager.step_status("import")
+    assert_equal 0, manager.step_metadata("import")["imported_count"]
   end
 
   private

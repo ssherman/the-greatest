@@ -20,7 +20,7 @@ class Wizard::NavigationComponent < ViewComponent::Base
   end
 
   def next_button_disabled?
-    !@next_enabled || @list.wizard_job_status == "running"
+    !@next_enabled || @list.wizard_manager.step_status(@step_name) == "running"
   end
 
   private

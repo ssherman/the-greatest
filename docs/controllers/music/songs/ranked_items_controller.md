@@ -70,7 +70,7 @@ Nested under `/music/songs` routes
 ## Related Documentation
 - Parent Controller: `/home/shane/dev/the-greatest/docs/controllers/music/ranked_items_controller.md`
 - Base Controller: `/home/shane/dev/the-greatest/docs/controllers/ranked_items_controller.md`
-- Task: `/home/shane/dev/the-greatest/docs/todos/045-greatest-songs-ui-and-album-improvements.md`
+- Spec: `/home/shane/dev/the-greatest/docs/specs/045-greatest-songs-ui-and-album-improvements.md`
 - Model: `/home/shane/dev/the-greatest/docs/models/music/songs/ranking_configuration.md`
 - RankedItem Model: `/home/shane/dev/the-greatest/docs/models/ranked_item.md`
 

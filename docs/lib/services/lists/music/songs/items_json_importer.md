@@ -269,4 +269,4 @@ For lists with hundreds of songs:
 
 ## See Also
 - Avo action: `Avo::Actions::Lists::Music::Songs::ImportItemsFromJson` - Admin UI trigger for this service
-- Task documentation: [`docs/todos/066-import-songs-from-items-json.md`](/home/shane/dev/the-greatest/docs/todos/066-import-songs-from-items-json.md)
+- Spec documentation: [`docs/specs/066-import-songs-from-items-json.md`](/home/shane/dev/the-greatest/docs/specs/066-import-songs-from-items-json.md)

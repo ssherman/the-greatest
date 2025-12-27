@@ -74,7 +74,7 @@ First, think about The Greatest's multi-domain architecture:
 ### Documentation Structure
 - **Class Docs**: `docs/models/`, `docs/services/`, `docs/controllers/`
 - **Feature Docs**: `docs/features/` - High-level overviews
-- **Task Management**: `docs/todos/` - Individual task files
+- **Spec Management**: `docs/specs/` - Individual spec files
 - **API Documentation**: `docs/lib/` - External service documentation
 
 ### Common Patterns to Find in The Greatest
@@ -128,7 +128,7 @@ Structure your findings for The Greatest Rails application like this:
 ### Documentation (in docs/)
 - `docs/models/music/artist.md` - Artist model documentation
 - `docs/services/music/import_service.md` - Service documentation
-- `docs/todos/018-import-artists.md` - Implementation task history
+- `docs/specs/018-import-artists.md` - Implementation spec history
 
 ### Configuration (in web-app/config/)
 - `web-app/config/routes.rb` - Domain-specific routing

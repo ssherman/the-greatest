@@ -116,4 +116,3 @@ Output: …
 ## Documentation Updated
 - [ ] `documentation.md`
 - [ ] Class docs
-- [ ] `todo.md`

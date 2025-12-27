@@ -18,19 +18,19 @@ class Admin::Music::Songs::Wizard::ValidateStepComponent < ViewComponent::Base
   attr_reader :list, :unverified_items, :enriched_items
 
   def validate_status
-    list.wizard_step_status("validate")
+    list.wizard_manager.step_status("validate")
   end
 
   def validate_progress
-    list.wizard_step_progress("validate")
+    list.wizard_manager.step_progress("validate")
   end
 
   def validate_error
-    list.wizard_step_error("validate")
+    list.wizard_manager.step_error("validate")
   end
 
   def job_metadata
-    list.wizard_step_metadata("validate")
+    list.wizard_manager.step_metadata("validate")
   end
 
   def valid_count

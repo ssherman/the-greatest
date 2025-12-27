@@ -177,7 +177,7 @@ end
   - `docs/lib/actions/admin/music/merge_song.md`
 - **Base Controller**: `docs/controllers/admin/music/base_controller.md`
 - **Search Service**: `docs/lib/search/music/search/song_general.md`
-- **Implementation Task**: `docs/todos/completed/075-custom-admin-phase-4-songs.md`
+- **Implementation Spec**: `docs/specs/completed/075-custom-admin-phase-4-songs.md`
 
 ## Testing
 **Test Location**: `test/controllers/admin/music/songs_controller_test.rb`

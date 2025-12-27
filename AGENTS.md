@@ -34,7 +34,6 @@ Your working directory can be EITHER the project root OR the Rails web-app direc
 ```
 <project-root>/                          # Sometimes you are HERE
 ├── docs/                                # Documentation
-│   ├── todo.md
 │   ├── todos/
 │   ├── models/
 │   └── ...
@@ -63,8 +62,7 @@ pwd
 
 ```bash
 # ✅ CORRECT - Documentation files (NO ../ prefix)
-docs/todo.md
-docs/todos/077-task.md
+docs/specs/077-task.md
 docs/models/music/song.md
 AGENTS.md
 
@@ -75,16 +73,14 @@ web-app/config/routes.rb
 web-app/test/controllers/admin/music/songs_controller_test.rb
 
 # ❌ WRONG - Do not use ../ prefix when in project root
-../docs/todo.md           # This goes OUTSIDE the project!
-../docs/todos/077-task.md # This goes to parent directory!
+../docs/specs/077-task.md # This goes to parent directory!
 ```
 
 #### If you are in RAILS ROOT (`/home/shane/dev/the-greatest/web-app`)
 
 ```bash
 # ✅ CORRECT - Documentation files (use ../ prefix)
-../docs/todo.md
-../docs/todos/077-task.md
+../docs/specs/077-task.md
 ../docs/models/music/song.md
 ../AGENTS.md
 
@@ -104,8 +100,7 @@ web-app/app/controllers/...  # You're already IN web-app!
 
 | File Type | Path Example |
 |-----------|--------------|
-| Documentation | `docs/todo.md` |
-| Task files | `docs/todos/077-task.md` |
+| Task files | `docs/specs/077-task.md` |
 | AGENTS.md | `AGENTS.md` |
 | Controllers | `web-app/app/controllers/admin/music/songs_controller.rb` |
 | Models | `web-app/app/models/music/song.rb` |
@@ -115,8 +110,7 @@ web-app/app/controllers/...  # You're already IN web-app!
 
 | File Type | Path Example |
 |-----------|--------------|
-| Documentation | `../docs/todo.md` |
-| Task files | `../docs/todos/077-task.md` |
+| Task files | `../docs/specs/077-task.md` |
 | AGENTS.md | `../AGENTS.md` |
 | Controllers | `app/controllers/admin/music/songs_controller.rb` |
 | Models | `app/models/music/song.rb` |
@@ -134,7 +128,6 @@ web-app/app/controllers/...  # You're already IN web-app!
 If unsure, use absolute paths to verify:
 ```bash
 # Check if file exists before reading
-ls -la /home/shane/dev/the-greatest/docs/todo.md
 ls -la /home/shane/dev/the-greatest/web-app/app/models/music/song.rb
 ```
 
@@ -354,7 +347,7 @@ Every model/service needs corresponding documentation in `docs/`:
 - **Always document associations to result tables** (ranked_items, ranked_lists)
 
 ### Task Management
-Use `docs/todo.md` and `docs/todos/` for planning:
+Use `docs/specs/` for planning:
 - Break complex tasks into smaller files
 - Document decisions and implementation notes
 - Include acceptance criteria and dependencies
@@ -410,7 +403,7 @@ For deeper context, see:
 - [`docs/summary.md`](docs/summary.md) - Project architecture and goals
 - [`docs/documentation.md`](docs/documentation.md) - Documentation standards
 - [`docs/testing.md`](docs/testing.md) - Comprehensive testing guide
-- [`docs/todo-guide.md`](docs/todo-guide.md) - Task management workflow
+- [`docs/spec-instructions.md`](docs/spec-instructions.md) - Spec management workflow
 
 ## Quick Start Checklist
 
