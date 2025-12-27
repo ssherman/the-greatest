@@ -13,19 +13,19 @@ class Admin::Music::Songs::Wizard::EnrichStepComponent < ViewComponent::Base
   attr_reader :list, :unverified_items, :total_items, :enriched_count
 
   def enrich_status
-    list.wizard_step_status("enrich")
+    list.wizard_manager.step_status("enrich")
   end
 
   def enrich_progress
-    list.wizard_step_progress("enrich")
+    list.wizard_manager.step_progress("enrich")
   end
 
   def enrich_error
-    list.wizard_step_error("enrich")
+    list.wizard_manager.step_error("enrich")
   end
 
   def job_metadata
-    list.wizard_step_metadata("enrich")
+    list.wizard_manager.step_metadata("enrich")
   end
 
   def opensearch_matches

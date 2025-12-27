@@ -30,9 +30,10 @@
       <% end %>
     <% else %>
       <%# Step 1b: Parse existing HTML %>
-      <% parse_status = list.wizard_step_status("parse") %>
-      <% parse_progress = list.wizard_step_progress("parse") %>
-      <% parse_error = list.wizard_step_error("parse") %>
+      <% manager = list.wizard_manager %>
+      <% parse_status = manager.step_status("parse") %>
+      <% parse_progress = manager.step_progress("parse") %>
+      <% parse_error = manager.step_error("parse") %>
       <div <% if parse_status == "running" %>
              data-controller="wizard-step"
              data-wizard-step-status-url-value="<%= step_status_admin_songs_list_wizard_path(list_id: list.id, step: 'parse') %>"

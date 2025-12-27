@@ -65,7 +65,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     post advance_step_admin_songs_list_wizard_path(list_id: @list.id, step: "review")
 
     @list.reload
-    assert_equal 5, @list.wizard_current_step
+    assert_equal 5, @list.wizard_manager.current_step
     assert_redirected_to step_admin_songs_list_wizard_path(list_id: @list.id, step: "import")
   end
 
@@ -75,7 +75,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     post back_step_admin_songs_list_wizard_path(list_id: @list.id, step: "enrich")
 
     @list.reload
-    assert_equal 1, @list.wizard_current_step
+    assert_equal 1, @list.wizard_manager.current_step
     assert_redirected_to step_admin_songs_list_wizard_path(list_id: @list.id, step: "parse")
   end
 
@@ -85,7 +85,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     post back_step_admin_songs_list_wizard_path(list_id: @list.id, step: "source")
 
     @list.reload
-    assert_equal 0, @list.wizard_current_step
+    assert_equal 0, @list.wizard_manager.current_step
   end
 
   test "should restart wizard" do
@@ -97,7 +97,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     post restart_admin_songs_list_wizard_path(list_id: @list.id)
 
     @list.reload
-    assert_equal 0, @list.wizard_current_step
+    assert_equal 0, @list.wizard_manager.current_step
     assert_nil @list.wizard_state["completed_at"]
     assert_redirected_to admin_songs_list_wizard_path(list_id: @list.id)
   end
@@ -108,7 +108,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     post advance_step_admin_songs_list_wizard_path(list_id: @list.id, step: "complete")
 
     @list.reload
-    assert_equal 6, @list.wizard_current_step
+    assert_equal 6, @list.wizard_manager.current_step
     assert_not_nil @list.wizard_state["completed_at"]
   end
 
@@ -136,7 +136,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     )
 
     @list.reload
-    assert_equal 1, @list.wizard_current_step
+    assert_equal 1, @list.wizard_manager.current_step
     assert_equal "custom_html", @list.wizard_state["import_source"]
     assert_redirected_to step_admin_songs_list_wizard_path(
       list_id: @list.id,
@@ -154,7 +154,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     )
 
     @list.reload
-    assert_equal 5, @list.wizard_current_step
+    assert_equal 5, @list.wizard_manager.current_step
     assert_equal "musicbrainz_series", @list.wizard_state["import_source"]
     assert_redirected_to step_admin_songs_list_wizard_path(
       list_id: @list.id,
@@ -171,7 +171,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     )
 
     @list.reload
-    assert_equal 0, @list.wizard_current_step
+    assert_equal 0, @list.wizard_manager.current_step
     assert_response :redirect
     assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/source}, response.location
     assert_match(/alert=Please\+select\+an\+import\+source/, response.location)
@@ -187,7 +187,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     )
 
     @list.reload
-    assert_equal 0, @list.wizard_current_step
+    assert_equal 0, @list.wizard_manager.current_step
     assert_response :redirect
     assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/source}, response.location
     assert_match(/alert=Please\+select\+an\+import\+source/, response.location)
@@ -233,7 +233,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     )
 
     @list.reload
-    assert_equal 2, @list.wizard_current_step
+    assert_equal 2, @list.wizard_manager.current_step
     assert_redirected_to step_admin_songs_list_wizard_path(list_id: @list.id, step: "enrich")
   end
 
@@ -250,7 +250,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     )
 
     @list.reload
-    assert_equal 1, @list.wizard_current_step
+    assert_equal 1, @list.wizard_manager.current_step
     assert_response :redirect
     assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/parse}, response.location
     assert_match(/alert=Parsing\+in\+progress/, response.location)
@@ -311,7 +311,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     )
 
     @list.reload
-    assert_equal 3, @list.wizard_current_step
+    assert_equal 3, @list.wizard_manager.current_step
     assert_redirected_to step_admin_songs_list_wizard_path(list_id: @list.id, step: "validate")
   end
 
@@ -328,7 +328,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     )
 
     @list.reload
-    assert_equal 2, @list.wizard_current_step
+    assert_equal 2, @list.wizard_manager.current_step
     assert_response :redirect
     assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/enrich}, response.location
     assert_match(/alert=Enrichment\+in\+progress/, response.location)
@@ -350,7 +350,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     )
 
     @list.reload
-    assert_equal "running", @list.wizard_step_status("enrich")
+    assert_equal "running", @list.wizard_manager.step_status("enrich")
     assert_response :redirect
     assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/enrich}, response.location
     assert_match(/notice=Re-enrichment\+started/, response.location)
@@ -377,10 +377,10 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
 
     @list.reload
     # Enrich status should remain completed (not reset to idle)
-    assert_equal "completed", @list.wizard_step_status("enrich")
-    assert_equal 100, @list.wizard_step_progress("enrich")
+    assert_equal "completed", @list.wizard_manager.step_status("enrich")
+    assert_equal 100, @list.wizard_manager.step_progress("enrich")
     # New step (validate) should be idle
-    assert_equal "idle", @list.wizard_step_status("validate")
+    assert_equal "idle", @list.wizard_manager.step_status("validate")
   end
 
   # Validate step tests
@@ -447,7 +447,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     )
 
     @list.reload
-    assert_equal 4, @list.wizard_current_step
+    assert_equal 4, @list.wizard_manager.current_step
     assert_redirected_to step_admin_songs_list_wizard_path(list_id: @list.id, step: "review")
   end
 
@@ -463,7 +463,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     )
 
     @list.reload
-    assert_equal 3, @list.wizard_current_step
+    assert_equal 3, @list.wizard_manager.current_step
     assert_response :redirect
     assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/validate}, response.location
     assert_match(/alert=Validation\+in\+progress/, response.location)
@@ -491,7 +491,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     )
 
     @list.reload
-    assert_equal "running", @list.wizard_step_status("validate")
+    assert_equal "running", @list.wizard_manager.step_status("validate")
     assert_response :redirect
     assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/validate}, response.location
     assert_match(/notice=Re-validation\+started/, response.location)
@@ -576,7 +576,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     )
 
     @list.reload
-    assert_equal 5, @list.wizard_current_step
+    assert_equal 5, @list.wizard_manager.current_step
     assert_redirected_to step_admin_songs_list_wizard_path(list_id: @list.id, step: "import")
   end
 
@@ -603,7 +603,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     )
 
     @list.reload
-    assert_equal 4, @list.wizard_current_step
+    assert_equal 4, @list.wizard_manager.current_step
     assert_response :redirect
     assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/review}, response.location
     assert_match(/alert=No\+valid\+items\+to\+import/, response.location)
@@ -615,7 +615,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     post back_step_admin_songs_list_wizard_path(list_id: @list.id, step: "review")
 
     @list.reload
-    assert_equal 3, @list.wizard_current_step
+    assert_equal 3, @list.wizard_manager.current_step
     assert_redirected_to step_admin_songs_list_wizard_path(list_id: @list.id, step: "validate")
   end
 
@@ -683,7 +683,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     )
 
     @list.reload
-    assert_equal 6, @list.wizard_current_step
+    assert_equal 6, @list.wizard_manager.current_step
     assert_redirected_to step_admin_songs_list_wizard_path(list_id: @list.id, step: "complete")
   end
 
@@ -700,7 +700,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     )
 
     @list.reload
-    assert_equal 5, @list.wizard_current_step
+    assert_equal 5, @list.wizard_manager.current_step
     assert_response :redirect
     assert_match %r{/admin/songs/lists/#{@list.id}/wizard/step/import}, response.location
     assert_match(/alert=Import\+in\+progress/, response.location)
@@ -730,7 +730,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     )
 
     @list.reload
-    assert_equal "running", @list.wizard_step_status("import")
+    assert_equal "running", @list.wizard_manager.step_status("import")
     assert_response :redirect
     assert_match(/notice=Import\+started/, response.location)
   end

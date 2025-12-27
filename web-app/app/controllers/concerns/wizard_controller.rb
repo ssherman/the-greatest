@@ -75,7 +75,7 @@ module WizardController
   # Redirects to the current step in the wizard.
   # This is the entry point when accessing the wizard without a specific step.
   def show
-    redirect_to action: :show_step, step: wizard_steps[wizard_entity.wizard_current_step]
+    redirect_to action: :show_step, step: wizard_steps[wizard_entity.wizard_manager.current_step]
   end
 
   # Renders the view for a specific wizard step.
@@ -94,13 +94,14 @@ module WizardController
   # @return [JSON] status, progress, error, and metadata for the step
   def step_status
     # Use step parameter if provided, otherwise fall back to current step
-    step_name = params[:step] || wizard_entity.current_step_name
+    manager = wizard_entity.wizard_manager
+    step_name = params[:step] || manager.current_step_name
 
     render json: {
-      status: wizard_entity.wizard_step_status(step_name),
-      progress: wizard_entity.wizard_step_progress(step_name),
-      error: wizard_entity.wizard_step_error(step_name),
-      metadata: wizard_entity.wizard_step_metadata(step_name)
+      status: manager.step_status(step_name),
+      progress: manager.step_progress(step_name),
+      error: manager.step_error(step_name),
+      metadata: manager.step_metadata(step_name)
     }
   end
 
@@ -132,9 +133,9 @@ module WizardController
   end
 
   # Resets the wizard to its initial state and redirects to the first step.
-  # Calls +reset_wizard!+ on the entity to clear all wizard state.
+  # Calls +reset!+ on the wizard manager to clear all wizard state.
   def restart
-    wizard_entity.reset_wizard!
+    wizard_entity.wizard_manager.reset!
     redirect_to action: :show
   end
 

@@ -46,7 +46,7 @@ module Admin::Music::Songs::ListWizardHelper
     when "complete"
       false
     else
-      list.wizard_job_status != "running"
+      list.wizard_manager.step_status(step_name) != "running"
     end
   end
 
@@ -62,15 +62,21 @@ module Admin::Music::Songs::ListWizardHelper
     end
   end
 
-  # Returns human-readable status text for the parse job.
+  # Returns human-readable status text for a wizard step.
   #
   # @param list [Music::Songs::List] the list with wizard state
+  # @param step_name [String] the step to get status for (defaults to current step)
   # @return [String] status description
-  def job_status_text(list)
-    case list.wizard_job_status
+  def job_status_text(list, step_name = nil)
+    manager = list.wizard_manager
+    step_name ||= manager.current_step_name
+    status = manager.step_status(step_name)
+    metadata = manager.step_metadata(step_name)
+
+    case status
     when "idle" then "Ready to parse"
     when "running" then "Parsing HTML..."
-    when "completed" then "Complete! Parsed #{list.wizard_job_metadata["total_items"] || 0} items"
+    when "completed" then "Complete! Parsed #{metadata["total_items"] || 0} items"
     when "failed" then "Parsing failed"
     else "Unknown status"
     end

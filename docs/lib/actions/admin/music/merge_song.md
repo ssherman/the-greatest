@@ -161,7 +161,7 @@ Merge wrapped in database transaction via `Music::Song::Merger`:
 - **Model**: `docs/models/music/song.md`
 - **Controller**: `docs/controllers/admin/music/songs_controller.md`
 - **Base Action**: `docs/lib/actions/admin/base_action.md`
-- **Implementation Task**: `docs/todos/completed/075-custom-admin-phase-4-songs.md`
+- **Implementation Spec**: `docs/specs/completed/075-custom-admin-phase-4-songs.md`
 
 ## Common Use Cases
 1. **Duplicate song cleanup**: Merge misspelled or duplicate entries

@@ -102,7 +102,7 @@ Uses em dash (`"—"`) instead of empty string, "N/A", or nil
 ## Related Documentation
 - **Usage**: `docs/controllers/admin/music/songs_controller.md` - Primary consumer
 - **Model**: `docs/models/music/song.md` - duration_secs attribute
-- **Implementation Task**: `docs/todos/completed/075-custom-admin-phase-4-songs.md`
+- **Implementation Spec**: `docs/specs/completed/075-custom-admin-phase-4-songs.md`
 
 ## Future Enhancements
 - Localization support for different time formats

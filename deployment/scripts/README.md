@@ -190,4 +190,4 @@ sudo docker run --rm \
 
 - [MANUAL_DEPLOY.md](../MANUAL_DEPLOY.md) - Manual deployment instructions
 - [SECRETS.md](../SECRETS.md) - SOPS secrets management
-- [docs/todos/049-sops-secrets-management.md](../../docs/todos/049-sops-secrets-management.md) - SOPS implementation details
+- [docs/specs/049-sops-secrets-management.md](../../docs/specs/049-sops-secrets-management.md) - SOPS implementation details

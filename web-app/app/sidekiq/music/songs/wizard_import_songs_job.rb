@@ -25,7 +25,7 @@ class Music::Songs::WizardImportSongsJob
   private
 
   def import_from_series
-    @list.update_wizard_step_status(step: "import", status: "running", progress: 0, metadata: {
+    @list.wizard_manager.update_step_status!(step: "import", status: "running", progress: 0, metadata: {
       "import_source" => "musicbrainz_series"
     })
 
@@ -34,7 +34,7 @@ class Music::Songs::WizardImportSongsJob
     if result[:success]
       verified_count = mark_series_items_as_verified
 
-      @list.update_wizard_step_status(
+      @list.wizard_manager.update_step_status!(
         step: "import",
         status: "completed",
         progress: 100,
@@ -65,7 +65,7 @@ class Music::Songs::WizardImportSongsJob
       return
     end
 
-    @list.update_wizard_step_status(step: "import", status: "running", progress: 0, metadata: {
+    @list.wizard_manager.update_step_status!(step: "import", status: "running", progress: 0, metadata: {
       "import_source" => "custom_html",
       "processed_items" => 0,
       "total_items" => @total,
@@ -146,7 +146,7 @@ class Music::Songs::WizardImportSongsJob
   def update_progress(processed)
     progress_percent = ((processed.to_f / @total) * 100).round
 
-    @list.update_wizard_step_status(
+    @list.wizard_manager.update_step_status!(
       step: "import",
       status: "running",
       progress: progress_percent,
@@ -165,7 +165,7 @@ class Music::Songs::WizardImportSongsJob
   end
 
   def complete_job
-    @list.update_wizard_step_status(
+    @list.wizard_manager.update_step_status!(
       step: "import",
       status: "completed",
       progress: 100,
@@ -186,7 +186,7 @@ class Music::Songs::WizardImportSongsJob
   end
 
   def complete_with_no_items
-    @list.update_wizard_step_status(
+    @list.wizard_manager.update_step_status!(
       step: "import",
       status: "completed",
       progress: 100,
@@ -206,7 +206,7 @@ class Music::Songs::WizardImportSongsJob
   end
 
   def handle_error(error_message)
-    @list.update_wizard_step_status(
+    @list.wizard_manager.update_step_status!(
       step: "import",
       status: "failed",
       progress: 0,

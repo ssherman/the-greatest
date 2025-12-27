@@ -34,19 +34,19 @@ class Admin::Music::Songs::Wizard::ImportStepComponent < ViewComponent::Base
   end
 
   def import_status
-    list.wizard_step_status("import")
+    list.wizard_manager.step_status("import")
   end
 
   def import_progress
-    list.wizard_step_progress("import")
+    list.wizard_manager.step_progress("import")
   end
 
   def import_error
-    list.wizard_step_error("import")
+    list.wizard_manager.step_error("import")
   end
 
   def job_metadata
-    list.wizard_step_metadata("import")
+    list.wizard_manager.step_metadata("import")
   end
 
   def imported_count

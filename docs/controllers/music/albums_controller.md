@@ -42,7 +42,7 @@ Uses `music/application` layout for consistent music domain styling
 Namespaced under `/music` routes
 
 ## Related Documentation
-- Task: `/home/shane/dev/the-greatest/docs/todos/045-greatest-songs-ui-and-album-improvements.md`
+- Spec: `/home/shane/dev/the-greatest/docs/specs/045-greatest-songs-ui-and-album-improvements.md`
 - Model: `/home/shane/dev/the-greatest/docs/models/music/album.md`
 - Ranking Configuration: `/home/shane/dev/the-greatest/docs/models/music/albums/ranking_configuration.md`
 

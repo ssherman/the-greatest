@@ -10,7 +10,7 @@ class Music::Songs::WizardValidateListItemsJob
       return
     end
 
-    @list.update_wizard_step_status(step: "validate", status: "running", progress: 0, metadata: {})
+    @list.wizard_manager.update_step_status!(step: "validate", status: "running", progress: 0, metadata: {})
 
     clear_previous_validation_flags
 
@@ -68,7 +68,7 @@ class Music::Songs::WizardValidateListItemsJob
   end
 
   def complete_with_no_items
-    @list.update_wizard_step_status(
+    @list.wizard_manager.update_step_status!(
       step: "validate",
       status: "completed",
       progress: 100,
@@ -86,7 +86,7 @@ class Music::Songs::WizardValidateListItemsJob
   end
 
   def complete_job(data)
-    @list.update_wizard_step_status(
+    @list.wizard_manager.update_step_status!(
       step: "validate",
       status: "completed",
       progress: 100,
@@ -105,7 +105,7 @@ class Music::Songs::WizardValidateListItemsJob
   end
 
   def handle_error(error_message)
-    @list.update_wizard_step_status(
+    @list.wizard_manager.update_step_status!(
       step: "validate",
       status: "failed",
       progress: 0,

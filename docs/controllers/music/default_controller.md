@@ -60,7 +60,7 @@ Uses `music/application` layout for consistent music domain styling
 Serves as root path for `/music` namespace
 
 ## Related Documentation
-- Task: `/home/shane/dev/the-greatest/docs/todos/045-greatest-songs-ui-and-album-improvements.md`
+- Spec: `/home/shane/dev/the-greatest/docs/specs/045-greatest-songs-ui-and-album-improvements.md`
 - Album Model: `/home/shane/dev/the-greatest/docs/models/music/album.md`
 - Song Model: `/home/shane/dev/the-greatest/docs/models/music/song.md`
 - Album RC: `/home/shane/dev/the-greatest/docs/models/music/albums/ranking_configuration.md`

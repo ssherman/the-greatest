@@ -331,5 +331,5 @@ Check:
 
 ## See Also
 - Avo action: `Avo::Actions::Lists::Music::Songs::ImportItemsFromJson` - Admin UI trigger
-- Task documentation: [`docs/todos/066-import-songs-from-items-json.md`](/home/shane/dev/the-greatest/docs/todos/066-import-songs-from-items-json.md)
+- Spec documentation: [`docs/specs/066-import-songs-from-items-json.md`](/home/shane/dev/the-greatest/docs/specs/066-import-songs-from-items-json.md)
 - Sidekiq documentation: https://github.com/sidekiq/sidekiq/wiki

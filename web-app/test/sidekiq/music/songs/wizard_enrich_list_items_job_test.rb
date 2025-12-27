@@ -33,7 +33,8 @@ class Music::Songs::WizardEnrichListItemsJobTest < ActiveSupport::TestCase
     Music::Songs::WizardEnrichListItemsJob.new.perform(@list.id)
 
     @list.reload
-    assert_includes ["running", "completed"], @list.wizard_job_status
+    manager = @list.wizard_manager
+    assert_includes ["running", "completed"], manager.step_status("enrich")
   end
 
   test "job enriches all unverified items" do
@@ -51,12 +52,13 @@ class Music::Songs::WizardEnrichListItemsJobTest < ActiveSupport::TestCase
     Music::Songs::WizardEnrichListItemsJob.new.perform(@list.id)
 
     @list.reload
-    assert_equal "completed", @list.wizard_job_status
-    assert_equal 100, @list.wizard_job_progress
-    assert_equal 3, @list.wizard_job_metadata["total_items"]
-    assert_equal 3, @list.wizard_job_metadata["processed_items"]
-    assert_equal 3, @list.wizard_job_metadata["opensearch_matches"]
-    assert @list.wizard_job_metadata["enriched_at"].present?
+    manager = @list.wizard_manager
+    assert_equal "completed", manager.step_status("enrich")
+    assert_equal 100, manager.step_progress("enrich")
+    assert_equal 3, manager.step_metadata("enrich")["total_items"]
+    assert_equal 3, manager.step_metadata("enrich")["processed_items"]
+    assert_equal 3, manager.step_metadata("enrich")["opensearch_matches"]
+    assert manager.step_metadata("enrich")["enriched_at"].present?
   end
 
   test "job updates wizard_state to failed on critical error" do
@@ -65,8 +67,8 @@ class Music::Songs::WizardEnrichListItemsJobTest < ActiveSupport::TestCase
     Services::Lists::Music::Songs::ListItemEnricher.stubs(:call).returns({success: false, source: :not_found, data: {}})
 
     # Simulate an error after enrichment completes but before final update
-    # Job now uses update_wizard_step_status instead of update_wizard_job_status
-    Music::Songs::List.any_instance.stubs(:update_wizard_step_status).raises(StandardError.new("Database connection error")).then.returns(true)
+    # Job uses wizard_manager.update_step_status! which calls list.update!
+    Music::Songs::List.any_instance.stubs(:update!).raises(StandardError.new("Database connection error")).then.returns(true)
 
     assert_raises(StandardError) do
       Music::Songs::WizardEnrichListItemsJob.new.perform(@list.id)
@@ -102,8 +104,9 @@ class Music::Songs::WizardEnrichListItemsJobTest < ActiveSupport::TestCase
     Music::Songs::WizardEnrichListItemsJob.new.perform(@list.id)
 
     @list.reload
-    assert_equal "failed", @list.wizard_job_status
-    assert_includes @list.wizard_job_error, "No items to enrich"
+    manager = @list.wizard_manager
+    assert_equal "failed", manager.step_status("enrich")
+    assert_includes manager.step_error("enrich"), "No items to enrich"
   end
 
   test "job continues processing after individual item failure" do
@@ -119,9 +122,10 @@ class Music::Songs::WizardEnrichListItemsJobTest < ActiveSupport::TestCase
     Music::Songs::WizardEnrichListItemsJob.new.perform(@list.id)
 
     @list.reload
-    assert_equal "completed", @list.wizard_job_status
-    assert_equal 2, @list.wizard_job_metadata["opensearch_matches"]
-    assert_equal 1, @list.wizard_job_metadata["not_found"]
+    manager = @list.wizard_manager
+    assert_equal "completed", manager.step_status("enrich")
+    assert_equal 2, manager.step_metadata("enrich")["opensearch_matches"]
+    assert_equal 1, manager.step_metadata("enrich")["not_found"]
   end
 
   test "job tracks opensearch vs musicbrainz match counts" do
@@ -136,9 +140,10 @@ class Music::Songs::WizardEnrichListItemsJobTest < ActiveSupport::TestCase
     Music::Songs::WizardEnrichListItemsJob.new.perform(@list.id)
 
     @list.reload
-    assert_equal 1, @list.wizard_job_metadata["opensearch_matches"]
-    assert_equal 1, @list.wizard_job_metadata["musicbrainz_matches"]
-    assert_equal 1, @list.wizard_job_metadata["not_found"]
+    manager = @list.wizard_manager
+    assert_equal 1, manager.step_metadata("enrich")["opensearch_matches"]
+    assert_equal 1, manager.step_metadata("enrich")["musicbrainz_matches"]
+    assert_equal 1, manager.step_metadata("enrich")["not_found"]
   end
 
   test "job raises error when list not found" do
