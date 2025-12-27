@@ -115,4 +115,8 @@ class Admin::Music::Songs::Wizard::ReviewStepComponent < ViewComponent::Base
   def verify_path(item)
     helpers.verify_admin_songs_list_item_path(list_id: list.id, id: item.id)
   end
+
+  def modal_path(item, modal_type)
+    helpers.modal_admin_songs_list_item_path(list_id: list.id, id: item.id, modal_type: modal_type)
+  end
 end

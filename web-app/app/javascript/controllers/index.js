@@ -13,11 +13,17 @@ application.register("authentication", AuthenticationController)
 import AutocompleteController from "./autocomplete_controller"
 application.register("autocomplete", AutocompleteController)
 
+import MetadataEditorController from "./metadata_editor_controller"
+application.register("metadata-editor", MetadataEditorController)
+
 import ModalFormController from "./modal_form_controller"
 application.register("modal-form", ModalFormController)
 
 import ReviewFilterController from "./review_filter_controller"
 application.register("review-filter", ReviewFilterController)
+
+import SharedModalController from "./shared_modal_controller"
+application.register("shared-modal", SharedModalController)
 
 import WizardStepController from "./wizard_step_controller"
 application.register("wizard-step", WizardStepController)

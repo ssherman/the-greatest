@@ -2,7 +2,27 @@
 
 class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseController
   before_action :set_list
-  before_action :set_item, only: [:verify, :metadata, :manual_link, :link_musicbrainz]
+  before_action :set_item, only: [:verify, :metadata, :manual_link, :link_musicbrainz, :modal]
+
+  # GET /admin/songs/:list_id/items/:id/modal/:modal_type
+  # Loads modal content on-demand for the shared modal component.
+  # Returns content wrapped in turbo_frame_tag for Turbo Frame replacement.
+  VALID_MODAL_TYPES = %w[edit_metadata link_song search_musicbrainz].freeze
+
+  def modal
+    modal_type = params[:modal_type]
+
+    unless VALID_MODAL_TYPES.include?(modal_type)
+      render turbo_stream: turbo_stream.replace(
+        Admin::Music::Songs::Wizard::SharedModalComponent::FRAME_ID,
+        html: "<div class='text-error p-4'>Invalid modal type</div>"
+      )
+      return
+    end
+
+    render partial: "admin/music/songs/list_items_actions/modals/#{modal_type}",
+      locals: {item: @item, list: @list}
+  end
 
   def verify
     # Clear ai_match_invalid when admin verifies - this overrides AI decision
@@ -32,7 +52,7 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
       respond_to do |format|
         format.turbo_stream do
           render turbo_stream: turbo_stream.replace(
-            "edit_metadata_modal_#{@item.id}_error",
+            Admin::Music::Songs::Wizard::SharedModalComponent::ERROR_ID,
             partial: "error_message",
             locals: {message: "Invalid JSON: #{e.message}"}
           )
@@ -63,7 +83,7 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
       respond_to do |format|
         format.turbo_stream do
           render turbo_stream: turbo_stream.replace(
-            "link_song_modal_#{@item.id}_error",
+            Admin::Music::Songs::Wizard::SharedModalComponent::ERROR_ID,
             partial: "error_message",
             locals: {message: "Please select a song"}
           )
@@ -79,7 +99,7 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
       respond_to do |format|
         format.turbo_stream do
           render turbo_stream: turbo_stream.replace(
-            "link_song_modal_#{@item.id}_error",
+            Admin::Music::Songs::Wizard::SharedModalComponent::ERROR_ID,
             partial: "error_message",
             locals: {message: "Song not found"}
           )
@@ -119,7 +139,7 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
       respond_to do |format|
         format.turbo_stream do
           render turbo_stream: turbo_stream.replace(
-            "search_mb_modal_#{@item.id}_error",
+            Admin::Music::Songs::Wizard::SharedModalComponent::ERROR_ID,
             partial: "error_message",
             locals: {message: "Please select a recording"}
           )
@@ -187,7 +207,7 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
       respond_to do |format|
         format.turbo_stream do
           render turbo_stream: turbo_stream.replace(
-            "search_mb_modal_#{@item.id}_error",
+            Admin::Music::Songs::Wizard::SharedModalComponent::ERROR_ID,
             partial: "error_message",
             locals: {message: error_message}
           )
