@@ -13,10 +13,8 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
     modal_type = params[:modal_type]
 
     unless VALID_MODAL_TYPES.include?(modal_type)
-      render turbo_stream: turbo_stream.replace(
-        Admin::Music::Songs::Wizard::SharedModalComponent::FRAME_ID,
-        html: "<div class='text-error p-4'>Invalid modal type</div>"
-      )
+      render partial: "admin/music/songs/list_items_actions/modals/error",
+        locals: {message: "Invalid modal type"}
       return
     end
 

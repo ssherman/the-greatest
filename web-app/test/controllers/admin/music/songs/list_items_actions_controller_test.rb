@@ -432,11 +432,27 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
   end
 
   test "modal returns error for invalid modal type" do
-    get modal_admin_songs_list_item_path(list_id: @list.id, id: @item.id, modal_type: :invalid_type),
-      headers: {"Accept" => "text/vnd.turbo-stream.html"}
+    get modal_admin_songs_list_item_path(list_id: @list.id, id: @item.id, modal_type: :invalid_type)
 
     assert_response :success
     assert_match "Invalid modal type", response.body
+  end
+
+  test "modal error preserves turbo-frame element for subsequent requests" do
+    # First request with invalid type
+    get modal_admin_songs_list_item_path(list_id: @list.id, id: @item.id, modal_type: :invalid_type)
+
+    assert_response :success
+    # Verify the turbo-frame element is preserved in the response
+    assert_match "turbo-frame", response.body
+    assert_match Admin::Music::Songs::Wizard::SharedModalComponent::FRAME_ID, response.body
+
+    # Subsequent request with valid type should still work
+    get modal_admin_songs_list_item_path(list_id: @list.id, id: @item.id, modal_type: :edit_metadata)
+
+    assert_response :success
+    assert_match "Edit Metadata", response.body
+    assert_match "turbo-frame", response.body
   end
 
   # Authorization tests
