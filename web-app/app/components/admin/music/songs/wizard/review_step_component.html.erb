@@ -5,9 +5,14 @@
   active: true
 )) do |step| %>
   <% step.with_step_content do %>
-    <div class="space-y-6" data-controller="review-filter">
-      <%# Stats Cards %>
-      <div class="stats stats-vertical lg:stats-horizontal shadow w-full">
+    <div class="space-y-6"
+         data-controller="review-filter"
+         data-review-filter-total-count-value="<%= total_count %>"
+         data-review-filter-valid-count-value="<%= valid_count %>"
+         data-review-filter-invalid-count-value="<%= invalid_count %>"
+         data-review-filter-missing-count-value="<%= missing_count %>">
+      <%# Stats Cards - ID for Turbo Stream updates when rows change status %>
+      <div id="review_stats_<%= list.id %>" class="stats stats-vertical lg:stats-horizontal shadow w-full">
         <div class="stat">
           <div class="stat-title">Total Items</div>
           <div class="stat-value text-primary"><%= total_count %></div>
@@ -50,9 +55,19 @@
         </span>
       </div>
 
-      <%# Review Table %>
+      <%# Review Table - Uses CSS-based filtering for performance with 1000+ items %>
       <% if items.any? %>
-        <div class="overflow-x-auto max-h-[32rem] min-h-[16rem] overflow-y-auto">
+        <div class="overflow-x-auto max-h-[32rem] min-h-[16rem] overflow-y-auto"
+             data-review-filter-target="container"
+             data-filter="all">
+          <%# CSS filtering rules - hide rows that don't match the current filter %>
+          <style>
+            [data-filter="valid"] tr[data-status]:not([data-status="valid"]),
+            [data-filter="invalid"] tr[data-status]:not([data-status="invalid"]),
+            [data-filter="missing"] tr[data-status]:not([data-status="missing"]) {
+              display: none;
+            }
+          </style>
           <table class="table table-sm table-pin-rows w-full">
             <thead>
               <tr>
@@ -70,7 +85,6 @@
                 <tr
                   id="item_row_<%= item.id %>"
                   class="<%= row_background_class(status) %>"
-                  data-review-filter-target="row"
                   data-status="<%= status %>"
                   data-item-id="<%= item.id %>">
                   <td>

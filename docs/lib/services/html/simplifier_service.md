@@ -66,10 +66,6 @@ The service removes these categories of HTML elements:
 - `nav`, `aside`, `footer`, `header`
 - Purpose: Site navigation elements often confuse list parsing
 
-#### Table Elements
-- `table`, `thead`, `tbody`, `tfoot`, `tr`, `td`, `th`, `caption`, `colgroup`, `col`
-- Purpose: Tables rarely contain the actual list structure we want
-
 #### Specialized Elements
 - `ruby`, `rt`, `rp` (Ruby annotations)
 - `time`, `data` (Temporal/data elements)
@@ -93,6 +89,7 @@ All other attributes (style, onclick, data-*, etc.) are removed.
 ### Essential Elements Kept
 The service preserves these elements crucial for list parsing:
 - `ul`, `ol`, `li` - List structure
+- `table`, `thead`, `tbody`, `tfoot`, `tr`, `td`, `th`, `caption`, `colgroup`, `col` - Table structure (for Wikipedia-style tabular lists)
 - `div`, `span` - Generic containers
 - `p` - Paragraphs
 - `h1`-`h6` - Headings
@@ -130,6 +127,22 @@ HTML
 
 simplified = Services::Html::SimplifierService.call(complex_html)
 # Returns: "<div class=\"list-container\"><ul id=\"main-list\"><li><strong>Album Title</strong> - Artist Name</li></ul></div>"
+```
+
+### With Wikipedia-style Tables
+```ruby
+table_html = <<~HTML
+  <div>
+    <script>trackView()</script>
+    <table class="wikitable">
+      <tr><th>Rank</th><th>Album</th><th>Artist</th></tr>
+      <tr><td>1</td><td>Abbey Road</td><td>Beatles</td></tr>
+    </table>
+  </div>
+HTML
+
+simplified = Services::Html::SimplifierService.call(table_html)
+# Returns: "<div><table class=\"wikitable\"><tr><th>Rank</th><th>Album</th><th>Artist</th></tr><tr><td>1</td><td>Abbey Road</td><td>Beatles</td></tr></table></div>"
 ```
 
 ### Instance-based Usage

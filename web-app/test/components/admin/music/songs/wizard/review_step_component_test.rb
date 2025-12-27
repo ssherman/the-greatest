@@ -245,9 +245,10 @@ class Admin::Music::Songs::Wizard::ReviewStepComponentTest < ViewComponent::Test
       missing_count: @missing_count
     ))
 
-    assert_selector "tr[data-review-filter-target='row'][data-status='valid']"
-    assert_selector "tr[data-review-filter-target='row'][data-status='invalid']"
-    assert_selector "tr[data-review-filter-target='row'][data-status='missing']"
+    # Rows have data-status for CSS-based filtering (no JS row targets needed)
+    assert_selector "tr[data-status='valid']"
+    assert_selector "tr[data-status='invalid']"
+    assert_selector "tr[data-status='missing']"
   end
 
   test "handles empty items list" do

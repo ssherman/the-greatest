@@ -106,12 +106,17 @@ module Services
         assert_includes result, "<p>1. The Beatles - Abbey Road</p>"
       end
 
-      def test_removes_table_elements
+      def test_preserves_table_elements
         html = <<~HTML
           <div>
-            <table>
-              <tr><td>Album</td><td>Artist</td></tr>
-              <tr><td>Abbey Road</td><td>Beatles</td></tr>
+            <table class="wikitable">
+              <thead>
+                <tr><th>Rank</th><th>Album</th><th>Artist</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>1</td><td>Abbey Road</td><td>Beatles</td></tr>
+                <tr><td>2</td><td>Dark Side of the Moon</td><td>Pink Floyd</td></tr>
+              </tbody>
             </table>
             <p>Best albums list</p>
           </div>
@@ -119,10 +124,20 @@ module Services
 
         result = SimplifierService.call(html)
 
-        refute_includes result, "<table"
-        refute_includes result, "<tr"
-        refute_includes result, "<td"
+        # Should preserve table structure for Wikipedia-style lists
+        assert_includes result, "<table"
+        assert_includes result, "<thead"
+        assert_includes result, "<tbody"
+        assert_includes result, "<tr"
+        assert_includes result, "<th"
+        assert_includes result, "<td"
+        assert_includes result, "Abbey Road"
+        assert_includes result, "Beatles"
+        assert_includes result, "Dark Side of the Moon"
+        assert_includes result, "Pink Floyd"
         assert_includes result, "<p>Best albums list</p>"
+        # Should preserve allowed attributes on table elements
+        assert_includes result, 'class="wikitable"'
       end
 
       def test_removes_navigation_elements

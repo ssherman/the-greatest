@@ -1,0 +1,36 @@
+<%
+  # Compute counts from list items
+  items = list.list_items.ordered
+  total_count = items.count
+  valid_count = items.count(&:verified?)
+  invalid_count = items.count { |i| i.metadata["ai_match_invalid"] }
+  missing_count = total_count - valid_count - invalid_count
+
+  # Percentage helper
+  percentage = ->(count) {
+    return 0 if total_count.zero?
+    ((count.to_f / total_count) * 100).round(1)
+  }
+%>
+<div id="review_stats_<%= list.id %>" class="stats stats-vertical lg:stats-horizontal shadow w-full">
+  <div class="stat">
+    <div class="stat-title">Total Items</div>
+    <div class="stat-value text-primary"><%= total_count %></div>
+    <div class="stat-desc">Unverified items</div>
+  </div>
+  <div class="stat">
+    <div class="stat-title">Valid</div>
+    <div class="stat-value text-success"><%= valid_count %></div>
+    <div class="stat-desc"><%= percentage.call(valid_count) %>% of total</div>
+  </div>
+  <div class="stat">
+    <div class="stat-title">Invalid</div>
+    <div class="stat-value text-error"><%= invalid_count %></div>
+    <div class="stat-desc"><%= percentage.call(invalid_count) %>% of total</div>
+  </div>
+  <div class="stat">
+    <div class="stat-title">Missing</div>
+    <div class="stat-value text-base-content/70"><%= missing_count %></div>
+    <div class="stat-desc"><%= percentage.call(missing_count) %>% of total</div>
+  </div>
+</div>
