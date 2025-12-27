@@ -114,9 +114,9 @@
       popover
       id="item_menu_<%= item.id %>"
       style="position-anchor: --item-anchor-<%= item.id %>">
-      <li><button type="button" onclick="edit_metadata_modal_<%= item.id %>_dialog.showModal(); document.getElementById('item_menu_<%= item.id %>').hidePopover();">Edit Metadata</button></li>
-      <li><button type="button" onclick="link_song_modal_<%= item.id %>_dialog.showModal(); document.getElementById('item_menu_<%= item.id %>').hidePopover();">Link Existing Song</button></li>
-      <li><button type="button" onclick="search_mb_modal_<%= item.id %>_dialog.showModal(); document.getElementById('item_menu_<%= item.id %>').hidePopover();">Search MusicBrainz</button></li>
+      <li><%= link_to "Edit Metadata", modal_admin_songs_list_item_path(list_id: item.list_id, id: item.id, modal_type: :edit_metadata), data: { turbo_frame: Admin::Music::Songs::Wizard::SharedModalComponent::FRAME_ID }, onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" %></li>
+      <li><%= link_to "Link Existing Song", modal_admin_songs_list_item_path(list_id: item.list_id, id: item.id, modal_type: :link_song), data: { turbo_frame: Admin::Music::Songs::Wizard::SharedModalComponent::FRAME_ID }, onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" %></li>
+      <li><%= link_to "Search MusicBrainz", modal_admin_songs_list_item_path(list_id: item.list_id, id: item.id, modal_type: :search_musicbrainz), data: { turbo_frame: Admin::Music::Songs::Wizard::SharedModalComponent::FRAME_ID }, onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" %></li>
     </ul>
   </td>
 </tr>

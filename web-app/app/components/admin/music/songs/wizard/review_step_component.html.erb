@@ -132,16 +132,12 @@
                           <%= button_to "Verify", verify_path(item), method: :post, class: "justify-start", data: { turbo_frame: "_top" }, form: { data: { turbo: true } } %>
                         </li>
                       <% end %>
-                      <li><button type="button" onclick="edit_metadata_modal_<%= item.id %>_dialog.showModal(); document.getElementById('item_menu_<%= item.id %>').hidePopover();">Edit Metadata</button></li>
-                      <li><button type="button" onclick="link_song_modal_<%= item.id %>_dialog.showModal(); document.getElementById('item_menu_<%= item.id %>').hidePopover();">Link Existing Song</button></li>
-                      <li><button type="button" onclick="search_mb_modal_<%= item.id %>_dialog.showModal(); document.getElementById('item_menu_<%= item.id %>').hidePopover();">Search MusicBrainz</button></li>
+                      <li><%= link_to "Edit Metadata", modal_path(item, :edit_metadata), data: { turbo_frame: Admin::Music::Songs::Wizard::SharedModalComponent::FRAME_ID }, onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" %></li>
+                      <li><%= link_to "Link Existing Song", modal_path(item, :link_song), data: { turbo_frame: Admin::Music::Songs::Wizard::SharedModalComponent::FRAME_ID }, onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" %></li>
+                      <li><%= link_to "Search MusicBrainz", modal_path(item, :search_musicbrainz), data: { turbo_frame: Admin::Music::Songs::Wizard::SharedModalComponent::FRAME_ID }, onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" %></li>
                     </ul>
                   </td>
                 </tr>
-                <%# Render modals for this item %>
-                <%= render(Admin::Music::Songs::Wizard::EditMetadataModalComponent.new(list_item: item)) %>
-                <%= render(Admin::Music::Songs::Wizard::LinkSongModalComponent.new(list_item: item)) %>
-                <%= render(Admin::Music::Songs::Wizard::SearchMusicbrainzModalComponent.new(list_item: item, list: list)) %>
               <% end %>
             </tbody>
           </table>
@@ -151,6 +147,9 @@
           No items to review
         </div>
       <% end %>
+
+      <%# Shared modal - single dialog for all modal types, content loads on-demand %>
+      <%= render(Admin::Music::Songs::Wizard::SharedModalComponent.new) %>
     </div>
   <% end %>
 <% end %>

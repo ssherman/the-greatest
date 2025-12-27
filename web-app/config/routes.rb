@@ -90,6 +90,7 @@ Rails.application.routes.draw do
 
           resources :items, controller: "list_items_actions", only: [] do
             member do
+              get "modal/:modal_type", action: :modal, as: :modal
               post :verify
               post :skip
               patch :metadata

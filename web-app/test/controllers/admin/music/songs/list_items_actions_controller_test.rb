@@ -394,6 +394,67 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
     assert_equal [], JSON.parse(response.body)
   end
 
+  # modal action tests
+  test "modal returns edit_metadata content" do
+    get modal_admin_songs_list_item_path(list_id: @list.id, id: @item.id, modal_type: :edit_metadata)
+
+    assert_response :success
+    assert_match "Edit Metadata", response.body
+    assert_match "turbo-frame", response.body
+    assert_match Admin::Music::Songs::Wizard::SharedModalComponent::FRAME_ID, response.body
+  end
+
+  test "modal returns link_song content" do
+    get modal_admin_songs_list_item_path(list_id: @list.id, id: @item.id, modal_type: :link_song)
+
+    assert_response :success
+    assert_match "Link to Existing Song", response.body
+    assert_match "turbo-frame", response.body
+  end
+
+  test "modal returns search_musicbrainz content with warning when no artist match" do
+    get modal_admin_songs_list_item_path(list_id: @list.id, id: @item.id, modal_type: :search_musicbrainz)
+
+    assert_response :success
+    assert_match "Search MusicBrainz", response.body
+    assert_match "requires an artist match first", response.body
+  end
+
+  test "modal returns search_musicbrainz content with form when artist match exists" do
+    @item.update!(metadata: @item.metadata.merge("mb_artist_ids" => ["b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d"]))
+
+    get modal_admin_songs_list_item_path(list_id: @list.id, id: @item.id, modal_type: :search_musicbrainz)
+
+    assert_response :success
+    assert_match "Search MusicBrainz", response.body
+    assert_match "Search MusicBrainz for recordings", response.body
+    assert_no_match(/requires an artist match first/, response.body)
+  end
+
+  test "modal returns error for invalid modal type" do
+    get modal_admin_songs_list_item_path(list_id: @list.id, id: @item.id, modal_type: :invalid_type)
+
+    assert_response :success
+    assert_match "Invalid modal type", response.body
+  end
+
+  test "modal error preserves turbo-frame element for subsequent requests" do
+    # First request with invalid type
+    get modal_admin_songs_list_item_path(list_id: @list.id, id: @item.id, modal_type: :invalid_type)
+
+    assert_response :success
+    # Verify the turbo-frame element is preserved in the response
+    assert_match "turbo-frame", response.body
+    assert_match Admin::Music::Songs::Wizard::SharedModalComponent::FRAME_ID, response.body
+
+    # Subsequent request with valid type should still work
+    get modal_admin_songs_list_item_path(list_id: @list.id, id: @item.id, modal_type: :edit_metadata)
+
+    assert_response :success
+    assert_match "Edit Metadata", response.body
+    assert_match "turbo-frame", response.body
+  end
+
   # Authorization tests
   test "requires admin authentication" do
     sign_out
