@@ -50,6 +50,17 @@ module Search
         assert_equal "the time", result
       end
 
+      test "normalize_search_text preserves periods for acronyms" do
+        result = Search::Shared::Utils.normalize_search_text("B.O.B.")
+        assert_equal "b.o.b.", result
+
+        result = Search::Shared::Utils.normalize_search_text("U.S.A.")
+        assert_equal "u.s.a.", result
+
+        result = Search::Shared::Utils.normalize_search_text("Dr. Dre")
+        assert_equal "dr. dre", result
+      end
+
       test "cleanup_for_indexing normalizes smart quotes to straight quotes" do
         text_array = ["\u2018Don\u2019t Stop\u2019", "\u201CThe Wall\u201D"]
         result = Search::Shared::Utils.cleanup_for_indexing(text_array)
