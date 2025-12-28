@@ -227,6 +227,21 @@ Located in [`app/components/admin/music/songs/wizard/`](/web-app/app/components/
 | `next_button_label(step_name)` | Dynamic button text |
 | `job_status_text(list)` | Human-readable job status |
 
+### Review Step Item Actions
+
+The review step provides per-item actions via a dropdown menu, handled by `ListItemsActionsController`:
+
+| Action | Purpose |
+|--------|---------|
+| Edit Metadata | Manually edit the raw JSON metadata |
+| Link Existing Song | Search and link to a song already in the database |
+| Search MusicBrainz Recordings | Search for recordings within the matched artist's catalog |
+| Search MusicBrainz Artists | Search and replace the artist match (useful when enrich step matched wrong artist) |
+
+All actions use a shared modal component (`SharedModalComponent`) that loads content on-demand via Turbo Frames. Actions return Turbo Stream responses to update the table row and stats without page reload.
+
+See [`ListItemsActionsController`](/docs/controllers/admin/music/songs/list_items_actions_controller.md) for full documentation.
+
 ### Review Step Performance Optimization
 
 The review step uses CSS-based filtering for performance with large lists (1000+ items).

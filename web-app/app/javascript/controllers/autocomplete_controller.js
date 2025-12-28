@@ -76,8 +76,8 @@ export default class extends Controller {
 
       resultsList: {
         tag: "ul",
-        class: "absolute dropdown-content menu p-2 shadow-lg bg-base-100 rounded-box w-full mt-1 max-h-80 overflow-y-auto z-[9999] left-0",
-        maxResults: 5,
+        class: "absolute dropdown-content p-2 shadow-lg bg-base-100 rounded-box w-full mt-1 max-h-80 overflow-y-auto z-[9999] left-0",
+        maxResults: 10,
         noResults: true,
         position: "afterend",
         container: (element) => {

@@ -23,11 +23,11 @@ class Admin::Music::Songs::Wizard::SearchMusicbrainzModalComponent < ViewCompone
   end
 
   def form_url
-    link_musicbrainz_admin_songs_list_item_path(list_id: list.id, id: list_item.id)
+    link_musicbrainz_recording_admin_songs_list_item_path(list_id: list.id, id: list_item.id)
   end
 
   def autocomplete_url
-    musicbrainz_search_admin_songs_list_wizard_path(list_id: list.id, item_id: list_item.id)
+    musicbrainz_recording_search_admin_songs_list_wizard_path(list_id: list.id, item_id: list_item.id)
   end
 
   def musicbrainz_available?

@@ -2,7 +2,7 @@
         class="modal"
         data-controller="shared-modal"
         data-action="turbo:frame-load->shared-modal#open">
-  <div class="modal-box max-w-2xl">
+  <div class="modal-box max-w-2xl overflow-visible">
     <%= helpers.turbo_frame_tag frame_id do %>
       <%# Content loads here on-demand %>
       <div class="flex justify-center py-8">

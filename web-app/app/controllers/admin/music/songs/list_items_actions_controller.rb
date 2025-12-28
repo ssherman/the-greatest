@@ -2,12 +2,12 @@
 
 class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseController
   before_action :set_list
-  before_action :set_item, only: [:verify, :metadata, :manual_link, :link_musicbrainz, :modal]
+  before_action :set_item, only: [:verify, :metadata, :manual_link, :link_musicbrainz_recording, :link_musicbrainz_artist, :modal]
 
   # GET /admin/songs/:list_id/items/:id/modal/:modal_type
   # Loads modal content on-demand for the shared modal component.
   # Returns content wrapped in turbo_frame_tag for Turbo Frame replacement.
-  VALID_MODAL_TYPES = %w[edit_metadata link_song search_musicbrainz].freeze
+  VALID_MODAL_TYPES = %w[edit_metadata link_song search_musicbrainz_recordings search_musicbrainz_artists].freeze
 
   def modal
     modal_type = params[:modal_type]
@@ -130,7 +130,7 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
     end
   end
 
-  def link_musicbrainz
+  def link_musicbrainz_recording
     mb_recording_id = params[:mb_recording_id]
 
     unless mb_recording_id.present?
@@ -215,7 +215,74 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
     end
   end
 
-  def musicbrainz_search
+  def link_musicbrainz_artist
+    mb_artist_id = params[:mb_artist_id]
+
+    unless mb_artist_id.present?
+      respond_to do |format|
+        format.turbo_stream do
+          render turbo_stream: turbo_stream.replace(
+            Admin::Music::Songs::Wizard::SharedModalComponent::ERROR_ID,
+            partial: "error_message",
+            locals: {message: "Please select an artist"}
+          )
+        end
+        format.html { redirect_to review_step_path, alert: "Please select an artist" }
+      end
+      return
+    end
+
+    search = Music::Musicbrainz::Search::ArtistSearch.new
+    response = search.lookup_by_mbid(mb_artist_id)
+
+    if response[:success] && response[:data]["artists"]&.any?
+      artist = response[:data]["artists"].first
+      artist_name = artist["name"]
+
+      # Clear stale recording metadata since it was matched against the old artist
+      # Also clear any linked song since it may no longer be correct
+      @item.metadata = @item.metadata.except(
+        "mb_recording_id",
+        "mb_recording_name",
+        "mb_release_year",
+        "musicbrainz_match",
+        "manual_musicbrainz_link",
+        "song_id",
+        "song_name"
+      ).merge(
+        "mb_artist_ids" => [mb_artist_id],
+        "mb_artist_names" => [artist_name]
+      )
+      @item.listable = nil
+      @item.verified = false
+      @item.save!
+
+      respond_to do |format|
+        format.turbo_stream do
+          render turbo_stream: [
+            turbo_stream.replace("item_row_#{@item.id}", partial: "item_row", locals: {item: @item}),
+            turbo_stream.replace("review_stats_#{@list.id}", partial: "review_stats", locals: {list: @list}),
+            turbo_stream.append("flash_messages", partial: "flash_success", locals: {message: "MusicBrainz artist linked successfully"})
+          ]
+        end
+        format.html { redirect_to review_step_path, notice: "MusicBrainz artist linked successfully" }
+      end
+    else
+      error_message = response[:errors]&.first || "Artist not found"
+      respond_to do |format|
+        format.turbo_stream do
+          render turbo_stream: turbo_stream.replace(
+            Admin::Music::Songs::Wizard::SharedModalComponent::ERROR_ID,
+            partial: "error_message",
+            locals: {message: error_message}
+          )
+        end
+        format.html { redirect_to review_step_path, alert: error_message }
+      end
+    end
+  end
+
+  def musicbrainz_recording_search
     item_id = params[:item_id]
     query = params[:q]
 
@@ -249,6 +316,24 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
     }
   end
 
+  def musicbrainz_artist_search
+    query = params[:q]
+    return render json: [] if query.blank? || query.length < 2
+
+    search = Music::Musicbrainz::Search::ArtistSearch.new
+    response = search.search_by_name(query, limit: 10)
+
+    return render json: [] unless response[:success]
+
+    artists = response[:data]["artists"] || []
+    render json: artists.map { |artist|
+      {
+        value: artist["id"],
+        text: format_artist_display(artist)
+      }
+    }
+  end
+
   private
 
   def set_list
@@ -272,5 +357,27 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
     first_release = recording["first-release-date"]
     return nil unless first_release.present?
     first_release.split("-").first.to_i
+  end
+
+  # Format artist display as "Artist Name (Type from Location)"
+  # e.g., "The Beatles (Group from Liverpool)"
+  def format_artist_display(artist)
+    name = artist["name"]
+    type = artist["type"]
+    country = artist["country"]
+    disambiguation = artist["disambiguation"]
+
+    # Build location string from country or disambiguation
+    location = disambiguation.presence || country.presence
+
+    if type.present? && location.present?
+      "#{name} (#{type} from #{location})"
+    elsif type.present?
+      "#{name} (#{type})"
+    elsif location.present?
+      "#{name} (#{location})"
+    else
+      name
+    end
   end
 end

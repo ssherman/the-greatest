@@ -134,7 +134,8 @@
                       <% end %>
                       <li><%= link_to "Edit Metadata", modal_path(item, :edit_metadata), data: { turbo_frame: Admin::Music::Songs::Wizard::SharedModalComponent::FRAME_ID }, onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" %></li>
                       <li><%= link_to "Link Existing Song", modal_path(item, :link_song), data: { turbo_frame: Admin::Music::Songs::Wizard::SharedModalComponent::FRAME_ID }, onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" %></li>
-                      <li><%= link_to "Search MusicBrainz", modal_path(item, :search_musicbrainz), data: { turbo_frame: Admin::Music::Songs::Wizard::SharedModalComponent::FRAME_ID }, onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" %></li>
+                      <li><%= link_to "Search MusicBrainz Recordings", modal_path(item, :search_musicbrainz_recordings), data: { turbo_frame: Admin::Music::Songs::Wizard::SharedModalComponent::FRAME_ID }, onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" %></li>
+                      <li><%= link_to "Search MusicBrainz Artists", modal_path(item, :search_musicbrainz_artists), data: { turbo_frame: Admin::Music::Songs::Wizard::SharedModalComponent::FRAME_ID }, onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" %></li>
                     </ul>
                   </td>
                 </tr>
