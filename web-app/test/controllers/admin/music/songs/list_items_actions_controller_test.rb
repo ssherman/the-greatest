@@ -117,8 +117,8 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
     assert_equal @song.id, @item.listable_id
   end
 
-  # link_musicbrainz action tests
-  test "link_musicbrainz links recording to item" do
+  # link_musicbrainz_recording action tests
+  test "link_musicbrainz_recording links recording to item" do
     mb_recording_id = "e3f3c2d4-55c2-4d28-bb47-71f42f2a5ccc"
     mock_response = {
       success: true,
@@ -137,7 +137,7 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
       .with(mb_recording_id)
       .returns(mock_response)
 
-    post link_musicbrainz_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
+    post link_musicbrainz_recording_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
       params: {mb_recording_id: mb_recording_id}
 
     assert_response :redirect
@@ -151,8 +151,8 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
     assert @item.metadata["manual_musicbrainz_link"]
   end
 
-  test "link_musicbrainz returns error when mb_recording_id missing" do
-    post link_musicbrainz_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
+  test "link_musicbrainz_recording returns error when mb_recording_id missing" do
+    post link_musicbrainz_recording_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
       params: {mb_recording_id: ""}
 
     assert_response :redirect
@@ -160,7 +160,7 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
     assert_nil @item.metadata["mb_recording_id"]
   end
 
-  test "link_musicbrainz returns error when recording not found" do
+  test "link_musicbrainz_recording returns error when recording not found" do
     mb_recording_id = "nonexistent-mbid"
     mock_response = {
       success: false,
@@ -173,7 +173,7 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
       .with(mb_recording_id)
       .returns(mock_response)
 
-    post link_musicbrainz_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
+    post link_musicbrainz_recording_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
       params: {mb_recording_id: mb_recording_id}
 
     assert_response :redirect
@@ -181,7 +181,7 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
     assert_nil @item.metadata["mb_recording_id"]
   end
 
-  test "link_musicbrainz accepts turbo stream format" do
+  test "link_musicbrainz_recording accepts turbo stream format" do
     mb_recording_id = "e3f3c2d4-55c2-4d28-bb47-71f42f2a5ccc"
     mock_response = {
       success: true,
@@ -199,7 +199,7 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
       .stubs(:lookup_by_mbid)
       .returns(mock_response)
 
-    post link_musicbrainz_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
+    post link_musicbrainz_recording_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
       params: {mb_recording_id: mb_recording_id},
       headers: {"Accept" => "text/vnd.turbo-stream.html"}
 
@@ -208,7 +208,7 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
     assert_equal mb_recording_id, @item.metadata["mb_recording_id"]
   end
 
-  test "link_musicbrainz clears stale listable when no local song matches the recording" do
+  test "link_musicbrainz_recording clears stale listable when no local song matches the recording" do
     # Setup: Item already has a listable (from OpenSearch or manual link)
     @item.update!(
       listable: @song,
@@ -239,7 +239,7 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
       .with(mb_recording_id)
       .returns(mock_response)
 
-    post link_musicbrainz_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
+    post link_musicbrainz_recording_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
       params: {mb_recording_id: mb_recording_id}
 
     assert_response :redirect
@@ -256,7 +256,7 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
     assert_nil @item.metadata["song_name"], "Stale song_name in metadata should be cleared"
   end
 
-  test "link_musicbrainz updates listable when local song matches the recording" do
+  test "link_musicbrainz_recording updates listable when local song matches the recording" do
     # Setup: Item has one song linked
     @item.update!(
       listable: @song,
@@ -293,7 +293,7 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
       .with(mb_recording_id)
       .returns(mock_response)
 
-    post link_musicbrainz_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
+    post link_musicbrainz_recording_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
       params: {mb_recording_id: mb_recording_id}
 
     assert_response :redirect
@@ -305,33 +305,33 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
     assert_equal different_song.title, @item.metadata["song_name"]
   end
 
-  # musicbrainz_search action tests
-  test "musicbrainz_search returns empty array when item_id missing" do
-    get musicbrainz_search_admin_songs_list_wizard_path(list_id: @list.id), params: {q: "Come Together"}
+  # musicbrainz_recording_search action tests
+  test "musicbrainz_recording_search returns empty array when item_id missing" do
+    get musicbrainz_recording_search_admin_songs_list_wizard_path(list_id: @list.id), params: {q: "Come Together"}
 
     assert_response :success
     assert_equal [], JSON.parse(response.body)
   end
 
-  test "musicbrainz_search returns empty array when item has no mb_artist_ids" do
-    get musicbrainz_search_admin_songs_list_wizard_path(list_id: @list.id),
+  test "musicbrainz_recording_search returns empty array when item has no mb_artist_ids" do
+    get musicbrainz_recording_search_admin_songs_list_wizard_path(list_id: @list.id),
       params: {item_id: @item.id, q: "Come Together"}
 
     assert_response :success
     assert_equal [], JSON.parse(response.body)
   end
 
-  test "musicbrainz_search returns empty array for blank query" do
+  test "musicbrainz_recording_search returns empty array for blank query" do
     @item.update!(metadata: @item.metadata.merge("mb_artist_ids" => ["b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d"]))
 
-    get musicbrainz_search_admin_songs_list_wizard_path(list_id: @list.id),
+    get musicbrainz_recording_search_admin_songs_list_wizard_path(list_id: @list.id),
       params: {item_id: @item.id, q: ""}
 
     assert_response :success
     assert_equal [], JSON.parse(response.body)
   end
 
-  test "musicbrainz_search returns formatted results using artist MBID" do
+  test "musicbrainz_recording_search returns formatted results using artist MBID" do
     artist_mbid = "b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d"
     @item.update!(metadata: @item.metadata.merge("mb_artist_ids" => [artist_mbid]))
 
@@ -360,7 +360,7 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
       .with(artist_mbid, "Come Together", limit: 10)
       .returns(mock_response)
 
-    get musicbrainz_search_admin_songs_list_wizard_path(list_id: @list.id),
+    get musicbrainz_recording_search_admin_songs_list_wizard_path(list_id: @list.id),
       params: {item_id: @item.id, q: "Come Together"}
 
     assert_response :success
@@ -373,7 +373,7 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
     assert_equal "Come Together (Remaster) - The Beatles (2009)", json[1]["text"]
   end
 
-  test "musicbrainz_search returns empty array on api failure" do
+  test "musicbrainz_recording_search returns empty array on api failure" do
     artist_mbid = "b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d"
     @item.update!(metadata: @item.metadata.merge("mb_artist_ids" => [artist_mbid]))
 
@@ -387,7 +387,7 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
       .stubs(:search_by_artist_mbid_and_title)
       .returns(mock_response)
 
-    get musicbrainz_search_admin_songs_list_wizard_path(list_id: @list.id),
+    get musicbrainz_recording_search_admin_songs_list_wizard_path(list_id: @list.id),
       params: {item_id: @item.id, q: "Come Together"}
 
     assert_response :success
@@ -412,23 +412,31 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
     assert_match "turbo-frame", response.body
   end
 
-  test "modal returns search_musicbrainz content with warning when no artist match" do
-    get modal_admin_songs_list_item_path(list_id: @list.id, id: @item.id, modal_type: :search_musicbrainz)
+  test "modal returns search_musicbrainz_recordings content with warning when no artist match" do
+    get modal_admin_songs_list_item_path(list_id: @list.id, id: @item.id, modal_type: :search_musicbrainz_recordings)
 
     assert_response :success
-    assert_match "Search MusicBrainz", response.body
+    assert_match "Search MusicBrainz Recordings", response.body
     assert_match "requires an artist match first", response.body
   end
 
-  test "modal returns search_musicbrainz content with form when artist match exists" do
+  test "modal returns search_musicbrainz_recordings content with form when artist match exists" do
     @item.update!(metadata: @item.metadata.merge("mb_artist_ids" => ["b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d"]))
 
-    get modal_admin_songs_list_item_path(list_id: @list.id, id: @item.id, modal_type: :search_musicbrainz)
+    get modal_admin_songs_list_item_path(list_id: @list.id, id: @item.id, modal_type: :search_musicbrainz_recordings)
 
     assert_response :success
-    assert_match "Search MusicBrainz", response.body
+    assert_match "Search MusicBrainz Recordings", response.body
     assert_match "Search MusicBrainz for recordings", response.body
     assert_no_match(/requires an artist match first/, response.body)
+  end
+
+  test "modal returns search_musicbrainz_artists content" do
+    get modal_admin_songs_list_item_path(list_id: @list.id, id: @item.id, modal_type: :search_musicbrainz_artists)
+
+    assert_response :success
+    assert_match "Search MusicBrainz Artists", response.body
+    assert_match "Search MusicBrainz for artists", response.body
   end
 
   test "modal returns error for invalid modal type" do
@@ -453,6 +461,163 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
     assert_response :success
     assert_match "Edit Metadata", response.body
     assert_match "turbo-frame", response.body
+  end
+
+  # link_musicbrainz_artist action tests
+  test "link_musicbrainz_artist links artist to item" do
+    mb_artist_id = "b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d"
+    mock_response = {
+      success: true,
+      data: {
+        "artists" => [{
+          "id" => mb_artist_id,
+          "name" => "The Beatles",
+          "type" => "Group",
+          "country" => "GB"
+        }]
+      }
+    }
+
+    Music::Musicbrainz::Search::ArtistSearch.any_instance
+      .stubs(:lookup_by_mbid)
+      .with(mb_artist_id)
+      .returns(mock_response)
+
+    post link_musicbrainz_artist_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
+      params: {mb_artist_id: mb_artist_id}
+
+    assert_response :redirect
+    @item.reload
+    assert_equal [mb_artist_id], @item.metadata["mb_artist_ids"]
+    assert_equal ["The Beatles"], @item.metadata["mb_artist_names"]
+  end
+
+  test "link_musicbrainz_artist returns error when mb_artist_id missing" do
+    post link_musicbrainz_artist_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
+      params: {mb_artist_id: ""}
+
+    assert_response :redirect
+    @item.reload
+    assert_nil @item.metadata["mb_artist_ids"]
+  end
+
+  test "link_musicbrainz_artist returns error when artist not found" do
+    mb_artist_id = "nonexistent-mbid"
+    mock_response = {
+      success: false,
+      data: nil,
+      errors: ["Artist not found"]
+    }
+
+    Music::Musicbrainz::Search::ArtistSearch.any_instance
+      .stubs(:lookup_by_mbid)
+      .with(mb_artist_id)
+      .returns(mock_response)
+
+    post link_musicbrainz_artist_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
+      params: {mb_artist_id: mb_artist_id}
+
+    assert_response :redirect
+    @item.reload
+    assert_nil @item.metadata["mb_artist_ids"]
+  end
+
+  test "link_musicbrainz_artist accepts turbo stream format" do
+    mb_artist_id = "b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d"
+    mock_response = {
+      success: true,
+      data: {
+        "artists" => [{
+          "id" => mb_artist_id,
+          "name" => "The Beatles",
+          "type" => "Group"
+        }]
+      }
+    }
+
+    Music::Musicbrainz::Search::ArtistSearch.any_instance
+      .stubs(:lookup_by_mbid)
+      .returns(mock_response)
+
+    post link_musicbrainz_artist_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
+      params: {mb_artist_id: mb_artist_id},
+      headers: {"Accept" => "text/vnd.turbo-stream.html"}
+
+    assert_response :success
+    @item.reload
+    assert_equal [mb_artist_id], @item.metadata["mb_artist_ids"]
+  end
+
+  # musicbrainz_artist_search action tests
+  test "musicbrainz_artist_search returns empty array for blank query" do
+    get musicbrainz_artist_search_admin_songs_list_wizard_path(list_id: @list.id), params: {q: ""}
+
+    assert_response :success
+    assert_equal [], JSON.parse(response.body)
+  end
+
+  test "musicbrainz_artist_search returns empty array for short query" do
+    get musicbrainz_artist_search_admin_songs_list_wizard_path(list_id: @list.id), params: {q: "a"}
+
+    assert_response :success
+    assert_equal [], JSON.parse(response.body)
+  end
+
+  test "musicbrainz_artist_search returns formatted results" do
+    mock_response = {
+      success: true,
+      data: {
+        "artists" => [
+          {
+            "id" => "b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d",
+            "name" => "The Beatles",
+            "type" => "Group",
+            "country" => "GB",
+            "disambiguation" => "Liverpool"
+          },
+          {
+            "id" => "4d5bbb57-8c4c-4a7f-a3ab-8b6e6c9c8e4c",
+            "name" => "Beatles",
+            "type" => "Group",
+            "country" => nil,
+            "disambiguation" => "São Paulo"
+          }
+        ]
+      }
+    }
+
+    Music::Musicbrainz::Search::ArtistSearch.any_instance
+      .stubs(:search_by_name)
+      .with("beatles", limit: 10)
+      .returns(mock_response)
+
+    get musicbrainz_artist_search_admin_songs_list_wizard_path(list_id: @list.id), params: {q: "beatles"}
+
+    assert_response :success
+    json = JSON.parse(response.body)
+
+    assert_equal 2, json.length
+    assert_equal "b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d", json[0]["value"]
+    assert_equal "The Beatles (Group from Liverpool)", json[0]["text"]
+    assert_equal "4d5bbb57-8c4c-4a7f-a3ab-8b6e6c9c8e4c", json[1]["value"]
+    assert_equal "Beatles (Group from São Paulo)", json[1]["text"]
+  end
+
+  test "musicbrainz_artist_search returns empty array on api failure" do
+    mock_response = {
+      success: false,
+      data: nil,
+      errors: ["API error"]
+    }
+
+    Music::Musicbrainz::Search::ArtistSearch.any_instance
+      .stubs(:search_by_name)
+      .returns(mock_response)
+
+    get musicbrainz_artist_search_admin_songs_list_wizard_path(list_id: @list.id), params: {q: "beatles"}
+
+    assert_response :success
+    assert_equal [], JSON.parse(response.body)
   end
 
   # Authorization tests

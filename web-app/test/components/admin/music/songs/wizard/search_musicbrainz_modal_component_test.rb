@@ -50,7 +50,7 @@ class Admin::Music::Songs::Wizard::SearchMusicbrainzModalComponentTest < ViewCom
 
     assert_selector ".alert-warning"
     assert_text "MusicBrainz search requires an artist match first"
-    assert_no_selector "form[action='#{link_musicbrainz_admin_songs_list_item_path(list_id: @list.id, id: @item.id)}']"
+    assert_no_selector "form[action='#{link_musicbrainz_recording_admin_songs_list_item_path(list_id: @list.id, id: @item.id)}']"
     assert_no_selector "[data-controller='autocomplete']"
   end
 
@@ -65,7 +65,7 @@ class Admin::Music::Songs::Wizard::SearchMusicbrainzModalComponentTest < ViewCom
   test "renders form with correct action when mb_artist_ids present" do
     render_inline(Admin::Music::Songs::Wizard::SearchMusicbrainzModalComponent.new(list_item: @item_with_mb_artist, list: @list))
 
-    assert_selector "form[action='#{link_musicbrainz_admin_songs_list_item_path(list_id: @list.id, id: @item_with_mb_artist.id)}']"
+    assert_selector "form[action='#{link_musicbrainz_recording_admin_songs_list_item_path(list_id: @list.id, id: @item_with_mb_artist.id)}']"
   end
 
   test "renders autocomplete component when mb_artist_ids present" do
@@ -77,7 +77,7 @@ class Admin::Music::Songs::Wizard::SearchMusicbrainzModalComponentTest < ViewCom
   test "autocomplete points to musicbrainz search endpoint with item_id" do
     render_inline(Admin::Music::Songs::Wizard::SearchMusicbrainzModalComponent.new(list_item: @item_with_mb_artist, list: @list))
 
-    expected_url = musicbrainz_search_admin_songs_list_wizard_path(list_id: @list.id, item_id: @item_with_mb_artist.id)
+    expected_url = musicbrainz_recording_search_admin_songs_list_wizard_path(list_id: @list.id, item_id: @item_with_mb_artist.id)
     assert_selector "[data-autocomplete-url-value='#{expected_url}']"
   end
 

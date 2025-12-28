@@ -1,10 +1,10 @@
 <%# Modal content for searching MusicBrainz recordings %>
 <%= turbo_frame_tag Admin::Music::Songs::Wizard::SharedModalComponent::FRAME_ID do %>
-  <h3 class="font-bold text-lg">Search MusicBrainz</h3>
+  <h3 class="font-bold text-lg">Search MusicBrainz Recordings</h3>
   <p class="text-sm text-base-content/70 mt-1"><%= item_label(item) %></p>
 
   <% if musicbrainz_available?(item) %>
-    <%= form_with url: link_musicbrainz_admin_songs_list_item_path(list_id: list.id, id: item.id),
+    <%= form_with url: link_musicbrainz_recording_admin_songs_list_item_path(list_id: list.id, id: item.id),
                   method: :post,
                   data: {
                     controller: "modal-form",
@@ -12,13 +12,13 @@
                     turbo_frame: "_top"
                   } do |f| %>
 
-      <div class="form-control mt-4">
+      <div class="form-control mt-4 min-h-96">
         <label class="label">
           <span class="label-text">Search MusicBrainz for recordings:</span>
         </label>
         <%= render AutocompleteComponent.new(
           name: "mb_recording_id",
-          url: musicbrainz_search_admin_songs_list_wizard_path(list_id: list.id, item_id: item.id),
+          url: musicbrainz_recording_search_admin_songs_list_wizard_path(list_id: list.id, item_id: item.id),
           placeholder: "Search by song title...",
           display_key: "text",
           value_key: "value",

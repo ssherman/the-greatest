@@ -85,7 +85,8 @@ Rails.application.routes.draw do
             post "save_html", action: :save_html, as: :save_html
             post "reparse", action: :reparse, as: :reparse
             post "restart", action: :restart
-            get "musicbrainz_search", to: "list_items_actions#musicbrainz_search", as: :musicbrainz_search
+            get "musicbrainz_recording_search", to: "list_items_actions#musicbrainz_recording_search", as: :musicbrainz_recording_search
+            get "musicbrainz_artist_search", to: "list_items_actions#musicbrainz_artist_search", as: :musicbrainz_artist_search
           end
 
           resources :items, controller: "list_items_actions", only: [] do
@@ -96,7 +97,8 @@ Rails.application.routes.draw do
               patch :metadata
               post :re_enrich
               post :manual_link
-              post :link_musicbrainz
+              post :link_musicbrainz_recording
+              post :link_musicbrainz_artist
               post :queue_import
             end
 
