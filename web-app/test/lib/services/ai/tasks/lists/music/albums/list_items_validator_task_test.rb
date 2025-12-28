@@ -5,21 +5,21 @@ module Services
     module Tasks
       module Lists
         module Music
-          module Songs
+          module Albums
             class ListItemsValidatorTaskTest < ActiveSupport::TestCase
               def setup
-                @list = lists(:music_songs_list)
+                @list = lists(:music_albums_list)
                 @list.list_items.destroy_all
 
                 @item1 = @list.list_items.create!(
                   position: 1,
                   verified: false,
                   metadata: {
-                    "title" => "Come Together",
-                    "artists" => ["The Beatles"],
-                    "song_id" => 123,
-                    "song_name" => "Come Together",
-                    "opensearch_artist_names" => ["The Beatles"],
+                    "title" => "The Dark Side of the Moon",
+                    "artists" => ["Pink Floyd"],
+                    "album_id" => 123,
+                    "album_name" => "The Dark Side of the Moon",
+                    "opensearch_artist_names" => ["Pink Floyd"],
                     "opensearch_match" => true,
                     "opensearch_score" => 18.5
                   }
@@ -29,11 +29,11 @@ module Services
                   position: 2,
                   verified: false,
                   metadata: {
-                    "title" => "Imagine",
-                    "artists" => ["John Lennon"],
-                    "mb_recording_id" => "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
-                    "mb_recording_name" => "Imagine (Live)",
-                    "mb_artist_names" => ["John Lennon"],
+                    "title" => "Abbey Road",
+                    "artists" => ["The Beatles"],
+                    "mb_release_group_id" => "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+                    "mb_release_group_name" => "Abbey Road (Live)",
+                    "mb_artist_names" => ["The Beatles"],
                     "musicbrainz_match" => true
                   }
                 )
@@ -42,8 +42,8 @@ module Services
                   position: 3,
                   verified: false,
                   metadata: {
-                    "title" => "Hey Jude",
-                    "artists" => ["The Beatles"]
+                    "title" => "Nevermind",
+                    "artists" => ["Nirvana"]
                   }
                 )
 
@@ -74,31 +74,31 @@ module Services
                 system_message = @task.send(:system_message)
 
                 assert_includes system_message, "music expert"
-                assert_includes system_message, "validates song recording matches"
+                assert_includes system_message, "validates album matches"
                 assert_includes system_message, "INVALID"
-                assert_includes system_message, "Live recordings"
-                assert_includes system_message, "Cover versions"
+                assert_includes system_message, "Live albums"
+                assert_includes system_message, "Compilations"
               end
 
               test "user_prompt includes OpenSearch matched items with artist and source tag" do
                 user_prompt = @task.send(:user_prompt)
 
-                assert_includes user_prompt, "The Beatles - Come Together"
-                assert_match(/Matched: "The Beatles - Come Together" \[OpenSearch\]/, user_prompt)
+                assert_includes user_prompt, "Pink Floyd - The Dark Side of the Moon"
+                assert_match(/Matched: "Pink Floyd - The Dark Side of the Moon" \[OpenSearch\]/, user_prompt)
               end
 
               test "user_prompt includes MusicBrainz matched items with source tag" do
                 user_prompt = @task.send(:user_prompt)
 
-                assert_includes user_prompt, "John Lennon - Imagine"
-                assert_includes user_prompt, "Imagine (Live)"
+                assert_includes user_prompt, "The Beatles - Abbey Road"
+                assert_includes user_prompt, "Abbey Road (Live)"
                 assert_includes user_prompt, "[MusicBrainz]"
               end
 
               test "user_prompt excludes items with no enrichment" do
                 user_prompt = @task.send(:user_prompt)
 
-                refute_includes user_prompt, "Hey Jude"
+                refute_includes user_prompt, "Nevermind"
               end
 
               test "user_prompt numbers items starting from 1" do
@@ -119,7 +119,7 @@ module Services
                 provider_response = {
                   parsed: {
                     invalid: [2],
-                    reasoning: "Imagine (Live) is a live recording"
+                    reasoning: "Abbey Road (Live) is a live album"
                   }
                 }
 
@@ -158,8 +158,8 @@ module Services
               end
 
               test "process_and_persist clears listable_id for invalid OpenSearch matches" do
-                song = music_songs(:wish_you_were_here)
-                @item1.update!(listable: song)
+                album = music_albums(:dark_side_of_the_moon)
+                @item1.update!(listable: album)
 
                 provider_response = {
                   parsed: {
@@ -221,7 +221,7 @@ module Services
                 provider_response = {
                   parsed: {
                     invalid: [2],
-                    reasoning: "Item 2 is a live version"
+                    reasoning: "Item 2 is a live album"
                   }
                 }
 
@@ -235,7 +235,7 @@ module Services
                 assert_equal 1, result.data[:invalid_count]
                 assert_equal 2, result.data[:total_count]
                 assert_equal 1, result.data[:verified_count]
-                assert_equal "Item 2 is a live version", result.data[:reasoning]
+                assert_equal "Item 2 is a live album", result.data[:reasoning]
                 assert_equal chat, result.ai_chat
               end
 
@@ -249,8 +249,8 @@ module Services
               end
 
               test "enriched_items includes items with listable_id" do
-                song = music_songs(:wish_you_were_here)
-                @item3.update!(listable: song, metadata: {"title" => "Hey Jude", "artists" => ["The Beatles"]})
+                album = music_albums(:dark_side_of_the_moon)
+                @item3.update!(listable: album, metadata: {"title" => "Nevermind", "artists" => ["Nirvana"]})
 
                 enriched = @task.send(:enriched_items)
 

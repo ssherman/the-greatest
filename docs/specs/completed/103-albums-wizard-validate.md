@@ -1,12 +1,12 @@
 # 103 - Albums Wizard Validate Step
 
 ## Status
-- **Status**: Not Started
+- **Status**: Completed
 - **Priority**: High
 - **Created**: 2025-12-27
-- **Started**:
-- **Completed**:
-- **Developer**:
+- **Started**: 2025-12-28
+- **Completed**: 2025-12-28
+- **Developer**: Claude
 
 ## Overview
 Implement the validate step for the Albums List Wizard. This step uses AI to validate that enrichment matches are correct, flagging invalid matches for manual review.
@@ -139,13 +139,13 @@ Return an array of item numbers that are INVALID matches.
 - Single AI call per batch (not per item)
 
 ## Acceptance Criteria
-- [ ] Validate step component shows job progress
-- [ ] Job validates all enriched items via AI
-- [ ] Valid matches automatically verified
-- [ ] Invalid matches flagged with reason
-- [ ] Stats show valid/invalid/skipped counts
-- [ ] "Re-validate" button clears and re-runs validation
-- [ ] Validation reasons visible in review step
+- [x] Validate step component shows job progress
+- [x] Job validates all enriched items via AI
+- [x] Valid matches automatically verified
+- [x] Invalid matches flagged with reason
+- [x] Stats show valid/invalid/skipped counts
+- [x] "Re-validate" button clears and re-runs validation
+- [x] Validation reasons visible in review step
 
 ### Golden Examples
 
@@ -199,30 +199,42 @@ Return an array of item numbers that are INVALID matches.
 ---
 
 ## Implementation Notes (living)
-- Approach taken:
-- Important decisions:
+- Approach taken: Followed the songs wizard validation pattern exactly, adapting it for albums
+- Important decisions: Used the same AI model (gpt-5-mini) and validation approach as songs validator
+- Enhancement: Added `opensearch_artist_names` to enrichers and validator prompts for consistent artist display
 
 ### Key Files Touched (paths only)
 - `app/sidekiq/music/albums/wizard_validate_list_items_job.rb`
 - `app/lib/services/ai/tasks/lists/music/albums/list_items_validator_task.rb`
 - `app/components/admin/music/albums/wizard/validate_step_component.rb`
+- `app/components/admin/music/albums/wizard/validate_step_component.html.erb`
 - `app/helpers/admin/music/albums/list_wizard_helper.rb`
+- `app/lib/services/lists/music/albums/list_item_enricher.rb` (added opensearch_artist_names)
+- `app/lib/services/lists/music/songs/list_item_enricher.rb` (added opensearch_artist_names)
+- `app/lib/services/ai/tasks/lists/music/songs/list_items_validator_task.rb` (use artist names in prompt)
+- `test/sidekiq/music/albums/wizard_validate_list_items_job_test.rb`
+- `test/lib/services/ai/tasks/lists/music/albums/list_items_validator_task_test.rb`
+- `test/components/admin/music/albums/wizard/validate_step_component_test.rb`
 
 ### Challenges & Resolutions
--
+- OpenSearch matches missing artist names in AI prompt: Added `opensearch_artist_names` field to enrichers for both songs and albums
 
 ### Deviations From Plan
--
+- Enhanced both songs and albums enrichers to store `opensearch_artist_names` for consistent AI validation prompts
 
 ## Acceptance Results
-- Date, verifier, artifacts:
+- Date: 2025-12-28
+- Verifier: Claude
+- All 42 tests pass (job, AI task, component)
 
 ## Future Improvements
 - Consider extracting base validator task between songs and albums
 - Could add confidence scores instead of binary valid/invalid
 
 ## Related PRs
--
+- Part of album-list-wizard branch
 
 ## Documentation Updated
-- [ ] Class docs for new files
+- [x] `docs/sidekiq/music/albums/wizard_validate_list_items_job.md`
+- [x] `docs/lib/services/ai/tasks/lists/music/albums/list_items_validator_task.md`
+- [x] `docs/components/music/albums/wizard/validate_step_component.md`

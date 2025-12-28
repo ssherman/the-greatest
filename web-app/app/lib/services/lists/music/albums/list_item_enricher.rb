@@ -55,6 +55,7 @@ module Services
             enrichment_data = {
               "album_id" => album.id,
               "album_name" => album.title,
+              "opensearch_artist_names" => album.artists.pluck(:name),
               "opensearch_match" => true,
               "opensearch_score" => score
             }
