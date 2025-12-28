@@ -1,0 +1,47 @@
+<%= render(Wizard::StepComponent.new(
+  title: "Import Source",
+  description: "Choose where to import your album list from",
+  step_number: 1,
+  active: true
+)) do |step| %>
+  <% step.with_step_content do %>
+    <%= form_with url: advance_step_admin_albums_list_wizard_path(list_id: list.id, step: "source"), method: :post, data: { turbo_frame: "wizard_content" } do |f| %>
+      <div class="space-y-6">
+        <div class="form-control">
+          <label class="label">
+            <span class="label-text font-bold">Select Import Source</span>
+          </label>
+
+          <div class="space-y-3">
+            <label class="flex items-center gap-3 p-4 border rounded-lg cursor-pointer hover:bg-base-200 transition-colors">
+              <%= radio_button_tag :import_source, "custom_html", default_import_source == "custom_html", class: "radio radio-primary" %>
+              <div>
+                <div class="font-semibold">Custom HTML</div>
+                <div class="text-sm text-base-content/70">Paste HTML from any source and parse album data</div>
+              </div>
+            </label>
+
+            <label class="flex items-center gap-3 p-4 border rounded-lg <%= musicbrainz_available? ? 'cursor-pointer hover:bg-base-200' : 'cursor-not-allowed opacity-50' %> transition-colors">
+              <%= radio_button_tag :import_source, "musicbrainz_series", default_import_source == "musicbrainz_series", disabled: !musicbrainz_available?, class: "radio radio-primary" %>
+              <div class="flex-1">
+                <div class="font-semibold">MusicBrainz Series</div>
+                <div class="text-sm text-base-content/70">
+                  <% if musicbrainz_available? %>
+                    Import from MusicBrainz series by MBID
+                    <span class="block text-xs mt-1 font-mono text-success">MBID: <%= list.musicbrainz_series_id %></span>
+                  <% else %>
+                    <span class="text-warning">Not available - update the list to add a MusicBrainz series MBID first</span>
+                  <% end %>
+                </div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="flex justify-end">
+          <%= f.submit "Continue ->", class: "btn btn-primary" %>
+        </div>
+      </div>
+    <% end %>
+  <% end %>
+<% end %>

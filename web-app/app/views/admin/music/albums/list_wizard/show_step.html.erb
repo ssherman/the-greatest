@@ -1,8 +1,8 @@
-<% provide(:title, "Song List Wizard - #{@list.name}") %>
+<% provide(:title, "Album List Wizard - #{@list.name}") %>
 
 <div class="container mx-auto py-8">
   <%= render(Wizard::ContainerComponent.new(
-    wizard_id: "song_list_wizard",
+    wizard_id: "album_list_wizard",
     current_step: @step_index,
     total_steps: @wizard_steps.length
   )) do |wizard| %>
@@ -10,7 +10,7 @@
     <% wizard.with_header do %>
       <div class="mb-4">
         <h1 class="text-3xl font-bold"><%= @list.name %></h1>
-        <p class="text-base-content/70">Import and configure your song list</p>
+        <p class="text-base-content/70">Import and configure your album list</p>
       </div>
     <% end %>
 
@@ -23,7 +23,7 @@
     <% end %>
 
     <%= turbo_frame_tag "wizard_content" do %>
-      <%= render_songs_step_component(@step_name, @list) %>
+      <%= render_albums_step_component(@step_name, @list) %>
     <% end %>
 
     <% wizard.with_navigation do %>

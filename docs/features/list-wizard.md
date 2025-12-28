@@ -2,7 +2,7 @@
 
 ## Summary
 
-Multi-step wizard framework for importing and processing list data in admin interfaces. Provides reusable ViewComponents for wizard UI, a controller concern for step management, and integration patterns for background job processing. Currently implemented for Music::Songs::List imports.
+Multi-step wizard framework for importing and processing list data in admin interfaces. Provides reusable ViewComponents for wizard UI, a controller concern for step management, and integration patterns for background job processing. Currently implemented for Music::Songs::List and Music::Albums::List imports.
 
 ## Architecture Overview
 
@@ -546,6 +546,16 @@ Add wizard link to the list show page:
 | [`app/helpers/admin/music/songs/list_wizard_helper.rb`](/web-app/app/helpers/admin/music/songs/list_wizard_helper.rb) | View helpers |
 | [`app/views/admin/music/songs/list_wizard/show_step.html.erb`](/web-app/app/views/admin/music/songs/list_wizard/show_step.html.erb) | Step view |
 
+### Music::Albums Implementation
+
+| File | Purpose |
+|------|---------|
+| [`app/controllers/admin/music/albums/list_wizard_controller.rb`](/web-app/app/controllers/admin/music/albums/list_wizard_controller.rb) | Domain controller |
+| [`app/helpers/admin/music/albums/list_wizard_helper.rb`](/web-app/app/helpers/admin/music/albums/list_wizard_helper.rb) | View helpers |
+| [`app/views/admin/music/albums/list_wizard/show_step.html.erb`](/web-app/app/views/admin/music/albums/list_wizard/show_step.html.erb) | Step view |
+| [`app/lib/services/lists/wizard/music/albums/state_manager.rb`](/web-app/app/lib/services/lists/wizard/music/albums/state_manager.rb) | Albums state manager |
+| [`app/components/admin/music/albums/wizard/source_step_component.rb`](/web-app/app/components/admin/music/albums/wizard/source_step_component.rb) | Source selection |
+
 ### Domain Step Components
 
 | File | Purpose |
@@ -593,4 +603,6 @@ Add wizard link to the list show page:
 
 - [List Model](/docs/models/list.md) - Base model with wizard_state methods
 - [Music::Songs::List](/docs/models/music/songs/list.md) - Song list implementation
+- [Music::Albums::List](/docs/models/music/albums/list.md) - Album list implementation
 - [Spec Instructions](/docs/spec-instructions.md) - Spec tracking standards
+- [Albums Wizard Specs](/docs/specs/) - Spec files 100-106 for albums wizard implementation
