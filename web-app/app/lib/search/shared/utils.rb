@@ -30,8 +30,8 @@ module Search
           normalized
             .strip
             .downcase
-            .gsub(/[^\w\s\-']/, " ")  # Replace special chars with space
-            .gsub(/\s+/, " ")         # Collapse multiple spaces
+            .gsub(/[^\w\s\-'.]/, " ")  # Replace special chars with space (keep periods for acronyms like B.O.B.)
+            .gsub(/\s+/, " ")          # Collapse multiple spaces
             .strip
         end
 
