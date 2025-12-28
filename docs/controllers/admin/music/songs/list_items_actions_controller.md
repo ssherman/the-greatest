@@ -99,9 +99,12 @@ Links a MusicBrainz artist to a list item, replacing existing artist metadata.
 1. Looks up artist details via `Music::Musicbrainz::Search::ArtistSearch#lookup_by_mbid`
 2. Replaces `mb_artist_ids` with single-element array containing selected artist MBID
 3. Replaces `mb_artist_names` with single-element array containing artist name
-4. Returns Turbo Stream response updating the table row
+4. Clears stale recording metadata (`mb_recording_id`, `mb_recording_name`, `mb_release_year`, `musicbrainz_match`, `manual_musicbrainz_link`)
+5. Clears stale song link (`listable`, `song_id`, `song_name`)
+6. Sets `verified = false` (item needs re-review after artist change)
+7. Returns Turbo Stream response updating the table row
 
-**Use Case**: Allows manual correction of artist match when the enrich step matched the wrong artist.
+**Use Case**: Allows manual correction of artist match when the enrich step matched the wrong artist. Clears all recording/song data since it was matched against the old artist and is now potentially invalid.
 
 ### `musicbrainz_recording_search` (GET)
 Autocomplete endpoint for searching MusicBrainz recordings.

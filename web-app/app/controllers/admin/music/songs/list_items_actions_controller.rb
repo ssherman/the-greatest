@@ -239,11 +239,22 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
       artist = response[:data]["artists"].first
       artist_name = artist["name"]
 
-      # Replace mb_artist_ids and mb_artist_names with single-element arrays
-      @item.metadata = @item.metadata.merge(
+      # Clear stale recording metadata since it was matched against the old artist
+      # Also clear any linked song since it may no longer be correct
+      @item.metadata = @item.metadata.except(
+        "mb_recording_id",
+        "mb_recording_name",
+        "mb_release_year",
+        "musicbrainz_match",
+        "manual_musicbrainz_link",
+        "song_id",
+        "song_name"
+      ).merge(
         "mb_artist_ids" => [mb_artist_id],
         "mb_artist_names" => [artist_name]
       )
+      @item.listable = nil
+      @item.verified = false
       @item.save!
 
       respond_to do |format|

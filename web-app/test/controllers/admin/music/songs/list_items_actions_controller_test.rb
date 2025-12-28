@@ -492,6 +492,69 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
     assert_equal ["The Beatles"], @item.metadata["mb_artist_names"]
   end
 
+  test "link_musicbrainz_artist clears stale recording metadata when changing artist" do
+    # Setup: Item has existing MusicBrainz recording match from a different artist
+    @item.update!(
+      listable: @song,
+      verified: true,
+      metadata: @item.metadata.merge(
+        "mb_artist_ids" => ["old-artist-mbid"],
+        "mb_artist_names" => ["Old Artist"],
+        "mb_recording_id" => "old-recording-mbid",
+        "mb_recording_name" => "Old Recording",
+        "mb_release_year" => 1990,
+        "musicbrainz_match" => true,
+        "manual_musicbrainz_link" => true,
+        "song_id" => @song.id,
+        "song_name" => @song.title
+      )
+    )
+
+    # Admin changes to a different artist
+    new_artist_id = "new-artist-mbid"
+    mock_response = {
+      success: true,
+      data: {
+        "artists" => [{
+          "id" => new_artist_id,
+          "name" => "New Artist",
+          "type" => "Person",
+          "country" => "US"
+        }]
+      }
+    }
+
+    Music::Musicbrainz::Search::ArtistSearch.any_instance
+      .stubs(:lookup_by_mbid)
+      .with(new_artist_id)
+      .returns(mock_response)
+
+    post link_musicbrainz_artist_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
+      params: {mb_artist_id: new_artist_id}
+
+    assert_response :redirect
+    @item.reload
+
+    # New artist should be set
+    assert_equal [new_artist_id], @item.metadata["mb_artist_ids"]
+    assert_equal ["New Artist"], @item.metadata["mb_artist_names"]
+
+    # Stale recording metadata should be cleared
+    assert_nil @item.metadata["mb_recording_id"], "Stale mb_recording_id should be cleared"
+    assert_nil @item.metadata["mb_recording_name"], "Stale mb_recording_name should be cleared"
+    assert_nil @item.metadata["mb_release_year"], "Stale mb_release_year should be cleared"
+    assert_nil @item.metadata["musicbrainz_match"], "Stale musicbrainz_match should be cleared"
+    assert_nil @item.metadata["manual_musicbrainz_link"], "Stale manual_musicbrainz_link should be cleared"
+
+    # Stale song link should be cleared
+    assert_nil @item.listable_id, "Stale listable should be cleared"
+    assert_nil @item.metadata["song_id"], "Stale song_id should be cleared"
+    assert_nil @item.metadata["song_name"], "Stale song_name should be cleared"
+
+    # Item should no longer be verified (needs re-review after artist change)
+    assert_not @item.verified?, "Item should not be verified after artist change"
+  end
+
   test "link_musicbrainz_artist returns error when mb_artist_id missing" do
     post link_musicbrainz_artist_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
       params: {mb_artist_id: ""}
