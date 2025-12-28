@@ -165,22 +165,27 @@ ListItem.create!(
 - `app/components/admin/music/albums/wizard/parse_step_component.rb`
 - `app/components/admin/music/albums/wizard/parse_step_component.html.erb`
 - `app/helpers/admin/music/albums/list_wizard_helper.rb`
+- `app/helpers/admin/music/songs/list_wizard_helper.rb` (renamed method)
+- `app/views/admin/music/albums/list_wizard/show_step.html.erb`
+- `app/views/admin/music/songs/list_wizard/show_step.html.erb` (updated method call)
 - `test/sidekiq/music/albums/wizard_parse_list_job_test.rb`
 - `test/components/admin/music/albums/wizard/parse_step_component_test.rb`
 
 ### Challenges & Resolutions
-- None encountered - songs wizard provided clear patterns to follow
+- Helper method name conflict: Both albums and songs wizards defined `render_step_component` with the same name. Rails loads all helpers globally, causing the songs helper to override the albums helper. Resolved by renaming methods to `render_albums_step_component` and `render_songs_step_component`.
 
 ### Deviations From Plan
 - Controller actions were already implemented in spec 100, so no controller changes needed
+- Helper method renamed from `render_step_component` to `render_albums_step_component` to avoid conflict with songs wizard helper
 
 ## Acceptance Results
 - Date: 2025-12-28
 - Verifier: Claude
-- All 35 tests pass (19 new parse step tests + 16 controller tests)
+- All 77 wizard tests pass (8 job tests + 11 component tests + 58 controller tests)
 
 ## Future Improvements
 - Consider extracting shared parse job logic between songs and albums
+- Consider a base helper module with parameterized step component rendering
 
 ## Related PRs
 -

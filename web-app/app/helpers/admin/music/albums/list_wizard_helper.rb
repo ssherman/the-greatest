@@ -14,9 +14,9 @@ module Admin::Music::Albums::ListWizardHelper
       render(Admin::Music::Albums::Wizard::SourceStepComponent.new(list: list))
     when "parse"
       render(Admin::Music::Albums::Wizard::ParseStepComponent.new(list: list))
+    when "enrich"
+      render(Admin::Music::Albums::Wizard::EnrichStepComponent.new(list: list))
     # Future step components will be added here as they are implemented:
-    # when "enrich"
-    #   render(Admin::Music::Albums::Wizard::EnrichStepComponent.new(list: list))
     # when "validate"
     #   render(Admin::Music::Albums::Wizard::ValidateStepComponent.new(list: list))
     # when "review"

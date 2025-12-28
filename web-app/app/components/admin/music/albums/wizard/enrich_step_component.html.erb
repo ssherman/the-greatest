@@ -1,0 +1,191 @@
+<%= render(Wizard::StepComponent.new(
+  title: "Enrich Data",
+  description: "Enrich albums with metadata from OpenSearch and MusicBrainz",
+  step_number: 3,
+  active: true
+)) do |step| %>
+  <% step.with_step_content do %>
+    <div class="space-y-6"
+         <% if running? %>
+           data-controller="wizard-step"
+           data-wizard-step-status-url-value="<%= step_status_admin_albums_list_wizard_path(list_id: list.id, step: 'enrich') %>"
+           data-wizard-step-step-url-value="<%= step_admin_albums_list_wizard_path(list_id: list.id, step: 'enrich') %>"
+         <% end %>>
+
+      <% if idle_or_failed? %>
+        <%# State 1 - Idle (Ready to Enrich) or State 4 - Failed %>
+        <div class="alert alert-info">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          <span>Albums will be matched against the local database (OpenSearch) first, then MusicBrainz for unmatched items.</span>
+        </div>
+
+        <% if failed? && enrich_error.present? %>
+          <div class="alert alert-error">
+            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span><%= enrich_error %></span>
+          </div>
+        <% end %>
+
+        <div class="stats stats-vertical lg:stats-horizontal shadow w-full">
+          <div class="stat">
+            <div class="stat-title">Total Items</div>
+            <div class="stat-value text-primary"><%= total_items %></div>
+            <div class="stat-desc">Items to enrich</div>
+          </div>
+          <div class="stat">
+            <div class="stat-title">Already Matched</div>
+            <div class="stat-value text-success"><%= enriched_count %></div>
+            <div class="stat-desc">Linked to albums</div>
+          </div>
+        </div>
+
+        <div class="flex gap-3">
+          <%= button_to failed? ? "Retry Enrichment" : "Start Enrichment",
+              advance_step_admin_albums_list_wizard_path(list_id: list.id, step: "enrich"),
+              method: :post,
+              class: "btn btn-primary",
+              data: {turbo_frame: "wizard_content"} %>
+        </div>
+
+      <% elsif running? %>
+        <%# State 2 - Running %>
+        <div class="mb-6">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-sm font-medium" data-wizard-step-target="statusText">
+              Enriching <%= processed_items %>/<%= total_from_metadata %> items...
+            </span>
+            <span class="text-sm text-base-content/70">
+              <%= enrich_progress %>%
+            </span>
+          </div>
+          <progress
+            class="progress progress-primary w-full"
+            value="<%= enrich_progress %>"
+            max="100"
+            data-wizard-step-target="progressBar">
+          </progress>
+        </div>
+
+        <div class="stats stats-vertical lg:stats-horizontal shadow w-full">
+          <div class="stat">
+            <div class="stat-title">Processed</div>
+            <div class="stat-value"><%= processed_items %></div>
+            <div class="stat-desc">of <%= total_from_metadata %></div>
+          </div>
+          <div class="stat">
+            <div class="stat-title">OpenSearch</div>
+            <div class="stat-value text-success"><%= opensearch_matches %></div>
+            <div class="stat-desc">Local matches</div>
+          </div>
+          <div class="stat">
+            <div class="stat-title">MusicBrainz</div>
+            <div class="stat-value text-info"><%= musicbrainz_matches %></div>
+            <div class="stat-desc">External matches</div>
+          </div>
+          <div class="stat">
+            <div class="stat-title">Not Found</div>
+            <div class="stat-value text-warning"><%= not_found_count %></div>
+            <div class="stat-desc">No match</div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 text-base-content/70">
+          <span class="loading loading-spinner loading-sm"></span>
+          <span>Enrichment in progress...</span>
+        </div>
+
+      <% elsif completed? %>
+        <%# State 3 - Completed %>
+        <div class="alert alert-success mb-6">
+          <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div>
+            <h3 class="font-bold">Enrichment Complete!</h3>
+            <div class="text-sm">Processed <%= total_from_metadata %> items</div>
+          </div>
+        </div>
+
+        <div class="stats stats-vertical lg:stats-horizontal shadow w-full mb-6">
+          <div class="stat">
+            <div class="stat-title">OpenSearch Matches</div>
+            <div class="stat-value text-success"><%= opensearch_matches %></div>
+            <div class="stat-desc"><%= percentage(opensearch_matches) %>% of items</div>
+          </div>
+          <div class="stat">
+            <div class="stat-title">MusicBrainz Matches</div>
+            <div class="stat-value text-info"><%= musicbrainz_matches %></div>
+            <div class="stat-desc"><%= percentage(musicbrainz_matches) %>% of items</div>
+          </div>
+          <div class="stat">
+            <div class="stat-title">Not Found</div>
+            <div class="stat-value text-warning"><%= not_found_count %></div>
+            <div class="stat-desc"><%= percentage(not_found_count) %>% of items</div>
+          </div>
+        </div>
+
+        <%# Preview table %>
+        <% items_preview = preview_items %>
+        <% if items_preview.any? %>
+          <div class="card bg-base-100 border mb-6">
+            <div class="card-body">
+              <h3 class="card-title text-sm">Enriched Items (<%= total_items %> total)</h3>
+              <div class="overflow-x-auto max-h-[32rem] overflow-y-auto">
+                <table class="table table-sm table-pin-rows">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Title</th>
+                      <th>Artists</th>
+                      <th>Match Source</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <% items_preview.each do |item| %>
+                      <tr>
+                        <td><%= item.position %></td>
+                        <td><%= item.metadata["title"] %></td>
+                        <td><%= Array(item.metadata["artists"]).join(", ") %></td>
+                        <td>
+                          <% if item.metadata["opensearch_match"] %>
+                            <span class="badge badge-success badge-sm">OpenSearch</span>
+                          <% elsif item.metadata["musicbrainz_match"] %>
+                            <span class="badge badge-info badge-sm">MusicBrainz</span>
+                          <% else %>
+                            <span class="badge badge-ghost badge-sm">-</span>
+                          <% end %>
+                        </td>
+                        <td>
+                          <% if item.listable_id.present? %>
+                            <span class="badge badge-success badge-sm">Linked</span>
+                          <% elsif item.metadata["mb_release_group_id"].present? %>
+                            <span class="badge badge-info badge-sm">MBID Found</span>
+                          <% else %>
+                            <span class="badge badge-warning badge-sm">No Match</span>
+                          <% end %>
+                        </td>
+                      </tr>
+                    <% end %>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        <% end %>
+
+        <div class="flex gap-3">
+          <%= button_to "Re-enrich Items",
+              advance_step_admin_albums_list_wizard_path(list_id: list.id, step: "enrich", reenrich: true),
+              method: :post,
+              class: "btn btn-outline btn-sm",
+              data: {turbo_frame: "wizard_content", turbo_confirm: "This will re-enrich all items, clearing previous enrichment data. Continue?"} %>
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+<% end %>
