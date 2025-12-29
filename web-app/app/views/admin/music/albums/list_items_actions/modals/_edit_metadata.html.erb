@@ -1,0 +1,32 @@
+<%# Modal content for editing item metadata JSON %>
+<%= turbo_frame_tag Admin::Music::Albums::Wizard::SharedModalComponent::FRAME_ID do %>
+  <h3 class="font-bold text-lg">Edit Metadata</h3>
+  <p class="text-sm text-base-content/70 mt-1"><%= item_label(item) %></p>
+
+  <%= form_with url: metadata_admin_albums_list_item_path(list_id: list.id, id: item.id),
+                method: :patch,
+                data: {
+                  controller: "metadata-editor modal-form",
+                  modal_form_modal_id_value: Admin::Music::Albums::Wizard::SharedModalComponent::DIALOG_ID,
+                  turbo_frame: "_top"
+                } do |f| %>
+
+    <div class="form-control mt-4">
+      <label for="list_item_metadata_json" class="label">
+        <span class="label-text">Metadata (JSON):</span>
+      </label>
+      <textarea name="list_item[metadata_json]"
+                id="list_item_metadata_json"
+                rows="15"
+                class="textarea textarea-bordered font-mono text-sm w-full"
+                data-metadata-editor-target="textarea"
+                data-action="input->metadata-editor#validate"><%= formatted_metadata(item) %></textarea>
+      <div id="<%= Admin::Music::Albums::Wizard::SharedModalComponent::ERROR_ID %>" class="text-error text-sm mt-2" data-metadata-editor-target="error"></div>
+    </div>
+
+    <div class="modal-action">
+      <button type="button" class="btn" onclick="<%= Admin::Music::Albums::Wizard::SharedModalComponent::DIALOG_ID %>.close()">Cancel</button>
+      <%= f.submit "Save", class: "btn btn-primary", data: { metadata_editor_target: "submitButton" } %>
+    </div>
+  <% end %>
+<% end %>

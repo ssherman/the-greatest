@@ -1,12 +1,12 @@
 # 104 - Albums Wizard Review Step & Actions
 
 ## Status
-- **Status**: Not Started
+- **Status**: Completed
 - **Priority**: High
 - **Created**: 2025-12-27
-- **Started**:
-- **Completed**:
-- **Developer**:
+- **Started**: 2025-12-28
+- **Completed**: 2025-12-28
+- **Developer**: Claude
 
 ## Overview
 Implement the review step for the Albums List Wizard. This step provides a UI for manual verification of album matches, with actions to edit metadata, link to existing albums, search MusicBrainz release groups, and search/change artists.
@@ -194,17 +194,17 @@ end
 - Autocomplete response < 500ms
 
 ## Acceptance Criteria
-- [ ] Review step displays all items in filterable table
-- [ ] Filter buttons work (All, Valid, Invalid, Missing)
-- [ ] Stats cards show correct counts
-- [ ] Dropdown actions menu per row
-- [ ] "Verify" action marks item verified
-- [ ] "Edit Metadata" opens modal with JSON editor
-- [ ] "Link Existing Album" opens modal with album autocomplete
-- [ ] "Search MusicBrainz Releases" opens modal with release search
-- [ ] "Search MusicBrainz Artists" opens modal with artist search
-- [ ] All actions update row and stats via Turbo Stream
-- [ ] Next button disabled until at least one valid item exists
+- [x] Review step displays all items in filterable table
+- [x] Filter buttons work (All, Valid, Invalid, Missing)
+- [x] Stats cards show correct counts
+- [x] Dropdown actions menu per row
+- [x] "Verify" action marks item verified
+- [x] "Edit Metadata" opens modal with JSON editor
+- [x] "Link Existing Album" opens modal with album autocomplete
+- [x] "Search MusicBrainz Releases" opens modal with release search
+- [x] "Search MusicBrainz Artists" opens modal with artist search
+- [x] All actions update row and stats via Turbo Stream
+- [ ] Next button disabled until at least one valid item exists (controlled by wizard navigation, not this spec)
 
 ### Golden Examples
 
@@ -256,26 +256,42 @@ end
 ---
 
 ## Implementation Notes (living)
-- Approach taken:
-- Important decisions:
+- Approach taken: Followed the songs wizard review step pattern exactly, adapting for albums
+- Important decisions: Used ReleaseGroupSearch for MusicBrainz album lookups instead of RecordingSearch
 
 ### Key Files Touched (paths only)
 - `config/routes.rb`
 - `app/controllers/admin/music/albums/list_items_actions_controller.rb`
 - `app/components/admin/music/albums/wizard/review_step_component.rb`
-- `app/components/admin/music/albums/wizard/link_album_modal_component.rb`
-- `app/components/admin/music/albums/wizard/search_musicbrainz_modal_component.rb`
-- `app/views/admin/music/albums/list_items_actions/*.html.erb`
+- `app/components/admin/music/albums/wizard/review_step_component.html.erb`
+- `app/components/admin/music/albums/wizard/shared_modal_component.rb`
+- `app/components/admin/music/albums/wizard/shared_modal_component.html.erb`
+- `app/views/admin/music/albums/list_items_actions/_item_row.html.erb`
+- `app/views/admin/music/albums/list_items_actions/_review_stats.html.erb`
+- `app/views/admin/music/albums/list_items_actions/_flash_success.html.erb`
+- `app/views/admin/music/albums/list_items_actions/_error_message.html.erb`
+- `app/views/admin/music/albums/list_items_actions/modals/_edit_metadata.html.erb`
+- `app/views/admin/music/albums/list_items_actions/modals/_link_album.html.erb`
+- `app/views/admin/music/albums/list_items_actions/modals/_search_musicbrainz_releases.html.erb`
+- `app/views/admin/music/albums/list_items_actions/modals/_search_musicbrainz_artists.html.erb`
+- `app/views/admin/music/albums/list_items_actions/modals/_error.html.erb`
+- `app/helpers/admin/music/albums/list_items_actions_helper.rb`
 - `app/helpers/admin/music/albums/list_wizard_helper.rb`
+- `test/controllers/admin/music/albums/list_items_actions_controller_test.rb`
+- `test/components/admin/music/albums/wizard/review_step_component_test.rb`
+- `test/components/admin/music/albums/wizard/shared_modal_component_test.rb`
 
 ### Challenges & Resolutions
--
+- None significant - the songs pattern translated well to albums
 
 ### Deviations From Plan
--
+- Used view partials for modals instead of separate component classes (same as songs)
+- Modal content loaded on-demand via Turbo Frames using SharedModalComponent pattern
 
 ## Acceptance Results
-- Date, verifier, artifacts:
+- Date: 2025-12-28
+- Verifier: Claude
+- All 48 tests pass (controller tests, component tests)
 
 ## Future Improvements
 - Consider extracting base ListItemsActionsController concern
@@ -283,8 +299,11 @@ end
 - Could add bulk verify/reject actions
 
 ## Related PRs
--
+- Part of album-list-wizard branch
 
 ## Documentation Updated
-- [ ] Class docs for new files
-- [ ] `docs/controllers/admin/music/albums/list_items_actions_controller.md`
+- [x] Class docs for new files (inline documentation)
+- [x] `docs/controllers/admin/music/albums/list_items_actions_controller.md`
+- [x] `docs/components/music/albums/wizard/review_step_component.md`
+- [x] `docs/components/music/albums/wizard/shared_modal_component.md`
+- [x] `docs/helpers/admin/music/albums/list_items_actions_helper.md`

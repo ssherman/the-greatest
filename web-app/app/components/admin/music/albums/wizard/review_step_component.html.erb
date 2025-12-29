@@ -1,0 +1,152 @@
+<%#
+  Review Step Component for Albums Wizard
+  Displays all items with filtering, statistics, and action dropdowns.
+  Uses CSS-based filtering for O(1) performance with large lists.
+%>
+
+<%# Main container with Stimulus controller for filtering %>
+<div class="space-y-6"
+     data-controller="review-filter"
+     data-review-filter-total-count-value="<%= total_count %>"
+     data-review-filter-valid-count-value="<%= valid_count %>"
+     data-review-filter-invalid-count-value="<%= invalid_count %>"
+     data-review-filter-missing-count-value="<%= missing_count %>">
+
+  <%# Stats cards %>
+  <div id="review_stats_<%= list.id %>" class="stats stats-vertical lg:stats-horizontal shadow w-full">
+    <div class="stat">
+      <div class="stat-title">Total Items</div>
+      <div class="stat-value text-primary"><%= total_count %></div>
+      <div class="stat-desc">Albums to review</div>
+    </div>
+    <div class="stat">
+      <div class="stat-title">Valid</div>
+      <div class="stat-value text-success"><%= valid_count %></div>
+      <div class="stat-desc"><%= percentage(valid_count) %>% of total</div>
+    </div>
+    <div class="stat">
+      <div class="stat-title">Invalid</div>
+      <div class="stat-value text-error"><%= invalid_count %></div>
+      <div class="stat-desc"><%= percentage(invalid_count) %>% of total</div>
+    </div>
+    <div class="stat">
+      <div class="stat-title">Missing</div>
+      <div class="stat-value text-base-content/70"><%= missing_count %></div>
+      <div class="stat-desc"><%= percentage(missing_count) %>% of total</div>
+    </div>
+  </div>
+
+  <%# Filter bar %>
+  <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-base-200 p-4 rounded-lg">
+    <select
+      id="status-filter"
+      class="select select-bordered select-sm w-40"
+      data-review-filter-target="filter"
+      data-action="change->review-filter#filter">
+      <option value="all">Show All</option>
+      <option value="valid">Valid Only</option>
+      <option value="invalid">Invalid Only</option>
+      <option value="missing">Missing Only</option>
+    </select>
+    <span data-review-filter-target="count">Showing <%= total_count %> items</span>
+  </div>
+
+  <%# Flash messages container %>
+  <div id="flash_messages"></div>
+
+  <%# Items table with CSS-based filtering %>
+  <div class="overflow-x-auto max-h-[32rem] min-h-[16rem] overflow-y-auto"
+       data-review-filter-target="container"
+       data-filter="all">
+    <style>
+      [data-filter="valid"] tr[data-status]:not([data-status="valid"]),
+      [data-filter="invalid"] tr[data-status]:not([data-status="invalid"]),
+      [data-filter="missing"] tr[data-status]:not([data-status="missing"]) {
+        display: none;
+      }
+    </style>
+    <table class="table table-sm table-pin-rows w-full">
+      <thead>
+        <tr>
+          <th style="width: 60px;">Status</th>
+          <th style="width: 50px;">#</th>
+          <th>Original</th>
+          <th>Matched</th>
+          <th style="width: 100px;">Source</th>
+          <th style="width: 100px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% items.each do |item| %>
+          <% status = item_status(item) %>
+          <tr
+            id="item_row_<%= item.id %>"
+            class="<%= row_background_class(status) %>"
+            data-status="<%= status %>"
+            data-item-id="<%= item.id %>">
+            <td>
+              <span class="<%= status_badge_class(status) %>" title="<%= status.titleize %>">
+                <%= status_badge_icon(status) %>
+              </span>
+            </td>
+            <td><%= item.position %></td>
+            <td>
+              <div class="font-medium"><%= original_title(item) %></div>
+              <div class="text-xs text-base-content/70"><%= original_artists(item) %></div>
+            </td>
+            <td>
+              <% if matched_title(item) %>
+                <div class="font-medium"><%= matched_title(item) %></div>
+                <% if matched_artists(item).present? %>
+                  <div class="text-xs text-base-content/70"><%= matched_artists(item) %></div>
+                <% end %>
+              <% else %>
+                <span class="text-base-content/50">-</span>
+              <% end %>
+            </td>
+            <td>
+              <% badge = source_badge(item) %>
+              <span class="<%= badge[:class] %>" title="<%= badge[:title] %>">
+                <%= badge[:text] %>
+              </span>
+            </td>
+            <td>
+              <button
+                class="btn btn-ghost btn-xs"
+                popovertarget="item_menu_<%= item.id %>"
+                style="anchor-name: --item-anchor-<%= item.id %>">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                </svg>
+              </button>
+              <ul
+                class="dropdown menu p-2 shadow bg-base-100 rounded-box w-52"
+                popover
+                id="item_menu_<%= item.id %>"
+                style="position-anchor: --item-anchor-<%= item.id %>">
+                <% unless item.verified? %>
+                  <li>
+                    <%= button_to "Verify", verify_path(item), method: :post, class: "text-success", data: { turbo_frame: "_top" }, form: { onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" } %>
+                  </li>
+                <% end %>
+                <li><%= link_to "Edit Metadata", modal_path(item, :edit_metadata), data: { turbo_frame: Admin::Music::Albums::Wizard::SharedModalComponent::FRAME_ID }, onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" %></li>
+                <li><%= link_to "Link Existing Album", modal_path(item, :link_album), data: { turbo_frame: Admin::Music::Albums::Wizard::SharedModalComponent::FRAME_ID }, onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" %></li>
+                <li><%= link_to "Search MusicBrainz Releases", modal_path(item, :search_musicbrainz_releases), data: { turbo_frame: Admin::Music::Albums::Wizard::SharedModalComponent::FRAME_ID }, onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" %></li>
+                <li><%= link_to "Search MusicBrainz Artists", modal_path(item, :search_musicbrainz_artists), data: { turbo_frame: Admin::Music::Albums::Wizard::SharedModalComponent::FRAME_ID }, onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" %></li>
+              </ul>
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+
+    <% if items.empty? %>
+      <div class="text-center py-8 text-base-content/50">
+        No items to review. Go back to the enrich step to add items.
+      </div>
+    <% end %>
+  </div>
+</div>
+
+<%# Shared modal - single dialog for all modal types, content loads on-demand %>
+<%= render(Admin::Music::Albums::Wizard::SharedModalComponent.new) %>

@@ -18,16 +18,23 @@ module Admin::Music::Albums::ListWizardHelper
       render(Admin::Music::Albums::Wizard::EnrichStepComponent.new(list: list))
     when "validate"
       render(Admin::Music::Albums::Wizard::ValidateStepComponent.new(list: list))
+    when "review"
+      # Load review step data
+      items = list.list_items.ordered.includes(listable: :artists)
+      total_count = items.count
+      valid_count = items.count(&:verified?)
+      invalid_count = items.count { |i| i.metadata["ai_match_invalid"] }
+      missing_count = total_count - valid_count - invalid_count
+
+      render(Admin::Music::Albums::Wizard::ReviewStepComponent.new(
+        list: list,
+        items: items,
+        total_count: total_count,
+        valid_count: valid_count,
+        invalid_count: invalid_count,
+        missing_count: missing_count
+      ))
     # Future step components will be added here as they are implemented:
-    # when "review"
-    #   render(Admin::Music::Albums::Wizard::ReviewStepComponent.new(
-    #     list: list,
-    #     items: @items || [],
-    #     total_count: @total_count || 0,
-    #     valid_count: @valid_count || 0,
-    #     invalid_count: @invalid_count || 0,
-    #     missing_count: @missing_count || 0
-    #   ))
     # when "import"
     #   render(Admin::Music::Albums::Wizard::ImportStepComponent.new(list: list))
     # when "complete"
