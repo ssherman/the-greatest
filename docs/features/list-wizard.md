@@ -555,6 +555,16 @@ Add wizard link to the list show page:
 | [`app/views/admin/music/albums/list_wizard/show_step.html.erb`](/web-app/app/views/admin/music/albums/list_wizard/show_step.html.erb) | Step view |
 | [`app/lib/services/lists/wizard/music/albums/state_manager.rb`](/web-app/app/lib/services/lists/wizard/music/albums/state_manager.rb) | Albums state manager |
 | [`app/components/admin/music/albums/wizard/source_step_component.rb`](/web-app/app/components/admin/music/albums/wizard/source_step_component.rb) | Source selection |
+| [`app/components/admin/music/albums/wizard/parse_step_component.rb`](/web-app/app/components/admin/music/albums/wizard/parse_step_component.rb) | Parse progress |
+| [`app/components/admin/music/albums/wizard/enrich_step_component.rb`](/web-app/app/components/admin/music/albums/wizard/enrich_step_component.rb) | Enrichment |
+| [`app/components/admin/music/albums/wizard/validate_step_component.rb`](/web-app/app/components/admin/music/albums/wizard/validate_step_component.rb) | AI validation |
+| [`app/components/admin/music/albums/wizard/review_step_component.rb`](/web-app/app/components/admin/music/albums/wizard/review_step_component.rb) | Manual review |
+| [`app/components/admin/music/albums/wizard/import_step_component.rb`](/web-app/app/components/admin/music/albums/wizard/import_step_component.rb) | Import progress |
+| [`app/components/admin/music/albums/wizard/complete_step_component.rb`](/web-app/app/components/admin/music/albums/wizard/complete_step_component.rb) | Completion |
+| [`app/sidekiq/music/albums/wizard_parse_list_job.rb`](/web-app/app/sidekiq/music/albums/wizard_parse_list_job.rb) | HTML parsing |
+| [`app/sidekiq/music/albums/wizard_enrich_list_items_job.rb`](/web-app/app/sidekiq/music/albums/wizard_enrich_list_items_job.rb) | MusicBrainz enrichment |
+| [`app/sidekiq/music/albums/wizard_validate_list_items_job.rb`](/web-app/app/sidekiq/music/albums/wizard_validate_list_items_job.rb) | AI validation |
+| [`app/sidekiq/music/albums/wizard_import_albums_job.rb`](/web-app/app/sidekiq/music/albums/wizard_import_albums_job.rb) | Album import |
 
 ### Domain Step Components
 

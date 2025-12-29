@@ -34,11 +34,10 @@ module Admin::Music::Albums::ListWizardHelper
         invalid_count: invalid_count,
         missing_count: missing_count
       ))
-    # Future step components will be added here as they are implemented:
-    # when "import"
-    #   render(Admin::Music::Albums::Wizard::ImportStepComponent.new(list: list))
-    # when "complete"
-    #   render(Admin::Music::Albums::Wizard::CompleteStepComponent.new(list: list))
+    when "import"
+      render(Admin::Music::Albums::Wizard::ImportStepComponent.new(list: list))
+    when "complete"
+      render(Admin::Music::Albums::Wizard::CompleteStepComponent.new(list: list))
     else
       content_tag(:div, "Step component for '#{step_name}' not yet implemented", class: "alert alert-warning")
     end

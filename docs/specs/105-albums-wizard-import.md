@@ -1,12 +1,12 @@
 # 105 - Albums Wizard Import & Complete Steps
 
 ## Status
-- **Status**: Not Started
+- **Status**: Complete
 - **Priority**: High
 - **Created**: 2025-12-27
-- **Started**:
-- **Completed**:
-- **Developer**:
+- **Started**: 2025-12-28
+- **Completed**: 2025-12-28
+- **Developer**: Claude
 
 ## Overview
 Implement the import and complete steps for the Albums List Wizard. The import step creates album records from MusicBrainz data and links them to ListItems. The complete step shows a summary of the import.
@@ -163,16 +163,16 @@ end
 - Idempotent: re-running skips already imported items
 
 ## Acceptance Criteria
-- [ ] Import step shows breakdown of items (to import, already linked, no data)
-- [ ] Clicking "Import" triggers WizardImportAlbumsJob
-- [ ] Job imports albums using existing Album::Importer
-- [ ] Job links imported albums to ListItems
-- [ ] Job marks items as verified after successful import
-- [ ] Progress bar shows import progress
-- [ ] Failed imports logged with error details
-- [ ] Complete step shows summary statistics
-- [ ] Complete step has link to view the list
-- [ ] Wizard state marked as completed
+- [x] Import step shows breakdown of items (to import, already linked, no data)
+- [x] Clicking "Import" triggers WizardImportAlbumsJob
+- [x] Job imports albums using existing Album::Importer
+- [x] Job links imported albums to ListItems
+- [x] Job marks items as verified after successful import
+- [x] Progress bar shows import progress
+- [x] Failed imports logged with error details
+- [x] Complete step shows summary statistics
+- [x] Complete step has link to view the list
+- [x] Wizard state marked as completed
 
 ### Golden Examples
 
@@ -223,20 +223,28 @@ end
 ---
 
 ## Implementation Notes (living)
-- Approach taken:
+- Approach taken: Followed the songs import job pattern exactly, adapting for albums
 - Important decisions:
+  - Series import path currently falls back to custom_html logic (no series importer for albums exists yet)
+  - Using `release_group_musicbrainz_id` instead of `musicbrainz_recording_id` for albums
+  - Progress throttled to every 10 items or 5 seconds to reduce DB writes
 
 ### Key Files Touched (paths only)
 - `app/sidekiq/music/albums/wizard_import_albums_job.rb`
 - `app/components/admin/music/albums/wizard/import_step_component.rb`
+- `app/components/admin/music/albums/wizard/import_step_component.html.erb`
 - `app/components/admin/music/albums/wizard/complete_step_component.rb`
+- `app/components/admin/music/albums/wizard/complete_step_component.html.erb`
 - `app/helpers/admin/music/albums/list_wizard_helper.rb`
+- `test/sidekiq/music/albums/wizard_import_albums_job_test.rb`
+- `test/components/admin/music/albums/wizard/import_step_component_test.rb`
+- `test/components/admin/music/albums/wizard/complete_step_component_test.rb`
 
 ### Challenges & Resolutions
--
+- No series importer for albums exists: Implemented fallback to process items with MB data
 
 ### Deviations From Plan
--
+- Series import uses same item-by-item logic as custom_html (no dedicated series service yet)
 
 ## Acceptance Results
 - Date, verifier, artifacts:
@@ -249,4 +257,7 @@ end
 -
 
 ## Documentation Updated
-- [ ] Class docs for new files
+- [x] Class docs for new files
+  - `docs/sidekiq/music/albums/wizard_import_albums_job.md`
+  - `docs/components/admin/music/albums/wizard/import_step_component.md`
+  - `docs/components/admin/music/albums/wizard/complete_step_component.md`
