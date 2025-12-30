@@ -16,6 +16,10 @@ class Admin::Music::Wizard::BaseSourceStepComponent < ViewComponent::Base
     list.musicbrainz_series_id.present?
   end
 
+  def musicbrainz_unavailable_message
+    "Not available - update the list to add a MusicBrainz series MBID first"
+  end
+
   def default_import_source
     return list.wizard_state["import_source"] if list.wizard_state&.[]("import_source").present?
     return "musicbrainz_series" if musicbrainz_available?

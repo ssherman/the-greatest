@@ -30,7 +30,7 @@
                     Import from MusicBrainz series by MBID
                     <span class="block text-xs mt-1 font-mono text-success">MBID: <%= list.musicbrainz_series_id %></span>
                   <% else %>
-                    <span class="text-warning">Not available - update the list to add a MusicBrainz series MBID first</span>
+                    <span class="text-warning"><%= musicbrainz_unavailable_message %></span>
                   <% end %>
                 </div>
               </div>
