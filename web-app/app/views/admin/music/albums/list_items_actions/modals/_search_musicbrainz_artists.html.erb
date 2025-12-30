@@ -1,0 +1,40 @@
+<%# Modal content for searching MusicBrainz artists %>
+<%= turbo_frame_tag Admin::Music::Albums::Wizard::SharedModalComponent::FRAME_ID do %>
+  <h3 class="font-bold text-lg">Search MusicBrainz Artists</h3>
+  <p class="text-sm text-base-content/70 mt-1"><%= item_label(item) %></p>
+
+  <%= form_with url: link_musicbrainz_artist_admin_albums_list_item_path(list_id: list.id, id: item.id),
+                method: :post,
+                data: {
+                  controller: "modal-form",
+                  modal_form_modal_id_value: Admin::Music::Albums::Wizard::SharedModalComponent::DIALOG_ID,
+                  turbo_frame: "_top"
+                } do |f| %>
+
+    <div class="form-control mt-4 min-h-96">
+      <label class="label">
+        <span class="label-text">Search MusicBrainz for artists:</span>
+      </label>
+      <%= render AutocompleteComponent.new(
+        name: "mb_artist_id",
+        url: musicbrainz_artist_search_admin_albums_list_wizard_path(list_id: list.id),
+        placeholder: "Search by artist name...",
+        display_key: "text",
+        value_key: "value",
+        min_length: 2,
+        debounce: 300,
+        required: true
+      ) %>
+      <label class="label">
+        <span class="label-text-alt">Select an artist to replace the current artist match</span>
+      </label>
+    </div>
+
+    <div id="<%= Admin::Music::Albums::Wizard::SharedModalComponent::ERROR_ID %>" class="text-error text-sm mt-2"></div>
+
+    <div class="modal-action">
+      <button type="button" class="btn" onclick="<%= Admin::Music::Albums::Wizard::SharedModalComponent::DIALOG_ID %>.close()">Cancel</button>
+      <%= f.submit "Link Artist", class: "btn btn-primary" %>
+    </div>
+  <% end %>
+<% end %>

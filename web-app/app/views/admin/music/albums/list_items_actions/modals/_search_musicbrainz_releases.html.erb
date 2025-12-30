@@ -1,0 +1,50 @@
+<%# Modal content for searching MusicBrainz release groups %>
+<%= turbo_frame_tag Admin::Music::Albums::Wizard::SharedModalComponent::FRAME_ID do %>
+  <h3 class="font-bold text-lg">Search MusicBrainz Releases</h3>
+  <p class="text-sm text-base-content/70 mt-1"><%= item_label(item) %></p>
+
+  <% if musicbrainz_available?(item) %>
+    <%= form_with url: link_musicbrainz_release_admin_albums_list_item_path(list_id: list.id, id: item.id),
+                  method: :post,
+                  data: {
+                    controller: "modal-form",
+                    modal_form_modal_id_value: Admin::Music::Albums::Wizard::SharedModalComponent::DIALOG_ID,
+                    turbo_frame: "_top"
+                  } do |f| %>
+
+      <div class="form-control mt-4 min-h-96">
+        <label class="label">
+          <span class="label-text">Search MusicBrainz for release groups:</span>
+        </label>
+        <%= render AutocompleteComponent.new(
+          name: "mb_release_group_id",
+          url: musicbrainz_release_search_admin_albums_list_wizard_path(list_id: list.id, item_id: item.id),
+          placeholder: "Search by album title...",
+          display_key: "text",
+          value_key: "value",
+          min_length: 2,
+          debounce: 300,
+          required: true
+        ) %>
+        <label class="label">
+          <span class="label-text-alt">Searching within artist's albums</span>
+        </label>
+      </div>
+
+      <div id="<%= Admin::Music::Albums::Wizard::SharedModalComponent::ERROR_ID %>" class="text-error text-sm mt-2"></div>
+
+      <div class="modal-action">
+        <button type="button" class="btn" onclick="<%= Admin::Music::Albums::Wizard::SharedModalComponent::DIALOG_ID %>.close()">Cancel</button>
+        <%= f.submit "Link", class: "btn btn-primary" %>
+      </div>
+    <% end %>
+  <% else %>
+    <div class="alert alert-warning mt-4">
+      <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+      <span>MusicBrainz search requires an artist match first. Use the enrich step to find artist matches, or link the album manually.</span>
+    </div>
+    <div class="modal-action">
+      <button type="button" class="btn" onclick="<%= Admin::Music::Albums::Wizard::SharedModalComponent::DIALOG_ID %>.close()">Close</button>
+    </div>
+  <% end %>
+<% end %>

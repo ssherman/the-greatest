@@ -23,7 +23,7 @@
     <% end %>
 
     <%= turbo_frame_tag "wizard_content" do %>
-      <%= render_step_component(@step_name, @list) %>
+      <%= render_songs_step_component(@step_name, @list) %>
     <% end %>
 
     <% wizard.with_navigation do %>

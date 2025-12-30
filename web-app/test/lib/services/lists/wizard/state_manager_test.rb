@@ -20,10 +20,10 @@ module Services
           assert_instance_of Services::Lists::Wizard::Music::Songs::StateManager, manager
         end
 
-        test ".for returns base StateManager for Music::Albums::List" do
+        test ".for returns Albums::StateManager for Music::Albums::List" do
           album_list = lists(:music_albums_list)
           manager = StateManager.for(album_list)
-          assert_instance_of Services::Lists::Wizard::StateManager, manager
+          assert_instance_of Services::Lists::Wizard::Music::Albums::StateManager, manager
         end
 
         test ".for returns base StateManager for Books::List" do

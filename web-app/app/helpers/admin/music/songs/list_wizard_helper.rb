@@ -8,7 +8,7 @@ module Admin::Music::Songs::ListWizardHelper
   # @param step_name [String] the current step (source, parse, enrich, etc.)
   # @param list [Music::Songs::List] the list being imported
   # @return [String] rendered HTML for the step component
-  def render_step_component(step_name, list)
+  def render_songs_step_component(step_name, list)
     case step_name
     when "source"
       render(Admin::Music::Songs::Wizard::SourceStepComponent.new(list: list))

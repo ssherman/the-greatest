@@ -38,8 +38,7 @@ module Services
           when "Music::Songs::List"
             Services::Lists::Wizard::Music::Songs::StateManager
           when "Music::Albums::List"
-            # Future: Music::Albums::StateManager
-            self
+            Services::Lists::Wizard::Music::Albums::StateManager
           else
             self
           end

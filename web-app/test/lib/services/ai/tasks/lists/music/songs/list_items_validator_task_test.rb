@@ -19,6 +19,7 @@ module Services
                     "artists" => ["The Beatles"],
                     "song_id" => 123,
                     "song_name" => "Come Together",
+                    "opensearch_artist_names" => ["The Beatles"],
                     "opensearch_match" => true,
                     "opensearch_score" => 18.5
                   }
@@ -79,12 +80,11 @@ module Services
                 assert_includes system_message, "Cover versions"
               end
 
-              test "user_prompt includes OpenSearch matched items with source tag" do
+              test "user_prompt includes OpenSearch matched items with artist and source tag" do
                 user_prompt = @task.send(:user_prompt)
 
                 assert_includes user_prompt, "The Beatles - Come Together"
-                assert_includes user_prompt, "Come Together"
-                assert_includes user_prompt, "[OpenSearch]"
+                assert_match(/Matched: "The Beatles - Come Together" \[OpenSearch\]/, user_prompt)
               end
 
               test "user_prompt includes MusicBrainz matched items with source tag" do

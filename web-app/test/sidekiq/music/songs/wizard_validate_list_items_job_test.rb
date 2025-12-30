@@ -19,6 +19,7 @@ class Music::Songs::WizardValidateListItemsJobTest < ActiveSupport::TestCase
         "artists" => ["The Beatles"],
         "song_id" => 123,
         "song_name" => "Come Together",
+        "opensearch_artist_names" => ["The Beatles"],
         "opensearch_match" => true
       }
     )

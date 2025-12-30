@@ -57,7 +57,8 @@ module Services
 
                   if item.metadata["opensearch_match"]
                     source = "OpenSearch"
-                    matched_name = item.metadata["song_name"]
+                    matched_artists = Array(item.metadata["opensearch_artist_names"]).join(", ")
+                    matched_name = "#{matched_artists} - #{item.metadata["song_name"]}"
                   else
                     source = "MusicBrainz"
                     matched_artists = Array(item.metadata["mb_artist_names"]).join(", ")

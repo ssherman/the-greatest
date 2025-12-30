@@ -63,7 +63,39 @@ Rails.application.routes.draw do
           end
         end
 
-        resources :lists
+        resources :lists do
+          resource :wizard, only: [:show], controller: "list_wizard" do
+            get "step/:step", action: :show_step, as: :step
+            get "step/:step/status", action: :step_status, as: :step_status
+            post "step/:step/advance", action: :advance_step, as: :advance_step
+            post "step/:step/back", action: :back_step, as: :back_step
+            post "save_html", action: :save_html, as: :save_html
+            post "reparse", action: :reparse, as: :reparse
+            post "restart", action: :restart
+            get "musicbrainz_release_search", to: "list_items_actions#musicbrainz_release_search", as: :musicbrainz_release_search
+            get "musicbrainz_artist_search", to: "list_items_actions#musicbrainz_artist_search", as: :musicbrainz_artist_search
+          end
+
+          resources :items, controller: "list_items_actions", only: [] do
+            member do
+              get "modal/:modal_type", action: :modal, as: :modal
+              post :verify
+              post :skip
+              patch :metadata
+              post :re_enrich
+              post :manual_link
+              post :link_musicbrainz_release
+              post :link_musicbrainz_artist
+              post :queue_import
+            end
+
+            collection do
+              post :bulk_verify
+              post :bulk_skip
+              delete :bulk_delete
+            end
+          end
+        end
       end
 
       namespace :songs do
