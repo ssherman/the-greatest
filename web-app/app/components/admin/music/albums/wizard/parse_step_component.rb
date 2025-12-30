@@ -1,14 +1,36 @@
 # frozen_string_literal: true
 
-class Admin::Music::Albums::Wizard::ParseStepComponent < ViewComponent::Base
-  def initialize(list:, errors: [], raw_html_preview: nil, parsed_count: nil)
-    @list = list
-    @errors = errors
-    @raw_html_preview = raw_html_preview || list.raw_html&.truncate(500) || "(No HTML provided)"
-    @parsed_count = parsed_count || list.list_items.unverified.count
-  end
-
+# Album-specific parse step component.
+# Inherits shared logic from BaseParseStepComponent.
+#
+class Admin::Music::Albums::Wizard::ParseStepComponent < Admin::Music::Wizard::BaseParseStepComponent
   private
 
-  attr_reader :list, :errors, :raw_html_preview, :parsed_count
+  def save_html_path
+    helpers.save_html_admin_albums_list_wizard_path(list_id: list.id)
+  end
+
+  def step_status_path
+    helpers.step_status_admin_albums_list_wizard_path(list_id: list.id, step: "parse")
+  end
+
+  def advance_step_path
+    helpers.advance_step_admin_albums_list_wizard_path(list_id: list.id, step: "parse")
+  end
+
+  def reparse_path
+    helpers.reparse_admin_albums_list_wizard_path(list_id: list.id)
+  end
+
+  def step_path
+    helpers.step_admin_albums_list_wizard_path(list_id: list.id, step: "parse")
+  end
+
+  def entity_name
+    "album"
+  end
+
+  def entity_name_plural
+    "albums"
+  end
 end

@@ -1,110 +1,22 @@
 # frozen_string_literal: true
 
 class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseController
-  before_action :set_list
-  before_action :set_item, only: [:verify, :metadata, :manual_link, :link_musicbrainz_recording, :link_musicbrainz_artist, :modal]
+  include ListItemsActions
 
-  # GET /admin/songs/:list_id/items/:id/modal/:modal_type
-  # Loads modal content on-demand for the shared modal component.
-  # Returns content wrapped in turbo_frame_tag for Turbo Frame replacement.
+  # Song-specific modal types
   VALID_MODAL_TYPES = %w[edit_metadata link_song search_musicbrainz_recordings search_musicbrainz_artists].freeze
-
-  def modal
-    modal_type = params[:modal_type]
-
-    unless VALID_MODAL_TYPES.include?(modal_type)
-      render partial: "admin/music/songs/list_items_actions/modals/error",
-        locals: {message: "Invalid modal type"}
-      return
-    end
-
-    render partial: "admin/music/songs/list_items_actions/modals/#{modal_type}",
-      locals: {item: @item, list: @list}
-  end
-
-  def verify
-    # Clear ai_match_invalid when admin verifies - this overrides AI decision
-    @item.update!(
-      verified: true,
-      metadata: @item.metadata.except("ai_match_invalid")
-    )
-
-    respond_to do |format|
-      format.turbo_stream do
-        render turbo_stream: [
-          turbo_stream.replace("item_row_#{@item.id}", partial: "item_row", locals: {item: @item}),
-          turbo_stream.replace("review_stats_#{@list.id}", partial: "review_stats", locals: {list: @list}),
-          turbo_stream.append("flash_messages", partial: "flash_success", locals: {message: "Item verified"})
-        ]
-      end
-      format.html { redirect_to review_step_path, notice: "Item verified" }
-    end
-  end
-
-  def metadata
-    metadata_json = params.dig(:list_item, :metadata_json)
-
-    begin
-      metadata = JSON.parse(metadata_json)
-    rescue JSON::ParserError => e
-      respond_to do |format|
-        format.turbo_stream do
-          render turbo_stream: turbo_stream.replace(
-            Admin::Music::Songs::Wizard::SharedModalComponent::ERROR_ID,
-            partial: "error_message",
-            locals: {message: "Invalid JSON: #{e.message}"}
-          )
-        end
-        format.html { redirect_to review_step_path, alert: "Invalid JSON: #{e.message}" }
-      end
-      return
-    end
-
-    @item.update!(metadata: metadata)
-
-    respond_to do |format|
-      format.turbo_stream do
-        render turbo_stream: [
-          turbo_stream.replace("item_row_#{@item.id}", partial: "item_row", locals: {item: @item}),
-          turbo_stream.replace("review_stats_#{@list.id}", partial: "review_stats", locals: {list: @list}),
-          turbo_stream.append("flash_messages", partial: "flash_success", locals: {message: "Metadata updated successfully"})
-        ]
-      end
-      format.html { redirect_to review_step_path, notice: "Metadata updated successfully" }
-    end
-  end
 
   def manual_link
     song_id = params[:song_id]
 
     unless song_id.present?
-      respond_to do |format|
-        format.turbo_stream do
-          render turbo_stream: turbo_stream.replace(
-            Admin::Music::Songs::Wizard::SharedModalComponent::ERROR_ID,
-            partial: "error_message",
-            locals: {message: "Please select a song"}
-          )
-        end
-        format.html { redirect_to review_step_path, alert: "Please select a song" }
-      end
-      return
+      return render_modal_error("Please select a song")
     end
 
     song = Music::Song.find_by(id: song_id)
 
     unless song
-      respond_to do |format|
-        format.turbo_stream do
-          render turbo_stream: turbo_stream.replace(
-            Admin::Music::Songs::Wizard::SharedModalComponent::ERROR_ID,
-            partial: "error_message",
-            locals: {message: "Song not found"}
-          )
-        end
-        format.html { redirect_to review_step_path, alert: "Song not found" }
-      end
-      return
+      return render_modal_error("Song not found")
     end
 
     # Clear ai_match_invalid when admin manually links - this overrides AI decision
@@ -118,33 +30,14 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
       )
     )
 
-    respond_to do |format|
-      format.turbo_stream do
-        render turbo_stream: [
-          turbo_stream.replace("item_row_#{@item.id}", partial: "item_row", locals: {item: @item}),
-          turbo_stream.replace("review_stats_#{@list.id}", partial: "review_stats", locals: {list: @list}),
-          turbo_stream.append("flash_messages", partial: "flash_success", locals: {message: "Song linked successfully"})
-        ]
-      end
-      format.html { redirect_to review_step_path, notice: "Song linked successfully" }
-    end
+    render_item_update_success("Song linked successfully")
   end
 
   def link_musicbrainz_recording
     mb_recording_id = params[:mb_recording_id]
 
     unless mb_recording_id.present?
-      respond_to do |format|
-        format.turbo_stream do
-          render turbo_stream: turbo_stream.replace(
-            Admin::Music::Songs::Wizard::SharedModalComponent::ERROR_ID,
-            partial: "error_message",
-            locals: {message: "Please select a recording"}
-          )
-        end
-        format.html { redirect_to review_step_path, alert: "Please select a recording" }
-      end
-      return
+      return render_modal_error("Please select a recording")
     end
 
     search = Music::Musicbrainz::Search::RecordingSearch.new
@@ -189,29 +82,10 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
       end
 
       @item.save!
-
-      respond_to do |format|
-        format.turbo_stream do
-          render turbo_stream: [
-            turbo_stream.replace("item_row_#{@item.id}", partial: "item_row", locals: {item: @item}),
-            turbo_stream.replace("review_stats_#{@list.id}", partial: "review_stats", locals: {list: @list}),
-            turbo_stream.append("flash_messages", partial: "flash_success", locals: {message: "MusicBrainz recording linked successfully"})
-          ]
-        end
-        format.html { redirect_to review_step_path, notice: "MusicBrainz recording linked successfully" }
-      end
+      render_item_update_success("MusicBrainz recording linked successfully")
     else
       error_message = response[:errors]&.first || "Recording not found"
-      respond_to do |format|
-        format.turbo_stream do
-          render turbo_stream: turbo_stream.replace(
-            Admin::Music::Songs::Wizard::SharedModalComponent::ERROR_ID,
-            partial: "error_message",
-            locals: {message: error_message}
-          )
-        end
-        format.html { redirect_to review_step_path, alert: error_message }
-      end
+      render_modal_error(error_message)
     end
   end
 
@@ -219,17 +93,7 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
     mb_artist_id = params[:mb_artist_id]
 
     unless mb_artist_id.present?
-      respond_to do |format|
-        format.turbo_stream do
-          render turbo_stream: turbo_stream.replace(
-            Admin::Music::Songs::Wizard::SharedModalComponent::ERROR_ID,
-            partial: "error_message",
-            locals: {message: "Please select an artist"}
-          )
-        end
-        format.html { redirect_to review_step_path, alert: "Please select an artist" }
-      end
-      return
+      return render_modal_error("Please select an artist")
     end
 
     search = Music::Musicbrainz::Search::ArtistSearch.new
@@ -257,28 +121,10 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
       @item.verified = false
       @item.save!
 
-      respond_to do |format|
-        format.turbo_stream do
-          render turbo_stream: [
-            turbo_stream.replace("item_row_#{@item.id}", partial: "item_row", locals: {item: @item}),
-            turbo_stream.replace("review_stats_#{@list.id}", partial: "review_stats", locals: {list: @list}),
-            turbo_stream.append("flash_messages", partial: "flash_success", locals: {message: "MusicBrainz artist linked successfully"})
-          ]
-        end
-        format.html { redirect_to review_step_path, notice: "MusicBrainz artist linked successfully" }
-      end
+      render_item_update_success("MusicBrainz artist linked successfully")
     else
       error_message = response[:errors]&.first || "Artist not found"
-      respond_to do |format|
-        format.turbo_stream do
-          render turbo_stream: turbo_stream.replace(
-            Admin::Music::Songs::Wizard::SharedModalComponent::ERROR_ID,
-            partial: "error_message",
-            locals: {message: error_message}
-          )
-        end
-        format.html { redirect_to review_step_path, alert: error_message }
-      end
+      render_modal_error(error_message)
     end
   end
 
@@ -316,32 +162,27 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
     }
   end
 
-  def musicbrainz_artist_search
-    query = params[:q]
-    return render json: [] if query.blank? || query.length < 2
-
-    search = Music::Musicbrainz::Search::ArtistSearch.new
-    response = search.search_by_name(query, limit: 10)
-
-    return render json: [] unless response[:success]
-
-    artists = response[:data]["artists"] || []
-    render json: artists.map { |artist|
-      {
-        value: artist["id"],
-        text: format_artist_display(artist)
-      }
-    }
-  end
-
   private
 
-  def set_list
-    @list = Music::Songs::List.find(params[:list_id])
+  # Override to add song-specific actions that need @item loaded
+  def item_actions_for_set_item
+    super + [:manual_link, :link_musicbrainz_recording, :link_musicbrainz_artist]
   end
 
-  def set_item
-    @item = @list.list_items.includes(listable: :artists).find(params[:id])
+  def list_class
+    Music::Songs::List
+  end
+
+  def partials_path
+    "admin/music/songs/list_items_actions"
+  end
+
+  def valid_modal_types
+    VALID_MODAL_TYPES
+  end
+
+  def shared_modal_component_class
+    Admin::Music::Songs::Wizard::SharedModalComponent
   end
 
   def review_step_path
@@ -357,27 +198,5 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
     first_release = recording["first-release-date"]
     return nil unless first_release.present?
     first_release.split("-").first.to_i
-  end
-
-  # Format artist display as "Artist Name (Type from Location)"
-  # e.g., "The Beatles (Group from Liverpool)"
-  def format_artist_display(artist)
-    name = artist["name"]
-    type = artist["type"]
-    country = artist["country"]
-    disambiguation = artist["disambiguation"]
-
-    # Build location string from country or disambiguation
-    location = disambiguation.presence || country.presence
-
-    if type.present? && location.present?
-      "#{name} (#{type} from #{location})"
-    elsif type.present?
-      "#{name} (#{type})"
-    elsif location.present?
-      "#{name} (#{location})"
-    else
-      name
-    end
   end
 end

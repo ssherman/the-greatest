@@ -1,30 +1,14 @@
 # frozen_string_literal: true
 
-# Shared modal component that renders a single <dialog> element with a Turbo Frame.
-# Modal content is loaded on-demand when action buttons are clicked.
-# This replaces per-item modal rendering to improve performance with large lists.
+# Albums-specific modal component that inherits from the shared base.
+# All functionality is provided by Admin::Music::Wizard::SharedModalComponent.
+#
+# This subclass exists to maintain the domain-specific namespace for constants:
+#   Admin::Music::Albums::Wizard::SharedModalComponent::FRAME_ID
+#   Admin::Music::Albums::Wizard::SharedModalComponent::DIALOG_ID
+#   Admin::Music::Albums::Wizard::SharedModalComponent::ERROR_ID
 #
 # Usage:
 #   <%= render(Admin::Music::Albums::Wizard::SharedModalComponent.new) %>
-#
-# Action buttons should link to the modal endpoint with data-turbo-frame:
-#   <%= link_to "Edit Metadata",
-#       modal_admin_albums_list_item_path(@list, item, modal_type: :edit_metadata),
-#       data: { turbo_frame: "shared_modal_content" } %>
-class Admin::Music::Albums::Wizard::SharedModalComponent < ViewComponent::Base
-  DIALOG_ID = "shared_modal_dialog"
-  FRAME_ID = "shared_modal_content"
-  ERROR_ID = "shared_modal_error"
-
-  def dialog_id
-    DIALOG_ID
-  end
-
-  def frame_id
-    FRAME_ID
-  end
-
-  def error_id
-    ERROR_ID
-  end
+class Admin::Music::Albums::Wizard::SharedModalComponent < Admin::Music::Wizard::SharedModalComponent
 end

@@ -27,7 +27,7 @@ class Admin::Music::Albums::Wizard::SourceStepComponentTest < ViewComponent::Tes
   test "renders continue button" do
     render_inline(Admin::Music::Albums::Wizard::SourceStepComponent.new(list: @list))
 
-    assert_selector "input[type='submit'][value='Continue ->']"
+    assert_selector "input[type='submit'][value='Continue →']"
   end
 
   test "form submits to advance_step path" do

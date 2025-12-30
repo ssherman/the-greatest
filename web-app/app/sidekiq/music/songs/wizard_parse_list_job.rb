@@ -1,72 +1,34 @@
-class Music::Songs::WizardParseListJob
-  include Sidekiq::Job
+# frozen_string_literal: true
 
-  def perform(list_id)
-    list = Music::Songs::List.find(list_id)
-
-    if list.raw_html.blank?
-      handle_error(list, "Cannot parse: raw_html is blank. Please go back and provide HTML content.")
-      return
-    end
-
-    list.wizard_manager.update_step_status!(step: "parse", status: "running", progress: 0)
-
-    list.list_items.unverified.destroy_all
-
-    result = Services::Ai::Tasks::Lists::Music::SongsRawParserTask.new(parent: list).call
-
-    unless result.success?
-      handle_error(list, result.error || "Parsing failed")
-      return
-    end
-
-    songs = result.data[:songs] || result.data["songs"]
-    list_items_attrs = songs.map.with_index do |song, index|
-      {
-        list_id: list.id,
-        listable_type: "Music::Song",
-        listable_id: nil,
-        verified: false,
-        position: song[:rank] || (index + 1),
-        metadata: {
-          "rank" => song[:rank],
-          "title" => song[:title],
-          "artists" => song[:artists],
-          "album" => song[:album],
-          "release_year" => song[:release_year]
-        },
-        created_at: Time.current,
-        updated_at: Time.current
-      }
-    end
-
-    ListItem.insert_all(list_items_attrs) if list_items_attrs.any?
-
-    list.wizard_manager.update_step_status!(
-      step: "parse",
-      status: "completed",
-      progress: 100,
-      metadata: {total_items: songs.count, parsed_at: Time.current.iso8601}
-    )
-
-    Rails.logger.info "WizardParseListJob completed for list #{list_id}: parsed #{songs.count} items"
-  rescue ActiveRecord::RecordNotFound => e
-    Rails.logger.error "WizardParseListJob: List not found - #{e.message}"
-    raise
-  rescue => e
-    Rails.logger.error "WizardParseListJob failed for list #{list_id}: #{e.message}"
-    handle_error(list, e.message) if list
-    raise
-  end
-
+# Song-specific wizard parse job.
+# Inherits shared parsing logic from BaseWizardParseListJob.
+#
+class Music::Songs::WizardParseListJob < Music::BaseWizardParseListJob
   private
 
-  def handle_error(list, error_message)
-    list.wizard_manager.update_step_status!(
-      step: "parse",
-      status: "failed",
-      progress: 0,
-      error: error_message
-    )
+  def list_class
+    Music::Songs::List
+  end
+
+  def parser_task_class
+    Services::Ai::Tasks::Lists::Music::SongsRawParserTask
+  end
+
+  def data_key
+    :songs
+  end
+
+  def listable_type
+    "Music::Song"
+  end
+
+  def build_metadata(item)
+    {
+      "rank" => item[:rank],
+      "title" => item[:title],
+      "artists" => item[:artists],
+      "album" => item[:album],
+      "release_year" => item[:release_year]
+    }
   end
 end

@@ -1,11 +1,11 @@
 <%= render(Wizard::StepComponent.new(
   title: "Import Source",
-  description: "Choose where to import your album list from",
+  description: "Choose where to import your #{entity_name} list from",
   step_number: 1,
   active: true
 )) do |step| %>
   <% step.with_step_content do %>
-    <%= form_with url: advance_step_admin_albums_list_wizard_path(list_id: list.id, step: "source"), method: :post, data: { turbo_frame: "wizard_content" } do |f| %>
+    <%= form_with url: advance_step_path, method: :post, data: { turbo_frame: "wizard_content" } do |f| %>
       <div class="space-y-6">
         <div class="form-control">
           <label class="label">
@@ -17,7 +17,7 @@
               <%= radio_button_tag :import_source, "custom_html", default_import_source == "custom_html", class: "radio radio-primary" %>
               <div>
                 <div class="font-semibold">Custom HTML</div>
-                <div class="text-sm text-base-content/70">Paste HTML from any source and parse album data</div>
+                <div class="text-sm text-base-content/70">Paste HTML from any source and parse <%= entity_name %> data</div>
               </div>
             </label>
 
@@ -39,7 +39,7 @@
         </div>
 
         <div class="flex justify-end">
-          <%= f.submit "Continue ->", class: "btn btn-primary" %>
+          <%= f.submit "Continue →", class: "btn btn-primary" %>
         </div>
       </div>
     <% end %>

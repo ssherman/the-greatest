@@ -105,11 +105,41 @@ Back/Next/Restart navigation buttons.
 
 ## Controller Infrastructure
 
+### Inheritance Hierarchy
+
+The wizard controllers use a layered architecture:
+
+```
+WizardController (Concern)
+    └── Admin::Music::BaseListWizardController
+            ├── Admin::Music::Songs::ListWizardController
+            └── Admin::Music::Albums::ListWizardController
+```
+
 ### WizardController Concern
 
 **File**: [`app/controllers/concerns/wizard_controller.rb`](/web-app/app/controllers/concerns/wizard_controller.rb)
 
 Provides base wizard behavior that domain-specific controllers include.
+
+### BaseListWizardController
+
+**File**: [`app/controllers/admin/music/base_list_wizard_controller.rb`](/web-app/app/controllers/admin/music/base_list_wizard_controller.rb)
+
+Provides shared functionality for music list wizards (songs and albums). Contains ~260 lines of shared logic including:
+- Step advancement logic for all 7 steps
+- Job-based step handling (parse, enrich, validate, import)
+- Progress navigation
+- Common step data loaders
+
+Domain-specific controllers only need to implement:
+
+| Method | Returns | Purpose |
+|--------|---------|---------|
+| `list_class` | Class | Model class for list (e.g., `Music::Songs::List`) |
+| `entity_id_key` | String | Metadata key for entity ID (e.g., `"song_id"`) |
+| `enrichment_id_key` | String | Metadata key for MusicBrainz ID (e.g., `"mb_recording_id"`) |
+| `job_step_config` | Hash | Configuration for job-based wizard steps |
 
 #### Included Callbacks
 
@@ -201,6 +231,65 @@ JOB_STEP_CONFIG = {
   # ...
 }
 ```
+
+### ListItemsActions Concern
+
+**File**: [`app/controllers/concerns/list_items_actions.rb`](/web-app/app/controllers/concerns/list_items_actions.rb)
+
+Provides shared actions for wizard list item manipulation. Used by both Songs and Albums `ListItemsActionsController`.
+
+**Shared Actions**:
+- `modal` - Loads modal content on-demand
+- `verify` - Marks item as verified
+- `metadata` - Updates item metadata from JSON
+- `musicbrainz_artist_search` - JSON endpoint for artist autocomplete
+
+**Required Implementations**:
+
+| Method | Returns | Purpose |
+|--------|---------|---------|
+| `list_class` | Class | Model class for list |
+| `partials_path` | String | Path prefix for partials |
+| `valid_modal_types` | Array | Valid modal type strings |
+| `shared_modal_component_class` | Class | Component class for error ID |
+| `review_step_path` | String | Path to review step |
+
+### SharedModalComponent
+
+**File**: [`app/components/admin/music/wizard/shared_modal_component.rb`](/web-app/app/components/admin/music/wizard/shared_modal_component.rb)
+
+Base modal component shared by both Songs and Albums wizards. Domain-specific subclasses inherit the constants:
+
+```ruby
+DIALOG_ID = "shared_modal_dialog"
+FRAME_ID = "shared_modal_content"
+ERROR_ID = "shared_modal_error"
+```
+
+Both `Admin::Music::Songs::Wizard::SharedModalComponent` and `Admin::Music::Albums::Wizard::SharedModalComponent` inherit from this base, maintaining backwards compatibility with existing constant references.
+
+### Base Step Components
+
+Located in [`app/components/admin/music/wizard/`](/web-app/app/components/admin/music/wizard/). These provide shared templates and logic for wizard steps.
+
+| Base Component | Purpose | Subclass Overrides |
+|----------------|---------|-------------------|
+| `BaseSourceStepComponent` | Import source selection UI | `advance_path`, description text |
+| `BaseParseStepComponent` | HTML parsing progress | `save_html_path`, `step_status_path` |
+| `BaseEnrichStepComponent` | MusicBrainz enrichment progress | `step_status_path`, `advance_path` |
+| `BaseValidateStepComponent` | AI validation progress | `enrichment_id_key`, `entity_id_key` |
+| `BaseImportStepComponent` | Entity import progress | `enrichment_id_key`, path helpers |
+
+#### Template Strategy
+
+For components with >90% ERB duplication:
+- Base component provides the template
+- Subclasses only override path helper methods
+- Use `content_for` blocks for entity-specific text
+
+For components with <80% duplication (Review, Complete):
+- Base component provides shared Ruby methods only
+- Subclasses provide their own templates
 
 ### Step Components
 
@@ -536,7 +625,15 @@ Add wizard link to the list show page:
 
 | File | Purpose |
 |------|---------|
-| [`app/controllers/concerns/wizard_controller.rb`](/web-app/app/controllers/concerns/wizard_controller.rb) | Base concern |
+| [`app/controllers/concerns/wizard_controller.rb`](/web-app/app/controllers/concerns/wizard_controller.rb) | Base wizard concern |
+| [`app/controllers/concerns/list_items_actions.rb`](/web-app/app/controllers/concerns/list_items_actions.rb) | Shared item actions |
+| [`app/controllers/admin/music/base_list_wizard_controller.rb`](/web-app/app/controllers/admin/music/base_list_wizard_controller.rb) | Music wizard base |
+
+### Shared Components
+
+| File | Purpose |
+|------|---------|
+| [`app/components/admin/music/wizard/shared_modal_component.rb`](/web-app/app/components/admin/music/wizard/shared_modal_component.rb) | Base modal component |
 
 ### Music::Songs Implementation
 
@@ -596,12 +693,95 @@ Add wizard link to the list show page:
 
 ### Background Jobs
 
+#### Base Job Classes
+
+| File | Purpose |
+|------|---------|
+| [`app/sidekiq/music/base_wizard_parse_list_job.rb`](/web-app/app/sidekiq/music/base_wizard_parse_list_job.rb) | Base parsing logic |
+| [`app/sidekiq/music/base_wizard_enrich_list_items_job.rb`](/web-app/app/sidekiq/music/base_wizard_enrich_list_items_job.rb) | Base enrichment logic |
+| [`app/sidekiq/music/base_wizard_validate_list_items_job.rb`](/web-app/app/sidekiq/music/base_wizard_validate_list_items_job.rb) | Base validation logic |
+| [`app/sidekiq/music/base_wizard_import_job.rb`](/web-app/app/sidekiq/music/base_wizard_import_job.rb) | Base import logic |
+
+##### BaseWizardParseListJob
+
+Parses raw HTML to extract list items. Subclasses implement:
+
+| Method | Purpose |
+|--------|---------|
+| `list_class` | Model class for list |
+| `parser_task_class` | AI task for HTML parsing |
+| `listable_type` | Polymorphic type string |
+| `data_key` | Response key (`:songs` or `:albums`) |
+| `build_metadata(item)` | Build metadata hash from parsed item |
+
+##### BaseWizardEnrichListItemsJob
+
+Enriches list items with MusicBrainz data. Subclasses implement:
+
+| Method | Purpose |
+|--------|---------|
+| `list_class` | Model class for list |
+| `enricher_class` | Service class for enrichment |
+| `enrichment_keys` | Array of metadata keys to clear on re-enrich |
+
+##### BaseWizardValidateListItemsJob
+
+Validates enriched items using AI. Subclasses implement:
+
+| Method | Purpose |
+|--------|---------|
+| `list_class` | Model class for list |
+| `validator_task_class` | AI task class |
+| `has_enrichment?(item)` | Check if item has enrichment data |
+
+##### BaseWizardImportJob
+
+Imports entities from MusicBrainz. Subclasses implement:
+
+| Method | Purpose |
+|--------|---------|
+| `list_class` | Model class for list |
+| `enrichment_id_key` | Metadata key for MB ID |
+| `importer_class` | DataImporter class |
+| `importer_params(mb_id)` | Hash of params for importer |
+| `imported_id_key` | Metadata key for imported entity ID |
+
+#### Songs Jobs
+
 | File | Purpose |
 |------|---------|
 | [`app/sidekiq/music/songs/wizard_parse_list_job.rb`](/web-app/app/sidekiq/music/songs/wizard_parse_list_job.rb) | HTML parsing |
 | [`app/sidekiq/music/songs/wizard_enrich_list_items_job.rb`](/web-app/app/sidekiq/music/songs/wizard_enrich_list_items_job.rb) | MusicBrainz enrichment |
 | [`app/sidekiq/music/songs/wizard_validate_list_items_job.rb`](/web-app/app/sidekiq/music/songs/wizard_validate_list_items_job.rb) | AI validation |
 | [`app/sidekiq/music/songs/wizard_import_songs_job.rb`](/web-app/app/sidekiq/music/songs/wizard_import_songs_job.rb) | Song creation |
+
+### Services
+
+| File | Purpose |
+|------|---------|
+| [`app/lib/services/lists/music/base_list_item_enricher.rb`](/web-app/app/lib/services/lists/music/base_list_item_enricher.rb) | Base enrichment service |
+| [`app/lib/services/lists/music/songs/list_item_enricher.rb`](/web-app/app/lib/services/lists/music/songs/list_item_enricher.rb) | Song enrichment |
+| [`app/lib/services/lists/music/albums/list_item_enricher.rb`](/web-app/app/lib/services/lists/music/albums/list_item_enricher.rb) | Album enrichment |
+
+#### BaseListItemEnricher
+
+**File**: [`app/lib/services/lists/music/base_list_item_enricher.rb`](/web-app/app/lib/services/lists/music/base_list_item_enricher.rb)
+
+Provides shared enrichment logic for matching list items to existing entities. Searches OpenSearch first, then falls back to MusicBrainz.
+
+**Subclass Requirements**:
+
+| Method | Purpose |
+|--------|---------|
+| `opensearch_service_class` | OpenSearch lookup service |
+| `entity_class` | Model class (e.g., `Music::Song`) |
+| `entity_id_key` | Metadata key for entity ID |
+| `entity_name_key` | Metadata key for entity name |
+| `musicbrainz_search_service_class` | MusicBrainz search service |
+| `musicbrainz_response_key` | Response key (e.g., `"recordings"`) |
+| `musicbrainz_id_key` | Metadata key for MB ID |
+| `musicbrainz_name_key` | Metadata key for MB name |
+| `lookup_existing_by_mb_id(mb_id)` | Find existing entity by MB ID |
 
 ### Model Support
 

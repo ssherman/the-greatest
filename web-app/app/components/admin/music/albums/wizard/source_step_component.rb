@@ -1,21 +1,16 @@
 # frozen_string_literal: true
 
-class Admin::Music::Albums::Wizard::SourceStepComponent < ViewComponent::Base
-  def initialize(list:)
-    @list = list
-  end
-
-  def musicbrainz_available?
-    list.musicbrainz_series_id.present?
-  end
-
-  def default_import_source
-    return list.wizard_state["import_source"] if list.wizard_state&.[]("import_source").present?
-    return "musicbrainz_series" if musicbrainz_available?
-    nil
-  end
-
+# Album-specific source step component.
+# Inherits shared logic from BaseSourceStepComponent.
+#
+class Admin::Music::Albums::Wizard::SourceStepComponent < Admin::Music::Wizard::BaseSourceStepComponent
   private
 
-  attr_reader :list
+  def advance_step_path
+    helpers.advance_step_admin_albums_list_wizard_path(list_id: list.id, step: "source")
+  end
+
+  def entity_name
+    "album"
+  end
 end

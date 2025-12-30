@@ -1,87 +1,36 @@
 # frozen_string_literal: true
 
-class Admin::Music::Albums::Wizard::ValidateStepComponent < ViewComponent::Base
-  def initialize(list:, enriched_items: nil)
-    @list = list
-    @unverified_items = list.list_items.unverified.ordered
-    all_items = list.list_items.ordered
-    @enriched_items = enriched_items || all_items.select do |item|
-      item.listable_id.present? ||
-        item.metadata["album_id"].present? ||
-        item.metadata["mb_release_group_id"].present?
-    end
-  end
-
+# Album-specific validate step component.
+# Inherits shared logic from BaseValidateStepComponent.
+#
+class Admin::Music::Albums::Wizard::ValidateStepComponent < Admin::Music::Wizard::BaseValidateStepComponent
   private
 
-  attr_reader :list, :unverified_items, :enriched_items
-
-  def validate_status
-    list.wizard_manager.step_status("validate")
+  def step_status_path
+    helpers.step_status_admin_albums_list_wizard_path(list_id: list.id, step: "validate")
   end
 
-  def validate_progress
-    list.wizard_manager.step_progress("validate")
+  def advance_step_path
+    helpers.advance_step_admin_albums_list_wizard_path(list_id: list.id, step: "validate")
   end
 
-  def validate_error
-    list.wizard_manager.step_error("validate")
+  def revalidate_path
+    helpers.advance_step_admin_albums_list_wizard_path(list_id: list.id, step: "validate", revalidate: true)
   end
 
-  def job_metadata
-    list.wizard_manager.step_metadata("validate")
+  def step_path
+    helpers.step_admin_albums_list_wizard_path(list_id: list.id, step: "validate")
   end
 
-  def valid_count
-    job_metadata["valid_count"] || 0
+  def entity_id_key
+    "album_id"
   end
 
-  def invalid_count
-    job_metadata["invalid_count"] || 0
+  def enrichment_id_key
+    "mb_release_group_id"
   end
 
-  def verified_count
-    job_metadata["verified_count"] || 0
-  end
-
-  def validated_items
-    job_metadata["validated_items"] || 0
-  end
-
-  def reasoning
-    job_metadata["reasoning"]
-  end
-
-  def total_items
-    @unverified_items.count
-  end
-
-  def items_to_validate
-    @enriched_items.count
-  end
-
-  def percentage(count)
-    return 0 if validated_items.zero?
-    ((count.to_f / validated_items) * 100).round(1)
-  end
-
-  def preview_items
-    @enriched_items
-  end
-
-  def idle_or_failed?
-    %w[idle failed].include?(validate_status)
-  end
-
-  def running?
-    validate_status == "running"
-  end
-
-  def completed?
-    validate_status == "completed"
-  end
-
-  def failed?
-    validate_status == "failed"
+  def entity_name
+    "album"
   end
 end

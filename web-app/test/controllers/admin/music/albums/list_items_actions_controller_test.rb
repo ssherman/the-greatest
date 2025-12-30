@@ -368,7 +368,7 @@ class Admin::Music::Albums::ListItemsActionsControllerTest < ActionDispatch::Int
     }
 
     Music::Musicbrainz::Search::ArtistSearch.any_instance
-      .stubs(:lookup_by_artist_mbid)
+      .stubs(:lookup_by_mbid)
       .with(mb_artist_id)
       .returns(mock_response)
 
@@ -400,7 +400,7 @@ class Admin::Music::Albums::ListItemsActionsControllerTest < ActionDispatch::Int
     )
 
     # Admin changes to a different artist
-    new_artist_id = "new-artist-mbid"
+    new_artist_id = "83d91898-7763-47d7-b03b-b92132375c48"
     mock_response = {
       success: true,
       data: {
@@ -414,7 +414,7 @@ class Admin::Music::Albums::ListItemsActionsControllerTest < ActionDispatch::Int
     }
 
     Music::Musicbrainz::Search::ArtistSearch.any_instance
-      .stubs(:lookup_by_artist_mbid)
+      .stubs(:lookup_by_mbid)
       .with(new_artist_id)
       .returns(mock_response)
 
@@ -454,7 +454,7 @@ class Admin::Music::Albums::ListItemsActionsControllerTest < ActionDispatch::Int
   end
 
   test "link_musicbrainz_artist returns error when artist not found" do
-    mb_artist_id = "nonexistent-mbid"
+    mb_artist_id = "83d91898-7763-47d7-b03b-b92132375c49"
     mock_response = {
       success: false,
       data: nil,
@@ -462,7 +462,7 @@ class Admin::Music::Albums::ListItemsActionsControllerTest < ActionDispatch::Int
     }
 
     Music::Musicbrainz::Search::ArtistSearch.any_instance
-      .stubs(:lookup_by_artist_mbid)
+      .stubs(:lookup_by_mbid)
       .with(mb_artist_id)
       .returns(mock_response)
 
@@ -488,7 +488,7 @@ class Admin::Music::Albums::ListItemsActionsControllerTest < ActionDispatch::Int
     }
 
     Music::Musicbrainz::Search::ArtistSearch.any_instance
-      .stubs(:lookup_by_artist_mbid)
+      .stubs(:lookup_by_mbid)
       .returns(mock_response)
 
     post link_musicbrainz_artist_admin_albums_list_item_path(list_id: @list.id, id: @item.id),

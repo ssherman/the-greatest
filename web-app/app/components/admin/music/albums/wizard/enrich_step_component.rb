@@ -1,75 +1,32 @@
 # frozen_string_literal: true
 
-class Admin::Music::Albums::Wizard::EnrichStepComponent < ViewComponent::Base
-  def initialize(list:, unverified_items: nil, enriched_count: nil)
-    @list = list
-    @unverified_items = unverified_items || list.list_items.unverified.ordered
-    @total_items = @unverified_items.count
-    @enriched_count = enriched_count || @unverified_items.where.not(listable_id: nil).count
-  end
-
+# Album-specific enrich step component.
+# Inherits shared logic from BaseEnrichStepComponent.
+#
+class Admin::Music::Albums::Wizard::EnrichStepComponent < Admin::Music::Wizard::BaseEnrichStepComponent
   private
 
-  attr_reader :list, :unverified_items, :total_items, :enriched_count
-
-  def enrich_status
-    list.wizard_manager.step_status("enrich")
+  def step_status_path
+    helpers.step_status_admin_albums_list_wizard_path(list_id: list.id, step: "enrich")
   end
 
-  def enrich_progress
-    list.wizard_manager.step_progress("enrich")
+  def advance_step_path
+    helpers.advance_step_admin_albums_list_wizard_path(list_id: list.id, step: "enrich")
   end
 
-  def enrich_error
-    list.wizard_manager.step_error("enrich")
+  def reenrich_path
+    helpers.advance_step_admin_albums_list_wizard_path(list_id: list.id, step: "enrich", reenrich: true)
   end
 
-  def job_metadata
-    list.wizard_manager.step_metadata("enrich")
+  def step_path
+    helpers.step_admin_albums_list_wizard_path(list_id: list.id, step: "enrich")
   end
 
-  def opensearch_matches
-    job_metadata["opensearch_matches"] || 0
+  def entity_name
+    "album"
   end
 
-  def musicbrainz_matches
-    job_metadata["musicbrainz_matches"] || 0
-  end
-
-  def not_found_count
-    job_metadata["not_found"] || 0
-  end
-
-  def processed_items
-    job_metadata["processed_items"] || 0
-  end
-
-  def total_from_metadata
-    job_metadata["total_items"] || total_items
-  end
-
-  def percentage(count)
-    return 0 if total_from_metadata.zero?
-    ((count.to_f / total_from_metadata) * 100).round(1)
-  end
-
-  def preview_items
-    @unverified_items.includes(listable: :artists)
-  end
-
-  def idle_or_failed?
-    %w[idle failed].include?(enrich_status)
-  end
-
-  def running?
-    enrich_status == "running"
-  end
-
-  def completed?
-    enrich_status == "completed"
-  end
-
-  def failed?
-    enrich_status == "failed"
+  def entity_name_plural
+    "albums"
   end
 end

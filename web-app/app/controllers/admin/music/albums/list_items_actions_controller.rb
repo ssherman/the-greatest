@@ -1,44 +1,10 @@
 # frozen_string_literal: true
 
 class Admin::Music::Albums::ListItemsActionsController < Admin::Music::BaseController
-  before_action :set_list
-  before_action :set_item, only: [:verify, :skip, :metadata, :manual_link, :link_musicbrainz_release, :link_musicbrainz_artist, :modal, :re_enrich, :queue_import]
+  include ListItemsActions
 
-  # GET /admin/albums/:list_id/items/:id/modal/:modal_type
-  # Loads modal content on-demand for the shared modal component.
-  # Returns content wrapped in turbo_frame_tag for Turbo Frame replacement.
+  # Album-specific modal types
   VALID_MODAL_TYPES = %w[edit_metadata link_album search_musicbrainz_releases search_musicbrainz_artists].freeze
-
-  def modal
-    modal_type = params[:modal_type]
-
-    unless VALID_MODAL_TYPES.include?(modal_type)
-      render partial: "admin/music/albums/list_items_actions/modals/error",
-        locals: {message: "Invalid modal type"}
-      return
-    end
-
-    render partial: "admin/music/albums/list_items_actions/modals/#{modal_type}",
-      locals: {item: @item, list: @list}
-  end
-
-  def verify
-    @item.update!(
-      verified: true,
-      metadata: @item.metadata.except("ai_match_invalid")
-    )
-
-    respond_to do |format|
-      format.turbo_stream do
-        render turbo_stream: [
-          turbo_stream.replace("item_row_#{@item.id}", partial: "item_row", locals: {item: @item}),
-          turbo_stream.replace("review_stats_#{@list.id}", partial: "review_stats", locals: {list: @list}),
-          turbo_stream.append("flash_messages", partial: "flash_success", locals: {message: "Item verified"})
-        ]
-      end
-      format.html { redirect_to review_step_path, notice: "Item verified" }
-    end
-  end
 
   def skip
     @item.update!(
@@ -46,82 +12,20 @@ class Admin::Music::Albums::ListItemsActionsController < Admin::Music::BaseContr
       metadata: @item.metadata.merge("skipped" => true)
     )
 
-    respond_to do |format|
-      format.turbo_stream do
-        render turbo_stream: [
-          turbo_stream.replace("item_row_#{@item.id}", partial: "item_row", locals: {item: @item}),
-          turbo_stream.replace("review_stats_#{@list.id}", partial: "review_stats", locals: {list: @list}),
-          turbo_stream.append("flash_messages", partial: "flash_success", locals: {message: "Item skipped"})
-        ]
-      end
-      format.html { redirect_to review_step_path, notice: "Item skipped" }
-    end
-  end
-
-  def metadata
-    metadata_json = params.dig(:list_item, :metadata_json)
-
-    begin
-      metadata = JSON.parse(metadata_json)
-    rescue JSON::ParserError => e
-      respond_to do |format|
-        format.turbo_stream do
-          render turbo_stream: turbo_stream.replace(
-            Admin::Music::Albums::Wizard::SharedModalComponent::ERROR_ID,
-            partial: "error_message",
-            locals: {message: "Invalid JSON: #{e.message}"}
-          )
-        end
-        format.html { redirect_to review_step_path, alert: "Invalid JSON: #{e.message}" }
-      end
-      return
-    end
-
-    @item.update!(metadata: metadata)
-
-    respond_to do |format|
-      format.turbo_stream do
-        render turbo_stream: [
-          turbo_stream.replace("item_row_#{@item.id}", partial: "item_row", locals: {item: @item}),
-          turbo_stream.replace("review_stats_#{@list.id}", partial: "review_stats", locals: {list: @list}),
-          turbo_stream.append("flash_messages", partial: "flash_success", locals: {message: "Metadata updated"})
-        ]
-      end
-      format.html { redirect_to review_step_path, notice: "Metadata updated" }
-    end
+    render_item_update_success("Item skipped")
   end
 
   def manual_link
     album_id = params[:album_id]
 
     unless album_id.present?
-      respond_to do |format|
-        format.turbo_stream do
-          render turbo_stream: turbo_stream.replace(
-            Admin::Music::Albums::Wizard::SharedModalComponent::ERROR_ID,
-            partial: "error_message",
-            locals: {message: "Please select an album"}
-          )
-        end
-        format.html { redirect_to review_step_path, alert: "Please select an album" }
-      end
-      return
+      return render_modal_error("Please select an album")
     end
 
     album = Music::Album.find_by(id: album_id)
 
     unless album
-      respond_to do |format|
-        format.turbo_stream do
-          render turbo_stream: turbo_stream.replace(
-            Admin::Music::Albums::Wizard::SharedModalComponent::ERROR_ID,
-            partial: "error_message",
-            locals: {message: "Album not found"}
-          )
-        end
-        format.html { redirect_to review_step_path, alert: "Album not found" }
-      end
-      return
+      return render_modal_error("Album not found")
     end
 
     @item.update!(
@@ -134,33 +38,14 @@ class Admin::Music::Albums::ListItemsActionsController < Admin::Music::BaseContr
       )
     )
 
-    respond_to do |format|
-      format.turbo_stream do
-        render turbo_stream: [
-          turbo_stream.replace("item_row_#{@item.id}", partial: "item_row", locals: {item: @item}),
-          turbo_stream.replace("review_stats_#{@list.id}", partial: "review_stats", locals: {list: @list}),
-          turbo_stream.append("flash_messages", partial: "flash_success", locals: {message: "Album linked"})
-        ]
-      end
-      format.html { redirect_to review_step_path, notice: "Album linked" }
-    end
+    render_item_update_success("Album linked")
   end
 
   def link_musicbrainz_release
     mb_release_group_id = params[:mb_release_group_id]
 
     unless mb_release_group_id.present?
-      respond_to do |format|
-        format.turbo_stream do
-          render turbo_stream: turbo_stream.replace(
-            Admin::Music::Albums::Wizard::SharedModalComponent::ERROR_ID,
-            partial: "error_message",
-            locals: {message: "Please select a release group"}
-          )
-        end
-        format.html { redirect_to review_step_path, alert: "Please select a release group" }
-      end
-      return
+      return render_modal_error("Please select a release group")
     end
 
     # Look up the release group from MusicBrainz
@@ -168,17 +53,7 @@ class Admin::Music::Albums::ListItemsActionsController < Admin::Music::BaseContr
     response = search.lookup_by_release_group_mbid(mb_release_group_id)
 
     unless response[:success] && response[:data]["release-groups"]&.any?
-      respond_to do |format|
-        format.turbo_stream do
-          render turbo_stream: turbo_stream.replace(
-            Admin::Music::Albums::Wizard::SharedModalComponent::ERROR_ID,
-            partial: "error_message",
-            locals: {message: "Release group not found in MusicBrainz"}
-          )
-        end
-        format.html { redirect_to review_step_path, alert: "Release group not found" }
-      end
-      return
+      return render_modal_error("Release group not found in MusicBrainz")
     end
 
     release_group = response[:data]["release-groups"].first
@@ -219,51 +94,22 @@ class Admin::Music::Albums::ListItemsActionsController < Admin::Music::BaseContr
     @item.verified = true
     @item.save!
 
-    respond_to do |format|
-      format.turbo_stream do
-        render turbo_stream: [
-          turbo_stream.replace("item_row_#{@item.id}", partial: "item_row", locals: {item: @item}),
-          turbo_stream.replace("review_stats_#{@list.id}", partial: "review_stats", locals: {list: @list}),
-          turbo_stream.append("flash_messages", partial: "flash_success", locals: {message: "MusicBrainz release linked"})
-        ]
-      end
-      format.html { redirect_to review_step_path, notice: "MusicBrainz release linked" }
-    end
+    render_item_update_success("MusicBrainz release linked")
   end
 
   def link_musicbrainz_artist
     mb_artist_id = params[:mb_artist_id]
 
     unless mb_artist_id.present?
-      respond_to do |format|
-        format.turbo_stream do
-          render turbo_stream: turbo_stream.replace(
-            Admin::Music::Albums::Wizard::SharedModalComponent::ERROR_ID,
-            partial: "error_message",
-            locals: {message: "Please select an artist"}
-          )
-        end
-        format.html { redirect_to review_step_path, alert: "Please select an artist" }
-      end
-      return
+      return render_modal_error("Please select an artist")
     end
 
     # Look up the artist from MusicBrainz
     search = Music::Musicbrainz::Search::ArtistSearch.new
-    response = search.lookup_by_artist_mbid(mb_artist_id)
+    response = search.lookup_by_mbid(mb_artist_id)
 
     unless response[:success] && response[:data]["artists"]&.any?
-      respond_to do |format|
-        format.turbo_stream do
-          render turbo_stream: turbo_stream.replace(
-            Admin::Music::Albums::Wizard::SharedModalComponent::ERROR_ID,
-            partial: "error_message",
-            locals: {message: "Artist not found in MusicBrainz"}
-          )
-        end
-        format.html { redirect_to review_step_path, alert: "Artist not found" }
-      end
-      return
+      return render_modal_error("Artist not found in MusicBrainz")
     end
 
     artist = response[:data]["artists"].first
@@ -286,16 +132,7 @@ class Admin::Music::Albums::ListItemsActionsController < Admin::Music::BaseContr
     @item.verified = false
     @item.save!
 
-    respond_to do |format|
-      format.turbo_stream do
-        render turbo_stream: [
-          turbo_stream.replace("item_row_#{@item.id}", partial: "item_row", locals: {item: @item}),
-          turbo_stream.replace("review_stats_#{@list.id}", partial: "review_stats", locals: {list: @list}),
-          turbo_stream.append("flash_messages", partial: "flash_success", locals: {message: "Artist updated - please search for releases"})
-        ]
-      end
-      format.html { redirect_to review_step_path, notice: "Artist updated" }
-    end
+    render_item_update_success("Artist updated - please search for releases")
   end
 
   def re_enrich
@@ -311,16 +148,7 @@ class Admin::Music::Albums::ListItemsActionsController < Admin::Music::BaseContr
       )
     )
 
-    respond_to do |format|
-      format.turbo_stream do
-        render turbo_stream: [
-          turbo_stream.replace("item_row_#{@item.id}", partial: "item_row", locals: {item: @item}),
-          turbo_stream.replace("review_stats_#{@list.id}", partial: "review_stats", locals: {list: @list}),
-          turbo_stream.append("flash_messages", partial: "flash_success", locals: {message: "Item cleared for re-enrichment"})
-        ]
-      end
-      format.html { redirect_to review_step_path, notice: "Item cleared for re-enrichment" }
-    end
+    render_item_update_success("Item cleared for re-enrichment")
   end
 
   def queue_import
@@ -329,16 +157,7 @@ class Admin::Music::Albums::ListItemsActionsController < Admin::Music::BaseContr
       metadata: @item.metadata.merge("queued_for_import" => true).except("ai_match_invalid")
     )
 
-    respond_to do |format|
-      format.turbo_stream do
-        render turbo_stream: [
-          turbo_stream.replace("item_row_#{@item.id}", partial: "item_row", locals: {item: @item}),
-          turbo_stream.replace("review_stats_#{@list.id}", partial: "review_stats", locals: {list: @list}),
-          turbo_stream.append("flash_messages", partial: "flash_success", locals: {message: "Item queued for import"})
-        ]
-      end
-      format.html { redirect_to review_step_path, notice: "Item queued for import" }
-    end
+    render_item_update_success("Item queued for import")
   end
 
   # JSON endpoint for MusicBrainz release group autocomplete
@@ -371,25 +190,6 @@ class Admin::Music::Albums::ListItemsActionsController < Admin::Music::BaseContr
       {
         value: rg["id"],
         text: "#{rg["title"]} - #{artist_names}#{" (#{year})" if year} [#{primary_type}]"
-      }
-    }
-  end
-
-  # JSON endpoint for MusicBrainz artist autocomplete
-  def musicbrainz_artist_search
-    query = params[:q]
-    return render json: [] if query.blank? || query.length < 2
-
-    search = Music::Musicbrainz::Search::ArtistSearch.new
-    response = search.search_by_name(query, limit: 10)
-
-    return render json: [] unless response[:success]
-
-    artists = response[:data]["artists"] || []
-    render json: artists.map { |artist|
-      {
-        value: artist["id"],
-        text: format_artist_display(artist)
       }
     }
   end
@@ -427,12 +227,25 @@ class Admin::Music::Albums::ListItemsActionsController < Admin::Music::BaseContr
 
   private
 
-  def set_list
-    @list = Music::Albums::List.find(params[:list_id])
+  # Override to add album-specific actions that need @item loaded
+  def item_actions_for_set_item
+    super + [:skip, :manual_link, :link_musicbrainz_release, :link_musicbrainz_artist, :re_enrich, :queue_import]
   end
 
-  def set_item
-    @item = @list.list_items.includes(listable: :artists).find(params[:id])
+  def list_class
+    Music::Albums::List
+  end
+
+  def partials_path
+    "admin/music/albums/list_items_actions"
+  end
+
+  def valid_modal_types
+    VALID_MODAL_TYPES
+  end
+
+  def shared_modal_component_class
+    Admin::Music::Albums::Wizard::SharedModalComponent
   end
 
   def review_step_path
@@ -448,25 +261,5 @@ class Admin::Music::Albums::ListItemsActionsController < Admin::Music::BaseContr
     first_release = release_group["first-release-date"]
     return nil unless first_release.present?
     first_release.split("-").first.to_i
-  end
-
-  # Format artist as "Artist Name (Type from Location)"
-  def format_artist_display(artist)
-    name = artist["name"]
-    type = artist["type"]
-    country = artist["country"]
-    disambiguation = artist["disambiguation"]
-
-    location = disambiguation.presence || country.presence
-
-    if type.present? && location.present?
-      "#{name} (#{type} from #{location})"
-    elsif type.present?
-      "#{name} (#{type})"
-    elsif location.present?
-      "#{name} (#{location})"
-    else
-      name
-    end
   end
 end
