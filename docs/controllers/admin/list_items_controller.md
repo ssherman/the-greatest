@@ -42,9 +42,10 @@ Removes a single item from a list.
 
 ### `destroy_all`
 Removes all items from a list in a single transaction.
-- Wraps deletion in `ActiveRecord::Base.transaction`
+- Uses `find_each` with `destroy!` to ensure callbacks that abort raise exceptions
+- Wraps deletion in `ActiveRecord::Base.transaction` for all-or-nothing behavior
 - Returns flash notice with count of deleted items
-- Handles `ActiveRecord::RecordNotDestroyed` with error flash
+- Handles `ActiveRecord::RecordNotDestroyed` with error flash (rolls back all deletions)
 - Redirects to appropriate list show page based on list type
 
 ## Private Methods

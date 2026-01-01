@@ -125,7 +125,10 @@ class Admin::ListItemsController < Admin::BaseController
     deleted_count = 0
 
     ActiveRecord::Base.transaction do
-      deleted_count = @list.list_items.destroy_all.count
+      @list.list_items.find_each do |item|
+        item.destroy!
+        deleted_count += 1
+      end
     end
 
     redirect_to redirect_path, notice: "#{deleted_count} items deleted from list."
