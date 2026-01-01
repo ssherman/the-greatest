@@ -224,7 +224,11 @@ Rails.application.routes.draw do
 
     scope "list/:list_id", as: "list" do
       resources :list_penalties, only: [:index, :create]
-      resources :list_items, only: [:index, :create]
+      resources :list_items, only: [:index, :create] do
+        collection do
+          delete :destroy_all
+        end
+      end
     end
 
     resources :list_penalties, only: [:destroy]

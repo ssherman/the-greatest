@@ -104,9 +104,9 @@ module Music
       @song.release_year = 1800
       assert_not @song.valid?
       assert_includes @song.errors[:release_year], "must be greater than 1900"
-      @song.release_year = 2030
+      @song.release_year = Date.current.year + 10
       assert_not @song.valid?
-      assert_includes @song.errors[:release_year], "must be less than or equal to 2026"
+      assert_includes @song.errors[:release_year], "must be less than or equal to #{Date.current.year + 1}"
     end
 
     test "should require integer release_year" do
