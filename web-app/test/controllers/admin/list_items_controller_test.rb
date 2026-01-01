@@ -199,5 +199,52 @@ module Admin
 
       assert_response :redirect
     end
+
+    test "destroy_all should delete all list items for album list" do
+      ListItem.create!(list: @album_list, listable: @album, position: 1)
+      ListItem.create!(list: @album_list, listable: music_albums(:abbey_road), position: 2)
+
+      assert_difference "ListItem.count", -2 do
+        delete destroy_all_admin_list_list_items_path(@album_list)
+      end
+
+      assert_redirected_to admin_albums_list_path(@album_list)
+      follow_redirect!
+      assert_match "2 items deleted from list", flash[:notice]
+    end
+
+    test "destroy_all should delete all list items for song list" do
+      ListItem.create!(list: @song_list, listable: @song, position: 1)
+      ListItem.create!(list: @song_list, listable: music_songs(:money), position: 2)
+
+      assert_difference "ListItem.count", -2 do
+        delete destroy_all_admin_list_list_items_path(@song_list)
+      end
+
+      assert_redirected_to admin_songs_list_path(@song_list)
+      follow_redirect!
+      assert_match "2 items deleted from list", flash[:notice]
+    end
+
+    test "destroy_all should handle empty list gracefully" do
+      assert_no_difference "ListItem.count" do
+        delete destroy_all_admin_list_list_items_path(@album_list)
+      end
+
+      assert_redirected_to admin_albums_list_path(@album_list)
+      follow_redirect!
+      assert_match "0 items deleted from list", flash[:notice]
+    end
+
+    test "destroy_all should require admin authorization" do
+      ListItem.create!(list: @album_list, listable: @album, position: 1)
+      sign_in_as(@regular_user, stub_auth: true)
+
+      assert_no_difference "ListItem.count" do
+        delete destroy_all_admin_list_list_items_path(@album_list)
+      end
+
+      assert_response :redirect
+    end
   end
 end

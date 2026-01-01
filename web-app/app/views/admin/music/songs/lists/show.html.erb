@@ -214,9 +214,19 @@
               Songs
               <span class="badge badge-ghost"><%= @list.list_items.count %></span>
             </h2>
-            <button class="btn btn-primary btn-sm" onclick="add_item_to_list_modal_dialog.showModal()">
-              + Add Song
-            </button>
+            <div class="flex gap-2">
+              <% if @list.list_items.any? %>
+                <%= button_to destroy_all_admin_list_list_items_path(@list),
+                    method: :delete,
+                    class: "btn btn-error btn-outline btn-sm",
+                    data: { turbo_confirm: "Are you sure you want to delete all #{@list.list_items.count} items from this list? This cannot be undone." } do %>
+                  Delete All Items
+                <% end %>
+              <% end %>
+              <button class="btn btn-primary btn-sm" onclick="add_item_to_list_modal_dialog.showModal()">
+                + Add Song
+              </button>
+            </div>
           </div>
           <%= turbo_frame_tag "list_items_list", loading: :lazy,
               src: admin_list_list_items_path(@list) do %>

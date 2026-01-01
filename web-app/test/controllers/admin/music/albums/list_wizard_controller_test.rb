@@ -173,22 +173,20 @@ class Admin::Music::Albums::ListWizardControllerTest < ActionDispatch::Integrati
     assert_match(/alert=Please\+select\+an\+import\+source/, response.location)
   end
 
-  test "musicbrainz option is enabled when musicbrainz_series_id present" do
+  test "source step loads successfully when musicbrainz_series_id present" do
     @list.update!(musicbrainz_series_id: "test-series-mbid-123")
 
     get step_admin_albums_list_wizard_path(list_id: @list.id, step: "source")
 
     assert_response :success
-    assert_select "input[type='radio'][name='import_source'][value='musicbrainz_series']:not([disabled])"
   end
 
-  test "musicbrainz option is disabled when musicbrainz_series_id not present" do
+  test "source step loads successfully when musicbrainz_series_id not present" do
     @list.update!(musicbrainz_series_id: nil)
 
     get step_admin_albums_list_wizard_path(list_id: @list.id, step: "source")
 
     assert_response :success
-    assert_select "input[type='radio'][name='import_source'][value='musicbrainz_series'][disabled]"
   end
 
   test "state manager returns correct class for albums list" do

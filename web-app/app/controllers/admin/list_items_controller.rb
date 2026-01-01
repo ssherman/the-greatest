@@ -1,5 +1,5 @@
 class Admin::ListItemsController < Admin::BaseController
-  before_action :set_list, only: [:index, :create]
+  before_action :set_list, only: [:index, :create, :destroy_all]
   before_action :set_list_item, only: [:update, :destroy]
 
   def index
@@ -119,6 +119,18 @@ class Admin::ListItemsController < Admin::BaseController
         redirect_to redirect_path, notice: "Item removed successfully."
       end
     end
+  end
+
+  def destroy_all
+    deleted_count = 0
+
+    ActiveRecord::Base.transaction do
+      deleted_count = @list.list_items.destroy_all.count
+    end
+
+    redirect_to redirect_path, notice: "#{deleted_count} items deleted from list."
+  rescue ActiveRecord::RecordNotDestroyed => e
+    redirect_to redirect_path, alert: "Failed to delete items: #{e.message}"
   end
 
   private
