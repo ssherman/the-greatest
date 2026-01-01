@@ -173,7 +173,9 @@ module Music
         # @return [Hash] search results
         def search_by_artist_and_title(artist_name, title, options = {})
           artist_query = build_field_query("artist", artist_name)
-          title_query = build_field_query("title", title)
+          # Use releasegroup field instead of title - it properly indexes Unicode
+          # characters and also matches aliases (e.g., "cross" matches "✝")
+          title_query = build_field_query("releasegroup", title)
           query = "#{artist_query} AND #{title_query}"
           search(query, options)
         end
@@ -185,7 +187,9 @@ module Music
         # @return [Hash] search results
         def search_by_artist_mbid_and_title(artist_mbid, title, options = {})
           artist_query = build_field_query("arid", artist_mbid)
-          title_query = build_field_query("title", title)
+          # Use releasegroup field instead of title - it properly indexes Unicode
+          # characters and also matches aliases (e.g., "cross" matches "✝")
+          title_query = build_field_query("releasegroup", title)
           query = "#{artist_query} AND #{title_query}"
           search(query, options)
         end
