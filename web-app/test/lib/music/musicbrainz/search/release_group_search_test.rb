@@ -110,7 +110,8 @@ class Music::Musicbrainz::Search::ReleaseGroupSearchTest < ActiveSupport::TestCa
   end
 
   test "search_by_artist_and_title combines artist and title search" do
-    expected_query = 'artist:The\\ Beatles AND title:Abbey\\ Road'
+    # Uses releasegroup field instead of title for better Unicode support
+    expected_query = 'artist:The\\ Beatles AND releasegroup:Abbey\\ Road'
 
     @mock_client.expects(:get)
       .with("release-group", {query: expected_query})
@@ -123,7 +124,8 @@ class Music::Musicbrainz::Search::ReleaseGroupSearchTest < ActiveSupport::TestCa
 
   test "search_by_artist_mbid_and_title combines artist MBID and title search" do
     artist_mbid = "b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d"
-    expected_query = 'arid:b10bbbfc\\-cf9e\\-42e0\\-be17\\-e2c3e1d2600d AND title:Abbey\\ Road'
+    # Uses releasegroup field instead of title for better Unicode support
+    expected_query = 'arid:b10bbbfc\\-cf9e\\-42e0\\-be17\\-e2c3e1d2600d AND releasegroup:Abbey\\ Road'
 
     @mock_client.expects(:get)
       .with("release-group", {query: expected_query})
