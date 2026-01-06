@@ -1,0 +1,291 @@
+<%= form_with url: music_lists_path, method: :post, class: "space-y-6" do |f| %>
+  <% if @list.errors.any? %>
+    <div class="alert alert-error">
+      <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <div>
+        <h3 class="font-bold"><%= pluralize(@list.errors.count, "error") %> prohibited this list from being saved:</h3>
+        <ul class="list-disc list-inside mt-2">
+          <% @list.errors.full_messages.each do |message| %>
+            <li><%= message %></li>
+          <% end %>
+        </ul>
+      </div>
+    </div>
+  <% end %>
+
+  <!-- List Type Selection -->
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">List Type</h2>
+      <p class="text-sm text-base-content/70 mb-4">Choose whether this list ranks albums or songs.</p>
+
+      <div class="flex flex-col sm:flex-row gap-4">
+        <label class="label cursor-pointer justify-start gap-3 flex-1 p-4 border border-base-300 rounded-lg hover:border-primary has-[:checked]:border-primary has-[:checked]:bg-primary/5">
+          <input type="radio" name="list_type" value="albums" class="radio radio-primary" <%= params[:list_type] == "albums" ? "checked" : "" %>>
+          <div>
+            <span class="label-text font-semibold">Album List</span>
+            <p class="text-xs text-base-content/60">A ranking of albums (full-length releases, EPs, etc.)</p>
+          </div>
+        </label>
+
+        <label class="label cursor-pointer justify-start gap-3 flex-1 p-4 border border-base-300 rounded-lg hover:border-primary has-[:checked]:border-primary has-[:checked]:bg-primary/5">
+          <input type="radio" name="list_type" value="songs" class="radio radio-primary" <%= params[:list_type] == "songs" ? "checked" : "" %>>
+          <div>
+            <span class="label-text font-semibold">Song List</span>
+            <p class="text-xs text-base-content/60">A ranking of individual songs or tracks</p>
+          </div>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Basic Information -->
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">Basic Information</h2>
+
+      <div class="grid grid-cols-1 gap-4">
+        <div class="form-control">
+          <%= f.label "list[name]", class: "label" do %>
+            <span class="label-text font-semibold">List Name <span class="text-error">*</span></span>
+          <% end %>
+          <%= f.text_field "list[name]",
+              value: @list.name,
+              class: "input input-bordered w-full #{@list.errors[:name].any? ? 'input-error' : ''}",
+              placeholder: "e.g., Rolling Stone's 500 Greatest Albums",
+              required: true,
+              autofocus: true %>
+          <label class="label">
+            <span class="label-text-alt">The official name of the list</span>
+          </label>
+          <% if @list.errors[:name].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @list.errors[:name].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <div class="form-control">
+          <%= f.label "list[description]", class: "label" do %>
+            <span class="label-text font-semibold">Description</span>
+          <% end %>
+          <%= f.text_area "list[description]",
+              value: @list.description,
+              class: "textarea textarea-bordered w-full h-24 #{@list.errors[:description].any? ? 'textarea-error' : ''}",
+              placeholder: "A brief overview of this list - what makes it notable, how it was compiled, etc." %>
+          <label class="label">
+            <span class="label-text-alt">Optional background information about this list</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Source Information -->
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">Source Information</h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-control">
+          <%= f.label "list[source]", class: "label" do %>
+            <span class="label-text font-semibold">Source/Publication</span>
+          <% end %>
+          <%= f.text_field "list[source]",
+              value: @list.source,
+              class: "input input-bordered w-full #{@list.errors[:source].any? ? 'input-error' : ''}",
+              placeholder: "e.g., Rolling Stone, NME, Pitchfork" %>
+          <label class="label">
+            <span class="label-text-alt">The publication, website, or organization that created this list</span>
+          </label>
+        </div>
+
+        <div class="form-control">
+          <%= f.label "list[url]", class: "label" do %>
+            <span class="label-text font-semibold">Original URL</span>
+          <% end %>
+          <%= f.url_field "list[url]",
+              value: @list.url,
+              class: "input input-bordered w-full #{@list.errors[:url].any? ? 'input-error' : ''}",
+              placeholder: "https://example.com/best-albums-list" %>
+          <label class="label">
+            <span class="label-text-alt">Link to the original list if available online</span>
+          </label>
+          <% if @list.errors[:url].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @list.errors[:url].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <div class="form-control">
+          <%= f.label "list[year_published]", class: "label" do %>
+            <span class="label-text font-semibold">Year Published</span>
+          <% end %>
+          <%= f.number_field "list[year_published]",
+              value: @list.year_published,
+              class: "input input-bordered w-full #{@list.errors[:year_published].any? ? 'input-error' : ''}",
+              placeholder: "2024",
+              min: 1900,
+              max: Date.current.year + 1 %>
+          <label class="label">
+            <span class="label-text-alt">The year this list was published or last updated</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Voter Information -->
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">Voter Information</h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-control">
+          <%= f.label "list[number_of_voters]", class: "label" do %>
+            <span class="label-text font-semibold">Number of Voters</span>
+          <% end %>
+          <%= f.number_field "list[number_of_voters]",
+              value: @list.number_of_voters,
+              class: "input input-bordered w-full #{@list.errors[:number_of_voters].any? ? 'input-error' : ''}",
+              placeholder: "e.g., 100",
+              min: 1 %>
+          <label class="label">
+            <span class="label-text-alt">How many critics, readers, or experts voted on this list?</span>
+          </label>
+        </div>
+
+        <div class="form-control">
+          <%= f.label "list[num_years_covered]", class: "label" do %>
+            <span class="label-text font-semibold">Years Covered</span>
+          <% end %>
+          <%= f.number_field "list[num_years_covered]",
+              value: @list.num_years_covered,
+              class: "input input-bordered w-full #{@list.errors[:num_years_covered].any? ? 'input-error' : ''}",
+              placeholder: "e.g., 50 for 'all time' lists",
+              min: 1 %>
+          <label class="label">
+            <span class="label-text-alt">How many years of releases does this list consider?</span>
+          </label>
+          <% if @list.errors[:num_years_covered].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @list.errors[:num_years_covered].first %></span>
+            </label>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- List Characteristics -->
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">List Characteristics</h2>
+      <p class="text-sm text-base-content/70 mb-4">Check all that apply to help us categorize this list.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-control p-3 border border-base-300 rounded-lg overflow-hidden">
+          <label class="label cursor-pointer justify-start gap-4 items-start">
+            <%= f.check_box "list[location_specific]",
+                checked: @list.location_specific,
+                class: "checkbox checkbox-primary shrink-0 mt-0.5" %>
+            <div class="min-w-0">
+              <span class="label-text font-semibold">Location Specific</span>
+              <p class="text-xs text-base-content/60">Focuses on a specific country or region</p>
+            </div>
+          </label>
+        </div>
+
+        <div class="form-control p-3 border border-base-300 rounded-lg overflow-hidden">
+          <label class="label cursor-pointer justify-start gap-4 items-start">
+            <%= f.check_box "list[category_specific]",
+                checked: @list.category_specific,
+                class: "checkbox checkbox-primary shrink-0 mt-0.5" %>
+            <div class="min-w-0">
+              <span class="label-text font-semibold">Category Specific</span>
+              <p class="text-xs text-base-content/60">Focuses on a specific genre or style</p>
+            </div>
+          </label>
+        </div>
+
+        <div class="form-control p-3 border border-base-300 rounded-lg overflow-hidden">
+          <label class="label cursor-pointer justify-start gap-4 items-start">
+            <%= f.check_box "list[yearly_award]",
+                checked: @list.yearly_award,
+                class: "checkbox checkbox-primary shrink-0 mt-0.5" %>
+            <div class="min-w-0">
+              <span class="label-text font-semibold">Yearly Award</span>
+              <p class="text-xs text-base-content/60">An annual award that recurs each year</p>
+            </div>
+          </label>
+        </div>
+
+        <div class="form-control p-3 border border-base-300 rounded-lg overflow-hidden">
+          <label class="label cursor-pointer justify-start gap-4 items-start">
+            <%= f.check_box "list[voter_count_estimated]",
+                checked: @list.voter_count_estimated,
+                class: "checkbox checkbox-primary shrink-0 mt-0.5" %>
+            <div class="min-w-0">
+              <span class="label-text font-semibold">Voter Count Estimated</span>
+              <p class="text-xs text-base-content/60">The voter count is an estimate, not exact</p>
+            </div>
+          </label>
+        </div>
+
+        <div class="form-control p-3 border border-base-300 rounded-lg overflow-hidden">
+          <label class="label cursor-pointer justify-start gap-4 items-start">
+            <%= f.check_box "list[voter_names_unknown]",
+                checked: @list.voter_names_unknown,
+                class: "checkbox checkbox-primary shrink-0 mt-0.5" %>
+            <div class="min-w-0">
+              <span class="label-text font-semibold">Voter Names Unknown</span>
+              <p class="text-xs text-base-content/60">Voters' identities are anonymous</p>
+            </div>
+          </label>
+        </div>
+
+        <div class="form-control p-3 border border-base-300 rounded-lg overflow-hidden">
+          <label class="label cursor-pointer justify-start gap-4 items-start">
+            <%= f.check_box "list[voter_count_unknown]",
+                checked: @list.voter_count_unknown,
+                class: "checkbox checkbox-primary shrink-0 mt-0.5" %>
+            <div class="min-w-0">
+              <span class="label-text font-semibold">Voter Count Unknown</span>
+              <p class="text-xs text-base-content/60">Total number of voters is unknown</p>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Albums or Songs Content -->
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">Albums or Songs</h2>
+      <p class="text-sm text-base-content/70 mb-4">
+        Paste or type the list items here, one per line. Include rankings, artist names, and titles.
+        We'll process this into individual entries.
+      </p>
+
+      <div class="form-control">
+        <%= f.text_area "list[raw_html]",
+            value: @list.raw_html,
+            class: "textarea textarea-bordered w-full h-64 font-mono text-sm #{@list.errors[:raw_html].any? ? 'textarea-error' : ''}",
+            placeholder: "1. Marvin Gaye - What's Going On\n2. The Beach Boys - Pet Sounds\n3. Joni Mitchell - Blue\n4. Stevie Wonder - Songs in the Key of Life\n5. The Beatles - Abbey Road\n..." %>
+        <label class="label">
+          <span class="label-text-alt">Enter each album or song on a new line. Include position numbers if available.</span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Submit Buttons -->
+  <div class="flex flex-col sm:flex-row gap-2 justify-end">
+    <%= link_to "Cancel", music_lists_path, class: "btn btn-ghost" %>
+    <%= f.submit "Submit List", class: "btn btn-primary" %>
+  </div>
+<% end %>

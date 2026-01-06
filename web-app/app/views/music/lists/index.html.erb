@@ -2,11 +2,19 @@
 <% content_for :meta_description, "Browse curated lists of the greatest albums and songs. Discover expert rankings, user favorites, and authoritative music collections from trusted sources." %>
 
 <div class="container mx-auto px-4 py-8">
-  <div class="mb-8">
-    <h1 class="text-4xl font-bold text-base-content mb-2">Greatest Music Lists</h1>
-    <p class="text-base-content/70">
-      Explore curated lists of the greatest albums and songs from trusted sources
-    </p>
+  <div class="mb-8 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+    <div>
+      <h1 class="text-4xl font-bold text-base-content mb-2">Greatest Music Lists</h1>
+      <p class="text-base-content/70">
+        Explore curated lists of the greatest albums and songs from trusted sources
+      </p>
+    </div>
+    <%= link_to new_music_list_path, class: "btn btn-primary btn-sm sm:btn-md" do %>
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+      </svg>
+      Submit a List
+    <% end %>
   </div>
 
   <div class="mb-12">
