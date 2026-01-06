@@ -1,11 +1,15 @@
 Rails.application.routes.draw do
   # Music domain routes (scoped within domain constraint)
   constraints DomainConstraint.new(Rails.application.config.domains[:music]) do
-    # Lists overview (no ranking configuration support)
-    get "lists", to: "music/lists#index", as: :music_lists
+    # All music routes are prefixed with 'music_' for route helpers to avoid
+    # conflicts when other domains (games, movies) add similar resources
+    scope as: "music" do
+      # Lists overview and public submission
+      resources :lists, only: [:index, :new, :create], controller: "music/lists"
 
-    # Search
-    get "search", to: "music/searches#index", as: :search
+      # Search
+      get "search", to: "music/searches#index"
+    end
 
     # Artist rankings (outside rc scope - always uses default primary configs for both albums and songs)
     get "artists", to: "music/artists/ranked_items#index", as: :artists

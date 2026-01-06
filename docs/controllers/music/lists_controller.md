@@ -1,55 +1,90 @@
 # Music::ListsController
 
 ## Summary
-Overview controller for music lists that displays top-ranked album lists and song lists on a single page. Serves as the landing page for the music lists section of the application.
+Public-facing controller for browsing and submitting music lists. Handles the lists overview page showing top album and song lists, and provides a public submission form for users to contribute new lists for review.
 
 ## Purpose
-Provides a consolidated view of the highest-weighted lists for both albums and songs in the music domain. This controller aggregates data from two separate ranking configurations to give users a quick overview of the most influential music lists in the system.
+Provides a consolidated view of the highest-weighted lists for both albums and songs in the music domain, plus a public submission workflow for users to contribute new lists.
 
 ## Actions
 
 ### `index`
-Displays the top 10 album lists and top 10 song lists ordered by weight.
+Displays the top 50 album lists and top 50 song lists ordered by weight.
 
 **Query Strategy:**
 - Fetches from two separate ranking configurations (albums and songs)
 - Joins with the `lists` table to filter by STI type
 - Includes `list_items` for efficient display
 - Orders by `weight` descending (highest influence first)
-- Limits to 10 results per category
+- Limits to 50 results per category
 
 **Instance Variables Set:**
-- `@albums_ranked_lists` - Top 10 weighted album lists (Array of RankedList)
-- `@songs_ranked_lists` - Top 10 weighted song lists (Array of RankedList)
+- `@albums_ranked_lists` - Top 50 weighted album lists (Array of RankedList)
+- `@songs_ranked_lists` - Top 50 weighted song lists (Array of RankedList)
 - `@albums_ranking_configuration` - The primary albums ranking configuration
 - `@songs_ranking_configuration` - The primary songs ranking configuration
 
-**SQL Joins:**
-```ruby
-# Albums query
-@albums_ranking_configuration.ranked_lists
-  .joins(:list)
-  .where(lists: { type: "Music::Albums::List" })
-  .includes(list: :list_items)
-  .order(weight: :desc)
-  .limit(10)
+### `new`
+Renders the public list submission form.
 
-# Songs query (similar structure)
-```
+**Purpose:** Allows any user (anonymous or logged in) to submit a music list for review.
+
+**Instance Variables Set:**
+- `@list` - New, unsaved List instance for form binding
+
+### `create`
+Processes list submission from the public form.
+
+**Behavior:**
+1. Determines list class from `list_type` param:
+   - `"albums"` → `Music::Albums::List`
+   - `"songs"` → `Music::Songs::List`
+2. If invalid/missing list_type, renders form with error
+3. Creates list with permitted params
+4. Sets `status: :unapproved` (always)
+5. Sets `submitted_by` to current user (if logged in)
+6. On success: redirects to index with flash notice
+7. On failure: re-renders form with validation errors
+
+**Parameters:**
+- `list_type` (required) - "albums" or "songs"
+- `list[name]` (required) - List name
+- `list[description]` - Optional description
+- `list[source]` - Publication/organization name
+- `list[url]` - Original list URL
+- `list[year_published]` - Year published
+- `list[number_of_voters]` - Voter count
+- `list[num_years_covered]` - Years of releases covered
+- `list[location_specific]` - Boolean flag
+- `list[category_specific]` - Boolean flag
+- `list[yearly_award]` - Boolean flag
+- `list[voter_count_estimated]` - Boolean flag
+- `list[voter_names_unknown]` - Boolean flag
+- `list[voter_count_unknown]` - Boolean flag
+- `list[raw_html]` - Free-text list items
+
+**Returns:**
+- Success: Redirect to `music_lists_path` with flash notice
+- Failure: Render `:new` with status 422
 
 ## Routing
 
 **Routes:**
 ```ruby
-# config/routes.rb
-get "lists", to: "music/lists#index", as: :music_lists
+# config/routes.rb (within music domain constraint)
+scope as: "music" do
+  resources :lists, only: [:index, :new, :create], controller: "music/lists"
+end
 ```
 
 **URL Patterns:**
-- `/music/lists` - Main music lists overview page
+| Verb | Path | Action | Route Helper |
+|------|------|--------|--------------|
+| GET | /lists | index | `music_lists_path` |
+| GET | /lists/new | new | `new_music_list_path` |
+| POST | /lists | create | `music_lists_path` |
 
-**Named Routes:**
-- `music_lists_path` - Helper for the index action
+> Routes use `scope as: "music"` to prefix helpers, preventing conflicts when other domains (games, movies) add similar resources.
 
 ## Configuration
 
@@ -57,25 +92,24 @@ get "lists", to: "music/lists#index", as: :music_lists
 Uses `music/application` layout for consistent music domain styling.
 
 ### Callbacks
-- `before_action :load_ranking_configurations` - Loads both primary ranking configurations before any action
+- `before_action :load_ranking_configurations, only: [:index]` - Loads ranking configurations for index action only
 
 ## Private Methods
 
 ### `load_ranking_configurations`
 Loads the default primary ranking configurations for both albums and songs.
 
-**Implementation:**
-```ruby
-def load_ranking_configurations
-  @albums_ranking_configuration = Music::Albums::RankingConfiguration.default_primary
-  @songs_ranking_configuration = Music::Songs::RankingConfiguration.default_primary
-end
-```
+### `list_class_from_type(list_type)`
+Maps list_type string to appropriate List subclass.
+- `"albums"` → `Music::Albums::List`
+- `"songs"` → `Music::Songs::List`
+- Other → `nil`
 
-**Purpose:**
-- Ensures both ranking configurations are available in instance variables
-- Uses `default_primary` scope to get the main ranking configuration for each media type
-- Called via `before_action` so configurations are available for all actions
+### `list_params`
+Strong parameters for list creation. Permits safe subset of List attributes for public submission.
+
+## Authentication
+All actions are public (no authentication required). When a user is logged in, `submitted_by_id` is automatically set on created lists.
 
 ## Dependencies
 
@@ -85,46 +119,29 @@ end
 - `RankedList` - Join model between lists and ranking configurations
 - `Music::Albums::List` - Album-specific list model (STI)
 - `Music::Songs::List` - Song-specific list model (STI)
+- `List` - Base list model
 - `ListItem` - Items within each list
-
-### Concerns
-None - inherits standard Rails controller functionality from ApplicationController
-
-### External Dependencies
-None - pure Rails application logic
 
 ## Related Controllers
 - `Music::Albums::ListsController` - Detailed album lists browsing and individual list display
 - `Music::Songs::ListsController` - Detailed song lists browsing and individual list display
 
 ## Views
-- `app/views/music/lists/index.html.erb` - Main overview page template
+- `app/views/music/lists/index.html.erb` - Lists overview with top albums/songs lists
+- `app/views/music/lists/new.html.erb` - Submission form wrapper
+- `app/views/music/lists/_form.html.erb` - Submission form partial with DaisyUI styling
 
-## Usage Examples
-
-### Accessing the Music Lists Overview
-```ruby
-# In routes
-music_lists_path  # => "/music/lists"
-
-# In controller
-redirect_to music_lists_path
-```
-
-### Data Available in Views
-```erb
-<!-- In index.html.erb -->
-<% @albums_ranked_lists.each do |ranked_list| %>
-  <%= ranked_list.list.name %>
-  <%= ranked_list.weight %>
-  <%= ranked_list.list.list_items.count %>
-<% end %>
-
-<% @songs_ranked_lists.each do |ranked_list| %>
-  <%= ranked_list.list.name %>
-  <%= ranked_list.weight %>
-<% end %>
-```
+## Tests
+- `test/controllers/music/lists_controller_test.rb` - 12 integration tests covering:
+  - Index page rendering
+  - Submit a List link presence
+  - Form rendering
+  - Album list creation (anonymous and logged-in)
+  - Song list creation
+  - Missing list_type validation
+  - Missing name validation
+  - Invalid URL validation
+  - All permitted attributes
 
 ## Design Notes
 
@@ -133,28 +150,18 @@ Albums and songs use separate ranking configurations because:
 - They may have different algorithm parameters (exponent, bonus pool, penalties)
 - They rank different types of items (Album vs Song models)
 - They use different STI list types
-- They may have different quality thresholds and weighting strategies
 
 ### Performance Considerations
-- **Limit to 10**: Only fetches top 10 lists per category to keep page load fast
+- **Limit to 50**: Only fetches top 50 lists per category to keep page load fast
 - **Eager Loading**: Uses `includes(list: :list_items)` to prevent N+1 queries
 - **Pre-sorted**: Relies on database-level sorting by weight (indexed column)
-- **No Pagination**: Deliberately limited to 10 items, no pagination needed
 
-### Weight Ordering
-Lists are ordered by their weight in the ranking configuration:
-- Higher weight = more influence on the overall ranking
-- Weight is calculated based on list quality metrics (voter count, recency, etc.)
-- Null weights are considered lowest priority
-
-## Future Enhancements
-- Add ability to switch between different ranking configurations via params
-- Support filtering by date ranges or list creation time
-- Add pagination if the limit of 10 becomes insufficient
-- Cache the ranking configuration lookups for performance
+### Public Submission Design
+- Lists are always created with `status: unapproved` for admin review
+- `submitted_by_id` tracks who submitted (if logged in) for accountability
+- Uses STI to create the correct list subclass based on user selection
+- Form collects raw text in `raw_html` field; parsing handled separately by admin wizard
 
 ## Related Documentation
+- [List Model](../../models/list.md)
 - [RankedList Model](../../models/ranked_list.md)
-- [RankingConfiguration Model](../../models/ranking_configuration.md)
-- [Music::Albums::ListsController](music/albums/lists_controller.md)
-- [Music::Songs::ListsController](music/songs/lists_controller.md)
