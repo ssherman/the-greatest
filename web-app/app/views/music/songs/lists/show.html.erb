@@ -5,7 +5,7 @@
   description += " #{truncate(@list.description, length: 90)}" if @list.description.present?
   description += " Source: #{@list.source}." if @list.source.present?
 
-  content_for :title, truncate(title, length: 60)
+  content_for :page_title, truncate(title, length: 60)
   content_for :meta_description, truncate(description, length: 160)
 %>
 
