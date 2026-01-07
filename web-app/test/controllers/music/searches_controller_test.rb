@@ -9,12 +9,12 @@ module Music
     end
 
     test "should get index with blank query" do
-      get search_path
+      get music_search_path
       assert_response :success
     end
 
     test "should get index with empty query parameter" do
-      get search_path(q: "")
+      get music_search_path(q: "")
       assert_response :success
     end
 
@@ -23,7 +23,7 @@ module Music
       ::Search::Music::Search::AlbumGeneral.stubs(:call).returns([])
       ::Search::Music::Search::SongGeneral.stubs(:call).returns([])
 
-      get search_path(q: "nonexistentartist")
+      get music_search_path(q: "nonexistentartist")
       assert_response :success
     end
 
@@ -35,7 +35,7 @@ module Music
       ::Search::Music::Search::AlbumGeneral.stubs(:call).returns([])
       ::Search::Music::Search::SongGeneral.stubs(:call).returns([])
 
-      get search_path(q: "Beatles")
+      get music_search_path(q: "Beatles")
       assert_response :success
     end
 
@@ -47,7 +47,7 @@ module Music
       ::Search::Music::Search::AlbumGeneral.stubs(:call).returns(album_results)
       ::Search::Music::Search::SongGeneral.stubs(:call).returns([])
 
-      get search_path(q: "Dark Side")
+      get music_search_path(q: "Dark Side")
       assert_response :success
     end
 
@@ -59,7 +59,7 @@ module Music
       ::Search::Music::Search::AlbumGeneral.stubs(:call).returns([])
       ::Search::Music::Search::SongGeneral.stubs(:call).returns(song_results)
 
-      get search_path(q: "Time")
+      get music_search_path(q: "Time")
       assert_response :success
     end
 
@@ -76,7 +76,7 @@ module Music
       ::Search::Music::Search::AlbumGeneral.stubs(:call).returns(album_results)
       ::Search::Music::Search::SongGeneral.stubs(:call).returns(song_results)
 
-      get search_path(q: "music")
+      get music_search_path(q: "music")
       assert_response :success
     end
 
@@ -85,7 +85,7 @@ module Music
       ::Search::Music::Search::AlbumGeneral.expects(:call).with("test", size: 25).returns([])
       ::Search::Music::Search::SongGeneral.expects(:call).with("test", size: 10).returns([])
 
-      get search_path(q: "test")
+      get music_search_path(q: "test")
       assert_response :success
     end
 
@@ -94,7 +94,7 @@ module Music
       ::Search::Music::Search::AlbumGeneral.stubs(:call).returns([])
       ::Search::Music::Search::SongGeneral.stubs(:call).returns([])
 
-      get search_path(q: "AC/DC & More!")
+      get music_search_path(q: "AC/DC & More!")
       assert_response :success
     end
 
@@ -111,7 +111,7 @@ module Music
       ::Search::Music::Search::AlbumGeneral.stubs(:call).returns([])
       ::Search::Music::Search::SongGeneral.stubs(:call).returns([])
 
-      get search_path(q: "Beatles")
+      get music_search_path(q: "Beatles")
       assert_response :success
     end
   end

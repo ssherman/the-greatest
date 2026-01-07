@@ -1,0 +1,134 @@
+<%= form_with model: @user, url: admin_user_path(@user), scope: :user, class: "space-y-6" do |f| %>
+  <% if @user.errors.any? %>
+    <div class="alert alert-error">
+      <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <div>
+        <h3 class="font-bold"><%= pluralize(@user.errors.count, "error") %> prohibited this user from being saved:</h3>
+        <ul class="list-disc list-inside mt-2">
+          <% @user.errors.full_messages.each do |message| %>
+            <li><%= message %></li>
+          <% end %>
+        </ul>
+      </div>
+    </div>
+  <% end %>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">Account Information</h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-control md:col-span-2">
+          <%= f.label :email, class: "label" do %>
+            <span class="label-text font-semibold">Email <span class="text-error">*</span></span>
+          <% end %>
+          <%= f.email_field :email,
+              class: "input input-bordered w-full #{@user.errors[:email].any? ? 'input-error' : ''}",
+              placeholder: "user@example.com",
+              required: true,
+              autofocus: true %>
+          <% if @user.errors[:email].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @user.errors[:email].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <div class="form-control">
+          <%= f.label :display_name, class: "label" do %>
+            <span class="label-text font-semibold">Display Name</span>
+          <% end %>
+          <%= f.text_field :display_name,
+              class: "input input-bordered w-full #{@user.errors[:display_name].any? ? 'input-error' : ''}",
+              placeholder: "Public display name" %>
+          <label class="label">
+            <span class="label-text-alt">User's public display name</span>
+          </label>
+          <% if @user.errors[:display_name].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @user.errors[:display_name].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <div class="form-control">
+          <%= f.label :name, class: "label" do %>
+            <span class="label-text font-semibold">Full Name</span>
+          <% end %>
+          <%= f.text_field :name,
+              class: "input input-bordered w-full #{@user.errors[:name].any? ? 'input-error' : ''}",
+              placeholder: "John Doe" %>
+          <label class="label">
+            <span class="label-text-alt">User's full name</span>
+          </label>
+          <% if @user.errors[:name].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @user.errors[:name].first %></span>
+            </label>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">Access Control</h2>
+
+      <div class="form-control max-w-xs">
+        <%= f.label :role, class: "label" do %>
+          <span class="label-text font-semibold">Role <span class="text-error">*</span></span>
+        <% end %>
+        <%= f.select :role,
+            options_for_select([
+              ["User", "user"],
+              ["Editor", "editor"],
+              ["Admin", "admin"]
+            ], @user.role),
+            {},
+            class: "select select-bordered w-full #{@user.errors[:role].any? ? 'select-error' : ''}" %>
+        <label class="label">
+          <span class="label-text-alt">Controls access to admin features</span>
+        </label>
+        <% if @user.errors[:role].any? %>
+          <label class="label">
+            <span class="label-text-alt text-error"><%= @user.errors[:role].first %></span>
+          </label>
+        <% end %>
+      </div>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">Billing</h2>
+
+      <div class="form-control">
+        <%= f.label :stripe_customer_id, class: "label" do %>
+          <span class="label-text font-semibold">Stripe Customer ID</span>
+        <% end %>
+        <%= f.text_field :stripe_customer_id,
+            class: "input input-bordered w-full font-mono #{@user.errors[:stripe_customer_id].any? ? 'input-error' : ''}",
+            placeholder: "cus_..." %>
+        <label class="label">
+          <span class="label-text-alt">Stripe customer identifier for billing</span>
+        </label>
+        <% if @user.errors[:stripe_customer_id].any? %>
+          <label class="label">
+            <span class="label-text-alt text-error"><%= @user.errors[:stripe_customer_id].first %></span>
+          </label>
+        <% end %>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex gap-2 justify-end">
+    <%= link_to admin_user_path(@user), class: "btn btn-ghost" do %>
+      Cancel
+    <% end %>
+
+    <%= f.submit "Update User", class: "btn btn-primary" %>
+  </div>
+<% end %>
