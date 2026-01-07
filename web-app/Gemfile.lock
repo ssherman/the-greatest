@@ -460,8 +460,9 @@ GEM
     unicode-emoji (4.2.0)
     uri (1.1.1)
     useragent (0.16.11)
-    vacuum (5.0.0)
-      http (>= 5.0)
+    vacuum (4.3.0)
+      aws-sigv4 (~> 1.0)
+      http (>= 4.0, < 6.0)
     view_component (4.1.1)
       actionview (>= 7.1.0, < 8.2)
       activesupport (>= 7.1.0, < 8.2)
@@ -541,7 +542,7 @@ DEPENDENCIES
   thruster
   turbo-rails
   tzinfo-data
-  vacuum
+  vacuum (~> 4.3.0)
   view_component
   web-console
   webmock
