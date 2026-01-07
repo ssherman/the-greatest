@@ -30,7 +30,7 @@ gem "view_component"
 gem "nokogiri"
 gem "weighted_list_rank"
 gem "ruby-vips"
-gem "vacuum"
+gem "vacuum", "~> 4.3.0"
 gem "down", "~> 5.0"
 
 # Windows does not include zoneinfo files, so bundle the tzinfo-data gem
