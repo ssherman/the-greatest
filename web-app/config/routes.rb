@@ -238,6 +238,7 @@ Rails.application.routes.draw do
     resources :list_penalties, only: [:destroy]
     resources :list_items, only: [:update, :destroy]
     resources :penalties
+    resources :users, except: [:new, :create]
   end
 
   # Move Avo to /avo path
