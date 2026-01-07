@@ -39,6 +39,7 @@ class User < ApplicationRecord
   has_many :penalties, dependent: :destroy
   has_many :ai_chats, dependent: :destroy
   has_many :submitted_lists, class_name: "List", foreign_key: :submitted_by_id, dependent: :nullify
+  has_many :submitted_external_links, class_name: "ExternalLink", foreign_key: :submitted_by_id, dependent: :nullify
 
   enum :role, [:user, :admin, :editor]
   enum :external_provider, [:facebook, :twitter, :google, :apple, :password]

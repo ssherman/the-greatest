@@ -93,6 +93,31 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to admin_users_url
   end
 
+  test "should destroy user with submitted external links" do
+    user_to_delete = User.create!(
+      email: "linksubmitter@example.com",
+      role: :user,
+      email_verified: false
+    )
+
+    # Create an external link submitted by this user
+    external_link = ExternalLink.create!(
+      name: "Test Link",
+      url: "https://example.com",
+      parent: music_artists(:the_beatles),
+      submitted_by_id: user_to_delete.id
+    )
+
+    assert_difference("User.count", -1) do
+      delete admin_user_url(user_to_delete)
+    end
+    assert_redirected_to admin_users_url
+
+    # Verify the external link still exists but submitted_by_id is nullified
+    external_link.reload
+    assert_nil external_link.submitted_by_id
+  end
+
   test "should allow admin access" do
     get admin_users_url
     assert_response :success

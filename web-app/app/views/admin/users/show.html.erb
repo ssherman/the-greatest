@@ -241,9 +241,13 @@
               <span>Submitted Lists</span>
               <span class="badge badge-lg"><%= @user.submitted_lists.count %></span>
             </div>
+            <div class="flex justify-between items-center">
+              <span>Submitted External Links</span>
+              <span class="badge badge-lg"><%= @user.submitted_external_links.count %></span>
+            </div>
           </div>
           <div class="mt-4 text-xs text-base-content/50">
-            Deleting this user will destroy their ranking configurations, penalties, and AI chats. Submitted lists will remain but be disassociated from this user.
+            Deleting this user will destroy their ranking configurations, penalties, and AI chats. Submitted lists and external links will remain but be disassociated from this user.
           </div>
         </div>
       </div>

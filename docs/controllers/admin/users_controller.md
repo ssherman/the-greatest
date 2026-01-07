@@ -54,7 +54,7 @@ Displays detailed user information organized in cards.
 - Activity: sign_in_count, last_sign_in_at
 - Billing: stripe_customer_id (if present)
 - Metadata: id, created_at, updated_at
-- Related data counts: ranking_configurations, penalties, ai_chats, submitted_lists
+- Related data counts: ranking_configurations, penalties, ai_chats, submitted_lists, submitted_external_links
 
 ### `edit`
 Renders the edit form for user attributes.
@@ -80,6 +80,7 @@ Deletes user and triggers cascade deletions.
 - `penalties` - destroyed
 - `ai_chats` - destroyed
 - `submitted_lists` - nullified (lists remain, `submitted_by_id` set to NULL)
+- `submitted_external_links` - nullified (links remain, `submitted_by_id` set to NULL)
 
 **Success:** Redirects to index with success notice
 
