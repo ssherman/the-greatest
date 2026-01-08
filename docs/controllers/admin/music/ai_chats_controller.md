@@ -52,7 +52,7 @@ Returns AiChats within the music domain scope.
 **Excludes:**
 - AiChats with non-music parent types (e.g., `Books::List`, `Games::List`)
 
-**Implementation Note:** Uses ID-based filtering for List STI types because Rails' `.or()` doesn't support mixing JOIN-based and non-JOIN relations. The scope first fetches list chat IDs via `AiChat.with_list_parent_types`, then combines with other conditions.
+**Implementation Note:** Uses subquery-based filtering for List STI types because Rails' `.or()` doesn't support mixing JOIN-based and non-JOIN relations. The method creates a subquery with `AiChat.with_list_parent_types(...).select(:id)` to avoid loading IDs into memory and potential SQL size limits.
 
 ## Authorization
 Inherits from `Admin::Music::BaseController`:

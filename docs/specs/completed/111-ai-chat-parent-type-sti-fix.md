@@ -201,25 +201,29 @@ AiChat.with_list_parent_types(MOVIES_LIST_STI_TYPES)
 ---
 
 ## Implementation Notes (living)
-- **Approach taken**: Added `with_list_parent_types` scope to AiChat model that uses INNER JOIN to lists table, then combined results using `.or()` with ID-based filtering to avoid Rails' ".or() incompatible with joins" limitation.
+- **Approach taken**: Added `with_list_parent_types` scope to AiChat model that uses INNER JOIN to lists table, then combined results using subquery-based filtering to avoid Rails' ".or() incompatible with joins" limitation.
 - **Important decisions**:
-  - Used `pluck(:id)` to get list chat IDs, then combined with `.or(AiChat.where(id: list_chat_ids))` since Rails doesn't allow `.or()` between relations with different JOIN structures
+  - Used `select(:id)` subquery instead of `pluck(:id)` to avoid loading all IDs into memory and potential SQL size limits
   - Added early return `return none if sti_types.blank?` to handle empty/nil input gracefully
   - Used explicit `parent_type: "List"` and `parent_id` in fixtures (with `ActiveRecord::FixtureSet.identify`) since Rails fixture polymorphic syntax stores the specified class name, not what Rails would naturally store
+  - Updated `ai_chat_parent_type_label` helper to use actual parent class for List STI types (since `parent_type` is always `"List"`)
 
 ### Key Files Touched (paths only)
 - `app/models/ai_chat.rb` - Added `with_list_parent_types` scope
 - `app/controllers/admin/music/ai_chats_controller.rb` - Split constants, updated `music_scoped_ai_chats`
+- `app/helpers/admin/ai_chats_helper.rb` - Fixed `ai_chat_parent_type_label` to use actual parent class for List types
 - `test/fixtures/ai_chats.yml` - Added music list parent AiChat fixtures with correct `parent_type: "List"`
 - `test/models/ai_chat_test.rb` - Added 8 tests for `with_list_parent_types` scope
 - `test/controllers/admin/music/ai_chats_controller_test.rb` - Added 4 tests for music list STI parent handling
+- `test/helpers/admin/ai_chats_helper_test.rb` - Added 11 tests for helper methods including STI label handling
 
 ### Challenges & Resolutions
 1. **Fixture polymorphic STI behavior**: Rails fixture syntax `parent: x (ClassName)` stores the specified class name directly, not the base class that Rails would naturally store. Resolved by manually setting `parent_type: "List"` and using `ActiveRecord::FixtureSet.identify(:fixture_name)` for parent_id.
-2. **`.or()` incompatible with JOINs**: Rails doesn't allow `.or()` between relations with different structural compositions (one with JOIN, one without). Resolved by fetching list chat IDs first with `pluck(:id)`, then using `.or(AiChat.where(id: list_chat_ids))`.
+2. **`.or()` incompatible with JOINs**: Rails doesn't allow `.or()` between relations with different structural compositions (one with JOIN, one without). Resolved using `select(:id)` subquery instead of `pluck(:id)` to keep query in database.
+3. **Badge labels for List STI types**: The `parent_type` column always contains `"List"` for STI List subclasses, so UI badges would show generic "List" label. Fixed by checking actual parent class (`ai_chat.parent`) for List types.
 
 ### Deviations From Plan
-- **Scope chainability with `.or()`**: The spec mentioned the scope should be "chainable with `.or()`", but Rails doesn't support this for JOIN-based scopes. The scope is chainable with `.where()`, `.includes()`, and other methods. The controller works around this limitation using the ID-based approach.
+- **Scope chainability with `.or()`**: The spec mentioned the scope should be "chainable with `.or()`", but Rails doesn't support this for JOIN-based scopes. The scope is chainable with `.where()`, `.includes()`, and other methods. The controller works around this limitation using the subquery approach.
 
 ## Acceptance Results
 - **Date**: 2026-01-07

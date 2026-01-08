@@ -32,12 +32,11 @@ class Admin::Music::AiChatsController < Admin::Music::BaseController
   end
 
   def music_scoped_ai_chats
-    # Get IDs from the JOIN-based list query, then combine with simple WHERE conditions
-    # This avoids the ".or() incompatible with joins" issue
-    list_chat_ids = AiChat.with_list_parent_types(MUSIC_LIST_STI_TYPES).pluck(:id)
+    # Use subquery to avoid loading all IDs into memory and potential SQL size limits
+    list_chat_subquery = AiChat.with_list_parent_types(MUSIC_LIST_STI_TYPES).select(:id)
 
     AiChat.where(parent_type: MUSIC_DIRECT_PARENT_TYPES)
       .or(AiChat.where(parent_type: nil))
-      .or(AiChat.where(id: list_chat_ids))
+      .or(AiChat.where(id: list_chat_subquery))
   end
 end

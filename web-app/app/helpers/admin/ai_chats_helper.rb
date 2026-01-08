@@ -36,24 +36,32 @@ module Admin::AiChatsHelper
   end
 
   # Returns the human-readable parent type
+  # For STI models (like List), uses the actual parent class rather than parent_type
+  # since Rails stores the base class name in polymorphic parent_type
   def ai_chat_parent_type_label(ai_chat)
     return nil unless ai_chat.parent_type.present?
 
-    case ai_chat.parent_type
-    when "Music::Artist"
-      "Artist"
-    when "Music::Album"
-      "Album"
-    when "Music::Song"
-      "Song"
-    when "Music::Albums::List"
-      "Albums List"
-    when "Music::Songs::List"
-      "Songs List"
-    when /List$/
-      "List"
+    # For List parents, use the actual STI class from the parent object
+    if ai_chat.parent_type == "List" && ai_chat.parent.present?
+      case ai_chat.parent
+      when Music::Albums::List
+        "Albums List"
+      when Music::Songs::List
+        "Songs List"
+      else
+        "List"
+      end
     else
-      ai_chat.parent_type.demodulize
+      case ai_chat.parent_type
+      when "Music::Artist"
+        "Artist"
+      when "Music::Album"
+        "Album"
+      when "Music::Song"
+        "Song"
+      else
+        ai_chat.parent_type.demodulize
+      end
     end
   end
 
