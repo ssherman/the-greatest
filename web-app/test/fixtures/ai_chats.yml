@@ -72,3 +72,48 @@ music_album_chat:
   json_mode: true
   messages: [{ role: "system", content: "Rank album tracks", timestamp: "2024-01-02T11:00:00Z" }]
   parent: dark_side_of_the_moon (Music::Album)
+
+# AiChats with List STI subclass parents (for testing STI-aware scoping)
+# NOTE: Rails stores base class 'List' in parent_type for STI models.
+# We manually set parent_type and parent_id to match this behavior,
+# since the fixture syntax `parent: x (ClassName)` would store the STI class name.
+music_albums_list_chat:
+  chat_type: ranking
+  model: "gpt-4"
+  provider: openai
+  temperature: 0.2
+  json_mode: true
+  messages: [{ role: "system", content: "Parse this albums list", timestamp: "2024-01-03T10:00:00Z" }]
+  parent_type: "List"
+  parent_id: <%= ActiveRecord::FixtureSet.identify(:music_albums_list) %>
+
+music_songs_list_chat:
+  chat_type: ranking
+  model: "claude-3"
+  provider: anthropic
+  temperature: 0.2
+  json_mode: true
+  messages: [{ role: "system", content: "Parse this songs list", timestamp: "2024-01-03T11:00:00Z" }]
+  parent_type: "List"
+  parent_id: <%= ActiveRecord::FixtureSet.identify(:music_songs_list) %>
+
+# Non-music list chats (for exclusion testing)
+games_list_chat:
+  chat_type: ranking
+  model: "gpt-4"
+  provider: openai
+  temperature: 0.2
+  json_mode: true
+  messages: [{ role: "system", content: "Parse this games list", timestamp: "2024-01-03T12:00:00Z" }]
+  parent_type: "List"
+  parent_id: <%= ActiveRecord::FixtureSet.identify(:games_list) %>
+
+# AiChat with no parent (should be included in music admin)
+no_parent_chat:
+  chat_type: general
+  model: "gpt-4"
+  provider: openai
+  temperature: 0.7
+  json_mode: false
+  messages: [{ role: "user", content: "General question", timestamp: "2024-01-03T13:00:00Z" }]
+  user: regular_user

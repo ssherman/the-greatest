@@ -6,8 +6,13 @@ class Admin::Music::AiChatsControllerTest < ActionDispatch::IntegrationTest
     @editor = users(:editor_user)
     @regular_user = users(:regular_user)
     @music_artist_chat = ai_chats(:music_artist_chat)
+    @music_album_chat = ai_chats(:music_album_chat)
+    @music_albums_list_chat = ai_chats(:music_albums_list_chat)
+    @music_songs_list_chat = ai_chats(:music_songs_list_chat)
     @general_chat = ai_chats(:general_chat)
+    @no_parent_chat = ai_chats(:no_parent_chat)
     @books_chat = ai_chats(:ranking_chat) # Has Books::List parent - non-music
+    @games_list_chat = ai_chats(:games_list_chat)
 
     host! Rails.application.config.domains[:music]
     sign_in_as(@admin, stub_auth: true)
@@ -60,6 +65,27 @@ class Admin::Music::AiChatsControllerTest < ActionDispatch::IntegrationTest
     # ranking_chat has Books::List parent which is not a music type
     get admin_ai_chat_url(@books_chat)
     assert_response :not_found
+  end
+
+  # Music List STI subclass tests
+  test "should get show for AI chat with Music::Albums::List parent" do
+    get admin_ai_chat_url(@music_albums_list_chat)
+    assert_response :success
+  end
+
+  test "should get show for AI chat with Music::Songs::List parent" do
+    get admin_ai_chat_url(@music_songs_list_chat)
+    assert_response :success
+  end
+
+  test "should return not found for AI chat with Games::List parent" do
+    get admin_ai_chat_url(@games_list_chat)
+    assert_response :not_found
+  end
+
+  test "should show AI chat without parent" do
+    get admin_ai_chat_url(@no_parent_chat)
+    assert_response :success
   end
 
   # Authorization tests

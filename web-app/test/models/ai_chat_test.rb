@@ -93,4 +93,66 @@ class AiChatTest < ActiveSupport::TestCase
     assert AiChat.providers.key?("gemini")
     assert AiChat.providers.key?("local")
   end
+
+  # Tests for with_list_parent_types scope
+  test "with_list_parent_types returns AiChats with Music::Albums::List parents" do
+    result = AiChat.with_list_parent_types(["Music::Albums::List"])
+
+    assert_includes result, ai_chats(:music_albums_list_chat)
+    assert_not_includes result, ai_chats(:music_songs_list_chat)
+    assert_not_includes result, ai_chats(:games_list_chat)
+    assert_not_includes result, ai_chats(:ranking_chat) # Books::List
+  end
+
+  test "with_list_parent_types returns AiChats with Music::Songs::List parents" do
+    result = AiChat.with_list_parent_types(["Music::Songs::List"])
+
+    assert_includes result, ai_chats(:music_songs_list_chat)
+    assert_not_includes result, ai_chats(:music_albums_list_chat)
+    assert_not_includes result, ai_chats(:games_list_chat)
+  end
+
+  test "with_list_parent_types returns AiChats with multiple List STI types" do
+    result = AiChat.with_list_parent_types(["Music::Albums::List", "Music::Songs::List"])
+
+    assert_includes result, ai_chats(:music_albums_list_chat)
+    assert_includes result, ai_chats(:music_songs_list_chat)
+    assert_not_includes result, ai_chats(:games_list_chat)
+    assert_not_includes result, ai_chats(:ranking_chat) # Books::List
+  end
+
+  test "with_list_parent_types returns empty relation for empty array" do
+    result = AiChat.with_list_parent_types([])
+
+    assert_empty result
+  end
+
+  test "with_list_parent_types returns empty relation for nil" do
+    result = AiChat.with_list_parent_types(nil)
+
+    assert_empty result
+  end
+
+  test "with_list_parent_types returns empty relation for invalid types" do
+    result = AiChat.with_list_parent_types(["NonExistent::List"])
+
+    assert_empty result
+  end
+
+  test "with_list_parent_types is chainable with includes" do
+    result = AiChat.with_list_parent_types(["Music::Albums::List"]).includes(:parent)
+
+    assert_includes result, ai_chats(:music_albums_list_chat)
+    # Verify the result is still a relation (can be iterated)
+    assert_kind_of ActiveRecord::Relation, result
+  end
+
+  test "with_list_parent_types is chainable with where" do
+    # Test that the scope can be further filtered with additional conditions
+    result = AiChat.with_list_parent_types(["Music::Albums::List", "Music::Songs::List"])
+      .where(provider: :openai)
+
+    assert_includes result, ai_chats(:music_albums_list_chat)
+    assert_not_includes result, ai_chats(:music_songs_list_chat) # uses anthropic provider
+  end
 end

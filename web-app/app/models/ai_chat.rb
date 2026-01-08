@@ -49,4 +49,17 @@ class AiChat < ApplicationRecord
   validates :model, presence: true
   validates :provider, presence: true
   validates :temperature, presence: true, numericality: {greater_than_or_equal_to: 0, less_than_or_equal_to: 2}
+
+  # Scope for filtering AiChats by List STI subclass types.
+  # Rails stores the base class name ('List') in polymorphic parent_type,
+  # so we need to JOIN to lists table to filter by the actual STI type.
+  #
+  # @param sti_types [Array<String>] STI type names (e.g., ['Music::Albums::List'])
+  # @return [ActiveRecord::Relation] AiChats with matching List parent types
+  scope :with_list_parent_types, ->(sti_types) {
+    return none if sti_types.blank?
+
+    joins("INNER JOIN lists ON lists.id = ai_chats.parent_id AND ai_chats.parent_type = 'List'")
+      .where(lists: {type: sti_types})
+  }
 end
