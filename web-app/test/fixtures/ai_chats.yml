@@ -53,3 +53,22 @@ recommendation_chat:
   json_mode: false
   messages: [{ role: "user", content: "Recommend me a book", timestamp: "2024-01-01T12:00:00Z" }]
   user: admin_user
+
+# Music-related AI chats for admin testing
+music_artist_chat:
+  chat_type: analysis
+  model: "gpt-4"
+  provider: openai
+  temperature: 0.3
+  json_mode: true
+  messages: [{ role: "system", content: "Analyze this artist", timestamp: "2024-01-02T10:00:00Z" }]
+  parent: david_bowie (Music::Artist)
+
+music_album_chat:
+  chat_type: ranking
+  model: "claude-3"
+  provider: anthropic
+  temperature: 0.2
+  json_mode: true
+  messages: [{ role: "system", content: "Rank album tracks", timestamp: "2024-01-02T11:00:00Z" }]
+  parent: dark_side_of_the_moon (Music::Album)

@@ -1,0 +1,18 @@
+<% content_for :title, "AI Chats" %>
+
+<div class="space-y-6">
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <h1 class="text-3xl font-bold">AI Chats</h1>
+      <p class="text-sm text-base-content/70 mt-1">View AI chat interactions for music content</p>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body p-0">
+      <%= turbo_frame_tag "ai_chats_table" do %>
+        <%= render "table", ai_chats: @ai_chats, pagy: @pagy %>
+      <% end %>
+    </div>
+  </div>
+</div>
