@@ -1,0 +1,99 @@
+<% if ai_chats.any? %>
+  <div class="overflow-x-auto">
+    <table class="table table-zebra table-hover">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Chat Type</th>
+          <th>Provider</th>
+          <th>Model</th>
+          <th>Parent</th>
+          <th>Created</th>
+          <th class="text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% ai_chats.each do |ai_chat| %>
+          <tr>
+            <td class="font-mono text-sm">
+              <%= link_to ai_chat.id, admin_ai_chat_path(ai_chat),
+                  class: "link link-hover",
+                  data: { turbo_frame: "_top" } %>
+            </td>
+            <td>
+              <span class="badge <%= ai_chat_type_badge_class(ai_chat.chat_type) %> badge-sm">
+                <%= ai_chat.chat_type.humanize %>
+              </span>
+            </td>
+            <td>
+              <span class="badge <%= ai_chat_provider_badge_class(ai_chat.provider) %> badge-sm">
+                <%= ai_chat.provider.humanize %>
+              </span>
+            </td>
+            <td class="font-mono text-sm">
+              <%= ai_chat.model %>
+            </td>
+            <td>
+              <% if ai_chat.parent.present? %>
+                <div class="flex flex-col">
+                  <span class="text-xs text-base-content/70"><%= ai_chat_parent_type_label(ai_chat) %></span>
+                  <% parent_path = admin_ai_chat_parent_path(ai_chat) %>
+                  <% if parent_path %>
+                    <%= link_to truncate(ai_chat_parent_display_name(ai_chat), length: 40),
+                        parent_path,
+                        class: "link link-hover",
+                        data: { turbo_frame: "_top" } %>
+                  <% else %>
+                    <span><%= truncate(ai_chat_parent_display_name(ai_chat), length: 40) %></span>
+                  <% end %>
+                </div>
+              <% elsif ai_chat.user.present? %>
+                <div class="flex flex-col">
+                  <span class="text-xs text-base-content/70">User</span>
+                  <%= link_to ai_chat.user.email,
+                      admin_user_path(ai_chat.user),
+                      class: "link link-hover",
+                      data: { turbo_frame: "_top" } %>
+                </div>
+              <% else %>
+                <span class="text-base-content/50">-</span>
+              <% end %>
+            </td>
+            <td class="text-sm text-base-content/70">
+              <%= time_tag ai_chat.created_at, ai_chat.created_at.strftime("%b %d, %Y %H:%M") %>
+            </td>
+            <td>
+              <div class="flex justify-end">
+                <%= link_to admin_ai_chat_path(ai_chat),
+                    class: "btn btn-ghost btn-xs",
+                    data: { turbo_frame: "_top" },
+                    title: "View" do %>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                    <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
+                  </svg>
+                <% end %>
+              </div>
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+
+  <% if defined?(pagy) && pagy %>
+    <div class="flex justify-center py-4 border-t border-base-300">
+      <%== pagy_nav(pagy) if pagy.pages > 1 %>
+    </div>
+  <% end %>
+<% else %>
+  <div class="py-12 text-center">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-base-content/20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+    </svg>
+    <h3 class="mt-4 text-lg font-semibold">No AI chats found</h3>
+    <p class="mt-2 text-sm text-base-content/70">
+      AI chats are created automatically during ranking and analysis operations.
+    </p>
+  </div>
+<% end %>

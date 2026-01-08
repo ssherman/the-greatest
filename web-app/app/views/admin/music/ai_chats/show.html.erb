@@ -1,0 +1,192 @@
+<% content_for :title, "AI Chat ##{@ai_chat.id}" %>
+
+<div class="space-y-6">
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div class="flex-1">
+      <div class="flex items-center gap-2 mb-2">
+        <%= link_to admin_ai_chats_path, class: "btn btn-ghost btn-sm btn-circle" do %>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+          </svg>
+        <% end %>
+        <h1 class="text-3xl font-bold">AI Chat #<%= @ai_chat.id %></h1>
+      </div>
+      <div class="flex items-center gap-4 text-sm text-base-content/70">
+        <span>Created <%= time_ago_in_words(@ai_chat.created_at) %> ago</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">Basic Information</h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Chat Type</span>
+              </label>
+              <span class="badge <%= ai_chat_type_badge_class(@ai_chat.chat_type) %> badge-lg">
+                <%= @ai_chat.chat_type.humanize %>
+              </span>
+            </div>
+
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Provider</span>
+              </label>
+              <span class="badge <%= ai_chat_provider_badge_class(@ai_chat.provider) %> badge-lg">
+                <%= @ai_chat.provider.humanize %>
+              </span>
+            </div>
+
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Model</span>
+              </label>
+              <p class="font-mono"><%= @ai_chat.model %></p>
+            </div>
+
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Temperature</span>
+              </label>
+              <p><%= @ai_chat.temperature %></p>
+            </div>
+
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">JSON Mode</span>
+              </label>
+              <% if @ai_chat.json_mode? %>
+                <span class="badge badge-success">Enabled</span>
+              <% else %>
+                <span class="badge badge-ghost">Disabled</span>
+              <% end %>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <% if @ai_chat.messages.present? %>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title">Messages</h2>
+            <div class="overflow-x-auto">
+              <pre class="bg-base-200 p-4 rounded-lg text-sm whitespace-pre-wrap break-words max-h-96 overflow-y-auto"><code><%= JSON.pretty_generate(@ai_chat.messages) %></code></pre>
+            </div>
+          </div>
+        </div>
+      <% end %>
+
+      <% if @ai_chat.parameters.present? %>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title">Parameters</h2>
+            <div class="overflow-x-auto">
+              <pre class="bg-base-200 p-4 rounded-lg text-sm whitespace-pre-wrap break-words max-h-96 overflow-y-auto"><code><%= JSON.pretty_generate(@ai_chat.parameters) %></code></pre>
+            </div>
+          </div>
+        </div>
+      <% end %>
+
+      <% if @ai_chat.response_schema.present? %>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title">Response Schema</h2>
+            <div class="overflow-x-auto">
+              <pre class="bg-base-200 p-4 rounded-lg text-sm whitespace-pre-wrap break-words max-h-96 overflow-y-auto"><code><%= JSON.pretty_generate(@ai_chat.response_schema) %></code></pre>
+            </div>
+          </div>
+        </div>
+      <% end %>
+
+      <% if @ai_chat.raw_responses.present? %>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title">Raw Responses</h2>
+            <div class="overflow-x-auto">
+              <pre class="bg-base-200 p-4 rounded-lg text-sm whitespace-pre-wrap break-words max-h-96 overflow-y-auto"><code><%= JSON.pretty_generate(@ai_chat.raw_responses) %></code></pre>
+            </div>
+          </div>
+        </div>
+      <% end %>
+    </div>
+
+    <div class="space-y-6">
+      <% if @ai_chat.parent.present? %>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title text-lg">Parent</h2>
+            <div class="space-y-3 text-sm">
+              <div>
+                <label class="label-text font-semibold">Type</label>
+                <p class="text-base-content/70"><%= ai_chat_parent_type_label(@ai_chat) %></p>
+              </div>
+              <div>
+                <label class="label-text font-semibold">Name</label>
+                <% parent_path = admin_ai_chat_parent_path(@ai_chat) %>
+                <% if parent_path %>
+                  <p>
+                    <%= link_to ai_chat_parent_display_name(@ai_chat),
+                        parent_path,
+                        class: "link link-primary",
+                        data: { turbo_frame: "_top" } %>
+                  </p>
+                <% else %>
+                  <p class="text-base-content/70"><%= ai_chat_parent_display_name(@ai_chat) %></p>
+                <% end %>
+              </div>
+            </div>
+          </div>
+        </div>
+      <% end %>
+
+      <% if @ai_chat.user.present? %>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title text-lg">User</h2>
+            <div class="space-y-3 text-sm">
+              <div>
+                <label class="label-text font-semibold">Email</label>
+                <p>
+                  <%= link_to @ai_chat.user.email,
+                      admin_user_path(@ai_chat.user),
+                      class: "link link-primary",
+                      data: { turbo_frame: "_top" } %>
+                </p>
+              </div>
+              <% if @ai_chat.user.display_name.present? %>
+                <div>
+                  <label class="label-text font-semibold">Display Name</label>
+                  <p class="text-base-content/70"><%= @ai_chat.user.display_name %></p>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        </div>
+      <% end %>
+
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title text-lg">Metadata</h2>
+          <div class="space-y-3 text-sm">
+            <div>
+              <label class="label-text font-semibold">ID</label>
+              <p class="text-base-content/70 font-mono"><%= @ai_chat.id %></p>
+            </div>
+            <div>
+              <label class="label-text font-semibold">Created At</label>
+              <p class="text-base-content/70"><%= @ai_chat.created_at.strftime("%B %d, %Y at %I:%M %p") %></p>
+            </div>
+            <div>
+              <label class="label-text font-semibold">Updated At</label>
+              <p class="text-base-content/70"><%= @ai_chat.updated_at.strftime("%B %d, %Y at %I:%M %p") %></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

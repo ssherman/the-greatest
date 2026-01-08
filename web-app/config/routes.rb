@@ -186,6 +186,8 @@ Rails.application.routes.draw do
 
       resources :song_artists, only: [:update, :destroy]
 
+      resources :ai_chats, only: [:index, :show]
+
       scope "ranking_configuration/:ranking_configuration_id", as: "ranking_configuration" do
         resources :ranked_items, only: [:index]
       end
