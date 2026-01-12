@@ -33,8 +33,8 @@
 class Category < ApplicationRecord
   extend FriendlyId
 
-  # FriendlyId configuration with scoping by STI type
-  friendly_id :name, use: [:slugged, :scoped], scope: :type
+  # FriendlyId configuration with scoping by STI type and finders for find() support
+  friendly_id :name, use: [:slugged, :scoped, :finders], scope: :type
 
   # Rails 8 enum syntax
   enum :category_type, {genre: 0, location: 1, subject: 2}
@@ -67,6 +67,11 @@ class Category < ApplicationRecord
       WHERE lower(unnested) = ?
     )", name.downcase)
   }
+
+  # Soft delete the category (sets deleted: true instead of destroying)
+  def soft_delete!
+    update!(deleted: true)
+  end
 
   # Override to_param for FriendlyId
   def to_param

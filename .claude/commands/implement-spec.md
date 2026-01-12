@@ -14,6 +14,13 @@ Review these documents for context and standards:
 - @docs/testing.md - testing requirements
 - @docs/documentation.md - documentation standards
 
+## Core Principles
+
+- **Ask clarifying questions**: Identify all ambiguities, edge cases, and underspecified behaviors. Ask specific, concrete questions rather than making assumptions. Wait for user answers before proceeding with implementation. Ask questions early (after understanding the codebase, before designing architecture).
+- **Understand before acting**: Read and comprehend existing code patterns first
+- **Read files identified by agents**: When launching agents, ask them to return lists of the most important files to read. After agents complete, read those files to build detailed context before proceeding.
+- **Simple and elegant**: Prioritize readable, maintainable, architecturally sound code
+
 ## Process
 
 1. Read and understand the spec thoroughly

@@ -9,7 +9,8 @@ Music-specific category model for categorizing albums, artists, and songs. Inher
 - `has_many :artists, through: :category_items, source: :item, source_type: 'Music::Artist'` - Artists in this category
 
 ## Public Methods
-Inherits all methods from base Category model.
+Inherits all methods from base Category model, including:
+- `#soft_delete!` - Soft-delete the category (sets `deleted: true`)
 
 ## Validations
 Inherits all validations from base Category model.
@@ -30,6 +31,17 @@ Inherits all callbacks from base Category model.
 - Music::Album, Music::Song, Music::Artist models
 - Polymorphic CategoryItem associations
 
+## Admin Interface
+Custom admin interface at `/admin/categories` provides:
+- Index with search (SQL ILIKE), sorting (name, category_type, item_count), pagination (25/page)
+- Show page with albums/artists/songs counts breakdown
+- Create/Edit with parent category selection
+- Soft delete (sets `deleted: true`)
+
+See: `Admin::Music::CategoriesController` (`app/controllers/admin/music/categories_controller.rb`)
+
+Documentation: `docs/controllers/admin/music/categories_controller.md`
+
 ## Usage Examples
 ```ruby
 # Create a music genre category
@@ -44,4 +56,7 @@ rock.albums
 
 # Find categories by album
 Music::Category.by_album_ids([album1.id, album2.id])
+
+# Soft delete a category
+rock.soft_delete!
 ```

@@ -11,6 +11,11 @@ Base model for categorizing content across all media types using Single Table In
 
 ## Public Methods
 
+### `#soft_delete!`
+Soft-deletes the category by setting `deleted: true`.
+- Returns: Boolean (success of update)
+- Side effects: Updates `deleted` column, does not destroy record
+
 ### `#to_param`
 Returns the slug for URL generation
 - Returns: String (slug)
@@ -41,7 +46,7 @@ Determines if FriendlyId should regenerate the slug
 - `before_validation` - FriendlyId slug generation when name changes
 
 ## Dependencies
-- FriendlyId gem for slug generation with scoped slugs
+- FriendlyId gem for slug generation with scoped slugs and finders (`[:slugged, :scoped, :finders]`)
 - PostgreSQL array support for alternative_names
 - STI for media-specific category types
 
