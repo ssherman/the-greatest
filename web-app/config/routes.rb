@@ -188,6 +188,8 @@ Rails.application.routes.draw do
 
       resources :ai_chats, only: [:index, :show]
 
+      resources :categories
+
       scope "ranking_configuration/:ranking_configuration_id", as: "ranking_configuration" do
         resources :ranked_items, only: [:index]
       end
