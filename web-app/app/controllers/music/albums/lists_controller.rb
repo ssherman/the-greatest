@@ -22,7 +22,17 @@ class Music::Albums::ListsController < ApplicationController
   end
 
   def show
-    @list = Music::Albums::List.with_albums_for_display.find(params[:id])
+    @list = Music::Albums::List.find(params[:id])
     @ranked_list = @ranking_configuration.ranked_lists.find_by(list: @list)
+
+    # Paginate list items with eager loading
+    list_items_query = @list.list_items.includes(
+      listable: [
+        :artists,
+        :categories,
+        {primary_image: {file_attachment: {blob: {variant_records: {image_attachment: :blob}}}}}
+      ]
+    ).order(:position)
+    @pagy, @pagy_list_items = pagy(list_items_query, limit: 100)
   end
 end

@@ -22,7 +22,11 @@ class Music::Songs::ListsController < ApplicationController
   end
 
   def show
-    @list = Music::Songs::List.with_songs_for_display.find(params[:id])
+    @list = Music::Songs::List.find(params[:id])
     @ranked_list = @ranking_configuration.ranked_lists.find_by(list: @list)
+
+    # Paginate list items with eager loading
+    list_items_query = @list.list_items.includes(listable: :artists).order(:position)
+    @pagy, @pagy_list_items = pagy(list_items_query, limit: 100)
   end
 end
