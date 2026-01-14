@@ -61,6 +61,19 @@ module Music
         get "/rc/99999/albums/lists"
         assert_response :not_found
       end
+
+      test "should handle page parameter on show" do
+        list = lists(:music_albums_list)
+        get "/albums/lists/#{list.id}?page=1"
+        assert_response :success
+      end
+
+      test "should handle page parameter beyond last page gracefully" do
+        list = lists(:music_albums_list)
+        # Pagy configured with overflow: :last_page returns last page instead of error
+        get "/albums/lists/#{list.id}?page=9999"
+        assert_response :success
+      end
     end
   end
 end
