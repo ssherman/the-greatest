@@ -48,9 +48,12 @@ module Music
       def merge_all_associations
         merge_album_artists
         merge_song_artists
-        merge_band_memberships
-        merge_memberships
-        merge_credits
+        # NOTE: Memberships not currently used - commented out due to complex unique constraint
+        # (artist_id, member_id, joined_on) that would need special handling for multiple stints
+        # merge_band_memberships
+        # merge_memberships
+        # NOTE: Credits not currently used
+        # merge_credits
         merge_identifiers
         merge_category_items
         merge_images
@@ -89,42 +92,46 @@ module Music
         @stats[:song_artists] = count
       end
 
-      def merge_band_memberships
-        count = 0
-        source_artist.band_memberships.find_each do |membership|
-          existing = target_artist.band_memberships.find_by(member_id: membership.member_id)
+      # NOTE: Memberships not currently used - commented out due to complex unique constraint
+      # (artist_id, member_id, joined_on) that would need special handling for multiple stints
+      #
+      # def merge_band_memberships
+      #   count = 0
+      #   source_artist.band_memberships.find_each do |membership|
+      #     existing = target_artist.band_memberships.find_by(member_id: membership.member_id)
+      #
+      #     if existing
+      #       membership.destroy!
+      #     else
+      #       membership.update!(artist_id: target_artist.id)
+      #       count += 1
+      #     end
+      #   end
+      #   @stats[:band_memberships] = count
+      # end
+      #
+      # def merge_memberships
+      #   count = 0
+      #   source_artist.memberships.find_each do |membership|
+      #     next if membership.artist_id == target_artist.id
+      #
+      #     existing = target_artist.memberships.find_by(artist_id: membership.artist_id)
+      #
+      #     if existing
+      #       membership.destroy!
+      #     else
+      #       membership.update!(member_id: target_artist.id)
+      #       count += 1
+      #     end
+      #   end
+      #   @stats[:memberships] = count
+      # end
 
-          if existing
-            membership.destroy!
-          else
-            membership.update!(artist_id: target_artist.id)
-            count += 1
-          end
-        end
-        @stats[:band_memberships] = count
-      end
-
-      def merge_memberships
-        count = 0
-        source_artist.memberships.find_each do |membership|
-          next if membership.artist_id == target_artist.id
-
-          existing = target_artist.memberships.find_by(artist_id: membership.artist_id)
-
-          if existing
-            membership.destroy!
-          else
-            membership.update!(member_id: target_artist.id)
-            count += 1
-          end
-        end
-        @stats[:memberships] = count
-      end
-
-      def merge_credits
-        count = source_artist.credits.update_all(artist_id: target_artist.id)
-        @stats[:credits] = count
-      end
+      # NOTE: Credits not currently used
+      # def merge_credits
+      #   count = source_artist.credits.update_all(artist_id: target_artist.id)
+      #   @stats[:credits] = count
+      # end
 
       def merge_identifiers
         count = 0
