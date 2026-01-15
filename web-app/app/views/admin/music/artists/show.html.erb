@@ -50,6 +50,13 @@
                 method: :post,
                 class: "text-left" %>
           </li>
+          <li>
+            <button type="button"
+                    class="text-left"
+                    onclick="document.getElementById('merge-artist-modal').showModal()">
+              Merge Another Artist
+            </button>
+          </li>
         </ul>
       </div>
 
@@ -459,3 +466,58 @@
 
 <!-- Add Category Modal -->
 <%= render Admin::AddCategoryModalComponent.new(item: @artist) %>
+
+<!-- Merge Artist Modal -->
+<dialog id="merge-artist-modal" class="modal">
+  <div class="modal-box max-w-2xl">
+    <h3 class="font-bold text-lg">Merge Another Artist Into This One</h3>
+    <p class="py-4">
+      Search for a duplicate artist to merge into the current artist.
+      All albums, songs, credits, and other associations will be transferred.
+      The source artist will be permanently deleted after merging.
+    </p>
+
+    <%= form_with url: execute_action_admin_artist_path(@artist),
+                  method: :post,
+                  class: "space-y-4",
+                  data: {
+                    controller: "modal-form",
+                    modal_form_modal_id_value: "merge-artist-modal"
+                  } do |f| %>
+      <%= f.hidden_field :action_name, value: "MergeArtist" %>
+
+      <div class="form-control">
+        <%= f.label :source_artist_id, "Source Artist (to be deleted)", class: "label" do %>
+          <span class="label-text font-semibold">Source Artist <span class="text-error">*</span></span>
+        <% end %>
+        <%= render AutocompleteComponent.new(
+          name: "source_artist_id",
+          url: search_admin_artists_path(exclude_id: @artist.id),
+          placeholder: "Search for artist to merge...",
+          required: true
+        ) %>
+        <label class="label">
+          <span class="label-text-alt">Search for the duplicate artist you want to merge into this one</span>
+        </label>
+      </div>
+
+      <div class="form-control">
+        <label class="label cursor-pointer justify-start gap-2">
+          <%= f.check_box :confirm_merge, class: "checkbox", required: true %>
+          <span class="label-text">I understand this action cannot be undone</span>
+        </label>
+        <label class="label">
+          <span class="label-text-alt text-warning">The source artist will be permanently deleted after merging</span>
+        </label>
+      </div>
+
+      <div class="modal-action">
+        <button type="button" class="btn" onclick="document.getElementById('merge-artist-modal').close()">Cancel</button>
+        <%= f.submit "Merge Artist", class: "btn btn-warning" %>
+      </div>
+    <% end %>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>

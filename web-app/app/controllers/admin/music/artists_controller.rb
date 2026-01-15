@@ -50,8 +50,14 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
   end
 
   def execute_action
+    fields_hash = params.except(:controller, :action, :id, :action_name, :artist_ids)
+
     action_class = "Actions::Admin::Music::#{params[:action_name]}".constantize
-    result = action_class.call(user: current_user, models: [@artist])
+    result = action_class.call(
+      user: current_user,
+      models: [@artist],
+      fields: fields_hash
+    )
 
     respond_to do |format|
       format.turbo_stream do
@@ -96,6 +102,11 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
   def search
     search_results = ::Search::Music::Search::ArtistAutocomplete.call(params[:q], size: 10)
     artist_ids = search_results.map { |r| r[:id].to_i }
+
+    # Filter out excluded ID (used for merge autocomplete to exclude current artist)
+    if params[:exclude_id].present?
+      artist_ids -= [params[:exclude_id].to_i]
+    end
 
     # Guard against empty results - in_order_of raises ArgumentError with empty array
     if artist_ids.empty?
