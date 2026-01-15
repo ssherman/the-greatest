@@ -378,6 +378,79 @@ module Admin
         )
         assert_redirected_to admin_artists_path
       end
+
+      # Merge Artist Tests
+
+      test "should execute merge artist action for admin" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        source_artist = music_artists(:beatles_tribute_band)
+        target_artist = music_artists(:the_beatles)
+
+        post execute_action_admin_artist_path(target_artist), params: {
+          action_name: "MergeArtist",
+          source_artist_id: source_artist.id,
+          confirm_merge: "1"
+        }
+
+        assert_redirected_to admin_artist_path(target_artist)
+      end
+
+      test "should handle merge action errors gracefully" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        post execute_action_admin_artist_path(@artist, action_name: "MergeArtist")
+
+        assert_redirected_to admin_artist_path(@artist)
+      end
+
+      # Search with exclude_id Tests
+
+      test "should filter out excluded artist id from search results" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        artist2 = music_artists(:the_beatles)
+        search_results = [
+          {id: @artist.id.to_s, score: 10.0},
+          {id: artist2.id.to_s, score: 9.0}
+        ]
+        ::Search::Music::Search::ArtistAutocomplete.stubs(:call).returns(search_results)
+
+        get search_admin_artists_path(q: "artist", exclude_id: @artist.id), as: :json
+        assert_response :success
+
+        json_response = JSON.parse(response.body)
+        artist_ids = json_response.map { |a| a["value"] }
+
+        assert_not_includes artist_ids, @artist.id
+        assert_includes artist_ids, artist2.id
+      end
+
+      test "should return empty array when exclude_id filters out all results" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        search_results = [{id: @artist.id.to_s, score: 10.0}]
+        ::Search::Music::Search::ArtistAutocomplete.stubs(:call).returns(search_results)
+
+        get search_admin_artists_path(q: "artist", exclude_id: @artist.id), as: :json
+        assert_response :success
+
+        json_response = JSON.parse(response.body)
+        assert_equal [], json_response
+      end
+
+      test "should not filter when exclude_id is not provided" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        search_results = [{id: @artist.id.to_s, score: 10.0}]
+        ::Search::Music::Search::ArtistAutocomplete.stubs(:call).returns(search_results)
+
+        get search_admin_artists_path(q: "artist"), as: :json
+        assert_response :success
+
+        json_response = JSON.parse(response.body)
+        assert_equal 1, json_response.length
+      end
     end
   end
 end
