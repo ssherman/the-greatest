@@ -20,7 +20,11 @@ Inherits from: `Admin::Music::BaseController`
 ```ruby
 # Inside domain constraint for Music
 namespace :admin, module: "admin/music" do
-  resources :categories
+  resources :categories do
+    collection do
+      get :search
+    end
+  end
 end
 ```
 
@@ -29,6 +33,7 @@ end
 - `admin_category_path(@category)` → `/admin/categories/:id`
 - `new_admin_category_path` → `/admin/categories/new`
 - `edit_admin_category_path(@category)` → `/admin/categories/:id/edit`
+- `search_admin_categories_path` → `/admin/categories/search`
 
 ## Public Actions
 
@@ -102,6 +107,32 @@ Soft-deletes category record.
 - Allows recovery of accidentally deleted categories
 - Maintains historical data for reporting
 
+### `search`
+Returns JSON array for autocomplete search.
+
+**Parameters:**
+- `q` (optional) - Search query string
+
+**Response Format:**
+```json
+[
+  {"value": 1, "text": "Rock (Genre)"},
+  {"value": 2, "text": "Progressive Rock (Genre)"}
+]
+```
+
+**Behavior:**
+- Filters to active categories only
+- Applies search filter if `q` present (uses `search_by_name` scope)
+- Orders alphabetically by name
+- Limits to 20 results
+- Returns JSON array with `value` (ID) and `text` (name + type)
+
+**Usage:**
+- Called by `AutocompleteComponent` in `Admin::AddCategoryModalComponent`
+- Route: `GET /admin/categories/search`
+- Path helper: `search_admin_categories_path`
+
 ## Private Methods
 
 ### `set_category`
@@ -158,6 +189,8 @@ Whitelists sortable columns to prevent SQL injection.
 - `Music::Category` - Model being managed (STI from Category)
 - `Category` - Base model for all categories
 - `Admin::Music::BaseController` - Parent controller
+- `Admin::CategoryItemsController` - Uses search endpoint for autocomplete
+- `Admin::AddCategoryModalComponent` - Uses search endpoint via AutocompleteComponent
 
 ## Related Views
 - `/app/views/admin/music/categories/index.html.erb`

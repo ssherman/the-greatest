@@ -1,0 +1,54 @@
+<%
+  item = local_assigns.fetch(:item, @item)
+  category_items = local_assigns.fetch(:category_items, @category_items)
+%>
+<%= turbo_frame_tag "category_items_list" do %>
+  <% if category_items.any? %>
+    <div class="overflow-x-auto">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% category_items.each do |category_item| %>
+            <tr>
+              <td>
+                <div class="font-semibold">
+                  <%= link_to category_item.category.name,
+                      admin_category_path(category_item.category),
+                      class: "link link-primary",
+                      data: { turbo_frame: "_top" } %>
+                </div>
+              </td>
+              <td>
+                <span class="badge badge-ghost badge-sm"><%= category_item.category.category_type&.titleize %></span>
+              </td>
+              <td>
+                <div class="flex gap-2">
+                  <%= button_to "Remove",
+                      admin_category_item_path(category_item),
+                      method: :delete,
+                      class: "btn btn-xs btn-error btn-outline",
+                      form: { data: { turbo_confirm: "Remove #{category_item.category.name} from this #{item.class.name.demodulize.downcase}?" } } %>
+                </div>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <div class="py-8 text-center">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-base-content/20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+      </svg>
+      <p class="mt-4 text-sm text-base-content/70">
+        No categories assigned yet.
+      </p>
+    </div>
+  <% end %>
+<% end %>

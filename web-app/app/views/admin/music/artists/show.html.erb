@@ -190,22 +190,29 @@
         </div>
       </div>
 
-      <!-- Categories -->
-      <% if @artist.categories.any? %>
-        <div class="card bg-base-100 shadow-xl">
-          <div class="card-body">
+      <!-- Categories Section -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <div class="flex justify-between items-center mb-4">
             <h2 class="card-title">
               Categories
-              <span class="badge badge-ghost"><%= @artist.categories.count %></span>
+              <div class="badge badge-primary"><%= @artist.categories.count %></div>
             </h2>
-            <div class="flex flex-wrap gap-2">
-              <% @artist.categories.each do |category| %>
-                <span class="badge badge-outline badge-lg"><%= category.name %></span>
-              <% end %>
-            </div>
+
+            <button class="btn btn-primary btn-sm"
+                    onclick="add_category_modal_dialog.showModal()">
+              + Add Category
+            </button>
           </div>
+
+          <%= turbo_frame_tag "category_items_list", loading: :lazy,
+              src: admin_artist_category_items_path(@artist) do %>
+            <div class="flex justify-center py-8">
+              <span class="loading loading-spinner loading-lg"></span>
+            </div>
+          <% end %>
         </div>
-      <% end %>
+      </div>
 
       <!-- Identifiers -->
       <% if @artist.identifiers.any? %>
@@ -449,3 +456,6 @@
     <button>close</button>
   </form>
 </dialog>
+
+<!-- Add Category Modal -->
+<%= render Admin::AddCategoryModalComponent.new(item: @artist) %>

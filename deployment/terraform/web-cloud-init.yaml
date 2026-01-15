@@ -39,6 +39,16 @@ write_files:
         git clone --depth=1 "$REPO_URL" "$APP_DIR"
       fi
 
+  # SSL certificate auto-renewal cron job
+  # Runs weekly on Monday at 3am to renew Let's Encrypt certificates
+  - path: /etc/cron.d/ssl-cert-renewal
+    owner: root:root
+    permissions: '0644'
+    content: |
+      # Renew SSL certificates weekly (Monday 3am)
+      # Certbot only renews if within 30 days of expiration
+      0 3 * * 1 root /home/deploy/apps/the-greatest/deployment/scripts/renew-certs.sh >> /var/log/cert-renewal.log 2>&1
+
 runcmd:
   # firewall + fail2ban
   - ufw allow OpenSSH && ufw allow 80 && ufw allow 443 && ufw --force enable
