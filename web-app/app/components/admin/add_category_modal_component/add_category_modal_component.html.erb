@@ -1,0 +1,41 @@
+<div id="add_category_modal">
+  <dialog id="add_category_modal_dialog" class="modal">
+    <div class="modal-box max-w-2xl">
+      <h3 class="font-bold text-lg">Add Category</h3>
+      <p class="py-4 text-sm text-base-content/70">
+        Search for a category to associate with this <%= item_type_label %>.
+      </p>
+
+      <%= form_with model: CategoryItem.new,
+                    url: form_url,
+                    method: :post,
+                    class: "space-y-4",
+                    data: {
+                      controller: "modal-form",
+                      modal_form_modal_id_value: "add_category_modal_dialog",
+                      turbo_frame: "category_items_list"
+                    } do |f| %>
+
+        <div class="form-control">
+          <%= f.label :category_id, "Category", class: "label" do %>
+            <span class="label-text font-semibold">Category <span class="text-error">*</span></span>
+          <% end %>
+          <%= render AutocompleteComponent.new(
+            name: "category_item[category_id]",
+            url: search_url,
+            placeholder: "Search for category...",
+            required: true
+          ) %>
+        </div>
+
+        <div class="modal-action">
+          <button type="button" class="btn" onclick="add_category_modal_dialog.close()">Cancel</button>
+          <%= f.submit "Add Category", class: "btn btn-primary" %>
+        </div>
+      <% end %>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button>close</button>
+    </form>
+  </dialog>
+</div>

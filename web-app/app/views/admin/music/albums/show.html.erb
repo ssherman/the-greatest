@@ -222,19 +222,23 @@
       <!-- Categories Section -->
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
-          <h2 class="card-title">
-            Categories
-            <div class="badge badge-primary"><%= @album.categories.count %></div>
-          </h2>
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="card-title">
+              Categories
+              <div class="badge badge-primary"><%= @album.categories.count %></div>
+            </h2>
 
-          <% if @album.categories.any? %>
-            <div class="flex flex-wrap gap-2">
-              <% @album.categories.each do |category| %>
-                <span class="badge badge-lg badge-outline"><%= category.name %></span>
-              <% end %>
+            <button class="btn btn-primary btn-sm"
+                    onclick="add_category_modal_dialog.showModal()">
+              + Add Category
+            </button>
+          </div>
+
+          <%= turbo_frame_tag "category_items_list", loading: :lazy,
+              src: admin_album_category_items_path(@album) do %>
+            <div class="flex justify-center py-8">
+              <span class="loading loading-spinner loading-lg"></span>
             </div>
-          <% else %>
-            <p class="text-base-content/50">No categories assigned yet.</p>
           <% end %>
         </div>
       </div>
@@ -469,3 +473,6 @@
     <button>close</button>
   </form>
 </dialog>
+
+<!-- Add Category Modal -->
+<%= render Admin::AddCategoryModalComponent.new(item: @album) %>

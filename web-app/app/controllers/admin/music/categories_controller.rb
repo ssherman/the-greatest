@@ -49,6 +49,18 @@ class Admin::Music::CategoriesController < Admin::Music::BaseController
     redirect_to admin_categories_path, notice: "Category deleted successfully."
   end
 
+  def search
+    categories = Music::Category.active
+
+    if params[:q].present?
+      categories = categories.search_by_name(params[:q])
+    end
+
+    categories = categories.order(:name).limit(20)
+
+    render json: categories.map { |c| {value: c.id, text: "#{c.name} (#{c.category_type&.titleize || "Unknown"})"} }
+  end
+
   private
 
   def set_category
