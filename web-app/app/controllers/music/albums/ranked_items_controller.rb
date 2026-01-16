@@ -1,10 +1,12 @@
 class Music::Albums::RankedItemsController < Music::RankedItemsController
   include Pagy::Backend
+  include Cacheable
 
   layout "music/application"
 
   before_action :find_ranking_configuration
   before_action :validate_ranking_configuration_type
+  before_action :cache_for_index_page, only: [:index]
 
   def self.ranking_configuration_class
     Music::Albums::RankingConfiguration

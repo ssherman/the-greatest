@@ -1,7 +1,10 @@
 class Music::ListsController < ApplicationController
+  include Cacheable
+
   layout "music/application"
 
   before_action :load_ranking_configurations, only: [:index]
+  before_action :cache_for_index_page, only: [:index]
 
   def index
     @albums_ranked_lists = @albums_ranking_configuration.ranked_lists

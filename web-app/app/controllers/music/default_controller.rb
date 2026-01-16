@@ -1,5 +1,9 @@
 class Music::DefaultController < ApplicationController
+  include Cacheable
+
   layout "music/application"
+
+  before_action :cache_for_index_page, only: [:index]
 
   def index
     @primary_album_rc = Music::Albums::RankingConfiguration.default_primary

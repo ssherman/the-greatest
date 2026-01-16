@@ -1,6 +1,10 @@
 module Music
   class SearchesController < ApplicationController
+    include Cacheable
+
     layout "music/application"
+
+    before_action :prevent_caching
 
     def index
       @query = params[:q]

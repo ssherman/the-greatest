@@ -1,7 +1,10 @@
 class Music::Artists::RankedItemsController < ApplicationController
   include Pagy::Backend
+  include Cacheable
 
   layout "music/application"
+
+  before_action :cache_for_index_page, only: [:index]
 
   def index
     @ranking_configuration = Music::Artists::RankingConfiguration.default_primary

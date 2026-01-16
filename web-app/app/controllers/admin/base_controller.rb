@@ -1,7 +1,9 @@
 class Admin::BaseController < ApplicationController
   include Pagy::Backend
+  include Cacheable
 
   before_action :authenticate_admin!
+  before_action :prevent_caching
 
   private
 
