@@ -93,6 +93,7 @@ class Admin::Music::ListsController < Admin::Music::BaseController
       :voter_count_estimated,
       :voter_count_unknown,
       :voter_names_unknown,
+      :creator_specific,
       :num_years_covered,
       :musicbrainz_series_id,
       :items_json,

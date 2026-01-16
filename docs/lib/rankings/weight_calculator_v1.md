@@ -63,8 +63,13 @@ Penalties for lists with missing voter information.
 
 ### `#calculate_bias_penalties`
 Penalties for lists with geographic or category bias.
-- Returns: Float - penalty percentage  
+- Returns: Float - penalty percentage
 - Applied when: category_specific or location_specific
+
+### `#calculate_creator_penalties`
+Penalties for lists focused on a single creator (artist for music, author for books, etc.).
+- Returns: Float - penalty percentage
+- Applied when: creator_specific
 
 ### `#calculate_temporal_coverage_penalty`
 Calculates penalties based on temporal coverage (num_years_covered field).
@@ -116,7 +121,8 @@ None (service object)
 2. **Voter Count Penalties**: Dynamic penalties based on median voter count
 3. **Unknown Data Penalties**: For missing voter information (voter_names_unknown, voter_count_unknown, voter_count_estimated)
 4. **Bias Penalties**: For category/location-specific lists
-5. **Temporal Coverage Penalties**: For lists with limited time coverage (num_years_covered)
+5. **Creator Penalties**: For creator-specific lists (e.g., artist-specific for music, author-specific for books)
+6. **Temporal Coverage Penalties**: For lists with limited time coverage (num_years_covered)
 
 ### Voter Count Penalty Hierarchy
 The calculator applies different severity levels for voter count reliability:

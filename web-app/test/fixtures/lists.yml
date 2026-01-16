@@ -6,6 +6,7 @@
 #
 #  id                    :bigint           not null, primary key
 #  category_specific     :boolean
+#  creator_specific      :boolean
 #  description           :text
 #  estimated_quality     :integer          default(0), not null
 #  formatted_text        :text

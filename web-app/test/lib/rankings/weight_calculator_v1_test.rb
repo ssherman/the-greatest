@@ -994,6 +994,80 @@ module Rankings
       assert_equal 15, penalty_detail["value"]
     end
 
+    test "applies penalty for creator_specific lists" do
+      creator_specific_list = Books::List.create!(
+        name: "Creator Specific List",
+        status: :approved,
+        creator_specific: true
+      )
+
+      creator_penalty = Global::Penalty.create!(
+        type: "Global::Penalty",
+        name: "Creator Specific Bias",
+        dynamic_type: :creator_specific
+      )
+
+      PenaltyApplication.create!(
+        penalty: creator_penalty,
+        ranking_configuration: @books_config,
+        value: 15
+      )
+
+      clean_list = Books::List.create!(
+        name: "Clean List",
+        status: :approved,
+        creator_specific: false
+      )
+
+      creator_ranked = RankedList.create!(list: creator_specific_list, ranking_configuration: @books_config)
+      clean_ranked = RankedList.create!(list: clean_list, ranking_configuration: @books_config)
+
+      creator_weight = WeightCalculatorV1.new(creator_ranked).call
+      clean_weight = WeightCalculatorV1.new(clean_ranked).call
+
+      assert_operator clean_weight, :>, creator_weight
+    end
+
+    test "captures creator_specific penalty details" do
+      test_config = Music::Albums::RankingConfiguration.create!(
+        name: "Creator Specific Details Test #{SecureRandom.hex(4)}",
+        global: true,
+        min_list_weight: 1
+      )
+
+      test_list = Music::Albums::List.create!(
+        name: "Creator Specific Details List",
+        status: :approved,
+        creator_specific: true
+      )
+
+      creator_penalty = Global::Penalty.create!(
+        type: "Global::Penalty",
+        name: "Creator Specific Penalty",
+        dynamic_type: :creator_specific
+      )
+
+      PenaltyApplication.create!(
+        penalty: creator_penalty,
+        ranking_configuration: test_config,
+        value: 15
+      )
+
+      test_ranked_list = RankedList.create!(list: test_list, ranking_configuration: test_config)
+      calculator = WeightCalculatorV1.new(test_ranked_list)
+      calculator.call
+
+      details = test_ranked_list.reload.calculated_weight_details
+      attribute_penalties = details["penalties"].select { |p| p["source"] == "dynamic_attribute" && p["dynamic_type"] == "creator_specific" }
+
+      assert_equal 1, attribute_penalties.size
+      penalty_detail = attribute_penalties.first
+      assert_equal "dynamic_attribute", penalty_detail["source"]
+      assert_equal "creator_specific", penalty_detail["dynamic_type"]
+      assert_equal true, penalty_detail["attribute_value"]
+      assert_equal 15, penalty_detail["value"]
+    end
+
     test "applies penalty for estimated voter count" do
       estimated_voters_list = Books::List.create!(
         name: "Estimated Voters List",
