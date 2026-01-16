@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_01_16_053028) do
+ActiveRecord::Schema[8.1].define(version: 2026_01_16_060845) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -198,6 +198,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_01_16_053028) do
     t.text "raw_html"
     t.text "simplified_html"
     t.string "source"
+    t.string "source_country_origin"
     t.integer "status", default: 0, null: false
     t.bigint "submitted_by_id"
     t.string "type", null: false
