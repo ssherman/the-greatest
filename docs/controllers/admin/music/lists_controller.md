@@ -12,12 +12,13 @@ Abstract base controller for managing music lists (albums and songs) in the admi
 ## Public Actions
 
 ### `#index`
-Lists all lists with sorting, filtering, and pagination
+Lists all lists with sorting, filtering, search, and pagination
 - Query: Includes submitted_by user, left joins list_items for counting
+- Search: Case-insensitive wildcard search on name and source via `?q=` param (uses `List.search_by_name` scope)
 - Filtering: By status (unapproved, approved, rejected, active) via `?status=` param
 - Sorting: By id, name, year_published, or created_at (whitelisted)
 - Pagination: 25 items per page via Pagy
-- Sets `@selected_status` for view dropdown
+- Sets `@selected_status` and `@search_query` for view
 
 ### `#show`
 Displays a single list with full details
@@ -84,8 +85,9 @@ Added in Phase 9 to support different eager loading strategies per list type.
 ## Private Methods
 
 ### `#load_lists_for_index`
-Builds the query for the index page with filtering, sorting, and pagination
+Builds the query for the index page with search, filtering, sorting, and pagination
 - Applies status filter via `apply_status_filter`
+- Applies search filter via `apply_search_filter`
 - Counts items via SQL aggregation (field name from `items_count_name`) to avoid N+1
 - Applies sorting with whitelisted columns and directions
 
@@ -97,6 +99,15 @@ Filters lists by status
   - Returns original scope if status param is blank or "all"
   - Returns original scope if status value is not a valid enum key
   - Otherwise filters to the specified status
+
+### `#apply_search_filter(scope)`
+Filters lists by name or source using case-insensitive wildcard search
+- Parameters: scope (ActiveRecord::Relation) - the base query
+- Returns: Filtered scope or original scope if no search query
+- Behavior:
+  - Returns original scope if `q` param is blank
+  - Uses `List.search_by_name` scope for ILIKE search on name and source fields
+  - Special characters (`%`, `_`) are properly escaped
 
 ### `#sortable_column(column)`
 Whitelists sort columns
@@ -150,6 +161,11 @@ Uses `param_key` from subclass to support different form parameter structures (`
 - **Spec 116** (2026-01-16): Added status filtering
   - Added `apply_status_filter` method for filtering by list status
   - Index views updated with filter dropdown and combined name/source columns
+- **Spec 117** (2026-01-16): Added name/source search
+  - Added `apply_search_filter` method for searching by name or source
+  - Uses `List.search_by_name` scope with PostgreSQL ILIKE
+  - Search and status filter combined into single form for proper interaction
+  - Empty search results show user-friendly message
 
 ## Related Files
 - Base class: `app/controllers/admin/music/base_controller.rb`

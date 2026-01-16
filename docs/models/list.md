@@ -96,6 +96,7 @@ Resets wizard to initial state
 - `high_quality` - Returns lists marked as high quality sources
 - `by_year(year)` - Returns lists published in the specified year
 - `yearly_awards` - Returns lists that are yearly awards
+- `search_by_name(query)` - Case-insensitive wildcard search on `name` and `source` fields. Returns all lists if query is blank. Uses PostgreSQL ILIKE with proper SQL escaping for special characters (`%`, `_`)
 
 ## Constants
 None defined.
@@ -199,6 +200,10 @@ lists_2023 = List.by_year(2023)
 
 # Query yearly awards
 award_lists = List.yearly_awards
+
+# Search lists by name or source (case-insensitive wildcard)
+List.search_by_name("rolling")  # Finds "Rolling Stone 500", source: "Rolling Stone Magazine", etc.
+List.search_by_name("BEST")     # Case-insensitive: finds "Best Albums", "100 Best Songs", etc.
 
 # Access list items
 list.list_items.ordered

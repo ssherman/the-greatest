@@ -68,6 +68,11 @@ class List < ApplicationRecord
   scope :high_quality, -> { where(high_quality_source: true) }
   scope :by_year, ->(year) { where(year_published: year) }
   scope :yearly_awards, -> { where(yearly_award: true) }
+  scope :search_by_name, ->(query) {
+    return all if query.blank?
+    sanitized = "%" + sanitize_sql_like(query.to_s.strip) + "%"
+    where("name ILIKE ? OR source ILIKE ?", sanitized, sanitized)
+  }
 
   # Public Methods
   def has_penalties?

@@ -14,7 +14,7 @@
               current_direction = params[:direction]
               id_direction = (current_sort == "id" && current_direction != "desc") ? "desc" : "asc"
             %>
-            <%= link_to admin_albums_lists_path(sort: "id", direction: id_direction, status: params[:status]), data: { turbo_frame: "lists_table" }, class: "link link-hover flex items-center gap-1" do %>
+            <%= link_to admin_albums_lists_path(sort: "id", direction: id_direction, status: params[:status], q: params[:q]), data: { turbo_frame: "lists_table" }, class: "link link-hover flex items-center gap-1" do %>
               <span>ID</span>
               <% if current_sort == "id" %>
                 <% if current_direction == "desc" %>
@@ -33,7 +33,7 @@
             <%
               name_direction = (current_sort == "name" && current_direction != "desc") ? "desc" : "asc"
             %>
-            <%= link_to admin_albums_lists_path(sort: "name", direction: name_direction, status: params[:status]), data: { turbo_frame: "lists_table" }, class: "link link-hover flex items-center gap-1" do %>
+            <%= link_to admin_albums_lists_path(sort: "name", direction: name_direction, status: params[:status], q: params[:q]), data: { turbo_frame: "lists_table" }, class: "link link-hover flex items-center gap-1" do %>
               <span>Name</span>
               <% if current_sort == "name" || current_sort.blank? %>
                 <% if current_direction == "desc" %>
@@ -53,7 +53,7 @@
             <%
               year_direction = (current_sort == "year_published" && current_direction != "desc") ? "desc" : "asc"
             %>
-            <%= link_to admin_albums_lists_path(sort: "year_published", direction: year_direction, status: params[:status]), data: { turbo_frame: "lists_table" }, class: "link link-hover flex items-center gap-1" do %>
+            <%= link_to admin_albums_lists_path(sort: "year_published", direction: year_direction, status: params[:status], q: params[:q]), data: { turbo_frame: "lists_table" }, class: "link link-hover flex items-center gap-1" do %>
               <span>Year</span>
               <% if current_sort == "year_published" %>
                 <% if current_direction == "desc" %>
@@ -73,7 +73,7 @@
             <%
               created_direction = (current_sort == "created_at" && current_direction != "desc") ? "desc" : "asc"
             %>
-            <%= link_to admin_albums_lists_path(sort: "created_at", direction: created_direction, status: params[:status]), data: { turbo_frame: "lists_table" }, class: "link link-hover flex items-center gap-1" do %>
+            <%= link_to admin_albums_lists_path(sort: "created_at", direction: created_direction, status: params[:status], q: params[:q]), data: { turbo_frame: "lists_table" }, class: "link link-hover flex items-center gap-1" do %>
               <span>Created</span>
               <% if current_sort == "created_at" %>
                 <% if current_direction == "desc" %>
@@ -186,25 +186,36 @@
 
   <% if defined?(pagy) && pagy %>
     <div class="flex justify-center py-4 border-t border-base-300">
-      <%== pagy_nav(pagy, params: params.permit(:sort, :direction, :status).to_h) if pagy.pages > 1 %>
+      <%== pagy_nav(pagy, params: params.permit(:sort, :direction, :status, :q).to_h) if pagy.pages > 1 %>
     </div>
   <% end %>
 <% else %>
   <div class="py-12 text-center">
     <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-base-content/20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-    </svg>
-    <h3 class="mt-4 text-lg font-semibold">No album lists found</h3>
-    <p class="mt-2 text-sm text-base-content/70">
-      Get started by creating your first album list.
-    </p>
-    <div class="mt-6">
-      <%= link_to new_admin_albums_list_path, class: "btn btn-primary" do %>
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-          <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
-        </svg>
-        <span>New Album List</span>
+      <% if defined?(search_query) && search_query.present? %>
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      <% else %>
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
       <% end %>
-    </div>
+    </svg>
+    <% if defined?(search_query) && search_query.present? %>
+      <h3 class="mt-4 text-lg font-semibold">No album lists found</h3>
+      <p class="mt-2 text-sm text-base-content/70">
+        No lists match your search "<%= search_query %>". Try a different search term.
+      </p>
+    <% else %>
+      <h3 class="mt-4 text-lg font-semibold">No album lists found</h3>
+      <p class="mt-2 text-sm text-base-content/70">
+        Get started by creating your first album list.
+      </p>
+      <div class="mt-6">
+        <%= link_to new_admin_albums_list_path, class: "btn btn-primary" do %>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+          </svg>
+          <span>New Album List</span>
+        <% end %>
+      </div>
+    <% end %>
   </div>
 <% end %>
