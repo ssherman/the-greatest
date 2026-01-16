@@ -98,6 +98,23 @@
         </div>
 
         <div class="form-control">
+          <%= f.label :source_country_origin, class: "label" do %>
+            <span class="label-text font-semibold">Source Country Origin</span>
+          <% end %>
+          <%= f.text_field :source_country_origin,
+              class: "input input-bordered w-full #{@list.errors[:source_country_origin].any? ? 'input-error' : ''}",
+              placeholder: "e.g., USA, Germany, UK" %>
+          <label class="label">
+            <span class="label-text-alt">Country where the source publication is based</span>
+          </label>
+          <% if @list.errors[:source_country_origin].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @list.errors[:source_country_origin].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <div class="form-control">
           <%= f.label :url, class: "label" do %>
             <span class="label-text font-semibold">URL</span>
           <% end %>

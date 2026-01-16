@@ -19,6 +19,7 @@
 #  raw_html              :text
 #  simplified_html       :text
 #  source                :string
+#  source_country_origin :string
 #  status                :integer          default("unapproved"), not null
 #  type                  :string           not null
 #  url                   :string

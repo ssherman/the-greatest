@@ -120,14 +120,18 @@
               </span>
             </td>
             <td>
+              <%
+                source_display = list.source.presence || list.url
+                source_display = "#{source_display} (#{list.source_country_origin})" if source_display && list.source_country_origin.present?
+              %>
               <% if list.url.present? %>
-                <%= link_to (list.source.presence || list.url).truncate(30), list.url,
+                <%= link_to source_display&.truncate(40), list.url,
                     target: "_blank",
                     rel: "noopener",
                     class: "link link-primary",
-                    title: list.source %>
+                    title: source_display %>
               <% elsif list.source.present? %>
-                <%= list.source.truncate(30) %>
+                <%= source_display.truncate(40) %>
               <% else %>
                 <span class="text-base-content/30">-</span>
               <% end %>

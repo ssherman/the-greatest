@@ -81,6 +81,7 @@ class Admin::Music::ListsController < Admin::Music::BaseController
       :name,
       :description,
       :source,
+      :source_country_origin,
       :url,
       :year_published,
       :number_of_voters,
