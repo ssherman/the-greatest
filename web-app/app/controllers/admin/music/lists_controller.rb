@@ -4,6 +4,7 @@ class Admin::Music::ListsController < Admin::Music::BaseController
   def index
     load_lists_for_index
     @selected_status = params[:status].presence || "all"
+    @search_query = params[:q].presence
   end
 
   def show
@@ -56,6 +57,7 @@ class Admin::Music::ListsController < Admin::Music::BaseController
       .includes(:submitted_by)
       .left_joins(:list_items)
       .then { |scope| apply_status_filter(scope) }
+      .then { |scope| apply_search_filter(scope) }
       .select("#{list_class.table_name}.*, COUNT(DISTINCT list_items.id) as #{items_count_name}")
       .group("#{list_class.table_name}.id")
       .order("#{sort_column} #{sort_direction}")
@@ -70,6 +72,11 @@ class Admin::Music::ListsController < Admin::Music::BaseController
     return scope unless List.statuses.key?(status_value)
 
     scope.where(status: status_value)
+  end
+
+  def apply_search_filter(scope)
+    return scope if params[:q].blank?
+    scope.search_by_name(params[:q])
   end
 
   def sortable_column(column)

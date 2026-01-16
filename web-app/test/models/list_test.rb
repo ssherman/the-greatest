@@ -118,6 +118,49 @@ class ListTest < ActiveSupport::TestCase
     assert_not_includes award_lists, lists(:basic_list)
   end
 
+  test "search_by_name scope should find lists with matching name (case-insensitive)" do
+    results = List.search_by_name("basic")
+    assert_includes results, lists(:basic_list)
+
+    # Case insensitive
+    results_upper = List.search_by_name("BASIC")
+    assert_includes results_upper, lists(:basic_list)
+  end
+
+  test "search_by_name scope should find lists with matching source (case-insensitive)" do
+    list = Music::Songs::List.create!(name: "Test List", source: "Rolling Stone Magazine", status: :unapproved)
+
+    results = List.search_by_name("rolling")
+    assert_includes results, list
+
+    # Case insensitive
+    results_upper = List.search_by_name("ROLLING")
+    assert_includes results_upper, list
+
+    list.destroy
+  end
+
+  test "search_by_name scope should return all lists when query is blank" do
+    assert_equal List.count, List.search_by_name("").count
+    assert_equal List.count, List.search_by_name(nil).count
+    assert_equal List.count, List.search_by_name("   ").count
+  end
+
+  test "search_by_name scope should escape special SQL characters" do
+    # Create a list with special characters in the name
+    list = Music::Songs::List.create!(name: "100% Best Songs", status: :unapproved)
+
+    # Should find it with exact special char search
+    results = List.search_by_name("100%")
+    assert_includes results, list
+
+    # % should not act as wildcard
+    results = List.search_by_name("%")
+    assert results.all? { |l| l.name.include?("%") || l.source&.include?("%") }
+
+    list.destroy
+  end
+
   test "STI should work with domain-specific classes" do
     books_list = lists(:books_list)
     movies_list = lists(:movies_list)

@@ -116,6 +116,40 @@ module Admin
           assert_response :success
         end
 
+        # Search tests
+        test "should search by name" do
+          ::Music::Songs::List.create!(name: "Rolling Stone Best Songs", status: :approved)
+          ::Music::Songs::List.create!(name: "Billboard Top 100", status: :approved)
+          get admin_songs_lists_path(q: "rolling")
+          assert_response :success
+          assert_select "td", text: /Rolling Stone/
+        end
+
+        test "should search case-insensitively" do
+          ::Music::Songs::List.create!(name: "Rolling Stone Best Songs", status: :approved)
+          get admin_songs_lists_path(q: "ROLLING")
+          assert_response :success
+          assert_select "td", text: /Rolling Stone/
+        end
+
+        test "should combine search with status filter" do
+          ::Music::Songs::List.create!(name: "Rolling Stone Approved", status: :approved)
+          ::Music::Songs::List.create!(name: "Rolling Stone Rejected", status: :rejected)
+          get admin_songs_lists_path(q: "rolling", status: "approved")
+          assert_response :success
+        end
+
+        test "should return all lists when search is blank" do
+          get admin_songs_lists_path(q: "")
+          assert_response :success
+        end
+
+        test "should preserve search query in pagination" do
+          26.times { |i| ::Music::Songs::List.create!(name: "Rolling List #{i}", status: :approved) }
+          get admin_songs_lists_path(q: "rolling", page: 2)
+          assert_response :success
+        end
+
         test "should get new" do
           get new_admin_songs_list_path
           assert_response :success
