@@ -17,9 +17,30 @@
   </div>
 
   <div class="card bg-base-100 shadow-xl">
-    <div class="card-body p-0">
+    <div class="card-body">
+      <div class="mb-4">
+        <%= form_with url: admin_songs_lists_path, method: :get, data: { turbo_frame: "lists_table", turbo_action: "advance" }, class: "flex gap-2 items-center" do |f| %>
+          <label class="form-control w-full max-w-xs">
+            <div class="label">
+              <span class="label-text">Filter by Status</span>
+            </div>
+            <%= f.select :status,
+                options_for_select([
+                  ["All Statuses", "all"],
+                  ["Unapproved", "unapproved"],
+                  ["Approved", "approved"],
+                  ["Rejected", "rejected"],
+                  ["Active", "active"]
+                ], @selected_status),
+                {},
+                class: "select select-bordered",
+                onchange: "this.form.requestSubmit()" %>
+          </label>
+        <% end %>
+      </div>
+
       <%= turbo_frame_tag "lists_table" do %>
-        <%= render "table", lists: @lists, pagy: @pagy %>
+        <%= render "table", lists: @lists, pagy: @pagy, selected_status: @selected_status %>
       <% end %>
     </div>
   </div>
