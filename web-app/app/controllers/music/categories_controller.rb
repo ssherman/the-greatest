@@ -1,5 +1,9 @@
 class Music::CategoriesController < ApplicationController
+  include Cacheable
+
   layout "music/application"
+
+  before_action :cache_for_index_page, only: [:show]
 
   def show
     @category = Music::Category.active.friendly.find(params[:id])

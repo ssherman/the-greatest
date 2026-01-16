@@ -1,5 +1,8 @@
 class AuthController < ApplicationController
+  include Cacheable
+
   skip_before_action :verify_authenticity_token, only: [:sign_in, :sign_out]
+  before_action :prevent_caching
 
   def sign_in
     if params[:jwt].blank? || params[:provider].blank?

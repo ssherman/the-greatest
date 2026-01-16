@@ -1,7 +1,10 @@
 class Music::AlbumsController < ApplicationController
+  include Cacheable
+
   layout "music/application"
 
   before_action :load_ranking_configuration, only: [:show]
+  before_action :cache_for_show_page, only: [:show]
 
   def self.ranking_configuration_class
     Music::Albums::RankingConfiguration

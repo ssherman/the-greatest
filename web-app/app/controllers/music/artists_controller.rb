@@ -1,8 +1,11 @@
 class Music::ArtistsController < ApplicationController
+  include Cacheable
+
   layout "music/application"
 
   before_action :load_album_ranking_configuration, only: [:show]
   before_action :load_song_ranking_configuration, only: [:show]
+  before_action :cache_for_show_page, only: [:show]
 
   def show
     @artist = Music::Artist
