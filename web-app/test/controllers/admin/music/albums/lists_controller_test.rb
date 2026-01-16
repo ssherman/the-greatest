@@ -114,6 +114,58 @@ module Admin
           assert_response :success
         end
 
+        # Status filter tests
+        test "should filter by status all" do
+          sign_in_as(@admin_user, stub_auth: true)
+          get admin_albums_lists_path(status: "all")
+          assert_response :success
+        end
+
+        test "should filter by status unapproved" do
+          sign_in_as(@admin_user, stub_auth: true)
+          get admin_albums_lists_path(status: "unapproved")
+          assert_response :success
+        end
+
+        test "should filter by status approved" do
+          sign_in_as(@admin_user, stub_auth: true)
+          get admin_albums_lists_path(status: "approved")
+          assert_response :success
+        end
+
+        test "should filter by status rejected" do
+          sign_in_as(@admin_user, stub_auth: true)
+          ::Music::Albums::List.create!(name: "Rejected List", status: :rejected)
+          get admin_albums_lists_path(status: "rejected")
+          assert_response :success
+        end
+
+        test "should filter by status active" do
+          sign_in_as(@admin_user, stub_auth: true)
+          ::Music::Albums::List.create!(name: "Active List", status: :active)
+          get admin_albums_lists_path(status: "active")
+          assert_response :success
+        end
+
+        test "should handle invalid status filter gracefully" do
+          sign_in_as(@admin_user, stub_auth: true)
+          get admin_albums_lists_path(status: "invalid_status")
+          assert_response :success
+        end
+
+        test "should preserve status filter in pagination" do
+          sign_in_as(@admin_user, stub_auth: true)
+          26.times { |i| ::Music::Albums::List.create!(name: "Paginated List #{i}", status: :approved) }
+          get admin_albums_lists_path(status: "approved", page: 2)
+          assert_response :success
+        end
+
+        test "should preserve status filter when sorting" do
+          sign_in_as(@admin_user, stub_auth: true)
+          get admin_albums_lists_path(status: "approved", sort: "name", direction: "desc")
+          assert_response :success
+        end
+
         test "should paginate lists" do
           sign_in_as(@admin_user, stub_auth: true)
           26.times { |i| ::Music::Albums::List.create!(name: "List #{i}", status: :approved) }

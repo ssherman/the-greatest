@@ -3,6 +3,7 @@ class Admin::Music::ListsController < Admin::Music::BaseController
 
   def index
     load_lists_for_index
+    @selected_status = params[:status].presence || "all"
   end
 
   def show
@@ -54,11 +55,21 @@ class Admin::Music::ListsController < Admin::Music::BaseController
     @lists = list_class
       .includes(:submitted_by)
       .left_joins(:list_items)
+      .then { |scope| apply_status_filter(scope) }
       .select("#{list_class.table_name}.*, COUNT(DISTINCT list_items.id) as #{items_count_name}")
       .group("#{list_class.table_name}.id")
       .order("#{sort_column} #{sort_direction}")
 
     @pagy, @lists = pagy(@lists, items: 25)
+  end
+
+  def apply_status_filter(scope)
+    return scope if params[:status].blank? || params[:status] == "all"
+
+    status_value = params[:status].to_s.downcase
+    return scope unless List.statuses.key?(status_value)
+
+    scope.where(status: status_value)
   end
 
   def sortable_column(column)

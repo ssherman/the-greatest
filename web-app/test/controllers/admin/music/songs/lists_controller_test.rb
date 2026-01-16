@@ -70,6 +70,52 @@ module Admin
           assert_response :success
         end
 
+        # Status filter tests
+        test "should filter by status all" do
+          get admin_songs_lists_path(status: "all")
+          assert_response :success
+        end
+
+        test "should filter by status unapproved" do
+          ::Music::Songs::List.create!(name: "Unapproved List", status: :unapproved)
+          get admin_songs_lists_path(status: "unapproved")
+          assert_response :success
+        end
+
+        test "should filter by status approved" do
+          ::Music::Songs::List.create!(name: "Approved List", status: :approved)
+          get admin_songs_lists_path(status: "approved")
+          assert_response :success
+        end
+
+        test "should filter by status rejected" do
+          ::Music::Songs::List.create!(name: "Rejected List", status: :rejected)
+          get admin_songs_lists_path(status: "rejected")
+          assert_response :success
+        end
+
+        test "should filter by status active" do
+          ::Music::Songs::List.create!(name: "Active List", status: :active)
+          get admin_songs_lists_path(status: "active")
+          assert_response :success
+        end
+
+        test "should handle invalid status filter gracefully" do
+          get admin_songs_lists_path(status: "invalid_status")
+          assert_response :success
+        end
+
+        test "should preserve status filter in pagination" do
+          26.times { |i| ::Music::Songs::List.create!(name: "List #{i}", status: :approved) }
+          get admin_songs_lists_path(status: "approved", page: 2)
+          assert_response :success
+        end
+
+        test "should preserve status filter when sorting" do
+          get admin_songs_lists_path(status: "approved", sort: "name", direction: "desc")
+          assert_response :success
+        end
+
         test "should get new" do
           get new_admin_songs_list_path
           assert_response :success

@@ -14,7 +14,7 @@
               current_direction = params[:direction]
               id_direction = (current_sort == "id" && current_direction != "desc") ? "desc" : "asc"
             %>
-            <%= link_to admin_songs_lists_path(sort: "id", direction: id_direction), data: { turbo_frame: "lists_table" }, class: "link link-hover flex items-center gap-1" do %>
+            <%= link_to admin_songs_lists_path(sort: "id", direction: id_direction, status: params[:status]), data: { turbo_frame: "lists_table" }, class: "link link-hover flex items-center gap-1" do %>
               <span>ID</span>
               <% if current_sort == "id" %>
                 <% if current_direction == "desc" %>
@@ -33,7 +33,7 @@
             <%
               name_direction = (current_sort == "name" && current_direction != "desc") ? "desc" : "asc"
             %>
-            <%= link_to admin_songs_lists_path(sort: "name", direction: name_direction), data: { turbo_frame: "lists_table" }, class: "link link-hover flex items-center gap-1" do %>
+            <%= link_to admin_songs_lists_path(sort: "name", direction: name_direction, status: params[:status]), data: { turbo_frame: "lists_table" }, class: "link link-hover flex items-center gap-1" do %>
               <span>Name</span>
               <% if current_sort == "name" || current_sort.blank? %>
                 <% if current_direction == "desc" %>
@@ -49,12 +49,11 @@
             <% end %>
           </th>
           <th>Status</th>
-          <th>Source</th>
           <th>
             <%
               year_direction = (current_sort == "year_published" && current_direction != "desc") ? "desc" : "asc"
             %>
-            <%= link_to admin_songs_lists_path(sort: "year_published", direction: year_direction), data: { turbo_frame: "lists_table" }, class: "link link-hover flex items-center gap-1" do %>
+            <%= link_to admin_songs_lists_path(sort: "year_published", direction: year_direction, status: params[:status]), data: { turbo_frame: "lists_table" }, class: "link link-hover flex items-center gap-1" do %>
               <span>Year</span>
               <% if current_sort == "year_published" %>
                 <% if current_direction == "desc" %>
@@ -74,7 +73,7 @@
             <%
               created_direction = (current_sort == "created_at" && current_direction != "desc") ? "desc" : "asc"
             %>
-            <%= link_to admin_songs_lists_path(sort: "created_at", direction: created_direction), data: { turbo_frame: "lists_table" }, class: "link link-hover flex items-center gap-1" do %>
+            <%= link_to admin_songs_lists_path(sort: "created_at", direction: created_direction, status: params[:status]), data: { turbo_frame: "lists_table" }, class: "link link-hover flex items-center gap-1" do %>
               <span>Created</span>
               <% if current_sort == "created_at" %>
                 <% if current_direction == "desc" %>
@@ -113,28 +112,28 @@
                     class: "link link-hover",
                     data: { turbo_frame: "_top" } %>
               </div>
+              <% if list.source.present? || list.url.present? %>
+                <div class="text-sm text-base-content/70">
+                  <%
+                    source_display = list.source.presence || list.url
+                    source_display = "#{source_display} (#{list.source_country_origin})" if list.source_country_origin.present?
+                  %>
+                  <% if list.url.present? %>
+                    <%= link_to source_display&.truncate(50), list.url,
+                        target: "_blank",
+                        rel: "noopener",
+                        class: "link link-primary",
+                        title: source_display %>
+                  <% else %>
+                    <%= source_display&.truncate(50) %>
+                  <% end %>
+                </div>
+              <% end %>
             </td>
             <td>
               <span class="badge <%= list.approved? ? 'badge-success' : list.active? ? 'badge-primary' : list.rejected? ? 'badge-error' : 'badge-ghost' %> badge-sm">
                 <%= list.status.titleize %>
               </span>
-            </td>
-            <td>
-              <%
-                source_display = list.source.presence || list.url
-                source_display = "#{source_display} (#{list.source_country_origin})" if source_display && list.source_country_origin.present?
-              %>
-              <% if list.url.present? %>
-                <%= link_to source_display&.truncate(40), list.url,
-                    target: "_blank",
-                    rel: "noopener",
-                    class: "link link-primary",
-                    title: source_display %>
-              <% elsif list.source.present? %>
-                <%= source_display.truncate(40) %>
-              <% else %>
-                <span class="text-base-content/30">-</span>
-              <% end %>
             </td>
             <td>
               <% if list.year_published.present? %>
@@ -187,7 +186,7 @@
 
   <% if defined?(pagy) && pagy %>
     <div class="flex justify-center py-4 border-t border-base-300">
-      <%== pagy_nav(pagy, params: params.permit(:sort, :direction).to_h) if pagy.pages > 1 %>
+      <%== pagy_nav(pagy, params: params.permit(:sort, :direction, :status).to_h) if pagy.pages > 1 %>
     </div>
   <% end %>
 <% else %>

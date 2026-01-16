@@ -12,10 +12,12 @@ Abstract base controller for managing music lists (albums and songs) in the admi
 ## Public Actions
 
 ### `#index`
-Lists all lists with sorting and pagination
+Lists all lists with sorting, filtering, and pagination
 - Query: Includes submitted_by user, left joins list_items for counting
+- Filtering: By status (unapproved, approved, rejected, active) via `?status=` param
 - Sorting: By id, name, year_published, or created_at (whitelisted)
 - Pagination: 25 items per page via Pagy
+- Sets `@selected_status` for view dropdown
 
 ### `#show`
 Displays a single list with full details
@@ -82,9 +84,19 @@ Added in Phase 9 to support different eager loading strategies per list type.
 ## Private Methods
 
 ### `#load_lists_for_index`
-Builds the query for the index page with sorting and pagination
+Builds the query for the index page with filtering, sorting, and pagination
+- Applies status filter via `apply_status_filter`
 - Counts items via SQL aggregation (field name from `items_count_name`) to avoid N+1
 - Applies sorting with whitelisted columns and directions
+
+### `#apply_status_filter(scope)`
+Filters lists by status
+- Parameters: scope (ActiveRecord::Relation) - the base query
+- Returns: Filtered scope or original scope if no filter applies
+- Behavior:
+  - Returns original scope if status param is blank or "all"
+  - Returns original scope if status value is not a valid enum key
+  - Otherwise filters to the specified status
 
 ### `#sortable_column(column)`
 Whitelists sort columns
@@ -135,6 +147,9 @@ Uses `param_key` from subclass to support different form parameter structures (`
 - **Phase 9** (2025-11-14): Enhanced abstraction for song lists support
   - Added `param_key`, `items_count_name`, and `listable_includes` abstract methods
   - Made base controller truly reusable for different list types
+- **Spec 116** (2026-01-16): Added status filtering
+  - Added `apply_status_filter` method for filtering by list status
+  - Index views updated with filter dropdown and combined name/source columns
 
 ## Related Files
 - Base class: `app/controllers/admin/music/base_controller.rb`
