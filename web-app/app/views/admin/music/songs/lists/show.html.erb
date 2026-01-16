@@ -72,17 +72,21 @@
             </div>
 
             <% if @list.source.present? || @list.url.present? %>
+              <%
+                source_display = @list.source.presence || @list.url
+                source_display = "#{source_display} (#{@list.source_country_origin})" if @list.source_country_origin.present?
+              %>
               <div>
                 <label class="label">
                   <span class="label-text font-semibold">Source</span>
                 </label>
                 <% if @list.url.present? %>
-                  <%= link_to (@list.source.presence || @list.url), @list.url,
+                  <%= link_to source_display, @list.url,
                       target: "_blank",
                       rel: "noopener",
                       class: "link link-primary" %>
                 <% else %>
-                  <p><%= @list.source %></p>
+                  <p><%= source_display %></p>
                 <% end %>
               </div>
             <% end %>

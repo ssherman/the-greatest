@@ -55,6 +55,11 @@ No new endpoints. Existing endpoints modified:
 - [x] Admin controller permits `source_country_origin` in strong params
 - [x] Album list form displays field in Source Information section
 - [x] Song list form displays field in Source Information section
+- [x] Album list index table shows country in parentheses after source (e.g., "Rolling Stone (USA)")
+- [x] Song list index table shows country in parentheses after source
+- [x] Album list show page displays country in parentheses after source
+- [x] Song list show page displays country in parentheses after source
+- [x] Country parentheses only shown when source_country_origin is present
 - [x] Existing tests pass
 
 ### Golden Examples
@@ -98,6 +103,10 @@ Output: List saved with source_country_origin = nil
 - `app/controllers/admin/music/lists_controller.rb`
 - `app/views/admin/music/albums/lists/_form.html.erb`
 - `app/views/admin/music/songs/lists/_form.html.erb`
+- `app/views/admin/music/albums/lists/_table.html.erb`
+- `app/views/admin/music/songs/lists/_table.html.erb`
+- `app/views/admin/music/albums/lists/show.html.erb`
+- `app/views/admin/music/songs/lists/show.html.erb`
 
 ### Challenges & Resolutions
 - None
