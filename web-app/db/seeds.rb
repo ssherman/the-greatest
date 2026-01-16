@@ -33,6 +33,7 @@ penalty_definitions = [
   {name: "Voters: Estimated Count", dynamic_type: :voter_count_estimated},
   {name: "List: only covers 1 specific location", dynamic_type: :location_specific},
   {name: "List: only covers 1 specific genre", dynamic_type: :category_specific},
+  {name: "List: only covers 1 specific creator", dynamic_type: :creator_specific},
   {name: "List: number of years covered", dynamic_type: :num_years_covered}
 ]
 

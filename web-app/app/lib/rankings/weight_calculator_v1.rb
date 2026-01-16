@@ -149,6 +149,7 @@ module Rankings
 
       total_penalty += calculate_unknown_data_penalties_with_details(details)
       total_penalty += calculate_bias_penalties_with_details(details)
+      total_penalty += calculate_creator_penalties_with_details(details)
       total_penalty += calculate_temporal_coverage_penalty_with_details(details)
 
       total_penalty
@@ -222,6 +223,25 @@ module Rankings
           details["penalties"] << penalty_info.merge(
             "source" => "dynamic_attribute",
             "dynamic_type" => "location_specific",
+            "attribute_value" => true,
+            "value" => penalty_value
+          )
+        end
+      end
+
+      penalty
+    end
+
+    def calculate_creator_penalties_with_details(details)
+      penalty = 0
+
+      if list.creator_specific?
+        penalty_value, penalty_info = find_penalty_details_by_dynamic_type(:creator_specific)
+        if penalty_value > 0
+          penalty += penalty_value
+          details["penalties"] << penalty_info.merge(
+            "source" => "dynamic_attribute",
+            "dynamic_type" => "creator_specific",
             "attribute_value" => true,
             "value" => penalty_value
           )
@@ -433,6 +453,7 @@ module Rankings
       # Apply penalties based on list attributes
       total_penalty += calculate_unknown_data_penalties
       total_penalty += calculate_bias_penalties
+      total_penalty += calculate_creator_penalties
       total_penalty += calculate_temporal_coverage_penalty
 
       total_penalty
@@ -470,6 +491,17 @@ module Rankings
       # Penalty for location-specific lists
       if list.location_specific?
         penalty += find_penalty_value_by_dynamic_type(:location_specific)
+      end
+
+      penalty
+    end
+
+    def calculate_creator_penalties
+      penalty = 0
+
+      # Penalty for creator-specific lists (e.g., artist-specific for music)
+      if list.creator_specific?
+        penalty += find_penalty_value_by_dynamic_type(:creator_specific)
       end
 
       penalty

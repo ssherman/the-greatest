@@ -37,7 +37,8 @@ class Penalty < ApplicationRecord
     category_specific: 4,
     location_specific: 5,
     num_years_covered: 6,
-    voter_count_estimated: 7
+    voter_count_estimated: 7,
+    creator_specific: 8
   }, allow_nil: true
 
   # Validations
