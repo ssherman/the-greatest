@@ -299,40 +299,25 @@
 
     <!-- Sidebar -->
     <div class="space-y-6">
-      <!-- Primary Image -->
-      <% if @album.primary_image && @album.primary_image.file.attached? %>
-        <div class="card bg-base-100 shadow-xl">
-          <figure>
-            <%= image_tag @album.primary_image.file.variant(resize_to_limit: [400, 400]),
-                alt: @album.title,
-                class: "w-full" %>
-          </figure>
-          <div class="card-body">
-            <p class="text-sm text-base-content/70">Primary Image</p>
-          </div>
-        </div>
-      <% end %>
-
-      <!-- Images Section -->
+      <!-- Images Management -->
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
-          <h2 class="card-title">
-            Images
-            <div class="badge badge-primary"><%= @album.images.count %></div>
-          </h2>
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="card-title">
+              Images
+              <span class="badge badge-ghost"><%= @album.images.count %></span>
+            </h2>
+            <button class="btn btn-primary btn-sm"
+                    onclick="add_image_modal.showModal()">
+              + Add
+            </button>
+          </div>
 
-          <% if @album.images.any? %>
-            <div class="grid grid-cols-2 gap-2">
-              <% @album.images.first(6).each do |image| %>
-                <% if image.file.attached? %>
-                  <%= image_tag image.file.variant(resize_to_limit: [150, 150]),
-                      alt: @album.title,
-                      class: "w-full rounded" %>
-                <% end %>
-              <% end %>
+          <%= turbo_frame_tag "images_list", loading: :lazy,
+              src: admin_album_images_path(@album) do %>
+            <div class="flex justify-center py-4">
+              <span class="loading loading-spinner loading-md"></span>
             </div>
-          <% else %>
-            <p class="text-base-content/50">No images yet.</p>
           <% end %>
         </div>
       </div>
@@ -483,3 +468,61 @@
 
 <!-- Add Category Modal -->
 <%= render Admin::AddCategoryModalComponent.new(item: @album) %>
+
+<!-- Add Image Modal -->
+<dialog id="add_image_modal" class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg">Add Image</h3>
+    <p class="py-2 text-sm text-base-content/70">
+      Upload an image for this album. Supported formats: JPEG, PNG, WebP, GIF.
+    </p>
+
+    <%= form_with model: Image.new,
+                  url: admin_album_images_path(@album),
+                  method: :post,
+                  class: "space-y-4",
+                  data: {
+                    controller: "modal-form",
+                    modal_form_modal_id_value: "add_image_modal"
+                  } do |f| %>
+
+      <div class="form-control">
+        <%= f.label :file, class: "label" do %>
+          <span class="label-text font-semibold">Image File <span class="text-error">*</span></span>
+        <% end %>
+        <%= f.file_field :file,
+            accept: "image/jpeg,image/png,image/webp,image/gif",
+            class: "file-input file-input-bordered w-full",
+            required: true %>
+        <label class="label">
+          <span class="label-text-alt">Max recommended size: 10MB</span>
+        </label>
+      </div>
+
+      <div class="form-control">
+        <%= f.label :notes, class: "label" do %>
+          <span class="label-text font-semibold">Notes</span>
+        <% end %>
+        <%= f.text_area :notes,
+            class: "textarea textarea-bordered w-full",
+            rows: 2,
+            placeholder: "Optional description or notes about this image" %>
+      </div>
+
+      <div class="form-control">
+        <label class="label cursor-pointer justify-start gap-2">
+          <%= f.check_box :primary, class: "checkbox checkbox-primary" %>
+          <span class="label-text">Set as primary image</span>
+        </label>
+      </div>
+
+      <div class="modal-action">
+        <button type="button" class="btn" onclick="add_image_modal.close()">Cancel</button>
+        <%= f.submit "Upload Image", class: "btn btn-primary" %>
+      </div>
+    <% end %>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>

@@ -13,7 +13,7 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
         :primary_image,
         album_artists: {album: [:primary_image]},
         song_artists: [:song],
-        images: []
+        images: {file_attachment: :blob}
       )
       .find(params[:id])
   end

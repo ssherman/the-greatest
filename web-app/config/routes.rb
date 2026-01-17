@@ -154,6 +154,7 @@ Rails.application.routes.draw do
         resources :album_artists, only: [:create], shallow: true
         resources :song_artists, only: [:create], shallow: true
         resources :category_items, only: [:index, :create], controller: "/admin/category_items"
+        resources :images, only: [:index, :create], controller: "/admin/images"
         member do
           post :execute_action
         end
@@ -168,6 +169,7 @@ Rails.application.routes.draw do
       resources :albums do
         resources :album_artists, only: [:create], shallow: true
         resources :category_items, only: [:index, :create], controller: "/admin/category_items"
+        resources :images, only: [:index, :create], controller: "/admin/images"
         member do
           post :execute_action
         end
@@ -252,6 +254,11 @@ Rails.application.routes.draw do
     resources :list_penalties, only: [:destroy]
     resources :list_items, only: [:update, :destroy]
     resources :category_items, only: [:destroy]
+    resources :images, only: [:update, :destroy], controller: "images" do
+      member do
+        post :set_primary
+      end
+    end
     resources :penalties
     resources :users, except: [:new, :create]
 

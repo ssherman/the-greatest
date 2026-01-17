@@ -254,17 +254,28 @@
 
     <!-- Sidebar -->
     <div class="space-y-6">
-      <!-- Primary Image -->
-      <% if @artist.primary_image.present? && @artist.primary_image.file.attached? %>
-        <div class="card bg-base-100 shadow-xl">
-          <figure class="px-4 pt-4">
-            <%= image_tag @artist.primary_image.file.variant(:medium), alt: @artist.name, class: "rounded-xl w-full" %>
-          </figure>
-          <div class="card-body">
-            <h2 class="card-title text-sm">Primary Image</h2>
+      <!-- Images Management -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="card-title">
+              Images
+              <span class="badge badge-ghost"><%= @artist.images.count %></span>
+            </h2>
+            <button class="btn btn-primary btn-sm"
+                    onclick="add_image_modal.showModal()">
+              + Add
+            </button>
           </div>
+
+          <%= turbo_frame_tag "images_list", loading: :lazy,
+              src: admin_artist_images_path(@artist) do %>
+            <div class="flex justify-center py-4">
+              <span class="loading loading-spinner loading-md"></span>
+            </div>
+          <% end %>
         </div>
-      <% end %>
+      </div>
 
       <!-- Stats -->
       <div class="card bg-base-100 shadow-xl">
@@ -288,27 +299,6 @@
           </div>
         </div>
       </div>
-
-      <!-- Images Gallery -->
-      <% if @artist.images.where.not(id: @artist.primary_image&.id).any? %>
-        <div class="card bg-base-100 shadow-xl">
-          <div class="card-body">
-            <h2 class="card-title">
-              Other Images
-              <span class="badge badge-ghost"><%= @artist.images.count - 1 %></span>
-            </h2>
-            <div class="grid grid-cols-2 gap-2">
-              <% @artist.images.where.not(id: @artist.primary_image&.id).limit(6).each do |image| %>
-                <% if image.file.attached? %>
-                  <div class="aspect-square">
-                    <%= image_tag image.file.variant(:small), alt: @artist.name, class: "rounded w-full h-full object-cover" %>
-                  </div>
-                <% end %>
-              <% end %>
-            </div>
-          </div>
-        </div>
-      <% end %>
 
       <!-- Metadata -->
       <div class="card bg-base-100 shadow-xl">
@@ -514,6 +504,64 @@
       <div class="modal-action">
         <button type="button" class="btn" onclick="document.getElementById('merge-artist-modal').close()">Cancel</button>
         <%= f.submit "Merge Artist", class: "btn btn-warning" %>
+      </div>
+    <% end %>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
+
+<!-- Add Image Modal -->
+<dialog id="add_image_modal" class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg">Add Image</h3>
+    <p class="py-2 text-sm text-base-content/70">
+      Upload an image for this artist. Supported formats: JPEG, PNG, WebP, GIF.
+    </p>
+
+    <%= form_with model: Image.new,
+                  url: admin_artist_images_path(@artist),
+                  method: :post,
+                  class: "space-y-4",
+                  data: {
+                    controller: "modal-form",
+                    modal_form_modal_id_value: "add_image_modal"
+                  } do |f| %>
+
+      <div class="form-control">
+        <%= f.label :file, class: "label" do %>
+          <span class="label-text font-semibold">Image File <span class="text-error">*</span></span>
+        <% end %>
+        <%= f.file_field :file,
+            accept: "image/jpeg,image/png,image/webp,image/gif",
+            class: "file-input file-input-bordered w-full",
+            required: true %>
+        <label class="label">
+          <span class="label-text-alt">Max recommended size: 10MB</span>
+        </label>
+      </div>
+
+      <div class="form-control">
+        <%= f.label :notes, class: "label" do %>
+          <span class="label-text font-semibold">Notes</span>
+        <% end %>
+        <%= f.text_area :notes,
+            class: "textarea textarea-bordered w-full",
+            rows: 2,
+            placeholder: "Optional description or notes about this image" %>
+      </div>
+
+      <div class="form-control">
+        <label class="label cursor-pointer justify-start gap-2">
+          <%= f.check_box :primary, class: "checkbox checkbox-primary" %>
+          <span class="label-text">Set as primary image</span>
+        </label>
+      </div>
+
+      <div class="modal-action">
+        <button type="button" class="btn" onclick="add_image_modal.close()">Cancel</button>
+        <%= f.submit "Upload Image", class: "btn btn-primary" %>
       </div>
     <% end %>
   </div>
