@@ -93,26 +93,6 @@ module ListItemsActions
     end
   end
 
-  # GET musicbrainz_artist_search
-  # JSON endpoint for MusicBrainz artist autocomplete. 100% identical between songs/albums.
-  def musicbrainz_artist_search
-    query = params[:q]
-    return render json: [] if query.blank? || query.length < 2
-
-    search = Music::Musicbrainz::Search::ArtistSearch.new
-    response = search.search_by_name(query, limit: 10)
-
-    return render json: [] unless response[:success]
-
-    artists = response[:data]["artists"] || []
-    render json: artists.map { |artist|
-      {
-        value: artist["id"],
-        text: format_artist_display(artist)
-      }
-    }
-  end
-
   protected
 
   # Helper to render turbo stream error response
@@ -160,27 +140,6 @@ module ListItemsActions
 
   def set_item
     @item = @list.list_items.includes(listable: :artists).find(params[:id])
-  end
-
-  # Format artist display as "Artist Name (Type from Location)"
-  # e.g., "The Beatles (Group from Liverpool)"
-  def format_artist_display(artist)
-    name = artist["name"]
-    type = artist["type"]
-    country = artist["country"]
-    disambiguation = artist["disambiguation"]
-
-    location = disambiguation.presence || country.presence
-
-    if type.present? && location.present?
-      "#{name} (#{type} from #{location})"
-    elsif type.present?
-      "#{name} (#{type})"
-    elsif location.present?
-      "#{name} (#{location})"
-    else
-      name
-    end
   end
 
   # Abstract methods - subclasses must implement
