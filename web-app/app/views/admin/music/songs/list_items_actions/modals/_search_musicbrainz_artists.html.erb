@@ -17,7 +17,7 @@
       </label>
       <%= render AutocompleteComponent.new(
         name: "mb_artist_id",
-        url: musicbrainz_artist_search_admin_songs_list_wizard_path(list_id: list.id),
+        url: admin_musicbrainz_artists_path,
         placeholder: "Search by artist name...",
         display_key: "text",
         value_key: "value",

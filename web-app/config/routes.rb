@@ -44,6 +44,11 @@ Rails.application.routes.draw do
     namespace :admin, module: "admin/music" do
       root to: "dashboard#index"
 
+      # MusicBrainz search endpoints (shared across admin features)
+      scope :musicbrainz, controller: "musicbrainz_search", as: "musicbrainz" do
+        get :artists
+      end
+
       # Ranking configuration routes must come BEFORE the resource routes
       # to prevent friendly_id from treating "ranking_configurations" as a slug
       namespace :artists do
@@ -77,7 +82,6 @@ Rails.application.routes.draw do
             post "reparse", action: :reparse, as: :reparse
             post "restart", action: :restart
             get "musicbrainz_release_search", to: "list_items_actions#musicbrainz_release_search", as: :musicbrainz_release_search
-            get "musicbrainz_artist_search", to: "list_items_actions#musicbrainz_artist_search", as: :musicbrainz_artist_search
           end
 
           resources :items, controller: "list_items_actions", only: [] do
@@ -122,7 +126,6 @@ Rails.application.routes.draw do
             post "reparse", action: :reparse, as: :reparse
             post "restart", action: :restart
             get "musicbrainz_recording_search", to: "list_items_actions#musicbrainz_recording_search", as: :musicbrainz_recording_search
-            get "musicbrainz_artist_search", to: "list_items_actions#musicbrainz_artist_search", as: :musicbrainz_artist_search
           end
 
           resources :items, controller: "list_items_actions", only: [] do

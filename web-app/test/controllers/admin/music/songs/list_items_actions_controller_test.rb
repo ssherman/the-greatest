@@ -611,77 +611,9 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
     assert_equal [mb_artist_id], @item.metadata["mb_artist_ids"]
   end
 
-  # musicbrainz_artist_search action tests
-  test "musicbrainz_artist_search returns empty array for blank query" do
-    get musicbrainz_artist_search_admin_songs_list_wizard_path(list_id: @list.id), params: {q: ""}
-
-    assert_response :success
-    assert_equal [], JSON.parse(response.body)
-  end
-
-  test "musicbrainz_artist_search returns empty array for short query" do
-    get musicbrainz_artist_search_admin_songs_list_wizard_path(list_id: @list.id), params: {q: "a"}
-
-    assert_response :success
-    assert_equal [], JSON.parse(response.body)
-  end
-
-  test "musicbrainz_artist_search returns formatted results" do
-    mock_response = {
-      success: true,
-      data: {
-        "artists" => [
-          {
-            "id" => "b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d",
-            "name" => "The Beatles",
-            "type" => "Group",
-            "country" => "GB",
-            "disambiguation" => "Liverpool"
-          },
-          {
-            "id" => "4d5bbb57-8c4c-4a7f-a3ab-8b6e6c9c8e4c",
-            "name" => "Beatles",
-            "type" => "Group",
-            "country" => nil,
-            "disambiguation" => "São Paulo"
-          }
-        ]
-      }
-    }
-
-    Music::Musicbrainz::Search::ArtistSearch.any_instance
-      .stubs(:search_by_name)
-      .with("beatles", limit: 10)
-      .returns(mock_response)
-
-    get musicbrainz_artist_search_admin_songs_list_wizard_path(list_id: @list.id), params: {q: "beatles"}
-
-    assert_response :success
-    json = JSON.parse(response.body)
-
-    assert_equal 2, json.length
-    assert_equal "b10bbbfc-cf9e-42e0-be17-e2c3e1d2600d", json[0]["value"]
-    assert_equal "The Beatles (Group from Liverpool)", json[0]["text"]
-    assert_equal "4d5bbb57-8c4c-4a7f-a3ab-8b6e6c9c8e4c", json[1]["value"]
-    assert_equal "Beatles (Group from São Paulo)", json[1]["text"]
-  end
-
-  test "musicbrainz_artist_search returns empty array on api failure" do
-    mock_response = {
-      success: false,
-      data: nil,
-      errors: ["API error"]
-    }
-
-    Music::Musicbrainz::Search::ArtistSearch.any_instance
-      .stubs(:search_by_name)
-      .returns(mock_response)
-
-    get musicbrainz_artist_search_admin_songs_list_wizard_path(list_id: @list.id), params: {q: "beatles"}
-
-    assert_response :success
-    assert_equal [], JSON.parse(response.body)
-  end
+  # Note: musicbrainz_artist_search tests have been moved to
+  # test/controllers/admin/music/musicbrainz_search_controller_test.rb
+  # as part of the refactor to consolidate MusicBrainz search endpoints.
 
   # Authorization tests
   test "requires admin authentication" do
