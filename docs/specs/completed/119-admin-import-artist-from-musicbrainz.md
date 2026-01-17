@@ -1,12 +1,12 @@
 # 119 - Admin Import Artist from MusicBrainz
 
 ## Status
-- **Status**: Not Started
+- **Status**: Completed
 - **Priority**: Medium
 - **Created**: 2026-01-16
-- **Started**:
-- **Completed**:
-- **Developer**:
+- **Started**: 2026-01-16
+- **Completed**: 2026-01-16
+- **Developer**: Claude
 
 ## Overview
 Add ability to import an artist from MusicBrainz directly from the admin artists index page. User clicks "Import From MusicBrainz" button, searches for an artist via autocomplete, and imports them using the existing `DataImporters::Music::Artist::Importer`.
@@ -55,12 +55,13 @@ Add ability to import an artist from MusicBrainz directly from the admin artists
 - Success (new artist): Redirect to `admin_artist_path(artist)` with notice "Artist imported successfully"
 - Success (existing): Redirect to `admin_artist_path(existing_artist)` with notice "Artist already exists"
 - Failure: Redirect to `admin_artists_path` with alert containing error message
+- Missing param: Redirect to `admin_artists_path` with alert "Please select an artist from MusicBrainz"
 
 ### Behaviors (pre/postconditions)
 
 **Preconditions:**
 - User is authenticated admin
-- MusicBrainz ID is valid UUID format
+- MusicBrainz ID is provided (validated server-side)
 
 **Postconditions/effects:**
 - New artist created in database with MusicBrainz data (name, kind, country, identifiers, categories)
@@ -69,7 +70,7 @@ Add ability to import an artist from MusicBrainz directly from the admin artists
 **Edge cases & failure modes:**
 - Query < 2 chars: Return empty array `[]`
 - MusicBrainz API timeout: Return empty array (graceful degradation)
-- Invalid MusicBrainz ID format: Redirect with error flash
+- Missing MusicBrainz ID: Redirect with error flash
 - Artist already exists (has matching MusicBrainz ID): Redirect to existing artist with info flash
 - Importer failure: Redirect with error flash containing importer errors
 
@@ -80,15 +81,15 @@ Add ability to import an artist from MusicBrainz directly from the admin artists
 
 ## Acceptance Criteria
 
-- [ ] "Import From MusicBrainz" button appears next to "New Artist" button on index page
-- [ ] Clicking button opens modal with autocomplete search field
-- [ ] Autocomplete searches MusicBrainz API as user types (min 2 chars)
-- [ ] Autocomplete displays artist name with type and location: "Pink Floyd (Group from United Kingdom)"
-- [ ] Selecting artist and clicking "Import" calls importer with MusicBrainz ID
-- [ ] Successful import redirects to new artist's show page with success flash
-- [ ] If artist already exists (matching MusicBrainz ID), redirects to existing artist with info flash
-- [ ] Import errors display as flash alerts on index page
-- [ ] Modal can be dismissed via Cancel button or clicking outside
+- [x] "Import From MusicBrainz" button appears next to "New Artist" button on index page
+- [x] Clicking button opens modal with autocomplete search field
+- [x] Autocomplete searches MusicBrainz API as user types (min 2 chars)
+- [x] Autocomplete displays artist name with type and location: "Pink Floyd (Group from United Kingdom)"
+- [x] Selecting artist and clicking "Import" calls importer with MusicBrainz ID
+- [x] Successful import redirects to new artist's show page with success flash
+- [x] If artist already exists (matching MusicBrainz ID), redirects to existing artist with info flash
+- [x] Import errors display as flash alerts on index page
+- [x] Modal can be dismissed via Cancel button or clicking outside
 
 ### Golden Examples
 
@@ -141,76 +142,60 @@ Expected:
 ### Approach
 
 **1. Add Routes**
-Add to `config/routes.rb` inside `resources :artists` block:
+Added to `config/routes.rb` inside `resources :artists` collection block (line 161):
 ```ruby
 collection do
   post :import_from_musicbrainz
+  # ... existing routes
 end
 ```
 
-Note: The MusicBrainz search endpoint is provided by Spec 120's `MusicbrainzSearchController`.
-
 **2. Controller Action**
-Add to `Admin::Music::ArtistsController`:
-
-`import_from_musicbrainz` - New action:
-- Validate MusicBrainz ID format (UUID)
-- Call `DataImporters::Music::Artist::Importer.call(musicbrainz_id: params[:musicbrainz_id])`
-- Check if result.item was already persisted before import (existing artist case)
-- Redirect appropriately with flash message
+Added `import_from_musicbrainz` action to `Admin::Music::ArtistsController` (lines 102-121):
+- Validates `musicbrainz_id` presence (server-side validation)
+- Calls `DataImporters::Music::Artist::Importer.call(musicbrainz_id: params[:musicbrainz_id])`
+- Detects existing vs new artist via `result.provider_results.empty?` (finder returns early with empty provider_results when artist exists)
+- Redirects appropriately with flash message
 
 **3. View Updates**
-Add to `app/views/admin/music/artists/index.html.erb`:
-- Button next to "New Artist" that opens modal
-- Modal dialog with AutocompleteComponent pointing to `admin_musicbrainz_artists_path`
-- Follow pattern from merge-artist-modal in show.html.erb
+Added to `app/views/admin/music/artists/index.html.erb`:
+- "Import From MusicBrainz" button next to "New Artist" (lines 11-15)
+- Modal dialog with AutocompleteComponent (lines 58-98)
+- Follows merge-artist-modal pattern from show.html.erb
+- Uses `modal-form` Stimulus controller for auto-close on success
 
 ### Key Files Touched (paths only)
-- `config/routes.rb` (add `import_from_musicbrainz` collection route)
-- `app/controllers/admin/music/artists_controller.rb` (add `import_from_musicbrainz` action)
-- `app/views/admin/music/artists/index.html.erb` (add button + modal)
-- `test/controllers/admin/music/artists_controller_test.rb`
+- `config/routes.rb:161` (add `import_from_musicbrainz` collection route)
+- `app/controllers/admin/music/artists_controller.rb:102-121` (add `import_from_musicbrainz` action)
+- `app/views/admin/music/artists/index.html.erb:11-15,58-98` (add button + modal)
+- `test/controllers/admin/music/artists_controller_test.rb:455-554` (add 5 tests)
 
-### Reference: Modal Pattern (≤40 lines, non-authoritative)
-```erb
-<!-- Pattern to follow from show.html.erb -->
-<dialog id="import-musicbrainz-modal" class="modal">
-  <div class="modal-box max-w-2xl">
-    <h3 class="font-bold text-lg">Import Artist from MusicBrainz</h3>
-    <%= form_with url: import_from_musicbrainz_admin_artists_path, method: :post do |f| %>
-      <div class="form-control">
-        <%= render AutocompleteComponent.new(
-          name: "musicbrainz_id",
-          url: admin_musicbrainz_artists_path,
-          placeholder: "Search MusicBrainz for artist...",
-          required: true
-        ) %>
-      </div>
-      <div class="modal-action">
-        <button type="button" class="btn" onclick="...close()">Cancel</button>
-        <%= f.submit "Import", class: "btn btn-primary" %>
-      </div>
-    <% end %>
-  </div>
-</dialog>
-```
+### Key Decisions
+1. **Direct controller action** instead of index_action pattern - simpler since importer already has its own result handling
+2. **No UUID validation** - autocomplete only returns valid MusicBrainz IDs from API
+3. **Server-side presence validation** - added to prevent 500 error if form is bypassed
+4. **Detect existing via provider_results** - `result.provider_results.empty?` indicates finder returned early
 
 ### Challenges & Resolutions
-- None anticipated; straightforward pattern reuse
+- None; straightforward pattern reuse as anticipated
 
 ### Deviations From Plan
-- (none yet)
+- Removed UUID format validation from controller - unnecessary since autocomplete returns valid MusicBrainz IDs
+- Added server-side presence validation for `musicbrainz_id` parameter (not in original spec)
 
 ## Acceptance Results
-- Date, verifier, artifacts (screenshots/links):
+- **Date**: 2026-01-16
+- **Verifier**: Claude
+- **Tests**: 45 tests pass (5 new tests for import functionality)
+- **Test file**: `test/controllers/admin/music/artists_controller_test.rb`
 
 ## Future Improvements
 - Bulk import from MusicBrainz search results
 - Import artist with albums in one action
 
 ## Related PRs
--
+- (pending)
 
 ## Documentation Updated
-- [ ] `documentation.md`
-- [ ] Class docs (if any new classes created)
+- [x] Controller documentation: `docs/controllers/admin/music/artists_controller.md`
+- [x] Spec file moved to `docs/specs/completed/`

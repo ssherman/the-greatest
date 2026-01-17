@@ -23,6 +23,7 @@ namespace :admin, module: "admin/music" do
   resources :artists do
     member { post :execute_action }
     collection do
+      post :import_from_musicbrainz
       post :bulk_action
       post :index_action
       get :search
@@ -35,6 +36,7 @@ end
 - `admin_artists_path` → `/admin/artists`
 - `admin_artist_path(@artist)` → `/admin/artists/:id`
 - `execute_action_admin_artist_path(@artist)` → `/admin/artists/:id/execute_action`
+- `import_from_musicbrainz_admin_artists_path` → `/admin/artists/import_from_musicbrainz`
 - `bulk_action_admin_artists_path` → `/admin/artists/bulk_action`
 - `index_action_admin_artists_path` → `/admin/artists/index_action`
 - `search_admin_artists_path` → `/admin/artists/search`
@@ -213,6 +215,39 @@ end
 ```
 Without this guard, `in_order_of(:id, [])` would raise `ArgumentError`.
 
+### `import_from_musicbrainz` (collection POST)
+Imports an artist from MusicBrainz by ID.
+
+**Parameters:**
+- `musicbrainz_id` - MusicBrainz UUID (from autocomplete selection)
+
+**Behavior:**
+- Validates `musicbrainz_id` presence
+- Calls `DataImporters::Music::Artist::Importer.call(musicbrainz_id: ...)`
+- Detects existing vs new artist via `result.provider_results.empty?`
+- Redirects appropriately with flash message
+
+**Responses:**
+- **New artist imported:** Redirect to `admin_artist_path(artist)` with notice "Artist imported successfully"
+- **Artist already exists:** Redirect to `admin_artist_path(existing)` with notice "Artist already exists"
+- **Import failed:** Redirect to `admin_artists_path` with alert containing error message
+- **Missing param:** Redirect to `admin_artists_path` with alert "Please select an artist from MusicBrainz"
+
+**Example:**
+```ruby
+post import_from_musicbrainz_admin_artists_path(
+  musicbrainz_id: "83d91898-7763-47d7-b03b-b92132375c47"
+)
+# => Calls DataImporters::Music::Artist::Importer.call(musicbrainz_id: "83d91898-...")
+```
+
+**UI Integration:**
+- Button on index page opens modal
+- Modal contains AutocompleteComponent pointing to `admin_musicbrainz_artists_path`
+- User searches MusicBrainz, selects artist, clicks Import
+
+**Added:** Spec 119
+
 ## Private Methods
 
 ### `set_artist`
@@ -390,6 +425,7 @@ result.status    # => :success, :error, or :warning
 - **Pagy**: Pagination (25 items per page)
 - **Turbo**: Turbo Frame partial updates
 - **Actions**: Custom admin action classes in `Actions::Admin::Music::`
+- **DataImporters**: Artist import via `DataImporters::Music::Artist::Importer`
 
 ## Related Classes
 - `Music::Artist` - Model being managed
@@ -406,8 +442,8 @@ result.status    # => :success, :error, or :warning
 - `/app/views/admin/music/artists/_table.html.erb`
 
 ## Testing
-- Controller tests: `/test/controllers/admin/music/artists_controller_test.rb` (34 tests)
-- Covers: CRUD operations, search, pagination, actions, authorization, SQL injection prevention, empty search results
+- Controller tests: `/test/controllers/admin/music/artists_controller_test.rb` (45 tests)
+- Covers: CRUD operations, search, pagination, actions, authorization, SQL injection prevention, empty search results, MusicBrainz import
 
 ### Error Handling Tests
 Two specific tests verify empty search result handling:
