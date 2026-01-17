@@ -23,6 +23,7 @@ Polymorphic model for image uploads supporting cover art, photos, and visual ass
 - `file` - presence required
 - `primary` - must be true or false
 - `acceptable_image_format` - validates JPEG, PNG, WebP, or GIF content types
+  - HEIC/HEIF files are explicitly rejected with a user-friendly error message suggesting conversion
 
 ## Scopes
 - `primary` - Returns only primary images
@@ -98,9 +99,13 @@ large_url = image.file.variant(:large).url
 - `Music::Release` - has_many :images, has_one :primary_image
 
 ## Admin Interface
-Managed through Avo with fields for:
-- File upload with image preview
-- Polymorphic parent selection (Artist, Album, Release)
-- Primary checkbox with help text
-- Notes field for descriptions
-- Read-only metadata fields
+Managed through custom admin interface via `Admin::ImagesController`:
+- Inline image management on Artist/Album show pages
+- Lazy-loaded Turbo Frame image gallery
+- Modal-based file upload with notes and primary checkbox
+- Quick "Set Primary" toggle button on image hover
+- Edit modal for notes and primary status
+- Delete with confirmation dialog
+- Turbo Stream responses for seamless updates
+
+See `docs/controllers/admin/images_controller.md` for controller documentation.

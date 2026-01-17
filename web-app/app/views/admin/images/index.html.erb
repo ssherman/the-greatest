@@ -1,0 +1,13 @@
+<% images_list = defined?(images) ? images : @images %>
+<% parent_entity = defined?(parent) ? parent : @parent %>
+<%= turbo_frame_tag "images_list" do %>
+  <% if images_list.any? %>
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <% images_list.each do |image| %>
+        <%= render "admin/images/image_card", image: image, parent: parent_entity %>
+      <% end %>
+    </div>
+  <% else %>
+    <p class="text-base-content/60 text-sm">No images yet. Click "Add Image" to upload one.</p>
+  <% end %>
+<% end %>

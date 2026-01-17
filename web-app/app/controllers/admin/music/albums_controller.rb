@@ -14,7 +14,7 @@ class Admin::Music::AlbumsController < Admin::Music::BaseController
         :external_links,
         album_artists: [:artist],
         releases: {tracks: [:song]},
-        images: [],
+        images: {file_attachment: :blob},
         credits: [:artist]
       )
       .find(params[:id])

@@ -43,7 +43,12 @@ class Image < ApplicationRecord
   def acceptable_image_format
     return unless file.attached?
 
-    unless file.blob.content_type.in?(%w[image/jpeg image/png image/webp image/gif])
+    allowed_types = %w[image/jpeg image/png image/webp image/gif]
+    return if file.blob.content_type.in?(allowed_types)
+
+    if file.blob.content_type.in?(%w[image/heic image/heif])
+      errors.add(:file, "HEIC/HEIF format is not supported. Please convert to JPEG, PNG, or WebP before uploading.")
+    else
       errors.add(:file, "must be a JPEG, PNG, WebP, or GIF")
     end
   end
