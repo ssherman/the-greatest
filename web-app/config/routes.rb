@@ -254,6 +254,11 @@ Rails.application.routes.draw do
     resources :category_items, only: [:destroy]
     resources :penalties
     resources :users, except: [:new, :create]
+
+    # Cloudflare cache management
+    resource :cloudflare, only: [], controller: "cloudflare" do
+      post :purge_cache
+    end
   end
 
   # Health check
