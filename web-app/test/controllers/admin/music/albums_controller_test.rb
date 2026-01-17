@@ -297,6 +297,54 @@ module Admin
         assert_equal 1, json_response.length
       end
 
+      # Search with exclude_id Tests
+
+      test "should filter out excluded album id from search results" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        album2 = music_albums(:wish_you_were_here)
+        search_results = [
+          {id: @album.id.to_s, score: 10.0},
+          {id: album2.id.to_s, score: 9.0}
+        ]
+        ::Search::Music::Search::AlbumAutocomplete.stubs(:call).returns(search_results)
+
+        get search_admin_albums_path(q: "album", exclude_id: @album.id), as: :json
+        assert_response :success
+
+        json_response = JSON.parse(response.body)
+        album_ids = json_response.map { |a| a["value"] }
+
+        assert_not_includes album_ids, @album.id
+        assert_includes album_ids, album2.id
+      end
+
+      test "should return empty array when exclude_id filters out all results" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        search_results = [{id: @album.id.to_s, score: 10.0}]
+        ::Search::Music::Search::AlbumAutocomplete.stubs(:call).returns(search_results)
+
+        get search_admin_albums_path(q: "album", exclude_id: @album.id), as: :json
+        assert_response :success
+
+        json_response = JSON.parse(response.body)
+        assert_equal [], json_response
+      end
+
+      test "should not filter when exclude_id is not provided" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        search_results = [{id: @album.id.to_s, score: 10.0}]
+        ::Search::Music::Search::AlbumAutocomplete.stubs(:call).returns(search_results)
+
+        get search_admin_albums_path(q: "album"), as: :json
+        assert_response :success
+
+        json_response = JSON.parse(response.body)
+        assert_equal 1, json_response.length
+      end
+
       # Action Execution Tests
 
       test "should execute single record action" do

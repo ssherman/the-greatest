@@ -42,9 +42,11 @@
                 data: { turbo_confirm: "Generate AI description for this album?" } %>
           </li>
           <li>
-            <%= link_to "#", class: "text-left", data: { action: "click->modal#open", modal_target_value: "merge-album-modal" } do %>
+            <button type="button"
+                    class="text-left"
+                    onclick="document.getElementById('merge-album-modal').showModal()">
               Merge Another Album
-            <% end %>
+            </button>
           </li>
         </ul>
       </div>
@@ -429,7 +431,8 @@
   <div class="modal-box max-w-2xl">
     <h3 class="font-bold text-lg">Merge Another Album Into This One</h3>
     <p class="py-4">
-      Enter the ID of a duplicate album to merge into the current album.
+      Search for a duplicate album to merge into the current album.
+      All releases, identifiers, and other associations will be transferred.
       The source album will be permanently deleted after merging.
     </p>
 
@@ -443,13 +446,17 @@
       <%= f.hidden_field :action_name, value: "MergeAlbum" %>
 
       <div class="form-control">
-        <%= f.label :source_album_id, "Source Album ID (to be deleted)", class: "label" %>
-        <%= f.number_field :source_album_id,
-                          class: "input input-bordered w-full",
-                          placeholder: "e.g., 123",
-                          required: true %>
+        <%= f.label :source_album_id, "Source Album (to be deleted)", class: "label" do %>
+          <span class="label-text font-semibold">Source Album <span class="text-error">*</span></span>
+        <% end %>
+        <%= render AutocompleteComponent.new(
+          name: "source_album_id",
+          url: search_admin_albums_path(exclude_id: @album.id),
+          placeholder: "Search for album to merge...",
+          required: true
+        ) %>
         <label class="label">
-          <span class="label-text-alt">Enter the ID of the duplicate album</span>
+          <span class="label-text-alt">Search for the duplicate album you want to merge into this one</span>
         </label>
       </div>
 
@@ -459,7 +466,7 @@
           <span class="label-text">I understand this action cannot be undone</span>
         </label>
         <label class="label">
-          <span class="label-text-alt">The source album will be permanently deleted after merging</span>
+          <span class="label-text-alt text-warning">The source album will be permanently deleted after merging</span>
         </label>
       </div>
 
