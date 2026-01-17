@@ -90,7 +90,7 @@ Media-specific filters:
 - **Web Server**: Nginx (reverse proxy to Rails)
 - **CDN**: Cloudflare for global content delivery
 - **Storage**: Cloudflare R2 for cover images and media assets
-- **Admin**: Avo HQ for internal content management
+- **Admin**: Custom admin interface for internal content management
 - **Monitoring**: Performance and error tracking
 - **Container Orchestration**: Docker-based deployment strategy
 

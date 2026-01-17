@@ -256,9 +256,6 @@ Rails.application.routes.draw do
     resources :users, except: [:new, :create]
   end
 
-  # Move Avo to /avo path
-  mount Avo::Engine, at: :avo
-
   # Health check
   get "up" => "rails/health#show", :as => :rails_health_check
 
