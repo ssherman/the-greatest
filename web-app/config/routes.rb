@@ -158,6 +158,7 @@ Rails.application.routes.draw do
           post :execute_action
         end
         collection do
+          post :import_from_musicbrainz
           post :bulk_action
           post :index_action
           get :search

@@ -99,6 +99,27 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
     redirect_to admin_artists_path, notice: result.message
   end
 
+  def import_from_musicbrainz
+    unless params[:musicbrainz_id].present?
+      redirect_to admin_artists_path, alert: "Please select an artist from MusicBrainz"
+      return
+    end
+
+    result = DataImporters::Music::Artist::Importer.call(
+      musicbrainz_id: params[:musicbrainz_id]
+    )
+
+    if result.success?
+      if result.provider_results.empty?
+        redirect_to admin_artist_path(result.item), notice: "Artist already exists"
+      else
+        redirect_to admin_artist_path(result.item), notice: "Artist imported successfully"
+      end
+    else
+      redirect_to admin_artists_path, alert: "Import failed: #{result.all_errors.join(", ")}"
+    end
+  end
+
   def search
     search_results = ::Search::Music::Search::ArtistAutocomplete.call(params[:q], size: 10)
     artist_ids = search_results.map { |r| r[:id].to_i }

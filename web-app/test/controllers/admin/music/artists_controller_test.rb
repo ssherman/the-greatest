@@ -451,6 +451,107 @@ module Admin
         json_response = JSON.parse(response.body)
         assert_equal 1, json_response.length
       end
+
+      # Import from MusicBrainz Tests
+
+      test "should import artist from musicbrainz for admin" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        new_artist = ::Music::Artist.new(id: 99999, name: "New Imported Artist")
+        new_artist.stubs(:to_param).returns("99999")
+
+        provider_result = DataImporters::ProviderResult.success(
+          provider: "DataImporters::Music::Artist::Providers::MusicBrainz",
+          data_populated: [:name, :kind, :country]
+        )
+
+        import_result = DataImporters::ImportResult.new(
+          item: new_artist,
+          provider_results: [provider_result],
+          success: true
+        )
+
+        DataImporters::Music::Artist::Importer.stubs(:call)
+          .with(musicbrainz_id: "83d91898-7763-47d7-b03b-b92132375c47")
+          .returns(import_result)
+
+        post import_from_musicbrainz_admin_artists_path, params: {
+          musicbrainz_id: "83d91898-7763-47d7-b03b-b92132375c47"
+        }
+
+        assert_redirected_to admin_artist_path(new_artist)
+        assert_equal "Artist imported successfully", flash[:notice]
+      end
+
+      test "should redirect to existing artist when already imported" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        import_result = DataImporters::ImportResult.new(
+          item: @artist,
+          provider_results: [],
+          success: true
+        )
+
+        DataImporters::Music::Artist::Importer.stubs(:call)
+          .with(musicbrainz_id: "83d91898-7763-47d7-b03b-b92132375c47")
+          .returns(import_result)
+
+        post import_from_musicbrainz_admin_artists_path, params: {
+          musicbrainz_id: "83d91898-7763-47d7-b03b-b92132375c47"
+        }
+
+        assert_redirected_to admin_artist_path(@artist)
+        assert_equal "Artist already exists", flash[:notice]
+      end
+
+      test "should show error when import fails" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        provider_result = DataImporters::ProviderResult.failure(
+          provider: "DataImporters::Music::Artist::Providers::MusicBrainz",
+          errors: ["MusicBrainz API error"]
+        )
+
+        import_result = DataImporters::ImportResult.new(
+          item: nil,
+          provider_results: [provider_result],
+          success: false
+        )
+
+        DataImporters::Music::Artist::Importer.stubs(:call)
+          .with(musicbrainz_id: "invalid-mbid")
+          .returns(import_result)
+
+        post import_from_musicbrainz_admin_artists_path, params: {
+          musicbrainz_id: "invalid-mbid"
+        }
+
+        assert_redirected_to admin_artists_path
+        assert_match(/Import failed/, flash[:alert])
+      end
+
+      test "should not allow import from musicbrainz for regular user" do
+        sign_in_as(@regular_user, stub_auth: true)
+
+        DataImporters::Music::Artist::Importer.expects(:call).never
+
+        post import_from_musicbrainz_admin_artists_path, params: {
+          musicbrainz_id: "83d91898-7763-47d7-b03b-b92132375c47"
+        }
+
+        assert_redirected_to music_root_path
+      end
+
+      test "should show error when musicbrainz_id is missing" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        DataImporters::Music::Artist::Importer.expects(:call).never
+
+        post import_from_musicbrainz_admin_artists_path, params: {}
+
+        assert_redirected_to admin_artists_path
+        assert_equal "Please select an artist from MusicBrainz", flash[:alert]
+      end
     end
   end
 end

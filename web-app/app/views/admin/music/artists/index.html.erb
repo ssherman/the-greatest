@@ -8,6 +8,11 @@
       <p class="text-sm text-base-content/70 mt-1">Manage music artists, bands, and performers</p>
     </div>
     <div class="flex gap-2">
+      <button type="button"
+              class="btn btn-outline"
+              onclick="document.getElementById('import-musicbrainz-modal').showModal()">
+        Import From MusicBrainz
+      </button>
       <%= link_to new_admin_artist_path, class: "btn btn-primary" do %>
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
           <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
@@ -49,3 +54,45 @@
     </div>
   </div>
 </div>
+
+<!-- Import from MusicBrainz Modal -->
+<dialog id="import-musicbrainz-modal" class="modal">
+  <div class="modal-box max-w-2xl">
+    <h3 class="font-bold text-lg">Import Artist from MusicBrainz</h3>
+    <p class="py-4 text-sm text-base-content/70">
+      Search MusicBrainz to import a new artist with all their metadata including genres, country, and identifiers.
+    </p>
+
+    <%= form_with url: import_from_musicbrainz_admin_artists_path,
+                  method: :post,
+                  class: "space-y-4",
+                  data: {
+                    controller: "modal-form",
+                    modal_form_modal_id_value: "import-musicbrainz-modal"
+                  } do |f| %>
+
+      <div class="form-control">
+        <label class="label">
+          <span class="label-text font-semibold">Artist <span class="text-error">*</span></span>
+        </label>
+        <%= render AutocompleteComponent.new(
+          name: "musicbrainz_id",
+          url: admin_musicbrainz_artists_path,
+          placeholder: "Search MusicBrainz for artist...",
+          required: true
+        ) %>
+        <label class="label">
+          <span class="label-text-alt">Start typing to search MusicBrainz database</span>
+        </label>
+      </div>
+
+      <div class="modal-action">
+        <button type="button" class="btn" onclick="document.getElementById('import-musicbrainz-modal').close()">Cancel</button>
+        <%= f.submit "Import", class: "btn btn-primary" %>
+      </div>
+    <% end %>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
