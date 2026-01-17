@@ -91,7 +91,6 @@ group :test do
   # Pin minitest to 5.x - version 6.0 is incompatible with Rails 8.x
   gem "minitest", "~> 5.0"
 end
-gem "avo", ">= 3.2"
 gem "faraday"
 gem "faraday-follow_redirects"
 gem "jwt"
