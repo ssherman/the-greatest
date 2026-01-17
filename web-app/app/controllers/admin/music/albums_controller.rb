@@ -96,6 +96,11 @@ class Admin::Music::AlbumsController < Admin::Music::BaseController
     search_results = ::Search::Music::Search::AlbumAutocomplete.call(params[:q], size: 10)
     album_ids = search_results.map { |r| r[:id].to_i }
 
+    # Filter out excluded ID (used for merge autocomplete to exclude current album)
+    if params[:exclude_id].present?
+      album_ids -= [params[:exclude_id].to_i]
+    end
+
     if album_ids.empty?
       render json: []
       return
