@@ -8,7 +8,7 @@ class Admin::PenaltiesController < Admin::BaseController
       .then { |scope| apply_type_filter(scope) }
       .order(:name)
 
-    @pagy, @penalties = pagy(@penalties, items: 25)
+    @pagy, @penalties = pagy(@penalties, limit: 25)
     @selected_type = params[:type] || "All"
   end
 

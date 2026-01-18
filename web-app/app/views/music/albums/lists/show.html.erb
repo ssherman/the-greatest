@@ -81,7 +81,7 @@
     <%= turbo_frame_tag "list_items" do %>
       <% if @pagy.pages > 1 %>
         <div class="flex justify-center mb-6">
-          <%== pagy_nav(@pagy) %>
+          <%== @pagy.series_nav %>
         </div>
       <% end %>
 
@@ -173,7 +173,7 @@
 
       <% if @pagy.pages > 1 %>
         <div class="flex justify-center mt-6">
-          <%== pagy_nav(@pagy) %>
+          <%== @pagy.series_nav %>
         </div>
       <% end %>
     <% end %>

@@ -9,7 +9,7 @@ class Admin::RankedListsController < Admin::BaseController
       .includes(list: :submitted_by)
       .order(weight: :desc)
 
-    @pagy, @ranked_lists = pagy(@ranked_lists, items: 25)
+    @pagy, @ranked_lists = pagy(@ranked_lists, limit: 25)
 
     render layout: false
   end

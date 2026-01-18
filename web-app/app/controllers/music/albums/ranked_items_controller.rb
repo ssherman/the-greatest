@@ -1,5 +1,5 @@
 class Music::Albums::RankedItemsController < Music::RankedItemsController
-  include Pagy::Backend
+  include Pagy::Method
   include Cacheable
 
   layout "music/application"

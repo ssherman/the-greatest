@@ -66,7 +66,7 @@
 
     <% if @pagy && @pagy.pages > 1 %>
       <div class="flex justify-center py-4 border-t border-base-300">
-        <%== pagy_nav(@pagy, link_extra: 'data-turbo-frame="ranked_items_list"') %>
+        <%== @pagy.series_nav(anchor_string: 'data-turbo-frame="ranked_items_list"') %>
       </div>
     <% end %>
   <% else %>

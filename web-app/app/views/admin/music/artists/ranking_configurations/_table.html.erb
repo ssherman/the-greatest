@@ -122,7 +122,7 @@
 
   <% if defined?(pagy) && pagy %>
     <div class="flex justify-center py-4 border-t border-base-300">
-      <%== pagy_nav(pagy) if pagy.pages > 1 %>
+      <%== pagy.series_nav if pagy.pages > 1 %>
     </div>
   <% end %>
 <% else %>

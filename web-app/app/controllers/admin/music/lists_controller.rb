@@ -70,7 +70,7 @@ class Admin::Music::ListsController < Admin::Music::BaseController
       .group("#{list_class.table_name}.id")
       .order("#{sort_column} #{sort_direction}")
 
-    @pagy, @lists = pagy(@lists, items: 25)
+    @pagy, @lists = pagy(@lists, limit: 25)
   end
 
   def apply_status_filter(scope)

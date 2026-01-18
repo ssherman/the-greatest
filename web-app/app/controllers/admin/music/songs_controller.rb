@@ -151,7 +151,7 @@ class Admin::Music::SongsController < Admin::Music::BaseController
         .order(sort_column)
     end
 
-    @pagy, @songs = pagy(@songs, items: 25)
+    @pagy, @songs = pagy(@songs, limit: 25)
   end
 
   def sortable_column(column)

@@ -109,7 +109,7 @@ class Admin::Music::RankingConfigurationsController < Admin::Music::BaseControll
         .order(sort_column)
     end
 
-    @pagy, @ranking_configurations = pagy(@ranking_configurations, items: 25)
+    @pagy, @ranking_configurations = pagy(@ranking_configurations, limit: 25)
   end
 
   def sortable_column(column)
