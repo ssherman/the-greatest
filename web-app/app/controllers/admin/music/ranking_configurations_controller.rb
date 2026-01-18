@@ -1,7 +1,9 @@
 class Admin::Music::RankingConfigurationsController < Admin::Music::BaseController
   before_action :set_ranking_configuration, only: [:show, :edit, :update, :destroy, :execute_action]
+  before_action :authorize_ranking_configuration, only: [:show, :edit, :update, :destroy, :execute_action]
 
   def index
+    authorize ranking_configuration_class, policy_class: Music::RankingConfigurationPolicy
     load_ranking_configurations_for_index
   end
 
@@ -13,10 +15,12 @@ class Admin::Music::RankingConfigurationsController < Admin::Music::BaseControll
 
   def new
     @ranking_configuration = ranking_configuration_class.new
+    authorize @ranking_configuration, policy_class: Music::RankingConfigurationPolicy
   end
 
   def create
     @ranking_configuration = ranking_configuration_class.new(ranking_configuration_params)
+    authorize @ranking_configuration, policy_class: Music::RankingConfigurationPolicy
 
     if @ranking_configuration.save
       redirect_to ranking_configuration_path(@ranking_configuration), notice: "Ranking configuration created successfully."
@@ -58,6 +62,7 @@ class Admin::Music::RankingConfigurationsController < Admin::Music::BaseControll
   end
 
   def index_action
+    authorize ranking_configuration_class, :index_action?, policy_class: Music::RankingConfigurationPolicy
     ranking_configuration_ids = params[:ranking_configuration_ids] || []
 
     # If no IDs provided, use all configurations of this type
@@ -87,6 +92,10 @@ class Admin::Music::RankingConfigurationsController < Admin::Music::BaseControll
 
   def set_ranking_configuration
     @ranking_configuration = ranking_configuration_class.find(params[:id])
+  end
+
+  def authorize_ranking_configuration
+    authorize @ranking_configuration, policy_class: Music::RankingConfigurationPolicy
   end
 
   def load_ranking_configurations_for_index

@@ -1,7 +1,9 @@
 class Admin::Music::ListsController < Admin::Music::BaseController
   before_action :set_list, only: [:show, :edit, :update, :destroy]
+  before_action :authorize_list, only: [:show, :edit, :update, :destroy]
 
   def index
+    authorize list_class, policy_class: Music::ListPolicy
     load_lists_for_index
     @selected_status = params[:status].presence || "all"
     @search_query = params[:q].presence
@@ -15,10 +17,12 @@ class Admin::Music::ListsController < Admin::Music::BaseController
 
   def new
     @list = list_class.new
+    authorize @list, policy_class: Music::ListPolicy
   end
 
   def create
     @list = list_class.new(list_params)
+    authorize @list, policy_class: Music::ListPolicy
 
     if @list.save
       redirect_to list_path(@list), notice: "Album list created successfully."
@@ -47,6 +51,10 @@ class Admin::Music::ListsController < Admin::Music::BaseController
 
   def set_list
     @list = list_class.find(params[:id])
+  end
+
+  def authorize_list
+    authorize @list, policy_class: Music::ListPolicy
   end
 
   def load_lists_for_index
