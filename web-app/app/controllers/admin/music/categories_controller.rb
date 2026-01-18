@@ -1,7 +1,9 @@
 class Admin::Music::CategoriesController < Admin::Music::BaseController
   before_action :set_category, only: [:show, :edit, :update, :destroy]
+  before_action :authorize_category, only: [:show, :edit, :update, :destroy]
 
   def index
+    authorize Music::Category
     @categories = Music::Category.active.includes(:parent)
 
     if params[:q].present?
@@ -20,10 +22,12 @@ class Admin::Music::CategoriesController < Admin::Music::BaseController
 
   def new
     @category = Music::Category.new
+    authorize @category
   end
 
   def create
     @category = Music::Category.new(category_params)
+    authorize @category
 
     if @category.save
       redirect_to admin_category_path(@category), notice: "Category created successfully."
@@ -65,6 +69,10 @@ class Admin::Music::CategoriesController < Admin::Music::BaseController
 
   def set_category
     @category = Music::Category.find(params[:id])
+  end
+
+  def authorize_category
+    authorize @category
   end
 
   def category_params

@@ -3,8 +3,10 @@ class ApplicationController < ActionController::Base
   allow_browser versions: :modern
 
   include ApplicationHelper
+  include Pundit::Authorization
 
   rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
+  rescue_from Pundit::NotAuthorizedError, with: :user_not_authorized
 
   before_action :set_current_domain
 
@@ -56,6 +58,12 @@ class ApplicationController < ActionController::Base
 
   def render_not_found
     render file: "#{Rails.root}/public/404.html", status: :not_found, layout: false
+  end
+
+  def user_not_authorized
+    flash[:alert] = "You are not authorized to perform this action."
+    fallback = respond_to?(:domain_root_path, true) ? domain_root_path : "/"
+    redirect_back(fallback_location: fallback)
   end
 
   # Load ranking configuration based on controller class configuration

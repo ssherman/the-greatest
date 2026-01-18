@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_01_16_060845) do
+ActiveRecord::Schema[8.1].define(version: 2026_01_18_055546) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -93,6 +93,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_01_16_060845) do
     t.index ["category_id"], name: "index_category_items_on_category_id"
     t.index ["item_type", "item_id"], name: "index_category_items_on_item"
     t.index ["item_type", "item_id"], name: "index_category_items_on_item_type_and_item_id"
+  end
+
+  create_table "domain_roles", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "domain", null: false
+    t.integer "permission_level", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["domain"], name: "index_domain_roles_on_domain"
+    t.index ["permission_level"], name: "index_domain_roles_on_permission_level"
+    t.index ["user_id", "domain"], name: "index_domain_roles_on_user_id_and_domain", unique: true
+    t.index ["user_id"], name: "index_domain_roles_on_user_id"
   end
 
   create_table "external_links", force: :cascade do |t|
@@ -533,6 +545,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_01_16_060845) do
   add_foreign_key "ai_chats", "users"
   add_foreign_key "categories", "categories", column: "parent_id"
   add_foreign_key "category_items", "categories"
+  add_foreign_key "domain_roles", "users"
   add_foreign_key "external_links", "users", column: "submitted_by_id"
   add_foreign_key "list_items", "lists"
   add_foreign_key "list_penalties", "lists"

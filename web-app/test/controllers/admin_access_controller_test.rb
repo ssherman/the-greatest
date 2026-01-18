@@ -30,7 +30,7 @@ class AdminAccessControllerTest < ActionDispatch::IntegrationTest
   test "unauthenticated users cannot access admin area" do
     get "/admin"
     assert_redirected_to music_root_path
-    assert_equal "Access denied. Admin or editor role required.", flash[:alert]
+    assert_equal "Access denied. You need permission for music admin.", flash[:alert]
   end
 
   test "regular users cannot access admin area" do
@@ -38,7 +38,7 @@ class AdminAccessControllerTest < ActionDispatch::IntegrationTest
 
     get "/admin"
     assert_redirected_to music_root_path
-    assert_equal "Access denied. Admin or editor role required.", flash[:alert]
+    assert_equal "Access denied. You need permission for music admin.", flash[:alert]
   end
 
   test "admin users can access admin area" do

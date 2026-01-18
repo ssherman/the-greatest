@@ -1,0 +1,161 @@
+<% content_for :title, "Domain Roles for #{@user.email}" %>
+
+<div class="space-y-6">
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div class="flex-1">
+      <div class="flex items-center gap-2 mb-2">
+        <%= link_to admin_user_path(@user), class: "btn btn-ghost btn-sm btn-circle" do %>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+          </svg>
+        <% end %>
+        <h1 class="text-3xl font-bold">Domain Roles</h1>
+      </div>
+      <div class="flex items-center gap-4 text-sm text-base-content/70">
+        <span>Managing permissions for <span class="font-semibold"><%= @user.email %></span></span>
+        <% if @user.admin? %>
+          <span class="badge badge-error">Global Admin</span>
+        <% elsif @user.editor? %>
+          <span class="badge badge-warning">Global Editor</span>
+        <% end %>
+      </div>
+    </div>
+  </div>
+
+  <% if @user.admin? %>
+    <div class="alert alert-info">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+      <span>This user has the <strong>global admin</strong> role and can access all domains regardless of domain-specific roles.</span>
+    </div>
+  <% elsif @user.editor? %>
+    <div class="alert alert-info">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+      <span>This user has the <strong>global editor</strong> role and can access all domains regardless of domain-specific roles.</span>
+    </div>
+  <% end %>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">Current Domain Roles</h2>
+          <% if @domain_roles.any? %>
+            <div class="overflow-x-auto">
+              <table class="table table-zebra">
+                <thead>
+                  <tr>
+                    <th>Domain</th>
+                    <th>Permission Level</th>
+                    <th>Granted</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% @domain_roles.each do |role| %>
+                    <tr>
+                      <td>
+                        <span class="badge badge-lg badge-outline"><%= role.domain.humanize %></span>
+                      </td>
+                      <td>
+                        <%
+                          level_badge_class = case role.permission_level
+                          when "admin"
+                            "badge-error"
+                          when "moderator"
+                            "badge-warning"
+                          when "editor"
+                            "badge-info"
+                          else
+                            "badge-ghost"
+                          end
+                        %>
+                        <span class="badge <%= level_badge_class %>"><%= role.permission_level.humanize %></span>
+                      </td>
+                      <td class="text-sm text-base-content/70">
+                        <%= time_ago_in_words(role.created_at) %> ago
+                      </td>
+                      <td>
+                        <div class="flex gap-2">
+                          <%= form_with url: admin_user_domain_role_path(@user, role), method: :patch, class: "inline-flex gap-2" do |f| %>
+                            <%= f.select :permission_level, DomainRole.permission_levels.keys.map { |k| [k.humanize, k] }, {}, class: "select select-bordered select-sm" %>
+                            <%= f.submit "Update", class: "btn btn-sm btn-primary" %>
+                          <% end %>
+                          <%= button_to admin_user_domain_role_path(@user, role),
+                              method: :delete,
+                              class: "btn btn-sm btn-error btn-outline",
+                              data: { turbo_confirm: "Are you sure you want to revoke #{role.domain} access for this user?" } do %>
+                            Revoke
+                          <% end %>
+                        </div>
+                      </td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% else %>
+            <div class="text-center py-8 text-base-content/70">
+              <p>No domain-specific roles assigned.</p>
+              <p class="text-sm mt-2">
+                <% if @user.admin? || @user.editor? %>
+                  This user still has access via their global role.
+                <% else %>
+                  This user cannot access any admin areas.
+                <% end %>
+              </p>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-6">
+      <% if @available_domains.any? %>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title text-lg">Grant New Role</h2>
+            <%= form_with url: admin_user_domain_roles_path(@user), scope: :domain_role, method: :post, class: "space-y-4" do |f| %>
+              <div class="form-control">
+                <label class="label">
+                  <span class="label-text">Domain</span>
+                </label>
+                <%= f.select :domain, @available_domains.map { |d| [d.humanize, d] }, { prompt: "Select domain..." }, class: "select select-bordered w-full" %>
+              </div>
+              <div class="form-control">
+                <label class="label">
+                  <span class="label-text">Permission Level</span>
+                </label>
+                <%= f.select :permission_level, DomainRole.permission_levels.keys.map { |k| [k.humanize, k] }, {}, class: "select select-bordered w-full" %>
+              </div>
+              <%= f.submit "Grant Role", class: "btn btn-primary w-full" %>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title text-lg">Permission Levels</h2>
+          <div class="space-y-3 text-sm">
+            <div class="flex justify-between items-start">
+              <span class="badge badge-ghost">Viewer</span>
+              <span class="text-base-content/70 text-right">Read-only access</span>
+            </div>
+            <div class="flex justify-between items-start">
+              <span class="badge badge-info">Editor</span>
+              <span class="text-base-content/70 text-right">Create & update</span>
+            </div>
+            <div class="flex justify-between items-start">
+              <span class="badge badge-warning">Moderator</span>
+              <span class="text-base-content/70 text-right">+ Delete content</span>
+            </div>
+            <div class="flex justify-between items-start">
+              <span class="badge badge-error">Admin</span>
+              <span class="text-base-content/70 text-right">+ System actions</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

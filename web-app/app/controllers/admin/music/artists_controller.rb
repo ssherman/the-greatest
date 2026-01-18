@@ -1,11 +1,15 @@
 class Admin::Music::ArtistsController < Admin::Music::BaseController
-  before_action :set_artist, only: [:edit, :update, :destroy, :execute_action]
+  before_action :set_artist, only: [:show, :edit, :update, :destroy, :execute_action]
+  before_action :authorize_artist, only: [:show, :edit, :update, :destroy, :execute_action]
 
   def index
+    authorize Music::Artist
     load_artists_for_index
   end
 
   def show
+    # @artist loaded and authorized by before_action
+    # Eager load associations for display
     @artist = Music::Artist
       .includes(
         :categories,
@@ -20,10 +24,12 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
 
   def new
     @artist = Music::Artist.new
+    authorize @artist
   end
 
   def create
     @artist = Music::Artist.new(artist_params)
+    authorize @artist
 
     if @artist.save
       redirect_to admin_artist_path(@artist), notice: "Artist created successfully."
@@ -72,6 +78,7 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
   end
 
   def bulk_action
+    authorize Music::Artist, :bulk_action?
     artist_ids = params[:artist_ids] || []
     artists = Music::Artist.where(id: artist_ids)
 
@@ -93,6 +100,7 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
   end
 
   def index_action
+    authorize Music::Artist, :index_action?
     action_class = "Actions::Admin::Music::#{params[:action_name]}".constantize
     result = action_class.call(user: current_user, models: [])
 
@@ -100,6 +108,7 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
   end
 
   def import_from_musicbrainz
+    authorize Music::Artist, :import?
     unless params[:musicbrainz_id].present?
       redirect_to admin_artists_path, alert: "Please select an artist from MusicBrainz"
       return
@@ -147,6 +156,10 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
 
   def set_artist
     @artist = Music::Artist.find(params[:id])
+  end
+
+  def authorize_artist
+    authorize @artist
   end
 
   def load_artists_for_index

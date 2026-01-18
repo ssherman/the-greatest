@@ -1,11 +1,15 @@
 class Admin::Music::AlbumsController < Admin::Music::BaseController
   before_action :set_album, only: [:show, :edit, :update, :destroy, :execute_action]
+  before_action :authorize_album, only: [:show, :edit, :update, :destroy, :execute_action]
 
   def index
+    authorize Music::Album
     load_albums_for_index
   end
 
   def show
+    # @album loaded and authorized by before_action
+    # Eager load associations for display
     @album = Music::Album
       .includes(
         :categories,
@@ -22,10 +26,12 @@ class Admin::Music::AlbumsController < Admin::Music::BaseController
 
   def new
     @album = Music::Album.new
+    authorize @album
   end
 
   def create
     @album = Music::Album.new(album_params)
+    authorize @album
 
     if @album.save
       redirect_to admin_album_path(@album), notice: "Album created successfully."
@@ -73,6 +79,7 @@ class Admin::Music::AlbumsController < Admin::Music::BaseController
   end
 
   def bulk_action
+    authorize Music::Album, :bulk_action?
     album_ids = params[:album_ids] || []
     albums = Music::Album.where(id: album_ids)
 
@@ -123,6 +130,10 @@ class Admin::Music::AlbumsController < Admin::Music::BaseController
 
   def set_album
     @album = Music::Album.find(params[:id])
+  end
+
+  def authorize_album
+    authorize @album
   end
 
   def load_albums_for_index

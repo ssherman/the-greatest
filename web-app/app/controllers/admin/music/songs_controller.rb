@@ -1,11 +1,15 @@
 class Admin::Music::SongsController < Admin::Music::BaseController
   before_action :set_song, only: [:show, :edit, :update, :destroy, :execute_action]
+  before_action :authorize_song, only: [:show, :edit, :update, :destroy, :execute_action]
 
   def index
+    authorize Music::Song
     load_songs_for_index
   end
 
   def show
+    # @song loaded and authorized by before_action
+    # Eager load associations for display
     @song = Music::Song
       .includes(
         :categories,
@@ -21,10 +25,12 @@ class Admin::Music::SongsController < Admin::Music::BaseController
 
   def new
     @song = Music::Song.new
+    authorize @song
   end
 
   def create
     @song = Music::Song.new(song_params)
+    authorize @song
 
     if @song.save
       redirect_to admin_song_path(@song), notice: "Song created successfully."
@@ -72,6 +78,7 @@ class Admin::Music::SongsController < Admin::Music::BaseController
   end
 
   def bulk_action
+    authorize Music::Song, :bulk_action?
     song_ids = params[:song_ids] || []
     songs = Music::Song.where(id: song_ids)
 
@@ -117,6 +124,10 @@ class Admin::Music::SongsController < Admin::Music::BaseController
 
   def set_song
     @song = Music::Song.find(params[:id])
+  end
+
+  def authorize_song
+    authorize @song
   end
 
   def load_songs_for_index

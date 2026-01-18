@@ -20,14 +20,14 @@ module Admin
         test "should redirect index to root for unauthenticated users" do
           get admin_albums_ranking_configurations_path
           assert_redirected_to music_root_path
-          assert_equal "Access denied. Admin or editor role required.", flash[:alert]
+          assert_equal "Access denied. You need permission for music admin.", flash[:alert]
         end
 
         test "should redirect to root for regular users" do
           sign_in_as(@regular_user, stub_auth: true)
           get admin_albums_ranking_configurations_path
           assert_redirected_to music_root_path
-          assert_equal "Access denied. Admin or editor role required.", flash[:alert]
+          assert_equal "Access denied. You need permission for music admin.", flash[:alert]
         end
 
         test "should allow admin users to access index" do
@@ -154,10 +154,10 @@ module Admin
           assert_response :success
         end
 
-        test "should get new for editor" do
+        test "should not get new for editor (manage permission required)" do
           sign_in_as(@editor_user, stub_auth: true)
           get new_admin_albums_ranking_configuration_path
-          assert_response :success
+          assert_redirected_to music_root_path
         end
 
         test "should not get new for regular user" do
@@ -229,10 +229,10 @@ module Admin
           assert_response :success
         end
 
-        test "should get edit for editor" do
+        test "should not get edit for editor (manage permission required)" do
           sign_in_as(@editor_user, stub_auth: true)
           get edit_admin_albums_ranking_configuration_path(@ranking_configuration)
-          assert_response :success
+          assert_redirected_to music_root_path
         end
 
         test "should not get edit for regular user" do

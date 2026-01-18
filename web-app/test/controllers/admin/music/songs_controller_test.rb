@@ -15,14 +15,14 @@ module Admin
       test "should redirect index to root for unauthenticated users" do
         get admin_songs_path
         assert_redirected_to music_root_path
-        assert_equal "Access denied. Admin or editor role required.", flash[:alert]
+        assert_equal "Access denied. You need permission for music admin.", flash[:alert]
       end
 
       test "should redirect index to root for regular users" do
         sign_in_as(@regular_user, stub_auth: true)
         get admin_songs_path
         assert_redirected_to music_root_path
-        assert_equal "Access denied. Admin or editor role required.", flash[:alert]
+        assert_equal "Access denied. You need permission for music admin.", flash[:alert]
       end
 
       test "should allow admin users to access index" do

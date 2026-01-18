@@ -245,6 +245,15 @@
               <span>Submitted External Links</span>
               <span class="badge badge-lg"><%= @user.submitted_external_links.count %></span>
             </div>
+            <div class="flex justify-between items-center">
+              <span>Domain Roles</span>
+              <span class="badge badge-lg"><%= @user.domain_roles.count %></span>
+            </div>
+          </div>
+          <div class="mt-4">
+            <%= link_to admin_user_domain_roles_path(@user), class: "btn btn-sm btn-outline w-full" do %>
+              Manage Domain Roles
+            <% end %>
           </div>
           <div class="mt-4 text-xs text-base-content/50">
             Deleting this user will destroy their ranking configurations, penalties, and AI chats. Submitted lists and external links will remain but be disassociated from this user.

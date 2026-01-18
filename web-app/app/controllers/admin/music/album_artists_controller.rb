@@ -5,6 +5,8 @@ class Admin::Music::AlbumArtistsController < Admin::Music::BaseController
 
   def create
     @album_artist = Music::AlbumArtist.new(album_artist_params)
+    # Authorize against the album being modified
+    authorize @album || @album_artist.album, :update?, policy_class: Music::AlbumPolicy
 
     if @album_artist.save
       respond_to do |format|
@@ -43,6 +45,8 @@ class Admin::Music::AlbumArtistsController < Admin::Music::BaseController
   end
 
   def update
+    authorize @album_artist.album, :update?, policy_class: Music::AlbumPolicy
+
     if @album_artist.update(album_artist_params)
       respond_to do |format|
         format.turbo_stream do
@@ -80,6 +84,7 @@ class Admin::Music::AlbumArtistsController < Admin::Music::BaseController
   end
 
   def destroy
+    authorize @album_artist.album, :update?, policy_class: Music::AlbumPolicy
     @album_artist.destroy!
 
     respond_to do |format|
