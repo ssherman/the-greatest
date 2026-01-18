@@ -228,7 +228,8 @@ end
 - `app/policies/music/artist_policy.rb`
 - `app/policies/music/song_policy.rb`
 - `app/controllers/application_controller.rb` - include Pundit::Authorization
-- `app/controllers/admin/base_controller.rb` - updated authenticate_admin! for domain access
+- `app/controllers/admin/base_controller.rb` - authenticate_admin! requires global admin/editor
+- `app/controllers/admin/music/base_controller.rb` - overrides authenticate_admin! to allow music domain roles
 - `app/controllers/admin/domain_roles_controller.rb` - CRUD for domain roles
 - `app/controllers/admin/music/albums_controller.rb` - added authorize calls
 - `app/controllers/admin/music/artists_controller.rb` - added authorize calls
@@ -240,19 +241,22 @@ end
 - `test/controllers/admin/domain_roles_controller_test.rb` - 10 controller tests
 - `test/fixtures/domain_roles.yml` - test fixtures
 - `test/fixtures/users.yml` - added contractor_user fixture
+- `test/controllers/admin/domain_isolation_test.rb` - 10 tests for domain isolation security
 
 ### Challenges & Resolutions
 - View path helpers needed explicit `admin_user_domain_role_path` vs implicit path generation
+- **Domain Isolation Fix**: Initial implementation allowed domain-scoped users to access global admin controllers. Fixed by keeping `Admin::BaseController#authenticate_admin!` strict (requires global admin/editor) and overriding in `Admin::Music::BaseController` to allow music domain roles. Added 10 domain isolation tests to verify.
 
 ### Deviations From Plan
 - Did not create separate policy tests (testing via controller tests instead)
 - Kept global `editor` role for backward compatibility (spec originally only mentioned admin)
 
 ## Acceptance Results
-- Date: 2026-01-17
+- Date: 2026-01-18
 - Verifier: Claude
-- All 31 tests pass (21 model tests, 10 controller tests)
+- All 51 tests pass (21 model tests, 10 controller tests, 10 domain isolation tests, 10 domain role controller tests)
 - Authorization works for global admin, global editor, and domain-scoped roles
+- Domain isolation verified: domain-scoped users cannot access global admin controllers
 
 ## Future Improvements
 - Resource-type permissions (e.g., can edit artists but not albums)
@@ -266,4 +270,9 @@ end
 
 ## Documentation Updated
 - [x] `docs/models/domain_role.md` - Created
-- [ ] Class docs for policies (optional)
+- [x] `docs/models/user.md` - Updated with domain role methods
+- [x] `docs/policies/application_policy.md` - Created
+- [x] `docs/policies/music/album_policy.md` - Created
+- [x] `docs/policies/music/artist_policy.md` - Created
+- [x] `docs/policies/music/song_policy.md` - Created
+- [x] `docs/features/domain-scoped-authorization.md` - Created feature overview

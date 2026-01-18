@@ -8,12 +8,10 @@ class Admin::BaseController < ApplicationController
   private
 
   def authenticate_admin!
-    # Global admin or editor has full access (backward compatible)
-    return if current_user&.admin? || current_user&.editor?
-
-    # Otherwise, check for domain-specific access
-    unless current_user&.can_access_domain?(current_domain.to_s)
-      redirect_to domain_root_path, alert: "Access denied. You need permission for #{current_domain} admin."
+    # Global admin or editor has full access
+    # Domain-specific controllers should override this to allow domain roles
+    unless current_user&.admin? || current_user&.editor?
+      redirect_to domain_root_path, alert: "Access denied. Admin or editor role required."
     end
   end
 

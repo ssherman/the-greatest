@@ -31,17 +31,28 @@ Users can be granted domain-specific permissions via the `domain_roles` table:
 ## Architecture
 
 ### Authorization Flow
+
+**Global Admin Controllers** (e.g., `Admin::PenaltiesController`, `Admin::ListItemsController`):
 ```
 Request → Admin::BaseController#authenticate_admin!
           ├─ Global admin/editor? → Allow
-          └─ Has domain role? → Allow
-              └─ No access → Redirect with error
+          └─ No global role → Redirect with "Admin or editor role required"
+```
+
+**Domain-Scoped Controllers** (e.g., `Admin::Music::AlbumsController`):
+```
+Request → Admin::Music::BaseController#authenticate_admin!
+          ├─ Global admin/editor? → Allow
+          └─ Has music domain role? → Allow
+              └─ No access → Redirect with "You need permission for music admin"
 
 Action → Pundit Policy (e.g., Music::AlbumPolicy)
           ├─ global_role? → Allow (read/write/delete)
           ├─ domain_role.can_*? → Check permission level
           └─ manage? → Only global_admin or domain_admin
 ```
+
+**Important**: Domain-scoped users can ONLY access controllers within their domain namespace. They cannot access global controllers that manage cross-domain resources (penalties, list items, etc.).
 
 ### Key Components
 
@@ -54,7 +65,8 @@ Action → Pundit Policy (e.g., Music::AlbumPolicy)
 - `Music::AlbumPolicy`, `Music::ArtistPolicy`, `Music::SongPolicy` - Domain implementations
 
 **Controllers:**
-- `Admin::BaseController` - `authenticate_admin!` checks access
+- `Admin::BaseController` - `authenticate_admin!` requires global admin/editor (for global controllers)
+- `Admin::Music::BaseController` - Overrides `authenticate_admin!` to allow music domain roles
 - `Admin::DomainRolesController` - CRUD for managing user domain roles (global admin only)
 
 ## Usage
