@@ -56,3 +56,12 @@ editor_user:
   role: 2
   email_verified: true
   original_signup_domain: thegreatestmovies.org
+
+# User with no global role, but will have domain-specific roles via domain_roles fixtures
+contractor_user:
+  email: contractor@example.com
+  display_name: Contractor User
+  name: Contractor User Full Name
+  role: 0
+  email_verified: true
+  original_signup_domain: thegreatestmusic.org

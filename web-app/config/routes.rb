@@ -260,7 +260,9 @@ Rails.application.routes.draw do
       end
     end
     resources :penalties
-    resources :users, except: [:new, :create]
+    resources :users, except: [:new, :create] do
+      resources :domain_roles, only: [:index, :create, :update, :destroy]
+    end
 
     # Cloudflare cache management
     resource :cloudflare, only: [], controller: "cloudflare" do

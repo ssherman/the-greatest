@@ -40,6 +40,7 @@ class User < ApplicationRecord
   has_many :ai_chats, dependent: :destroy
   has_many :submitted_lists, class_name: "List", foreign_key: :submitted_by_id, dependent: :nullify
   has_many :submitted_external_links, class_name: "ExternalLink", foreign_key: :submitted_by_id, dependent: :nullify
+  has_many :domain_roles, dependent: :destroy
 
   enum :role, [:user, :admin, :editor]
   enum :external_provider, [:facebook, :twitter, :google, :apple, :password]
@@ -73,5 +74,45 @@ class User < ApplicationRecord
     return false if confirmation_sent_at.nil?
 
     confirmation_sent_at < 24.hours.ago
+  end
+
+  # Domain-scoped authorization methods
+
+  # Returns DomainRole for the given domain, or nil
+  def domain_role_for(domain)
+    domain_roles.find_by(domain: domain)
+  end
+
+  # Check if user has any access to domain
+  def can_access_domain?(domain)
+    return true if admin? # global admin bypasses
+    domain_role_for(domain).present?
+  end
+
+  # Permission level checks for a domain
+  def can_read_in_domain?(domain)
+    return true if admin?
+    domain_role_for(domain)&.can_read? || false
+  end
+
+  def can_write_in_domain?(domain)
+    return true if admin?
+    domain_role_for(domain)&.can_write? || false
+  end
+
+  def can_delete_in_domain?(domain)
+    return true if admin?
+    domain_role_for(domain)&.can_delete? || false
+  end
+
+  def can_manage_domain?(domain)
+    return true if admin?
+    domain_role_for(domain)&.can_manage? || false
+  end
+
+  # Get permission level name for display
+  def domain_permission_level(domain)
+    return :super_admin if admin?
+    domain_role_for(domain)&.permission_level&.to_sym
   end
 end

@@ -1,0 +1,36 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+# == Schema Information
+#
+# Table name: domain_roles
+#
+#  id               :bigint           not null, primary key
+#  domain           :integer          not null
+#  permission_level :integer          default("viewer"), not null
+#  created_at       :datetime         not null
+#  updated_at       :datetime         not null
+#  user_id          :bigint           not null
+#
+# Indexes
+#
+#  index_domain_roles_on_domain              (domain)
+#  index_domain_roles_on_permission_level    (permission_level)
+#  index_domain_roles_on_user_id             (user_id)
+#  index_domain_roles_on_user_id_and_domain  (user_id,domain) UNIQUE
+#
+# Foreign Keys
+#
+#  fk_rails_...  (user_id => users.id)
+#
+
+# Contractor with music editor access
+music_editor:
+  user: contractor_user
+  domain: 0  # music
+  permission_level: 1  # editor
+
+# Contractor with games viewer access
+games_viewer:
+  user: contractor_user
+  domain: 1  # games
+  permission_level: 0  # viewer

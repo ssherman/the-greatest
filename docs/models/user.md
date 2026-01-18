@@ -5,9 +5,39 @@ Represents a user of The Greatest platform. Handles authentication, roles, and u
 
 ## Associations
 - `has_many :lists, foreign_key: :submitted_by_id` - Lists submitted by this user (optional, inverse of List#submitted_by)
+- `has_many :domain_roles, dependent: :destroy` - Domain-scoped permissions for admin access
 
 ## Public Methods
-No custom public methods defined. Inherits standard ActiveRecord methods.
+
+### `#domain_role_for(domain)`
+Gets the user's DomainRole for a specific domain.
+- Parameters: domain (String) - Domain name ("music", "games", "books", "movies")
+- Returns: DomainRole or nil
+
+### `#can_access_domain?(domain)`
+Checks if user can access a domain's admin area.
+- Parameters: domain (String)
+- Returns: Boolean (true if admin or has domain role)
+
+### `#can_read_in_domain?(domain)`
+Checks if user has read access in a domain.
+- Parameters: domain (String)
+- Returns: Boolean
+
+### `#can_write_in_domain?(domain)`
+Checks if user has write access in a domain.
+- Parameters: domain (String)
+- Returns: Boolean
+
+### `#can_delete_in_domain?(domain)`
+Checks if user has delete access in a domain.
+- Parameters: domain (String)
+- Returns: Boolean
+
+### `#can_manage_domain?(domain)`
+Checks if user has manage access in a domain.
+- Parameters: domain (String)
+- Returns: Boolean
 
 ## Validations
 - `email` - presence required, uniqueness required
@@ -62,6 +92,12 @@ user.lists
 user.admin?
 user.editor?
 user.user?
+
+# Domain-scoped permissions
+user.domain_roles.create!(domain: :music, permission_level: :editor)
+user.can_access_domain?("music")  # => true
+user.can_write_in_domain?("music")  # => true
+user.can_delete_in_domain?("music")  # => false (editor can't delete)
 
 # Set external provider
 user.external_provider = :google
