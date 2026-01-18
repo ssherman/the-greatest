@@ -6,7 +6,7 @@ class Admin::DomainRolesController < Admin::BaseController
 
   def index
     @domain_roles = @user.domain_roles.order(:domain)
-    @available_domains = DomainRole.domains.keys - @domain_roles.pluck(:domain)
+    @available_domains = DomainRole.domains.keys - @domain_roles.map(&:domain)
   end
 
   def create

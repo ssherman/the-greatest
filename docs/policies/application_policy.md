@@ -103,3 +103,5 @@ end
 | create/update | Yes | Yes | Yes | Yes | Yes | No |
 | destroy | Yes | Yes | Yes | Yes | No | No |
 | manage | Yes | No | Yes | No | No | No |
+
+**Important**: The `manage` permission is for system-level actions (ranking configurations, imports, cache purging). Global editors do NOT have manage access - only global admin or domain admin.

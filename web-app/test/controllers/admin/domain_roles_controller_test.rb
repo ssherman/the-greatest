@@ -95,4 +95,34 @@ class Admin::DomainRolesControllerTest < ActionDispatch::IntegrationTest
     get admin_user_domain_roles_url(@contractor)
     assert_redirected_to music_root_url
   end
+
+  # Available domains tests
+  # Regression test for bug where pluck(:domain) returns integers but
+  # DomainRole.domains.keys returns strings, so subtraction never removes anything
+  test "available_domains should exclude already assigned domains" do
+    # contractor_user has music and games domain roles from fixtures
+    get admin_user_domain_roles_url(@contractor)
+    assert_response :success
+
+    # The select options should NOT include music or games (already assigned)
+    # The Grant New Role form uses: @available_domains.map { |d| [d.humanize, d] }
+    assert_no_match(/<option[^>]*value="music"/, response.body, "Music should not be in available domains")
+    assert_no_match(/<option[^>]*value="games"/, response.body, "Games should not be in available domains")
+
+    # But should include other domains that aren't assigned
+    assert_match(/<option[^>]*value="books"/, response.body, "Books should be available")
+    assert_match(/<option[^>]*value="movies"/, response.body, "Movies should be available")
+  end
+
+  test "available_domains should be empty when user has all domain roles" do
+    # Give the contractor the remaining domain roles (they already have music and games)
+    DomainRole.create!(user: @contractor, domain: "books", permission_level: "viewer")
+    DomainRole.create!(user: @contractor, domain: "movies", permission_level: "viewer")
+
+    get admin_user_domain_roles_url(@contractor)
+    assert_response :success
+
+    # The "Grant New Role" form should not appear when no domains are available
+    assert_no_match(/Grant New Role/, response.body, "Grant New Role form should not appear when user has all domains")
+  end
 end

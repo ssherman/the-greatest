@@ -6,10 +6,11 @@ module Music
       "music"
     end
 
-    # Ranking configurations are system-level
-    # Global admin/editor can manage, domain users need admin level
+    # Ranking configurations are system-level resources
+    # Only global admin or domain admin can modify them
+    # Global editor does NOT have manage access (only read/write, not manage)
     def create?
-      global_role? || domain_role&.can_manage?
+      manage?
     end
 
     def new?
@@ -17,7 +18,7 @@ module Music
     end
 
     def update?
-      global_role? || domain_role&.can_manage?
+      manage?
     end
 
     def edit?
@@ -25,16 +26,16 @@ module Music
     end
 
     def destroy?
-      global_role? || domain_role&.can_manage?
+      manage?
     end
 
     # Execute actions on ranking configs require manage permission
     def execute_action?
-      global_role? || domain_role&.can_manage?
+      manage?
     end
 
     def index_action?
-      global_role? || domain_role&.can_manage?
+      manage?
     end
 
     class Scope < ApplicationPolicy::Scope

@@ -154,10 +154,10 @@ module Admin
           assert_response :success
         end
 
-        test "should get new for editor" do
+        test "should not get new for editor (manage permission required)" do
           sign_in_as(@editor_user, stub_auth: true)
           get new_admin_songs_ranking_configuration_path
-          assert_response :success
+          assert_redirected_to music_root_path
         end
 
         test "should not get new for regular user" do
@@ -229,10 +229,10 @@ module Admin
           assert_response :success
         end
 
-        test "should get edit for editor" do
+        test "should not get edit for editor (manage permission required)" do
           sign_in_as(@editor_user, stub_auth: true)
           get edit_admin_songs_ranking_configuration_path(@ranking_configuration)
-          assert_response :success
+          assert_redirected_to music_root_path
         end
 
         test "should not get edit for regular user" do
