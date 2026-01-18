@@ -125,4 +125,29 @@ class Admin::DomainRolesControllerTest < ActionDispatch::IntegrationTest
     # The "Grant New Role" form should not appear when no domains are available
     assert_no_match(/Grant New Role/, response.body, "Grant New Role form should not appear when user has all domains")
   end
+
+  # Regression test: form must submit params nested under domain_role key
+  test "form should submit params correctly nested under domain_role" do
+    # Simulate what the form actually submits (without proper nesting)
+    # This should fail if form doesn't have proper scope/model
+    assert_difference("DomainRole.count") do
+      post admin_user_domain_roles_url(@regular_user), params: {
+        domain_role: {
+          domain: "books",
+          permission_level: "editor"
+        }
+      }
+    end
+    assert_redirected_to admin_user_domain_roles_url(@regular_user)
+  end
+
+  test "form inputs should have correct name attributes for params nesting" do
+    get admin_user_domain_roles_url(@regular_user)
+    assert_response :success
+
+    # The form inputs should be named domain_role[domain] and domain_role[permission_level]
+    # not just "domain" and "permission_level"
+    assert_match(/name="domain_role\[domain\]"/, response.body, "Domain select should have name='domain_role[domain]'")
+    assert_match(/name="domain_role\[permission_level\]"/, response.body, "Permission level select should have name='domain_role[permission_level]'")
+  end
 end

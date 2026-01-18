@@ -114,7 +114,7 @@
         <div class="card bg-base-100 shadow-xl">
           <div class="card-body">
             <h2 class="card-title text-lg">Grant New Role</h2>
-            <%= form_with url: admin_user_domain_roles_path(@user), method: :post, class: "space-y-4" do |f| %>
+            <%= form_with url: admin_user_domain_roles_path(@user), scope: :domain_role, method: :post, class: "space-y-4" do |f| %>
               <div class="form-control">
                 <label class="label">
                   <span class="label-text">Domain</span>
