@@ -1,5 +1,5 @@
 class Admin::BaseController < ApplicationController
-  include Pagy::Backend
+  include Pagy::Method
   include Cacheable
 
   before_action :authenticate_admin!

@@ -1,5 +1,5 @@
 class Music::Artists::CategoriesController < ApplicationController
-  include Pagy::Backend
+  include Pagy::Method
   include Cacheable
 
   layout "music/application"

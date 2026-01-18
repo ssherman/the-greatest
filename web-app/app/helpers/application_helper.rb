@@ -1,5 +1,5 @@
 module ApplicationHelper
-  include Pagy::Frontend
+  include Pagy::Method
 
   def format_duration(seconds)
     return "—" if seconds.nil? || seconds == 0

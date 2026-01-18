@@ -27,9 +27,9 @@
     </div>
   <% end %>
 
-  <% if @pagy.pages > 1 %>
-    <div class="flex justify-center mt-8">
-      <%== pagy_nav(@pagy) %>
-    </div>
-  <% end %>
+
+  <div class="flex justify-center mt-8">
+    <%== @pagy.series_nav %>
+  </div>
+
 </div>

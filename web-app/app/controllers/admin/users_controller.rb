@@ -8,7 +8,7 @@ class Admin::UsersController < Admin::BaseController
     @users = @users.where("email ILIKE ?", "%#{params[:q]}%") if params[:q].present?
     @users = @users.order(created_at: :desc)
 
-    @pagy, @users = pagy(@users, items: 25)
+    @pagy, @users = pagy(@users, limit: 25)
   end
 
   def show

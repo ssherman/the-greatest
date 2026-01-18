@@ -11,7 +11,7 @@ class Admin::Music::CategoriesController < Admin::Music::BaseController
     end
 
     @categories = @categories.order(sortable_column(params[:sort]))
-    @pagy, @categories = pagy(@categories, items: 25)
+    @pagy, @categories = pagy(@categories, limit: 25)
   end
 
   def show

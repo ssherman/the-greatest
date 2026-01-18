@@ -11,7 +11,7 @@ class Admin::Music::RankedItemsController < Admin::Music::BaseController
 
     @ranked_items = @ranked_items.order(rank: :asc)
 
-    @pagy, @ranked_items = pagy(@ranked_items, items: 25)
+    @pagy, @ranked_items = pagy(@ranked_items, limit: 25)
 
     render layout: false
   end
