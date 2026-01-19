@@ -24,13 +24,27 @@ Rails.application.routes.draw do
       get "albums/lists", to: "music/albums/lists#index", as: :music_albums_lists
       get "albums/lists/:id", to: "music/albums/lists#show", as: :music_album_list
       get "albums/categories/:id", to: "music/albums/categories#show", as: :music_album_category
-      get "albums/:id", to: "music/albums#show", as: :album
+      # Year-filtered albums (must come before :id to avoid treating "1990s" as a slug)
+      get "albums/since/:year", to: "music/albums/ranked_items#index", as: :albums_since_year,
+        constraints: {year: /\d{4}/}, defaults: {year_mode: "since"}
+      get "albums/through/:year", to: "music/albums/ranked_items#index", as: :albums_through_year,
+        constraints: {year: /\d{4}/}, defaults: {year_mode: "through"}
+      get "albums/:year", to: "music/albums/ranked_items#index", as: :albums_by_year,
+        constraints: {year: /\d{4}(s|-\d{4})?/}
+      get "album/:slug", to: "music/albums#show", as: :album
 
       # Song routes
       get "songs", to: "music/songs/ranked_items#index", as: :songs
       get "songs/lists", to: "music/songs/lists#index", as: :music_songs_lists
       get "songs/lists/:id", to: "music/songs/lists#show", as: :music_song_list
-      get "songs/:id", to: "music/songs#show", as: :song
+      # Year-filtered songs (must come before :id to avoid treating "1990s" as a slug)
+      get "songs/since/:year", to: "music/songs/ranked_items#index", as: :songs_since_year,
+        constraints: {year: /\d{4}/}, defaults: {year_mode: "since"}
+      get "songs/through/:year", to: "music/songs/ranked_items#index", as: :songs_through_year,
+        constraints: {year: /\d{4}/}, defaults: {year_mode: "through"}
+      get "songs/:year", to: "music/songs/ranked_items#index", as: :songs_by_year,
+        constraints: {year: /\d{4}(s|-\d{4})?/}
+      get "song/:slug", to: "music/songs#show", as: :song
 
       # Artist routes
       get "artists/categories/:id", to: "music/artists/categories#show", as: :music_artist_category

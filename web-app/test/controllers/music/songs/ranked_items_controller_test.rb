@@ -36,6 +36,51 @@ module Music
         get "/rc/#{ranking_configurations(:books_global).id}/songs"
         assert_response :not_found
       end
+
+      test "should get index with decade year filter" do
+        get "/songs/1990s"
+        assert_response :success
+      end
+
+      test "should get index with year range filter" do
+        get "/songs/1980-2000"
+        assert_response :success
+      end
+
+      test "should get index with single year filter" do
+        get "/songs/1994"
+        assert_response :success
+      end
+
+      test "should get index with year filter and ranking configuration" do
+        get "/rc/#{ranking_configurations(:music_songs_global).id}/songs/1990s"
+        assert_response :success
+      end
+
+      test "should get index with year filter and page" do
+        get "/songs/1990s?page=2"
+        assert_response :success
+      end
+
+      test "should get index with since year filter" do
+        get "/songs/since/1980"
+        assert_response :success
+      end
+
+      test "should get index with through year filter" do
+        get "/songs/through/1980"
+        assert_response :success
+      end
+
+      test "should get index with since filter and ranking configuration" do
+        get "/rc/#{ranking_configurations(:music_songs_global).id}/songs/since/1980"
+        assert_response :success
+      end
+
+      test "should get index with through filter and ranking configuration" do
+        get "/rc/#{ranking_configurations(:music_songs_global).id}/songs/through/1980"
+        assert_response :success
+      end
     end
   end
 end

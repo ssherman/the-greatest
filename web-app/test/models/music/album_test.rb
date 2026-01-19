@@ -12,7 +12,8 @@
 #
 # Indexes
 #
-#  index_music_albums_on_slug  (slug) UNIQUE
+#  index_music_albums_on_release_year  (release_year)
+#  index_music_albums_on_slug          (slug) UNIQUE
 #
 require "test_helper"
 

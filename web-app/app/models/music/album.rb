@@ -12,7 +12,8 @@
 #
 # Indexes
 #
-#  index_music_albums_on_slug  (slug) UNIQUE
+#  index_music_albums_on_release_year  (release_year)
+#  index_music_albums_on_slug          (slug) UNIQUE
 #
 class Music::Album < ApplicationRecord
   include SearchIndexable
@@ -67,6 +68,10 @@ class Music::Album < ApplicationRecord
 
   scope :with_primary_image_for_display, -> {
     includes(primary_image: {file_attachment: {blob: {variant_records: {image_attachment: :blob}}}})
+  }
+
+  scope :released_in_range, ->(start_year, end_year) {
+    where(release_year: start_year..end_year)
   }
 
   # Class Methods

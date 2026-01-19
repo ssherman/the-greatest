@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_01_18_055546) do
+ActiveRecord::Schema[8.1].define(version: 2026_01_19_020707) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -304,6 +304,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_01_18_055546) do
     t.string "slug", null: false
     t.string "title", null: false
     t.datetime "updated_at", null: false
+    t.index ["release_year"], name: "index_music_albums_on_release_year"
     t.index ["slug"], name: "index_music_albums_on_slug", unique: true
   end
 
@@ -402,6 +403,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_01_18_055546) do
     t.string "title", null: false
     t.datetime "updated_at", null: false
     t.index ["isrc"], name: "index_music_songs_on_isrc", unique: true, where: "(isrc IS NOT NULL)"
+    t.index ["release_year"], name: "index_music_songs_on_release_year"
     t.index ["slug"], name: "index_music_songs_on_slug", unique: true
   end
 
