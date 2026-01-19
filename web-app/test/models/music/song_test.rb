@@ -73,6 +73,19 @@ module Music
       assert @song.valid?
     end
 
+    test "should allow multiple songs with blank isrc" do
+      # This tests the fix for the production bug where empty ISRC strings
+      # violated the unique constraint because PostgreSQL treats '' as NOT NULL
+      song1 = Music::Song.create!(title: "Song Without ISRC 1", isrc: "")
+      song2 = Music::Song.create!(title: "Song Without ISRC 2", isrc: "")
+      song3 = Music::Song.create!(title: "Song Without ISRC 3", isrc: nil)
+
+      # All songs should have nil isrc (empty strings normalized to nil)
+      assert_nil song1.reload.isrc
+      assert_nil song2.reload.isrc
+      assert_nil song3.reload.isrc
+    end
+
     test "should require 12 character isrc if present" do
       @song.isrc = "GBEMI7300001"
       assert @song.valid?
