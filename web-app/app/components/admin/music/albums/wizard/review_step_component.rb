@@ -86,7 +86,7 @@ class Admin::Music::Albums::Wizard::ReviewStepComponent < ViewComponent::Base
   def source_badge(item)
     if item.metadata["opensearch_match"]
       score = item.metadata["opensearch_score"]
-      score_text = score ? " #{score.round(1)}" : ""
+      score_text = score ? " #{score.to_f.round(1)}" : ""
       {text: "OS#{score_text}", class: "badge badge-success badge-sm", title: "OpenSearch Match"}
     elsif item.metadata["musicbrainz_match"]
       {text: "MB", class: "badge badge-info badge-sm", title: "MusicBrainz Match"}
