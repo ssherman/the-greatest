@@ -13,7 +13,7 @@ module Music
       end
 
       test "should get index with page parameter" do
-        get "/artists/page/2"
+        get "/artists?page=2"
         assert_response :success
       end
 

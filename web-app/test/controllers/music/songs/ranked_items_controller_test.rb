@@ -18,12 +18,12 @@ module Music
       end
 
       test "should get index with page parameter" do
-        get "/songs/page/2"
+        get "/songs?page=2"
         assert_response :success
       end
 
       test "should get index with ranking configuration and page" do
-        get "/rc/#{ranking_configurations(:music_songs_global).id}/songs/page/2"
+        get "/rc/#{ranking_configurations(:music_songs_global).id}/songs?page=2"
         assert_response :success
       end
 
