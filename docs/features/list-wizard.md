@@ -635,6 +635,7 @@ Add wizard link to the list show page:
 | File | Purpose |
 |------|---------|
 | [`app/components/admin/music/wizard/shared_modal_component.rb`](/web-app/app/components/admin/music/wizard/shared_modal_component.rb) | Base modal component |
+| [`app/components/admin/music/wizard/item_row_component.rb`](/web-app/app/components/admin/music/wizard/item_row_component.rb) | Base item row component |
 
 ### Music::Songs Implementation
 
@@ -657,6 +658,7 @@ Add wizard link to the list show page:
 | [`app/components/admin/music/albums/wizard/enrich_step_component.rb`](/web-app/app/components/admin/music/albums/wizard/enrich_step_component.rb) | Enrichment |
 | [`app/components/admin/music/albums/wizard/validate_step_component.rb`](/web-app/app/components/admin/music/albums/wizard/validate_step_component.rb) | AI validation |
 | [`app/components/admin/music/albums/wizard/review_step_component.rb`](/web-app/app/components/admin/music/albums/wizard/review_step_component.rb) | Manual review |
+| [`app/components/admin/music/albums/wizard/item_row_component.rb`](/web-app/app/components/admin/music/albums/wizard/item_row_component.rb) | Review table row |
 | [`app/components/admin/music/albums/wizard/import_step_component.rb`](/web-app/app/components/admin/music/albums/wizard/import_step_component.rb) | Import progress |
 | [`app/components/admin/music/albums/wizard/complete_step_component.rb`](/web-app/app/components/admin/music/albums/wizard/complete_step_component.rb) | Completion |
 | [`app/sidekiq/music/albums/wizard_parse_list_job.rb`](/web-app/app/sidekiq/music/albums/wizard_parse_list_job.rb) | HTML parsing |
@@ -673,6 +675,7 @@ Add wizard link to the list show page:
 | [`app/components/admin/music/songs/wizard/enrich_step_component.rb`](/web-app/app/components/admin/music/songs/wizard/enrich_step_component.rb) | Enrichment |
 | [`app/components/admin/music/songs/wizard/validate_step_component.rb`](/web-app/app/components/admin/music/songs/wizard/validate_step_component.rb) | AI validation |
 | [`app/components/admin/music/songs/wizard/review_step_component.rb`](/web-app/app/components/admin/music/songs/wizard/review_step_component.rb) | Manual review |
+| [`app/components/admin/music/songs/wizard/item_row_component.rb`](/web-app/app/components/admin/music/songs/wizard/item_row_component.rb) | Review table row |
 | [`app/components/admin/music/songs/wizard/import_step_component.rb`](/web-app/app/components/admin/music/songs/wizard/import_step_component.rb) | Import progress |
 | [`app/components/admin/music/songs/wizard/complete_step_component.rb`](/web-app/app/components/admin/music/songs/wizard/complete_step_component.rb) | Completion |
 
@@ -680,7 +683,7 @@ Add wizard link to the list show page:
 
 | File | Purpose |
 |------|---------|
-| [`app/views/admin/music/songs/list_items_actions/_item_row.html.erb`](/web-app/app/views/admin/music/songs/list_items_actions/_item_row.html.erb) | Review table row (Turbo Stream target) |
+| [`app/views/admin/music/songs/list_items_actions/_item_row.html.erb`](/web-app/app/views/admin/music/songs/list_items_actions/_item_row.html.erb) | Review table row (renders ItemRowComponent) |
 | [`app/views/admin/music/songs/list_items_actions/_review_stats.html.erb`](/web-app/app/views/admin/music/songs/list_items_actions/_review_stats.html.erb) | Stats cards (Turbo Stream target) |
 | [`app/views/admin/music/songs/list_items_actions/_flash_success.html.erb`](/web-app/app/views/admin/music/songs/list_items_actions/_flash_success.html.erb) | Success message |
 | [`app/views/admin/music/songs/list_items_actions/_error_message.html.erb`](/web-app/app/views/admin/music/songs/list_items_actions/_error_message.html.erb) | Error message |
