@@ -1,11 +1,11 @@
 <%
-  content_for :page_title, "Top 100 Greatest Songs of All Time | The Greatest Music"
-  content_for :meta_description, "Our definitive ranking of the 100 greatest songs ever recorded. From classic rock to modern masterpieces, discover the songs that changed music."
+  content_for :page_title, songs_page_title(@year_filter)
+  content_for :meta_description, songs_page_description(@year_filter)
 %>
 
 <div class="container mx-auto px-4 py-8">
   <div class="mb-8">
-    <h1 class="text-4xl font-bold text-base-content mb-2">Top Songs</h1>
+    <h1 class="text-4xl font-bold text-base-content mb-2"><%= songs_page_heading(@year_filter) %></h1>
     <% if @ranking_configuration %>
       <p class="text-base-content/70">
         <%= @ranking_configuration.name %>

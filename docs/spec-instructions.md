@@ -29,9 +29,9 @@
 **Specs**
 ```
 docs/specs/
-  075-custom-admin-phase-4-songs.md
+  custom-admin-phase-4-songs.md
   completed/
-    000-project-setup.md
+    project-setup.md
   templates/
     spec-template.md
 ```

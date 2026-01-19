@@ -16,8 +16,9 @@
 #
 # Indexes
 #
-#  index_music_songs_on_isrc  (isrc) UNIQUE WHERE (isrc IS NOT NULL)
-#  index_music_songs_on_slug  (slug) UNIQUE
+#  index_music_songs_on_isrc          (isrc) UNIQUE WHERE (isrc IS NOT NULL)
+#  index_music_songs_on_release_year  (release_year)
+#  index_music_songs_on_slug          (slug) UNIQUE
 #
 class Music::Song < ApplicationRecord
   include SearchIndexable
@@ -74,6 +75,7 @@ class Music::Song < ApplicationRecord
   scope :released_in, ->(year) { where(release_year: year) }
   scope :released_before, ->(year) { where("release_year <= ?", year) }
   scope :released_after, ->(year) { where("release_year >= ?", year) }
+  scope :released_in_range, ->(start_year, end_year) { where(release_year: start_year..end_year) }
 
   scope :with_identifier, ->(identifier_type, value) {
     joins(:identifiers).where(identifiers: {identifier_type: identifier_type, value: value})

@@ -18,7 +18,7 @@ class Music::SongsController < ApplicationController
       lists: :list_items
     )
       .friendly
-      .find(params[:id])
+      .find(params[:slug])
 
     @categories_by_type = @song.categories.group_by(&:category_type)
     @artist_names = @song.artists.map(&:name).join(", ")

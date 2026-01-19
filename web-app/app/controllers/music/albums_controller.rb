@@ -15,7 +15,7 @@ class Music::AlbumsController < ApplicationController
       .includes(:artists, :categories, :lists)
       .with_primary_image_for_display
       .friendly
-      .find(params[:id])
+      .find(params[:slug])
 
     @categories_by_type = @album.categories.group_by(&:category_type)
     @artist_names = @album.artists.map(&:name).join(", ")
