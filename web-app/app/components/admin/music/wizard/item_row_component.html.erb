@@ -1,0 +1,65 @@
+<%
+  status = item_status
+  badge = source_badge
+%>
+<tr
+  id="item_row_<%= item.id %>"
+  class="<%= row_background_class(status) %>"
+  data-status="<%= status %>"
+  data-item-id="<%= item.id %>">
+  <td>
+    <span class="<%= status_badge_class(status) %>" title="<%= status.titleize %>">
+      <%= status_badge_icon(status) %>
+    </span>
+  </td>
+  <td><%= item.position %></td>
+  <td>
+    <div class="font-medium"><%= original_title %></div>
+    <div class="text-xs text-base-content/70"><%= original_artists %></div>
+  </td>
+  <td>
+    <% if matched_title %>
+      <div class="font-medium"><%= matched_title %></div>
+      <% if matched_artists.present? %>
+        <div class="text-xs text-base-content/70"><%= matched_artists %></div>
+      <% end %>
+    <% else %>
+      <span class="text-base-content/50">-</span>
+    <% end %>
+  </td>
+  <td>
+    <span class="<%= badge[:css_class] %>" title="<%= badge[:title] %>">
+      <%= badge[:text] %>
+    </span>
+  </td>
+  <td>
+    <button
+      class="btn btn-ghost btn-xs"
+      popovertarget="<%= popover_menu_id %>"
+      style="anchor-name: --item-anchor-<%= item.id %>">
+      <%= icon_dots_vertical %>
+    </button>
+    <ul
+      class="dropdown menu p-2 shadow bg-base-100 rounded-box w-52"
+      popover
+      id="<%= popover_menu_id %>"
+      style="position-anchor: --item-anchor-<%= item.id %>">
+      <% menu_items.each do |menu_item| %>
+        <% case menu_item[:type] %>
+        <% when :verify %>
+          <% unless item.verified? %>
+            <li>
+              <%= button_to menu_item[:text], verify_item_path, method: :post, class: menu_item[:css_class] || "text-success", data: { turbo_frame: "_top" }, form: { onclick: popover_close_js } %>
+            </li>
+          <% end %>
+        <% when :link %>
+          <li><%= link_to menu_item[:text], modal_item_path(menu_item[:modal_type]), data: { turbo_frame: modal_frame_id }, onclick: popover_close_js %></li>
+        <% when :delete %>
+          <li class="border-t border-base-300 mt-1 pt-1">
+            <%= button_to menu_item[:text], destroy_item_path, method: :delete, class: menu_item[:css_class] || "text-error", data: { turbo_confirm: "Are you sure you want to delete this item?" }, form: { onclick: popover_close_js } %>
+          </li>
+        <% end %>
+      <% end %>
+    </ul>
+  </td>
+</tr>

@@ -58,6 +58,13 @@ module ListItemsActions
     end
   end
 
+  # DELETE destroy
+  # Deletes a single list item.
+  def destroy
+    @item.destroy!
+    render_item_delete_success("Item deleted")
+  end
+
   # POST metadata
   # Updates item metadata from JSON input.
   def metadata
@@ -123,9 +130,24 @@ module ListItemsActions
     end
   end
 
+  # Helper to render turbo stream success response for item deletion
+  def render_item_delete_success(message)
+    item_id = @item.id
+    respond_to do |format|
+      format.turbo_stream do
+        render turbo_stream: [
+          turbo_stream.remove("item_row_#{item_id}"),
+          turbo_stream.replace("review_stats_#{@list.id}", partial: "review_stats", locals: {list: @list}),
+          turbo_stream.append("flash_messages", partial: "flash_success", locals: {message: message})
+        ]
+      end
+      format.html { redirect_to review_step_path, notice: message }
+    end
+  end
+
   # Override in subclass to add domain-specific actions that need @item loaded
   def item_actions_for_set_item
-    [:verify, :metadata, :modal]
+    [:verify, :destroy, :metadata, :modal]
   end
 
   private

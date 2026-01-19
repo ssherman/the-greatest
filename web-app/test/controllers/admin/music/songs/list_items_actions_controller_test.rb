@@ -39,6 +39,32 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
     assert @item.verified?
   end
 
+  # destroy action tests
+  test "destroy deletes the item" do
+    item_id = @item.id
+
+    delete admin_songs_list_item_path(list_id: @list.id, id: @item.id)
+
+    assert_response :redirect
+    assert_not ListItem.exists?(item_id)
+  end
+
+  test "destroy accepts turbo stream format" do
+    item_id = @item.id
+
+    delete admin_songs_list_item_path(list_id: @list.id, id: @item.id),
+      headers: {"Accept" => "text/vnd.turbo-stream.html"}
+
+    assert_response :success
+    assert_not ListItem.exists?(item_id)
+  end
+
+  test "destroy returns 404 for non-existent item" do
+    delete admin_songs_list_item_path(list_id: @list.id, id: 999999)
+
+    assert_response :not_found
+  end
+
   # metadata action tests
   test "metadata updates item metadata with valid JSON" do
     new_metadata = {"title" => "Fixed Title", "artists" => ["Fixed Artist"], "rank" => 1}

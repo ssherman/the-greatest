@@ -1,4 +1,4 @@
-# [NNN] - [Concise Task Title]
+# [Concise Task Title]
 
 ## Status
 - **Status**: Not Started | In Progress | Completed

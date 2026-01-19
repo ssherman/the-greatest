@@ -78,64 +78,7 @@
       </thead>
       <tbody>
         <% items.each do |item| %>
-          <% status = item_status(item) %>
-          <tr
-            id="item_row_<%= item.id %>"
-            class="<%= row_background_class(status) %>"
-            data-status="<%= status %>"
-            data-item-id="<%= item.id %>">
-            <td>
-              <span class="<%= status_badge_class(status) %>" title="<%= status.titleize %>">
-                <%= status_badge_icon(status) %>
-              </span>
-            </td>
-            <td><%= item.position %></td>
-            <td>
-              <div class="font-medium"><%= original_title(item) %></div>
-              <div class="text-xs text-base-content/70"><%= original_artists(item) %></div>
-            </td>
-            <td>
-              <% if matched_title(item) %>
-                <div class="font-medium"><%= matched_title(item) %></div>
-                <% if matched_artists(item).present? %>
-                  <div class="text-xs text-base-content/70"><%= matched_artists(item) %></div>
-                <% end %>
-              <% else %>
-                <span class="text-base-content/50">-</span>
-              <% end %>
-            </td>
-            <td>
-              <% badge = source_badge(item) %>
-              <span class="<%= badge[:class] %>" title="<%= badge[:title] %>">
-                <%= badge[:text] %>
-              </span>
-            </td>
-            <td>
-              <button
-                class="btn btn-ghost btn-xs"
-                popovertarget="item_menu_<%= item.id %>"
-                style="anchor-name: --item-anchor-<%= item.id %>">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                </svg>
-              </button>
-              <ul
-                class="dropdown menu p-2 shadow bg-base-100 rounded-box w-52"
-                popover
-                id="item_menu_<%= item.id %>"
-                style="position-anchor: --item-anchor-<%= item.id %>">
-                <% unless item.verified? %>
-                  <li>
-                    <%= button_to "Verify", verify_path(item), method: :post, class: "text-success", data: { turbo_frame: "_top" }, form: { onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" } %>
-                  </li>
-                <% end %>
-                <li><%= link_to "Edit Metadata", modal_path(item, :edit_metadata), data: { turbo_frame: Admin::Music::Albums::Wizard::SharedModalComponent::FRAME_ID }, onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" %></li>
-                <li><%= link_to "Link Existing Album", modal_path(item, :link_album), data: { turbo_frame: Admin::Music::Albums::Wizard::SharedModalComponent::FRAME_ID }, onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" %></li>
-                <li><%= link_to "Search MusicBrainz Releases", modal_path(item, :search_musicbrainz_releases), data: { turbo_frame: Admin::Music::Albums::Wizard::SharedModalComponent::FRAME_ID }, onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" %></li>
-                <li><%= link_to "Search MusicBrainz Artists", modal_path(item, :search_musicbrainz_artists), data: { turbo_frame: Admin::Music::Albums::Wizard::SharedModalComponent::FRAME_ID }, onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" %></li>
-              </ul>
-            </td>
-          </tr>
+          <%= render(Admin::Music::Albums::Wizard::ItemRowComponent.new(item: item)) %>
         <% end %>
       </tbody>
     </table>
