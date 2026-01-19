@@ -132,4 +132,30 @@ class Admin::Music::Albums::Wizard::ReviewStepComponentTest < ViewComponent::Tes
 
     assert_selector "dialog##{Admin::Music::Albums::Wizard::SharedModalComponent::DIALOG_ID}"
   end
+
+  test "renders opensearch source with score when score is a string" do
+    # Regression test: when position is manually edited, opensearch_score can be stored as a string
+    # which caused 'undefined method round for an instance of String' error
+    item = @list.list_items.create!(
+      position: 1,
+      verified: true,
+      metadata: {
+        "title" => "Test Album",
+        "artists" => ["Test Artist"],
+        "opensearch_match" => true,
+        "opensearch_score" => "18.5"  # String instead of float
+      }
+    )
+
+    render_inline(Admin::Music::Albums::Wizard::ReviewStepComponent.new(
+      list: @list,
+      items: [item],
+      total_count: 1,
+      valid_count: 1,
+      invalid_count: 0,
+      missing_count: 0
+    ))
+
+    assert_selector ".badge", text: "OS 18.5"
+  end
 end

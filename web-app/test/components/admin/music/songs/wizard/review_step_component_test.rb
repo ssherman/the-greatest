@@ -165,6 +165,37 @@ class Admin::Music::Songs::Wizard::ReviewStepComponentTest < ViewComponent::Test
     assert_selector ".badge", text: "OS 18.5"
   end
 
+  test "renders opensearch source with score when score is a string" do
+    # Regression test: when position is manually edited, opensearch_score can be stored as a string
+    # which caused 'undefined method round for an instance of String' error
+    different_song = music_songs(:money)
+    item_with_string_score = @list.list_items.create!(
+      listable: different_song,
+      listable_type: "Music::Song",
+      verified: true,
+      position: 10,
+      metadata: {
+        "title" => "Money",
+        "artists" => ["Pink Floyd"],
+        "song_id" => different_song.id,
+        "song_name" => "Money",
+        "opensearch_match" => true,
+        "opensearch_score" => "18.5"  # String instead of float
+      }
+    )
+
+    render_inline(Admin::Music::Songs::Wizard::ReviewStepComponent.new(
+      list: @list,
+      items: [item_with_string_score],
+      total_count: 1,
+      valid_count: 1,
+      invalid_count: 0,
+      missing_count: 0
+    ))
+
+    assert_selector ".badge", text: "OS 18.5"
+  end
+
   test "renders musicbrainz source badge" do
     render_inline(Admin::Music::Songs::Wizard::ReviewStepComponent.new(
       list: @list,
