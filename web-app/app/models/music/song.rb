@@ -66,6 +66,7 @@ class Music::Song < ApplicationRecord
 
   # Callbacks
   before_validation :normalize_title
+  before_save :normalize_isrc
 
   # Scopes
   scope :with_lyrics, -> { where.not(lyrics: [nil, ""]) }
@@ -162,5 +163,9 @@ class Music::Song < ApplicationRecord
 
   def normalize_title
     self.title = Services::Text::QuoteNormalizer.call(title) if title.present?
+  end
+
+  def normalize_isrc
+    self.isrc = nil if isrc.blank?
   end
 end
