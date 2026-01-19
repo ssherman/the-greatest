@@ -326,8 +326,9 @@ The review step provides per-item actions via a dropdown menu, handled by `ListI
 | Link Existing Song | Search and link to a song already in the database |
 | Search MusicBrainz Recordings | Search for recordings within the matched artist's catalog |
 | Search MusicBrainz Artists | Search and replace the artist match (useful when enrich step matched wrong artist) |
+| Delete | Remove the list item permanently (with browser confirmation) |
 
-All actions use a shared modal component (`SharedModalComponent`) that loads content on-demand via Turbo Frames. Actions return Turbo Stream responses to update the table row and stats without page reload.
+Most actions use a shared modal component (`SharedModalComponent`) that loads content on-demand via Turbo Frames. The Delete action uses a direct button with browser confirmation dialog. Actions return Turbo Stream responses to update the table row and stats without page reload.
 
 See [`ListItemsActionsController`](/docs/controllers/admin/music/songs/list_items_actions_controller.md) for full documentation.
 

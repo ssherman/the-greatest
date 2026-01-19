@@ -118,6 +118,9 @@
       <li><%= link_to "Link Existing Song", modal_admin_songs_list_item_path(list_id: item.list_id, id: item.id, modal_type: :link_song), data: { turbo_frame: Admin::Music::Songs::Wizard::SharedModalComponent::FRAME_ID }, onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" %></li>
       <li><%= link_to "Search MusicBrainz Recordings", modal_admin_songs_list_item_path(list_id: item.list_id, id: item.id, modal_type: :search_musicbrainz_recordings), data: { turbo_frame: Admin::Music::Songs::Wizard::SharedModalComponent::FRAME_ID }, onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" %></li>
       <li><%= link_to "Search MusicBrainz Artists", modal_admin_songs_list_item_path(list_id: item.list_id, id: item.id, modal_type: :search_musicbrainz_artists), data: { turbo_frame: Admin::Music::Songs::Wizard::SharedModalComponent::FRAME_ID }, onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" %></li>
+      <li class="border-t border-base-300 mt-1 pt-1">
+        <%= button_to "Delete", admin_songs_list_item_path(list_id: item.list_id, id: item.id), method: :delete, class: "text-error", data: { turbo_confirm: "Are you sure you want to delete this item?" }, form: { onclick: "document.getElementById('item_menu_#{item.id}').hidePopover();" } %>
+      </li>
     </ul>
   </td>
 </tr>

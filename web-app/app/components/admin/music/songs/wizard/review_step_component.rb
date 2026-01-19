@@ -119,4 +119,8 @@ class Admin::Music::Songs::Wizard::ReviewStepComponent < ViewComponent::Base
   def modal_path(item, modal_type)
     helpers.modal_admin_songs_list_item_path(list_id: list.id, id: item.id, modal_type: modal_type)
   end
+
+  def destroy_path(item)
+    helpers.admin_songs_list_item_path(list_id: list.id, id: item.id)
+  end
 end

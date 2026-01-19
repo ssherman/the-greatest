@@ -106,6 +106,7 @@ Rails.application.routes.draw do
               post :link_musicbrainz_release
               post :link_musicbrainz_artist
               post :queue_import
+              delete :destroy
             end
 
             collection do
@@ -150,6 +151,7 @@ Rails.application.routes.draw do
               post :link_musicbrainz_recording
               post :link_musicbrainz_artist
               post :queue_import
+              delete :destroy
             end
 
             collection do
