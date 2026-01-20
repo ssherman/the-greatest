@@ -19,7 +19,7 @@ variable "instance_region" {
 variable "instance_type" {
   description = "Linode instance type"
   type        = string
-  default     = "g6-standard-2"
+  default     = "g6-standard-4"
 }
 
 variable "authorized_keys" {
