@@ -5,7 +5,7 @@ module Music::Songs::RankedItemsHelper
     if year_filter
       "#{year_title_phrase(year_filter, "Songs")} | The Greatest Music"
     else
-      "Top 100 Greatest Songs of All Time | The Greatest Music"
+      "Greatest Songs of All Time | The Greatest Music"
     end
   end
 
@@ -20,6 +20,6 @@ module Music::Songs::RankedItemsHelper
   end
 
   def songs_page_heading(year_filter)
-    year_filter ? year_title_phrase(year_filter, "Songs") : "Top Songs"
+    year_filter ? year_title_phrase(year_filter, "Songs") : "Greatest Songs of All Time"
   end
 end

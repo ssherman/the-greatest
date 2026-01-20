@@ -4,17 +4,15 @@
 %>
 
 <div class="container mx-auto px-4 py-8">
-  <div class="mb-8">
-    <h1 class="text-4xl font-bold text-base-content mb-2"><%= songs_page_heading(@year_filter) %></h1>
-    <% if @ranking_configuration %>
-      <p class="text-base-content/70">
-        <%= @ranking_configuration.name %>
-        <% if @ranking_configuration.description.present? %>
-          - <%= @ranking_configuration.description %>
-        <% end %>
-      </p>
-    <% end %>
+  <div class="mb-4">
+    <h1 class="text-4xl font-bold text-base-content"><%= songs_page_heading(@year_filter) %></h1>
   </div>
+
+  <%= render Music::FilterTabsComponent.new(
+    item_type: "songs",
+    base_path: songs_path,
+    year_filter: @year_filter
+  ) %>
 
   <div class="card bg-base-100 shadow-xl">
     <div class="card-body p-0">
@@ -43,7 +41,7 @@
       <div class="text-6xl mb-4">🎵</div>
       <h2 class="text-2xl font-bold text-base-content mb-2">No songs found</h2>
       <p class="text-base-content/70">
-        This ranking configuration doesn't have any songs yet.
+        No songs match the selected filter criteria.
       </p>
     </div>
   <% end %>
