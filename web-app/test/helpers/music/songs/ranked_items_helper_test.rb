@@ -4,7 +4,7 @@ class Music::Songs::RankedItemsHelperTest < ActionView::TestCase
   test "songs_page_title returns default title when no filter" do
     result = songs_page_title(nil)
 
-    assert_equal "Top 100 Greatest Songs of All Time | The Greatest Music", result
+    assert_equal "Greatest Songs of All Time | The Greatest Music", result
   end
 
   test "songs_page_title formats decade correctly" do
@@ -42,7 +42,7 @@ class Music::Songs::RankedItemsHelperTest < ActionView::TestCase
   test "songs_page_heading returns default heading when no filter" do
     result = songs_page_heading(nil)
 
-    assert_equal "Top Songs", result
+    assert_equal "Greatest Songs of All Time", result
   end
 
   test "songs_page_description includes year context for filter" do

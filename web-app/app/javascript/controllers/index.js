@@ -27,3 +27,6 @@ application.register("shared-modal", SharedModalController)
 
 import WizardStepController from "./wizard_step_controller"
 application.register("wizard-step", WizardStepController)
+
+import YearRangeModalController from "./year_range_modal_controller"
+application.register("year-range-modal", YearRangeModalController)

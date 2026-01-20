@@ -36,9 +36,37 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" />
             </svg>
           </div>
-          <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
-            <li><%= link_to "Albums", albums_path %></li>
-            <li><%= link_to "Songs", songs_path %></li>
+          <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-56">
+            <li>
+              <details>
+                <summary>Albums</summary>
+                <ul>
+                  <li><%= link_to "All Time", albums_path %></li>
+                  <li><%= link_to "1960s", albums_by_year_path(year: "1960s") %></li>
+                  <li><%= link_to "1970s", albums_by_year_path(year: "1970s") %></li>
+                  <li><%= link_to "1980s", albums_by_year_path(year: "1980s") %></li>
+                  <li><%= link_to "1990s", albums_by_year_path(year: "1990s") %></li>
+                  <li><%= link_to "2000s", albums_by_year_path(year: "2000s") %></li>
+                  <li><%= link_to "2010s", albums_by_year_path(year: "2010s") %></li>
+                  <li><%= link_to "2020s", albums_by_year_path(year: "2020s") %></li>
+                </ul>
+              </details>
+            </li>
+            <li>
+              <details>
+                <summary>Songs</summary>
+                <ul>
+                  <li><%= link_to "All Time", songs_path %></li>
+                  <li><%= link_to "1960s", songs_by_year_path(year: "1960s") %></li>
+                  <li><%= link_to "1970s", songs_by_year_path(year: "1970s") %></li>
+                  <li><%= link_to "1980s", songs_by_year_path(year: "1980s") %></li>
+                  <li><%= link_to "1990s", songs_by_year_path(year: "1990s") %></li>
+                  <li><%= link_to "2000s", songs_by_year_path(year: "2000s") %></li>
+                  <li><%= link_to "2010s", songs_by_year_path(year: "2010s") %></li>
+                  <li><%= link_to "2020s", songs_by_year_path(year: "2020s") %></li>
+                </ul>
+              </details>
+            </li>
             <li><%= link_to "Artists", artists_path %></li>
             <li><%= link_to "Lists", music_lists_path %></li>
           </ul>
@@ -50,8 +78,36 @@
       </div>
       <div class="navbar-center hidden lg:flex">
         <ul class="menu menu-horizontal px-1">
-          <li><%= link_to "Albums", albums_path %></li>
-          <li><%= link_to "Songs", songs_path %></li>
+          <li>
+            <details>
+              <summary>Albums</summary>
+              <ul class="bg-base-100 rounded-box z-[1] w-40 p-2 shadow">
+                <li><%= link_to "All Time", albums_path %></li>
+                <li><%= link_to "1960s", albums_by_year_path(year: "1960s") %></li>
+                <li><%= link_to "1970s", albums_by_year_path(year: "1970s") %></li>
+                <li><%= link_to "1980s", albums_by_year_path(year: "1980s") %></li>
+                <li><%= link_to "1990s", albums_by_year_path(year: "1990s") %></li>
+                <li><%= link_to "2000s", albums_by_year_path(year: "2000s") %></li>
+                <li><%= link_to "2010s", albums_by_year_path(year: "2010s") %></li>
+                <li><%= link_to "2020s", albums_by_year_path(year: "2020s") %></li>
+              </ul>
+            </details>
+          </li>
+          <li>
+            <details>
+              <summary>Songs</summary>
+              <ul class="bg-base-100 rounded-box z-[1] w-40 p-2 shadow">
+                <li><%= link_to "All Time", songs_path %></li>
+                <li><%= link_to "1960s", songs_by_year_path(year: "1960s") %></li>
+                <li><%= link_to "1970s", songs_by_year_path(year: "1970s") %></li>
+                <li><%= link_to "1980s", songs_by_year_path(year: "1980s") %></li>
+                <li><%= link_to "1990s", songs_by_year_path(year: "1990s") %></li>
+                <li><%= link_to "2000s", songs_by_year_path(year: "2000s") %></li>
+                <li><%= link_to "2010s", songs_by_year_path(year: "2010s") %></li>
+                <li><%= link_to "2020s", songs_by_year_path(year: "2020s") %></li>
+              </ul>
+            </details>
+          </li>
           <li><%= link_to "Artists", artists_path %></li>
           <li><%= link_to "Lists", music_lists_path %></li>
         </ul>

@@ -4,17 +4,15 @@
 %>
 
 <div class="container mx-auto px-4 py-8">
-  <div class="mb-8">
-    <h1 class="text-4xl font-bold text-base-content mb-2"><%= albums_page_heading(@year_filter) %></h1>
-    <% if @ranking_configuration %>
-      <p class="text-base-content/70">
-        <%= @ranking_configuration.name %>
-        <% if @ranking_configuration.description.present? %>
-          - <%= @ranking_configuration.description %>
-        <% end %>
-      </p>
-    <% end %>
+  <div class="mb-4">
+    <h1 class="text-4xl font-bold text-base-content"><%= albums_page_heading(@year_filter) %></h1>
   </div>
+
+  <%= render Music::FilterTabsComponent.new(
+    item_type: "albums",
+    base_path: albums_path(ranking_configuration_id: params[:ranking_configuration_id]),
+    year_filter: @year_filter
+  ) %>
 
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
     <% @albums.each do |ranked_item| %>
@@ -27,14 +25,12 @@
       <div class="text-6xl mb-4">🎵</div>
       <h2 class="text-2xl font-bold text-base-content mb-2">No albums found</h2>
       <p class="text-base-content/70">
-        This ranking configuration doesn't have any albums yet.
+        No albums match the selected filter criteria.
       </p>
     </div>
   <% end %>
 
-
   <div class="flex justify-center mt-8">
     <%== @pagy.series_nav %>
   </div>
-
 </div>
