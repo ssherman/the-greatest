@@ -10,7 +10,7 @@
 
   <%= render Music::FilterTabsComponent.new(
     item_type: "songs",
-    base_path: songs_path,
+    base_path: songs_path(ranking_configuration_id: params[:ranking_configuration_id]),
     year_filter: @year_filter
   ) %>
 
