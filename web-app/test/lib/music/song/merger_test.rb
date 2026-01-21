@@ -408,6 +408,62 @@ module Music
           relation_type: :remix
         )
       end
+
+      # Release year preservation tests
+      test "should update target release_year when source year is earlier" do
+        @source_song.update!(release_year: 1970)
+        @target_song.update!(release_year: 1980)
+
+        result = Music::Song::Merger.call(source: @source_song, target: @target_song)
+
+        assert result.success?
+        @target_song.reload
+        assert_equal 1970, @target_song.release_year
+      end
+
+      test "should not update target release_year when source year is later" do
+        @source_song.update!(release_year: 1990)
+        @target_song.update!(release_year: 1980)
+
+        result = Music::Song::Merger.call(source: @source_song, target: @target_song)
+
+        assert result.success?
+        @target_song.reload
+        assert_equal 1980, @target_song.release_year
+      end
+
+      test "should not update target release_year when source year is nil" do
+        @source_song.update!(release_year: nil)
+        @target_song.update!(release_year: 1980)
+
+        result = Music::Song::Merger.call(source: @source_song, target: @target_song)
+
+        assert result.success?
+        @target_song.reload
+        assert_equal 1980, @target_song.release_year
+      end
+
+      test "should update target release_year when target year is nil and source has year" do
+        @source_song.update!(release_year: 1975)
+        @target_song.update!(release_year: nil)
+
+        result = Music::Song::Merger.call(source: @source_song, target: @target_song)
+
+        assert result.success?
+        @target_song.reload
+        assert_equal 1975, @target_song.release_year
+      end
+
+      test "should leave release_year nil when both source and target are nil" do
+        @source_song.update!(release_year: nil)
+        @target_song.update!(release_year: nil)
+
+        result = Music::Song::Merger.call(source: @source_song, target: @target_song)
+
+        assert result.success?
+        @target_song.reload
+        assert_nil @target_song.release_year
+      end
     end
   end
 end

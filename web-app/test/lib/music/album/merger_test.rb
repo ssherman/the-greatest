@@ -205,6 +205,62 @@ module Music
         assert_equal @target_album, merger.target_album
         assert_equal({}, merger.stats)
       end
+
+      # Release year preservation tests
+      test "should update target release_year when source year is earlier" do
+        @source_album.update!(release_year: 1969)
+        @target_album.update!(release_year: 1973)
+
+        result = Music::Album::Merger.call(source: @source_album, target: @target_album)
+
+        assert result.success?
+        @target_album.reload
+        assert_equal 1969, @target_album.release_year
+      end
+
+      test "should not update target release_year when source year is later" do
+        @source_album.update!(release_year: 1990)
+        @target_album.update!(release_year: 1973)
+
+        result = Music::Album::Merger.call(source: @source_album, target: @target_album)
+
+        assert result.success?
+        @target_album.reload
+        assert_equal 1973, @target_album.release_year
+      end
+
+      test "should not update target release_year when source year is nil" do
+        @source_album.update!(release_year: nil)
+        @target_album.update!(release_year: 1973)
+
+        result = Music::Album::Merger.call(source: @source_album, target: @target_album)
+
+        assert result.success?
+        @target_album.reload
+        assert_equal 1973, @target_album.release_year
+      end
+
+      test "should update target release_year when target year is nil and source has year" do
+        @source_album.update!(release_year: 1969)
+        @target_album.update!(release_year: nil)
+
+        result = Music::Album::Merger.call(source: @source_album, target: @target_album)
+
+        assert result.success?
+        @target_album.reload
+        assert_equal 1969, @target_album.release_year
+      end
+
+      test "should leave release_year nil when both source and target are nil" do
+        @source_album.update!(release_year: nil)
+        @target_album.update!(release_year: nil)
+
+        result = Music::Album::Merger.call(source: @source_album, target: @target_album)
+
+        assert result.success?
+        @target_album.reload
+        assert_nil @target_album.release_year
+      end
     end
   end
 end

@@ -48,6 +48,28 @@ Returns a `Result` struct with:
 - **ai_chats** - Historical AI conversations not valuable to preserve; destroyed automatically
 - **ranked_items** - Source's rankings destroyed; target's preserved; triggers recalculation jobs
 
+## Release Year Preservation
+
+When merging songs, the merger preserves the **earliest (lowest) non-null release_year** between source and target:
+
+**Logic**:
+```ruby
+if source.release_year.present? && (target.release_year.nil? || source.release_year < target.release_year)
+  target.release_year = source.release_year
+end
+```
+
+**Behavior**:
+| Source Year | Target Year | Result |
+|-------------|-------------|--------|
+| 1970 | 1980 | Target updated to 1970 |
+| 1990 | 1980 | No change (1980 preserved) |
+| nil | 1980 | No change (1980 preserved) |
+| 1975 | nil | Target updated to 1975 |
+| nil | nil | Remains nil |
+
+This ensures data integrity by always preserving the original/first release year for a song, which is important for historical accuracy in rankings and displays.
+
 ## Duplicate Identifier Handling
 
 When merging songs that share the same external identifier (common when both were imported from the same MusicBrainz recording):
@@ -192,12 +214,13 @@ Constructor.
 ## Testing
 
 Comprehensive test coverage in `test/lib/music/song/merger_test.rb`:
-- 23 tests covering all merge scenarios
+- 28 tests covering all merge scenarios
 - Self-reference edge cases
 - Transaction rollback verification
 - Association merge verification
 - Ranking job scheduling
 - Error handling
+- Release year preservation (5 tests covering all edge cases)
 
 ## Common Use Cases
 
