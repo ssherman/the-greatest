@@ -198,9 +198,13 @@ namespace :music do
         begin
           # Look up all MBIDs and find the minimum year
           mb_year = nil
+          lookup_failures = 0
           mbids.each do |mbid|
             result = recording_search.lookup_by_mbid(mbid)
-            next unless result[:success] && result[:data]
+            unless result[:success] && result[:data]
+              lookup_failures += 1
+              next
+            end
 
             recording = result[:data]["recordings"]&.first
             first_release_date = recording&.dig("first-release-date")
@@ -213,8 +217,15 @@ namespace :music do
             mb_year = year if mb_year.nil? || year < mb_year
           end
 
+          # If ALL lookups failed, count as error not skip
+          if lookup_failures == mbids.count
+            puts "  Song ##{song.id} \"#{song.title}\" - ERROR: All #{mbids.count} MusicBrainz lookup(s) failed"
+            stats[:errors] += 1
+            next
+          end
+
           unless mb_year
-            puts "  Song ##{song.id} \"#{song.title}\" - SKIPPED (no valid MusicBrainz date from #{mbids.count} ID(s))"
+            puts "  Song ##{song.id} \"#{song.title}\" - SKIPPED (no valid MusicBrainz date from #{mbids.count - lookup_failures} successful lookup(s))"
             stats[:skipped] += 1
             next
           end
