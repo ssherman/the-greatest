@@ -111,34 +111,41 @@ namespace :music do
         begin
           # Look up all MBIDs and find the minimum year
           mb_year = nil
-          lookup_failures = 0
+          lookup_failures = []
           mbids.each do |mbid|
-            result = release_group_search.lookup_by_release_group_mbid(mbid)
-            unless result[:success] && result[:data]
-              lookup_failures += 1
-              next
+            begin
+              result = release_group_search.lookup_by_release_group_mbid(mbid)
+              unless result[:success] && result[:data]
+                error_msg = result[:errors]&.join(", ") || "Unknown error"
+                lookup_failures << "#{mbid}: #{error_msg}"
+                next
+              end
+
+              release_group = result[:data]["release-groups"]&.first
+              first_release_date = release_group&.dig("first-release-date")
+              next unless first_release_date.present?
+
+              # Extract year from date (formats: YYYY, YYYY-MM, YYYY-MM-DD)
+              year = first_release_date.to_s[0..3].to_i
+              next if year < 1900 || year > Date.current.year + 1
+
+              mb_year = year if mb_year.nil? || year < mb_year
+            rescue Music::Musicbrainz::Exceptions::QueryError => e
+              # Invalid MBID format - skip this one but continue with others
+              lookup_failures << "#{mbid}: #{e.message}"
             end
-
-            release_group = result[:data]["release-groups"]&.first
-            first_release_date = release_group&.dig("first-release-date")
-            next unless first_release_date.present?
-
-            # Extract year from date (formats: YYYY, YYYY-MM, YYYY-MM-DD)
-            year = first_release_date.to_s[0..3].to_i
-            next if year < 1900 || year > Date.current.year + 1
-
-            mb_year = year if mb_year.nil? || year < mb_year
           end
 
           # If ALL lookups failed, count as error not skip
-          if lookup_failures == mbids.count
+          if lookup_failures.count == mbids.count
             puts "  Album ##{album.id} \"#{album.title}\" - ERROR: All #{mbids.count} MusicBrainz lookup(s) failed"
+            lookup_failures.each { |f| puts "    - #{f}" }
             stats[:errors] += 1
             next
           end
 
           unless mb_year
-            puts "  Album ##{album.id} \"#{album.title}\" - SKIPPED (no valid MusicBrainz date from #{mbids.count - lookup_failures} successful lookup(s))"
+            puts "  Album ##{album.id} \"#{album.title}\" - SKIPPED (no valid MusicBrainz date from #{mbids.count - lookup_failures.count} successful lookup(s))"
             stats[:skipped] += 1
             next
           end
