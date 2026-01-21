@@ -93,6 +93,28 @@ The merger handles the following associations from source to target album:
 - **Destroyed**: Historical AI conversations are not preserved
 - **Rationale**: Not valuable to merge conversational history
 
+## Release Year Preservation
+
+When merging albums, the merger preserves the **earliest (lowest) non-null release_year** between source and target:
+
+**Logic**:
+```ruby
+if source.release_year.present? && (target.release_year.nil? || source.release_year < target.release_year)
+  target.release_year = source.release_year
+end
+```
+
+**Behavior**:
+| Source Year | Target Year | Result |
+|-------------|-------------|--------|
+| 1969 | 1973 | Target updated to 1969 |
+| 1990 | 1973 | No change (1973 preserved) |
+| nil | 1973 | No change (1973 preserved) |
+| 1969 | nil | Target updated to 1969 |
+| nil | nil | Remains nil |
+
+This ensures data integrity by always preserving the original/first release year for an album, which is important for historical accuracy in rankings and displays.
+
 ## Transaction Safety
 
 **Critical**: The entire merge operation is wrapped in a database transaction:

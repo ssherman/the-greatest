@@ -81,5 +81,96 @@ namespace :music do
         end
       end
     end
+
+    desc "Backfill release_year from MusicBrainz for albums with release group IDs. Use DRY_RUN=true to preview."
+    task backfill_release_years: :environment do
+      dry_run = ENV["DRY_RUN"].present? && ENV["DRY_RUN"].downcase == "true"
+
+      puts "Backfilling release years from MusicBrainz..."
+      puts "Scope: Only albums with MusicBrainz release group IDs"
+      puts "Mode: #{dry_run ? "DRY RUN (no changes will be made)" : "LIVE (updates will be applied)"}"
+      puts "=" * 80
+
+      stats = {total: 0, updated: 0, skipped: 0, errors: 0}
+      release_group_search = Music::Musicbrainz::Search::ReleaseGroupSearch.new
+
+      # Find albums with MusicBrainz release group IDs
+      albums_with_mbid = Music::Album
+        .joins(:identifiers)
+        .where(identifiers: {identifier_type: :music_musicbrainz_release_group_id})
+        .distinct
+        .includes(:identifiers, :artists)
+
+      albums_with_mbid.find_each do |album|
+        stats[:total] += 1
+
+        mbid = album.identifiers.find_by(identifier_type: :music_musicbrainz_release_group_id)&.value
+        next unless mbid
+
+        begin
+          result = release_group_search.lookup_by_release_group_mbid(mbid)
+
+          unless result[:success] && result[:data]
+            puts "result failed with: #{result.inspect}"
+            puts "  Album ##{album.id} \"#{album.title}\" - ERROR: MusicBrainz lookup failed"
+            stats[:errors] += 1
+            next
+          end
+
+          release_group = result[:data]["release-groups"]&.first
+          first_release_date = release_group&.dig("first-release-date")
+
+          unless first_release_date.present?
+            puts "  Album ##{album.id} \"#{album.title}\" - SKIPPED (no MusicBrainz date)"
+            stats[:skipped] += 1
+            next
+          end
+
+          # Extract year from date (formats: YYYY, YYYY-MM, YYYY-MM-DD)
+          mb_year = first_release_date.to_s[0..3].to_i
+          if mb_year < 1900 || mb_year > Date.current.year + 1
+            puts "  Album ##{album.id} \"#{album.title}\" - SKIPPED (invalid MB year: #{mb_year})"
+            stats[:skipped] += 1
+            next
+          end
+
+          current_year = album.release_year
+          artist_names = album.artists.map(&:name).join(", ")
+
+          if current_year.nil?
+            puts "  Album ##{album.id} \"#{album.title}\" (#{artist_names})"
+            puts "    Current: nil, MusicBrainz: #{mb_year} → #{dry_run ? "WOULD UPDATE" : "UPDATED"} (was null)"
+            album.update!(release_year: mb_year) unless dry_run
+            stats[:updated] += 1
+          elsif mb_year < current_year
+            puts "  Album ##{album.id} \"#{album.title}\" (#{artist_names})"
+            puts "    Current: #{current_year}, MusicBrainz: #{mb_year} → #{dry_run ? "WOULD UPDATE" : "UPDATED"} (#{current_year - mb_year} years earlier)"
+            album.update!(release_year: mb_year) unless dry_run
+            stats[:updated] += 1
+          else
+            stats[:skipped] += 1
+          end
+        rescue => e
+          puts "  Album ##{album.id} \"#{album.title}\" - ERROR: #{e.message}"
+          stats[:errors] += 1
+        end
+
+        if stats[:total] % 100 == 0
+          puts "  Processed #{stats[:total]} albums..."
+        end
+      end
+
+      puts "=" * 80
+      puts "Backfill complete!"
+      puts "  Total processed: #{stats[:total]}"
+      puts "  Updated: #{stats[:updated]}"
+      puts "  Skipped (not earlier or no MB data): #{stats[:skipped]}"
+      puts "  Errors: #{stats[:errors]}"
+
+      if dry_run
+        puts "\nDRY RUN - No changes were made."
+        puts "To apply updates, run: bin/rails music:albums:backfill_release_years"
+      end
+    end
   end
 end

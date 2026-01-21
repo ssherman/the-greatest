@@ -44,6 +44,9 @@ module Music
         merge_images
         merge_external_links
         merge_list_items
+        merge_release_year
+
+        target_album.save! if target_album.changed?
       end
 
       def merge_releases
@@ -98,6 +101,15 @@ module Music
           count += 1
         end
         @stats[:list_items] = count
+      end
+
+      def merge_release_year
+        return unless source_album.release_year.present?
+
+        if target_album.release_year.nil? || source_album.release_year < target_album.release_year
+          target_album.release_year = source_album.release_year
+          @stats[:release_year_updated] = true
+        end
       end
 
       def collect_affected_ranking_configurations

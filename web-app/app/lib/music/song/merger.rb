@@ -52,8 +52,10 @@ module Music
         merge_list_items
         merge_song_relationships
         merge_inverse_song_relationships
+        merge_release_year
 
-        target_song.touch
+        target_song.save! if target_song.changed?
+        target_song.touch unless target_song.saved_changes?
       end
 
       def merge_tracks
@@ -136,6 +138,15 @@ module Music
         end
 
         @stats[:inverse_song_relationships] = inverse_relationships.count
+      end
+
+      def merge_release_year
+        return unless source_song.release_year.present?
+
+        if target_song.release_year.nil? || source_song.release_year < target_song.release_year
+          target_song.release_year = source_song.release_year
+          @stats[:release_year_updated] = true
+        end
       end
 
       def collect_affected_ranking_configurations
