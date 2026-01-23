@@ -391,12 +391,22 @@ step_icon(step[:step], index)
   "started_at": "2025-01-19T10:00:00Z",
   "completed_at": null,
   "import_source": "custom_html",
+  "batch_mode": false,
   "steps": {
     "parse": { ... },
     "enrich": { ... }
   }
 }
 ```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `current_step` | Integer | Zero-based index of current step |
+| `started_at` | String | ISO8601 timestamp when wizard started |
+| `completed_at` | String | ISO8601 timestamp when wizard completed |
+| `import_source` | String | Import method (`custom_html`, `musicbrainz_series`) |
+| `batch_mode` | Boolean | Enable batch processing for large lists (500+ items) |
+| `steps` | Object | Per-step status and metadata |
 
 ### Step-Level Structure
 
@@ -457,6 +467,58 @@ step_icon(step[:step], index)
   }
 }
 ```
+
+## Batch Processing for Large Lists
+
+For lists with 500+ items, the AI may return incomplete results. Batch processing solves this by splitting content into manageable chunks.
+
+### Enabling Batch Mode
+
+Users enable batch processing via a checkbox on the source step. The setting is stored in `wizard_state.batch_mode`.
+
+**UI Location**: Source step, below the HTML/text input area
+
+**Checkbox Label**: "Process in batches"
+
+**Description**: "Enable for large plain text lists with one item per line (recommended for 500+ items). Processes 100 items at a time to ensure all items are captured."
+
+### How Batch Processing Works
+
+#### Parse Step
+
+When batch mode is enabled:
+
+1. Content is split by newlines
+2. Empty/whitespace-only lines are filtered out
+3. Lines are grouped into batches of 100
+4. Each batch is parsed via `parser_task_class.new(parent: @list, content: batch_content)`
+5. Positions are assigned cumulatively (batch 1: 1-100, batch 2: 101-200, etc.)
+6. All items inserted atomically via `ListItem.insert_all`
+
+#### Validate Step
+
+When batch mode is enabled:
+
+1. Enriched items are split into batches of 100
+2. Each batch is validated via `validator_task_class.new(parent: @list, items: batch_items)`
+3. Valid/invalid counts are aggregated across batches
+4. Progress is updated after each batch completes
+
+### Error Handling
+
+**Fail-fast policy**: If any batch fails, the entire step fails. This prevents inconsistent data states.
+
+- Error message includes batch number (e.g., "Batch 3 failed: AI timeout")
+- Step can be re-run safely (idempotent via `destroy_all` for parse, `clear_previous_validation_flags` for validate)
+
+### When to Use Batch Mode
+
+| Scenario | Recommendation |
+|----------|----------------|
+| Plain text list, 500+ items | Enable batch mode |
+| Plain text list, <500 items | Optional |
+| HTML with complex structure | Do not enable (unpredictable splitting) |
+| MusicBrainz series import | Not applicable (items come from API) |
 
 ## Implementing for New List Type
 
@@ -708,7 +770,7 @@ Add wizard link to the list show page:
 
 ##### BaseWizardParseListJob
 
-Parses raw HTML to extract list items. Subclasses implement:
+Parses raw HTML to extract list items. Supports optional batch processing for large plain text lists.
 
 | Method | Purpose |
 |--------|---------|
@@ -717,6 +779,12 @@ Parses raw HTML to extract list items. Subclasses implement:
 | `listable_type` | Polymorphic type string |
 | `data_key` | Response key (`:songs` or `:albums`) |
 | `build_metadata(item)` | Build metadata hash from parsed item |
+
+**Batch Processing** (when `wizard_state.batch_mode = true`):
+- Splits content by newlines, filters empty lines
+- Processes in batches of 100 lines
+- Uses `parser_task_class.new(parent: @list, content: batch_content)` for each batch
+- Assigns cumulative positions across batches
 
 ##### BaseWizardEnrichListItemsJob
 
@@ -730,13 +798,20 @@ Enriches list items with MusicBrainz data. Subclasses implement:
 
 ##### BaseWizardValidateListItemsJob
 
-Validates enriched items using AI. Subclasses implement:
+Validates enriched items using AI. Supports optional batch processing for large lists.
 
 | Method | Purpose |
 |--------|---------|
 | `list_class` | Model class for list |
 | `validator_task_class` | AI task class |
-| `has_enrichment?(item)` | Check if item has enrichment data |
+| `entity_id_key` | Metadata key for entity ID (e.g., `"song_id"`) |
+| `enrichment_id_key` | Metadata key for MusicBrainz ID |
+
+**Batch Processing** (when `wizard_state.batch_mode = true`):
+- Processes enriched items in batches of 100
+- Uses `validator_task_class.new(parent: @list, items: batch_items)` for each batch
+- Aggregates valid/invalid counts across batches
+- Updates progress metadata with batch completion status
 
 ##### BaseWizardImportJob
 

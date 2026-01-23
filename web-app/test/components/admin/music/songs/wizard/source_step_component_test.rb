@@ -83,4 +83,35 @@ class Admin::Music::Songs::Wizard::SourceStepComponentTest < ViewComponent::Test
     assert_selector "input[type='radio'][name='import_source'][value='custom_html'][checked]"
     assert_selector "input[type='radio'][name='import_source'][value='musicbrainz_series']:not([checked])"
   end
+
+  # Batch mode checkbox tests
+
+  test "renders batch mode checkbox" do
+    render_inline(Admin::Music::Songs::Wizard::SourceStepComponent.new(list: @list))
+
+    assert_selector "input[type='checkbox'][name='batch_mode'][value='1']"
+    assert_text "Process in batches"
+    assert_text "Enable for large plain text lists"
+  end
+
+  test "batch mode checkbox is unchecked by default" do
+    @list.update!(wizard_state: {})
+    render_inline(Admin::Music::Songs::Wizard::SourceStepComponent.new(list: @list))
+
+    assert_selector "input[type='checkbox'][name='batch_mode']:not([checked])"
+  end
+
+  test "batch mode checkbox is checked when wizard_state has batch_mode true" do
+    @list.update!(wizard_state: {"batch_mode" => true})
+    render_inline(Admin::Music::Songs::Wizard::SourceStepComponent.new(list: @list))
+
+    assert_selector "input[type='checkbox'][name='batch_mode'][checked]"
+  end
+
+  test "batch mode checkbox is unchecked when wizard_state has batch_mode false" do
+    @list.update!(wizard_state: {"batch_mode" => false})
+    render_inline(Admin::Music::Songs::Wizard::SourceStepComponent.new(list: @list))
+
+    assert_selector "input[type='checkbox'][name='batch_mode']:not([checked])"
+  end
 end

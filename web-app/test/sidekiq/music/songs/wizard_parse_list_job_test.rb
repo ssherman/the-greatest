@@ -165,4 +165,177 @@ class Music::Songs::WizardParseListJobTest < ActiveSupport::TestCase
       Music::Songs::WizardParseListJob.new.perform(999999)
     end
   end
+
+  # Batch mode tests
+
+  test "batch mode creates items with strictly sequential positions" do
+    # Enable batch mode and set up plain text content
+    @list.update!(
+      wizard_state: {"current_step" => 1, "batch_mode" => true},
+      simplified_html: "1. Song A - Artist A\n2. Song B - Artist B\n3. Song C - Artist C"
+    )
+
+    # Mock AI returns items with rank: 5, 10, 15 - but batch mode should ignore these
+    parsed_songs = [
+      OpenStruct.new(rank: 5, title: "Song A", artists: ["Artist A"], album: nil, release_year: nil),
+      OpenStruct.new(rank: 10, title: "Song B", artists: ["Artist B"], album: nil, release_year: nil),
+      OpenStruct.new(rank: 15, title: "Song C", artists: ["Artist C"], album: nil, release_year: nil)
+    ]
+
+    result = Services::Ai::Result.new(
+      success: true,
+      data: OpenStruct.new(songs: parsed_songs)
+    )
+
+    Services::Ai::Tasks::Lists::Music::SongsRawParserTask.any_instance.stubs(:call).returns(result)
+
+    Music::Songs::WizardParseListJob.new.perform(@list.id)
+
+    @list.reload
+    positions = @list.list_items.unverified.order(:position).pluck(:position)
+    # Batch mode uses sequential positions, ignoring AI-extracted ranks
+    assert_equal [1, 2, 3], positions
+  end
+
+  test "batch mode processes multiple batches and creates all items" do
+    # Create 150 lines of content (will create 2 batches of 100 and 50)
+    lines = (1..150).map { |i| "#{i}. Song #{i} - Artist #{i}" }
+    @list.update!(
+      wizard_state: {"current_step" => 1, "batch_mode" => true},
+      simplified_html: lines.join("\n")
+    )
+
+    # First batch returns 100 items
+    songs_batch1 = (1..100).map do |i|
+      OpenStruct.new(rank: nil, title: "Song #{i}", artists: ["Artist #{i}"], album: nil, release_year: nil)
+    end
+    result1 = Services::Ai::Result.new(success: true, data: OpenStruct.new(songs: songs_batch1))
+
+    # Second batch returns 50 items
+    songs_batch2 = (1..50).map do |i|
+      OpenStruct.new(rank: nil, title: "Song #{i}", artists: ["Artist #{i}"], album: nil, release_year: nil)
+    end
+    result2 = Services::Ai::Result.new(success: true, data: OpenStruct.new(songs: songs_batch2))
+
+    # Use multiple_yields alternative - sequence of returns
+    Services::Ai::Tasks::Lists::Music::SongsRawParserTask.any_instance.stubs(:call).returns(result1).then.returns(result2)
+
+    Music::Songs::WizardParseListJob.new.perform(@list.id)
+
+    @list.reload
+    assert_equal 150, @list.list_items.unverified.count
+
+    # Verify positions are cumulative across batches
+    positions = @list.list_items.unverified.order(:position).pluck(:position)
+    assert_equal (1..150).to_a, positions
+  end
+
+  test "batch mode metadata includes batch info on completion" do
+    @list.update!(
+      wizard_state: {"current_step" => 1, "batch_mode" => true},
+      simplified_html: "1. Song A - Artist A\n2. Song B - Artist B"
+    )
+
+    parsed_songs = [
+      OpenStruct.new(rank: nil, title: "Song A", artists: ["Artist A"], album: nil, release_year: nil),
+      OpenStruct.new(rank: nil, title: "Song B", artists: ["Artist B"], album: nil, release_year: nil)
+    ]
+
+    result = Services::Ai::Result.new(
+      success: true,
+      data: OpenStruct.new(songs: parsed_songs)
+    )
+
+    Services::Ai::Tasks::Lists::Music::SongsRawParserTask.any_instance.stubs(:call).returns(result)
+
+    Music::Songs::WizardParseListJob.new.perform(@list.id)
+
+    @list.reload
+    metadata = @list.wizard_manager.step_metadata("parse")
+    assert_equal true, metadata["batched"]
+    assert_equal 1, metadata["total_batches"]
+    assert_equal 2, metadata["total_items"]
+  end
+
+  test "batch mode filters empty lines before batching" do
+    @list.update!(
+      wizard_state: {"current_step" => 1, "batch_mode" => true},
+      simplified_html: "1. Song A - Artist A\n\n\n2. Song B - Artist B\n   \n3. Song C - Artist C"
+    )
+
+    # Should only get 3 non-empty lines
+    parsed_songs = [
+      OpenStruct.new(rank: nil, title: "Song A", artists: ["Artist A"], album: nil, release_year: nil),
+      OpenStruct.new(rank: nil, title: "Song B", artists: ["Artist B"], album: nil, release_year: nil),
+      OpenStruct.new(rank: nil, title: "Song C", artists: ["Artist C"], album: nil, release_year: nil)
+    ]
+
+    result = Services::Ai::Result.new(
+      success: true,
+      data: OpenStruct.new(songs: parsed_songs)
+    )
+
+    Services::Ai::Tasks::Lists::Music::SongsRawParserTask.any_instance.stubs(:call).returns(result)
+
+    Music::Songs::WizardParseListJob.new.perform(@list.id)
+
+    @list.reload
+    assert_equal 3, @list.list_items.unverified.count
+  end
+
+  test "batch mode fails entire step if any batch fails" do
+    lines = (1..150).map { |i| "#{i}. Song #{i} - Artist #{i}" }
+    @list.update!(
+      wizard_state: {"current_step" => 1, "batch_mode" => true},
+      simplified_html: lines.join("\n")
+    )
+
+    # First batch succeeds
+    songs_batch1 = (1..100).map do |i|
+      OpenStruct.new(rank: nil, title: "Song #{i}", artists: ["Artist #{i}"], album: nil, release_year: nil)
+    end
+    result1 = Services::Ai::Result.new(success: true, data: OpenStruct.new(songs: songs_batch1))
+
+    # Second batch fails
+    result2 = Services::Ai::Result.new(success: false, error: "AI timeout")
+
+    Services::Ai::Tasks::Lists::Music::SongsRawParserTask.any_instance.stubs(:call).returns(result1).then.returns(result2)
+
+    assert_raises(RuntimeError) do
+      Music::Songs::WizardParseListJob.new.perform(@list.id)
+    end
+
+    @list.reload
+    manager = @list.wizard_manager
+    assert_equal "failed", manager.step_status("parse")
+    assert_includes manager.step_error("parse"), "batch 2"
+  end
+
+  test "batch mode off still uses AI-extracted ranks" do
+    # batch_mode not set (defaults to false)
+    @list.update!(
+      wizard_state: {"current_step" => 1},
+      simplified_html: "Some HTML content"
+    )
+
+    # AI returns items with explicit ranks
+    parsed_songs = [
+      OpenStruct.new(rank: 5, title: "Song A", artists: ["Artist A"], album: nil, release_year: nil),
+      OpenStruct.new(rank: 10, title: "Song B", artists: ["Artist B"], album: nil, release_year: nil)
+    ]
+
+    result = Services::Ai::Result.new(
+      success: true,
+      data: OpenStruct.new(songs: parsed_songs)
+    )
+
+    Services::Ai::Tasks::Lists::Music::SongsRawParserTask.any_instance.stubs(:call).returns(result)
+
+    Music::Songs::WizardParseListJob.new.perform(@list.id)
+
+    @list.reload
+    positions = @list.list_items.unverified.order(:position).pluck(:position)
+    # Non-batch mode uses AI-extracted ranks
+    assert_equal [5, 10], positions
+  end
 end

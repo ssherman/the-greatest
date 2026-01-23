@@ -3,6 +3,10 @@
 # Base class for wizard validate jobs.
 # Validates enriched list items using AI to check match quality.
 #
+# Supports optional batch processing for large lists (100+ enriched items).
+# When batch_mode is enabled in wizard_state, processes items in batches of 100
+# to ensure all items are validated.
+#
 # Subclasses must implement:
 #   - list_class: Model class for list (e.g., Music::Songs::List)
 #   - validator_task_class: AI task class for validation
@@ -25,13 +29,18 @@ class Music::BaseWizardValidateListItemsJob
 
     clear_previous_validation_flags
 
-    result = validator_task_class.new(parent: @list).call
-
-    if result.success?
-      complete_job(result.data)
+    data = if batch_mode?
+      process_in_batches
     else
-      handle_error(result.error || "Validation failed")
+      result = validator_task_class.new(parent: @list).call
+      unless result.success?
+        handle_error(result.error || "Validation failed")
+        return
+      end
+      result.data
     end
+
+    complete_job(data)
   rescue ActiveRecord::RecordNotFound => e
     Rails.logger.error "#{self.class.name}: List not found - #{e.message}"
     raise
@@ -71,7 +80,7 @@ class Music::BaseWizardValidateListItemsJob
   end
 
   def clear_previous_validation_flags
-    @list.list_items.find_each do |item|
+    @list.list_items.reorder(nil).find_each do |item|
       needs_update = false
 
       if item.metadata["ai_match_invalid"].present?
@@ -93,6 +102,63 @@ class Music::BaseWizardValidateListItemsJob
     item.listable_id.present? ||
       item.metadata[entity_id_key].present? ||
       item.metadata[enrichment_id_key].present?
+  end
+
+  # Check if batch mode is enabled in wizard_state
+  def batch_mode?
+    @list.wizard_state&.dig("batch_mode") == true
+  end
+
+  # Process all items in batches of 100
+  def process_in_batches
+    total_valid = 0
+    total_invalid = 0
+    total_verified = 0
+    last_reasoning = nil
+    total_batches = (@items.size.to_f / 100).ceil
+    items_validated = 0
+
+    @items.each_slice(100).with_index do |batch_items, batch_index|
+      # Call validator task with specific items (ai_chat still associated with @list)
+      result = validator_task_class.new(
+        parent: @list,
+        items: batch_items
+      ).call
+
+      unless result.success?
+        error_msg = "Batch #{batch_index + 1} failed: #{result.error}"
+        handle_error(error_msg)
+        raise error_msg
+      end
+
+      # Accumulate counts (items already updated by task's process_and_persist)
+      total_valid += result.data[:valid_count]
+      total_invalid += result.data[:invalid_count]
+      total_verified += result.data[:verified_count]
+      last_reasoning = result.data[:reasoning]
+      items_validated += batch_items.size
+
+      # Update progress
+      @list.wizard_manager.update_step_status!(
+        step: "validate",
+        status: "running",
+        progress: ((batch_index + 1).to_f / total_batches * 100).to_i,
+        metadata: {
+          batches_completed: batch_index + 1,
+          total_batches: total_batches,
+          items_validated: items_validated
+        }
+      )
+    end
+
+    # Return aggregated counts
+    {
+      valid_count: total_valid,
+      invalid_count: total_invalid,
+      verified_count: total_verified,
+      total_count: @items.count,
+      reasoning: last_reasoning
+    }
   end
 
   def complete_with_no_items

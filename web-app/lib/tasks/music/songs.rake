@@ -200,27 +200,25 @@ namespace :music do
           mb_year = nil
           lookup_failures = []
           mbids.each do |mbid|
-            begin
-              result = recording_search.lookup_by_mbid(mbid)
-              unless result[:success] && result[:data]
-                error_msg = result[:errors]&.join(", ") || "Unknown error"
-                lookup_failures << "#{mbid}: #{error_msg}"
-                next
-              end
-
-              recording = result[:data]["recordings"]&.first
-              first_release_date = recording&.dig("first-release-date")
-              next unless first_release_date.present?
-
-              # Extract year from date (formats: YYYY, YYYY-MM, YYYY-MM-DD)
-              year = first_release_date.to_s[0..3].to_i
-              next if year < 1900 || year > Date.current.year + 1
-
-              mb_year = year if mb_year.nil? || year < mb_year
-            rescue Music::Musicbrainz::Exceptions::QueryError => e
-              # Invalid MBID format - skip this one but continue with others
-              lookup_failures << "#{mbid}: #{e.message}"
+            result = recording_search.lookup_by_mbid(mbid)
+            unless result[:success] && result[:data]
+              error_msg = result[:errors]&.join(", ") || "Unknown error"
+              lookup_failures << "#{mbid}: #{error_msg}"
+              next
             end
+
+            recording = result[:data]["recordings"]&.first
+            first_release_date = recording&.dig("first-release-date")
+            next unless first_release_date.present?
+
+            # Extract year from date (formats: YYYY, YYYY-MM, YYYY-MM-DD)
+            year = first_release_date.to_s[0..3].to_i
+            next if year < 1900 || year > Date.current.year + 1
+
+            mb_year = year if mb_year.nil? || year < mb_year
+          rescue Music::Musicbrainz::Exceptions::QueryError => e
+            # Invalid MBID format - skip this one but continue with others
+            lookup_failures << "#{mbid}: #{e.message}"
           end
 
           # If ALL lookups failed, count as error not skip
