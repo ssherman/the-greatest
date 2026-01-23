@@ -26,6 +26,10 @@ class Admin::Music::Wizard::BaseSourceStepComponent < ViewComponent::Base
     nil
   end
 
+  def default_batch_mode
+    list.wizard_state&.dig("batch_mode") || false
+  end
+
   private
 
   attr_reader :list

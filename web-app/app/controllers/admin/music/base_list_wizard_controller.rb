@@ -227,11 +227,15 @@ class Admin::Music::BaseListWizardController < Admin::Music::BaseController
       return
     end
 
+    # Extract batch_mode parameter (checkbox returns "1" when checked, nil when unchecked)
+    batch_mode = params[:batch_mode] == "1"
+
     next_step_index = (import_source == "musicbrainz_series") ? 5 : 1
 
     wizard_entity.update!(wizard_state: (wizard_entity.wizard_state || {}).merge(
       "current_step" => next_step_index,
-      "import_source" => import_source
+      "import_source" => import_source,
+      "batch_mode" => batch_mode
     ))
 
     redirect_to action: :show_step, step: wizard_steps[next_step_index]

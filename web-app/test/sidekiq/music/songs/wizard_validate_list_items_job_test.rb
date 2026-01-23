@@ -212,4 +212,163 @@ class Music::Songs::WizardValidateListItemsJobTest < ActiveSupport::TestCase
     assert_equal "failed", manager.step_status("validate")
     assert_equal "Network error", manager.step_error("validate")
   end
+
+  # Batch mode tests
+
+  test "batch mode processes items in batches of 100" do
+    @list.update!(wizard_state: {"current_step" => 3, "batch_mode" => true, "steps" => {"validate" => {"status" => "idle"}}})
+
+    # Create 150 enriched items
+    @list_items.each(&:destroy)
+    @list_items.clear
+
+    150.times do |i|
+      @list_items << ListItem.create!(
+        list: @list,
+        listable_type: "Music::Song",
+        listable_id: nil,
+        verified: false,
+        position: i + 1,
+        metadata: {
+          "title" => "Song #{i + 1}",
+          "artists" => ["Artist #{i + 1}"],
+          "song_id" => i + 1,
+          "song_name" => "Song #{i + 1}",
+          "opensearch_artist_names" => ["Artist #{i + 1}"],
+          "opensearch_match" => true
+        }
+      )
+    end
+
+    # First batch (100 items): 98 valid, 2 invalid
+    result1 = Services::Ai::Result.new(
+      success: true,
+      data: {
+        valid_count: 98,
+        invalid_count: 2,
+        verified_count: 98,
+        total_count: 100,
+        invalid_indices: [0, 1],
+        reasoning: "Batch 1 validated"
+      }
+    )
+
+    # Second batch (50 items): 48 valid, 2 invalid
+    result2 = Services::Ai::Result.new(
+      success: true,
+      data: {
+        valid_count: 48,
+        invalid_count: 2,
+        verified_count: 48,
+        total_count: 50,
+        invalid_indices: [0, 1],
+        reasoning: "Batch 2 validated"
+      }
+    )
+
+    Services::Ai::Tasks::Lists::Music::Songs::ListItemsValidatorTask.any_instance.stubs(:call).returns(result1).then.returns(result2)
+
+    Music::Songs::WizardValidateListItemsJob.new.perform(@list.id)
+
+    @list.reload
+    manager = @list.wizard_manager
+    assert_equal "completed", manager.step_status("validate")
+
+    metadata = manager.step_metadata("validate")
+    # 2 batches: first 100 items (98 valid, 2 invalid), second 50 items (48 valid, 2 invalid)
+    assert_equal 146, metadata["valid_count"]
+    assert_equal 4, metadata["invalid_count"]
+    assert_equal 150, metadata["validated_items"]
+  end
+
+  test "batch mode aggregates counts correctly across batches" do
+    @list.update!(wizard_state: {"current_step" => 3, "batch_mode" => true, "steps" => {"validate" => {"status" => "idle"}}})
+
+    result = Services::Ai::Result.new(
+      success: true,
+      data: {
+        valid_count: 1,
+        invalid_count: 1,
+        verified_count: 1,
+        total_count: 2,
+        invalid_indices: [1],
+        reasoning: "One invalid"
+      }
+    )
+
+    Services::Ai::Tasks::Lists::Music::Songs::ListItemsValidatorTask.any_instance.stubs(:call).returns(result)
+
+    Music::Songs::WizardValidateListItemsJob.new.perform(@list.id)
+
+    @list.reload
+    manager = @list.wizard_manager
+    metadata = manager.step_metadata("validate")
+
+    # With 2 items in one batch, should match the single result
+    assert_equal 1, metadata["valid_count"]
+    assert_equal 1, metadata["invalid_count"]
+    assert_equal 1, metadata["verified_count"]
+  end
+
+  test "batch mode fails entire step if any batch fails" do
+    @list.update!(wizard_state: {"current_step" => 3, "batch_mode" => true, "steps" => {"validate" => {"status" => "idle"}}})
+
+    # Create 150 items to trigger 2 batches
+    @list_items.each(&:destroy)
+    @list_items.clear
+
+    150.times do |i|
+      @list_items << ListItem.create!(
+        list: @list,
+        listable_type: "Music::Song",
+        listable_id: nil,
+        verified: false,
+        position: i + 1,
+        metadata: {
+          "title" => "Song #{i + 1}",
+          "artists" => ["Artist #{i + 1}"],
+          "song_id" => i + 1,
+          "opensearch_match" => true
+        }
+      )
+    end
+
+    # First batch succeeds
+    result1 = Services::Ai::Result.new(
+      success: true,
+      data: {valid_count: 100, invalid_count: 0, verified_count: 100, total_count: 100, invalid_indices: [], reasoning: "All valid"}
+    )
+
+    # Second batch fails
+    result2 = Services::Ai::Result.new(success: false, error: "AI timeout")
+
+    Services::Ai::Tasks::Lists::Music::Songs::ListItemsValidatorTask.any_instance.stubs(:call).returns(result1).then.returns(result2)
+
+    assert_raises(RuntimeError) do
+      Music::Songs::WizardValidateListItemsJob.new.perform(@list.id)
+    end
+
+    @list.reload
+    manager = @list.wizard_manager
+    assert_equal "failed", manager.step_status("validate")
+    assert_includes manager.step_error("validate"), "Batch 2"
+  end
+
+  test "batch mode off still works (no regression)" do
+    # batch_mode not set or false
+    @list.update!(wizard_state: {"current_step" => 3, "batch_mode" => false, "steps" => {"validate" => {"status" => "idle"}}})
+
+    result = Services::Ai::Result.new(
+      success: true,
+      data: {valid_count: 2, invalid_count: 0, verified_count: 2, total_count: 2, invalid_indices: [], reasoning: "All valid"}
+    )
+
+    Services::Ai::Tasks::Lists::Music::Songs::ListItemsValidatorTask.any_instance.expects(:call).once.returns(result)
+
+    Music::Songs::WizardValidateListItemsJob.new.perform(@list.id)
+
+    @list.reload
+    manager = @list.wizard_manager
+    assert_equal "completed", manager.step_status("validate")
+  end
 end

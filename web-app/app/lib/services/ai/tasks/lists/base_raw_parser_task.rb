@@ -5,6 +5,14 @@ module Services
     module Tasks
       module Lists
         class BaseRawParserTask < Services::Ai::Tasks::BaseTask
+          # Override BaseTask initializer to accept optional content parameter.
+          # When content: is provided (for batch processing), uses that content
+          # instead of parent.simplified_html and skips parent.update! in persist.
+          def initialize(parent:, content: nil, provider: nil, model: nil)
+            @provided_content = content
+            super(parent: parent, provider: provider, model: model)
+          end
+
           private
 
           def chat_type = :analysis
@@ -36,7 +44,7 @@ module Services
               Extract #{media_type} information from the following HTML. Focus ONLY on extracting the data without any additional processing:
 
               ```html
-              #{parent.simplified_html}
+              #{content_to_parse}
               ```
 
               #{extraction_examples}
@@ -51,11 +59,16 @@ module Services
             PROMPT
           end
 
+          def content_to_parse
+            @provided_content || parent.simplified_html
+          end
+
           def response_format = {type: "json_object"}
 
           def process_and_persist(provider_response)
             data = JSON.parse(provider_response[:content], symbolize_names: true)
-            parent.update!(items_json: data)
+            # Only update parent.items_json in normal mode (not batch mode)
+            parent.update!(items_json: data) unless @provided_content
             create_result(success: true, data: data, ai_chat: chat)
           end
 

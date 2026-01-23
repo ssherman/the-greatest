@@ -5,6 +5,14 @@ module Services
         module Music
           module Songs
             class ListItemsValidatorTask < Services::Ai::Tasks::BaseTask
+              # Override BaseTask initializer to accept optional items parameter.
+              # When items: is provided (for batch processing), validates those items
+              # instead of fetching from parent. AI chat is still associated with parent.
+              def initialize(parent:, items: nil, provider: nil, model: nil)
+                @provided_items = items
+                super(parent: parent, provider: provider, model: model)
+              end
+
               private
 
               def task_provider = :openai
@@ -40,7 +48,7 @@ module Services
               end
 
               def enriched_items
-                @enriched_items ||= parent.list_items.unverified.ordered.select do |item|
+                @enriched_items ||= @provided_items || parent.list_items.unverified.ordered.select do |item|
                   item.listable_id.present? ||
                     item.metadata["song_id"].present? ||
                     item.metadata["mb_recording_id"].present?
@@ -114,6 +122,7 @@ module Services
                     invalid_count: invalid_count,
                     verified_count: verified_count,
                     total_count: enriched_items.count,
+                    invalid_indices: invalid_indices,
                     reasoning: data[:reasoning]
                   },
                   ai_chat: chat
