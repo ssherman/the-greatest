@@ -66,7 +66,7 @@ module Admin
 
         ::Music::Musicbrainz::Search::ArtistSearch.any_instance
           .expects(:search_by_name)
-          .with("Pink Floyd", limit: 10)
+          .with("Pink Floyd", limit: 20)
           .returns({success: true, data: {"artists" => []}})
 
         get admin_musicbrainz_artists_path(q: "Pink Floyd"), as: :json

@@ -177,7 +177,7 @@ class Admin::Music::Albums::ListItemsActionsController < Admin::Music::BaseContr
     return render json: [] if query.blank? || query.length < 2
 
     search = Music::Musicbrainz::Search::ReleaseGroupSearch.new
-    response = search.search_by_artist_mbid_and_title(artist_mbid, query, limit: 10)
+    response = search.search_by_artist_mbid_and_title(artist_mbid, query, limit: 20)
 
     return render json: [] unless response[:success]
 

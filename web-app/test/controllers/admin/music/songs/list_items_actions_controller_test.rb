@@ -383,7 +383,7 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
 
     Music::Musicbrainz::Search::RecordingSearch.any_instance
       .stubs(:search_by_artist_mbid_and_title)
-      .with(artist_mbid, "Come Together", limit: 10)
+      .with(artist_mbid, "Come Together", limit: 20)
       .returns(mock_response)
 
     get musicbrainz_recording_search_admin_songs_list_wizard_path(list_id: @list.id),
