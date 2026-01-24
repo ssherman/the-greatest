@@ -9,7 +9,7 @@ class Admin::Music::MusicbrainzSearchController < Admin::Music::BaseController
     return render json: [] if query.blank? || query.length < 2
 
     search = Music::Musicbrainz::Search::ArtistSearch.new
-    response = search.search_by_name(query, limit: 10)
+    response = search.search_by_name(query, limit: 20)
 
     return render json: [] unless response[:success]
 

@@ -289,7 +289,7 @@ class Admin::Music::Albums::ListItemsActionsControllerTest < ActionDispatch::Int
 
     Music::Musicbrainz::Search::ReleaseGroupSearch.any_instance
       .stubs(:search_by_artist_mbid_and_title)
-      .with(artist_mbid, "Dark Side", limit: 10)
+      .with(artist_mbid, "Dark Side", limit: 20)
       .returns(mock_response)
 
     get musicbrainz_release_search_admin_albums_list_wizard_path(list_id: @list.id),

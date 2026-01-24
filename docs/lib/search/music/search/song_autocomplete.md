@@ -14,7 +14,7 @@ Executes autocomplete search query.
   - `text` (String) - Search query text
   - `options` (Hash) - Optional search parameters
     - `:min_score` (Float) - Minimum relevance score. Default: `0.1` (much lower than general search)
-    - `:size` (Integer) - Maximum results to return. Default: `10`
+    - `:size` (Integer) - Maximum results to return. Default: `20`
     - `:from` (Integer) - Offset for pagination. Default: `0`
 - Returns: Array of hashes with `:id` and `:score` keys
 - Returns empty array if text is blank
@@ -86,7 +86,7 @@ json = songs.map { |s|
 ## Performance Notes
 - Edge n-grams increase index size but dramatically improve autocomplete UX
 - Lower min_score allows more fuzzy matching
-- Typically used with small result limits (5-10) for dropdown display
+- Typically used with result limits of 10-20 for dropdown display
 - Controller should eager load artists and albums for display formatting
 
 ## Status

@@ -12,7 +12,7 @@ module Search
           return empty_response if text.blank?
 
           min_score = options[:min_score] || 0.1
-          size = options[:size] || 10
+          size = options[:size] || 20
           from = options[:from] || 0
 
           query_definition = build_query_definition(text, min_score, size, from)

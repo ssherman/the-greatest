@@ -130,7 +130,7 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
   end
 
   def search
-    search_results = ::Search::Music::Search::ArtistAutocomplete.call(params[:q], size: 10)
+    search_results = ::Search::Music::Search::ArtistAutocomplete.call(params[:q], size: 20)
     artist_ids = search_results.map { |r| r[:id].to_i }
 
     # Filter out excluded ID (used for merge autocomplete to exclude current artist)

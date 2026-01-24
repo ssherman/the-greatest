@@ -322,10 +322,10 @@ module Admin
         assert_equal [], json_response
       end
 
-      test "should call search with size limit of 10 for autocomplete" do
+      test "should call search with size limit of 20 for autocomplete" do
         sign_in_as(@admin_user, stub_auth: true)
 
-        ::Search::Music::Search::ArtistAutocomplete.expects(:call).with("test", size: 10).returns([])
+        ::Search::Music::Search::ArtistAutocomplete.expects(:call).with("test", size: 20).returns([])
 
         get search_admin_artists_path(q: "test"), as: :json
         assert_response :success

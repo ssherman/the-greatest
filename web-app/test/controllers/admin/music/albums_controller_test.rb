@@ -271,7 +271,7 @@ module Admin
       test "should call OpenSearch with correct size limit for autocomplete" do
         sign_in_as(@admin_user, stub_auth: true)
 
-        ::Search::Music::Search::AlbumAutocomplete.expects(:call).with("test", size: 10).returns([])
+        ::Search::Music::Search::AlbumAutocomplete.expects(:call).with("test", size: 20).returns([])
 
         get search_admin_albums_path(q: "test"), as: :json
         assert_response :success
