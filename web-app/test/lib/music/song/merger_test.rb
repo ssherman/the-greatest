@@ -144,6 +144,104 @@ module Music
         assert_equal initial_count, @target_song.list_items.count
       end
 
+      test "should preserve verified status when creating new list_item" do
+        list = lists(:music_songs_list)
+
+        ListItem.create!(
+          list: list,
+          listable: @source_song,
+          position: 5,
+          verified: true
+        )
+
+        result = Music::Song::Merger.call(source: @source_song, target: @target_song)
+
+        assert result.success?
+        @target_song.reload
+
+        target_list_item = @target_song.list_items.find_by(list: list)
+        assert target_list_item.present?, "Expected list_item to exist on target"
+        assert target_list_item.verified?, "Expected list_item to preserve verified=true"
+      end
+
+      test "should preserve verified=true when merging duplicate list_items and source is verified" do
+        list = lists(:music_songs_list)
+
+        ListItem.create!(
+          list: list,
+          listable: @source_song,
+          position: 5,
+          verified: true
+        )
+
+        ListItem.create!(
+          list: list,
+          listable: @target_song,
+          position: 10,
+          verified: false
+        )
+
+        result = Music::Song::Merger.call(source: @source_song, target: @target_song)
+
+        assert result.success?
+        @target_song.reload
+
+        target_list_item = @target_song.list_items.find_by(list: list)
+        assert target_list_item.verified?, "Expected verified=true to be preserved from source"
+      end
+
+      test "should preserve verified=true when merging duplicate list_items and target is verified" do
+        list = lists(:music_songs_list)
+
+        ListItem.create!(
+          list: list,
+          listable: @source_song,
+          position: 5,
+          verified: false
+        )
+
+        ListItem.create!(
+          list: list,
+          listable: @target_song,
+          position: 10,
+          verified: true
+        )
+
+        result = Music::Song::Merger.call(source: @source_song, target: @target_song)
+
+        assert result.success?
+        @target_song.reload
+
+        target_list_item = @target_song.list_items.find_by(list: list)
+        assert target_list_item.verified?, "Expected verified=true to be preserved from target"
+      end
+
+      test "should not set verified=true when merging duplicate list_items and neither is verified" do
+        list = lists(:music_songs_list)
+
+        ListItem.create!(
+          list: list,
+          listable: @source_song,
+          position: 5,
+          verified: false
+        )
+
+        ListItem.create!(
+          list: list,
+          listable: @target_song,
+          position: 10,
+          verified: false
+        )
+
+        result = Music::Song::Merger.call(source: @source_song, target: @target_song)
+
+        assert result.success?
+        @target_song.reload
+
+        target_list_item = @target_song.list_items.find_by(list: list)
+        assert_not target_list_item.verified?, "Expected verified=false when neither source nor target was verified"
+      end
+
       test "should merge forward song_relationships" do
         related_song = music_songs(:wish_you_were_here)
 

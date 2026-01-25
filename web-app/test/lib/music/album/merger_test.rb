@@ -7,6 +7,10 @@ module Music
         @source_album = music_albums(:abbey_road)
         @target_album = music_albums(:dark_side_of_the_moon)
         @pink_floyd = music_artists(:pink_floyd)
+
+        # Clean up list_items from fixtures to ensure tests start with clean state
+        ListItem.where(listable: @source_album).destroy_all
+        ListItem.where(listable: @target_album).destroy_all
       end
 
       test "should successfully merge albums and return success result" do
@@ -204,6 +208,129 @@ module Music
         assert_equal @source_album, merger.source_album
         assert_equal @target_album, merger.target_album
         assert_equal({}, merger.stats)
+      end
+
+      test "should merge list_items with duplicate handling" do
+        list = lists(:music_albums_list)
+
+        ListItem.create!(
+          list: list,
+          listable: @source_album,
+          position: 5
+        )
+
+        ListItem.create!(
+          list: list,
+          listable: @target_album,
+          position: 10
+        )
+
+        initial_count = @target_album.list_items.count
+
+        result = Music::Album::Merger.call(source: @source_album, target: @target_album)
+
+        assert result.success?
+        @target_album.reload
+
+        assert_equal initial_count, @target_album.list_items.count
+      end
+
+      test "should preserve verified status when creating new list_item" do
+        list = lists(:music_albums_list)
+
+        ListItem.create!(
+          list: list,
+          listable: @source_album,
+          position: 5,
+          verified: true
+        )
+
+        result = Music::Album::Merger.call(source: @source_album, target: @target_album)
+
+        assert result.success?
+        @target_album.reload
+
+        target_list_item = @target_album.list_items.find_by(list: list)
+        assert target_list_item.present?, "Expected list_item to exist on target"
+        assert target_list_item.verified?, "Expected list_item to preserve verified=true"
+      end
+
+      test "should preserve verified=true when merging duplicate list_items and source is verified" do
+        list = lists(:music_albums_list)
+
+        ListItem.create!(
+          list: list,
+          listable: @source_album,
+          position: 5,
+          verified: true
+        )
+
+        ListItem.create!(
+          list: list,
+          listable: @target_album,
+          position: 10,
+          verified: false
+        )
+
+        result = Music::Album::Merger.call(source: @source_album, target: @target_album)
+
+        assert result.success?
+        @target_album.reload
+
+        target_list_item = @target_album.list_items.find_by(list: list)
+        assert target_list_item.verified?, "Expected verified=true to be preserved from source"
+      end
+
+      test "should preserve verified=true when merging duplicate list_items and target is verified" do
+        list = lists(:music_albums_list)
+
+        ListItem.create!(
+          list: list,
+          listable: @source_album,
+          position: 5,
+          verified: false
+        )
+
+        ListItem.create!(
+          list: list,
+          listable: @target_album,
+          position: 10,
+          verified: true
+        )
+
+        result = Music::Album::Merger.call(source: @source_album, target: @target_album)
+
+        assert result.success?
+        @target_album.reload
+
+        target_list_item = @target_album.list_items.find_by(list: list)
+        assert target_list_item.verified?, "Expected verified=true to be preserved from target"
+      end
+
+      test "should not set verified=true when merging duplicate list_items and neither is verified" do
+        list = lists(:music_albums_list)
+
+        ListItem.create!(
+          list: list,
+          listable: @source_album,
+          position: 5,
+          verified: false
+        )
+
+        ListItem.create!(
+          list: list,
+          listable: @target_album,
+          position: 10,
+          verified: false
+        )
+
+        result = Music::Album::Merger.call(source: @source_album, target: @target_album)
+
+        assert result.success?
+        @target_album.reload
+
+        target_list_item = @target_album.list_items.find_by(list: list)
+        assert_not target_list_item.verified?, "Expected verified=false when neither source nor target was verified"
       end
 
       # Release year preservation tests
