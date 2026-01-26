@@ -169,12 +169,13 @@ namespace :music do
       puts "\n" + "=" * 80
     end
 
-    desc "Backfill release_year from MusicBrainz for songs with recording IDs. Use DRY_RUN=true to preview."
+    desc "Backfill release_year from MusicBrainz for songs with recording IDs. Use DRY_RUN=true to preview. Use RANKED_ONLY=true to limit to ranked songs."
     task backfill_release_years: :environment do
       dry_run = ENV["DRY_RUN"].present? && ENV["DRY_RUN"].downcase == "true"
+      ranked_only = ENV["RANKED_ONLY"].present? && ENV["RANKED_ONLY"].downcase == "true"
 
       puts "Backfilling release years from MusicBrainz..."
-      puts "Scope: Only songs with MusicBrainz recording IDs"
+      puts "Scope: #{ranked_only ? "Only RANKED songs with MusicBrainz recording IDs" : "All songs with MusicBrainz recording IDs"}"
       puts "Mode: #{dry_run ? "DRY RUN (no changes will be made)" : "LIVE (updates will be applied)"}"
       puts "=" * 80
 
@@ -187,6 +188,13 @@ namespace :music do
         .where(identifiers: {identifier_type: :music_musicbrainz_recording_id})
         .distinct
         .includes(:identifiers, :artists)
+
+      # Filter to ranked songs only if requested
+      if ranked_only
+        songs_with_mbid = songs_with_mbid
+          .joins(:ranked_items)
+          .distinct
+      end
 
       songs_with_mbid.find_each do |song|
         stats[:total] += 1
@@ -271,6 +279,88 @@ namespace :music do
       if dry_run
         puts "\nDRY RUN - No changes were made."
         puts "To apply updates, run: bin/rails music:songs:backfill_release_years"
+      end
+    end
+
+    desc "Enrich songs with additional MusicBrainz recording IDs. Use DRY_RUN=true to preview. Use RANKED_ONLY=true to limit to ranked songs."
+    task enrich_recording_ids: :environment do
+      dry_run = ENV["DRY_RUN"].present? && ENV["DRY_RUN"].downcase == "true"
+      ranked_only = ENV["RANKED_ONLY"].present? && ENV["RANKED_ONLY"].downcase == "true"
+
+      puts "Enriching songs with MusicBrainz recording IDs..."
+      puts "Scope: #{ranked_only ? "Only RANKED songs" : "All songs"}"
+      puts "Mode: #{dry_run ? "DRY RUN (no changes will be made)" : "LIVE (identifiers will be created)"}"
+      puts "=" * 80
+
+      stats = {total: 0, enriched: 0, skipped: 0, errors: 0, new_identifiers: 0}
+
+      # Build base query - songs with artists
+      songs = Music::Song
+        .joins(:song_artists)
+        .distinct
+        .includes(:artists, :identifiers)
+
+      # Filter to ranked songs only if requested
+      if ranked_only
+        songs = songs
+          .joins(:ranked_items)
+          .distinct
+      end
+
+      songs.find_each do |song|
+        stats[:total] += 1
+
+        begin
+          result = Services::Music::Songs::RecordingIdEnricher.call(
+            song: song,
+            dry_run: dry_run
+          )
+
+          if result.success?
+            data = result.data
+
+            if data[:skip_reason]
+              stats[:skipped] += 1
+            elsif data[:new_identifiers_created] > 0
+              stats[:enriched] += 1
+              stats[:new_identifiers] += data[:new_identifiers_created]
+
+              artist_names = song.artists.map(&:name).join(", ")
+              puts "  Song ##{song.id} \"#{song.title}\" (#{artist_names})"
+              puts "    Found #{data[:candidates_found]} candidates, #{data[:exact_matches]} exact matches"
+              puts "    #{dry_run ? "Would create" : "Created"} #{data[:new_identifiers_created]} new identifier(s) (#{data[:existing_identifiers]} already existed)"
+              puts "    Reasoning: #{data[:reasoning]}" if data[:reasoning].present?
+            else
+              stats[:skipped] += 1
+            end
+          else
+            puts "  Song ##{song.id} \"#{song.title}\" - ERROR: #{result.errors.join(", ")}"
+            stats[:errors] += 1
+          end
+        rescue => e
+          puts "  Song ##{song.id} \"#{song.title}\" - ERROR: #{e.message}"
+          stats[:errors] += 1
+        end
+
+        if stats[:total] % 100 == 0
+          puts "  Processed #{stats[:total]} songs..."
+        end
+      end
+
+      puts "=" * 80
+      puts "Enrichment complete!"
+      puts "  Total processed: #{stats[:total]}"
+      puts "  Enriched: #{stats[:enriched]}"
+      puts "  New identifiers: #{stats[:new_identifiers]}"
+      puts "  Skipped (no matches or no artists): #{stats[:skipped]}"
+      puts "  Errors: #{stats[:errors]}"
+
+      if dry_run
+        puts "\nDRY RUN - No changes were made."
+        puts "To apply updates, run: bin/rails music:songs:enrich_recording_ids"
+      else
+        puts "\nTo update release years from the new identifiers, run:"
+        puts "  bin/rails music:songs:backfill_release_years"
       end
     end
   end
