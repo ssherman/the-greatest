@@ -189,12 +189,12 @@ namespace :music do
         .includes(:identifiers, :artists)
 
       # Filter to ranked songs only if requested
-      if ranked_only
-        songs_with_mbid = songs_with_mbid
+      songs_with_mbid = if ranked_only
+        songs_with_mbid
           .joins(:ranked_items)
           .distinct
       else
-        songs_with_mbid = songs_with_mbid.distinct
+        songs_with_mbid.distinct
       end
 
       songs_with_mbid.find_each do |song|
