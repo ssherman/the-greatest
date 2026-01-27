@@ -169,12 +169,13 @@ namespace :music do
       puts "\n" + "=" * 80
     end
 
-    desc "Backfill release_year from MusicBrainz for songs with recording IDs. Use DRY_RUN=true to preview."
+    desc "Backfill release_year from MusicBrainz for songs with recording IDs. Use DRY_RUN=true to preview. Use RANKED_ONLY=true to limit to ranked songs."
     task backfill_release_years: :environment do
       dry_run = ENV["DRY_RUN"].present? && ENV["DRY_RUN"].downcase == "true"
+      ranked_only = ENV["RANKED_ONLY"].present? && ENV["RANKED_ONLY"].downcase == "true"
 
       puts "Backfilling release years from MusicBrainz..."
-      puts "Scope: Only songs with MusicBrainz recording IDs"
+      puts "Scope: #{ranked_only ? "Only RANKED songs with MusicBrainz recording IDs" : "All songs with MusicBrainz recording IDs"}"
       puts "Mode: #{dry_run ? "DRY RUN (no changes will be made)" : "LIVE (updates will be applied)"}"
       puts "=" * 80
 
@@ -185,8 +186,16 @@ namespace :music do
       songs_with_mbid = Music::Song
         .joins(:identifiers)
         .where(identifiers: {identifier_type: :music_musicbrainz_recording_id})
-        .distinct
         .includes(:identifiers, :artists)
+
+      # Filter to ranked songs only if requested
+      songs_with_mbid = if ranked_only
+        songs_with_mbid
+          .joins(:ranked_items)
+          .distinct
+      else
+        songs_with_mbid.distinct
+      end
 
       songs_with_mbid.find_each do |song|
         stats[:total] += 1
@@ -212,8 +221,9 @@ namespace :music do
             next unless first_release_date.present?
 
             # Extract year from date (formats: YYYY, YYYY-MM, YYYY-MM-DD)
+            # Must match release_year validation: greater_than 1900, less_than_or_equal_to next year
             year = first_release_date.to_s[0..3].to_i
-            next if year < 1900 || year > Date.current.year + 1
+            next if year <= 1900 || year > Date.current.year + 1
 
             mb_year = year if mb_year.nil? || year < mb_year
           rescue Music::Musicbrainz::Exceptions::QueryError => e
@@ -272,6 +282,38 @@ namespace :music do
         puts "\nDRY RUN - No changes were made."
         puts "To apply updates, run: bin/rails music:songs:backfill_release_years"
       end
+    end
+
+    desc "Queue Sidekiq jobs to enrich ranked songs with MusicBrainz recording IDs."
+    task enrich_recording_ids: :environment do
+      puts "Queueing recording ID enrichment jobs for ranked songs..."
+      puts "=" * 80
+
+      # Query ranked songs with artists
+      songs = Music::Song
+        .joins(:song_artists)
+        .joins(:ranked_items)
+        .distinct
+
+      count = songs.count
+      puts "Found #{count} ranked songs with artists"
+      puts "Queueing jobs..."
+
+      queued = 0
+      songs.find_each do |song|
+        Music::EnrichSongRecordingIdsJob.perform_async(song.id)
+        queued += 1
+
+        if queued % 100 == 0
+          puts "  Queued #{queued}/#{count} jobs..."
+        end
+      end
+
+      puts "=" * 80
+      puts "Complete! Queued #{queued} jobs to serial queue."
+      puts "Jobs will execute at ~1/second due to MusicBrainz rate limiting."
+      puts "\nNote: Jobs will skip songs whose primary artist lacks a MusicBrainz artist ID."
+      puts "Monitor progress with: bundle exec sidekiq"
     end
   end
 end

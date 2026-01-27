@@ -385,5 +385,215 @@ module Music
       assert_includes indexed_data[:category_ids], category.id
       assert_not_includes indexed_data[:category_ids], deleted_category.id
     end
+
+    # update_release_year_from_identifiers! tests
+    test "update_release_year_from_identifiers! returns false when no recording identifiers" do
+      song = music_songs(:time)
+      song.identifiers.where(identifier_type: :music_musicbrainz_recording_id).destroy_all
+
+      result = song.update_release_year_from_identifiers!
+
+      assert_not result
+    end
+
+    test "update_release_year_from_identifiers! updates when MB year is earlier" do
+      song = music_songs(:time)
+      song.update!(release_year: 2000)
+
+      # Add recording ID identifier
+      song.identifiers.create!(
+        identifier_type: :music_musicbrainz_recording_id,
+        value: "test-mbid-123"
+      )
+
+      # Mock the MusicBrainz lookup
+      recording_search = mock
+      ::Music::Musicbrainz::Search::RecordingSearch.stubs(:new).returns(recording_search)
+      recording_search.stubs(:lookup_by_mbid).with("test-mbid-123").returns({
+        success: true,
+        data: {
+          "recordings" => [{
+            "first-release-date" => "1973-03-01"
+          }]
+        }
+      })
+
+      result = song.update_release_year_from_identifiers!
+
+      assert result
+      assert_equal 1973, song.reload.release_year
+    end
+
+    test "update_release_year_from_identifiers! does not update when MB year is later" do
+      song = music_songs(:time)
+      original_year = song.release_year # 1973
+
+      song.identifiers.create!(
+        identifier_type: :music_musicbrainz_recording_id,
+        value: "test-mbid-123"
+      )
+
+      recording_search = mock
+      ::Music::Musicbrainz::Search::RecordingSearch.stubs(:new).returns(recording_search)
+      recording_search.stubs(:lookup_by_mbid).returns({
+        success: true,
+        data: {
+          "recordings" => [{
+            "first-release-date" => "2020-01-01"
+          }]
+        }
+      })
+
+      result = song.update_release_year_from_identifiers!
+
+      assert_not result
+      assert_equal original_year, song.reload.release_year
+    end
+
+    test "update_release_year_from_identifiers! updates when current year is nil" do
+      song = music_songs(:time)
+      song.update!(release_year: nil)
+
+      song.identifiers.create!(
+        identifier_type: :music_musicbrainz_recording_id,
+        value: "test-mbid-123"
+      )
+
+      recording_search = mock
+      ::Music::Musicbrainz::Search::RecordingSearch.stubs(:new).returns(recording_search)
+      recording_search.stubs(:lookup_by_mbid).returns({
+        success: true,
+        data: {
+          "recordings" => [{
+            "first-release-date" => "1980"
+          }]
+        }
+      })
+
+      result = song.update_release_year_from_identifiers!
+
+      assert result
+      assert_equal 1980, song.reload.release_year
+    end
+
+    test "update_release_year_from_identifiers! finds minimum across multiple MBIDs" do
+      song = music_songs(:time)
+      song.update!(release_year: nil)
+
+      song.identifiers.create!(identifier_type: :music_musicbrainz_recording_id, value: "mbid-1")
+      song.identifiers.create!(identifier_type: :music_musicbrainz_recording_id, value: "mbid-2")
+      song.identifiers.create!(identifier_type: :music_musicbrainz_recording_id, value: "mbid-3")
+
+      recording_search = mock
+      ::Music::Musicbrainz::Search::RecordingSearch.stubs(:new).returns(recording_search)
+
+      recording_search.stubs(:lookup_by_mbid).with("mbid-1").returns({
+        success: true,
+        data: {"recordings" => [{"first-release-date" => "1980"}]}
+      })
+      recording_search.stubs(:lookup_by_mbid).with("mbid-2").returns({
+        success: true,
+        data: {"recordings" => [{"first-release-date" => "1973"}]}  # Earliest
+      })
+      recording_search.stubs(:lookup_by_mbid).with("mbid-3").returns({
+        success: true,
+        data: {"recordings" => [{"first-release-date" => "1990"}]}
+      })
+
+      song.update_release_year_from_identifiers!
+
+      assert_equal 1973, song.reload.release_year
+    end
+
+    test "update_release_year_from_identifiers! handles failed lookups gracefully" do
+      song = music_songs(:time)
+      song.update!(release_year: nil)
+
+      song.identifiers.create!(identifier_type: :music_musicbrainz_recording_id, value: "mbid-1")
+      song.identifiers.create!(identifier_type: :music_musicbrainz_recording_id, value: "mbid-2")
+
+      recording_search = mock
+      ::Music::Musicbrainz::Search::RecordingSearch.stubs(:new).returns(recording_search)
+
+      # First lookup fails
+      recording_search.stubs(:lookup_by_mbid).with("mbid-1").returns({
+        success: false,
+        data: nil
+      })
+      # Second lookup succeeds
+      recording_search.stubs(:lookup_by_mbid).with("mbid-2").returns({
+        success: true,
+        data: {"recordings" => [{"first-release-date" => "1985"}]}
+      })
+
+      song.update_release_year_from_identifiers!
+
+      assert_equal 1985, song.reload.release_year
+    end
+
+    test "update_release_year_from_identifiers! handles QueryError gracefully" do
+      song = music_songs(:time)
+      song.update!(release_year: nil)
+
+      song.identifiers.create!(identifier_type: :music_musicbrainz_recording_id, value: "invalid-mbid")
+      song.identifiers.create!(identifier_type: :music_musicbrainz_recording_id, value: "valid-mbid")
+
+      recording_search = mock
+      ::Music::Musicbrainz::Search::RecordingSearch.stubs(:new).returns(recording_search)
+
+      # First lookup raises QueryError
+      recording_search.stubs(:lookup_by_mbid).with("invalid-mbid").raises(
+        ::Music::Musicbrainz::Exceptions::QueryError.new("Invalid MBID format")
+      )
+      # Second lookup succeeds
+      recording_search.stubs(:lookup_by_mbid).with("valid-mbid").returns({
+        success: true,
+        data: {"recordings" => [{"first-release-date" => "1990"}]}
+      })
+
+      result = song.update_release_year_from_identifiers!
+
+      assert result
+      assert_equal 1990, song.reload.release_year
+    end
+
+    test "update_release_year_from_identifiers! ignores invalid years" do
+      song = music_songs(:time)
+      song.update!(release_year: nil)
+
+      song.identifiers.create!(identifier_type: :music_musicbrainz_recording_id, value: "mbid-1")
+      song.identifiers.create!(identifier_type: :music_musicbrainz_recording_id, value: "mbid-2")
+
+      recording_search = mock
+      ::Music::Musicbrainz::Search::RecordingSearch.stubs(:new).returns(recording_search)
+
+      # First lookup has invalid year (too old)
+      recording_search.stubs(:lookup_by_mbid).with("mbid-1").returns({
+        success: true,
+        data: {"recordings" => [{"first-release-date" => "1800"}]}
+      })
+      # Second lookup has valid year
+      recording_search.stubs(:lookup_by_mbid).with("mbid-2").returns({
+        success: true,
+        data: {"recordings" => [{"first-release-date" => "1975"}]}
+      })
+
+      song.update_release_year_from_identifiers!
+
+      assert_equal 1975, song.reload.release_year
+    end
+
+    # Callback tests
+    test "queues enrichment job after creation" do
+      Music::EnrichSongRecordingIdsJob.expects(:perform_in).with(1.minute, kind_of(Integer)).once
+
+      Music::Song.create!(title: "New Test Song")
+    end
+
+    test "does not queue enrichment job on update" do
+      Music::EnrichSongRecordingIdsJob.expects(:perform_in).never
+
+      @song.update!(title: "Updated Title Again")
+    end
   end
 end
