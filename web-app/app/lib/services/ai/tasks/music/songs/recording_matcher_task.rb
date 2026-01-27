@@ -98,7 +98,8 @@ module Services
               parts = []
               parts << "Title: \"#{parent.title}\""
               parts << "Artist(s): #{artist_names}" if artist_names.present?
-              parts << "Release year: #{parent.release_year}" if parent.release_year
+              # NOTE: Intentionally NOT including release_year - we want the AI to match
+              # recordings from ANY year so we can find the earliest first-release-date
               parts.join("\n")
             end
 
