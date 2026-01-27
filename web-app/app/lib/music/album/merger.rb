@@ -93,10 +93,17 @@ module Music
       def merge_list_items
         count = 0
         source_album.list_items.find_each do |list_item|
-          target_album.list_items.find_or_create_by!(
-            list_id: list_item.list_id
-          ) do |new_list_item|
-            new_list_item.position = list_item.position
+          existing = target_album.list_items.find_by(list_id: list_item.list_id)
+
+          if existing
+            # Preserve verified=true if source has it and target doesn't
+            existing.update!(verified: true) if list_item.verified? && !existing.verified?
+          else
+            target_album.list_items.create!(
+              list_id: list_item.list_id,
+              position: list_item.position,
+              verified: list_item.verified
+            )
           end
           count += 1
         end
