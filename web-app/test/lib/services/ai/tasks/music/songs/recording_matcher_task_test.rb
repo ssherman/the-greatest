@@ -67,7 +67,8 @@ module Services
 
               assert_includes user_prompt, "Wish You Were Here"
               assert_includes user_prompt, "Pink Floyd"
-              assert_includes user_prompt, "1975"
+              # NOTE: release_year intentionally NOT included - we want to find earliest year
+              refute_includes user_prompt, "Release year:"
             end
 
             test "user_prompt includes candidate recordings" do
@@ -104,12 +105,14 @@ module Services
               assert_includes user_prompt, "3. MBID:"
             end
 
-            test "build_song_info includes all song metadata" do
+            test "build_song_info includes title and artist but not release_year" do
               song_info = @task.send(:build_song_info)
 
               assert_includes song_info, "Wish You Were Here"
               assert_includes song_info, "Pink Floyd"
-              assert_includes song_info, "1975"
+              # NOTE: release_year intentionally NOT included - we want to find earliest year
+              refute_includes song_info, "1975"
+              refute_includes song_info, "Release year"
             end
 
             test "build_candidates_list formats candidates correctly" do
