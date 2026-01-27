@@ -32,14 +32,25 @@ module Services
           exact_matches = ai_result.data[:exact_matches] || []
           return skip_result("No exact matches found", candidates_found: candidates.count) if exact_matches.empty?
 
-          # Step 3: Create identifiers for matches (unless dry run)
-          new_count, existing_count = create_identifiers(exact_matches)
+          # Validate AI matches against candidate MBIDs to prevent hallucinations
+          candidate_mbids = candidates.map { |c| c["id"] }.to_set
+          validated_matches = exact_matches.select { |mbid| candidate_mbids.include?(mbid) }
+          hallucinated = exact_matches - validated_matches
+
+          if hallucinated.any?
+            Rails.logger.warn "RecordingIdEnricher: Song #{song.id} - AI returned #{hallucinated.count} MBID(s) not in candidate set: #{hallucinated.join(", ")}"
+          end
+
+          return skip_result("No valid matches after validation", candidates_found: candidates.count) if validated_matches.empty?
+
+          # Step 3: Create identifiers for validated matches (unless dry run)
+          new_count, existing_count = create_identifiers(validated_matches)
 
           Result.new(
             success?: true,
             data: {
               candidates_found: candidates.count,
-              exact_matches: exact_matches.count,
+              exact_matches: validated_matches.count,
               new_identifiers_created: new_count,
               existing_identifiers: existing_count,
               reasoning: ai_result.data[:reasoning]
