@@ -221,8 +221,9 @@ namespace :music do
             next unless first_release_date.present?
 
             # Extract year from date (formats: YYYY, YYYY-MM, YYYY-MM-DD)
+            # Must match release_year validation: greater_than 1900, less_than_or_equal_to next year
             year = first_release_date.to_s[0..3].to_i
-            next if year < 1900 || year > Date.current.year + 1
+            next if year <= 1900 || year > Date.current.year + 1
 
             mb_year = year if mb_year.nil? || year < mb_year
           rescue Music::Musicbrainz::Exceptions::QueryError => e
