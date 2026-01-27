@@ -6,6 +6,11 @@ module DataImporters
   module Music
     module Song
       class ImporterTest < ActiveSupport::TestCase
+        def setup
+          # Stub the enrichment job to prevent callback from triggering during tests
+          ::Music::EnrichSongRecordingIdsJob.stubs(:perform_in)
+        end
+
         test "call with title creates and imports new song" do
           # Mock MusicBrainz recording search
           search_service = mock

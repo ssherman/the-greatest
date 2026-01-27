@@ -67,6 +67,7 @@ class Music::Song < ApplicationRecord
   # Callbacks
   before_validation :normalize_title
   before_save :normalize_isrc
+  after_commit :queue_recording_id_enrichment, on: :create
 
   # Scopes
   scope :with_lyrics, -> { where.not(lyrics: [nil, ""]) }
@@ -113,6 +114,50 @@ class Music::Song < ApplicationRecord
 
   def alternated_by
     original_songs.merge(Music::SongRelationship.alternates)
+  end
+
+  # Update release_year from MusicBrainz recording identifiers
+  # Looks up all linked MBIDs and sets release_year to the minimum year found
+  # Returns true if updated, false if not
+  def update_release_year_from_identifiers!
+    # Get all MusicBrainz recording IDs for this song
+    mbids = identifiers.where(identifier_type: :music_musicbrainz_recording_id).pluck(:value)
+    return false if mbids.empty?
+
+    recording_search = ::Music::Musicbrainz::Search::RecordingSearch.new
+    mb_year = nil
+
+    mbids.each do |mbid|
+      begin
+        result = recording_search.lookup_by_mbid(mbid)
+        next unless result[:success] && result[:data]
+
+        recording = result[:data]["recordings"]&.first
+        first_release_date = recording&.dig("first-release-date")
+        next unless first_release_date.present?
+
+        # Extract year from date (formats: YYYY, YYYY-MM, YYYY-MM-DD)
+        year = first_release_date.to_s[0..3].to_i
+        next if year < 1900 || year > Date.current.year + 1
+
+        mb_year = year if mb_year.nil? || year < mb_year
+      rescue ::Music::Musicbrainz::Exceptions::QueryError
+        # Invalid MBID format - skip this one but continue with others
+        next
+      end
+    end
+
+    return false unless mb_year
+
+    # Only update if new year is earlier or current year is nil
+    if release_year.nil? || mb_year < release_year
+      old_year = release_year
+      update!(release_year: mb_year)
+      Rails.logger.info "Song #{id} release_year updated from #{old_year || "nil"} to #{mb_year}"
+      true
+    else
+      false
+    end
   end
 
   # Class Methods
@@ -167,5 +212,9 @@ class Music::Song < ApplicationRecord
 
   def normalize_isrc
     self.isrc = nil if isrc.blank?
+  end
+
+  def queue_recording_id_enrichment
+    Music::EnrichSongRecordingIdsJob.perform_in(1.minute, id)
   end
 end
