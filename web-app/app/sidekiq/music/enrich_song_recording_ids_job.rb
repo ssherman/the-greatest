@@ -8,20 +8,7 @@ class Music::EnrichSongRecordingIdsJob
   def perform(song_id)
     song = Music::Song.find(song_id)
 
-    # Early return if no primary artist
-    primary_artist = song.artists.first
-    unless primary_artist
-      Rails.logger.info "EnrichSongRecordingIds: Song #{song.id} has no artists, skipping"
-      return
-    end
-
-    # Early return if primary artist has no MusicBrainz artist ID
-    unless primary_artist.identifiers.exists?(identifier_type: :music_musicbrainz_artist_id)
-      Rails.logger.info "EnrichSongRecordingIds: Song #{song.id} primary artist '#{primary_artist.name}' has no MusicBrainz artist ID, skipping"
-      return
-    end
-
-    # Call enrichment service
+    # Call enrichment service (handles both MBID and name-based search)
     result = Services::Music::Songs::RecordingIdEnricher.call(song: song)
 
     if result.success?

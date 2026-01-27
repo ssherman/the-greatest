@@ -18,23 +18,53 @@ module Music
       assert EnrichSongRecordingIdsJob.included_modules.include?(Sidekiq::Job)
     end
 
-    test "perform skips when song has no artists" do
+    test "perform delegates to enrichment service which handles no artists" do
       @song.song_artists.destroy_all
 
+      # Service returns skip result for songs with no artists
+      result = Services::Music::Songs::RecordingIdEnricher::Result.new(
+        success?: true,
+        data: {
+          candidates_found: 0,
+          exact_matches: 0,
+          new_identifiers_created: 0,
+          existing_identifiers: 0,
+          skip_reason: "Song has no artists"
+        },
+        errors: []
+      )
+
+      Services::Music::Songs::RecordingIdEnricher.stubs(:call).returns(result)
+
       assert_nothing_raised do
         @job.perform(@song.id)
       end
     end
 
-    test "perform skips when primary artist has no MusicBrainz artist ID" do
+    test "perform calls enrichment service even without artist MBID (uses name fallback)" do
       @artist.identifiers.where(identifier_type: :music_musicbrainz_artist_id).destroy_all
 
+      # Service uses name-based search as fallback
+      result = Services::Music::Songs::RecordingIdEnricher::Result.new(
+        success?: true,
+        data: {
+          candidates_found: 3,
+          exact_matches: 1,
+          new_identifiers_created: 1,
+          existing_identifiers: 0
+        },
+        errors: []
+      )
+
+      Services::Music::Songs::RecordingIdEnricher.stubs(:call).returns(result)
+      Music::Song.any_instance.stubs(:update_release_year_from_identifiers!).returns(true)
+
       assert_nothing_raised do
         @job.perform(@song.id)
       end
     end
 
-    test "perform calls enrichment service when conditions are met" do
+    test "perform calls enrichment service" do
       result = Services::Music::Songs::RecordingIdEnricher::Result.new(
         success?: true,
         data: {
