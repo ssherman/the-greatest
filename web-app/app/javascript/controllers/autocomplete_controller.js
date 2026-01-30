@@ -5,7 +5,7 @@ export default class extends Controller {
   static targets = ["input", "hiddenField"]
   static values = {
     url: String,
-    minLength: { type: Number, default: 2 },
+    minLength: { type: Number, default: 1 },
     debounce: { type: Number, default: 300 },
     displayKey: { type: String, default: "text" },
     valueKey: { type: String, default: "value" }
