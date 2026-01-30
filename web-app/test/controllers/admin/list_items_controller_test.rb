@@ -246,5 +246,73 @@ module Admin
 
       assert_response :redirect
     end
+
+    # Metadata JSONB parsing tests
+    test "should parse metadata JSON string to hash on update" do
+      list_item = ListItem.create!(list: @album_list, listable: @album, position: 1)
+      json_string = '{"title": "Test Album", "artists": ["Test Artist"], "rank": 1}'
+
+      patch admin_list_item_path(list_item),
+        params: {list_item: {metadata: json_string}},
+        as: :turbo_stream
+
+      assert_response :success
+      list_item.reload
+      assert list_item.metadata.is_a?(Hash)
+      assert_equal "Test Album", list_item.metadata["title"]
+      assert_equal ["Test Artist"], list_item.metadata["artists"]
+    end
+
+    test "should parse complex nested metadata JSON on update" do
+      list_item = ListItem.create!(list: @album_list, listable: @album, position: 1)
+      json_string = <<~JSON.strip
+        {
+          "rank": 79,
+          "title": "Jesus Christ Superstar",
+          "artists": ["Various Artists"],
+          "mb_artist_names": ["Andrew Lloyd Webber"],
+          "musicbrainz_match": true
+        }
+      JSON
+
+      patch admin_list_item_path(list_item),
+        params: {list_item: {metadata: json_string}},
+        as: :turbo_stream
+
+      assert_response :success
+      list_item.reload
+      assert list_item.metadata.is_a?(Hash)
+      assert_equal 79, list_item.metadata["rank"]
+      assert_equal "Jesus Christ Superstar", list_item.metadata["title"]
+      assert_equal true, list_item.metadata["musicbrainz_match"]
+    end
+
+    test "should reject invalid metadata JSON on update" do
+      list_item = ListItem.create!(list: @album_list, listable: @album, position: 1, metadata: {original: "data"})
+
+      patch admin_list_item_path(list_item),
+        params: {list_item: {metadata: "not valid json {"}},
+        as: :turbo_stream
+
+      assert_response :unprocessable_entity
+      list_item.reload
+      assert_equal({original: "data"}.stringify_keys, list_item.metadata)
+    end
+
+    test "should parse metadata JSON string on create" do
+      json_string = '{"title": "New Album", "rank": 5}'
+
+      assert_difference "ListItem.count", 1 do
+        post admin_list_list_items_path(@album_list),
+          params: {list_item: {listable_id: @album.id, listable_type: "Music::Album", position: 1, metadata: json_string}},
+          as: :turbo_stream
+      end
+
+      assert_response :success
+      list_item = ListItem.last
+      assert list_item.metadata.is_a?(Hash)
+      assert_equal "New Album", list_item.metadata["title"]
+      assert_equal 5, list_item.metadata["rank"]
+    end
   end
 end
