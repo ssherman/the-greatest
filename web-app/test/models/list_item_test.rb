@@ -258,4 +258,99 @@ class ListItemTest < ActiveSupport::TestCase
     assert_nil item1.listable_id
     assert_nil item2.listable_id
   end
+
+  # Metadata JSONB parsing tests
+  test "should parse metadata JSON string to hash on save" do
+    json_string = '{"title": "Test Album", "artists": ["Test Artist"], "rank": 1}'
+    item = ListItem.create!(
+      list: lists(:basic_list),
+      metadata: json_string
+    )
+
+    assert item.metadata.is_a?(Hash)
+    assert_equal "Test Album", item.metadata["title"]
+    assert_equal ["Test Artist"], item.metadata["artists"]
+    assert_equal 1, item.metadata["rank"]
+  end
+
+  test "should parse metadata JSON string on update" do
+    item = list_items(:basic_item)
+    json_string = '{"title": "Updated Title", "rank": 99}'
+
+    item.update!(metadata: json_string)
+    item.reload
+
+    assert item.metadata.is_a?(Hash)
+    assert_equal "Updated Title", item.metadata["title"]
+    assert_equal 99, item.metadata["rank"]
+  end
+
+  test "should accept metadata as hash directly" do
+    item = ListItem.create!(
+      list: lists(:basic_list),
+      metadata: {title: "Direct Hash", artists: ["Artist"]}
+    )
+
+    assert item.metadata.is_a?(Hash)
+    assert_equal "Direct Hash", item.metadata["title"]
+  end
+
+  test "should reject invalid JSON string for metadata" do
+    item = ListItem.new(
+      list: lists(:basic_list),
+      metadata: "not valid json {"
+    )
+
+    assert_not item.valid?
+    assert item.errors[:metadata].any? { |e| e.include?("must be valid JSON") }
+  end
+
+  test "should allow blank metadata" do
+    item = ListItem.new(
+      list: lists(:basic_list),
+      metadata: nil
+    )
+
+    assert item.valid?
+  end
+
+  test "should allow empty string metadata" do
+    item = ListItem.new(
+      list: lists(:basic_list),
+      metadata: ""
+    )
+
+    assert item.valid?
+  end
+
+  test "should parse complex nested JSON metadata" do
+    json_string = <<~JSON
+      {
+        "rank": 79,
+        "title": "Jesus Christ Superstar",
+        "artists": ["Various Artists"],
+        "release_year": null,
+        "mb_artist_ids": ["980ee2d8-2ee9-407b-b48e-48360fbc7437"],
+        "mb_artist_names": ["Andrew Lloyd Webber"],
+        "mb_release_year": 1972,
+        "musicbrainz_match": true,
+        "mb_release_group_id": "4dcde40f-63e1-3fa6-87ed-8ef10c3157df",
+        "mb_release_group_name": "Jesus Christ Superstar",
+        "manual_musicbrainz_link": true
+      }
+    JSON
+
+    item = ListItem.create!(
+      list: lists(:basic_list),
+      metadata: json_string
+    )
+
+    assert item.metadata.is_a?(Hash)
+    assert_equal 79, item.metadata["rank"]
+    assert_equal "Jesus Christ Superstar", item.metadata["title"]
+    assert_equal ["Various Artists"], item.metadata["artists"]
+    assert_nil item.metadata["release_year"]
+    assert_equal 1972, item.metadata["mb_release_year"]
+    assert_equal true, item.metadata["musicbrainz_match"]
+  end
 end

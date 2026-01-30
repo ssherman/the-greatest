@@ -30,13 +30,38 @@ class ListItem < ApplicationRecord
   belongs_to :listable, polymorphic: true, optional: true
   alias_method :item, :listable
 
+  # Callbacks
+  before_validation :parse_metadata_if_string
+
   # Validations
   validates :list, presence: true
   validates :position, numericality: {greater_than: 0}, allow_blank: true
   validates :listable_id, uniqueness: {scope: [:list_id, :listable_type], message: "is already in this list"}, allow_nil: true
   validate :listable_type_compatible_with_list_type
+  validate :metadata_format
 
   private
+
+  def parse_metadata_if_string
+    return unless metadata.is_a?(String) && metadata.present?
+
+    begin
+      self.metadata = JSON.parse(metadata)
+    rescue JSON::ParserError
+      # Let the validation catch this
+    end
+  end
+
+  def metadata_format
+    return if metadata.blank?
+    return if metadata.is_a?(Hash) || metadata.is_a?(Array)
+
+    if metadata.is_a?(String)
+      JSON.parse(metadata)
+    end
+  rescue JSON::ParserError => e
+    errors.add(:metadata, "must be valid JSON: #{e.message}")
+  end
 
   def listable_type_compatible_with_list_type
     return if listable_type.blank? || list.blank?
