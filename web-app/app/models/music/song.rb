@@ -67,7 +67,8 @@ class Music::Song < ApplicationRecord
   # Callbacks
   before_validation :normalize_title
   before_save :normalize_isrc
-  after_commit :queue_recording_id_enrichment, on: :create
+  # TODO: Disabled - creating too many jobs. Re-enable once we have rate limiting or batch processing.
+  # after_commit :queue_recording_id_enrichment, on: :create
 
   # Scopes
   scope :with_lyrics, -> { where.not(lyrics: [nil, ""]) }
@@ -213,7 +214,8 @@ class Music::Song < ApplicationRecord
     self.isrc = nil if isrc.blank?
   end
 
-  def queue_recording_id_enrichment
-    Music::EnrichSongRecordingIdsJob.perform_in(1.minute, id)
-  end
+  # TODO: Disabled - creating too many jobs. Re-enable once we have rate limiting or batch processing.
+  # def queue_recording_id_enrichment
+  #   Music::EnrichSongRecordingIdsJob.perform_in(1.minute, id)
+  # end
 end

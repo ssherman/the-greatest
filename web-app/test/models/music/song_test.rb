@@ -583,17 +583,17 @@ module Music
       assert_equal 1975, song.reload.release_year
     end
 
-    # Callback tests
-    test "queues enrichment job after creation" do
-      Music::EnrichSongRecordingIdsJob.expects(:perform_in).with(1.minute, kind_of(Integer)).once
-
-      Music::Song.create!(title: "New Test Song")
-    end
-
-    test "does not queue enrichment job on update" do
-      Music::EnrichSongRecordingIdsJob.expects(:perform_in).never
-
-      @song.update!(title: "Updated Title Again")
-    end
+    # TODO: Disabled - callback commented out due to creating too many jobs
+    # test "queues enrichment job after creation" do
+    #   Music::EnrichSongRecordingIdsJob.expects(:perform_in).with(1.minute, kind_of(Integer)).once
+    #
+    #   Music::Song.create!(title: "New Test Song")
+    # end
+    #
+    # test "does not queue enrichment job on update" do
+    #   Music::EnrichSongRecordingIdsJob.expects(:perform_in).never
+    #
+    #   @song.update!(title: "Updated Title Again")
+    # end
   end
 end
