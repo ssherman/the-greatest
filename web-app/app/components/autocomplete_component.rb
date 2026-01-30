@@ -9,7 +9,7 @@ class AutocompleteComponent < ViewComponent::Base
     selected_text: nil,
     display_key: "text",
     value_key: "value",
-    min_length: 2,
+    min_length: 1,
     debounce: 300,
     required: false,
     disabled: false
