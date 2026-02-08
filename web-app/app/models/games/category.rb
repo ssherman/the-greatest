@@ -32,10 +32,10 @@
 #
 module Games
   class Category < ::Category
-    # Games-specific associations - TODO: Uncomment when Games::Game model is created
-    # has_many :games, through: :category_items, source: :item, source_type: 'Games::Game'
+    # Games-specific associations
+    has_many :games, through: :category_items, source: :item, source_type: "Games::Game", inverse_of: :categories
 
-    # Games-specific scopes - TODO: Uncomment when Games::Game model is created
-    # scope :by_game_ids, ->(game_ids) { joins(:category_items).where(category_items: { item_type: 'Games::Game', item_id: game_ids }) }
+    # Games-specific scopes
+    scope :by_game_ids, ->(game_ids) { joins(:category_items).where(category_items: {item_type: "Games::Game", item_id: game_ids}) }
   end
 end

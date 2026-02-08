@@ -1,0 +1,17 @@
+nintendo:
+  name: "Nintendo"
+  slug: "nintendo"
+  country: "JP"
+  year_founded: 1889
+
+capcom:
+  name: "Capcom"
+  slug: "capcom"
+  country: "JP"
+  year_founded: 1979
+
+valve:
+  name: "Valve"
+  slug: "valve"
+  country: "US"
+  year_founded: 1996

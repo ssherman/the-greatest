@@ -1,0 +1,28 @@
+switch:
+  name: "Nintendo Switch"
+  slug: "nintendo-switch"
+  abbreviation: "Switch"
+  platform_family: 2
+
+ps5:
+  name: "PlayStation 5"
+  slug: "playstation-5"
+  abbreviation: "PS5"
+  platform_family: 0
+
+ps4:
+  name: "PlayStation 4"
+  slug: "playstation-4"
+  abbreviation: "PS4"
+  platform_family: 0
+
+pc:
+  name: "PC"
+  slug: "pc"
+  platform_family: 3
+
+xbox_series:
+  name: "Xbox Series X/S"
+  slug: "xbox-series-x-s"
+  abbreviation: "XSX"
+  platform_family: 1
