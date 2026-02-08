@@ -48,13 +48,11 @@ class Games::Company < ApplicationRecord
 
   # Helper methods
   def developed_games
-    games.joins(:game_companies)
-      .where(games_game_companies: {developer: true, company_id: id})
+    games.merge(Games::GameCompany.developers)
   end
 
   def published_games
-    games.joins(:game_companies)
-      .where(games_game_companies: {publisher: true, company_id: id})
+    games.merge(Games::GameCompany.publishers)
   end
 
   private

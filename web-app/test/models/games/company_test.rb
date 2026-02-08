@@ -69,10 +69,28 @@ module Games
       assert_not_includes developed, games_games(:breath_of_the_wild)
     end
 
+    test "developed_games excludes games where company is publisher only" do
+      # Add capcom as publisher-only on another game
+      Games::GameCompany.create!(game: games_games(:half_life_2), company: @capcom, developer: false, publisher: true)
+
+      developed = @capcom.developed_games
+      assert_not_includes developed, games_games(:half_life_2)
+    end
+
+    test "developed_games does not return duplicates" do
+      developed = @capcom.developed_games
+      assert_equal developed.size, developed.distinct.size
+    end
+
     test "published_games returns games where company is publisher" do
       published = @valve.published_games
       assert_includes published, games_games(:half_life_2)
       assert_not_includes published, games_games(:breath_of_the_wild)
+    end
+
+    test "published_games does not return duplicates" do
+      published = @valve.published_games
+      assert_equal published.size, published.distinct.size
     end
 
     # Dependent destroy

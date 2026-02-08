@@ -220,9 +220,39 @@ module Games
       assert_includes devs, games_companies(:nintendo)
     end
 
+    test "developers excludes publisher-only companies" do
+      # Add a publisher-only company to the game
+      pub_only = games_companies(:valve)
+      @botw.game_companies.create!(company: pub_only, developer: false, publisher: true)
+
+      devs = @botw.developers
+      assert_includes devs, games_companies(:nintendo)
+      assert_not_includes devs, pub_only
+    end
+
+    test "developers does not return duplicates" do
+      devs = @botw.developers
+      assert_equal devs.size, devs.distinct.size
+    end
+
     test "publishers returns only publisher companies" do
       pubs = @re4.publishers
       assert_includes pubs, games_companies(:capcom)
+    end
+
+    test "publishers excludes developer-only companies" do
+      # Add a developer-only company to the game
+      dev_only = games_companies(:valve)
+      @re4.game_companies.create!(company: dev_only, developer: true, publisher: false)
+
+      pubs = @re4.publishers
+      assert_includes pubs, games_companies(:capcom)
+      assert_not_includes pubs, dev_only
+    end
+
+    test "publishers does not return duplicates" do
+      pubs = @re4.publishers
+      assert_equal pubs.size, pubs.distinct.size
     end
 
     # Helper methods - Relationships

@@ -112,13 +112,11 @@ class Games::Game < ApplicationRecord
 
   # Helper methods - Companies
   def developers
-    companies.joins(:game_companies)
-      .where(games_game_companies: {developer: true, game_id: id})
+    companies.merge(Games::GameCompany.developers)
   end
 
   def publishers
-    companies.joins(:game_companies)
-      .where(games_game_companies: {publisher: true, game_id: id})
+    companies.merge(Games::GameCompany.publishers)
   end
 
   # Helper methods - Relationships
