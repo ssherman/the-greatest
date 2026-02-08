@@ -1,0 +1,34 @@
+breath_of_the_wild:
+  title: "The Legend of Zelda: Breath of the Wild"
+  slug: "the-legend-of-zelda-breath-of-the-wild"
+  release_year: 2017
+  game_type: 0
+  series: zelda
+
+resident_evil_4:
+  title: "Resident Evil 4"
+  slug: "resident-evil-4"
+  release_year: 2005
+  game_type: 0
+  series: resident_evil
+
+resident_evil_4_remake:
+  title: "Resident Evil 4"
+  slug: "resident-evil-4-remake"
+  release_year: 2023
+  game_type: 1
+  parent_game: resident_evil_4
+  series: resident_evil
+
+half_life_2:
+  title: "Half-Life 2"
+  slug: "half-life-2"
+  release_year: 2004
+  game_type: 0
+
+tears_of_the_kingdom:
+  title: "The Legend of Zelda: Tears of the Kingdom"
+  slug: "the-legend-of-zelda-tears-of-the-kingdom"
+  release_year: 2023
+  game_type: 0
+  series: zelda

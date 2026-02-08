@@ -1,0 +1,27 @@
+botw_switch:
+  game: breath_of_the_wild
+  platform: switch
+
+re4_remake_ps5:
+  game: resident_evil_4_remake
+  platform: ps5
+
+re4_remake_ps4:
+  game: resident_evil_4_remake
+  platform: ps4
+
+re4_remake_xbox:
+  game: resident_evil_4_remake
+  platform: xbox_series
+
+re4_remake_pc:
+  game: resident_evil_4_remake
+  platform: pc
+
+hl2_pc:
+  game: half_life_2
+  platform: pc
+
+totk_switch:
+  game: tears_of_the_kingdom
+  platform: switch

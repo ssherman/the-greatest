@@ -1,0 +1,29 @@
+botw_nintendo_dev:
+  game: breath_of_the_wild
+  company: nintendo
+  developer: true
+  publisher: true
+
+re4_capcom_dev:
+  game: resident_evil_4
+  company: capcom
+  developer: true
+  publisher: true
+
+re4_remake_capcom_dev:
+  game: resident_evil_4_remake
+  company: capcom
+  developer: true
+  publisher: true
+
+hl2_valve_dev:
+  game: half_life_2
+  company: valve
+  developer: true
+  publisher: true
+
+totk_nintendo_dev:
+  game: tears_of_the_kingdom
+  company: nintendo
+  developer: true
+  publisher: true

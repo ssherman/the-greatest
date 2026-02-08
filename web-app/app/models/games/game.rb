@@ -93,18 +93,18 @@ class Games::Game < ApplicationRecord
 
   # Scopes - Company filtering
   scope :by_developer, ->(company_id) {
-    joins(:game_companies).where(games_game_companies: {company_id: company_id, developer: true})
+    joins(:game_companies).where(games_game_companies: {company_id: company_id, developer: true}).distinct
   }
   scope :by_publisher, ->(company_id) {
-    joins(:game_companies).where(games_game_companies: {company_id: company_id, publisher: true})
+    joins(:game_companies).where(games_game_companies: {company_id: company_id, publisher: true}).distinct
   }
 
   # Scopes - Platform filtering
   scope :on_platform, ->(platform_id) {
-    joins(:game_platforms).where(games_game_platforms: {platform_id: platform_id})
+    joins(:game_platforms).where(games_game_platforms: {platform_id: platform_id}).distinct
   }
   scope :on_platform_family, ->(family) {
-    joins(:platforms).where(games_platforms: {platform_family: family})
+    joins(:platforms).where(games_platforms: {platform_family: family}).distinct
   }
 
   # Scopes - Series
