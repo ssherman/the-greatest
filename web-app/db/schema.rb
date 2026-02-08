@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_01_19_161015) do
+ActiveRecord::Schema[8.1].define(version: 2026_02_07_004642) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -142,6 +142,80 @@ ActiveRecord::Schema[8.1].define(version: 2026_01_19_161015) do
     t.index ["sluggable_type", "sluggable_id"], name: "index_friendly_id_slugs_on_sluggable_type_and_sluggable_id"
   end
 
+  create_table "games_companies", force: :cascade do |t|
+    t.string "country", limit: 2
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.string "name", null: false
+    t.string "slug", null: false
+    t.datetime "updated_at", null: false
+    t.integer "year_founded"
+    t.index ["name"], name: "index_games_companies_on_name"
+    t.index ["slug"], name: "index_games_companies_on_slug", unique: true
+  end
+
+  create_table "games_game_companies", force: :cascade do |t|
+    t.bigint "company_id", null: false
+    t.datetime "created_at", null: false
+    t.boolean "developer", default: false, null: false
+    t.bigint "game_id", null: false
+    t.boolean "publisher", default: false, null: false
+    t.datetime "updated_at", null: false
+    t.index ["company_id"], name: "index_games_game_companies_on_company_id"
+    t.index ["developer"], name: "index_games_game_companies_on_developer"
+    t.index ["game_id", "company_id"], name: "index_games_game_companies_on_game_and_company", unique: true
+    t.index ["game_id"], name: "index_games_game_companies_on_game_id"
+    t.index ["publisher"], name: "index_games_game_companies_on_publisher"
+  end
+
+  create_table "games_game_platforms", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.bigint "game_id", null: false
+    t.bigint "platform_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["game_id", "platform_id"], name: "index_games_game_platforms_on_game_and_platform", unique: true
+    t.index ["game_id"], name: "index_games_game_platforms_on_game_id"
+    t.index ["platform_id"], name: "index_games_game_platforms_on_platform_id"
+  end
+
+  create_table "games_games", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.integer "game_type", default: 0, null: false
+    t.bigint "parent_game_id"
+    t.integer "release_year"
+    t.bigint "series_id"
+    t.string "slug", null: false
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.index ["game_type"], name: "index_games_games_on_game_type"
+    t.index ["parent_game_id"], name: "index_games_games_on_parent_game_id"
+    t.index ["release_year"], name: "index_games_games_on_release_year"
+    t.index ["series_id"], name: "index_games_games_on_series_id"
+    t.index ["slug"], name: "index_games_games_on_slug", unique: true
+  end
+
+  create_table "games_platforms", force: :cascade do |t|
+    t.string "abbreviation"
+    t.datetime "created_at", null: false
+    t.string "name", null: false
+    t.integer "platform_family"
+    t.string "slug", null: false
+    t.datetime "updated_at", null: false
+    t.index ["platform_family"], name: "index_games_platforms_on_platform_family"
+    t.index ["slug"], name: "index_games_platforms_on_slug", unique: true
+  end
+
+  create_table "games_series", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.string "name", null: false
+    t.string "slug", null: false
+    t.datetime "updated_at", null: false
+    t.index ["name"], name: "index_games_series_on_name"
+    t.index ["slug"], name: "index_games_series_on_slug", unique: true
+  end
+
   create_table "identifiers", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.bigint "identifiable_id", null: false
@@ -179,8 +253,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_01_19_161015) do
     t.index ["list_id", "position"], name: "index_list_items_on_list_id_and_position"
     t.index ["list_id"], name: "index_list_items_on_list_id"
     t.index ["listable_type", "listable_id"], name: "index_list_items_on_listable"
-    t.index ["verified", "listable_id"], name: "index_list_items_on_verified_and_listable_id"
-    t.index ["verified"], name: "index_list_items_on_verified"
   end
 
   create_table "list_penalties", force: :cascade do |t|
@@ -549,6 +621,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_01_19_161015) do
   add_foreign_key "category_items", "categories"
   add_foreign_key "domain_roles", "users"
   add_foreign_key "external_links", "users", column: "submitted_by_id"
+  add_foreign_key "games_game_companies", "games_companies", column: "company_id"
+  add_foreign_key "games_game_companies", "games_games", column: "game_id"
+  add_foreign_key "games_game_platforms", "games_games", column: "game_id"
+  add_foreign_key "games_game_platforms", "games_platforms", column: "platform_id"
+  add_foreign_key "games_games", "games_games", column: "parent_game_id"
+  add_foreign_key "games_games", "games_series", column: "series_id"
   add_foreign_key "list_items", "lists"
   add_foreign_key "list_penalties", "lists"
   add_foreign_key "list_penalties", "penalties"

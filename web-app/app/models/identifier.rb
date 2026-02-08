@@ -53,7 +53,9 @@ class Identifier < ApplicationRecord
     music_isrc: 302,
 
     # Video Games
-    games_igdb_id: 400
+    games_igdb_id: 400,
+    games_rawg_id: 401,
+    games_igdb_company_id: 410
   }
 
   # Validations
