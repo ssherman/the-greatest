@@ -48,7 +48,9 @@ module Services
       # Extract email from user_data if available
       email = nil
       if user_data&.dig("providerData")&.any?
-        provider_data = user_data["providerData"].find { |p| p["providerId"] == "#{provider}.com" }
+        # Firebase uses "google.com" for OAuth providers but just "password" for email/password
+        provider_ids = ["#{provider}.com", provider]
+        provider_data = user_data["providerData"].find { |p| provider_ids.include?(p["providerId"]) }
         email = provider_data["email"] if provider_data
       end
 

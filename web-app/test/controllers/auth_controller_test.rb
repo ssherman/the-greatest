@@ -97,4 +97,57 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
     json_response = JSON.parse(response.body)
     assert json_response["success"]
   end
+
+  # check_provider tests
+
+  test "check_provider returns oauth provider when email has google account" do
+    post auth_check_provider_path, params: {email: "googleuser@example.com"},
+      as: :json
+
+    assert_response :success
+    json_response = JSON.parse(response.body)
+    assert json_response["has_oauth_provider"]
+    assert_equal "google", json_response["provider"]
+    assert_includes json_response["message"], "Google"
+  end
+
+  test "check_provider returns null for email with password account" do
+    post auth_check_provider_path, params: {email: "passworduser@example.com"},
+      as: :json
+
+    assert_response :success
+    json_response = JSON.parse(response.body)
+    refute json_response["has_oauth_provider"]
+    assert_nil json_response["provider"]
+    assert_nil json_response["message"]
+  end
+
+  test "check_provider returns null for non-existent email" do
+    post auth_check_provider_path, params: {email: "nonexistent@example.com"},
+      as: :json
+
+    assert_response :success
+    json_response = JSON.parse(response.body)
+    refute json_response["has_oauth_provider"]
+    assert_nil json_response["provider"]
+  end
+
+  test "check_provider returns null for blank email" do
+    post auth_check_provider_path, params: {email: ""},
+      as: :json
+
+    assert_response :success
+    json_response = JSON.parse(response.body)
+    refute json_response["has_oauth_provider"]
+  end
+
+  test "check_provider is case insensitive" do
+    post auth_check_provider_path, params: {email: "GOOGLEUSER@EXAMPLE.COM"},
+      as: :json
+
+    assert_response :success
+    json_response = JSON.parse(response.body)
+    assert json_response["has_oauth_provider"]
+    assert_equal "google", json_response["provider"]
+  end
 end

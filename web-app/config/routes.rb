@@ -231,6 +231,7 @@ Rails.application.routes.draw do
 
   post "auth/sign_in"
   post "auth/sign_out"
+  post "auth/check_provider"
 
   # Domain-specific roots using Default controllers
   constraints DomainConstraint.new(Rails.application.config.domains[:music]) do

@@ -108,6 +108,33 @@ class AuthenticationServiceTest < ActiveSupport::TestCase
     assert provider_data[:exp]
   end
 
+  test "extracts provider data from password provider user_data" do
+    Services::JwtValidationService.stubs(:call).returns(@valid_payload)
+
+    user_data = {
+      "providerData" => [
+        {
+          "providerId" => "password",
+          "uid" => "passworduser@example.com",
+          "email" => "passworduser@example.com"
+        }
+      ],
+      "displayName" => nil,
+      "photoURL" => nil,
+      "emailVerified" => false
+    }
+
+    result = Services::AuthenticationService.call(
+      auth_token: "valid.jwt.token",
+      provider: "password",
+      user_data: user_data
+    )
+
+    assert result[:success]
+    assert_equal "passworduser@example.com", result[:provider_data][:email]
+    assert_equal "password", result[:provider_data][:provider]
+  end
+
   test "handles missing optional fields in payload" do
     minimal_payload = {
       "sub" => "user123",

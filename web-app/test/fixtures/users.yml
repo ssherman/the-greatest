@@ -57,6 +57,28 @@ editor_user:
   email_verified: true
   original_signup_domain: thegreatestmovies.org
 
+# User with email/password authentication
+password_user:
+  email: passworduser@example.com
+  display_name: Password User
+  name: Password User Full Name
+  role: 0
+  email_verified: false
+  external_provider: 4
+  auth_uid: firebase-password-uid-123
+  original_signup_domain: thegreatestmusic.org
+
+# User with Google provider for conflict detection tests
+google_user:
+  email: googleuser@example.com
+  display_name: Google User
+  name: Google User Full Name
+  role: 0
+  email_verified: true
+  external_provider: 2
+  auth_uid: firebase-google-uid-456
+  original_signup_domain: thegreatestmusic.org
+
 # User with no global role, but will have domain-specific roles via domain_roles fixtures
 contractor_user:
   email: contractor@example.com

@@ -225,6 +225,15 @@ class FirebaseAuthService {
     }
   }
 
+  // Handle email/password auth result (no redirect involved)
+  async handleEmailAuthResult(result) {
+    console.log("🎉 Handling email auth result...")
+    const user = result.user
+    const idToken = await user.getIdToken()
+    const provider = this.getProviderFromUser(user)
+    await this.sendToBackend(idToken, provider, user)
+  }
+
   // Sign out user
   async signOut() {
     if (!this.initialized) {
