@@ -131,12 +131,13 @@ class Games::Game < ApplicationRecord
 
   # Search Methods
   def as_indexed_json
+    developer_companies = game_companies.select(&:developer?).map(&:company)
     {
       title: title,
-      developer_names: developers.map(&:name),
-      developer_ids: developers.map(&:id),
+      developer_names: developer_companies.map(&:name),
+      developer_ids: developer_companies.map(&:id),
       platform_ids: platforms.map(&:id),
-      category_ids: categories.active.pluck(:id)
+      category_ids: categories.select { |c| !c.deleted }.map(&:id)
     }
   end
 

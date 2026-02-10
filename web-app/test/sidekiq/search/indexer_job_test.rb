@@ -6,6 +6,7 @@ class Search::IndexerJobTest < ActiveSupport::TestCase
     @artist = music_artists(:the_beatles)
     @album = music_albums(:dark_side_of_the_moon)
     @song = music_songs(:money)
+    @game = games_games(:breath_of_the_wild)
 
     # Clear any existing requests
     SearchIndexRequest.delete_all
@@ -191,6 +192,7 @@ class Search::IndexerJobTest < ActiveSupport::TestCase
     Search::Music::ArtistIndex.expects(:bulk_index).never
     Search::Music::AlbumIndex.expects(:bulk_index).never
     Search::Music::SongIndex.expects(:bulk_index).never
+    Search::Games::GameIndex.expects(:bulk_index).never
 
     @job.perform
 
@@ -224,5 +226,41 @@ class Search::IndexerJobTest < ActiveSupport::TestCase
     Rails.logger.expects(:warn).with("Skipping indexing for deleted Music::Artist ID #{artist_id}")
 
     @job.perform
+  end
+
+  test "should process index requests for Games::Game" do
+    SearchIndexRequest.create!(parent: @game, action: :index_item)
+
+    Search::Games::GameIndex.stubs(:model_includes).returns([])
+    Search::Games::GameIndex.expects(:bulk_index).with([@game])
+
+    @job.perform
+
+    assert_equal 0, SearchIndexRequest.count
+  end
+
+  test "should process unindex requests for Games::Game" do
+    SearchIndexRequest.create!(parent: @game, action: :unindex_item)
+
+    Search::Games::GameIndex.expects(:bulk_unindex).with([@game.id])
+
+    @job.perform
+
+    assert_equal 0, SearchIndexRequest.count
+  end
+
+  test "should resolve correct index class for each domain" do
+    SearchIndexRequest.create!(parent: @artist, action: :index_item)
+    SearchIndexRequest.create!(parent: @game, action: :index_item)
+
+    Search::Music::ArtistIndex.stubs(:model_includes).returns([])
+    Search::Games::GameIndex.stubs(:model_includes).returns([])
+
+    Search::Music::ArtistIndex.expects(:bulk_index).with([@artist])
+    Search::Games::GameIndex.expects(:bulk_index).with([@game])
+
+    @job.perform
+
+    assert_equal 0, SearchIndexRequest.count
   end
 end

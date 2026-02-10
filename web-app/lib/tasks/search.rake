@@ -54,4 +54,31 @@ namespace :search do
       puts "✓ Songs index recreated and reindexed"
     end
   end
+
+  namespace :games do
+    desc "Recreate and reindex all games indices"
+    task recreate_and_reindex_all: :environment do
+      puts "=" * 80
+      puts "Search Games Indices - Recreation and Reindexing"
+      puts "=" * 80
+      puts "\nThis will delete existing indices and recreate them with updated mappings.\n\n"
+
+      record_count = Games::Game.count
+      puts "[Games] Starting recreation and reindex (#{record_count} records to index)..."
+      Search::Games::GameIndex.reindex_all
+      puts "[Games] Complete!"
+
+      puts "\n" + "=" * 80
+      puts "All games indices recreated and reindexed successfully!"
+      puts "=" * 80
+    end
+
+    desc "Recreate Games index"
+    task recreate_games: :environment do
+      record_count = Games::Game.count
+      puts "Recreating Games index (#{record_count} records)..."
+      Search::Games::GameIndex.reindex_all
+      puts "Games index recreated and reindexed"
+    end
+  end
 end

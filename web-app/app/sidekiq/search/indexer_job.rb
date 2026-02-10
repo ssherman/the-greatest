@@ -7,7 +7,7 @@ class Search::IndexerJob
     Rails.logger.info "Starting search indexing job"
 
     # Process each indexed model type
-    %w[Music::Artist Music::Album Music::Song].each do |model_type|
+    %w[Music::Artist Music::Album Music::Song Games::Game].each do |model_type|
       process_requests_for_type(model_type)
     end
 
@@ -30,7 +30,9 @@ class Search::IndexerJob
 
     Rails.logger.info "Deduplicated to #{grouped_requests.size} unique items for #{model_type}"
 
-    index_class = "Search::Music::#{model_type.demodulize}Index".constantize
+    domain = model_type.deconstantize  # "Music" or "Games"
+    model_name = model_type.demodulize  # "Artist" or "Game"
+    index_class = "Search::#{domain}::#{model_name}Index".constantize
 
     # Process each unique item
     items_to_index = []
