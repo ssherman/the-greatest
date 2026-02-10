@@ -91,7 +91,7 @@
 ## 7. Convention Over Configuration
 - **Rails Way**: Follow Rails conventions - use what Rails provides
 - **RESTful routes**: Maintain predictable URL patterns
-- **Testing approach**: Minitest with fixtures (see testing-guide.md)
+- **Testing approach**: Minitest with fixtures for unit/integration; Playwright for E2E (see `testing.md`)
 - **Default tools**: Prefer Rails built-ins over external gems
 
 ### CRITICAL: ALWAYS Use Rails Generators
@@ -136,6 +136,35 @@
 - **Turbo Frames**: Enhanced navigation without full page reloads
 - **Stimulus controllers**: Minimal JavaScript for interactivity
 - **Performance baseline**: Optimize for slow connections
+
+## 8.5. E2E Testability
+
+All user-facing views must be built with E2E testing in mind. Playwright tests verify real browser behavior against local dev instances.
+
+### Requirements for New Features
+- **Every new user-facing page or flow MUST have E2E tests** in `web-app/e2e/tests/`
+- **Add `data-testid` attributes** to elements that lack unique accessible identifiers
+- **Prefer semantic HTML** — proper headings, roles, labels, and form associations make Playwright locators stable without needing test IDs
+
+### When to Add `data-testid`
+Add `data-testid` when an element cannot be reliably targeted by role, text, or label:
+```erb
+<%# Icon-only buttons (no visible text) %>
+<%= link_to path, data: { testid: "back-button" } do %>
+  <svg>...</svg>
+<% end %>
+
+<%# Container elements that scope ambiguous child selectors %>
+<aside data-testid="admin-sidebar">
+
+<%# Elements whose visible text is shared with other elements on the page %>
+<div data-testid="stat-card-artists">
+```
+
+### Naming Convention
+- Use **kebab-case**: `data-testid="artist-search-input"`
+- Be **descriptive and scoped**: `"admin-sidebar"` not `"sidebar1"`
+- **Don't add test IDs to everything** — only where accessible locators are insufficient
 
 ## 9. Data Integrity
 - **Database constraints**: Enforce rules at the database level
@@ -211,5 +240,6 @@
 - **Business metrics**: Domain-specific KPIs
 
 ## Related Documentation
-- **Testing**: See `testing-guide.md` for comprehensive testing guidelines
+- **Testing**: See `testing.md` for comprehensive testing guidelines
+- **E2E Testing**: See `features/e2e-testing.md` for Playwright setup, running tests, and writing new tests
 - **Project Overview**: See `summary.md` for project context

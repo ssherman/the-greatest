@@ -37,3 +37,9 @@
 !/app/assets/builds/.keep
 
 /node_modules
+
+# Playwright
+/e2e/.auth/
+/e2e/.env
+/test-results/
+/playwright-report/
