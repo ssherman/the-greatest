@@ -1,0 +1,129 @@
+<%= turbo_frame_tag "game_companies_list" do %>
+  <% if game.game_companies.any? %>
+    <div class="overflow-x-auto">
+      <table class="table table-zebra">
+        <thead>
+          <tr>
+            <th>Company</th>
+            <th>Developer</th>
+            <th>Publisher</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% game.game_companies.includes(:company).each do |game_company| %>
+          <tr>
+            <td>
+              <%= link_to game_company.company.name,
+                  admin_games_company_path(game_company.company),
+                  class: "link link-hover",
+                  data: { turbo_frame: "_top" } %>
+            </td>
+            <td>
+              <% if game_company.developer? %>
+                <span class="badge badge-success badge-sm">Yes</span>
+              <% else %>
+                <span class="text-base-content/30">-</span>
+              <% end %>
+            </td>
+            <td>
+              <% if game_company.publisher? %>
+                <span class="badge badge-info badge-sm">Yes</span>
+              <% else %>
+                <span class="text-base-content/30">-</span>
+              <% end %>
+            </td>
+            <td>
+              <div class="flex gap-2">
+                <button class="btn btn-ghost btn-sm"
+                        onclick="edit_game_company_<%= game_company.id %>_modal.showModal()">
+                  Edit
+                </button>
+                <%= button_to "Remove",
+                    admin_games_game_company_path(game_company),
+                    method: :delete,
+                    class: "btn btn-ghost btn-sm text-error",
+                    data: {
+                      turbo_confirm: "Remove #{game_company.company.name} from this game?"
+                    } %>
+              </div>
+            </td>
+          </tr>
+
+          <dialog id="edit_game_company_<%= game_company.id %>_modal" class="modal">
+            <div class="modal-box max-w-2xl">
+              <h3 class="font-bold text-lg">Edit Company Roles</h3>
+              <p class="py-4 text-sm text-gray-500">
+                Update the developer/publisher roles for this company on the game.
+              </p>
+
+              <%= form_with model: game_company,
+                            url: admin_games_game_company_path(game_company),
+                            method: :patch,
+                            class: "space-y-4",
+                            data: {
+                              controller: "modal-form",
+                              modal_form_modal_id_value: "edit_game_company_#{game_company.id}_modal",
+                              turbo_frame: "game_companies_list"
+                            } do |f| %>
+
+                <div class="form-control">
+                  <%= f.label :game_id, "Game", class: "label" do %>
+                    <span class="label-text font-semibold">Game</span>
+                  <% end %>
+                  <%= f.text_field :game_id,
+                      value: game.title,
+                      disabled: true,
+                      class: "input input-bordered input-disabled w-full" %>
+                </div>
+
+                <div class="form-control">
+                  <%= f.label :company_id, "Company", class: "label" do %>
+                    <span class="label-text font-semibold">Company</span>
+                  <% end %>
+                  <%= f.text_field :company_id,
+                      value: game_company.company.name,
+                      disabled: true,
+                      class: "input input-bordered input-disabled w-full" %>
+                </div>
+
+                <div class="form-control">
+                  <label class="label cursor-pointer justify-start gap-2">
+                    <%= f.check_box :developer, class: "checkbox checkbox-primary" %>
+                    <span class="label-text">Developer</span>
+                  </label>
+                </div>
+
+                <div class="form-control">
+                  <label class="label cursor-pointer justify-start gap-2">
+                    <%= f.check_box :publisher, class: "checkbox checkbox-primary" %>
+                    <span class="label-text">Publisher</span>
+                  </label>
+                </div>
+
+                <label class="label">
+                  <span class="label-text-alt text-warning">At least one role (developer or publisher) must be selected</span>
+                </label>
+
+                <div class="modal-action">
+                  <button type="button"
+                          class="btn"
+                          onclick="edit_game_company_<%= game_company.id %>_modal.close()">
+                    Cancel
+                  </button>
+                  <%= f.submit "Update Roles", class: "btn btn-primary" %>
+                </div>
+              <% end %>
+            </div>
+            <form method="dialog" class="modal-backdrop">
+              <button>close</button>
+            </form>
+          </dialog>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <p class="text-gray-500 text-sm">No companies associated with this game yet.</p>
+  <% end %>
+<% end %>

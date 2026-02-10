@@ -13,14 +13,18 @@ class Admin::AddCategoryModalComponent < ViewComponent::Base
       helpers.admin_album_category_items_path(@item)
     when "Music::Song"
       helpers.admin_song_category_items_path(@item)
-      # Future: when "Books::Book", "Movies::Movie", "Games::Game"
+    when "Games::Game"
+      helpers.admin_games_game_category_items_path(@item)
     end
   end
 
   def search_url
-    # Currently only Music categories exist. When Books/Movies/Games are added,
-    # this will need a case statement to route to domain-specific search endpoints.
-    helpers.search_admin_categories_path
+    case @item.class.name
+    when "Games::Game"
+      helpers.search_admin_games_categories_path
+    else
+      helpers.search_admin_categories_path
+    end
   end
 
   def item_type_label

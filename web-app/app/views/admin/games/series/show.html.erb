@@ -1,0 +1,146 @@
+<% content_for :title, @series.name %>
+
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div class="flex-1">
+      <div class="flex items-center gap-2 mb-2">
+        <%= link_to admin_games_series_index_path, class: "btn btn-ghost btn-sm btn-circle", data: { testid: "back-button" } do %>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+          </svg>
+        <% end %>
+        <h1 class="text-3xl font-bold"><%= @series.name %></h1>
+      </div>
+      <div class="flex items-center gap-4 text-sm text-base-content/70">
+        <span>ID: <span class="font-mono"><%= @series.id %></span></span>
+        <span>Created <%= time_ago_in_words(@series.created_at) %> ago</span>
+      </div>
+    </div>
+    <div class="flex gap-2">
+      <%= link_to edit_admin_games_series_path(@series), class: "btn btn-primary" do %>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+        </svg>
+        <span>Edit</span>
+      <% end %>
+
+      <%= button_to admin_games_series_path(@series),
+          method: :delete,
+          class: "btn btn-error btn-outline",
+          data: { turbo_confirm: "Are you sure you want to delete #{@series.name}? This cannot be undone." } do %>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+        </svg>
+        <span>Delete</span>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Content -->
+    <div class="lg:col-span-2 space-y-6">
+      <!-- Basic Information -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">Basic Information</h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Name</span>
+              </label>
+              <p class="text-lg"><%= @series.name %></p>
+            </div>
+
+            <% if @series.description.present? %>
+              <div class="md:col-span-2">
+                <label class="label">
+                  <span class="label-text font-semibold">Description</span>
+                </label>
+                <p class="whitespace-pre-wrap"><%= @series.description %></p>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      </div>
+
+      <!-- Games in Series -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">
+            Games in Series
+            <span class="badge badge-ghost"><%= @series.games.count %></span>
+          </h2>
+
+          <% if @series.games.any? %>
+            <div class="overflow-x-auto">
+              <table class="table table-zebra">
+                <thead>
+                  <tr>
+                    <th>Title</th>
+                    <th>Year</th>
+                    <th>Type</th>
+                    <th>Platforms</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% @series.games.includes(:platforms).order(:release_year).each do |game| %>
+                    <tr>
+                      <td>
+                        <%= link_to game.title, admin_games_game_path(game),
+                            class: "link link-hover",
+                            data: { turbo_frame: "_top" } %>
+                      </td>
+                      <td><%= game.release_year || "-" %></td>
+                      <td><span class="badge badge-outline badge-sm"><%= game.game_type.titleize %></span></td>
+                      <td class="text-sm"><%= game.platforms.map(&:name).first(3).join(", ") %></td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% else %>
+            <p class="text-base-content/50">No games in this series yet.</p>
+          <% end %>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="space-y-6">
+      <!-- Statistics -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">Statistics</h2>
+          <div class="stats stats-vertical shadow">
+            <div class="stat">
+              <div class="stat-title">Total Games</div>
+              <div class="stat-value text-primary"><%= @series.games.count %></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Metadata -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title text-sm">Metadata</h2>
+          <div class="space-y-2 text-sm">
+            <div>
+              <span class="text-base-content/70">Slug:</span>
+              <span class="font-mono"><%= @series.slug %></span>
+            </div>
+            <div>
+              <span class="text-base-content/70">Created:</span>
+              <span><%= @series.created_at.strftime("%B %d, %Y at %I:%M %p") %></span>
+            </div>
+            <div>
+              <span class="text-base-content/70">Updated:</span>
+              <span><%= @series.updated_at.strftime("%B %d, %Y at %I:%M %p") %></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -243,6 +243,49 @@ Rails.application.routes.draw do
   end
 
   constraints DomainConstraint.new(Rails.application.config.domains[:games]) do
+    # Admin interface for games domain
+    namespace :admin, module: "admin/games", as: "admin_games" do
+      root to: "dashboard#index"
+
+      resources :games do
+        resources :game_companies, only: [:create], shallow: true
+        resources :game_platforms, only: [:create], shallow: true
+        resources :category_items, only: [:index, :create], controller: "/admin/category_items"
+        resources :images, only: [:index, :create], controller: "/admin/images"
+        collection do
+          get :search
+        end
+      end
+
+      resources :game_companies, only: [:update, :destroy]
+      resources :game_platforms, only: [:destroy]
+
+      resources :companies do
+        resources :images, only: [:index, :create], controller: "/admin/images"
+        collection do
+          get :search
+        end
+      end
+
+      resources :platforms do
+        collection do
+          get :search
+        end
+      end
+
+      resources :series do
+        collection do
+          get :search
+        end
+      end
+
+      resources :categories do
+        collection do
+          get :search
+        end
+      end
+    end
+
     root to: "games/default#index", as: :games_root
   end
 

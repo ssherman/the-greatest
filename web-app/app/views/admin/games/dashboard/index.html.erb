@@ -1,0 +1,137 @@
+<% content_for :title, "Dashboard" %>
+
+<div class="space-y-6">
+  <div>
+    <h1 class="text-4xl font-bold">Welcome to Games Admin</h1>
+    <p class="text-lg text-base-content/70 mt-2">Manage games, companies, platforms, and more</p>
+  </div>
+
+  <!-- Quick Stats -->
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="stats shadow" data-testid="stat-card-games">
+      <div class="stat">
+        <div class="stat-title">Total Games</div>
+        <div class="stat-value text-primary"><%= Games::Game.count %></div>
+        <div class="stat-desc"><%= Games::Game.where("created_at > ?", 7.days.ago).count %> added this week</div>
+      </div>
+    </div>
+
+    <div class="stats shadow" data-testid="stat-card-companies">
+      <div class="stat">
+        <div class="stat-title">Total Companies</div>
+        <div class="stat-value text-secondary"><%= Games::Company.count %></div>
+        <div class="stat-desc">Developers & publishers</div>
+      </div>
+    </div>
+
+    <div class="stats shadow" data-testid="stat-card-platforms">
+      <div class="stat">
+        <div class="stat-title">Total Platforms</div>
+        <div class="stat-value text-accent"><%= Games::Platform.count %></div>
+        <div class="stat-desc">Gaming platforms</div>
+      </div>
+    </div>
+
+    <div class="stats shadow" data-testid="stat-card-series">
+      <div class="stat">
+        <div class="stat-title">Total Series</div>
+        <div class="stat-value text-info"><%= Games::Series.count %></div>
+        <div class="stat-desc">Game franchises</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Links -->
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow">
+      <div class="card-body">
+        <h2 class="card-title">Games</h2>
+        <p class="text-base-content/70">Manage game catalog</p>
+        <div class="card-actions justify-end mt-4">
+          <%= link_to "View All", admin_games_games_path, class: "btn btn-primary btn-sm" %>
+          <%= link_to "Add New", new_admin_games_game_path, class: "btn btn-outline btn-sm" %>
+        </div>
+      </div>
+    </div>
+
+    <div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow">
+      <div class="card-body">
+        <h2 class="card-title">Companies</h2>
+        <p class="text-base-content/70">Manage developers & publishers</p>
+        <div class="card-actions justify-end mt-4">
+          <%= link_to "View All", admin_games_companies_path, class: "btn btn-secondary btn-sm" %>
+          <%= link_to "Add New", new_admin_games_company_path, class: "btn btn-outline btn-sm" %>
+        </div>
+      </div>
+    </div>
+
+    <div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow">
+      <div class="card-body">
+        <h2 class="card-title">Platforms</h2>
+        <p class="text-base-content/70">Manage gaming platforms</p>
+        <div class="card-actions justify-end mt-4">
+          <%= link_to "View All", admin_games_platforms_path, class: "btn btn-accent btn-sm" %>
+          <%= link_to "Add New", new_admin_games_platform_path, class: "btn btn-outline btn-sm" %>
+        </div>
+      </div>
+    </div>
+
+    <div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow">
+      <div class="card-body">
+        <h2 class="card-title">Series</h2>
+        <p class="text-base-content/70">Manage game franchises</p>
+        <div class="card-actions justify-end mt-4">
+          <%= link_to "View All", admin_games_series_index_path, class: "btn btn-info btn-sm" %>
+          <%= link_to "Add New", new_admin_games_series_path, class: "btn btn-outline btn-sm" %>
+        </div>
+      </div>
+    </div>
+
+    <div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow">
+      <div class="card-body">
+        <h2 class="card-title">Categories</h2>
+        <p class="text-base-content/70">Organize by genre and style</p>
+        <div class="card-actions justify-end mt-4">
+          <%= link_to "View All", admin_games_categories_path, class: "btn btn-warning btn-sm" %>
+          <%= link_to "Add New", new_admin_games_category_path, class: "btn btn-outline btn-sm" %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Activity -->
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">Recently Added Games</h2>
+      <% recent_games = Games::Game.includes(:companies, :platforms).order(created_at: :desc).limit(5) %>
+      <% if recent_games.any? %>
+        <div class="overflow-x-auto">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Year</th>
+                <th>Type</th>
+                <th>Created</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% recent_games.each do |game| %>
+                <tr>
+                  <td><%= game.title %></td>
+                  <td><%= game.release_year || "-" %></td>
+                  <td><span class="badge badge-sm"><%= game.game_type.titleize %></span></td>
+                  <td class="text-sm text-base-content/70"><%= time_ago_in_words(game.created_at) %> ago</td>
+                  <td><%= link_to "View", admin_games_game_path(game), class: "btn btn-ghost btn-xs" %></td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% else %>
+        <p class="text-base-content/70">No games yet. <%= link_to "Add your first game", new_admin_games_game_path, class: "link link-primary" %>.</p>
+      <% end %>
+    </div>
+  </div>
+</div>

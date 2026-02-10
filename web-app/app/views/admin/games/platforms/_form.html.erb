@@ -1,0 +1,83 @@
+<%= form_with model: @platform, url: @platform.persisted? ? admin_games_platform_path(@platform) : admin_games_platforms_path, class: "space-y-6" do |f| %>
+  <!-- Error Messages -->
+  <% if @platform.errors.any? %>
+    <div class="alert alert-error">
+      <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <div>
+        <h3 class="font-bold"><%= pluralize(@platform.errors.count, "error") %> prohibited this platform from being saved:</h3>
+        <ul class="list-disc list-inside mt-2">
+          <% @platform.errors.full_messages.each do |message| %>
+            <li><%= message %></li>
+          <% end %>
+        </ul>
+      </div>
+    </div>
+  <% end %>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">Basic Information</h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Name -->
+        <div class="form-control md:col-span-2">
+          <%= f.label :name, class: "label" do %>
+            <span class="label-text font-semibold">Name <span class="text-error">*</span></span>
+          <% end %>
+          <%= f.text_field :name,
+              class: "input input-bordered w-full #{@platform.errors[:name].any? ? 'input-error' : ''}",
+              placeholder: "Enter platform name",
+              required: true,
+              autofocus: true %>
+          <% if @platform.errors[:name].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @platform.errors[:name].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <!-- Abbreviation -->
+        <div class="form-control">
+          <%= f.label :abbreviation, class: "label" do %>
+            <span class="label-text font-semibold">Abbreviation</span>
+          <% end %>
+          <%= f.text_field :abbreviation,
+              class: "input input-bordered w-full #{@platform.errors[:abbreviation].any? ? 'input-error' : ''}",
+              placeholder: "e.g., PS5, XSX, NSW" %>
+          <label class="label">
+            <span class="label-text-alt">Short abbreviation for the platform</span>
+          </label>
+          <% if @platform.errors[:abbreviation].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @platform.errors[:abbreviation].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <!-- Platform Family -->
+        <div class="form-control">
+          <%= f.label :platform_family, class: "label" do %>
+            <span class="label-text font-semibold">Platform Family</span>
+          <% end %>
+          <%= f.select :platform_family,
+              Games::Platform.platform_families.keys.map { |t| [t.titleize, t] },
+              { include_blank: "Select family..." },
+              class: "select select-bordered w-full #{@platform.errors[:platform_family].any? ? 'select-error' : ''}" %>
+          <% if @platform.errors[:platform_family].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @platform.errors[:platform_family].first %></span>
+            </label>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Form Actions -->
+  <div class="flex flex-col sm:flex-row gap-2 justify-end">
+    <%= link_to "Cancel", @platform.persisted? ? admin_games_platform_path(@platform) : admin_games_platforms_path, class: "btn btn-ghost" %>
+    <%= f.submit @platform.persisted? ? "Update Platform" : "Create Platform", class: "btn btn-primary" %>
+  </div>
+<% end %>
