@@ -76,8 +76,9 @@ module Search
 
       test "model_includes returns associations for eager loading" do
         includes = ::Search::Games::GameIndex.model_includes
-        assert_includes includes, :companies
+        assert_includes includes, {game_companies: :company}
         assert_includes includes, :platforms
+        assert_includes includes, :categories
       end
 
       private

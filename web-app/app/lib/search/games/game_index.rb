@@ -8,7 +8,7 @@ module Search
       end
 
       def self.model_includes
-        [:companies, :platforms]
+        [{game_companies: :company}, :platforms, :categories]
       end
 
       def self.index_definition
