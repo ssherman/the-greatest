@@ -1,10 +1,11 @@
 # The Greatest - Testing Guide
 
 ## Core Testing Philosophy
-- **Framework**: Minitest with fixtures
-- **Mocking**: Mocha for stubs and mocks
-- **Coverage Goal**: 100% test coverage
+- **Unit/Integration**: Minitest with fixtures, Mocha for stubs and mocks
+- **E2E**: Playwright with TypeScript, running against local dev instances
+- **Coverage Goal**: 100% unit/integration test coverage; E2E coverage for all user-facing features
 - **Scope**: Test public methods only - never test private methods
+- **New features MUST include E2E tests** for any user-facing pages or flows
 
 ## Fixture Best Practices and Common Pitfalls
 
@@ -225,3 +226,81 @@ Examples of what should be tested:
 - All tests must pass before merge
 - No skipped tests without documented reason
 - Coverage reports generated on each run
+
+## E2E Testing (Playwright)
+
+For full details, see [E2E Testing Feature Doc](features/e2e-testing.md).
+
+### Overview
+Playwright E2E tests run against local dev instances with real Firebase authentication. They verify that pages load correctly, navigation works, and user flows (login, logout, admin browsing) function end-to-end.
+
+### When to Write E2E Tests
+**All new user-facing features MUST include E2E tests.** Specifically:
+- New public pages or routes
+- New admin pages or CRUD interfaces
+- Changes to navigation or layout
+- New auth flows or permission checks
+- Any feature a user interacts with in a browser
+
+### Running E2E Tests
+```bash
+cd web-app
+yarn test:e2e            # Full suite (headless)
+yarn test:e2e:headed     # With visible browser
+yarn test:e2e:ui         # Interactive UI mode
+yarn test:e2e:debug      # Debug with inspector
+```
+
+**Prerequisites**: Local dev server running, `e2e/.env` configured with test account credentials, Chromium installed (`npx playwright install chromium`).
+
+### Making Views E2E-Testable
+
+Add `data-testid` attributes to views to give Playwright stable, unambiguous selectors. This is **required** when:
+- An element has no accessible role, text, or label that uniquely identifies it (e.g., icon-only buttons)
+- Multiple elements on the page share the same role and name (e.g., sidebar "Artists" link vs. dashboard card "Artists" link)
+- The element's visible text or structure is likely to change
+
+**Naming convention**: Use kebab-case, descriptive names scoped to the component:
+```erb
+<%# Good - stable, descriptive test IDs %>
+<aside data-testid="admin-sidebar">
+<%= link_to path, data: { testid: "back-button" } do %>
+<div data-testid="stat-card-artists">
+
+<%# Bad - too generic or tied to implementation %>
+<aside data-testid="aside1">
+<div data-testid="div-wrapper">
+```
+
+**Locator priority in Playwright tests** (prefer top of list):
+1. `page.getByRole()` — buttons, links, headings (most accessible)
+2. `page.getByText()` — visible text content
+3. `page.getByLabel()` / `page.getByPlaceholder()` — form inputs
+4. `page.getByTestId()` — `data-testid` attributes (when above options are ambiguous)
+5. `page.locator()` — CSS selectors (last resort)
+
+### Existing `data-testid` Attributes
+| Attribute | Location | Purpose |
+|---|---|---|
+| `data-testid="admin-sidebar"` | `app/views/admin/shared/_sidebar.html.erb` | Scopes sidebar link selectors |
+| `data-testid="back-button"` | Artist, album, song show pages | Identifies icon-only back arrow links |
+
+### E2E Test Structure
+```
+web-app/e2e/
+  playwright.config.ts      # Config (baseURL, workers, auth project)
+  auth/auth.setup.ts        # Login once, save session for reuse
+  fixtures/auth.ts           # Custom test fixture with page objects
+  pages/                     # Page Object Models (locators + actions)
+  tests/                     # Test specs organized by domain/area
+```
+
+### Key Differences from Minitest
+| | Minitest | Playwright E2E |
+|---|---|---|
+| **Language** | Ruby | TypeScript |
+| **Target** | Rails test env with fixtures | Live local dev with real data |
+| **Auth** | Stubbed JWT via `sign_in_as` | Real Firebase email/password |
+| **Scope** | Controller behavior, models, services | Full browser user journeys |
+| **Speed** | Fast (parallel, in-process) | Slower (real browser, network) |
+| **Data** | Fixtures (isolated) | Shared dev database (read-only) |
