@@ -89,7 +89,7 @@ module Admin
 
         assert_no_difference("::Games::Company.count") do
           post admin_games_companies_path, params: {
-            games_company: { name: "" }
+            games_company: {name: ""}
           }
         end
 
@@ -102,7 +102,7 @@ module Admin
         sign_in_as(@admin_user, stub_auth: true)
 
         patch admin_games_company_path(@company), params: {
-          games_company: { name: "Updated Nintendo" }
+          games_company: {name: "Updated Nintendo"}
         }
 
         assert_redirected_to admin_games_company_path(@company)

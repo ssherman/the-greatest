@@ -118,7 +118,7 @@ module Admin
         sign_in_as(@admin_user, stub_auth: true)
 
         patch admin_games_category_path(@category), params: {
-          games_category: { name: "Updated Action" }
+          games_category: {name: "Updated Action"}
         }
 
         @category.reload

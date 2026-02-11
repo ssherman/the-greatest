@@ -68,7 +68,7 @@ class Admin::Games::GamesController < Admin::Games::BaseController
       .where(id: game_ids)
       .in_order_of(:id, game_ids)
 
-    render json: games.map { |g| {value: g.id, text: "#{g.title}#{g.release_year.present? ? " (#{g.release_year})" : ""}"} }
+    render json: games.map { |g| {value: g.id, text: "#{g.title}#{" (#{g.release_year})" if g.release_year.present?}"} }
   end
 
   private

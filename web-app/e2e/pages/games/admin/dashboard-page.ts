@@ -21,8 +21,8 @@ export class GamesDashboardPage {
     this.totalCompaniesStat = page.getByTestId('stat-card-companies');
     this.totalPlatformsStat = page.getByTestId('stat-card-platforms');
     this.totalSeriesStat = page.getByTestId('stat-card-series');
-    this.gamesCard = page.locator('.card', { hasText: 'Manage video games' });
-    this.companiesCard = page.locator('.card', { hasText: 'Manage game developers' });
+    this.gamesCard = page.locator('.card', { hasText: 'Manage game catalog' });
+    this.companiesCard = page.locator('.card', { hasText: 'Manage developers & publishers' });
     this.platformsCard = page.locator('.card', { hasText: 'Manage gaming platforms' });
     this.recentGamesHeading = page.getByRole('heading', { name: 'Recently Added Games' });
   }

@@ -49,7 +49,7 @@ class Admin::Games::PlatformsController < Admin::Games::BaseController
     platforms = Games::Platform.where("name ILIKE ?", "%#{params[:q]}%")
       .order(:name).limit(20)
 
-    render json: platforms.map { |p| {value: p.id, text: "#{p.name}#{p.abbreviation.present? ? " (#{p.abbreviation})" : ""}"} }
+    render json: platforms.map { |p| {value: p.id, text: "#{p.name}#{" (#{p.abbreviation})" if p.abbreviation.present?}"} }
   end
 
   private

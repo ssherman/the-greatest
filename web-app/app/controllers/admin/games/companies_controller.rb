@@ -54,7 +54,7 @@ class Admin::Games::CompaniesController < Admin::Games::BaseController
     companies = Games::Company.where("name ILIKE ?", "%#{params[:q]}%")
       .order(:name).limit(20)
 
-    render json: companies.map { |c| {value: c.id, text: "#{c.name}#{c.country.present? ? " (#{c.country})" : ""}"} }
+    render json: companies.map { |c| {value: c.id, text: "#{c.name}#{" (#{c.country})" if c.country.present?}"} }
   end
 
   private

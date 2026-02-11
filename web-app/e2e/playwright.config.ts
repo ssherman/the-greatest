@@ -20,7 +20,7 @@ export default defineConfig({
     video: { mode: 'retain-on-failure' },
   },
   projects: [
-    { name: 'setup', testDir: './auth', testMatch: 'auth.setup.ts' },
+    { name: 'setup', testDir: './auth', testMatch: 'auth.setup.ts', use: { baseURL: 'https://dev.thegreatestmusic.org' } },
     { name: 'games-setup', testDir: './auth', testMatch: 'games-auth.setup.ts' },
     {
       name: 'chromium',

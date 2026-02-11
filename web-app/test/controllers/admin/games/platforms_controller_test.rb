@@ -67,7 +67,7 @@ module Admin
 
         assert_no_difference("::Games::Platform.count") do
           post admin_games_platforms_path, params: {
-            games_platform: { name: "" }
+            games_platform: {name: ""}
           }
         end
 
@@ -78,7 +78,7 @@ module Admin
         sign_in_as(@admin_user, stub_auth: true)
 
         patch admin_games_platform_path(@platform), params: {
-          games_platform: { name: "Updated PS5" }
+          games_platform: {name: "Updated PS5"}
         }
 
         assert_redirected_to admin_games_platform_path(@platform)

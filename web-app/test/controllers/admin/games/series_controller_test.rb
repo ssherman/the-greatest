@@ -65,7 +65,7 @@ module Admin
 
         assert_no_difference("::Games::Series.count") do
           post admin_games_series_index_path, params: {
-            games_series: { name: "" }
+            games_series: {name: ""}
           }
         end
 
@@ -76,7 +76,7 @@ module Admin
         sign_in_as(@admin_user, stub_auth: true)
 
         patch admin_games_series_path(@series), params: {
-          games_series: { name: "Updated Zelda" }
+          games_series: {name: "Updated Zelda"}
         }
 
         assert_redirected_to admin_games_series_path(@series)
