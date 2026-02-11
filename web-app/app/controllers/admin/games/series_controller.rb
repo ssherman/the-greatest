@@ -46,7 +46,8 @@ class Admin::Games::SeriesController < Admin::Games::BaseController
   end
 
   def search
-    series = Games::Series.where("name ILIKE ?", "%#{params[:q]}%")
+    sanitized = "%#{Games::Series.sanitize_sql_like(params[:q].to_s)}%"
+    series = Games::Series.where("name ILIKE ?", sanitized)
       .order(:name).limit(20)
 
     render json: series.map { |s| {value: s.id, text: s.name} }
@@ -66,7 +67,8 @@ class Admin::Games::SeriesController < Admin::Games::BaseController
     @series_collection = Games::Series.all
 
     if params[:q].present?
-      @series_collection = @series_collection.where("name ILIKE ?", "%#{params[:q]}%")
+      sanitized = "%#{Games::Series.sanitize_sql_like(params[:q])}%"
+      @series_collection = @series_collection.where("name ILIKE ?", sanitized)
     end
 
     sort_column = sortable_column(params[:sort])

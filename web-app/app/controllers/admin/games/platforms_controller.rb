@@ -46,7 +46,8 @@ class Admin::Games::PlatformsController < Admin::Games::BaseController
   end
 
   def search
-    platforms = Games::Platform.where("name ILIKE ?", "%#{params[:q]}%")
+    sanitized = "%#{Games::Platform.sanitize_sql_like(params[:q].to_s)}%"
+    platforms = Games::Platform.where("name ILIKE ?", sanitized)
       .order(:name).limit(20)
 
     render json: platforms.map { |p| {value: p.id, text: "#{p.name}#{" (#{p.abbreviation})" if p.abbreviation.present?}"} }
@@ -66,7 +67,8 @@ class Admin::Games::PlatformsController < Admin::Games::BaseController
     @platforms = Games::Platform.all
 
     if params[:q].present?
-      @platforms = @platforms.where("name ILIKE ?", "%#{params[:q]}%")
+      sanitized = "%#{Games::Platform.sanitize_sql_like(params[:q])}%"
+      @platforms = @platforms.where("name ILIKE ?", sanitized)
     end
 
     sort_column = sortable_column(params[:sort])

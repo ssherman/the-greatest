@@ -51,7 +51,8 @@ class Admin::Games::CompaniesController < Admin::Games::BaseController
   end
 
   def search
-    companies = Games::Company.where("name ILIKE ?", "%#{params[:q]}%")
+    sanitized = "%#{Games::Company.sanitize_sql_like(params[:q].to_s)}%"
+    companies = Games::Company.where("name ILIKE ?", sanitized)
       .order(:name).limit(20)
 
     render json: companies.map { |c| {value: c.id, text: "#{c.name}#{" (#{c.country})" if c.country.present?}"} }
@@ -71,7 +72,8 @@ class Admin::Games::CompaniesController < Admin::Games::BaseController
     @companies = Games::Company.all
 
     if params[:q].present?
-      @companies = @companies.where("name ILIKE ?", "%#{params[:q]}%")
+      sanitized = "%#{Games::Company.sanitize_sql_like(params[:q])}%"
+      @companies = @companies.where("name ILIKE ?", sanitized)
     end
 
     sort_column = sortable_column(params[:sort])
