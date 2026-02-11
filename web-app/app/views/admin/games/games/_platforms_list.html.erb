@@ -1,0 +1,48 @@
+<%= turbo_frame_tag "game_platforms_list" do %>
+  <% if game.game_platforms.any? %>
+    <div class="overflow-x-auto">
+      <table class="table table-zebra">
+        <thead>
+          <tr>
+            <th>Platform</th>
+            <th>Family</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% game.game_platforms.includes(:platform).each do |game_platform| %>
+          <tr>
+            <td>
+              <%= link_to game_platform.platform.name,
+                  admin_games_platform_path(game_platform.platform),
+                  class: "link link-hover",
+                  data: { turbo_frame: "_top" } %>
+              <% if game_platform.platform.abbreviation.present? %>
+                <span class="text-base-content/50 text-sm">(<%= game_platform.platform.abbreviation %>)</span>
+              <% end %>
+            </td>
+            <td>
+              <% if game_platform.platform.platform_family.present? %>
+                <span class="badge badge-ghost badge-sm"><%= game_platform.platform.platform_family.titleize %></span>
+              <% else %>
+                <span class="text-base-content/30">-</span>
+              <% end %>
+            </td>
+            <td>
+              <%= button_to "Remove",
+                  admin_games_game_platform_path(game_platform),
+                  method: :delete,
+                  class: "btn btn-ghost btn-sm text-error",
+                  data: {
+                    turbo_confirm: "Remove #{game_platform.platform.name} from this game?"
+                  } %>
+            </td>
+          </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <p class="text-gray-500 text-sm">No platforms associated with this game yet.</p>
+  <% end %>
+<% end %>

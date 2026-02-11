@@ -1,0 +1,150 @@
+<%= form_with model: @game, url: @game.persisted? ? admin_games_game_path(@game) : admin_games_games_path, class: "space-y-6" do |f| %>
+  <!-- Error Messages -->
+  <% if @game.errors.any? %>
+    <div class="alert alert-error">
+      <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <div>
+        <h3 class="font-bold"><%= pluralize(@game.errors.count, "error") %> prohibited this game from being saved:</h3>
+        <ul class="list-disc list-inside mt-2">
+          <% @game.errors.full_messages.each do |message| %>
+            <li><%= message %></li>
+          <% end %>
+        </ul>
+      </div>
+    </div>
+  <% end %>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">Basic Information</h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Title -->
+        <div class="form-control md:col-span-2">
+          <%= f.label :title, class: "label" do %>
+            <span class="label-text font-semibold">Title <span class="text-error">*</span></span>
+          <% end %>
+          <%= f.text_field :title,
+              class: "input input-bordered w-full #{@game.errors[:title].any? ? 'input-error' : ''}",
+              placeholder: "Enter game title",
+              required: true,
+              autofocus: true %>
+          <% if @game.errors[:title].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @game.errors[:title].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <!-- Release Year -->
+        <div class="form-control">
+          <%= f.label :release_year, class: "label" do %>
+            <span class="label-text font-semibold">Release Year</span>
+          <% end %>
+          <%= f.number_field :release_year,
+              class: "input input-bordered w-full #{@game.errors[:release_year].any? ? 'input-error' : ''}",
+              placeholder: "e.g., 2023",
+              min: 1970,
+              max: Time.current.year + 2 %>
+          <label class="label">
+            <span class="label-text-alt">Initial release year</span>
+          </label>
+          <% if @game.errors[:release_year].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @game.errors[:release_year].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <!-- Game Type -->
+        <div class="form-control">
+          <%= f.label :game_type, class: "label" do %>
+            <span class="label-text font-semibold">Game Type <span class="text-error">*</span></span>
+          <% end %>
+          <%= f.select :game_type,
+              Games::Game.game_types.keys.map { |t| [t.titleize, t] },
+              { include_blank: "Select type..." },
+              class: "select select-bordered w-full #{@game.errors[:game_type].any? ? 'select-error' : ''}",
+              required: true %>
+          <% if @game.errors[:game_type].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @game.errors[:game_type].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <!-- Parent Game (for remake/remaster/expansion/dlc types) -->
+        <div class="form-control">
+          <%= f.label :parent_game_id, class: "label" do %>
+            <span class="label-text font-semibold">Parent Game</span>
+          <% end %>
+          <%= render AutocompleteComponent.new(
+            name: "games_game[parent_game_id]",
+            url: search_admin_games_games_path,
+            placeholder: "Search for parent game...",
+            value: @game.parent_game_id,
+            selected_text: @game.parent_game&.title
+          ) %>
+          <label class="label">
+            <span class="label-text-alt">Set for remakes, remasters, expansions, and DLC</span>
+          </label>
+          <% if @game.errors[:parent_game].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @game.errors[:parent_game].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <!-- Series -->
+        <div class="form-control">
+          <%= f.label :series_id, class: "label" do %>
+            <span class="label-text font-semibold">Series</span>
+          <% end %>
+          <%= render AutocompleteComponent.new(
+            name: "games_game[series_id]",
+            url: search_admin_games_series_index_path,
+            placeholder: "Search for series...",
+            value: @game.series_id,
+            selected_text: @game.series&.name
+          ) %>
+          <label class="label">
+            <span class="label-text-alt">Optional: Assign to a game franchise/series</span>
+          </label>
+        </div>
+
+        <!-- Description -->
+        <div class="form-control md:col-span-2">
+          <%= f.label :description, class: "label" do %>
+            <span class="label-text font-semibold">Description</span>
+          <% end %>
+          <%= f.text_area :description,
+              class: "textarea textarea-bordered w-full h-32 #{@game.errors[:description].any? ? 'textarea-error' : ''}",
+              placeholder: "Enter a description of the game..." %>
+          <label class="label">
+            <span class="label-text-alt">Game overview, gameplay, themes, critical reception</span>
+          </label>
+          <% if @game.errors[:description].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @game.errors[:description].first %></span>
+            </label>
+          <% end %>
+        </div>
+      </div>
+
+      <div class="alert alert-info mt-4">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <span>Company and platform associations can be managed after creating the game.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Form Actions -->
+  <div class="flex flex-col sm:flex-row gap-2 justify-end">
+    <%= link_to "Cancel", @game.persisted? ? admin_games_game_path(@game) : admin_games_games_path, class: "btn btn-ghost" %>
+    <%= f.submit @game.persisted? ? "Update Game" : "Create Game", class: "btn btn-primary" %>
+  </div>
+<% end %>

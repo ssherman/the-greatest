@@ -1,0 +1,446 @@
+<% content_for :title, @game.title %>
+
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div class="flex-1">
+      <div class="flex items-center gap-2 mb-2">
+        <%= link_to admin_games_games_path, class: "btn btn-ghost btn-sm btn-circle", data: { testid: "back-button" } do %>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+          </svg>
+        <% end %>
+        <h1 class="text-3xl font-bold"><%= @game.title %></h1>
+        <span class="badge badge-outline badge-lg">
+          <%= @game.game_type.titleize %>
+        </span>
+      </div>
+      <div class="flex items-center gap-4 text-sm text-base-content/70">
+        <span>ID: <span class="font-mono"><%= @game.id %></span></span>
+        <span>Created <%= time_ago_in_words(@game.created_at) %> ago</span>
+      </div>
+    </div>
+    <div class="flex gap-2">
+      <%= link_to edit_admin_games_game_path(@game), class: "btn btn-primary" do %>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+        </svg>
+        <span>Edit</span>
+      <% end %>
+
+      <%= button_to admin_games_game_path(@game),
+          method: :delete,
+          class: "btn btn-error btn-outline",
+          data: { turbo_confirm: "Are you sure you want to delete #{@game.title}? This cannot be undone." } do %>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+        </svg>
+        <span>Delete</span>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Content -->
+    <div class="lg:col-span-2 space-y-6">
+      <!-- Basic Information -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">Basic Information</h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Title</span>
+              </label>
+              <p class="text-lg"><%= @game.title %></p>
+            </div>
+
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Game Type</span>
+              </label>
+              <span class="badge badge-outline badge-lg">
+                <%= @game.game_type.titleize %>
+              </span>
+            </div>
+
+            <% if @game.release_year.present? %>
+              <div>
+                <label class="label">
+                  <span class="label-text font-semibold">Release Year</span>
+                </label>
+                <p><%= @game.release_year %></p>
+              </div>
+            <% end %>
+
+            <% if @game.series.present? %>
+              <div>
+                <label class="label">
+                  <span class="label-text font-semibold">Series</span>
+                </label>
+                <p>
+                  <%= link_to @game.series.name, admin_games_series_path(@game.series), class: "link link-primary" %>
+                </p>
+              </div>
+            <% end %>
+
+            <% if @game.parent_game.present? %>
+              <div>
+                <label class="label">
+                  <span class="label-text font-semibold">Parent Game</span>
+                </label>
+                <p>
+                  <%= link_to @game.parent_game.title, admin_games_game_path(@game.parent_game), class: "link link-primary" %>
+                </p>
+              </div>
+            <% end %>
+
+            <% if @game.slug.present? %>
+              <div class="md:col-span-2">
+                <label class="label">
+                  <span class="label-text font-semibold">Slug</span>
+                </label>
+                <p class="font-mono text-sm text-base-content/70"><%= @game.slug %></p>
+              </div>
+            <% end %>
+
+            <% if @game.description.present? %>
+              <div class="md:col-span-2">
+                <label class="label">
+                  <span class="label-text font-semibold">Description</span>
+                </label>
+                <p class="whitespace-pre-wrap"><%= @game.description %></p>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      </div>
+
+      <!-- Child Games -->
+      <% if @game.child_games.any? %>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title">
+              Related Games (Remakes, Remasters, DLC)
+              <span class="badge badge-ghost"><%= @game.child_games.count %></span>
+            </h2>
+            <div class="overflow-x-auto">
+              <table class="table table-zebra">
+                <thead>
+                  <tr>
+                    <th>Title</th>
+                    <th>Type</th>
+                    <th>Year</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% @game.child_games.order(:release_year).each do |child| %>
+                    <tr>
+                      <td>
+                        <%= link_to child.title, admin_games_game_path(child),
+                            class: "link link-hover",
+                            data: { turbo_frame: "_top" } %>
+                      </td>
+                      <td><span class="badge badge-outline badge-sm"><%= child.game_type.titleize %></span></td>
+                      <td><%= child.release_year || "-" %></td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      <% end %>
+
+      <!-- Companies Section -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="card-title">
+              Companies
+              <div class="badge badge-primary"><%= @game.game_companies.count %></div>
+            </h2>
+
+            <button class="btn btn-primary btn-sm"
+                    onclick="add_company_modal.showModal()">
+              + Add Company
+            </button>
+          </div>
+
+          <%= turbo_frame_tag "game_companies_list" do %>
+            <%= render "companies_list", game: @game %>
+          <% end %>
+        </div>
+      </div>
+
+      <!-- Platforms Section -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="card-title">
+              Platforms
+              <div class="badge badge-primary"><%= @game.game_platforms.count %></div>
+            </h2>
+
+            <button class="btn btn-primary btn-sm"
+                    onclick="add_platform_modal.showModal()">
+              + Add Platform
+            </button>
+          </div>
+
+          <%= turbo_frame_tag "game_platforms_list" do %>
+            <%= render "platforms_list", game: @game %>
+          <% end %>
+        </div>
+      </div>
+
+      <!-- Categories Section -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="card-title">
+              Categories
+              <div class="badge badge-primary"><%= @game.categories.count %></div>
+            </h2>
+
+            <button class="btn btn-primary btn-sm"
+                    onclick="add_category_modal_dialog.showModal()">
+              + Add Category
+            </button>
+          </div>
+
+          <%= turbo_frame_tag "category_items_list", loading: :lazy,
+              src: admin_games_game_category_items_path(@game) do %>
+            <div class="flex justify-center py-8">
+              <span class="loading loading-spinner loading-lg"></span>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="space-y-6">
+      <!-- Images Management -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="card-title">
+              Images
+              <span class="badge badge-ghost"><%= @game.images.count %></span>
+            </h2>
+            <button class="btn btn-primary btn-sm"
+                    onclick="add_image_modal.showModal()">
+              + Add
+            </button>
+          </div>
+
+          <%= turbo_frame_tag "images_list", loading: :lazy,
+              src: admin_games_game_images_path(@game) do %>
+            <div class="flex justify-center py-4">
+              <span class="loading loading-spinner loading-md"></span>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
+      <!-- Metadata -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title text-sm">Metadata</h2>
+          <div class="space-y-2 text-sm">
+            <div>
+              <span class="text-base-content/70">ID:</span>
+              <span class="font-mono"><%= @game.id %></span>
+            </div>
+            <div>
+              <span class="text-base-content/70">Created:</span>
+              <span><%= @game.created_at.strftime("%b %d, %Y %I:%M %p") %></span>
+            </div>
+            <div>
+              <span class="text-base-content/70">Updated:</span>
+              <span><%= @game.updated_at.strftime("%b %d, %Y %I:%M %p") %></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Company Modal -->
+<dialog id="add_company_modal" class="modal">
+  <div class="modal-box max-w-2xl">
+    <h3 class="font-bold text-lg">Add Company to Game</h3>
+    <p class="py-4 text-sm text-gray-500">
+      Search for a company to associate with this game. You can set developer and/or publisher roles.
+    </p>
+
+    <%= form_with model: Games::GameCompany.new,
+                  url: admin_games_game_game_companies_path(@game),
+                  method: :post,
+                  class: "space-y-4",
+                  data: {
+                    controller: "modal-form",
+                    modal_form_modal_id_value: "add_company_modal"
+                  } do |f| %>
+
+      <div class="form-control">
+        <%= f.label :game_id, "Game", class: "label" do %>
+          <span class="label-text font-semibold">Game</span>
+        <% end %>
+        <%= f.text_field :game_id,
+            value: @game.title,
+            disabled: true,
+            class: "input input-bordered input-disabled w-full" %>
+        <%= f.hidden_field :game_id, value: @game.id %>
+      </div>
+
+      <div class="form-control">
+        <%= f.label :company_id, "Company", class: "label" do %>
+          <span class="label-text font-semibold">Company <span class="text-error">*</span></span>
+        <% end %>
+        <%= render AutocompleteComponent.new(
+          name: "games_game_company[company_id]",
+          url: search_admin_games_companies_path,
+          placeholder: "Search for company...",
+          required: true
+        ) %>
+      </div>
+
+      <div class="form-control">
+        <label class="label cursor-pointer justify-start gap-2">
+          <%= f.check_box :developer, class: "checkbox checkbox-primary", checked: true %>
+          <span class="label-text">Developer</span>
+        </label>
+      </div>
+
+      <div class="form-control">
+        <label class="label cursor-pointer justify-start gap-2">
+          <%= f.check_box :publisher, class: "checkbox checkbox-primary" %>
+          <span class="label-text">Publisher</span>
+        </label>
+      </div>
+
+      <div class="modal-action">
+        <button type="button" class="btn" onclick="add_company_modal.close()">Cancel</button>
+        <%= f.submit "Add Company", class: "btn btn-primary" %>
+      </div>
+    <% end %>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
+
+<!-- Add Platform Modal -->
+<dialog id="add_platform_modal" class="modal">
+  <div class="modal-box max-w-2xl">
+    <h3 class="font-bold text-lg">Add Platform to Game</h3>
+    <p class="py-4 text-sm text-gray-500">
+      Search for a platform to associate with this game.
+    </p>
+
+    <%= form_with model: Games::GamePlatform.new,
+                  url: admin_games_game_game_platforms_path(@game),
+                  method: :post,
+                  class: "space-y-4",
+                  data: {
+                    controller: "modal-form",
+                    modal_form_modal_id_value: "add_platform_modal"
+                  } do |f| %>
+
+      <div class="form-control">
+        <%= f.label :game_id, "Game", class: "label" do %>
+          <span class="label-text font-semibold">Game</span>
+        <% end %>
+        <%= f.text_field :game_id,
+            value: @game.title,
+            disabled: true,
+            class: "input input-bordered input-disabled w-full" %>
+        <%= f.hidden_field :game_id, value: @game.id %>
+      </div>
+
+      <div class="form-control">
+        <%= f.label :platform_id, "Platform", class: "label" do %>
+          <span class="label-text font-semibold">Platform <span class="text-error">*</span></span>
+        <% end %>
+        <%= render AutocompleteComponent.new(
+          name: "games_game_platform[platform_id]",
+          url: search_admin_games_platforms_path,
+          placeholder: "Search for platform...",
+          required: true
+        ) %>
+      </div>
+
+      <div class="modal-action">
+        <button type="button" class="btn" onclick="add_platform_modal.close()">Cancel</button>
+        <%= f.submit "Add Platform", class: "btn btn-primary" %>
+      </div>
+    <% end %>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
+
+<!-- Add Category Modal -->
+<%= render Admin::AddCategoryModalComponent.new(item: @game) %>
+
+<!-- Add Image Modal -->
+<dialog id="add_image_modal" class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg">Add Image</h3>
+    <p class="py-2 text-sm text-base-content/70">
+      Upload an image for this game. Supported formats: JPEG, PNG, WebP, GIF.
+    </p>
+
+    <%= form_with model: Image.new,
+                  url: admin_games_game_images_path(@game),
+                  method: :post,
+                  class: "space-y-4",
+                  data: {
+                    controller: "modal-form",
+                    modal_form_modal_id_value: "add_image_modal"
+                  } do |f| %>
+
+      <div class="form-control">
+        <%= f.label :file, class: "label" do %>
+          <span class="label-text font-semibold">Image File <span class="text-error">*</span></span>
+        <% end %>
+        <%= f.file_field :file,
+            accept: "image/jpeg,image/png,image/webp,image/gif",
+            class: "file-input file-input-bordered w-full",
+            required: true %>
+        <label class="label">
+          <span class="label-text-alt">Max recommended size: 10MB</span>
+        </label>
+      </div>
+
+      <div class="form-control">
+        <%= f.label :notes, class: "label" do %>
+          <span class="label-text font-semibold">Notes</span>
+        <% end %>
+        <%= f.text_area :notes,
+            class: "textarea textarea-bordered w-full",
+            rows: 2,
+            placeholder: "Optional description or notes about this image" %>
+      </div>
+
+      <div class="form-control">
+        <label class="label cursor-pointer justify-start gap-2">
+          <%= f.check_box :primary, class: "checkbox checkbox-primary" %>
+          <span class="label-text">Set as primary image</span>
+        </label>
+      </div>
+
+      <div class="modal-action">
+        <button type="button" class="btn" onclick="add_image_modal.close()">Cancel</button>
+        <%= f.submit "Upload Image", class: "btn btn-primary" %>
+      </div>
+    <% end %>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
