@@ -38,7 +38,7 @@
         </ul>
       </div>
       <div class="navbar-end">
-        <button class="btn btn-primary" onclick="document.getElementById('login_modal').showModal()">Login</button>
+        <button class="btn btn-primary" onclick="login_modal.showModal()" id="navbar_login_button">Login</button>
       </div>
     </div>
 
@@ -50,7 +50,7 @@
     <dialog id="login_modal" class="modal">
       <div class="modal-box">
         <h3 class="font-bold text-lg mb-4">Sign In</h3>
-        <%= render Authentication::WidgetComponent.new %>
+        <%= render Authentication::WidgetComponent.new(reload_after_auth: true) %>
       </div>
       <form method="dialog" class="modal-backdrop">
         <button>close</button>
