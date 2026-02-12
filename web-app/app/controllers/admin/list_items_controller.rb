@@ -160,6 +160,8 @@ class Admin::ListItemsController < Admin::BaseController
       admin_albums_list_path(@list)
     when "Music::Songs::List"
       admin_songs_list_path(@list)
+    when "Games::List"
+      admin_games_list_path(@list)
     else
       music_root_path
     end

@@ -5,6 +5,7 @@ import { CompaniesPage } from '../pages/games/admin/companies-page';
 import { PlatformsPage } from '../pages/games/admin/platforms-page';
 import { SeriesPage } from '../pages/games/admin/series-page';
 import { CategoriesPage } from '../pages/games/admin/categories-page';
+import { ListsPage } from '../pages/games/admin/lists-page';
 
 type GamesFixtures = {
   gamesDashboardPage: GamesDashboardPage;
@@ -13,6 +14,7 @@ type GamesFixtures = {
   platformsPage: PlatformsPage;
   seriesPage: SeriesPage;
   categoriesPage: CategoriesPage;
+  listsPage: ListsPage;
 };
 
 export const test = base.extend<GamesFixtures>({
@@ -33,6 +35,9 @@ export const test = base.extend<GamesFixtures>({
   },
   categoriesPage: async ({ page }, use) => {
     await use(new CategoriesPage(page));
+  },
+  listsPage: async ({ page }, use) => {
+    await use(new ListsPage(page));
   },
 });
 
