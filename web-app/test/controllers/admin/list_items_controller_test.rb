@@ -314,5 +314,62 @@ module Admin
       assert_equal "New Album", list_item.metadata["title"]
       assert_equal 5, list_item.metadata["rank"]
     end
+
+    # Domain-scoped access tests
+    test "should allow games domain user to get index for games list" do
+      games_list = lists(:games_list)
+      games_list.list_items.destroy_all
+      game = games_games(:breath_of_the_wild)
+      ListItem.create!(list: games_list, listable: game, position: 1)
+
+      host! Rails.application.config.domains[:games]
+      sign_in_as(users(:contractor_user), stub_auth: true)
+
+      get admin_list_list_items_path(games_list)
+      assert_response :success
+    end
+
+    test "should allow games domain user to create list item for games list" do
+      games_list = lists(:games_list)
+      games_list.list_items.destroy_all
+      game = games_games(:breath_of_the_wild)
+
+      host! Rails.application.config.domains[:games]
+      sign_in_as(users(:contractor_user), stub_auth: true)
+
+      assert_difference "ListItem.count", 1 do
+        post admin_list_list_items_path(games_list),
+          params: {list_item: {listable_id: game.id, listable_type: "Games::Game", position: 1}},
+          as: :turbo_stream
+      end
+
+      assert_response :success
+    end
+
+    test "should allow games domain user to destroy list item for games list" do
+      games_list = lists(:games_list)
+      games_list.list_items.destroy_all
+      game = games_games(:breath_of_the_wild)
+      list_item = ListItem.create!(list: games_list, listable: game, position: 1)
+
+      host! Rails.application.config.domains[:games]
+      sign_in_as(users(:contractor_user), stub_auth: true)
+
+      assert_difference "ListItem.count", -1 do
+        delete admin_list_item_path(list_item), as: :turbo_stream
+      end
+
+      assert_response :success
+    end
+
+    test "should reject user with no domain role from games list items" do
+      games_list = lists(:games_list)
+
+      host! Rails.application.config.domains[:games]
+      sign_in_as(users(:regular_user), stub_auth: true)
+
+      get admin_list_list_items_path(games_list)
+      assert_response :redirect
+    end
   end
 end

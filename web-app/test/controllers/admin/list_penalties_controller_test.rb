@@ -140,5 +140,58 @@ module Admin
       assert_response :unprocessable_entity
       assert_match "cannot be manually attached", response.body
     end
+
+    # Domain-scoped access tests
+    test "should allow games domain user to get index for games list penalties" do
+      games_list = lists(:games_list)
+      games_list.list_penalties.destroy_all
+
+      host! Rails.application.config.domains[:games]
+      sign_in_as(users(:contractor_user), stub_auth: true)
+
+      get admin_list_list_penalties_path(games_list)
+      assert_response :success
+    end
+
+    test "should allow games domain user to create penalty for games list" do
+      games_list = lists(:games_list)
+      games_list.list_penalties.destroy_all
+
+      host! Rails.application.config.domains[:games]
+      sign_in_as(users(:contractor_user), stub_auth: true)
+
+      assert_difference "ListPenalty.count", 1 do
+        post admin_list_list_penalties_path(games_list),
+          params: {list_penalty: {penalty_id: @global_penalty.id}},
+          as: :turbo_stream
+      end
+
+      assert_response :success
+    end
+
+    test "should allow games domain user to destroy penalty for games list" do
+      games_list = lists(:games_list)
+      games_list.list_penalties.destroy_all
+      list_penalty = ListPenalty.create!(list: games_list, penalty: @global_penalty)
+
+      host! Rails.application.config.domains[:games]
+      sign_in_as(users(:contractor_user), stub_auth: true)
+
+      assert_difference "ListPenalty.count", -1 do
+        delete admin_list_penalty_path(list_penalty), as: :turbo_stream
+      end
+
+      assert_response :success
+    end
+
+    test "should reject user with no domain role from games list penalties" do
+      games_list = lists(:games_list)
+
+      host! Rails.application.config.domains[:games]
+      sign_in_as(users(:regular_user), stub_auth: true)
+
+      get admin_list_list_penalties_path(games_list)
+      assert_response :redirect
+    end
   end
 end

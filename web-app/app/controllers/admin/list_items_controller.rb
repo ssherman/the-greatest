@@ -2,6 +2,27 @@ class Admin::ListItemsController < Admin::BaseController
   before_action :set_list, only: [:index, :create, :destroy_all]
   before_action :set_list_item, only: [:update, :destroy]
 
+  private
+
+  # Override to allow domain-scoped users to manage list items
+  # for lists within their domain (e.g., games domain user managing Games::List items)
+  def authenticate_admin!
+    return if current_user&.admin? || current_user&.editor?
+
+    list = if params[:list_id].present?
+      List.find_by(id: params[:list_id])
+    elsif params[:id].present?
+      ListItem.find_by(id: params[:id])&.list
+    end
+
+    domain = list&.type&.split("::")&.first&.downcase
+    return if domain.present? && current_user&.can_access_domain?(domain)
+
+    redirect_to domain_root_path, alert: "Access denied. Admin or editor role required."
+  end
+
+  public
+
   def index
     @list_items = @list.list_items.includes(:listable).order(:position)
     render layout: false

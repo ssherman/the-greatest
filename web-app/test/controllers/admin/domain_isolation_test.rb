@@ -21,20 +21,34 @@ class Admin::DomainIsolationTest < ActionDispatch::IntegrationTest
     assert_equal "Access denied. Admin or editor role required.", flash[:alert]
   end
 
-  test "domain-scoped user cannot access global list items controller" do
+  test "domain-scoped user CAN access list items for lists in their domain" do
     sign_in_as(@contractor, stub_auth: true)
+    list = lists(:music_albums_list)  # contractor has music domain role
+    get admin_list_list_items_path(list)
+    assert_response :success
+  end
+
+  test "domain-scoped user CAN access list penalties for lists in their domain" do
+    sign_in_as(@contractor, stub_auth: true)
+    list = lists(:music_albums_list)  # contractor has music domain role
+    get admin_list_list_penalties_path(list)
+    assert_response :success
+  end
+
+  test "user with no domain role cannot access list items controller" do
+    regular = users(:regular_user)
+    sign_in_as(regular, stub_auth: true)
     list = lists(:music_albums_list)
     get admin_list_list_items_path(list)
     assert_redirected_to music_root_path
-    assert_equal "Access denied. Admin or editor role required.", flash[:alert]
   end
 
-  test "domain-scoped user cannot access global list penalties controller" do
-    sign_in_as(@contractor, stub_auth: true)
+  test "user with no domain role cannot access list penalties controller" do
+    regular = users(:regular_user)
+    sign_in_as(regular, stub_auth: true)
     list = lists(:music_albums_list)
     get admin_list_list_penalties_path(list)
     assert_redirected_to music_root_path
-    assert_equal "Access denied. Admin or editor role required.", flash[:alert]
   end
 
   # Domain-scoped controllers should allow domain role access
