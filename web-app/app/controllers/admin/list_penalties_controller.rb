@@ -2,6 +2,27 @@ class Admin::ListPenaltiesController < Admin::BaseController
   before_action :set_list, only: [:index, :create]
   before_action :set_list_penalty, only: [:destroy]
 
+  private
+
+  # Override to allow domain-scoped users to manage list penalties
+  # for lists within their domain (e.g., games domain user managing Games::List penalties)
+  def authenticate_admin!
+    return if current_user&.admin? || current_user&.editor?
+
+    list = if params[:list_id].present?
+      List.find_by(id: params[:list_id])
+    elsif params[:id].present?
+      ListPenalty.find_by(id: params[:id])&.list
+    end
+
+    domain = list&.type&.split("::")&.first&.downcase
+    return if domain.present? && current_user&.can_access_domain?(domain)
+
+    redirect_to domain_root_path, alert: "Access denied. Admin or editor role required."
+  end
+
+  public
+
   def index
     @list_penalties = @list.list_penalties.includes(:penalty).order("penalties.name")
     render layout: false
@@ -101,6 +122,8 @@ class Admin::ListPenaltiesController < Admin::BaseController
       admin_albums_list_path(@list)
     when /^Music::Songs::/
       admin_songs_list_path(@list)
+    when "Games::List"
+      admin_games_list_path(@list)
     else
       music_root_path
     end

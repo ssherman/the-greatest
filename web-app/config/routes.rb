@@ -284,6 +284,8 @@ Rails.application.routes.draw do
           get :search
         end
       end
+
+      resources :lists
     end
 
     root to: "games/default#index", as: :games_root

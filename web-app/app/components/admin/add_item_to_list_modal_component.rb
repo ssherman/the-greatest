@@ -11,6 +11,8 @@ class Admin::AddItemToListModalComponent < ViewComponent::Base
       Rails.application.routes.url_helpers.search_admin_albums_path
     when "Music::Songs::List"
       Rails.application.routes.url_helpers.search_admin_songs_path
+    when "Games::List"
+      Rails.application.routes.url_helpers.search_admin_games_games_path
     end
   end
 
@@ -20,6 +22,8 @@ class Admin::AddItemToListModalComponent < ViewComponent::Base
       "Music::Album"
     when "Music::Songs::List"
       "Music::Song"
+    when "Games::List"
+      "Games::Game"
     end
   end
 
@@ -29,6 +33,8 @@ class Admin::AddItemToListModalComponent < ViewComponent::Base
       "Album"
     when "Music::Songs::List"
       "Song"
+    when "Games::List"
+      "Game"
     else
       "Item"
     end
