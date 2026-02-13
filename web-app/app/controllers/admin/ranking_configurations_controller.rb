@@ -2,6 +2,12 @@ class Admin::RankingConfigurationsController < Admin::BaseController
   before_action :set_ranking_configuration, only: [:show, :edit, :update, :destroy, :execute_action]
   before_action :authorize_ranking_configuration, only: [:show, :edit, :update, :destroy, :execute_action]
 
+  helper_method :ranking_configurations_path, :ranking_configuration_path,
+    :new_ranking_configuration_path, :edit_ranking_configuration_path,
+    :execute_action_ranking_configuration_path,
+    :index_action_ranking_configurations_path,
+    :index_heading, :index_subheading, :type_label
+
   def index
     authorize ranking_configuration_class, policy_class: policy_class
     load_ranking_configurations_for_index
@@ -150,16 +156,44 @@ class Admin::RankingConfigurationsController < Admin::BaseController
     raise NotImplementedError, "Subclass must implement ranking_configuration_class"
   end
 
-  def ranking_configurations_path
+  def ranking_configurations_path(**opts)
     raise NotImplementedError, "Subclass must implement ranking_configurations_path"
   end
 
-  def ranking_configuration_path(config)
+  def ranking_configuration_path(config, **opts)
     raise NotImplementedError, "Subclass must implement ranking_configuration_path"
   end
 
+  def new_ranking_configuration_path
+    raise NotImplementedError, "Subclass must implement new_ranking_configuration_path"
+  end
+
+  def edit_ranking_configuration_path(config)
+    raise NotImplementedError, "Subclass must implement edit_ranking_configuration_path"
+  end
+
+  def execute_action_ranking_configuration_path(config, **opts)
+    raise NotImplementedError, "Subclass must implement execute_action_ranking_configuration_path"
+  end
+
+  def index_action_ranking_configurations_path(**opts)
+    raise NotImplementedError, "Subclass must implement index_action_ranking_configurations_path"
+  end
+
   def table_partial_path
-    raise NotImplementedError, "Subclass must implement table_partial_path"
+    "admin/ranking_configurations/table"
+  end
+
+  def index_heading
+    "Ranking Configurations"
+  end
+
+  def index_subheading
+    "Manage ranking configurations and algorithms"
+  end
+
+  def type_label
+    ""
   end
 
   def policy_class

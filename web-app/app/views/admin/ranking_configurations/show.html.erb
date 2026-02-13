@@ -4,7 +4,7 @@
   <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
     <div class="flex-1">
       <div class="flex items-center gap-2 mb-2">
-        <%= link_to admin_games_ranking_configurations_path, class: "btn btn-ghost btn-sm btn-circle" do %>
+        <%= link_to ranking_configurations_path, class: "btn btn-ghost btn-sm btn-circle" do %>
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
           </svg>
@@ -26,7 +26,7 @@
       </div>
     </div>
     <div class="flex gap-2">
-      <%= link_to edit_admin_games_ranking_configuration_path(@ranking_configuration), class: "btn btn-primary" do %>
+      <%= link_to edit_ranking_configuration_path(@ranking_configuration), class: "btn btn-primary" do %>
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
           <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
         </svg>
@@ -43,14 +43,14 @@
         <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow-lg bg-base-100 rounded-box w-52">
           <li>
             <%= button_to "Recalculate List Weights",
-                execute_action_admin_games_ranking_configuration_path(@ranking_configuration, action_name: "BulkCalculateWeights"),
+                execute_action_ranking_configuration_path(@ranking_configuration, action_name: "BulkCalculateWeights"),
                 method: :post,
                 class: "text-left",
                 data: { turbo_confirm: "Recalculate weights for all ranked lists in this configuration?" } %>
           </li>
           <li>
             <%= button_to "Refresh Rankings",
-                execute_action_admin_games_ranking_configuration_path(@ranking_configuration, action_name: "RefreshRankings"),
+                execute_action_ranking_configuration_path(@ranking_configuration, action_name: "RefreshRankings"),
                 method: :post,
                 class: "text-left",
                 data: { turbo_confirm: "Recalculate rankings for this configuration?" } %>
@@ -58,7 +58,7 @@
         </ul>
       </div>
 
-      <%= button_to admin_games_ranking_configuration_path(@ranking_configuration),
+      <%= button_to ranking_configuration_path(@ranking_configuration),
           method: :delete,
           class: "btn btn-error btn-outline",
           data: { turbo_confirm: "Are you sure you want to delete #{@ranking_configuration.name}? This cannot be undone." } do %>

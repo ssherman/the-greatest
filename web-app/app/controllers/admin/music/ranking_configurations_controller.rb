@@ -19,20 +19,4 @@ class Admin::Music::RankingConfigurationsController < Admin::RankingConfiguratio
   def domain_name
     "music"
   end
-
-  def ranking_configuration_class
-    raise NotImplementedError, "Subclass must implement ranking_configuration_class"
-  end
-
-  def ranking_configurations_path
-    raise NotImplementedError, "Subclass must implement ranking_configurations_path"
-  end
-
-  def ranking_configuration_path(config)
-    raise NotImplementedError, "Subclass must implement ranking_configuration_path"
-  end
-
-  def table_partial_path
-    raise NotImplementedError, "Subclass must implement table_partial_path"
-  end
 end

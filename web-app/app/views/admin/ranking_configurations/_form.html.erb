@@ -1,4 +1,4 @@
-<%= form_with model: @ranking_configuration, scope: :ranking_configuration, url: @ranking_configuration.persisted? ? admin_games_ranking_configuration_path(@ranking_configuration) : admin_games_ranking_configurations_path, class: "space-y-6" do |f| %>
+<%= form_with model: @ranking_configuration, scope: :ranking_configuration, url: @ranking_configuration.persisted? ? ranking_configuration_path(@ranking_configuration) : ranking_configurations_path, class: "space-y-6" do |f| %>
   <% if @ranking_configuration.errors.any? %>
     <div class="alert alert-error">
       <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
@@ -292,7 +292,7 @@
   </div>
 
   <div class="flex flex-col sm:flex-row gap-2 justify-end">
-    <%= link_to "Cancel", @ranking_configuration.persisted? ? admin_games_ranking_configuration_path(@ranking_configuration) : admin_games_ranking_configurations_path, class: "btn btn-ghost" %>
+    <%= link_to "Cancel", @ranking_configuration.persisted? ? ranking_configuration_path(@ranking_configuration) : ranking_configurations_path, class: "btn btn-ghost" %>
     <%= f.submit @ranking_configuration.persisted? ? "Update Configuration" : "Create Configuration", class: "btn btn-primary" %>
   </div>
 <% end %>
