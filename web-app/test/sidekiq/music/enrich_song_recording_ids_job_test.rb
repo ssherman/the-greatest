@@ -15,7 +15,7 @@ module Music
     end
 
     test "job includes Sidekiq::Job" do
-      assert EnrichSongRecordingIdsJob.included_modules.include?(Sidekiq::Job)
+      assert EnrichSongRecordingIdsJob.include?(Sidekiq::Job)
     end
 
     test "perform delegates to enrichment service which handles no artists" do

@@ -1,4 +1,6 @@
 class Admin::RankedListsController < Admin::BaseController
+  include RankingConfigurationDomainAuth
+
   layout "music/admin", only: [:show]
 
   before_action :set_ranking_configuration, only: [:index, :create]
@@ -94,6 +96,10 @@ class Admin::RankedListsController < Admin::BaseController
 
   private
 
+  def ranking_configuration_id_for_auth
+    params[:ranking_configuration_id] || RankedList.find_by(id: params[:id])&.ranking_configuration_id
+  end
+
   def set_ranking_configuration
     @ranking_configuration = RankingConfiguration.find(params[:ranking_configuration_id])
   end
@@ -112,6 +118,8 @@ class Admin::RankedListsController < Admin::BaseController
       admin_albums_ranking_configuration_path(@ranking_configuration)
     when /^Music::Songs::/
       admin_songs_ranking_configuration_path(@ranking_configuration)
+    when /^Games::/
+      admin_games_ranking_configuration_path(@ranking_configuration)
     else
       music_root_path
     end

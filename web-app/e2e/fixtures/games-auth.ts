@@ -6,6 +6,7 @@ import { PlatformsPage } from '../pages/games/admin/platforms-page';
 import { SeriesPage } from '../pages/games/admin/series-page';
 import { CategoriesPage } from '../pages/games/admin/categories-page';
 import { ListsPage } from '../pages/games/admin/lists-page';
+import { RankingConfigurationsPage } from '../pages/games/admin/ranking-configurations-page';
 
 type GamesFixtures = {
   gamesDashboardPage: GamesDashboardPage;
@@ -15,6 +16,7 @@ type GamesFixtures = {
   seriesPage: SeriesPage;
   categoriesPage: CategoriesPage;
   listsPage: ListsPage;
+  rankingConfigurationsPage: RankingConfigurationsPage;
 };
 
 export const test = base.extend<GamesFixtures>({
@@ -38,6 +40,9 @@ export const test = base.extend<GamesFixtures>({
   },
   listsPage: async ({ page }, use) => {
     await use(new ListsPage(page));
+  },
+  rankingConfigurationsPage: async ({ page }, use) => {
+    await use(new RankingConfigurationsPage(page));
   },
 });
 

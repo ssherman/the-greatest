@@ -115,6 +115,22 @@ games_global:
   max_list_dates_penalty_percentage: 60
   inherit_penalties: true
 
+games_secondary:
+  type: Games::RankingConfiguration
+  name: "Secondary Games Ranking"
+  description: "A non-primary ranking configuration for games"
+  global: true
+  primary: false
+  archived: false
+  algorithm_version: 1
+  exponent: 2.5
+  bonus_pool_percentage: 4.0
+  min_list_weight: 1
+  apply_list_dates_penalty: true
+  max_list_dates_penalty_age: 15
+  max_list_dates_penalty_percentage: 50
+  inherit_penalties: true
+
 music_albums_global:
   type: Music::Albums::RankingConfiguration
   name: "Global Music Albums Ranking"
