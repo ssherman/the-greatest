@@ -1,4 +1,6 @@
 class Admin::RankedItemsController < Admin::BaseController
+  include RankingConfigurationDomainAuth
+
   def index
     @ranking_configuration = RankingConfiguration.find(params[:ranking_configuration_id])
     @ranked_items = @ranking_configuration.ranked_items

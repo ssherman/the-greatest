@@ -52,6 +52,7 @@ class Admin::RankingConfigurationsController < Admin::BaseController
   end
 
   def execute_action
+    validate_action_name!
     action_class = "Actions::Admin::#{params[:action_name]}".constantize
     result = action_class.call(user: current_user, models: [@ranking_configuration])
 
@@ -69,6 +70,7 @@ class Admin::RankingConfigurationsController < Admin::BaseController
 
   def index_action
     authorize ranking_configuration_class, :index_action?, policy_class: policy_class
+    validate_action_name!
     ranking_configuration_ids = params[:ranking_configuration_ids] || []
 
     # If no IDs provided, use all configurations of this type
@@ -178,6 +180,16 @@ class Admin::RankingConfigurationsController < Admin::BaseController
 
   def index_action_ranking_configurations_path(**opts)
     raise NotImplementedError, "Subclass must implement index_action_ranking_configurations_path"
+  end
+
+  def validate_action_name!
+    unless allowed_action_names.include?(params[:action_name])
+      raise ActionController::BadRequest, "Invalid action: #{params[:action_name]}"
+    end
+  end
+
+  def allowed_action_names
+    %w[RefreshRankings BulkCalculateWeights]
   end
 
   def table_partial_path

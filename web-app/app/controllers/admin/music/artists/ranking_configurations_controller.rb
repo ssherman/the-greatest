@@ -32,6 +32,10 @@ module Admin
           index_action_admin_artists_ranking_configurations_path(**opts)
         end
 
+        def allowed_action_names
+          %w[RefreshRankings]
+        end
+
         def table_partial_path
           "admin/music/artists/ranking_configurations/table"
         end

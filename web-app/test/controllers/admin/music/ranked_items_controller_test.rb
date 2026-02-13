@@ -16,14 +16,14 @@ class Admin::Music::RankedItemsControllerTest < ActionDispatch::IntegrationTest
   test "should redirect index to root for unauthenticated users" do
     get admin_ranking_configuration_ranked_items_path(ranking_configuration_id: @ranking_configuration.id)
     assert_redirected_to music_root_path
-    assert_equal "Access denied. Admin or editor role required.", flash[:alert]
+    assert_equal "Access denied.", flash[:alert]
   end
 
   test "should redirect to root for regular users" do
     sign_in_as(@regular_user, stub_auth: true)
     get admin_ranking_configuration_ranked_items_path(ranking_configuration_id: @ranking_configuration.id)
     assert_redirected_to music_root_path
-    assert_equal "Access denied. Admin or editor role required.", flash[:alert]
+    assert_equal "Access denied.", flash[:alert]
   end
 
   test "should allow admin users to access index" do
@@ -91,6 +91,49 @@ class Admin::Music::RankedItemsControllerTest < ActionDispatch::IntegrationTest
     sign_in_as(@admin_user, stub_auth: true)
     get admin_ranking_configuration_ranked_items_path(ranking_configuration_id: @ranking_configuration.id, page: 1)
     assert_response :success
+  end
+
+  # Domain-scoped auth tests
+
+  test "should allow domain user with music access to view ranked items" do
+    contractor = users(:contractor_user)
+    sign_in_as(contractor, stub_auth: true)
+
+    # contractor_user has music editor domain role, so should have access
+    get admin_ranking_configuration_ranked_items_path(ranking_configuration_id: @ranking_configuration.id)
+    assert_response :success
+  end
+
+  test "should allow domain user with games access to view games ranked items" do
+    host! Rails.application.config.domains[:games]
+
+    contractor = users(:contractor_user)
+    sign_in_as(contractor, stub_auth: true)
+
+    games_rc = ranking_configurations(:games_global)
+    # contractor_user has games viewer domain role, so should have access
+    get admin_ranking_configuration_ranked_items_path(ranking_configuration_id: games_rc.id)
+    assert_response :success
+  end
+
+  test "should reject domain user without access to the config's domain" do
+    host! Rails.application.config.domains[:games]
+
+    # Create a user with only music access, no games access
+    music_only_user = User.create!(
+      email: "musiconly@example.com",
+      display_name: "Music Only",
+      name: "Music Only User",
+      role: :user,
+      email_verified: true
+    )
+    DomainRole.create!(user: music_only_user, domain: :music, permission_level: :editor)
+
+    sign_in_as(music_only_user, stub_auth: true)
+
+    games_rc = ranking_configurations(:games_global)
+    get admin_ranking_configuration_ranked_items_path(ranking_configuration_id: games_rc.id)
+    assert_response :redirect
   end
 
   test "should load ranked items for artist ranking configuration without eager loading artists association" do

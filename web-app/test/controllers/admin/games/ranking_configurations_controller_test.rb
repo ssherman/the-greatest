@@ -352,6 +352,26 @@ module Admin
         assert_redirected_to games_root_path
       end
 
+      test "should reject non-whitelisted execute action names" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        post execute_action_admin_games_ranking_configuration_path(
+          @ranking_configuration,
+          action_name: "Music::MergeSong"
+        )
+        assert_response :bad_request
+      end
+
+      test "should reject arbitrary execute action names" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        post execute_action_admin_games_ranking_configuration_path(
+          @ranking_configuration,
+          action_name: "NonExistentAction"
+        )
+        assert_response :bad_request
+      end
+
       # Index Action Tests
 
       test "should execute index action for admin" do
@@ -407,6 +427,15 @@ module Admin
         )
 
         assert_redirected_to games_root_path
+      end
+
+      test "should reject non-whitelisted index action names" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        post index_action_admin_games_ranking_configurations_path(
+          action_name: "Music::RefreshAllArtistsRankings"
+        )
+        assert_response :bad_request
       end
     end
   end
