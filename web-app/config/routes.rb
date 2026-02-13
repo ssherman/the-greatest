@@ -214,10 +214,6 @@ Rails.application.routes.draw do
           get :search
         end
       end
-
-      scope "ranking_configuration/:ranking_configuration_id", as: "ranking_configuration" do
-        resources :ranked_items, only: [:index]
-      end
     end
   end
   require "sidekiq/web"
@@ -286,6 +282,15 @@ Rails.application.routes.draw do
       end
 
       resources :lists
+
+      resources :ranking_configurations do
+        member do
+          post :execute_action
+        end
+        collection do
+          post :index_action
+        end
+      end
     end
 
     root to: "games/default#index", as: :games_root
@@ -296,6 +301,7 @@ Rails.application.routes.draw do
     scope "ranking_configuration/:ranking_configuration_id", as: "ranking_configuration" do
       resources :penalty_applications, only: [:index, :create]
       resources :ranked_lists, only: [:index, :create]
+      resources :ranked_items, only: [:index]
     end
 
     resources :penalty_applications, only: [:update, :destroy]

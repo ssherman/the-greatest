@@ -94,7 +94,7 @@ module Music
     end
 
     test "job includes Sidekiq::Job" do
-      assert AmazonProductEnrichmentJob.included_modules.include?(Sidekiq::Job)
+      assert AmazonProductEnrichmentJob.include?(Sidekiq::Job)
     end
   end
 end

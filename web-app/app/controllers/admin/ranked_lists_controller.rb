@@ -112,6 +112,8 @@ class Admin::RankedListsController < Admin::BaseController
       admin_albums_ranking_configuration_path(@ranking_configuration)
     when /^Music::Songs::/
       admin_songs_ranking_configuration_path(@ranking_configuration)
+    when /^Games::/
+      admin_games_ranking_configuration_path(@ranking_configuration)
     else
       music_root_path
     end

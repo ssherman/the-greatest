@@ -48,6 +48,19 @@
                         admin_artist_path(ranked_item.item),
                         class: "link link-hover",
                         data: { turbo_frame: "_top" } %>
+                  <% elsif @ranking_configuration.type == "Games::RankingConfiguration" %>
+                    <%= link_to ranked_item.item.title,
+                        admin_games_game_path(ranked_item.item),
+                        class: "link link-hover",
+                        data: { turbo_frame: "_top" } %>
+                    <% if ranked_item.item.companies.any? %>
+                      <span class="text-sm text-base-content/70">
+                        by
+                        <%= ranked_item.item.companies.map { |company|
+                          link_to company.name, admin_games_company_path(company), class: "link link-hover", data: { turbo_frame: "_top" }
+                        }.join(', ').html_safe %>
+                      </span>
+                    <% end %>
                   <% else %>
                     <%= ranked_item.item.try(:name) || ranked_item.item.try(:title) || "Item ##{ranked_item.item_id}" %>
                   <% end %>

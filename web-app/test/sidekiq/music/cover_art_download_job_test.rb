@@ -111,7 +111,7 @@ module Music
     end
 
     test "job includes Sidekiq::Job" do
-      assert CoverArtDownloadJob.included_modules.include?(Sidekiq::Job)
+      assert CoverArtDownloadJob.include?(Sidekiq::Job)
     end
   end
 end

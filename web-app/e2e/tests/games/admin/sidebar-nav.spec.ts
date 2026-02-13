@@ -44,6 +44,12 @@ test.describe('Games Admin Sidebar Navigation', () => {
     await expect(page.getByRole('heading', { name: 'Game Lists', exact: true })).toBeVisible();
   });
 
+  test('sidebar Rankings link navigates correctly', async ({ page }) => {
+    await sidebar(page).getByRole('link', { name: 'Rankings', exact: true }).click();
+    await expect(page).toHaveURL(/\/admin\/ranking_configurations/);
+    await expect(page.getByRole('heading', { name: 'Ranking Configurations', exact: true })).toBeVisible();
+  });
+
   test('sidebar Penalties link navigates correctly', async ({ page }) => {
     await sidebar(page).getByRole('link', { name: 'Penalties' }).click();
     await expect(page).toHaveURL(/\/admin\/penalties/);

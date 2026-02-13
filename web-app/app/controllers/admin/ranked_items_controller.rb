@@ -1,12 +1,14 @@
-class Admin::Music::RankedItemsController < Admin::Music::BaseController
+class Admin::RankedItemsController < Admin::BaseController
   def index
     @ranking_configuration = RankingConfiguration.find(params[:ranking_configuration_id])
     @ranked_items = @ranking_configuration.ranked_items
 
-    # Only eager-load artists association for album and song configurations
-    # Artist configurations don't have an artists association (artists don't belong to artists)
-    if @ranking_configuration.type.in?(["Music::Albums::RankingConfiguration", "Music::Songs::RankingConfiguration"])
+    # Eager-load associations based on configuration type
+    case @ranking_configuration.type
+    when "Music::Albums::RankingConfiguration", "Music::Songs::RankingConfiguration"
       @ranked_items = @ranked_items.includes(item: :artists)
+    when "Games::RankingConfiguration"
+      @ranked_items = @ranked_items.includes(item: :companies)
     end
 
     @ranked_items = @ranked_items.order(rank: :asc)
