@@ -63,7 +63,7 @@ module Games
         end
 
         def count(conditions = nil)
-          endpoint_with_count = "#{self.endpoint}/count"
+          endpoint_with_count = "#{endpoint}/count"
           query = if conditions
             Query.new.where(conditions)
           else

@@ -50,8 +50,6 @@ module Games
 
       def ensure_authenticated!
         authentication.access_token
-      rescue Exceptions::AuthenticationError
-        raise
       end
 
       def parse_response(response, endpoint, query_string, start_time)

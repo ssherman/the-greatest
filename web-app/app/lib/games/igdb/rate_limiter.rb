@@ -2,31 +2,24 @@
 
 module Games
   module Igdb
+    # IGDB-specific rate limiter that delegates to the generic DistributedRateLimiter.
+    # Enforces IGDB's 4 requests per second limit across all processes.
     class RateLimiter
       REQUESTS_PER_SECOND = 4
 
-      def initialize
-        @timestamps = []
-        @mutex = Mutex.new
+      def initialize(mode: :blocking)
+        @limiter = ::DistributedRateLimiter.new(
+          key: "igdb:api",
+          limit: REQUESTS_PER_SECOND,
+          window: 1.0,
+          mode: mode
+        )
       end
 
+      # Wait until a rate limit slot is available, then consume it.
+      # Preserves the original API for BaseClient compatibility.
       def wait!
-        @mutex.synchronize do
-          now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-          # Remove timestamps older than 1 second
-          @timestamps.reject! { |t| now - t >= 1.0 }
-
-          if @timestamps.size >= REQUESTS_PER_SECOND
-            sleep_time = 1.0 - (now - @timestamps.first)
-            if sleep_time > 0
-              sleep(sleep_time)
-              now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-              @timestamps.reject! { |t| now - t >= 1.0 }
-            end
-          end
-
-          @timestamps << now
-        end
+        @limiter.acquire!
       end
     end
   end

@@ -126,7 +126,6 @@ class Games::Igdb::AuthenticationTest < ActiveSupport::TestCase
   end
 
   def stub_request
-    req = OpenStruct.new(params: {}, headers: {}, body: nil)
-    req
+    OpenStruct.new(params: {}, headers: {}, body: nil)
   end
 end
