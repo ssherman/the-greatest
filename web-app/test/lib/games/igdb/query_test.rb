@@ -59,6 +59,22 @@ class Games::Igdb::QueryTest < ActiveSupport::TestCase
     assert_equal 'fields name; search "zelda";', query
   end
 
+  test "search escapes quotes in search terms" do
+    query = Games::Igdb::Query.new
+      .fields(:name)
+      .search('He said "Hi"')
+      .to_s
+    assert_equal 'fields name; search "He said \"Hi\"";', query
+  end
+
+  test "search escapes backslashes in search terms" do
+    query = Games::Igdb::Query.new
+      .fields(:name)
+      .search('Path\\to\\file')
+      .to_s
+    assert_equal 'fields name; search "Path\\\\to\\\\file";', query
+  end
+
   test "sort builds correct clause" do
     query = Games::Igdb::Query.new
       .fields(:name)

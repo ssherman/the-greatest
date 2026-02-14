@@ -64,7 +64,7 @@ module Games
         parts = []
         parts << "fields #{@clauses[:fields]};" if @clauses[:fields]
         parts << "exclude #{@clauses[:exclude]};" if @clauses[:exclude]
-        parts << "search \"#{@clauses[:search]}\";" if @clauses[:search]
+        parts << "search \"#{escape_search_term(@clauses[:search])}\";" if @clauses[:search]
 
         if @clauses[:where]&.any?
           parts << "where #{@clauses[:where].join(" & ")};"
@@ -87,6 +87,11 @@ module Games
         else
           "#{field} = #{value}"
         end
+      end
+
+      def escape_search_term(term)
+        # Escape backslashes first, then quotes for Apicalypse query syntax
+        term.to_s.gsub("\\", "\\\\\\\\").gsub('"', '\\"')
       end
     end
   end

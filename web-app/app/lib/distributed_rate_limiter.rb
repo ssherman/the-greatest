@@ -25,18 +25,21 @@ class DistributedRateLimiter
   end
 
   # Lua script for atomic sliding window rate limiting.
+  # Uses Redis server time to avoid clock skew issues across distributed nodes.
   # KEYS[1] = Redis key for this rate limiter
   # ARGV[1] = limit (max requests per window)
   # ARGV[2] = window_ms (window size in milliseconds)
-  # ARGV[3] = now_ms (current timestamp in milliseconds)
-  # ARGV[4] = consume (1 to consume a slot, 0 for read-only check)
+  # ARGV[3] = consume (1 to consume a slot, 0 for read-only check)
   # Returns: [allowed (0/1), remaining, retry_after_ms]
   LUA_SCRIPT = <<~LUA
     local key = KEYS[1]
     local limit = tonumber(ARGV[1])
     local window_ms = tonumber(ARGV[2])
-    local now_ms = tonumber(ARGV[3])
-    local consume = tonumber(ARGV[4]) == 1
+    local consume = tonumber(ARGV[3]) == 1
+
+    -- Use Redis server time to avoid clock skew between distributed nodes
+    local time = redis.call('TIME')
+    local now_ms = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
     local clear_before = now_ms - window_ms
 
     redis.call('ZREMRANGEBYSCORE', key, '-inf', clear_before)
@@ -122,8 +125,12 @@ class DistributedRateLimiter
   # @return [Hash] { count: Integer, limit: Integer, window: Float, remaining: Integer }
   def stats
     with_redis do |redis|
+      # Use Redis server time for consistency with Lua script
+      time = redis.time
+      now_ms = (time[0] * 1000) + (time[1] / 1000)
+      clear_before = now_ms - (@window * 1000).to_i
+
       # Clean up expired entries first (same as Lua script does)
-      clear_before = current_time_ms - (@window * 1000).to_i
       redis.zremrangebyscore(redis_key, "-inf", clear_before)
 
       count = redis.zcard(redis_key)
@@ -149,7 +156,6 @@ class DistributedRateLimiter
     with_redis do |redis|
       @script_sha ||= Digest::SHA1.hexdigest(LUA_SCRIPT)
 
-      now_ms = current_time_ms
       window_ms = (@window * 1000).to_i
       consume_flag = consume ? 1 : 0
 
@@ -157,14 +163,14 @@ class DistributedRateLimiter
         redis.evalsha(
           @script_sha,
           keys: [redis_key],
-          argv: [@limit, window_ms, now_ms, consume_flag]
+          argv: [@limit, window_ms, consume_flag]
         )
       rescue Redis::CommandError => e
         if e.message.include?("NOSCRIPT")
           redis.eval(
             LUA_SCRIPT,
             keys: [redis_key],
-            argv: [@limit, window_ms, now_ms, consume_flag]
+            argv: [@limit, window_ms, consume_flag]
           )
         else
           raise
@@ -194,10 +200,6 @@ class DistributedRateLimiter
 
   def redis_key
     "ratelimit:#{@key}"
-  end
-
-  def current_time_ms
-    (Time.now.to_f * 1000).to_i
   end
 
   def do_sleep(seconds)

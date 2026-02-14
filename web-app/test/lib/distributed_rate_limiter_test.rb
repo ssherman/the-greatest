@@ -267,9 +267,9 @@ class DistributedRateLimiterTest < ActiveSupport::TestCase
       redis: @pool
     )
 
-    # The consume flag (ARGV[4]) should be 0 for check
+    # The consume flag (ARGV[3]) should be 0 for check (now_ms removed, uses Redis TIME)
     @redis.expects(:evalsha).with do |_sha, args|
-      args[:argv][3] == 0  # consume flag is 0
+      args[:argv][2] == 0  # consume flag is 0
     end.returns([1, 3, 0])
 
     limiter.check
@@ -285,7 +285,8 @@ class DistributedRateLimiterTest < ActiveSupport::TestCase
       redis: @pool
     )
 
-    # Stats now cleans up expired entries before counting
+    # Stats uses Redis server time and cleans up expired entries before counting
+    @redis.expects(:time).returns([1234567890, 500000])
     @redis.expects(:zremrangebyscore).with("ratelimit:test:api", "-inf", anything)
     @redis.expects(:zcard).with("ratelimit:test:api").returns(7)
 
@@ -305,7 +306,8 @@ class DistributedRateLimiterTest < ActiveSupport::TestCase
       redis: @pool
     )
 
-    # Stats now cleans up expired entries before counting
+    # Stats uses Redis server time and cleans up expired entries before counting
+    @redis.expects(:time).returns([1234567890, 500000])
     @redis.expects(:zremrangebyscore).with("ratelimit:test:api", "-inf", anything)
     @redis.expects(:zcard).returns(0)
 

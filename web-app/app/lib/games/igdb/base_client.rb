@@ -119,6 +119,9 @@ module Games
           sleep_time = 2**attempt # exponential backoff: 1, 2, 4
           sleep(sleep_time)
 
+          # Coordinate retries through the distributed rate limiter
+          rate_limiter.wait!
+
           response = @connection.post(endpoint) do |req|
             req.headers["Client-ID"] = config.client_id
             req.headers["Authorization"] = "Bearer #{authentication.access_token}"

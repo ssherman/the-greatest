@@ -181,6 +181,33 @@ class Games::Igdb::BaseClientTest < ActiveSupport::TestCase
     end
   end
 
+  test "handle_rate_limit calls rate_limiter.wait! before each retry" do
+    # Successful response for the retry
+    success_response = OpenStruct.new(status: 200, body: '[{"id": 1}]')
+
+    mock_connection = mock("connection")
+    mock_connection.expects(:post).with("games").yields(stub_request_obj).returns(success_response)
+    @client.instance_variable_set(:@connection, mock_connection)
+
+    # Track wait! calls during handle_rate_limit
+    wait_call_count = 0
+    rate_limiter = Object.new
+    rate_limiter.define_singleton_method(:wait!) {
+      wait_call_count += 1
+      nil
+    }
+    @client.instance_variable_set(:@rate_limiter, rate_limiter)
+
+    # Mock sleep to avoid delays (handle_rate_limit calls sleep before wait!)
+    Object.any_instance.stubs(:sleep)
+
+    # Call handle_rate_limit directly to test it calls wait!
+    result = @client.send(:handle_rate_limit, "games", "fields name;", Time.current)
+    assert_equal true, result[:success]
+    # wait! should be called at least once during retry
+    assert_operator wait_call_count, :>=, 1, "rate_limiter.wait! should be called during retry"
+  end
+
   private
 
   def stub_request_obj
