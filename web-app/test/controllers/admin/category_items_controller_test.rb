@@ -168,4 +168,55 @@ module Admin
       assert_equal initial_count - 1, @rock_category.reload.item_count
     end
   end
+
+  class GamesCategoryItemsControllerTest < ActionDispatch::IntegrationTest
+    setup do
+      @admin_user = users(:admin_user)
+      @game = games_games(:breath_of_the_wild)
+      @action_category = categories(:games_action_genre)
+
+      host! Rails.application.config.domains[:games]
+      sign_in_as(@admin_user, stub_auth: true)
+    end
+
+    test "should get index for game with categories" do
+      CategoryItem.create!(category: @action_category, item: @game)
+
+      get admin_games_game_category_items_path(@game)
+      assert_response :success
+      assert_match @action_category.name, response.body
+    end
+
+    test "should get index for game without categories" do
+      @game.category_items.destroy_all
+
+      get admin_games_game_category_items_path(@game)
+      assert_response :success
+      assert_match "No categories assigned", response.body
+    end
+
+    test "should create category_item for game successfully" do
+      @game.category_items.destroy_all
+
+      assert_difference "CategoryItem.count", 1 do
+        post admin_games_game_category_items_path(@game),
+          params: {category_item: {category_id: @action_category.id}},
+          as: :turbo_stream
+      end
+
+      assert_response :success
+      assert_match "Category added successfully", response.body
+    end
+
+    test "should destroy category_item for game successfully" do
+      category_item = CategoryItem.create!(category: @action_category, item: @game)
+
+      assert_difference "CategoryItem.count", -1 do
+        delete admin_category_item_path(category_item), as: :turbo_stream
+      end
+
+      assert_response :success
+      assert_match "Category removed successfully", response.body
+    end
+  end
 end

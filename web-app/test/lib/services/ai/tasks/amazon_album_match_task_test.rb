@@ -32,7 +32,7 @@ module Services
           test "system_message contains proper instructions" do
             system_message = @task.send(:system_message)
 
-            assert_includes system_message, "music expert"
+            assert_includes system_message, "album expert"
             assert_includes system_message, "Amazon product search result"
             assert_includes system_message, "titles represent the same musical work"
             assert_includes system_message, "artists match"

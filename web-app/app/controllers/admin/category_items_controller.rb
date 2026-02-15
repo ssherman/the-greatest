@@ -90,7 +90,9 @@ class Admin::CategoryItemsController < Admin::BaseController
       Music::Album.find(params[:album_id])
     elsif params[:song_id]
       Music::Song.find(params[:song_id])
-      # Future: elsif params[:book_id], params[:movie_id], params[:game_id], etc.
+    elsif params[:game_id]
+      Games::Game.find(params[:game_id])
+      # Future: elsif params[:book_id], params[:movie_id], etc.
     end
   end
 
@@ -110,7 +112,9 @@ class Admin::CategoryItemsController < Admin::BaseController
       admin_album_path(@item)
     when "Music::Song"
       admin_song_path(@item)
-    # Future: when "Books::Book", "Movies::Movie", "Games::Game", etc.
+    when "Games::Game"
+      admin_games_game_path(@item)
+    # Future: when "Books::Book", "Movies::Movie", etc.
     else
       admin_root_path
     end

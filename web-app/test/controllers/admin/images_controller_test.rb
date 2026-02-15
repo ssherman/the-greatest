@@ -252,3 +252,48 @@ class Admin::ImagesControllerTest < ActionDispatch::IntegrationTest
     assert_match(/turbo-stream/, response.content_type)
   end
 end
+
+class Admin::GamesImagesControllerTest < ActionDispatch::IntegrationTest
+  setup do
+    @game = games_games(:breath_of_the_wild)
+    @company = games_companies(:nintendo)
+    @admin_user = users(:admin_user)
+
+    host! Rails.application.config.domains[:games]
+    sign_in_as(@admin_user, stub_auth: true)
+  end
+
+  test "should get index for game" do
+    get admin_games_game_images_path(@game)
+    assert_response :success
+  end
+
+  test "should get index for company" do
+    get admin_games_company_images_path(@company)
+    assert_response :success
+  end
+
+  test "should create image for game" do
+    assert_difference("Image.count", 1) do
+      post admin_games_game_images_path(@game), params: {
+        image: {
+          file: fixture_file_upload("test_image.png", "image/png"),
+          notes: "Game cover art",
+          primary: false
+        }
+      }
+    end
+  end
+
+  test "should create image for company" do
+    assert_difference("Image.count", 1) do
+      post admin_games_company_images_path(@company), params: {
+        image: {
+          file: fixture_file_upload("test_image.png", "image/png"),
+          notes: "Company logo",
+          primary: false
+        }
+      }
+    end
+  end
+end
