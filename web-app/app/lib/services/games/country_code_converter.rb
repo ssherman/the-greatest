@@ -24,12 +24,12 @@ module Services
         156 => "CN", # China
         410 => "KR", # South Korea
         158 => "TW", # Taiwan
-        0o36 => "AU", # Australia
-        0o76 => "BR", # Brazil
+        36 => "AU", # Australia
+        76 => "BR", # Brazil
         484 => "MX", # Mexico
-        0o32 => "AR", # Argentina
-        0o56 => "BE", # Belgium
-        0o40 => "AT", # Austria
+        32 => "AR", # Argentina
+        56 => "BE", # Belgium
+        40 => "AT", # Austria
         756 => "CH", # Switzerland
         208 => "DK", # Denmark
         246 => "FI", # Finland

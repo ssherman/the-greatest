@@ -124,6 +124,59 @@ module DataImporters
             assert_equal "Nintendo", game_company.company.name
           end
 
+          test "populate updates existing company roles on re-import" do
+            # Use fixture company
+            company = games_companies(:nintendo)
+            company.identifiers.find_or_create_by!(identifier_type: :games_igdb_company_id, value: "70")
+
+            @game.title = "Test Game"
+            @game.save!
+            existing_join = @game.game_companies.create!(company: company, developer: true, publisher: false)
+
+            # Verify initial state
+            assert existing_join.developer
+            assert_not existing_join.publisher
+
+            # Re-import with changed roles (developer=false, publisher=true)
+            game_search = mock
+            game_search.expects(:find_with_details).with(7346).returns(
+              success: true,
+              data: [
+                {
+                  "name" => "Test Game Updated",
+                  "involved_companies" => [
+                    {
+                      "company" => {"id" => 70, "name" => "Nintendo"},
+                      "developer" => false,
+                      "publisher" => true
+                    }
+                  ]
+                }
+              ]
+            )
+
+            # Stub company importer to return existing company
+            company_result = stub(success?: true, item: company)
+            DataImporters::Games::Company::Importer.stubs(:call).with(igdb_id: 70).returns(company_result)
+
+            ::Games::Igdb::Search::GameSearch.stubs(:new).returns(game_search)
+
+            # Reload game to get fresh associations
+            @game.reload
+
+            query = ImportQuery.new(igdb_id: 7346)
+            result = @provider.populate(@game, query: query)
+
+            assert result.success?
+
+            # Save and reload to verify persistence
+            @game.save!
+            existing_join.reload
+
+            assert_not existing_join.developer, "Developer flag should be updated to false"
+            assert existing_join.publisher, "Publisher flag should be updated to true"
+          end
+
           test "populate matches existing platforms by slug" do
             search_service = mock
             search_service.expects(:find_with_details).with(7346).returns(

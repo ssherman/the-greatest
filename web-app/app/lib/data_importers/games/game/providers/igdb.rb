@@ -119,9 +119,10 @@ module DataImporters
                 existing_join = game.game_companies.find { |gc| gc.company_id == company_result.item.id }
 
                 if existing_join
-                  # Update existing join
-                  existing_join.developer = ic["developer"] if ic["developer"]
-                  existing_join.publisher = ic["publisher"] if ic["publisher"]
+                  # Update existing join with explicit boolean values and save
+                  existing_join.developer = ic["developer"] || false
+                  existing_join.publisher = ic["publisher"] || false
+                  existing_join.save! if existing_join.changed?
                 else
                   # Create new join record
                   game.game_companies.build(
