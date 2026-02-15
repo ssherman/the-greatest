@@ -37,8 +37,12 @@ class Category < ApplicationRecord
   friendly_id :name, use: [:slugged, :scoped, :finders], scope: :type
 
   # Rails 8 enum syntax
-  enum :category_type, {genre: 0, location: 1, subject: 2}
-  enum :import_source, {amazon: 0, open_library: 1, openai: 2, goodreads: 3, musicbrainz: 4}
+  # genre/location/subject: all domains
+  # theme: games, movies, books (Action, Fantasy, Open world)
+  # game_mode: games only (Single player, Multiplayer, Co-operative)
+  # player_perspective: games only (First person, Third person, VR)
+  enum :category_type, {genre: 0, location: 1, subject: 2, theme: 3, game_mode: 4, player_perspective: 5}
+  enum :import_source, {amazon: 0, open_library: 1, openai: 2, goodreads: 3, musicbrainz: 4, igdb: 5}
 
   # Associations
   belongs_to :parent, class_name: "Category", optional: true
