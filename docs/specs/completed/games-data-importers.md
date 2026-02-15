@@ -432,4 +432,4 @@ Output:
 
 ## Documentation Updated
 - [x] `docs/specs/games-data-importers.md` - Updated with implementation notes
-- [ ] `docs/features/data_importers.md` - Add Games section (follow-up task)
+- [x] `docs/features/data_importers.md` - Added comprehensive Games section
