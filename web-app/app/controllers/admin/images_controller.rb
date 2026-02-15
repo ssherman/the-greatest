@@ -139,6 +139,10 @@ class Admin::ImagesController < Admin::BaseController
       Music::Artist.find(params[:artist_id])
     elsif params[:album_id]
       Music::Album.find(params[:album_id])
+    elsif params[:game_id]
+      Games::Game.find(params[:game_id])
+    elsif params[:company_id]
+      Games::Company.find(params[:company_id])
     end
   end
 
@@ -160,6 +164,10 @@ class Admin::ImagesController < Admin::BaseController
       admin_artist_path(parent)
     when "Music::Album"
       admin_album_path(parent)
+    when "Games::Game"
+      admin_games_game_path(parent)
+    when "Games::Company"
+      admin_games_company_path(parent)
     else
       admin_root_path
     end

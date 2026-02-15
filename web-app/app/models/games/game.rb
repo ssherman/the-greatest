@@ -34,12 +34,20 @@ class Games::Game < ApplicationRecord
   friendly_id :title, use: [:slugged, :finders]
 
   # Enums
+  # Note: IGDB uses different numeric values - mapping is in IGDB provider
   enum :game_type, {
     main_game: 0,
     remake: 1,
     remaster: 2,
     expansion: 3,
-    dlc: 4
+    dlc: 4,
+    bundle: 5,
+    standalone_expansion: 6,
+    mod: 7,
+    episode: 8,
+    season: 9,
+    expanded_game: 10,
+    port: 11
   }
 
   # Associations
