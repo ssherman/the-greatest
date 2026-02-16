@@ -43,8 +43,8 @@ Rails.application.configure do
       color_scheme: "purple",
       layout: "application",
       images_cdn: {
-        production: "https://images.thegreatestmusic.org",
-        default: "https://images-dev.thegreatestmusic.org"
+        production: "https://images.thegreatestbooks.org",
+        default: "https://images-dev.thegreatestbooks.org"
       }
     }
   }
