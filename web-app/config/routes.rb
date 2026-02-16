@@ -339,14 +339,19 @@ Rails.application.routes.draw do
   get "up" => "rails/health#show", :as => :rails_health_check
 
   # Custom direct route for serving images via CDN
+  # Uses Current.domain to serve images from the correct domain-specific CDN
   direct :rails_public_blob do |blob|
-    case Rails.env
-    when "development"
-      File.join("https://images-dev.thegreatestmusic.org", blob.key)
-    when "production"
-      File.join("https://images.thegreatestmusic.org", blob.key)
+    domain = Current.domain || :music
+    settings = Rails.application.config.domain_settings[domain]
+    cdn = settings&.dig(:images_cdn)
+
+    host = if Rails.env.production?
+      cdn&.fetch(:production)
     else
-      File.join("https://images-dev.thegreatestmusic.org", blob.key)
+      cdn&.fetch(:default)
     end
+
+    host ||= "https://images-dev.thegreatestmusic.org"
+    File.join(host, blob.key)
   end
 end

@@ -28,6 +28,7 @@ class ApplicationController < ActionController::Base
   def set_current_domain
     @current_domain = detect_current_domain
     @domain_settings = Rails.application.config.domain_settings[@current_domain]
+    Current.domain = @current_domain
 
     # Debug logging
     Rails.logger.info "Host: #{request.host}"
