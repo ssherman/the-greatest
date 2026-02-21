@@ -1,7 +1,11 @@
 # frozen_string_literal: true
 
-# Base class for list item enrichment services.
-# Provides shared enrichment logic for music list items (songs, albums).
+# Music base class for list item enrichment services.
+# Inherits shared enrichment logic from Services::Lists::BaseListItemEnricher.
+#
+# Provides music-specific two-tier enrichment:
+# 1. OpenSearch (local database search)
+# 2. MusicBrainz (external API fallback)
 #
 # Subclasses must implement:
 #   - opensearch_service_class: Service for OpenSearch lookups
@@ -17,54 +21,10 @@
 module Services
   module Lists
     module Music
-      class BaseListItemEnricher
-        def self.call(list_item:)
-          new(list_item: list_item).call
-        end
-
-        def initialize(list_item:)
-          @list_item = list_item
-        end
-
-        def call
-          title = @list_item.metadata["title"]
-          artists = @list_item.metadata["artists"]
-
-          return not_found_result if title.blank? || artists.blank?
-
-          opensearch_result = find_via_opensearch(title, artists)
-          return opensearch_result if opensearch_result[:success]
-
-          musicbrainz_result = find_via_musicbrainz(title, artists)
-          return musicbrainz_result if musicbrainz_result[:success]
-
-          not_found_result
-        rescue => e
-          Rails.logger.error "ListItemEnricher failed: #{e.message}"
-          {success: false, source: :error, error: e.message, data: {}}
-        end
-
+      class BaseListItemEnricher < ::Services::Lists::BaseListItemEnricher
         private
 
-        attr_reader :list_item
-
-        # Abstract methods - subclasses must implement
-        def opensearch_service_class
-          raise NotImplementedError, "Subclass must implement #opensearch_service_class"
-        end
-
-        def entity_class
-          raise NotImplementedError, "Subclass must implement #entity_class"
-        end
-
-        def entity_id_key
-          raise NotImplementedError, "Subclass must implement #entity_id_key"
-        end
-
-        def entity_name_key
-          raise NotImplementedError, "Subclass must implement #entity_name_key"
-        end
-
+        # Music-specific abstract methods
         def musicbrainz_search_service_class
           raise NotImplementedError, "Subclass must implement #musicbrainz_search_service_class"
         end
@@ -85,55 +45,25 @@ module Services
           raise NotImplementedError, "Subclass must implement #lookup_existing_by_mb_id"
         end
 
-        # Shared implementation methods
+        # Music-specific: include artist names in OpenSearch enrichment data
+        def build_opensearch_enrichment_data(entity, score)
+          super.merge("opensearch_artist_names" => entity.artists.pluck(:name))
+        end
 
-        def find_via_opensearch(title, artists)
-          search_results = opensearch_service_class.call(
-            title: title,
-            artists: artists,
-            size: 1,
-            min_score: 5.0
-          )
-
-          return {success: false, source: :opensearch, data: {}} if search_results.empty?
-
-          result = search_results.first
-          entity_id = result[:id].to_i
-          score = result[:score]
-
-          entity = entity_class.find_by(id: entity_id)
-          return {success: false, source: :opensearch, data: {}} unless entity
-
-          enrichment_data = {
-            entity_id_key => entity.id,
-            entity_name_key => entity.title,
-            "opensearch_artist_names" => entity.artists.pluck(:name),
-            "opensearch_match" => true,
-            "opensearch_score" => score
-          }
-
-          @list_item.update!(
-            listable_id: entity.id,
-            metadata: @list_item.metadata.merge(enrichment_data)
-          )
-
-          Rails.logger.debug "ListItemEnricher: OpenSearch match for '#{title}' -> #{entity.title} (ID: #{entity.id}, score: #{score})"
-
-          {:success => true, :source => :opensearch, entity_id_key.to_sym => entity.id, :data => enrichment_data}
-        rescue => e
-          Rails.logger.error "ListItemEnricher: OpenSearch lookup failed: #{e.message}"
-          {success: false, source: :opensearch, data: {}}
+        # Implement external API search via MusicBrainz
+        def find_via_external_api(title, artists)
+          find_via_musicbrainz(title, artists)
         end
 
         def find_via_musicbrainz(title, artists)
           artist_name = artists.join(", ")
           search_result = search_service.search_by_artist_and_title(artist_name, title)
 
-          Rails.logger.info "ListItemEnricher: MusicBrainz search for '#{title}' by '#{artist_name}' - success: #{search_result[:success]}, #{musicbrainz_response_key}: #{search_result[:data]&.dig(musicbrainz_response_key)&.length || 0}"
+          Rails.logger.info "#{self.class.name}: MusicBrainz search for '#{title}' by '#{artist_name}' - success: #{search_result[:success]}, #{musicbrainz_response_key}: #{search_result[:data]&.dig(musicbrainz_response_key)&.length || 0}"
 
           unless search_result[:success] && search_result[:data][musicbrainz_response_key]&.any?
             if search_result[:errors]&.any?
-              Rails.logger.warn "ListItemEnricher: MusicBrainz error for '#{title}': #{search_result[:errors].join(", ")}"
+              Rails.logger.warn "#{self.class.name}: MusicBrainz error for '#{title}': #{search_result[:errors].join(", ")}"
             end
             return {success: false, source: :musicbrainz, data: {}}
           end
@@ -163,29 +93,21 @@ module Services
               listable_id: existing_entity.id,
               metadata: @list_item.metadata.merge(enrichment_data)
             )
-            Rails.logger.debug "ListItemEnricher: MusicBrainz match (existing #{entity_type_name}) for '#{title}' -> #{existing_entity.title} (ID: #{existing_entity.id})"
+            Rails.logger.debug "#{self.class.name}: MusicBrainz match (existing #{entity_type_name}) for '#{title}' -> #{existing_entity.title} (ID: #{existing_entity.id})"
           else
             @list_item.update!(metadata: @list_item.metadata.merge(enrichment_data))
-            Rails.logger.debug "ListItemEnricher: MusicBrainz match (no local #{entity_type_name}) for '#{title}' -> MBID: #{mb_id}"
+            Rails.logger.debug "#{self.class.name}: MusicBrainz match (no local #{entity_type_name}) for '#{title}' -> MBID: #{mb_id}"
           end
 
           {:success => true, :source => :musicbrainz, entity_id_key.to_sym => existing_entity&.id, :data => enrichment_data}
         rescue => e
-          Rails.logger.error "ListItemEnricher: MusicBrainz lookup failed: #{e.class} - #{e.message}"
+          Rails.logger.error "#{self.class.name}: MusicBrainz lookup failed: #{e.class} - #{e.message}"
           Rails.logger.error e.backtrace.first(5).join("\n")
           {success: false, source: :musicbrainz, data: {}}
         end
 
         def search_service
           @search_service ||= musicbrainz_search_service_class.new
-        end
-
-        def not_found_result
-          {success: false, source: :not_found, data: {}}
-        end
-
-        def entity_type_name
-          entity_class.name.demodulize.downcase
         end
       end
     end

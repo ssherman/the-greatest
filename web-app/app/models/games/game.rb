@@ -118,6 +118,14 @@ class Games::Game < ApplicationRecord
   # Scopes - Series
   scope :in_series, ->(series_id) { where(series_id: series_id) }
 
+  # Scopes - Identifier lookup
+  scope :with_identifier, ->(identifier_type, value) {
+    joins(:identifiers).where(identifiers: {identifier_type: identifier_type, value: value})
+  }
+  scope :with_igdb_id, ->(igdb_id) {
+    with_identifier("games_igdb_id", igdb_id.to_s)
+  }
+
   # Helper methods - Companies
   def developers
     companies.merge(Games::GameCompany.developers)

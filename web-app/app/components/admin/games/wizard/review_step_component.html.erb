@@ -1,0 +1,93 @@
+<%#
+  Review Step Component for Games Wizard
+  Displays all items with filtering, statistics, and action dropdowns.
+%>
+
+<div class="space-y-6"
+     data-controller="review-filter"
+     data-review-filter-total-count-value="<%= total_count %>"
+     data-review-filter-valid-count-value="<%= valid_count %>"
+     data-review-filter-invalid-count-value="<%= invalid_count %>"
+     data-review-filter-missing-count-value="<%= missing_count %>">
+
+  <%# Stats cards %>
+  <div id="review_stats_<%= list.id %>" class="stats stats-vertical lg:stats-horizontal shadow w-full">
+    <div class="stat">
+      <div class="stat-title">Total Items</div>
+      <div class="stat-value text-primary"><%= total_count %></div>
+      <div class="stat-desc">Games to review</div>
+    </div>
+    <div class="stat">
+      <div class="stat-title">Valid</div>
+      <div class="stat-value text-success"><%= valid_count %></div>
+      <div class="stat-desc"><%= percentage(valid_count) %>% of total</div>
+    </div>
+    <div class="stat">
+      <div class="stat-title">Invalid</div>
+      <div class="stat-value text-error"><%= invalid_count %></div>
+      <div class="stat-desc"><%= percentage(invalid_count) %>% of total</div>
+    </div>
+    <div class="stat">
+      <div class="stat-title">Missing</div>
+      <div class="stat-value text-base-content/70"><%= missing_count %></div>
+      <div class="stat-desc"><%= percentage(missing_count) %>% of total</div>
+    </div>
+  </div>
+
+  <%# Filter bar %>
+  <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-base-200 p-4 rounded-lg">
+    <select
+      id="status-filter"
+      class="select select-bordered select-sm w-40"
+      data-review-filter-target="filter"
+      data-action="change->review-filter#filter">
+      <option value="all">Show All</option>
+      <option value="valid">Valid Only</option>
+      <option value="invalid">Invalid Only</option>
+      <option value="missing">Missing Only</option>
+    </select>
+    <span data-review-filter-target="count">Showing <%= total_count %> items</span>
+  </div>
+
+  <%# Flash messages container %>
+  <div id="flash_messages"></div>
+
+  <%# Items table with CSS-based filtering %>
+  <div class="overflow-x-auto max-h-[32rem] min-h-[16rem] overflow-y-auto"
+       data-review-filter-target="container"
+       data-filter="all">
+    <style>
+      [data-filter="valid"] tr[data-status]:not([data-status="valid"]),
+      [data-filter="invalid"] tr[data-status]:not([data-status="invalid"]),
+      [data-filter="missing"] tr[data-status]:not([data-status="missing"]) {
+        display: none;
+      }
+    </style>
+    <table class="table table-sm table-pin-rows w-full">
+      <thead>
+        <tr>
+          <th style="width: 60px;">Status</th>
+          <th style="width: 50px;">#</th>
+          <th>Original</th>
+          <th>Matched</th>
+          <th style="width: 100px;">Source</th>
+          <th style="width: 100px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% items.each do |item| %>
+          <%= render(Admin::Games::Wizard::ItemRowComponent.new(item: item)) %>
+        <% end %>
+      </tbody>
+    </table>
+
+    <% if items.empty? %>
+      <div class="text-center py-8 text-base-content/50">
+        No items to review. Go back to the enrich step to add items.
+      </div>
+    <% end %>
+  </div>
+</div>
+
+<%# Shared modal - single dialog for all modal types, content loads on-demand %>
+<%= render(Admin::Games::Wizard::SharedModalComponent.new) %>

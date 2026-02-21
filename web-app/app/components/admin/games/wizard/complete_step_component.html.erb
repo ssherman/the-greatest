@@ -1,0 +1,63 @@
+<%= render(Wizard::StepComponent.new(
+  title: "Complete",
+  description: "Wizard completed successfully",
+  step_number: 7,
+  active: true
+)) do |step| %>
+  <% step.with_step_content do %>
+    <div class="text-center py-8 space-y-6">
+      <div class="text-6xl text-success">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-24 w-24 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </div>
+
+      <div>
+        <h3 class="text-2xl font-bold text-success">Import Complete!</h3>
+        <p class="text-base-content/70 mt-2">
+          Your game list has been successfully imported.
+        </p>
+      </div>
+
+      <div class="stats stats-vertical lg:stats-horizontal shadow">
+        <div class="stat">
+          <div class="stat-title">Total Games</div>
+          <div class="stat-value text-primary"><%= total_items %></div>
+          <div class="stat-desc">In list</div>
+        </div>
+        <div class="stat">
+          <div class="stat-title">Linked</div>
+          <div class="stat-value text-success"><%= linked_items %></div>
+          <div class="stat-desc">Connected to database games</div>
+        </div>
+        <div class="stat">
+          <div class="stat-title">Verified</div>
+          <div class="stat-value text-info"><%= verified_items %></div>
+          <div class="stat-desc">Confirmed matches</div>
+        </div>
+        <% if unlinked_items > 0 %>
+          <div class="stat">
+            <div class="stat-title">Unlinked</div>
+            <div class="stat-value text-warning"><%= unlinked_items %></div>
+            <div class="stat-desc">Need manual linking</div>
+          </div>
+        <% end %>
+      </div>
+
+      <% if imported_count > 0 || failed_count > 0 %>
+        <div class="text-sm text-base-content/70">
+          <span class="font-medium">Import summary:</span>
+          <%= imported_count %> games imported
+          <% if failed_count > 0 %>
+            , <%= failed_count %> failed
+          <% end %>
+        </div>
+      <% end %>
+
+      <div class="flex gap-3 justify-center">
+        <%= link_to "View List", helpers.admin_games_list_path(list), class: "btn btn-primary", data: { turbo_frame: "_top" } %>
+        <%= link_to "Back to Lists", helpers.admin_games_lists_path, class: "btn btn-outline", data: { turbo_frame: "_top" } %>
+      </div>
+    </div>
+  <% end %>
+<% end %>

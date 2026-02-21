@@ -1,0 +1,46 @@
+<%= render(Wizard::StepComponent.new(
+  title: "Import Source",
+  description: "Choose where to import your game list from",
+  step_number: 1,
+  active: true
+)) do |step| %>
+  <% step.with_step_content do %>
+    <%= form_with url: advance_step_path, method: :post, data: { turbo_frame: "wizard_content" } do |f| %>
+      <div class="space-y-6">
+        <div class="form-control">
+          <label class="label">
+            <span class="label-text font-bold">Select Import Source</span>
+          </label>
+
+          <div class="space-y-3">
+            <label class="flex items-center gap-3 p-4 border rounded-lg cursor-pointer hover:bg-base-200 transition-colors">
+              <%= radio_button_tag :import_source, "custom_html", default_import_source == "custom_html", class: "radio radio-primary" %>
+              <div>
+                <div class="font-semibold">Custom HTML</div>
+                <div class="text-sm text-base-content/70">Paste HTML from any source and parse game data</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Batch Processing Option -->
+        <div class="form-control mt-4 p-4 bg-base-200 rounded-lg">
+          <label class="label cursor-pointer justify-start gap-4">
+            <%= check_box_tag :batch_mode, "1", default_batch_mode, class: "checkbox" %>
+            <div>
+              <span class="label-text font-semibold">Process in batches</span>
+              <p class="text-sm text-base-content/70 mt-1">
+                Enable for large plain text lists with one item per line (recommended for 500+ items).
+                Processes 100 items at a time to ensure all items are captured.
+              </p>
+            </div>
+          </label>
+        </div>
+
+        <div class="flex justify-end">
+          <%= f.submit "Continue \u2192", class: "btn btn-primary" %>
+        </div>
+      </div>
+    <% end %>
+  <% end %>
+<% end %>

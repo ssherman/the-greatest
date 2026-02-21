@@ -1,0 +1,214 @@
+<%= render(Wizard::StepComponent.new(
+  title: "Import",
+  description: "Import games from IGDB based on matched game IDs",
+  step_number: 6,
+  active: true
+)) do |step| %>
+  <% step.with_step_content do %>
+    <div class="space-y-6"
+         <% if running? %>
+           data-controller="wizard-step"
+           data-wizard-step-status-url-value="<%= helpers.step_status_admin_games_list_wizard_path(list_id: list.id, step: 'import') %>"
+           data-wizard-step-step-url-value="<%= helpers.step_admin_games_list_wizard_path(list_id: list.id, step: 'import') %>"
+         <% end %>>
+
+      <% if idle_or_failed? %>
+        <div class="alert alert-info">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          <span>Import will create games in the database for items that have an IGDB ID but are not yet linked to a game.</span>
+        </div>
+
+        <% if failed? && import_error.present? %>
+          <div class="alert alert-error">
+            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span><%= import_error %></span>
+          </div>
+        <% end %>
+
+        <div class="stats stats-vertical lg:stats-horizontal shadow w-full">
+          <div class="stat">
+            <div class="stat-title">Total Items</div>
+            <div class="stat-value text-primary"><%= total_items_count %></div>
+            <div class="stat-desc">In list</div>
+          </div>
+          <div class="stat">
+            <div class="stat-title">Already Linked</div>
+            <div class="stat-value text-success"><%= linked_items_count %></div>
+            <div class="stat-desc">Have game assigned</div>
+          </div>
+          <div class="stat">
+            <div class="stat-title">To Import</div>
+            <div class="stat-value text-info"><%= items_to_import_count %></div>
+            <div class="stat-desc">Have IGDB ID</div>
+          </div>
+          <div class="stat">
+            <div class="stat-title">Without Match</div>
+            <div class="stat-value text-warning"><%= items_without_match_count %></div>
+            <div class="stat-desc">No IGDB ID</div>
+          </div>
+        </div>
+
+        <% if items_to_import.any? %>
+          <div class="card bg-base-100 border">
+            <div class="card-body">
+              <h3 class="card-title text-sm">Items to Import (<%= items_to_import_count %>)</h3>
+              <div class="overflow-x-auto max-h-64 overflow-y-auto">
+                <table class="table table-sm table-pin-rows">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Title</th>
+                      <th>Developers</th>
+                      <th>IGDB Game</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <% items_to_import.limit(20).each do |item| %>
+                      <tr>
+                        <td><%= item.position %></td>
+                        <td><%= item.metadata["title"] %></td>
+                        <td><%= Array(item.metadata["developers"]).join(", ") %></td>
+                        <td>
+                          <code class="text-xs"><%= item.metadata["igdb_name"] || "IGDB ##{item.metadata["igdb_id"]}" %></code>
+                        </td>
+                      </tr>
+                    <% end %>
+                    <% if items_to_import_count > 20 %>
+                      <tr>
+                        <td colspan="4" class="text-center text-base-content/70">
+                          ... and <%= items_to_import_count - 20 %> more items
+                        </td>
+                      </tr>
+                    <% end %>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        <% end %>
+
+        <div class="flex gap-3">
+          <%= button_to failed? ? "Retry Import" : "Start Import",
+              helpers.advance_step_admin_games_list_wizard_path(list_id: list.id, step: "import"),
+              method: :post,
+              class: "btn btn-primary",
+              disabled: !can_start_import?,
+              data: {turbo_frame: "wizard_content"} %>
+        </div>
+
+      <% elsif running? %>
+        <div class="mb-6">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-sm font-medium" data-wizard-step-target="statusText">
+              Importing <%= processed_items %>/<%= total_from_metadata %> items...
+            </span>
+            <span class="text-sm text-base-content/70">
+              <%= import_progress %>%
+            </span>
+          </div>
+          <progress
+            class="progress progress-primary w-full"
+            value="<%= import_progress %>"
+            max="100"
+            data-wizard-step-target="progressBar">
+          </progress>
+        </div>
+
+        <div class="stats stats-vertical lg:stats-horizontal shadow w-full">
+          <div class="stat">
+            <div class="stat-title">Processed</div>
+            <div class="stat-value"><%= processed_items %></div>
+            <div class="stat-desc">of <%= total_from_metadata %></div>
+          </div>
+          <div class="stat">
+            <div class="stat-title">Imported</div>
+            <div class="stat-value text-success"><%= imported_count %></div>
+            <div class="stat-desc">Games created</div>
+          </div>
+          <div class="stat">
+            <div class="stat-title">Failed</div>
+            <div class="stat-value text-error"><%= failed_count %></div>
+            <div class="stat-desc">Could not import</div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 text-base-content/70">
+          <span class="loading loading-spinner loading-sm"></span>
+          <span>Import in progress...</span>
+        </div>
+
+      <% elsif completed? %>
+        <div class="alert alert-success mb-6">
+          <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div>
+            <h3 class="font-bold">Import Complete!</h3>
+            <div class="text-sm">Processed <%= total_from_metadata %> items</div>
+          </div>
+        </div>
+
+        <div class="stats stats-vertical lg:stats-horizontal shadow w-full mb-6">
+          <div class="stat">
+            <div class="stat-title">Imported</div>
+            <div class="stat-value text-success"><%= imported_count %></div>
+            <div class="stat-desc">Games created</div>
+          </div>
+          <div class="stat">
+            <div class="stat-title">Skipped</div>
+            <div class="stat-value text-info"><%= skipped_count %></div>
+            <div class="stat-desc">Already existed</div>
+          </div>
+          <div class="stat">
+            <div class="stat-title">Failed</div>
+            <div class="stat-value text-error"><%= failed_count %></div>
+            <div class="stat-desc">Could not import</div>
+          </div>
+        </div>
+
+        <% if errors.any? %>
+          <div class="collapse collapse-arrow bg-base-200 mb-6">
+            <input type="checkbox" />
+            <div class="collapse-title font-medium">
+              View Failed Items (<%= errors.count %>)
+            </div>
+            <div class="collapse-content">
+              <div class="overflow-x-auto max-h-64 overflow-y-auto">
+                <table class="table table-sm">
+                  <thead>
+                    <tr>
+                      <th>Item ID</th>
+                      <th>Title</th>
+                      <th>Error</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <% errors.each do |error| %>
+                      <tr>
+                        <td><%= error["item_id"] %></td>
+                        <td><%= error["title"] %></td>
+                        <td class="text-error"><%= error["error"] %></td>
+                      </tr>
+                    <% end %>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        <% end %>
+
+        <div class="flex gap-3">
+          <%= button_to "Complete Wizard",
+              helpers.advance_step_admin_games_list_wizard_path(list_id: list.id, step: "import"),
+              method: :post,
+              class: "btn btn-primary",
+              data: {turbo_frame: "_top"} %>
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+<% end %>
