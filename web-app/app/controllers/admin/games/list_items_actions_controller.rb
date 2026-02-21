@@ -50,7 +50,24 @@ class Admin::Games::ListItemsActionsController < Admin::Games::BaseController
 
     igdb_id = igdb_id.to_i
 
-    # Check if we have an existing game with this IGDB ID
+    # Validate the IGDB ID exists by looking it up
+    search = Games::Igdb::Search::GameSearch.new
+    result = search.find_with_details(igdb_id)
+
+    unless result[:success] && result[:data]&.any?
+      return render_modal_error("IGDB game not found for ID #{igdb_id}")
+    end
+
+    igdb_game = result[:data].first
+    igdb_name = igdb_game["name"]
+
+    involved_companies = igdb_game["involved_companies"] || []
+    igdb_developer_names = involved_companies
+      .select { |ic| ic["developer"] }
+      .map { |ic| ic.dig("company", "name") }
+      .compact
+
+    # Check if we have an existing local game with this IGDB ID
     game = Games::Game.with_igdb_id(igdb_id).first
 
     if game
@@ -65,13 +82,10 @@ class Admin::Games::ListItemsActionsController < Admin::Games::BaseController
       @item.metadata = @item.metadata.except("game_id", "game_name")
     end
 
-    # Fetch game details from IGDB for metadata
-    search = Games::Igdb::Search::GameSearch.new
-    search.search_by_name("", fields: %w[name involved_companies.company.name involved_companies.developer], limit: 1)
-
-    # Use the igdb_id to get name from the search that was already done client-side
     @item.metadata = @item.metadata.merge(
       "igdb_id" => igdb_id,
+      "igdb_name" => igdb_name,
+      "igdb_developer_names" => igdb_developer_names,
       "igdb_match" => true,
       "manual_igdb_link" => true
     ).except("ai_match_invalid")
