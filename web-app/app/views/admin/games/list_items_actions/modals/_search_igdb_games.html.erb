@@ -1,0 +1,37 @@
+<%# Modal content for searching IGDB games %>
+<%= turbo_frame_tag Admin::Games::Wizard::SharedModalComponent::FRAME_ID do %>
+  <h3 class="font-bold text-lg">Search IGDB Games</h3>
+  <p class="text-sm text-base-content/70 mt-1"><%= item_label(item) %></p>
+
+  <%= form_with url: link_igdb_game_admin_games_list_item_path(list_id: list.id, id: item.id),
+                method: :post,
+                data: {
+                  controller: "modal-form",
+                  modal_form_modal_id_value: Admin::Games::Wizard::SharedModalComponent::DIALOG_ID,
+                  turbo_frame: "_top"
+                } do |f| %>
+
+    <div class="form-control mt-4">
+      <label class="label">
+        <span class="label-text">Search IGDB for game:</span>
+      </label>
+      <%= render AutocompleteComponent.new(
+        name: "igdb_id",
+        url: igdb_game_search_admin_games_list_wizard_path(list_id: list.id),
+        placeholder: "Search IGDB...",
+        display_key: "text",
+        value_key: "value",
+        required: true,
+        min_length: 2,
+        debounce: 300
+      ) %>
+    </div>
+
+    <div id="<%= Admin::Games::Wizard::SharedModalComponent::ERROR_ID %>" class="text-error text-sm mt-2"></div>
+
+    <div class="modal-action">
+      <button type="button" class="btn" onclick="<%= Admin::Games::Wizard::SharedModalComponent::DIALOG_ID %>.close()">Cancel</button>
+      <%= f.submit "Link IGDB Game", class: "btn btn-primary" %>
+    </div>
+  <% end %>
+<% end %>

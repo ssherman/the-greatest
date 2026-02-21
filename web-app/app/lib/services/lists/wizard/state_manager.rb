@@ -39,6 +39,8 @@ module Services
             Services::Lists::Wizard::Music::Songs::StateManager
           when "Music::Albums::List"
             Services::Lists::Wizard::Music::Albums::StateManager
+          when "Games::List"
+            self # Games uses the default steps (same as base)
           else
             self
           end
