@@ -73,6 +73,7 @@ module Services
             ResponseSchema
           end
 
+          VALID_CONFIDENCE_LEVELS = %w[high medium low none].freeze
           MATCH_CONFIDENCE_LEVELS = %w[high medium low].freeze
 
           def process_and_persist(provider_response)
@@ -80,6 +81,14 @@ module Services
             index = data[:best_match_index]
             confidence = data[:confidence]
             reasoning = data[:reasoning]
+
+            unless VALID_CONFIDENCE_LEVELS.include?(confidence)
+              return Services::Ai::Result.new(
+                success: false,
+                error: "Unexpected confidence value: #{confidence}",
+                ai_chat: chat
+              )
+            end
 
             best_match = if index && MATCH_CONFIDENCE_LEVELS.include?(confidence) && index >= 0 && index < search_results.length
               search_results[index]

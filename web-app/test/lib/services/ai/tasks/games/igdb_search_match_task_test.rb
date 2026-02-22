@@ -163,16 +163,15 @@ module Services
             assert_nil result.data[:best_match_index]
           end
 
-          test "process_and_persist returns nil match when confidence is unexpected value" do
+          test "process_and_persist returns failure when confidence is unexpected value" do
             provider_response = {
               parsed: {best_match_index: 0, confidence: "unknown", reasoning: "Unexpected"}
             }
 
             result = @task.send(:process_and_persist, provider_response)
 
-            assert result.success?
-            assert_nil result.data[:best_match]
-            assert_nil result.data[:best_match_index]
+            assert result.failure?
+            assert_includes result.error, "Unexpected confidence value"
           end
 
           test "process_and_persist returns nil match when index is out of bounds" do
