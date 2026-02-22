@@ -125,7 +125,7 @@ class Admin::Games::ListItemsActionsController < Admin::Games::BaseController
     return render json: [] if query.blank? || query.length < 2
 
     search = Games::Igdb::Search::GameSearch.new
-    result = search.search_by_name(query, limit: 10, fields: Services::Lists::Games::ListItemEnricher::IGDB_SEARCH_FIELDS)
+    result = search.search_by_name(query, limit: 25, fields: Services::Lists::Games::ListItemEnricher::IGDB_SEARCH_FIELDS)
 
     return render json: [] unless result[:success]
 
