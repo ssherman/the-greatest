@@ -16,7 +16,8 @@ class Games::WizardEnrichListItemsJob < ::BaseWizardEnrichListItemsJob
 
   def enrichment_keys
     %w[game_id game_name opensearch_match opensearch_score
-      igdb_id igdb_name igdb_developer_names igdb_match]
+      igdb_id igdb_name igdb_developer_names igdb_match
+      ai_match_confidence ai_match_reasoning]
   end
 
   def default_stats

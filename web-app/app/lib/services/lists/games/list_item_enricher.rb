@@ -50,13 +50,20 @@ module Services
         ].freeze
 
         def find_via_igdb(title, developers)
-          search_result = igdb_game_search.search_by_name(title, limit: 5, fields: IGDB_SEARCH_FIELDS)
+          @ai_match_confidence = nil
+          @ai_match_reasoning = nil
+
+          search_result = igdb_game_search.search_by_name(title, limit: 25, fields: IGDB_SEARCH_FIELDS)
 
           unless search_result[:success] && search_result[:data]&.any?
             return {success: false, source: :igdb, data: {}}
           end
 
-          igdb_game = search_result[:data].first
+          igdb_results = search_result[:data]
+          igdb_game = select_best_igdb_match(title, developers, igdb_results)
+
+          return {success: false, source: :igdb, data: {}} unless igdb_game
+
           igdb_id = igdb_game["id"]
           igdb_name = igdb_game["name"]
 
@@ -74,7 +81,9 @@ module Services
             "igdb_id" => igdb_id,
             "igdb_name" => igdb_name,
             "igdb_developer_names" => igdb_developer_names,
-            "igdb_match" => true
+            "igdb_match" => true,
+            "ai_match_confidence" => @ai_match_confidence,
+            "ai_match_reasoning" => @ai_match_reasoning
           }
 
           if existing_game
@@ -95,6 +104,32 @@ module Services
           Rails.logger.error "#{self.class.name}: IGDB lookup failed: #{e.class} - #{e.message}"
           Rails.logger.error e.backtrace.first(5).join("\n")
           {success: false, source: :igdb, data: {}}
+        end
+
+        def select_best_igdb_match(title, developers, igdb_results)
+          ai_result = ::Services::Ai::Tasks::Games::IgdbSearchMatchTask.new(
+            parent: @list_item.list,
+            search_query: title,
+            search_results: igdb_results,
+            developers: Array(developers)
+          ).call
+
+          if ai_result.success? && ai_result.data[:best_match]
+            @ai_match_confidence = ai_result.data[:confidence]
+            @ai_match_reasoning = ai_result.data[:reasoning]
+            ai_result.data[:best_match]
+          elsif ai_result.success?
+            # AI returned no match
+            @ai_match_confidence = ai_result.data[:confidence]
+            @ai_match_reasoning = ai_result.data[:reasoning]
+            nil
+          else
+            # AI task failed — fall back to first result
+            Rails.logger.warn "#{self.class.name}: AI match task failed, falling back to first result: #{ai_result.error}"
+            @ai_match_confidence = nil
+            @ai_match_reasoning = nil
+            igdb_results.first
+          end
         end
 
         def igdb_game_search
