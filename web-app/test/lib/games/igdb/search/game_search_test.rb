@@ -162,6 +162,47 @@ class Games::Igdb::Search::GameSearchTest < ActiveSupport::TestCase
     @search.search_by_name("test")
   end
 
+  test "search_by_name alternative_names fallback passes caller limit" do
+    @mock_client.expects(:post)
+      .with("games", all_of(includes("search"), includes("limit 25")))
+      .returns(empty_response)
+
+    @mock_client.expects(:post)
+      .with("games", all_of(includes("name ~"), includes("limit 25")))
+      .returns(empty_response)
+
+    @mock_client.expects(:post)
+      .with("alternative_names", includes("limit 25"))
+      .returns(alternative_names_response)
+
+    @mock_client.expects(:post)
+      .with("games", includes("id = (1456)"))
+      .returns(pokemon_yellow_response)
+
+    @search.search_by_name("Pokemon Yellow", limit: 25)
+  end
+
+  test "search_by_name alternative_names fallback applies game_type filter" do
+    @mock_client.expects(:post)
+      .with("games", anything)
+      .returns(empty_response)
+
+    @mock_client.expects(:post)
+      .with("games", includes("name ~"))
+      .returns(empty_response)
+
+    @mock_client.expects(:post)
+      .with("alternative_names", anything)
+      .returns(alternative_names_response)
+
+    @mock_client.expects(:post)
+      .with("games", all_of(includes("id = (1456)"), includes("game_type = (0,4,8,9,10,11)")))
+      .returns(pokemon_yellow_response)
+
+    result = @search.search_by_name("Pokemon Yellow")
+    assert result[:success]
+  end
+
   test "find_with_details returns game with expanded fields" do
     @mock_client.expects(:post)
       .with("games", anything)

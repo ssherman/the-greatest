@@ -27,7 +27,7 @@ module Games
           result = name_contains_search(name, fields, limit)
           return result if results_present?(result)
 
-          alternative_names_search(name, fields)
+          alternative_names_search(name, fields, limit)
         end
 
         def find_with_details(id)
@@ -75,9 +75,9 @@ module Games
           execute(query)
         end
 
-        def alternative_names_search(name, fields)
+        def alternative_names_search(name, fields, limit)
           escaped = name.gsub('"', '\\"')
-          alt_query = "fields game; where name ~ *\"#{escaped}\"*; limit 10;"
+          alt_query = "fields game; where name ~ *\"#{escaped}\"*; limit #{limit};"
           alt_result = client.post("alternative_names", alt_query)
 
           return empty_success unless alt_result[:success] && alt_result[:data]&.any?
@@ -85,7 +85,11 @@ module Games
           game_ids = alt_result[:data].filter_map { |r| r["game"] }.uniq
           return empty_success if game_ids.empty?
 
-          find_by_ids(game_ids, fields: fields)
+          query = Query.new
+            .fields(*fields)
+            .where(id: game_ids)
+            .where("game_type = #{ALLOWED_GAME_TYPES}")
+          execute(query)
         rescue Exceptions::Error => e
           handle_error(e, "alternative_names fallback")
         end
