@@ -107,6 +107,10 @@ module DataImporters
               company_data = ic["company"]
               next unless company_data
 
+              # Skip companies with no role (e.g., supporting studios)
+              # GameCompany validates at_least_one_role
+              next unless ic["developer"] || ic["publisher"]
+
               # Get company ID from nested data
               company_igdb_id = company_data.is_a?(Hash) ? company_data["id"] : company_data
               next unless company_igdb_id
@@ -119,10 +123,10 @@ module DataImporters
                 existing_join = game.game_companies.find { |gc| gc.company_id == company_result.item.id }
 
                 if existing_join
-                  # Update existing join with explicit boolean values and save
+                  # Update existing join with explicit boolean values
                   existing_join.developer = ic["developer"] || false
                   existing_join.publisher = ic["publisher"] || false
-                  existing_join.save! if existing_join.changed?
+                  existing_join.save! if existing_join.changed? && game.persisted?
                 else
                   # Create new join record
                   game.game_companies.build(
@@ -190,7 +194,10 @@ module DataImporters
           end
 
           # Imports categories from IGDB genres, themes, game_modes, player_perspectives
+          # Game must be persisted before creating CategoryItem records (polymorphic join)
           def import_categories(game, game_data)
+            game.save! unless game.persisted?
+
             import_category_type(game, game_data, "genres", :genre)
             import_category_type(game, game_data, "themes", :theme)
             import_category_type(game, game_data, "game_modes", :game_mode)

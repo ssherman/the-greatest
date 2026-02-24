@@ -4,7 +4,7 @@ class Admin::Games::ListItemsActionsController < Admin::Games::BaseController
   include ListItemsActions
 
   # Games-specific modal types
-  VALID_MODAL_TYPES = %w[edit_metadata link_game search_igdb_games].freeze
+  VALID_MODAL_TYPES = %w[edit_metadata link_game search_igdb_games link_igdb_id].freeze
 
   def skip
     @item.update!(
@@ -42,17 +42,15 @@ class Admin::Games::ListItemsActionsController < Admin::Games::BaseController
   end
 
   def link_igdb_game
-    igdb_id = params[:igdb_id]
+    raw_input = params[:igdb_id].to_s.strip
 
-    unless igdb_id.present?
-      return render_modal_error("Please select a game")
+    unless raw_input.present?
+      return render_modal_error("Please enter an IGDB ID or URL")
     end
 
-    igdb_id = igdb_id.to_i
-
-    # Validate the IGDB ID exists by looking it up
     search = Games::Igdb::Search::GameSearch.new
-    result = search.find_with_details(igdb_id)
+    igdb_id, result = resolve_igdb_input(raw_input, search)
+    return unless igdb_id
 
     unless result[:success] && result[:data]&.any?
       return render_modal_error("IGDB game not found for ID #{igdb_id}")
@@ -209,6 +207,32 @@ class Admin::Games::ListItemsActionsController < Admin::Games::BaseController
 
   def shared_modal_component_class
     Admin::Games::Wizard::SharedModalComponent
+  end
+
+  IGDB_URL_PATTERN = %r{\Ahttps?://(?:www\.)?igdb\.com/games/([a-z0-9][a-z0-9-]*[a-z0-9])}i
+
+  # Parses raw input as either a numeric IGDB ID or an IGDB URL.
+  # Returns [igdb_id, result] on success, or renders an error and returns nil.
+  def resolve_igdb_input(raw_input, search)
+    if raw_input.match?(/\A\d+\z/)
+      igdb_id = raw_input.to_i
+      result = search.find_with_details(igdb_id)
+      [igdb_id, result]
+    elsif (match = raw_input.match(IGDB_URL_PATTERN))
+      slug = match[1]
+      slug_result = search.find_by_slug(slug)
+
+      unless slug_result[:success] && slug_result[:data]&.any?
+        render_modal_error("IGDB game not found for slug: #{slug}")
+        return nil
+      end
+
+      igdb_id = slug_result[:data].first["id"]
+      [igdb_id, slug_result]
+    else
+      render_modal_error("Invalid IGDB ID or URL. Enter a numeric ID (e.g., 12515) or IGDB URL.")
+      nil
+    end
   end
 
   def review_step_path
