@@ -1,0 +1,31 @@
+<%# Modal content for linking by IGDB ID or URL %>
+<%= turbo_frame_tag Admin::Games::Wizard::SharedModalComponent::FRAME_ID do %>
+  <h3 class="font-bold text-lg">Link by IGDB ID</h3>
+  <p class="text-sm text-base-content/70 mt-1"><%= item_label(item) %></p>
+
+  <%= form_with url: link_igdb_game_admin_games_list_item_path(list_id: list.id, id: item.id),
+                method: :post,
+                data: {
+                  controller: "modal-form",
+                  modal_form_modal_id_value: Admin::Games::Wizard::SharedModalComponent::DIALOG_ID,
+                  turbo_frame: "_top"
+                } do |f| %>
+
+    <div class="form-control mt-4">
+      <label class="label">
+        <span class="label-text">IGDB ID or URL:</span>
+      </label>
+      <input type="text" name="igdb_id"
+             class="input input-bordered w-full"
+             placeholder="e.g., 12515 or https://www.igdb.com/games/pokemon-go"
+             required />
+    </div>
+
+    <div id="<%= Admin::Games::Wizard::SharedModalComponent::ERROR_ID %>" class="text-error text-sm mt-2"></div>
+
+    <div class="modal-action">
+      <button type="button" class="btn" onclick="<%= Admin::Games::Wizard::SharedModalComponent::DIALOG_ID %>.close()">Cancel</button>
+      <%= f.submit "Link IGDB Game", class: "btn btn-primary" %>
+    </div>
+  <% end %>
+<% end %>
