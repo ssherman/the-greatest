@@ -26,7 +26,6 @@ class Games::WizardParseListJob < ::BaseWizardParseListJob
     {
       "rank" => item[:rank],
       "title" => item[:title],
-      "developers" => item[:developers],
       "release_year" => item[:release_year]
     }
   end
