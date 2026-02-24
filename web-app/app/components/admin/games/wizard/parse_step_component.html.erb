@@ -15,11 +15,11 @@
             </label>
             <%= f.text_area :raw_html,
                 rows: 15,
-                placeholder: "Paste the HTML content from your source list here...\n\nFor example:\n1. The Legend of Zelda: Breath of the Wild - Nintendo (2017)\n2. Red Dead Redemption 2 - Rockstar Games (2018)",
+                placeholder: "Paste the HTML content from your source list here...\n\nFor example:\n1. The Legend of Zelda: Breath of the Wild (2017)\n2. Red Dead Redemption 2 (2018)",
                 class: "textarea textarea-bordered w-full font-mono text-sm",
                 required: true %>
             <label class="label">
-              <span class="label-text-alt">Paste the HTML from a ranked game list. The AI will extract game titles, developers, and release years.</span>
+              <span class="label-text-alt">Paste the HTML from a ranked game list. The AI will extract game titles and release years.</span>
             </label>
           </div>
 
@@ -66,7 +66,6 @@
                       <tr>
                         <th>#</th>
                         <th>Title</th>
-                        <th>Developers</th>
                         <th>Year</th>
                       </tr>
                     </thead>
@@ -75,7 +74,6 @@
                         <tr>
                           <td><%= item.position %></td>
                           <td><%= item.metadata["title"] %></td>
-                          <td><%= Array(item.metadata["developers"]).join(", ") %></td>
                           <td><%= item.metadata["release_year"] || "-" %></td>
                         </tr>
                       <% end %>

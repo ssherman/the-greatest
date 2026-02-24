@@ -12,8 +12,8 @@ class Games::WizardParseListJobTest < ActiveSupport::TestCase
 
   test "job creates list_items from parsed games" do
     parsed_games = [
-      OpenStruct.new(rank: 1, title: "Zelda BOTW", developers: ["Nintendo"], release_year: 2017),
-      OpenStruct.new(rank: 2, title: "Red Dead 2", developers: ["Rockstar"], release_year: 2018)
+      OpenStruct.new(rank: 1, title: "Zelda BOTW", release_year: 2017),
+      OpenStruct.new(rank: 2, title: "Red Dead 2", release_year: 2018)
     ]
 
     result = Services::Ai::Result.new(
@@ -30,7 +30,7 @@ class Games::WizardParseListJobTest < ActiveSupport::TestCase
 
     item1 = @list.list_items.find_by(position: 1)
     assert_equal "Zelda BOTW", item1.metadata["title"]
-    assert_equal ["Nintendo"], item1.metadata["developers"]
+    assert_nil item1.metadata["developers"]
     assert_equal 2017, item1.metadata["release_year"]
     assert_nil item1.listable_id
     assert_not item1.verified
@@ -38,7 +38,7 @@ class Games::WizardParseListJobTest < ActiveSupport::TestCase
 
   test "job updates wizard_state to completed on success" do
     parsed_games = [
-      OpenStruct.new(rank: 1, title: "Test", developers: ["Dev"], release_year: nil)
+      OpenStruct.new(rank: 1, title: "Test", release_year: nil)
     ]
 
     result = Services::Ai::Result.new(
@@ -79,7 +79,7 @@ class Games::WizardParseListJobTest < ActiveSupport::TestCase
 
   test "job uses correct listable_type" do
     parsed_games = [
-      OpenStruct.new(rank: 1, title: "Test", developers: ["Dev"], release_year: nil)
+      OpenStruct.new(rank: 1, title: "Test", release_year: nil)
     ]
 
     result = Services::Ai::Result.new(

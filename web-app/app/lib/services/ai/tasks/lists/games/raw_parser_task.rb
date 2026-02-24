@@ -14,7 +14,6 @@ module Services
               [
                 "Rank (if present, can be null)",
                 "Game title",
-                "Developer/Studio name(s)",
                 "Release year (if present, can be null)"
               ]
             end
@@ -22,10 +21,9 @@ module Services
             def media_specific_instructions
               <<~INSTRUCTIONS
                 Understanding game information:
-                - Games may have multiple developers or studios
                 - Release year may be mentioned in parentheses or as separate text
                 - Some lists may include platform information - ignore for now
-                - Remove publisher information from titles unless it's part of the actual title
+                - Remove developer/publisher names from titles unless they're part of the actual game title
               INSTRUCTIONS
             end
 
@@ -35,13 +33,11 @@ module Services
                 For "1. The Legend of Zelda: Breath of the Wild - Nintendo (2017)":
                 - Rank: 1
                 - Title: "The Legend of Zelda: Breath of the Wild"
-                - Developers: ["Nintendo"]
                 - Release Year: 2017
 
                 For "Super Mario Bros. by Nintendo":
                 - Rank: null
                 - Title: "Super Mario Bros."
-                - Developers: ["Nintendo"]
                 - Release Year: null
               EXAMPLES
             end
@@ -53,7 +49,6 @@ module Services
             class Game < OpenAI::BaseModel
               required :rank, Integer, nil?: true, doc: "Rank position in the list"
               required :title, String, doc: "Game title"
-              required :developers, OpenAI::ArrayOf[String], doc: "Developer name(s)"
               required :release_year, Integer, nil?: true, doc: "Year the game was released"
             end
 
