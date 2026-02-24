@@ -65,6 +65,7 @@ class Admin::Games::Wizard::ItemRowComponent < Admin::Music::Wizard::ItemRowComp
       {type: :link, text: "Edit Metadata", modal_type: :edit_metadata},
       {type: :link, text: "Link Existing Game", modal_type: :link_game},
       {type: :link, text: "Search IGDB Games", modal_type: :search_igdb_games},
+      {type: :link, text: "Link by IGDB ID", modal_type: :link_igdb_id},
       {type: :delete, text: "Delete", css_class: "text-error"}
     ]
   end
