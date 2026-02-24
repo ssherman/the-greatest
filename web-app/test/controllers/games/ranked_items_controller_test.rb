@@ -85,5 +85,19 @@ module Games
       get "/"
       assert_response :success
     end
+
+    test "should render coming soon when no ranking configuration exists" do
+      Games::RankingConfiguration.stubs(:default_primary).returns(nil)
+      get "/video-games"
+      assert_response :success
+      assert_match(/coming soon/i, response.body)
+    end
+
+    test "root should render coming soon when no ranking configuration exists" do
+      Games::RankingConfiguration.stubs(:default_primary).returns(nil)
+      get "/"
+      assert_response :success
+      assert_match(/coming soon/i, response.body)
+    end
   end
 end

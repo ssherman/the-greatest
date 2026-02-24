@@ -5,8 +5,8 @@ class Games::RankedItemsController < RankedItemsController
   layout "games/application"
 
   before_action :find_ranking_configuration
-  before_action :validate_ranking_configuration_type
-  before_action :parse_year_filter
+  before_action :validate_ranking_configuration_type, if: -> { @ranking_configuration.present? }
+  before_action :parse_year_filter, if: -> { @ranking_configuration.present? }
   before_action :cache_for_index_page, only: [:index]
 
   def self.ranking_configuration_class
@@ -14,6 +14,8 @@ class Games::RankedItemsController < RankedItemsController
   end
 
   def index
+    return render "games/ranked_items/coming_soon" unless @ranking_configuration
+
     games_query = @ranking_configuration.ranked_items
       .joins("JOIN games_games ON ranked_items.item_id = games_games.id AND ranked_items.item_type = 'Games::Game'")
       .includes(item: [:categories, :primary_image, {game_companies: :company}])
@@ -30,6 +32,14 @@ class Games::RankedItemsController < RankedItemsController
   end
 
   private
+
+  def find_ranking_configuration
+    @ranking_configuration = if params[:ranking_configuration_id].present?
+      RankingConfiguration.find(params[:ranking_configuration_id])
+    else
+      self.class.ranking_configuration_class.default_primary
+    end
+  end
 
   def parse_year_filter
     return unless params[:year].present?
