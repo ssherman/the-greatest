@@ -74,8 +74,14 @@ class Admin::ListItemsController < Admin::BaseController
 
   def update
     @list = @list_item.list
+    update_params = update_list_item_params
 
-    if @list_item.update(update_list_item_params)
+    if update_params[:listable_id].present? && update_params[:listable_id].to_s != @list_item.listable_id.to_s
+      update_params[:verified] = true
+      update_params[:listable_type] = expected_listable_type_for(@list) if @list_item.listable_type.blank?
+    end
+
+    if @list_item.update(update_params)
       @list.reload
       respond_to do |format|
         format.turbo_stream do
@@ -172,7 +178,15 @@ class Admin::ListItemsController < Admin::BaseController
   end
 
   def update_list_item_params
-    params.require(:list_item).permit(:position, :metadata, :verified)
+    params.require(:list_item).permit(:listable_id, :position, :metadata, :verified)
+  end
+
+  def expected_listable_type_for(list)
+    case list.class.name
+    when "Music::Albums::List" then "Music::Album"
+    when "Music::Songs::List" then "Music::Song"
+    when "Games::List" then "Games::Game"
+    end
   end
 
   def redirect_path

@@ -12,15 +12,28 @@
                       turbo_frame: "list_items_list"
                     } do |f| %>
 
-        <div class="form-control">
-          <%= f.label :item_name, "Item", class: "label" %>
-          <div class="input input-bordered w-full bg-base-200">
-            <%= item_display_name %>
+        <% if autocomplete_url.present? %>
+          <div class="form-control">
+            <%= f.label :item_name, "Current: #{item_display_name}", class: "label" %>
+            <%= render AutocompleteComponent.new(
+              name: "list_item[listable_id]",
+              url: autocomplete_url,
+              placeholder: "Search for #{item_label.downcase}...",
+              display_key: "text",
+              value_key: "value"
+            ) %>
           </div>
-          <label class="label">
-            <span class="label-text-alt">Item cannot be changed</span>
-          </label>
-        </div>
+        <% else %>
+          <div class="form-control">
+            <%= f.label :item_name, "Item", class: "label" %>
+            <div class="input input-bordered w-full bg-base-200">
+              <%= item_display_name %>
+            </div>
+            <label class="label">
+              <span class="label-text-alt">Item cannot be changed</span>
+            </label>
+          </div>
+        <% end %>
 
         <div class="form-control">
           <%= f.label :position, "Position", class: "label" %>
