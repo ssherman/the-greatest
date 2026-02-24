@@ -43,3 +43,27 @@ music_songs_ranked_item:
   ranking_configuration: music_songs_global
   rank: 42
   score: 95.5
+
+games_ranked_botw:
+  item: breath_of_the_wild (Games::Game)
+  ranking_configuration: games_global
+  rank: 1
+  score: 98.5
+
+games_ranked_re4:
+  item: resident_evil_4 (Games::Game)
+  ranking_configuration: games_global
+  rank: 2
+  score: 95.0
+
+games_ranked_hl2:
+  item: half_life_2 (Games::Game)
+  ranking_configuration: games_global
+  rank: 3
+  score: 93.0
+
+games_ranked_totk:
+  item: tears_of_the_kingdom (Games::Game)
+  ranking_configuration: games_global
+  rank: 4
+  score: 91.5

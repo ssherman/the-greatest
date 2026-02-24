@@ -1,0 +1,55 @@
+<% content_for :page_title, "Greatest Video Game Lists | The Greatest Games" %>
+<% content_for :meta_description, "Browse curated lists of the greatest video games. Discover expert rankings and authoritative game collections from trusted sources." %>
+
+<div class="container mx-auto px-4 py-8">
+  <div class="mb-8">
+    <h1 class="text-4xl font-bold text-base-content mb-2">Greatest Video Game Lists</h1>
+    <p class="text-base-content/70">
+      Explore curated lists of the greatest video games from trusted sources
+    </p>
+  </div>
+
+  <% if @ranked_lists.any? %>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <% @ranked_lists.each do |ranked_list| %>
+        <% list = ranked_list.list %>
+        <div class="card bg-base-100 shadow-lg hover:shadow-xl transition-shadow">
+          <div class="card-body">
+            <div class="flex items-start justify-between mb-2">
+              <div class="badge badge-primary badge-sm">
+                Weight: <%= ranked_list.weight %>
+              </div>
+              <div class="badge badge-ghost badge-sm">
+                <%= list.list_items.size %> games
+              </div>
+            </div>
+
+            <h3 class="card-title text-lg">
+              <%= list.name %>
+            </h3>
+
+            <% if list.source.present? %>
+              <p class="text-sm text-base-content/70">
+                Source: <%= list.source %>
+              </p>
+            <% end %>
+
+            <% if list.description.present? %>
+              <p class="text-sm text-base-content/80 line-clamp-2">
+                <%= list.description %>
+              </p>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  <% else %>
+    <div class="text-center py-16">
+      <div class="text-6xl mb-4">🎮</div>
+      <h2 class="text-2xl font-bold text-base-content mb-2">No lists available</h2>
+      <p class="text-base-content/70">
+        Game lists will appear here once they've been ranked.
+      </p>
+    </div>
+  <% end %>
+</div>

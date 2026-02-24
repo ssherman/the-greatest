@@ -1,0 +1,35 @@
+<%
+  content_for :page_title, games_page_title(@year_filter)
+  content_for :meta_description, games_page_description(@year_filter)
+%>
+
+<div class="container mx-auto px-4 py-8">
+  <div class="mb-4">
+    <h1 class="text-4xl font-bold text-base-content"><%= games_page_heading(@year_filter) %></h1>
+  </div>
+
+  <%= render Games::FilterTabsComponent.new(
+    base_path: video_games_path(ranking_configuration_id: params[:ranking_configuration_id]),
+    year_filter: @year_filter
+  ) %>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+    <% @games.each do |ranked_item| %>
+      <%= render Games::CardComponent.new(ranked_item: ranked_item, ranking_configuration: @ranking_configuration) %>
+    <% end %>
+  </div>
+
+  <% if @games.empty? %>
+    <div class="text-center py-16">
+      <div class="text-6xl mb-4">🎮</div>
+      <h2 class="text-2xl font-bold text-base-content mb-2">No games found</h2>
+      <p class="text-base-content/70">
+        No games match the selected filter criteria.
+      </p>
+    </div>
+  <% end %>
+
+  <div class="flex justify-center mt-8">
+    <%== @pagy.series_nav %>
+  </div>
+</div>

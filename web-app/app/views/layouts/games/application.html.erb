@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html data-theme="light">
+<html data-theme="abyss">
   <head>
-    <title><%= domain_name %></title>
+    <title><%= content_for?(:page_title) ? yield(:page_title) : "Greatest Video Games Ranked | The Greatest Games" %></title>
+    <meta name="description" content="<%= content_for?(:meta_description) ? yield(:meta_description) : "Discover definitive rankings of the greatest video games of all time. Expert reviews, curated lists, and comprehensive game analysis." %>">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
@@ -20,21 +21,19 @@
             </svg>
           </div>
           <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
-            <li><a>Games</a></li>
-            <li><a>Developers</a></li>
-            <li><a>Genres</a></li>
+            <li><%= link_to "Games", "/" %></li>
+            <li><%= link_to "Lists", games_lists_path %></li>
           </ul>
         </div>
-        <a class="btn btn-ghost text-xl">
+        <%= link_to "/", class: "btn btn-ghost text-xl" do %>
           <span class="text-2xl mr-2">🎮</span>
           <%= domain_name %>
-        </a>
+        <% end %>
       </div>
       <div class="navbar-center hidden lg:flex">
         <ul class="menu menu-horizontal px-1">
-          <li><a>Games</a></li>
-          <li><a>Developers</a></li>
-          <li><a>Genres</a></li>
+          <li><%= link_to "Games", "/" %></li>
+          <li><%= link_to "Lists", games_lists_path %></li>
         </ul>
       </div>
       <div class="navbar-end">
@@ -43,24 +42,41 @@
     </div>
 
     <main class="container mx-auto px-4 py-8">
+      <% if flash[:notice] %>
+        <div class="alert alert-success mb-6">
+          <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <span><%= flash[:notice] %></span>
+        </div>
+      <% end %>
+      <% if flash[:alert] %>
+        <div class="alert alert-error mb-6">
+          <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <span><%= flash[:alert] %></span>
+        </div>
+      <% end %>
       <%= yield %>
     </main>
-
-    <!-- Authentication Modal -->
-    <dialog id="login_modal" class="modal">
-      <div class="modal-box">
-        <h3 class="font-bold text-lg mb-4">Sign In</h3>
-        <%= render Authentication::WidgetComponent.new(reload_after_auth: true) %>
-      </div>
-      <form method="dialog" class="modal-backdrop">
-        <button>close</button>
-      </form>
-    </dialog>
 
     <footer class="footer footer-center p-10 bg-base-200 text-base-content">
       <aside>
         <p>Copyright © 2025 - All rights reserved by <%= domain_name %></p>
       </aside>
     </footer>
+
+    <!-- Login Modal -->
+    <dialog id="login_modal" class="modal">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Sign In</h3>
+        <%= render Authentication::WidgetComponent.new(reload_after_auth: true) %>
+        <div class="modal-action">
+          <form method="dialog">
+            <button class="btn">Close</button>
+          </form>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+      </form>
+    </dialog>
   </body>
-</html> 
+</html>
