@@ -1,0 +1,158 @@
+<%
+  content_for :page_title, "#{@game.title} - #{@developer_names} | The Greatest Games"
+  content_for :meta_description, "Explore our ranking and review of #{@game.title} by #{@developer_names}. Platforms, genres, and why it's one of the greatest #{@genre_text} games of all time."
+%>
+
+<div class="container mx-auto px-4 py-8">
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div class="lg:col-span-1">
+      <div class="card bg-base-100 shadow-xl sticky top-8">
+        <figure class="px-4 pt-4">
+          <% if @game.primary_image&.file&.attached? %>
+            <%= image_tag rails_public_blob_url(@game.primary_image.file),
+                alt: @game.title,
+                class: "rounded-xl w-full aspect-[3/4] object-cover" %>
+          <% else %>
+            <div class="bg-base-200 rounded-xl w-full aspect-[3/4] flex items-center justify-center">
+              <span class="text-6xl">🎮</span>
+            </div>
+          <% end %>
+        </figure>
+
+        <div class="card-body">
+          <% if @game.release_year %>
+            <div class="badge badge-primary badge-lg">
+              Released: <%= @game.release_year %>
+            </div>
+          <% end %>
+          <% unless @game.main_game? %>
+            <div class="badge badge-secondary badge-lg">
+              <%= @game.game_type == "dlc" ? "DLC" : @game.game_type.titleize %>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    </div>
+
+    <div class="lg:col-span-2">
+      <div class="mb-6">
+        <h1 class="text-4xl font-bold text-base-content mb-3">
+          <%= @game.title %>
+        </h1>
+        <% if @developer_names.present? %>
+          <p class="text-2xl text-base-content/80 mb-4">
+            by <%= @developer_names %>
+          </p>
+        <% end %>
+
+        <% if @ranked_item %>
+          <p class="text-lg text-base-content/70 mb-4">
+            <% if @ranked_item.rank == 1 %>
+              The <strong>greatest</strong> video game of all time
+            <% else %>
+              The <strong><%= @ranked_item.rank.ordinalize %></strong> greatest video game of all time
+            <% end %>
+          </p>
+        <% end %>
+
+        <% if @game.description.present? %>
+          <div class="prose max-w-none">
+            <p class="text-base-content/70">
+              <%= @game.description %>
+            </p>
+          </div>
+        <% end %>
+      </div>
+
+      <% if @game.platforms.any? %>
+        <div class="card bg-base-100 shadow-md mb-6">
+          <div class="card-body">
+            <h2 class="card-title text-xl mb-4">Platforms</h2>
+            <div class="flex flex-wrap gap-2">
+              <% @game.platforms.each do |platform| %>
+                <span class="badge badge-lg badge-ghost">
+                  <%= platform.abbreviation.presence || platform.name %>
+                </span>
+              <% end %>
+            </div>
+          </div>
+        </div>
+      <% end %>
+
+      <% if @publisher_names.present? && @publisher_names != @developer_names %>
+        <div class="card bg-base-100 shadow-md mb-6">
+          <div class="card-body">
+            <h2 class="card-title text-xl mb-4">Publishers</h2>
+            <p class="text-base-content/80"><%= @publisher_names %></p>
+          </div>
+        </div>
+      <% end %>
+
+      <% if @categories_by_type.any? %>
+        <div class="card bg-base-100 shadow-md mb-6">
+          <div class="card-body">
+            <h2 class="card-title text-xl mb-4">Categories</h2>
+            <% @categories_by_type.each do |category_type, categories| %>
+              <div class="mb-4 last:mb-0">
+                <h3 class="text-sm font-semibold text-base-content/70 mb-2 uppercase">
+                  <%= category_type.to_s.titleize %>
+                </h3>
+                <div class="flex flex-wrap gap-2">
+                  <% categories.each do |category| %>
+                    <span class="badge badge-lg badge-ghost">
+                      <%= category.name %>
+                    </span>
+                  <% end %>
+                </div>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+
+      <% if @game.series.present? %>
+        <div class="card bg-base-100 shadow-md mb-6">
+          <div class="card-body">
+            <h2 class="card-title text-xl mb-4"><%= @game.series.name %> Series</h2>
+            <% if @related_games.any? %>
+              <div class="space-y-2">
+                <% @related_games.each do |related_game| %>
+                  <%= link_to_game related_game, @ranking_configuration, class: "block p-3 bg-base-200 rounded-lg hover:bg-base-300 transition-colors" do %>
+                    <div class="flex justify-between items-center">
+                      <span class="font-semibold text-base-content"><%= related_game.title %></span>
+                      <% if related_game.release_year %>
+                        <span class="text-sm text-base-content/70"><%= related_game.release_year %></span>
+                      <% end %>
+                    </div>
+                  <% end %>
+                <% end %>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+
+      <% if @game.lists.any? %>
+        <div class="card bg-base-100 shadow-md">
+          <div class="card-body">
+            <h2 class="card-title text-xl mb-4">Appears On These Lists</h2>
+            <div class="space-y-3">
+              <% @game.lists.each do |list| %>
+                <div class="block p-3 bg-base-200 rounded-lg">
+                  <h3 class="font-semibold text-base-content">
+                    <%= list.name %>
+                  </h3>
+                  <% if list.description.present? %>
+                    <p class="text-sm text-base-content/70 mt-1">
+                      <%= truncate(list.description, length: 100) %>
+                    </p>
+                  <% end %>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</div>

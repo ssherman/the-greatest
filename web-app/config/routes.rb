@@ -324,7 +324,25 @@ Rails.application.routes.draw do
       end
     end
 
-    root to: "games/default#index", as: :games_root
+    # Public games routes
+    scope as: "games" do
+      resources :lists, only: [:index], controller: "games/lists"
+    end
+
+    # All games routes with optional ranking configuration parameter
+    scope "(/rc/:ranking_configuration_id)" do
+      get "video-games", to: "games/ranked_items#index", as: :video_games
+      # Year-filtered games (must come before generic patterns)
+      get "video-games/since/:year", to: "games/ranked_items#index", as: :video_games_since_year,
+        constraints: {year: /\d{4}/}, defaults: {year_mode: "since"}
+      get "video-games/through/:year", to: "games/ranked_items#index", as: :video_games_through_year,
+        constraints: {year: /\d{4}/}, defaults: {year_mode: "through"}
+      get "video-games/:year", to: "games/ranked_items#index", as: :video_games_by_year,
+        constraints: {year: /\d{4}(s|-\d{4})?/}
+      get "game/:slug", to: "games/games#show", as: :game
+    end
+
+    root to: "games/ranked_items#index", as: :games_root
   end
 
   # Admin routes (global - no domain constraint)

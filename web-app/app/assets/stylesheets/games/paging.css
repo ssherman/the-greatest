@@ -1,0 +1,21 @@
+.pagy {
+    @apply flex flex-wrap justify-center gap-1 font-semibold text-sm;
+    a:not(.gap) {
+      @apply btn btn-sm btn-ghost;
+      &:not([href]) { /* disabled links */
+        @apply btn-disabled;
+      }
+      &.current {
+        @apply btn-active btn-primary;
+      }
+    }
+    .gap {
+      @apply btn btn-sm btn-ghost btn-disabled;
+    }
+    label {
+      @apply inline-block whitespace-nowrap bg-base-200 rounded-lg px-3 py-0.5;
+      input {
+        @apply bg-base-100 border-none rounded-md;
+      }
+    }
+  }
