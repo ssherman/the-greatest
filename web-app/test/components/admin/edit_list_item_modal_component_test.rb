@@ -25,10 +25,12 @@ class Admin::EditListItemModalComponentTest < ViewComponent::TestCase
     assert_selector "form[action='#{admin_list_item_path(@list_item)}']"
   end
 
-  test "shows item name as read-only" do
+  test "shows autocomplete for album list items" do
     render_inline(Admin::EditListItemModalComponent.new(list_item: @list_item))
 
-    assert_selector "div.input", text: @album.title
+    assert_selector "label", text: "Current: #{@album.title}"
+    assert_selector "input[name='list_item[listable_id]']", visible: :all
+    assert_selector "input[type='search']"
   end
 
   test "pre-fills current position value" do

@@ -362,6 +362,94 @@ module Admin
       assert_response :success
     end
 
+    # Update with listable_id (autocomplete association) tests
+    test "should update listable_id via autocomplete" do
+      list_item = ListItem.create!(list: @album_list, listable: @album, position: 1, verified: false)
+      new_album = music_albums(:abbey_road)
+
+      patch admin_list_item_path(list_item),
+        params: {list_item: {listable_id: new_album.id}},
+        as: :turbo_stream
+
+      assert_response :success
+      list_item.reload
+      assert_equal new_album.id, list_item.listable_id
+      assert_equal true, list_item.verified, "Should auto-verify when listable_id changes"
+    end
+
+    test "should not auto-verify when listable_id is unchanged" do
+      list_item = ListItem.create!(list: @album_list, listable: @album, position: 1, verified: false)
+
+      patch admin_list_item_path(list_item),
+        params: {list_item: {position: 5}},
+        as: :turbo_stream
+
+      assert_response :success
+      list_item.reload
+      assert_equal 5, list_item.position
+      assert_equal false, list_item.verified
+    end
+
+    test "should preserve listable_id when not provided in params" do
+      list_item = ListItem.create!(list: @album_list, listable: @album, position: 1)
+
+      patch admin_list_item_path(list_item),
+        params: {list_item: {position: 3}},
+        as: :turbo_stream
+
+      assert_response :success
+      list_item.reload
+      assert_equal @album.id, list_item.listable_id
+    end
+
+    test "should update listable_id for games list items" do
+      games_list = lists(:games_list)
+      games_list.list_items.destroy_all
+      game = games_games(:breath_of_the_wild)
+      new_game = games_games(:tears_of_the_kingdom)
+      list_item = ListItem.create!(list: games_list, listable: game, position: 1, verified: false)
+
+      host! Rails.application.config.domains[:games]
+      sign_in_as(users(:contractor_user), stub_auth: true)
+
+      patch admin_list_item_path(list_item),
+        params: {list_item: {listable_id: new_game.id}},
+        as: :turbo_stream
+
+      assert_response :success
+      list_item.reload
+      assert_equal new_game.id, list_item.listable_id
+      assert_equal true, list_item.verified
+    end
+
+    test "should update listable_id for song list items" do
+      list_item = ListItem.create!(list: @song_list, listable: @song, position: 1, verified: false)
+      new_song = music_songs(:money)
+
+      patch admin_list_item_path(list_item),
+        params: {list_item: {listable_id: new_song.id}},
+        as: :turbo_stream
+
+      assert_response :success
+      list_item.reload
+      assert_equal new_song.id, list_item.listable_id
+      assert_equal true, list_item.verified
+    end
+
+    test "should set listable_type for previously unlinked item" do
+      list_item = ListItem.create!(list: @album_list, position: 1, listable_type: nil, listable_id: nil, verified: false)
+
+      patch admin_list_item_path(list_item),
+        params: {list_item: {listable_id: @album.id}},
+        as: :turbo_stream
+
+      assert_response :success
+      list_item.reload
+      assert_equal @album.id, list_item.listable_id
+      assert_equal "Music::Album", list_item.listable_type
+      assert_equal true, list_item.verified
+    end
+
     test "should reject user with no domain role from games list items" do
       games_list = lists(:games_list)
 

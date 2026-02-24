@@ -6,6 +6,30 @@ class Admin::EditListItemModalComponent < ViewComponent::Base
     @list = list_item.list
   end
 
+  def autocomplete_url
+    case @list.class.name
+    when "Music::Albums::List"
+      Rails.application.routes.url_helpers.search_admin_albums_path
+    when "Music::Songs::List"
+      Rails.application.routes.url_helpers.search_admin_songs_path
+    when "Games::List"
+      Rails.application.routes.url_helpers.search_admin_games_games_path
+    end
+  end
+
+  def item_label
+    case @list.class.name
+    when "Music::Albums::List"
+      "Album"
+    when "Music::Songs::List"
+      "Song"
+    when "Games::List"
+      "Game"
+    else
+      "Item"
+    end
+  end
+
   def item_display_name
     return unverified_item_display_name if @list_item.listable.nil?
 
