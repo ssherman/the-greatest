@@ -77,6 +77,32 @@ class Games::WizardParseListJobTest < ActiveSupport::TestCase
     assert_equal "failed", @list.wizard_manager.step_status("parse")
   end
 
+  test "job sanitizes null bytes from metadata to avoid PG::UntranslatableCharacter" do
+    parsed_games = [
+      OpenStruct.new(rank: 1, title: "Portal", release_year: 2007),
+      OpenStruct.new(rank: 2, title: "Pok\u0000mon Red", release_year: 1996),
+      OpenStruct.new(rank: 3, title: "Pok\u0000mon Blue", release_year: 1996)
+    ]
+
+    result = Services::Ai::Result.new(
+      success: true,
+      data: OpenStruct.new(games: parsed_games)
+    )
+
+    Services::Ai::Tasks::Lists::Games::RawParserTask.any_instance.stubs(:call).returns(result)
+
+    Games::WizardParseListJob.new.perform(@list.id)
+
+    @list.reload
+    assert_equal 3, @list.list_items.unverified.count
+
+    pokemon_item = @list.list_items.find_by(position: 2)
+    assert_equal "Pokmon Red", pokemon_item.metadata["title"]
+    assert_no_match(/\u0000/, pokemon_item.metadata["title"])
+
+    assert_equal "completed", @list.wizard_manager.step_status("parse")
+  end
+
   test "job uses correct listable_type" do
     parsed_games = [
       OpenStruct.new(rank: 1, title: "Test", release_year: nil)

@@ -94,7 +94,7 @@ class BaseWizardParseListJob
         listable_id: nil,
         verified: false,
         position: item[:rank] || (index + 1),
-        metadata: build_metadata(item),
+        metadata: sanitize_metadata(build_metadata(item)),
         created_at: Time.current,
         updated_at: Time.current
       }
@@ -140,7 +140,7 @@ class BaseWizardParseListJob
           listable_id: nil,
           verified: false,
           position: current_position,
-          metadata: build_metadata(item),
+          metadata: sanitize_metadata(build_metadata(item)),
           created_at: Time.current,
           updated_at: Time.current
         }
@@ -178,6 +178,23 @@ class BaseWizardParseListJob
     )
 
     Rails.logger.info "#{self.class.name} completed for list #{@list.id}: parsed #{all_items_attrs.count} items in #{batches.size} batches"
+  end
+
+  # Remove null bytes (\u0000) from strings in metadata.
+  # PostgreSQL JSONB columns cannot store null bytes.
+  def sanitize_metadata(hash)
+    hash.transform_values do |value|
+      case value
+      when String
+        value.delete("\u0000")
+      when Hash
+        sanitize_metadata(value)
+      when Array
+        value.map { |v| v.is_a?(String) ? v.delete("\u0000") : v }
+      else
+        value
+      end
+    end
   end
 
   def handle_error(error_message)
