@@ -324,13 +324,10 @@ Rails.application.routes.draw do
       end
     end
 
-    # Public games routes
-    scope as: "games" do
-      resources :lists, only: [:index], controller: "games/lists"
-    end
-
     # All games routes with optional ranking configuration parameter
     scope "(/rc/:ranking_configuration_id)" do
+      get "lists", to: "games/lists#index", as: :games_lists
+      get "lists/:id", to: "games/lists#show", as: :games_list
       get "video-games", to: "games/ranked_items#index", as: :video_games
       # Year-filtered games (must come before generic patterns)
       get "video-games/since/:year", to: "games/ranked_items#index", as: :video_games_since_year,

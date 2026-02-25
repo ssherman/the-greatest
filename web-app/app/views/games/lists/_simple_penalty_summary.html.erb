@@ -1,0 +1,22 @@
+<% if ranked_list.calculated_weight_details.present? %>
+  <div class="mt-4">
+    <h3 class="text-sm font-semibold mb-2">Penalties Applied:</h3>
+    <div class="flex flex-wrap gap-2">
+      <% ranked_list.calculated_weight_details["penalties"].each do |penalty| %>
+        <div class="badge <%= penalty_badge_class(penalty["value"]) %>">
+          <%= penalty["penalty_name"] %>: <%= penalty["value"].round(1) %>%
+        </div>
+      <% end %>
+    </div>
+
+    <% if ranked_list.calculated_weight_details.dig("quality_bonus", "applied") %>
+      <div class="mt-2 text-sm text-success">
+        ✓ High Quality Source Bonus Applied
+      </div>
+    <% end %>
+  </div>
+<% else %>
+  <p class="text-sm text-gray-500 mt-2">
+    Weight calculation details not available.
+  </p>
+<% end %>

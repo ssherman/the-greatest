@@ -133,7 +133,7 @@ music_songs_item:
 
 games_item:
   list: games_list
-  listable: one (Games::Game)
+  listable: breath_of_the_wild (Games::Game)
   position: 1
 
 # Unverified items with metadata only

@@ -1,0 +1,109 @@
+<%
+  total_items = @pagy.count
+  title = "#{@list.name} - Video Game List | The Greatest Games"
+  description = "Explore #{@list.name}, featuring #{total_items} games."
+  description += " #{truncate(@list.description, length: 90)}" if @list.description.present?
+  description += " Source: #{@list.source}." if @list.source.present?
+
+  content_for :page_title, truncate(title, length: 60)
+  content_for :meta_description, truncate(description, length: 160)
+%>
+
+<div class="container mx-auto px-4 py-8">
+  <div class="mb-8">
+    <h1 class="text-4xl font-bold text-base-content mb-4">
+      <%= @list.name %>
+    </h1>
+
+    <div class="flex flex-wrap gap-3 mb-4">
+      <% if @list.source.present? %>
+        <div class="badge badge-lg badge-ghost">
+          Source: <%= @list.source %>
+        </div>
+      <% end %>
+
+      <% if @list.year_published.present? %>
+        <div class="badge badge-lg badge-ghost">
+          Year: <%= @list.year_published %>
+        </div>
+      <% end %>
+
+      <div class="badge badge-lg badge-ghost">
+        <%= number_with_delimiter(total_items) %> games
+      </div>
+
+      <% if @list.number_of_voters.present? %>
+        <div class="badge badge-lg badge-ghost">
+          <%= number_with_delimiter(@list.number_of_voters) %> voters
+        </div>
+      <% end %>
+    </div>
+
+    <% if @ranked_list %>
+      <div class="card bg-base-200 shadow-xl mb-6">
+        <div class="card-body">
+          <h2 class="card-title">
+            Weight: <%= @ranked_list.weight %>%
+          </h2>
+          <p class="text-sm text-base-content/70 mt-1">
+            How much this list influences our overall rankings. Higher weight means more reliable data.
+          </p>
+
+          <%= render partial: "games/lists/simple_penalty_summary",
+                     locals: { ranked_list: @ranked_list } %>
+        </div>
+      </div>
+    <% end %>
+
+    <% if @list.description.present? %>
+      <div class="prose max-w-none mb-4">
+        <p class="text-base-content/80">
+          <%= @list.description %>
+        </p>
+      </div>
+    <% end %>
+
+    <% if @list.url.present? %>
+      <div class="mt-4">
+        <%= link_to @list.url, target: "_blank", rel: "noopener noreferrer",
+            class: "btn btn-primary btn-sm" do %>
+          View Original List
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+          </svg>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+
+  <% if total_items > 0 %>
+    <%= turbo_frame_tag "list_items" do %>
+      <% if @pagy.pages > 1 %>
+        <div class="flex justify-center mb-6">
+          <%== @pagy.series_nav %>
+        </div>
+      <% end %>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <% @pagy_list_items.each do |list_item| %>
+          <% next unless list_item.item %>
+          <%= render Games::CardComponent.new(list_item: list_item, ranking_configuration: @ranking_configuration) %>
+        <% end %>
+      </div>
+
+      <% if @pagy.pages > 1 %>
+        <div class="flex justify-center mt-6">
+          <%== @pagy.series_nav %>
+        </div>
+      <% end %>
+    <% end %>
+  <% else %>
+    <div class="text-center py-16">
+      <div class="text-6xl mb-4">🎮</div>
+      <h2 class="text-2xl font-bold text-base-content mb-2">No games in this list</h2>
+      <p class="text-base-content/70">
+        This list doesn't have any games yet.
+      </p>
+    </div>
+  <% end %>
+</div>

@@ -1,3 +1,3 @@
-module Music::ListsHelper
+module Games::ListsHelper
   include ListsHelper
 end
