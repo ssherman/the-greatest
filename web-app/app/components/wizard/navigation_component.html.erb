@@ -13,7 +13,7 @@
         { action: :restart },
         method: :post,
         class: "btn btn-outline",
-        data: { turbo_confirm: "Are you sure you want to restart the wizard? This will reset all progress." } %>
+        data: { turbo_confirm: "Are you sure you want to restart the wizard? This will delete all list items and reset all progress." } %>
 
     <% if show_next_button? %>
       <%= button_to next_label,

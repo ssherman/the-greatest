@@ -29,13 +29,13 @@ module Games
       manage?
     end
 
-    # Execute actions on ranking configs require manage permission
+    # Execute actions (recalculate, refresh) allowed for editors
     def execute_action?
-      manage?
+      global_admin? || global_editor? || domain_role&.can_write?
     end
 
     def index_action?
-      manage?
+      global_admin? || global_editor? || domain_role&.can_write?
     end
 
     class Scope < ApplicationPolicy::Scope

@@ -6,7 +6,8 @@ class Admin::RankingConfigurationsController < Admin::BaseController
     :new_ranking_configuration_path, :edit_ranking_configuration_path,
     :execute_action_ranking_configuration_path,
     :index_action_ranking_configurations_path,
-    :index_heading, :index_subheading, :type_label
+    :index_heading, :index_subheading, :type_label,
+    :ranking_configuration_policy
 
   def index
     authorize ranking_configuration_class, policy_class: policy_class
@@ -210,6 +211,11 @@ class Admin::RankingConfigurationsController < Admin::BaseController
 
   def policy_class
     raise NotImplementedError, "Subclass must implement policy_class"
+  end
+
+  # Helper method for views to check permissions using the correct policy class
+  def ranking_configuration_policy
+    policy_class.new(current_user, @ranking_configuration)
   end
 
   def domain_name
