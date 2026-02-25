@@ -49,8 +49,7 @@
             How much this list influences our overall rankings. Higher weight means more reliable data.
           </p>
 
-          <%= render partial: "games/lists/simple_penalty_summary",
-                     locals: { ranked_list: @ranked_list } %>
+          <%= render Lists::SimplePenaltySummaryComponent.new(ranked_list: @ranked_list) %>
         </div>
       </div>
     <% end %>

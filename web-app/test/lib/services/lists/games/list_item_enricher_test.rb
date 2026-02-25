@@ -4,6 +4,9 @@ class Services::Lists::Games::ListItemEnricherTest < ActiveSupport::TestCase
   setup do
     @list = lists(:games_list)
     @game = games_games(:breath_of_the_wild)
+    # Remove the fixture list item that links games_list to breath_of_the_wild,
+    # so our test item can be enriched to point at @game without a uniqueness violation.
+    list_items(:games_item).destroy!
     @item = ListItem.create!(
       list: @list,
       listable_type: "Games::Game",
