@@ -337,6 +337,7 @@ Rails.application.routes.draw do
       get "video-games/:year", to: "games/ranked_items#index", as: :video_games_by_year,
         constraints: {year: /\d{4}(s|-\d{4})?/}
       get "game/:slug", to: "games/games#show", as: :game
+      get "categories/:id", to: "games/categories#show", as: :games_category
     end
 
     root to: "games/ranked_items#index", as: :games_root

@@ -24,6 +24,23 @@ module Games::DefaultHelper
     end
   end
 
+  def games_category_path_with_rc(category, ranking_configuration = nil)
+    if ranking_configuration && !ranking_configuration.default_primary?
+      games_category_path(category, ranking_configuration_id: ranking_configuration.id)
+    else
+      games_category_path(category)
+    end
+  end
+
+  def link_to_game_category(category, ranking_configuration = nil, **options, &block)
+    path = games_category_path_with_rc(category, ranking_configuration)
+    if block_given?
+      link_to path, **options, &block
+    else
+      link_to category.name, path, **options
+    end
+  end
+
   def link_to_game_list(list, ranking_configuration = nil, **options, &block)
     path = games_list_path_with_rc(list, ranking_configuration)
     if block_given?

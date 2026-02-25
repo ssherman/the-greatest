@@ -1,0 +1,38 @@
+<% content_for :page_title, "The Greatest #{@category.name} Games of All Time | The Greatest Games" %>
+<%
+  meta_desc = case @category.category_type.to_sym
+  when :genre
+    "Discover the greatest #{@category.name} video games of all time. Our definitive ranking of the top #{@category.name} games, from legendary classics to modern masterpieces."
+  when :theme
+    "Explore the greatest #{@category.name} video games of all time. Our definitive ranking of the top #{@category.name}-themed games across all platforms and eras."
+  else
+    "Discover the greatest #{@category.name} video games of all time. Our definitive ranking of the top #{@category.name} games."
+  end
+%>
+<% content_for :meta_description, meta_desc %>
+
+<div class="container mx-auto px-4 py-8">
+  <div class="mb-8">
+    <h1 class="text-4xl font-bold text-base-content">The Greatest <%= @category.name %> Games of All Time</h1>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+    <% @games.each do |ranked_item| %>
+      <%= render Games::CardComponent.new(ranked_item: ranked_item, ranking_configuration: @ranking_configuration) %>
+    <% end %>
+  </div>
+
+  <% if @games.empty? %>
+    <div class="text-center py-16">
+      <div class="text-6xl mb-4">🎮</div>
+      <h2 class="text-2xl font-bold text-base-content mb-2">No games found</h2>
+      <p class="text-base-content/70">No ranked games found for this category.</p>
+    </div>
+  <% end %>
+
+  <% if @pagy && @pagy.pages > 1 %>
+    <div class="flex justify-center mt-8">
+      <%== @pagy.series_nav %>
+    </div>
+  <% end %>
+</div>

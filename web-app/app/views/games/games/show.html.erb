@@ -99,9 +99,7 @@
                 </h3>
                 <div class="flex flex-wrap gap-2">
                   <% categories.each do |category| %>
-                    <span class="badge badge-lg badge-ghost">
-                      <%= category.name %>
-                    </span>
+                    <%= link_to_game_category category, @ranking_configuration, class: "badge badge-lg badge-ghost hover:badge-primary transition-colors" %>
                   <% end %>
                 </div>
               </div>
