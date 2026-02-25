@@ -463,9 +463,9 @@ Base modal component with shared constants (`DIALOG_ID`, `FRAME_ID`, `ERROR_ID`)
 
 ### ItemRowComponent
 
-**File**: [`app/components/admin/music/wizard/item_row_component.rb`](/web-app/app/components/admin/music/wizard/item_row_component.rb)
+**File**: [`app/components/wizard/item_row_component.rb`](/web-app/app/components/wizard/item_row_component.rb)
 
-Base item row component for the review step table. Games inherits and overrides for domain-specific rendering (developers instead of artists, IGDB badge, game-specific menu items).
+Domain-neutral base item row component for the review step table. Music inherits via `Admin::Music::Wizard::ItemRowComponent` (adds MusicBrainz source badge). Games inherits directly and overrides for domain-specific rendering (developers instead of artists, IGDB badge, game-specific menu items).
 
 ### Music Base Step Components
 
@@ -740,6 +740,7 @@ Add wizard link to the list show page:
 | [`app/components/wizard/progress_component.rb`](/web-app/app/components/wizard/progress_component.rb) | Step indicator |
 | [`app/components/wizard/step_component.rb`](/web-app/app/components/wizard/step_component.rb) | Step container |
 | [`app/components/wizard/navigation_component.rb`](/web-app/app/components/wizard/navigation_component.rb) | Navigation buttons |
+| [`app/components/wizard/item_row_component.rb`](/web-app/app/components/wizard/item_row_component.rb) | Base item row for review step |
 
 ### Controller Infrastructure
 
@@ -764,7 +765,8 @@ Add wizard link to the list show page:
 | File | Purpose |
 |------|---------|
 | [`app/components/admin/music/wizard/shared_modal_component.rb`](/web-app/app/components/admin/music/wizard/shared_modal_component.rb) | Base modal component |
-| [`app/components/admin/music/wizard/item_row_component.rb`](/web-app/app/components/admin/music/wizard/item_row_component.rb) | Base item row component |
+| [`app/components/wizard/item_row_component.rb`](/web-app/app/components/wizard/item_row_component.rb) | Base item row component |
+| [`app/components/admin/music/wizard/item_row_component.rb`](/web-app/app/components/admin/music/wizard/item_row_component.rb) | Music item row component (adds MusicBrainz source badge) |
 
 ### Shared Services
 
