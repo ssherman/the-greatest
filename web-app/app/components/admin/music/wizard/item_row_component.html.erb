@@ -47,11 +47,9 @@
       <% menu_items.each do |menu_item| %>
         <% case menu_item[:type] %>
         <% when :verify %>
-          <% unless item.verified? %>
-            <li>
-              <%= button_to menu_item[:text], verify_item_path, method: :post, class: menu_item[:css_class] || "text-success", data: { turbo_frame: "_top" }, form: { onclick: popover_close_js } %>
-            </li>
-          <% end %>
+          <li>
+            <%= link_to menu_item[:text], verify_item_path, data: { turbo_method: :post, turbo_frame: "_top" }, class: menu_item[:css_class] || "text-success", onclick: popover_close_js %>
+          </li>
         <% when :link %>
           <li><%= link_to menu_item[:text], modal_item_path(menu_item[:modal_type]), data: { turbo_frame: modal_frame_id }, onclick: popover_close_js %></li>
         <% when :delete %>

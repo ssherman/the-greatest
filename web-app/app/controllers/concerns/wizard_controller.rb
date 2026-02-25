@@ -133,8 +133,9 @@ module WizardController
   end
 
   # Resets the wizard to its initial state and redirects to the first step.
-  # Calls +reset!+ on the wizard manager to clear all wizard state.
+  # Deletes all list items and calls +reset!+ on the wizard manager to clear all wizard state.
   def restart
+    wizard_entity.list_items.destroy_all
     wizard_entity.wizard_manager.reset!
     redirect_to action: :show
   end

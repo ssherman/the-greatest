@@ -68,17 +68,21 @@ class Admin::Music::Albums::ListWizardControllerTest < ActionDispatch::Integrati
     assert_equal 0, @list.wizard_manager.current_step
   end
 
-  test "should restart wizard" do
+  test "should restart wizard and delete list items" do
     @list.update!(wizard_state: {
       "current_step" => 5,
       "completed_at" => Time.current.iso8601
     })
+    @list.list_items.destroy_all
+    ListItem.create!(list: @list, listable_type: "Music::Album", position: 1, metadata: {"title" => "Test Album"})
+    assert @list.list_items.count > 0
 
     post restart_admin_albums_list_wizard_path(list_id: @list.id)
 
     @list.reload
     assert_equal 0, @list.wizard_manager.current_step
     assert_nil @list.wizard_state["completed_at"]
+    assert_equal 0, @list.list_items.count
     assert_redirected_to admin_albums_list_wizard_path(list_id: @list.id)
   end
 

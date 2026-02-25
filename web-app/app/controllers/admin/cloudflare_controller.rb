@@ -37,8 +37,8 @@ class Admin::CloudflareController < Admin::BaseController
   private
 
   def require_admin_role!
-    unless current_user&.admin?
-      redirect_to domain_root_path, alert: "Access denied. Admin role required."
+    unless current_user&.admin? || current_user&.editor?
+      redirect_to domain_root_path, alert: "Access denied. Admin or editor role required."
     end
   end
 

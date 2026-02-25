@@ -72,13 +72,14 @@ class Admin::CloudflareControllerTest < ActionDispatch::IntegrationTest
     assert_match(/Access denied/, flash[:alert])
   end
 
-  test "purge_cache denies access to editors" do
+  test "purge_cache allows access to editors" do
     sign_in_as(@editor, stub_auth: true)
 
+    stub_cloudflare_purge("music_zone_123", success: true)
     post purge_cache_admin_cloudflare_url(type: :music)
 
-    assert_redirected_to music_root_url
-    assert_match(/Admin role required/, flash[:alert])
+    assert_redirected_to admin_root_path
+    assert flash[:success].present?
   end
 
   test "purge_cache allows admin access" do

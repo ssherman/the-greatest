@@ -8,6 +8,13 @@
   )) do |wizard| %>
 
     <% wizard.with_header do %>
+      <div class="breadcrumbs text-sm mb-2">
+        <ul>
+          <li><%= link_to "Lists", admin_songs_lists_path %></li>
+          <li><%= link_to @list.name, admin_songs_list_path(@list) %></li>
+          <li>Wizard</li>
+        </ul>
+      </div>
       <div class="mb-4">
         <h1 class="text-3xl font-bold"><%= @list.name %></h1>
         <p class="text-base-content/70">Import and configure your song list</p>

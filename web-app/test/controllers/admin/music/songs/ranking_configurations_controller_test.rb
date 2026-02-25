@@ -340,6 +340,18 @@ module Admin
           assert_equal "text/vnd.turbo-stream.html; charset=utf-8", response.content_type
         end
 
+        test "should execute action for editor" do
+          sign_in_as(@editor_user, stub_auth: true)
+
+          ::Music::Songs::RankingConfiguration.any_instance.expects(:calculate_rankings_async)
+
+          post execute_action_admin_songs_ranking_configuration_path(
+            @ranking_configuration,
+            action_name: "RefreshRankings"
+          )
+          assert_redirected_to admin_songs_ranking_configuration_path(@ranking_configuration)
+        end
+
         test "should not execute action for regular user" do
           sign_in_as(@regular_user, stub_auth: true)
 
