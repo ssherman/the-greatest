@@ -23,8 +23,8 @@ test.describe('Game Detail Page', () => {
     const firstGameCard = page.locator('a.card').first();
     await firstGameCard.click();
 
-    // Verify "by" developer byline is present
-    await expect(page.locator('text=/^by /').first()).toBeVisible();
+    // Verify "by" developer byline is present on the show page (not the card component)
+    await expect(page.locator('p', { hasText: /by \w/ }).first()).toBeVisible();
   });
 
   test('game show page accessible via direct URL', async ({ page }) => {

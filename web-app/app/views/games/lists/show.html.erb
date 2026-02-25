@@ -1,7 +1,7 @@
 <%
   total_items = @pagy.count
-  title = "#{@list.name} - Song List | The Greatest Music"
-  description = "Explore #{@list.name}, featuring #{total_items} songs."
+  title = "#{@list.name} - Video Game List | The Greatest Games"
+  description = "Explore #{@list.name}, featuring #{total_items} games."
   description += " #{truncate(@list.description, length: 90)}" if @list.description.present?
   description += " Source: #{@list.source}." if @list.source.present?
 
@@ -28,9 +28,8 @@
         </div>
       <% end %>
 
-
       <div class="badge badge-lg badge-ghost">
-        <%= number_with_delimiter(total_items) %> songs
+        <%= number_with_delimiter(total_items) %> games
       </div>
 
       <% if @list.number_of_voters.present? %>
@@ -84,56 +83,11 @@
         </div>
       <% end %>
 
-      <div class="card bg-base-100 shadow-xl">
-        <div class="card-body p-0">
-          <div class="overflow-x-auto">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th class="w-16">Rank</th>
-                  <th>Song</th>
-                  <th>Artists</th>
-                  <th class="w-24 text-center">Year</th>
-                </tr>
-              </thead>
-              <tbody>
-                <% @pagy_list_items.each do |list_item| %>
-                  <% song = list_item.item %>
-                  <% next unless song %>
-                  <tr class="hover">
-                    <td class="font-bold text-lg">
-                      <% if list_item.position.present? %>
-                        #<%= list_item.position %>
-                      <% else %>
-                        -
-                      <% end %>
-                    </td>
-                    <td>
-                      <%= link_to song_path(song, ranking_configuration_id: params[:ranking_configuration_id]),
-                          class: "font-semibold text-base-content hover:text-primary",
-                          data: { turbo_frame: "_top" } do %>
-                        <%= song.title %>
-                      <% end %>
-                    </td>
-                    <td>
-                      <% artists = song.artists.to_a %>
-                      <% artists.each_with_index do |artist, index| %>
-                        <%= link_to_artist artist, class: "text-base-content/80 hover:text-primary", data: { turbo_frame: "_top" } %><%= index < artists.size - 1 ? ", " : "" %>
-                      <% end %>
-                    </td>
-                    <td class="text-center">
-                      <% if song.release_year %>
-                        <span class="badge badge-ghost"><%= song.release_year %></span>
-                      <% else %>
-                        <span class="text-base-content/50">-</span>
-                      <% end %>
-                    </td>
-                  </tr>
-                <% end %>
-              </tbody>
-            </table>
-          </div>
-        </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <% @pagy_list_items.each do |list_item| %>
+          <% next unless list_item.item %>
+          <%= render Games::CardComponent.new(list_item: list_item, ranking_configuration: @ranking_configuration) %>
+        <% end %>
       </div>
 
       <% if @pagy.pages > 1 %>
@@ -144,10 +98,10 @@
     <% end %>
   <% else %>
     <div class="text-center py-16">
-      <div class="text-6xl mb-4">📋</div>
-      <h2 class="text-2xl font-bold text-base-content mb-2">No songs in this list</h2>
+      <div class="text-6xl mb-4">🎮</div>
+      <h2 class="text-2xl font-bold text-base-content mb-2">No games in this list</h2>
       <p class="text-base-content/70">
-        This list doesn't have any songs yet.
+        This list doesn't have any games yet.
       </p>
     </div>
   <% end %>

@@ -138,7 +138,7 @@
             <h2 class="card-title text-xl mb-4">Appears On These Lists</h2>
             <div class="space-y-3">
               <% @game.lists.each do |list| %>
-                <div class="block p-3 bg-base-200 rounded-lg">
+                <%= link_to games_list_path(list), class: "block p-3 bg-base-200 rounded-lg hover:bg-base-300 transition-colors", data: { turbo_frame: "_top" } do %>
                   <h3 class="font-semibold text-base-content">
                     <%= list.name %>
                   </h3>
@@ -147,7 +147,7 @@
                       <%= truncate(list.description, length: 100) %>
                     </p>
                   <% end %>
-                </div>
+                <% end %>
               <% end %>
             </div>
           </div>

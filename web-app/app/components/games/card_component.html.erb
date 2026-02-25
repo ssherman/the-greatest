@@ -1,4 +1,4 @@
-<%= link_to_game item_game, ranking_configuration, class: "card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow" do %>
+<%= link_to_game item_game, ranking_configuration, class: "card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow", data: { turbo_frame: "_top" } do %>
   <figure class="px-4 pt-4">
     <% if item_game.primary_image&.file&.attached? %>
       <%= image_tag rails_public_blob_url(item_game.primary_image.file),
@@ -15,7 +15,7 @@
     <div class="flex items-start justify-between mb-2">
       <% if show_rank? %>
         <div class="badge badge-primary badge-lg font-bold">
-          #<%= ranked_item.rank %>
+          #<%= rank_display %>
         </div>
       <% end %>
       <div class="<%= show_rank? ? 'text-right' : '' %> text-sm text-base-content/70">
