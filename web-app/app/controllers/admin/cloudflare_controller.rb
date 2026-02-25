@@ -2,7 +2,7 @@
 
 class Admin::CloudflareController < Admin::BaseController
   layout "music/admin"
-  before_action :require_admin_role!
+  before_action :require_privileged_role!
 
   def purge_cache
     domain = params[:type]&.to_sym
@@ -36,7 +36,7 @@ class Admin::CloudflareController < Admin::BaseController
 
   private
 
-  def require_admin_role!
+  def require_privileged_role!
     unless current_user&.admin? || current_user&.editor?
       redirect_to domain_root_path, alert: "Access denied. Admin or editor role required."
     end

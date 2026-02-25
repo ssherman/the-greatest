@@ -106,6 +106,17 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
     assert_redirected_to admin_songs_list_wizard_path(list_id: @list.id)
   end
 
+  test "should restart wizard with no list items without error" do
+    @list.list_items.destroy_all
+    @list.update!(wizard_state: {"current_step" => 3})
+
+    post restart_admin_songs_list_wizard_path(list_id: @list.id)
+
+    @list.reload
+    assert_equal 0, @list.wizard_manager.current_step
+    assert_redirected_to admin_songs_list_wizard_path(list_id: @list.id)
+  end
+
   test "should mark wizard as completed on last step advance" do
     @list.update!(wizard_state: {"current_step" => 6})
 
