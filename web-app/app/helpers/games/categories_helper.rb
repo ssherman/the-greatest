@@ -1,2 +1,0 @@
-module Games::CategoriesHelper
-end

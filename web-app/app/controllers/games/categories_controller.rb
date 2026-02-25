@@ -21,8 +21,6 @@ class Games::CategoriesController < ApplicationController
   private
 
   def build_ranked_games_query
-    return Games::Game.none unless @ranking_configuration
-
     RankedItem
       .joins("JOIN category_items ON category_items.item_id = ranked_items.item_id AND category_items.item_type = 'Games::Game'")
       .joins("JOIN games_games ON games_games.id = ranked_items.item_id AND ranked_items.item_type = 'Games::Game'")
