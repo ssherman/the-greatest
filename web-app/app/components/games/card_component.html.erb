@@ -1,15 +1,17 @@
-<%= link_to_game item_game, ranking_configuration, class: "card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow", data: { turbo_frame: "_top" } do %>
-  <figure class="px-4 pt-4">
-    <% if item_game.primary_image&.file&.attached? %>
-      <%= image_tag rails_public_blob_url(item_game.primary_image.file),
-          alt: item_game.title,
-          class: "rounded-xl w-full aspect-[3/4] object-cover" %>
-    <% else %>
-      <div class="bg-base-200 rounded-xl w-full aspect-[3/4] flex items-center justify-center">
-        <span class="text-base-content/50">No Image</span>
-      </div>
-    <% end %>
-  </figure>
+<div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow">
+  <%= link_to_game item_game, ranking_configuration, data: { turbo_frame: "_top" } do %>
+    <figure class="px-4 pt-4">
+      <% if item_game.primary_image&.file&.attached? %>
+        <%= image_tag rails_public_blob_url(item_game.primary_image.file),
+            alt: item_game.title,
+            class: "rounded-xl w-full aspect-[3/4] object-cover" %>
+      <% else %>
+        <div class="bg-base-200 rounded-xl w-full aspect-[3/4] flex items-center justify-center">
+          <span class="text-base-content/50">No Image</span>
+        </div>
+      <% end %>
+    </figure>
+  <% end %>
 
   <div class="card-body p-4">
     <div class="flex items-start justify-between mb-2">
@@ -26,7 +28,7 @@
     </div>
 
     <h2 class="card-title text-lg font-bold text-base-content mb-1">
-      <%= item_game.title %>
+      <%= link_to_game item_game, ranking_configuration, class: "hover:text-primary", data: { turbo_frame: "_top" } %>
     </h2>
 
     <% if developer_names.present? %>
@@ -39,9 +41,7 @@
     <% if cats.any? %>
       <div class="flex flex-wrap gap-1">
         <% cats.first(3).each do |category| %>
-          <span class="badge badge-ghost badge-sm">
-            <%= category.name %>
-          </span>
+          <%= link_to_game_category category, ranking_configuration, class: "badge badge-ghost badge-sm hover:badge-primary transition-colors", data: { turbo_frame: "_top" } %>
         <% end %>
         <% if cats.size > 3 %>
           <span class="badge badge-ghost badge-sm">
@@ -51,4 +51,4 @@
       </div>
     <% end %>
   </div>
-<% end %>
+</div>

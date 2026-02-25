@@ -10,7 +10,7 @@ test.describe('Games Lists', () => {
   test('lists index shows list cards', async ({ page }) => {
     await page.goto('/lists');
 
-    // Verify at least one list card is present
+    // Verify at least one list card is present (list cards are still a.card)
     const listCards = page.locator('a.card');
     await expect(listCards.first()).toBeVisible();
   });
@@ -47,8 +47,8 @@ test.describe('Games Lists', () => {
     await firstListCard.click();
     await expect(page).toHaveURL(/\/lists\/\d+/);
 
-    // Should show game cards (from CardComponent)
-    const gameCards = page.locator('a.card');
+    // Should show game cards (from CardComponent, now div.card)
+    const gameCards = page.locator('div.card');
     await expect(gameCards.first()).toBeVisible();
   });
 
@@ -71,14 +71,14 @@ test.describe('Games Lists', () => {
     await firstListCard.click();
     await expect(page).toHaveURL(/\/lists\/\d+/);
 
-    // Get the href of the first game card to verify it points to a game page
-    const firstGameCard = page.locator('a.card').first();
-    await expect(firstGameCard).toBeVisible();
-    const href = await firstGameCard.getAttribute('href');
+    // Get the href of the first game card's title link
+    const firstGameLink = page.locator('div.card .card-title a').first();
+    await expect(firstGameLink).toBeVisible();
+    const href = await firstGameLink.getAttribute('href');
     expect(href).toContain('/game/');
 
     // Click the game card and verify navigation
-    await firstGameCard.click();
+    await firstGameLink.click();
     await expect(page).toHaveURL(/\/game\//);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   });

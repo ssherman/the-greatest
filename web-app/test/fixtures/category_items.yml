@@ -38,3 +38,12 @@ dark_side_uk_category:
 wish_you_were_here_rock_category:
   category: music_rock_genre
   item: wish_you_were_here (Music::Album)
+
+# Games categorizations
+totk_action_category:
+  category: games_action_genre
+  item: tears_of_the_kingdom (Games::Game)
+
+re4_action_category:
+  category: games_action_genre
+  item: resident_evil_4 (Games::Game)
