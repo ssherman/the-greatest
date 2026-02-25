@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 # Games-specific item row component for wizard review step.
-# Inherits shared logic from Admin::Music::Wizard::ItemRowComponent.
+# Inherits shared logic from Wizard::ItemRowComponent.
 #
-class Admin::Games::Wizard::ItemRowComponent < Admin::Music::Wizard::ItemRowComponent
+class Admin::Games::Wizard::ItemRowComponent < Wizard::ItemRowComponent
   private
 
   def matched_title_key

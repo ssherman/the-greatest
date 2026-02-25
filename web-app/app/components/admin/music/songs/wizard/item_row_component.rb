@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # Song-specific item row component for wizard review step.
-# Inherits shared logic from Admin::Music::Wizard::ItemRowComponent.
+# Inherits music-specific logic from Admin::Music::Wizard::ItemRowComponent.
 #
 class Admin::Music::Songs::Wizard::ItemRowComponent < Admin::Music::Wizard::ItemRowComponent
   private
