@@ -272,9 +272,9 @@
       </p>
 
       <div class="form-control">
-        <%= f.text_area "list[raw_html]",
-            value: @list.raw_html,
-            class: "textarea textarea-bordered w-full h-64 font-mono text-sm #{@list.errors[:raw_html].any? ? 'textarea-error' : ''}",
+        <%= f.text_area "list[raw_content]",
+            value: @list.raw_content,
+            class: "textarea textarea-bordered w-full h-64 font-mono text-sm #{@list.errors[:raw_content].any? ? 'textarea-error' : ''}",
             placeholder: "1. Marvin Gaye - What's Going On\n2. The Beach Boys - Pet Sounds\n3. Joni Mitchell - Blue\n4. Stevie Wonder - Songs in the Key of Life\n5. The Beatles - Abbey Road\n..." %>
         <label class="label">
           <span class="label-text-alt">Enter each album or song on a new line. Include position numbers if available.</span>

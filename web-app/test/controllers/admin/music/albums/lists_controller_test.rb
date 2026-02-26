@@ -415,7 +415,7 @@ module Admin
           assert_response :success
         end
 
-        test "should update list with items_json as JSON string" do
+        test "items_json is not settable via admin form params" do
           sign_in_as(@admin_user, stub_auth: true)
 
           items_json_string = '{"albums": [{"rank": 1, "title": "Updated Album"}]}'
@@ -429,112 +429,63 @@ module Admin
           assert_redirected_to admin_albums_list_path(@album_list)
 
           @album_list.reload
-          # Rails automatically parses JSON strings for JSONB columns
-          assert @album_list.items_json.present?, "items_json should be present"
-          assert_kind_of Enumerable, @album_list.items_json, "items_json should be a Hash or Array, got #{@album_list.items_json.class}"
-
-          if @album_list.items_json.is_a?(Hash)
-            assert_equal 1, @album_list.items_json["albums"].length
-            assert_equal "Updated Album", @album_list.items_json["albums"][0]["title"]
-          end
+          # items_json should not be updated via form params (read-only in admin forms)
+          assert_nil @album_list.items_json
         end
 
-        test "should reject invalid JSON in items_json and return unprocessable_entity" do
-          sign_in_as(@admin_user, stub_auth: true)
-
-          invalid_json = '{"albums": [invalid json}'
-
-          patch admin_albums_list_path(@album_list), params: {
-            music_albums_list: {
-              items_json: invalid_json
-            }
-          }
-
-          assert_response :unprocessable_entity
-          # Verify error message appears in response body
-          assert_includes response.body, "must be valid JSON"
-        end
-
-        test "should reject invalid JSON on create and return unprocessable_entity" do
-          sign_in_as(@admin_user, stub_auth: true)
-
-          invalid_json = '{"albums": [invalid'
-
-          assert_no_difference("::Music::Albums::List.count") do
-            post admin_albums_lists_path, params: {
-              music_albums_list: {
-                name: "Invalid JSON List",
-                status: "approved",
-                items_json: invalid_json
-              }
-            }
-          end
-
-          assert_response :unprocessable_entity
-        end
-
-        test "should update list with raw_html and formatted_text" do
+        test "should update list with raw_content" do
           sign_in_as(@admin_user, stub_auth: true)
 
           patch admin_albums_list_path(@album_list), params: {
             music_albums_list: {
-              raw_html: "<html><body>Raw content</body></html>",
-              formatted_text: "Plain text content"
+              raw_content: "<html><body>Raw content</body></html>"
             }
           }
 
           assert_redirected_to admin_albums_list_path(@album_list)
 
           @album_list.reload
-          assert_equal "<html><body>Raw content</body></html>", @album_list.raw_html
-          # Note: simplified_html is auto-generated from raw_html by the model
-          assert @album_list.simplified_html.present?
-          assert_equal "Plain text content", @album_list.formatted_text
+          assert_equal "<html><body>Raw content</body></html>", @album_list.raw_content
+          # Note: simplified_content is auto-generated from raw_content by the model
+          assert @album_list.simplified_content.present?
         end
 
-        test "should update simplified_html directly when raw_html not changed" do
+        test "should update simplified_content directly when raw_content not changed" do
           sign_in_as(@admin_user, stub_auth: true)
 
-          # First set raw_html
-          @album_list.update!(raw_html: "<html><body>Original</body></html>")
+          # First set raw_content
+          @album_list.update!(raw_content: "<html><body>Original</body></html>")
 
-          # Now update simplified_html without changing raw_html
+          # Now update simplified_content without changing raw_content
           patch admin_albums_list_path(@album_list), params: {
             music_albums_list: {
-              simplified_html: "<div>Manually edited</div>"
+              simplified_content: "<div>Manually edited</div>"
             }
           }
 
           assert_redirected_to admin_albums_list_path(@album_list)
 
           @album_list.reload
-          assert_equal "<div>Manually edited</div>", @album_list.simplified_html
+          assert_equal "<div>Manually edited</div>", @album_list.simplified_content
         end
 
-        test "should create list with all data import fields" do
+        test "should create list with data import fields" do
           sign_in_as(@admin_user, stub_auth: true)
-
-          items_json_string = '{"albums": [{"rank": 1, "title": "Test Album"}]}'
 
           assert_difference("::Music::Albums::List.count") do
             post admin_albums_lists_path, params: {
               music_albums_list: {
                 name: "List with Data",
                 status: "approved",
-                items_json: items_json_string,
-                raw_html: "<html>Raw</html>",
-                formatted_text: "Text"
+                raw_content: "<html>Raw</html>"
               }
             }
           end
 
           list = ::Music::Albums::List.last
-          assert list.items_json.is_a?(Hash)
-          assert_equal 1, list.items_json["albums"].length
-          assert_equal "<html>Raw</html>", list.raw_html
-          # Note: simplified_html is auto-generated from raw_html
-          assert list.simplified_html.present?
-          assert_equal "Text", list.formatted_text
+          assert_equal "<html>Raw</html>", list.raw_content
+          # Note: simplified_content is auto-generated from raw_content
+          assert list.simplified_content.present?
         end
       end
     end

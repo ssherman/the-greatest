@@ -16,7 +16,7 @@ export class ListsPage {
     this.subtitle = page.getByText('Manage game lists and their rankings');
     this.searchInput = page.getByPlaceholder('Search by name or source...');
     this.statusFilter = page.locator('select[name="status"]');
-    this.newListButton = page.getByRole('link', { name: 'New List' });
+    this.newListButton = page.getByRole('link', { name: 'New Game List' });
     this.table = page.locator('table');
     this.tableRows = this.table.locator('tbody tr');
   }

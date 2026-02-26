@@ -12,11 +12,11 @@ module Services
       end
 
       def call
-        return failure("List has no raw HTML") if @list.raw_html.blank?
+        return failure("List has no raw content") if @list.raw_content.blank?
 
-        # Step 1: Simplify HTML
-        simplified_html = Services::Html::SimplifierService.call(@list.raw_html)
-        @list.update!(simplified_html: simplified_html)
+        # Step 1: Simplify content
+        simplified_content = Services::Html::SimplifierService.call(@list.raw_content)
+        @list.update!(simplified_content: simplified_content)
 
         # Step 2: Parse with appropriate AI task
         parser_class = determine_parser_class

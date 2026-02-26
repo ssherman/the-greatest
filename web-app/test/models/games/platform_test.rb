@@ -1,3 +1,20 @@
+# == Schema Information
+#
+# Table name: games_platforms
+#
+#  id              :bigint           not null, primary key
+#  abbreviation    :string
+#  name            :string           not null
+#  platform_family :integer
+#  slug            :string           not null
+#  created_at      :datetime         not null
+#  updated_at      :datetime         not null
+#
+# Indexes
+#
+#  index_games_platforms_on_platform_family  (platform_family)
+#  index_games_platforms_on_slug             (slug) UNIQUE
+#
 require "test_helper"
 
 module Games

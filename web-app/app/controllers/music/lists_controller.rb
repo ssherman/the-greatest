@@ -78,7 +78,7 @@ class Music::ListsController < ApplicationController
       :voter_count_estimated,
       :voter_names_unknown,
       :voter_count_unknown,
-      :raw_html
+      :raw_content
     )
   end
 end

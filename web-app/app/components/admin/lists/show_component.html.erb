@@ -1,0 +1,322 @@
+<div class="space-y-6">
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div class="flex-1">
+      <div class="flex items-center gap-2 mb-2">
+        <%= link_to domain_config[:lists_path], class: "btn btn-ghost btn-sm btn-circle", data: { testid: "back-button" } do %>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+          </svg>
+        <% end %>
+        <h1 class="text-3xl font-bold"><%= list.name %></h1>
+        <span class="badge <%= list.approved? ? 'badge-success' : list.active? ? 'badge-primary' : list.rejected? ? 'badge-error' : 'badge-ghost' %>">
+          <%= list.status.titleize %>
+        </span>
+      </div>
+      <div class="flex items-center gap-4 text-sm text-base-content/70">
+        <span>ID: <span class="font-mono"><%= list.id %></span></span>
+        <span>Created <%= time_ago_in_words(list.created_at) %> ago</span>
+      </div>
+    </div>
+    <div class="flex gap-2">
+      <%= link_to domain_config[:wizard_path_proc].call(list), class: "btn btn-secondary" do %>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 17.5 9.134a1 1 0 010 1.732l-3.354 1.935-1.18 4.455a1 1 0 01-1.933 0L9.854 12.8 6.5 10.866a1 1 0 010-1.732l3.354-1.935 1.18-4.455A1 1 0 0112 2z" clip-rule="evenodd" />
+        </svg>
+        <span>Launch Wizard</span>
+        <% if list.wizard_state.present? && list.wizard_state["completed_at"].blank? %>
+          <span class="badge badge-warning badge-sm">In Progress</span>
+        <% end %>
+      <% end %>
+
+      <%= link_to domain_config[:edit_list_path_proc].call(list), class: "btn btn-primary" do %>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+        </svg>
+        <span>Edit</span>
+      <% end %>
+
+      <%= button_to domain_config[:list_path_proc].call(list),
+          method: :delete,
+          class: "btn btn-error btn-outline",
+          data: { turbo_confirm: "Are you sure you want to delete #{list.name}? This cannot be undone." } do %>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+        </svg>
+        <span>Delete</span>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">Basic Information</h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Name</span>
+              </label>
+              <p class="text-lg"><%= list.name %></p>
+            </div>
+
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Status</span>
+              </label>
+              <span class="badge <%= list.approved? ? 'badge-success' : list.active? ? 'badge-primary' : list.rejected? ? 'badge-error' : 'badge-ghost' %> badge-lg">
+                <%= list.status.titleize %>
+              </span>
+            </div>
+
+            <% if list.source.present? || list.url.present? %>
+              <%
+                source_display = list.source.presence || list.url
+                source_display = "#{source_display} (#{list.source_country_origin})" if list.source_country_origin.present?
+              %>
+              <div>
+                <label class="label">
+                  <span class="label-text font-semibold">Source</span>
+                </label>
+                <% if list.url.present? %>
+                  <%= link_to source_display, list.url,
+                      target: "_blank",
+                      rel: "noopener",
+                      class: "link link-primary" %>
+                <% else %>
+                  <p><%= source_display %></p>
+                <% end %>
+              </div>
+            <% end %>
+
+            <% if list.year_published.present? %>
+              <div>
+                <label class="label">
+                  <span class="label-text font-semibold">Year Published</span>
+                </label>
+                <p><%= list.year_published %></p>
+              </div>
+            <% end %>
+
+            <% if list.submitted_by.present? %>
+              <div>
+                <label class="label">
+                  <span class="label-text font-semibold">Submitted By</span>
+                </label>
+                <p><%= list.submitted_by.email %></p>
+              </div>
+            <% end %>
+
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Created</span>
+              </label>
+              <p><%= list.created_at.strftime("%B %d, %Y at %I:%M %p") %></p>
+            </div>
+
+            <div>
+              <label class="label">
+                <span class="label-text font-semibold">Updated</span>
+              </label>
+              <p><%= list.updated_at.strftime("%B %d, %Y at %I:%M %p") %></p>
+            </div>
+          </div>
+
+          <% if list.description.present? %>
+            <div class="mt-4">
+              <label class="label">
+                <span class="label-text font-semibold">Description</span>
+              </label>
+              <p class="text-base-content/80 whitespace-pre-wrap"><%= list.description %></p>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
+      <% if metadata_card_visible? %>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title">Metadata</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <% if list.number_of_voters.present? %>
+                <div>
+                  <label class="label">
+                    <span class="label-text font-semibold">Number of Voters</span>
+                  </label>
+                  <p><%= number_with_delimiter(list.number_of_voters) %></p>
+                </div>
+              <% end %>
+
+              <% if list.estimated_quality.present? %>
+                <div>
+                  <label class="label">
+                    <span class="label-text font-semibold">Estimated Quality</span>
+                  </label>
+                  <p><%= list.estimated_quality %></p>
+                </div>
+              <% end %>
+
+              <% if list.num_years_covered.present? %>
+                <div>
+                  <label class="label">
+                    <span class="label-text font-semibold">Years Covered</span>
+                  </label>
+                  <p><%= list.num_years_covered %></p>
+                </div>
+              <% end %>
+
+              <% if show_musicbrainz_field? && list.musicbrainz_series_id.present? %>
+                <div class="md:col-span-2">
+                  <label class="label">
+                    <span class="label-text font-semibold">MusicBrainz Series ID</span>
+                  </label>
+                  <p class="font-mono"><%= list.musicbrainz_series_id %></p>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        </div>
+      <% end %>
+
+      <% if list.high_quality_source || list.category_specific || list.location_specific || list.yearly_award || list.voter_count_estimated || list.voter_count_unknown || list.voter_names_unknown %>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title">Flags</h2>
+            <div class="flex flex-wrap gap-2">
+              <% if list.high_quality_source %>
+                <span class="badge badge-success badge-lg">High Quality Source</span>
+              <% end %>
+              <% if list.category_specific %>
+                <span class="badge badge-info badge-lg">Category Specific</span>
+              <% end %>
+              <% if list.location_specific %>
+                <span class="badge badge-info badge-lg">Location Specific</span>
+              <% end %>
+              <% if list.yearly_award %>
+                <span class="badge badge-warning badge-lg">Yearly Award</span>
+              <% end %>
+              <% if list.voter_count_estimated %>
+                <span class="badge badge-ghost badge-lg">Voter Count Estimated</span>
+              <% end %>
+              <% if list.voter_count_unknown %>
+                <span class="badge badge-ghost badge-lg">Voter Count Unknown</span>
+              <% end %>
+              <% if list.voter_names_unknown %>
+                <span class="badge badge-ghost badge-lg">Voter Names Unknown</span>
+              <% end %>
+            </div>
+          </div>
+        </div>
+      <% end %>
+
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="card-title">
+              <%= domain_config[:item_label_plural] %>
+              <span class="badge badge-ghost"><%= list.list_items.count %></span>
+            </h2>
+            <div class="flex gap-2">
+              <% if list.list_items.any? %>
+                <%= button_to destroy_all_admin_list_list_items_path(list),
+                    method: :delete,
+                    class: "btn btn-error btn-outline btn-sm",
+                    data: { turbo_confirm: "Are you sure you want to delete all #{list.list_items.count} items from this list? This cannot be undone." } do %>
+                  Delete All Items
+                <% end %>
+              <% end %>
+              <button class="btn btn-primary btn-sm" onclick="add_item_to_list_modal_dialog.showModal()">
+                + Add <%= domain_config[:item_label] %>
+              </button>
+            </div>
+          </div>
+          <%= helpers.turbo_frame_tag "list_items_list", loading: :lazy,
+              src: admin_list_list_items_path(list) do %>
+            <div class="flex justify-center py-8">
+              <span class="loading loading-spinner loading-lg"></span>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="card-title">
+              Penalties
+              <span class="badge badge-ghost"><%= list.list_penalties.count %></span>
+            </h2>
+            <button class="btn btn-primary btn-sm" onclick="attach_penalty_modal_dialog.showModal()">
+              + Attach Penalty
+            </button>
+          </div>
+          <%= helpers.turbo_frame_tag "list_penalties_list", loading: :lazy,
+              src: admin_list_list_penalties_path(list) do %>
+            <div class="flex justify-center py-8">
+              <span class="loading loading-spinner loading-lg"></span>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
+      <% if list.items_json.present? %>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title">Items JSON</h2>
+            <div class="alert alert-info">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+              <span>This JSON data contains <%= number_with_delimiter(count_items_json(list.items_json)) %> items.</span>
+            </div>
+            <pre class="bg-base-200 p-4 rounded-lg overflow-x-auto max-h-96"><code class="language-json"><%= items_json_to_string(list.items_json) %></code></pre>
+          </div>
+        </div>
+      <% end %>
+
+      <% if list.raw_content.present? %>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title">Raw Content</h2>
+            <div class="bg-base-200 p-4 rounded-lg overflow-x-auto max-h-96">
+              <pre class="text-xs"><%= list.raw_content.truncate(1000) %></pre>
+            </div>
+          </div>
+        </div>
+      <% end %>
+
+      <% if list.simplified_content.present? %>
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body">
+            <h2 class="card-title">Simplified Content</h2>
+            <div class="bg-base-200 p-4 rounded-lg overflow-x-auto max-h-96">
+              <pre class="text-xs"><%= list.simplified_content.truncate(1000) %></pre>
+            </div>
+          </div>
+        </div>
+      <% end %>
+    </div>
+
+    <div class="space-y-6">
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">Statistics</h2>
+          <div class="stats stats-vertical shadow">
+            <div class="stat">
+              <div class="stat-title"><%= domain_config[:item_label_plural] %></div>
+              <div class="stat-value text-primary"><%= list.list_items.count %></div>
+            </div>
+
+            <% if list.penalties.any? %>
+              <div class="stat">
+                <div class="stat-title">Penalties</div>
+                <div class="stat-value text-error"><%= list.penalties.count %></div>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%= render Admin::AttachPenaltyModalComponent.new(list: list) %>
+<%= render Admin::AddItemToListModalComponent.new(list: list) %>

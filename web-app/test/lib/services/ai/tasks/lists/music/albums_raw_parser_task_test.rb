@@ -9,7 +9,7 @@ module Services
             def setup
               @list = lists(:music_albums_list)
               @list.update!(
-                simplified_html: "<ul><li>1. Abbey Road - The Beatles (1969)</li><li>The Dark Side of the Moon - Pink Floyd</li></ul>"
+                simplified_content: "<ul><li>1. Abbey Road - The Beatles (1969)</li><li>The Dark Side of the Moon - Pink Floyd</li></ul>"
               )
 
               # Mock the AI provider strategy

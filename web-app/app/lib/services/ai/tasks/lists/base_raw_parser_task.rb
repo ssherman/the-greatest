@@ -7,7 +7,7 @@ module Services
         class BaseRawParserTask < Services::Ai::Tasks::BaseTask
           # Override BaseTask initializer to accept optional content parameter.
           # When content: is provided (for batch processing), uses that content
-          # instead of parent.simplified_html and skips parent.update! in persist.
+          # instead of parent.simplified_content and skips parent.update! in persist.
           def initialize(parent:, content: nil, provider: nil, model: nil)
             @provided_content = content
             super(parent: parent, provider: provider, model: model)
@@ -60,7 +60,7 @@ module Services
           end
 
           def content_to_parse
-            @provided_content || parent.simplified_html
+            @provided_content || parent.simplified_content
           end
 
           def response_format = {type: "json_object"}

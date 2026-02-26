@@ -5,7 +5,7 @@
   active: true
 )) do |step| %>
   <% step.with_step_content do %>
-    <% if list.raw_html.blank? %>
+    <% if list.raw_content.blank? %>
       <%# Step 1a: Input HTML %>
       <%= form_with url: helpers.save_html_admin_games_list_wizard_path(list_id: list.id), method: :post, data: { turbo_frame: "wizard_content" } do |f| %>
         <div class="space-y-6">
@@ -13,7 +13,7 @@
             <label class="label">
               <span class="label-text font-bold">Paste HTML Content</span>
             </label>
-            <%= f.text_area :raw_html,
+            <%= f.text_area :raw_content,
                 rows: 15,
                 placeholder: "Paste the HTML content from your source list here...\n\nFor example:\n1. The Legend of Zelda: Breath of the Wild (2017)\n2. Red Dead Redemption 2 (2018)",
                 class: "textarea textarea-bordered w-full font-mono text-sm",
@@ -39,8 +39,8 @@
         <div class="card bg-base-200 mb-6">
           <div class="card-body">
             <h3 class="card-title text-sm">HTML Preview</h3>
-            <pre class="text-xs overflow-x-auto"><%= raw_html_preview %></pre>
-            <% if list.raw_html.length > 500 %>
+            <pre class="text-xs overflow-x-auto"><%= raw_content_preview %></pre>
+            <% if list.raw_content.length > 500 %>
               <p class="text-xs text-base-content/70">... (truncated)</p>
             <% end %>
           </div>

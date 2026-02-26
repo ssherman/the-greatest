@@ -209,7 +209,7 @@ class Admin::Music::Songs::ListWizardControllerTest < ActionDispatch::Integratio
   end
 
   test "parse step loads HTML preview" do
-    @list.update!(raw_html: "Test HTML content")
+    @list.update!(raw_content: "Test HTML content")
     get step_admin_songs_list_wizard_path(list_id: @list.id, step: "parse")
 
     assert_response :success

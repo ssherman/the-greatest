@@ -20,8 +20,8 @@ class BaseWizardParseListJob
   def perform(list_id)
     @list = list_class.find(list_id)
 
-    if @list.raw_html.blank?
-      handle_error("Cannot parse: raw_html is blank. Please go back and provide HTML content.")
+    if @list.raw_content.blank?
+      handle_error("Cannot parse: raw_content is blank. Please go back and provide content.")
       return
     end
 
@@ -114,7 +114,7 @@ class BaseWizardParseListJob
 
   # Process content in batches of lines for large lists
   def perform_batched_parse
-    batches = split_into_batches(@list.simplified_html)
+    batches = split_into_batches(@list.simplified_content)
     all_items_attrs = []
     current_position = 0
 

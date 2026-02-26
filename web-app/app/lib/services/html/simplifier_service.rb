@@ -3,18 +3,18 @@
 module Services
   module Html
     class SimplifierService
-      def self.call(raw_html)
-        new(raw_html).call
+      def self.call(raw_content)
+        new(raw_content).call
       end
 
-      def initialize(raw_html)
-        @raw_html = raw_html
+      def initialize(raw_content)
+        @raw_content = raw_content
       end
 
       def call
-        return nil if @raw_html.blank?
+        return nil if @raw_content.blank?
 
-        doc = Nokogiri::HTML::DocumentFragment.parse(@raw_html)
+        doc = Nokogiri::HTML::DocumentFragment.parse(@raw_content)
         simplify_node(doc)
         doc.to_html
       end

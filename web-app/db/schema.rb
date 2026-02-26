@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_02_07_004642) do
+ActiveRecord::Schema[8.1].define(version: 2026_02_26_002022) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -271,7 +271,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_07_004642) do
     t.boolean "creator_specific"
     t.text "description"
     t.integer "estimated_quality", default: 0, null: false
-    t.text "formatted_text"
     t.boolean "high_quality_source"
     t.jsonb "items_json"
     t.boolean "location_specific"
@@ -279,8 +278,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_07_004642) do
     t.string "name", null: false
     t.integer "num_years_covered"
     t.integer "number_of_voters"
-    t.text "raw_html"
-    t.text "simplified_html"
+    t.text "raw_content"
+    t.text "simplified_content"
     t.string "source"
     t.string "source_country_origin"
     t.integer "status", default: 0, null: false

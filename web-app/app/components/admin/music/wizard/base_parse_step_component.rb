@@ -11,16 +11,16 @@
 #   - entity_name_plural: "songs" or "albums" for display text
 #
 class Admin::Music::Wizard::BaseParseStepComponent < ViewComponent::Base
-  def initialize(list:, errors: [], raw_html_preview: nil, parsed_count: nil)
+  def initialize(list:, errors: [], raw_content_preview: nil, parsed_count: nil)
     @list = list
     @errors = errors
-    @raw_html_preview = raw_html_preview || list.raw_html&.truncate(500) || "(No HTML provided)"
+    @raw_content_preview = raw_content_preview || list.raw_content&.truncate(500) || "(No HTML provided)"
     @parsed_count = parsed_count || list.list_items.unverified.count
   end
 
   private
 
-  attr_reader :list, :errors, :raw_html_preview, :parsed_count
+  attr_reader :list, :errors, :raw_content_preview, :parsed_count
 
   # Abstract methods - subclasses must implement
   def save_html_path

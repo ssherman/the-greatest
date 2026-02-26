@@ -280,7 +280,7 @@ module Admin
           assert_equal "12345678-1234-1234-1234-123456789012", list.musicbrainz_series_id
         end
 
-        test "should handle items_json as string" do
+        test "items_json is not settable via admin form params" do
           json_string = '{"songs": [{"rank": 1, "title": "Test Song", "artist": "Test Artist"}]}'
           post admin_songs_lists_path, params: {
             music_songs_list: {
@@ -290,54 +290,31 @@ module Admin
             }
           }
           list = ::Music::Songs::List.last
-          assert_not_nil list.items_json
+          assert_nil list.items_json
         end
 
-        test "should handle items_json validation error" do
+        test "should handle raw_content field" do
           post admin_songs_lists_path, params: {
             music_songs_list: {
-              name: "Invalid JSON List",
+              name: "Raw Content Test List",
               status: "active",
-              items_json: "invalid json"
-            }
-          }
-          assert_response :unprocessable_entity
-        end
-
-        test "should handle raw_html field" do
-          post admin_songs_lists_path, params: {
-            music_songs_list: {
-              name: "HTML Test List",
-              status: "active",
-              raw_html: "<html><body>Test</body></html>"
+              raw_content: "<html><body>Test</body></html>"
             }
           }
           list = ::Music::Songs::List.last
-          assert_equal "<html><body>Test</body></html>", list.raw_html
+          assert_equal "<html><body>Test</body></html>", list.raw_content
         end
 
-        test "should handle simplified_html field" do
+        test "should handle simplified_content field" do
           post admin_songs_lists_path, params: {
             music_songs_list: {
-              name: "Simplified HTML Test List",
+              name: "Simplified Content Test List",
               status: "active",
-              simplified_html: "<p>Simplified content</p>"
+              simplified_content: "<p>Simplified content</p>"
             }
           }
           list = ::Music::Songs::List.last
-          assert_equal "<p>Simplified content</p>", list.simplified_html
-        end
-
-        test "should handle formatted_text field" do
-          post admin_songs_lists_path, params: {
-            music_songs_list: {
-              name: "Formatted Text Test List",
-              status: "active",
-              formatted_text: "Plain text content"
-            }
-          }
-          list = ::Music::Songs::List.last
-          assert_equal "Plain text content", list.formatted_text
+          assert_equal "<p>Simplified content</p>", list.simplified_content
         end
       end
     end

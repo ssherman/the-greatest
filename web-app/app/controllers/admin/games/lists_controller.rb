@@ -53,4 +53,8 @@ class Admin::Games::ListsController < Admin::ListsBaseController
   def listable_includes
     [:companies, :platforms, :series]
   end
+
+  def wizard_path(list)
+    admin_games_list_wizard_path(list_id: list.id)
+  end
 end
