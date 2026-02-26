@@ -5,7 +5,7 @@ class Games::WizardParseListJobTest < ActiveSupport::TestCase
   setup do
     @list = lists(:games_list)
     @list.update!(
-      raw_html: "<ol><li>Game 1 - Dev 1</li></ol>",
+      raw_content: "<ol><li>Game 1 - Dev 1</li></ol>",
       wizard_state: {"current_step" => 1, "job_status" => "idle"}
     )
   end
@@ -68,8 +68,8 @@ class Games::WizardParseListJobTest < ActiveSupport::TestCase
     assert_equal "failed", @list.wizard_manager.step_status("parse")
   end
 
-  test "job handles blank raw_html" do
-    @list.update!(raw_html: nil)
+  test "job handles blank raw_content" do
+    @list.update!(raw_content: nil)
 
     Games::WizardParseListJob.new.perform(@list.id)
 

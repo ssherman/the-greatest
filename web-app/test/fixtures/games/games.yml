@@ -1,3 +1,31 @@
+# == Schema Information
+#
+# Table name: games_games
+#
+#  id             :bigint           not null, primary key
+#  description    :text
+#  game_type      :integer          default("main_game"), not null
+#  release_year   :integer
+#  slug           :string           not null
+#  title          :string           not null
+#  created_at     :datetime         not null
+#  updated_at     :datetime         not null
+#  parent_game_id :bigint
+#  series_id      :bigint
+#
+# Indexes
+#
+#  index_games_games_on_game_type       (game_type)
+#  index_games_games_on_parent_game_id  (parent_game_id)
+#  index_games_games_on_release_year    (release_year)
+#  index_games_games_on_series_id       (series_id)
+#  index_games_games_on_slug            (slug) UNIQUE
+#
+# Foreign Keys
+#
+#  fk_rails_...  (parent_game_id => games_games.id)
+#  fk_rails_...  (series_id => games_series.id)
+#
 breath_of_the_wild:
   title: "The Legend of Zelda: Breath of the Wild"
   slug: "the-legend-of-zelda-breath-of-the-wild"

@@ -5,7 +5,7 @@ class Music::Albums::WizardParseListJobTest < ActiveSupport::TestCase
   setup do
     @list = lists(:music_albums_list)
     @list.update!(
-      raw_html: "<ol><li>Album 1 - Artist 1</li></ol>",
+      raw_content: "<ol><li>Album 1 - Artist 1</li></ol>",
       wizard_state: {"current_step" => 1, "job_status" => "idle"}
     )
   end
@@ -74,15 +74,15 @@ class Music::Albums::WizardParseListJobTest < ActiveSupport::TestCase
     assert_includes manager.step_error("parse"), "AI service timeout"
   end
 
-  test "job fails immediately if raw_html is blank" do
-    @list.update!(raw_html: nil)
+  test "job fails immediately if raw_content is blank" do
+    @list.update!(raw_content: nil)
 
     Music::Albums::WizardParseListJob.new.perform(@list.id)
 
     @list.reload
     manager = @list.wizard_manager
     assert_equal "failed", manager.step_status("parse")
-    assert_includes manager.step_error("parse"), "raw_html is blank"
+    assert_includes manager.step_error("parse"), "raw_content is blank"
   end
 
   test "job is idempotent - clears old unverified items" do

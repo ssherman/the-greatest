@@ -9,7 +9,7 @@ module Services
             def setup
               @list = lists(:music_songs_list)
               @list.update!(
-                simplified_html: "<ul><li>1. Bohemian Rhapsody - Queen (A Night at the Opera)</li><li>Imagine - John Lennon</li></ul>"
+                simplified_content: "<ul><li>1. Bohemian Rhapsody - Queen (A Night at the Opera)</li><li>Imagine - John Lennon</li></ul>"
               )
 
               # Mock the AI provider strategy

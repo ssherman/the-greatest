@@ -37,7 +37,7 @@ module BaseListWizardController
   # Saves raw HTML content for parsing.
   # Called from the source step when user provides custom HTML.
   def save_html
-    wizard_entity.update!(raw_html: params[:raw_html])
+    wizard_entity.update!(raw_content: params[:raw_content])
     redirect_to action: :show_step, step: "parse", notice: "HTML saved successfully"
   end
 
@@ -125,7 +125,7 @@ module BaseListWizardController
   end
 
   def load_parse_step_data
-    @raw_html_preview = @list.raw_html&.truncate(500) || "(No HTML provided)"
+    @raw_content_preview = @list.raw_content&.truncate(500) || "(No content provided)"
     @parsed_count = @list.list_items.unverified.count
   end
 

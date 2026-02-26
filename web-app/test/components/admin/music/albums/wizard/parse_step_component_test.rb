@@ -5,7 +5,7 @@ require "test_helper"
 class Admin::Music::Albums::Wizard::ParseStepComponentTest < ViewComponent::TestCase
   setup do
     @list = lists(:music_albums_list)
-    @list.update!(raw_html: "Sample HTML content for testing")
+    @list.update!(raw_content: "Sample HTML content for testing")
   end
 
   # Helper to set step-namespaced wizard state for parse step
@@ -120,7 +120,7 @@ class Admin::Music::Albums::Wizard::ParseStepComponentTest < ViewComponent::Test
 
   test "truncates long HTML preview" do
     long_html = "a" * 600
-    @list.update!(raw_html: long_html)
+    @list.update!(raw_content: long_html)
 
     render_inline(Admin::Music::Albums::Wizard::ParseStepComponent.new(list: @list))
 

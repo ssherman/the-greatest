@@ -7,15 +7,14 @@
 #  creator_specific      :boolean
 #  description           :text
 #  estimated_quality     :integer          default(0), not null
-#  formatted_text        :text
 #  high_quality_source   :boolean
 #  items_json            :jsonb
 #  location_specific     :boolean
 #  name                  :string           not null
 #  num_years_covered     :integer
 #  number_of_voters      :integer
-#  raw_html              :text
-#  simplified_html       :text
+#  raw_content           :text
+#  simplified_content    :text
 #  source                :string
 #  source_country_origin :string
 #  status                :integer          default("unapproved"), not null
@@ -200,18 +199,18 @@ class ListTest < ActiveSupport::TestCase
     assert_equal({success: true, data: {}}, result)
   end
 
-  # Test automatic HTML simplification callback
-  test "should automatically simplify HTML when raw_html is present on save" do
+  # Test automatic content simplification callback
+  test "should automatically simplify content when raw_content is present on save" do
     list = lists(:basic_list)
-    raw_html = "<div><script>alert('test')</script><p>Content</p></div>"
+    raw_content = "<div><script>alert('test')</script><p>Content</p></div>"
     simplified = "<div><p>Content</p></div>"
 
-    Services::Html::SimplifierService.expects(:call).with(raw_html).returns(simplified)
+    Services::Html::SimplifierService.expects(:call).with(raw_content).returns(simplified)
 
-    list.raw_html = raw_html
+    list.raw_content = raw_content
     list.save!
 
-    assert_equal simplified, list.simplified_html
+    assert_equal simplified, list.simplified_content
   end
 
   # ============================================

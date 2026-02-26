@@ -5,7 +5,7 @@ class Music::Songs::WizardParseListJobTest < ActiveSupport::TestCase
   setup do
     @list = lists(:music_songs_list)
     @list.update!(
-      raw_html: "<ol><li>Song 1 - Artist 1</li></ol>",
+      raw_content: "<ol><li>Song 1 - Artist 1</li></ol>",
       wizard_state: {"current_step" => 1, "job_status" => "idle"}
     )
   end
@@ -74,15 +74,15 @@ class Music::Songs::WizardParseListJobTest < ActiveSupport::TestCase
     assert_includes manager.step_error("parse"), "AI service timeout"
   end
 
-  test "job fails immediately if raw_html is blank" do
-    @list.update!(raw_html: nil)
+  test "job fails immediately if raw_content is blank" do
+    @list.update!(raw_content: nil)
 
     Music::Songs::WizardParseListJob.new.perform(@list.id)
 
     @list.reload
     manager = @list.wizard_manager
     assert_equal "failed", manager.step_status("parse")
-    assert_includes manager.step_error("parse"), "raw_html is blank"
+    assert_includes manager.step_error("parse"), "raw_content is blank"
   end
 
   test "job is idempotent - clears old unverified items" do
@@ -172,7 +172,7 @@ class Music::Songs::WizardParseListJobTest < ActiveSupport::TestCase
     # Enable batch mode and set up plain text content
     @list.update!(
       wizard_state: {"current_step" => 1, "batch_mode" => true},
-      simplified_html: "1. Song A - Artist A\n2. Song B - Artist B\n3. Song C - Artist C"
+      simplified_content: "1. Song A - Artist A\n2. Song B - Artist B\n3. Song C - Artist C"
     )
 
     # Mock AI returns items with rank: 5, 10, 15 - but batch mode should ignore these
@@ -202,7 +202,7 @@ class Music::Songs::WizardParseListJobTest < ActiveSupport::TestCase
     lines = (1..150).map { |i| "#{i}. Song #{i} - Artist #{i}" }
     @list.update!(
       wizard_state: {"current_step" => 1, "batch_mode" => true},
-      simplified_html: lines.join("\n")
+      simplified_content: lines.join("\n")
     )
 
     # First batch returns 100 items
@@ -233,7 +233,7 @@ class Music::Songs::WizardParseListJobTest < ActiveSupport::TestCase
   test "batch mode metadata includes batch info on completion" do
     @list.update!(
       wizard_state: {"current_step" => 1, "batch_mode" => true},
-      simplified_html: "1. Song A - Artist A\n2. Song B - Artist B"
+      simplified_content: "1. Song A - Artist A\n2. Song B - Artist B"
     )
 
     parsed_songs = [
@@ -260,7 +260,7 @@ class Music::Songs::WizardParseListJobTest < ActiveSupport::TestCase
   test "batch mode filters empty lines before batching" do
     @list.update!(
       wizard_state: {"current_step" => 1, "batch_mode" => true},
-      simplified_html: "1. Song A - Artist A\n\n\n2. Song B - Artist B\n   \n3. Song C - Artist C"
+      simplified_content: "1. Song A - Artist A\n\n\n2. Song B - Artist B\n   \n3. Song C - Artist C"
     )
 
     # Should only get 3 non-empty lines
@@ -287,7 +287,7 @@ class Music::Songs::WizardParseListJobTest < ActiveSupport::TestCase
     lines = (1..150).map { |i| "#{i}. Song #{i} - Artist #{i}" }
     @list.update!(
       wizard_state: {"current_step" => 1, "batch_mode" => true},
-      simplified_html: lines.join("\n")
+      simplified_content: lines.join("\n")
     )
 
     # First batch succeeds
@@ -315,7 +315,7 @@ class Music::Songs::WizardParseListJobTest < ActiveSupport::TestCase
     # batch_mode not set (defaults to false)
     @list.update!(
       wizard_state: {"current_step" => 1},
-      simplified_html: "Some HTML content"
+      simplified_content: "Some HTML content"
     )
 
     # AI returns items with explicit ranks

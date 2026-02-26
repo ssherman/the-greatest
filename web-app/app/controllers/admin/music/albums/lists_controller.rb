@@ -35,6 +35,10 @@ module Admin
         def listable_includes
           [:artists, :categories, :primary_image]
         end
+
+        def wizard_path(list)
+          admin_albums_list_wizard_path(list_id: list.id)
+        end
       end
     end
   end

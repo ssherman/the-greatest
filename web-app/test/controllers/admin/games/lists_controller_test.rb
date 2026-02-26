@@ -357,22 +357,20 @@ module Admin
         assert_response :success
       end
 
-      test "should update list with raw_html and formatted_text" do
+      test "should update list with raw_content" do
         sign_in_as(@admin_user, stub_auth: true)
 
         patch admin_games_list_path(@games_list), params: {
           games_list: {
-            raw_html: "<html><body>Raw content</body></html>",
-            formatted_text: "Plain text content"
+            raw_content: "<html><body>Raw content</body></html>"
           }
         }
 
         assert_redirected_to admin_games_list_path(@games_list)
 
         @games_list.reload
-        assert_equal "<html><body>Raw content</body></html>", @games_list.raw_html
-        assert @games_list.simplified_html.present?
-        assert_equal "Plain text content", @games_list.formatted_text
+        assert_equal "<html><body>Raw content</body></html>", @games_list.raw_content
+        assert @games_list.simplified_content.present?
       end
 
       test "should search lists by name" do

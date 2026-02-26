@@ -2,6 +2,8 @@ class Admin::ListsBaseController < Admin::BaseController
   before_action :set_list, only: [:show, :edit, :update, :destroy]
   before_action :authorize_list, only: [:show, :edit, :update, :destroy]
 
+  helper_method :domain_config
+
   def index
     authorize list_class, policy_class: policy_class
     load_lists_for_index
@@ -126,10 +128,8 @@ class Admin::ListsBaseController < Admin::BaseController
       :voter_names_unknown,
       :creator_specific,
       :num_years_covered,
-      :items_json,
-      :raw_html,
-      :simplified_html,
-      :formatted_text
+      :raw_content,
+      :simplified_content
     ]
   end
 
@@ -173,5 +173,47 @@ class Admin::ListsBaseController < Admin::BaseController
 
   def item_label
     raise NotImplementedError, "Subclass must implement item_label"
+  end
+
+  def wizard_path(list)
+    raise NotImplementedError, "Subclass must implement wizard_path"
+  end
+
+  def source_placeholder
+    "e.g., IGN, GameSpot, Metacritic"
+  end
+
+  def country_placeholder
+    "e.g., USA, Japan, UK"
+  end
+
+  def info_alert_text
+    "#{item_label.pluralize} can be managed after creating the list using the Add #{item_label} button on the show page"
+  end
+
+  def extra_form_fields
+    []
+  end
+
+  def extra_show_fields
+    []
+  end
+
+  def domain_config
+    {
+      item_label: item_label,
+      item_label_plural: item_label.pluralize,
+      lists_path: lists_path,
+      list_path_proc: method(:list_path),
+      new_list_path: new_list_path,
+      edit_list_path_proc: method(:edit_list_path),
+      wizard_path_proc: method(:wizard_path),
+      items_count_method: items_count_name,
+      source_placeholder: source_placeholder,
+      country_placeholder: country_placeholder,
+      info_alert_text: info_alert_text,
+      extra_fields: extra_form_fields,
+      extra_show_fields: extra_show_fields
+    }
   end
 end

@@ -167,19 +167,19 @@ class Admin::Games::ListWizardControllerTest < ActionDispatch::IntegrationTest
     assert_response :redirect
   end
 
-  test "save_html saves raw html and redirects to parse" do
+  test "save_html saves raw content and redirects to parse" do
     post save_html_admin_games_list_wizard_path(list_id: @list.id), params: {
-      raw_html: "<ol><li>Game 1</li></ol>"
+      raw_content: "<ol><li>Game 1</li></ol>"
     }
 
     @list.reload
-    assert_equal "<ol><li>Game 1</li></ol>", @list.raw_html
+    assert_equal "<ol><li>Game 1</li></ol>", @list.raw_content
     assert_response :redirect
     assert_match %r{/admin/lists/#{@list.id}/wizard/step/parse}, response.location
   end
 
   test "parse step shows html preview when html exists" do
-    @list.update!(raw_html: "<ol><li>Game 1</li></ol>")
+    @list.update!(raw_content: "<ol><li>Game 1</li></ol>")
 
     get step_admin_games_list_wizard_path(list_id: @list.id, step: "parse")
 
@@ -188,7 +188,7 @@ class Admin::Games::ListWizardControllerTest < ActionDispatch::IntegrationTest
 
   test "advancing from parse when idle sets running status" do
     @list.update!(
-      raw_html: "<ol><li>Game 1</li></ol>",
+      raw_content: "<ol><li>Game 1</li></ol>",
       wizard_state: {"current_step" => 1}
     )
 
@@ -252,7 +252,7 @@ class Admin::Games::ListWizardControllerTest < ActionDispatch::IntegrationTest
   test "reparse destroys unverified items and resets step" do
     @list.list_items.destroy_all
     @list.update!(
-      raw_html: "<ol><li>Game 1</li></ol>",
+      raw_content: "<ol><li>Game 1</li></ol>",
       wizard_state: {"current_step" => 1, "steps" => {"parse" => {"status" => "completed"}}}
     )
     ListItem.create!(list: @list, listable_type: "Games::Game", position: 1, metadata: {"title" => "Test"})

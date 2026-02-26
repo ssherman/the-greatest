@@ -7,15 +7,14 @@
 #  creator_specific      :boolean
 #  description           :text
 #  estimated_quality     :integer          default(0), not null
-#  formatted_text        :text
 #  high_quality_source   :boolean
 #  items_json            :jsonb
 #  location_specific     :boolean
 #  name                  :string           not null
 #  num_years_covered     :integer
 #  number_of_voters      :integer
-#  raw_html              :text
-#  simplified_html       :text
+#  raw_content           :text
+#  simplified_content    :text
 #  source                :string
 #  source_country_origin :string
 #  status                :integer          default("unapproved"), not null

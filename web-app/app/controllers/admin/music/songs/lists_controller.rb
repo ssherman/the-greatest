@@ -35,6 +35,14 @@ module Admin
         def listable_includes
           [:artists]
         end
+
+        def item_label
+          "Song"
+        end
+
+        def wizard_path(list)
+          admin_songs_list_wizard_path(list_id: list.id)
+        end
       end
     end
   end

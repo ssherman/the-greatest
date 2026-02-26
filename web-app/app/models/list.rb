@@ -7,15 +7,14 @@
 #  creator_specific      :boolean
 #  description           :text
 #  estimated_quality     :integer          default(0), not null
-#  formatted_text        :text
 #  high_quality_source   :boolean
 #  items_json            :jsonb
 #  location_specific     :boolean
 #  name                  :string           not null
 #  num_years_covered     :integer
 #  number_of_voters      :integer
-#  raw_html              :text
-#  simplified_html       :text
+#  raw_content           :text
+#  simplified_content    :text
 #  source                :string
 #  source_country_origin :string
 #  status                :integer          default("unapproved"), not null
@@ -53,7 +52,7 @@ class List < ApplicationRecord
 
   # Callbacks
   before_validation :parse_items_json_if_string
-  before_save :auto_simplify_html, if: :should_simplify_html?
+  before_save :auto_simplify_content, if: :should_simplify_content?
 
   # Validations
   validates :name, presence: true
@@ -123,12 +122,12 @@ class List < ApplicationRecord
 
   private
 
-  def should_simplify_html?
-    raw_html.present? && (new_record? || raw_html_changed?)
+  def should_simplify_content?
+    raw_content.present? && (new_record? || raw_content_changed?)
   end
 
-  def auto_simplify_html
-    self.simplified_html = Services::Html::SimplifierService.call(raw_html)
+  def auto_simplify_content
+    self.simplified_content = Services::Html::SimplifierService.call(raw_content)
   end
 
   def parse_items_json_if_string

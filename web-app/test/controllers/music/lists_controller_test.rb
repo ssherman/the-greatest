@@ -150,7 +150,7 @@ module Music
             voter_count_estimated: true,
             voter_names_unknown: false,
             voter_count_unknown: false,
-            raw_html: "1. Test Album - Test Artist\n2. Another Album - Another Artist"
+            raw_content: "1. Test Album - Test Artist\n2. Another Album - Another Artist"
           }
         }
       end
@@ -169,7 +169,7 @@ module Music
       assert list.voter_count_estimated
       assert_not list.voter_names_unknown
       assert_not list.voter_count_unknown
-      assert_includes list.raw_html, "Test Album"
+      assert_includes list.raw_content, "Test Album"
     end
   end
 end

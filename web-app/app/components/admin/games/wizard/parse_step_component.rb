@@ -11,8 +11,8 @@ class Admin::Games::Wizard::ParseStepComponent < ViewComponent::Base
 
   attr_reader :list
 
-  def raw_html_preview
-    list.raw_html&.truncate(500) || "(No HTML provided)"
+  def raw_content_preview
+    list.raw_content&.truncate(500) || "(No HTML provided)"
   end
 
   def parsed_count
