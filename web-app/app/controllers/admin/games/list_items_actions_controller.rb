@@ -155,37 +155,6 @@ class Admin::Games::ListItemsActionsController < Admin::Games::BaseController
     }
   end
 
-  # Bulk actions
-  def bulk_verify
-    item_ids = params[:item_ids] || []
-    items = @list.list_items.where(id: item_ids)
-
-    items.update_all(verified: true)
-    items.each do |item|
-      item.update!(metadata: item.metadata.except("ai_match_invalid"))
-    end
-
-    redirect_to review_step_path, notice: "#{items.count} items verified"
-  end
-
-  def bulk_skip
-    item_ids = params[:item_ids] || []
-    items = @list.list_items.where(id: item_ids)
-
-    items.each do |item|
-      item.update!(verified: false, metadata: item.metadata.merge("skipped" => true))
-    end
-
-    redirect_to review_step_path, notice: "#{items.count} items skipped"
-  end
-
-  def bulk_delete
-    item_ids = params[:item_ids] || []
-    deleted_count = @list.list_items.where(id: item_ids).destroy_all.count
-
-    redirect_to review_step_path, notice: "#{deleted_count} items deleted"
-  end
-
   private
 
   # Override to add games-specific actions that need @item loaded
