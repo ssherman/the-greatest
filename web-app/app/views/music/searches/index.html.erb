@@ -14,10 +14,10 @@
   </div>
 
   <% if @query.blank? %>
-    <%= render Music::Search::EmptyStateComponent.new(message: "Enter a search term to find artists, albums, and songs") %>
+    <%= render Search::EmptyStateComponent.new(message: "Enter a search term to find artists, albums, and songs") %>
 
   <% elsif @total_count == 0 %>
-    <%= render Music::Search::EmptyStateComponent.new(message: "No results found for \"#{@query}\"") %>
+    <%= render Search::EmptyStateComponent.new(message: "No results found for \"#{@query}\"") %>
 
   <% else %>
     <% if @artists.any? %>

@@ -1,0 +1,29 @@
+<div class="container mx-auto px-4 py-8">
+  <div class="mb-8">
+    <h1 class="text-4xl font-bold text-base-content mb-2">
+      Search Results
+      <% if @query.present? %>
+        for "<%= @query %>"
+      <% end %>
+    </h1>
+    <% if @total_count > 0 %>
+      <p class="text-base-content/70">
+        Found <%= pluralize(@total_count, "result") %>
+      </p>
+    <% end %>
+  </div>
+
+  <% if @query.blank? %>
+    <%= render Search::EmptyStateComponent.new(message: "Enter a search term to find video games") %>
+
+  <% elsif @total_count == 0 %>
+    <%= render Search::EmptyStateComponent.new(message: "No results found for \"#{@query}\"") %>
+
+  <% else %>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      <% @games.each do |game| %>
+        <%= render Games::CardComponent.new(game: game) %>
+      <% end %>
+    </div>
+  <% end %>
+</div>

@@ -324,6 +324,10 @@ Rails.application.routes.draw do
       end
     end
 
+    scope as: "games" do
+      get "search", to: "games/searches#index"
+    end
+
     # All games routes with optional ranking configuration parameter
     scope "(/rc/:ranking_configuration_id)" do
       get "lists", to: "games/lists#index", as: :games_lists
