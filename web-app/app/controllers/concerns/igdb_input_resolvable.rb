@@ -6,7 +6,10 @@ module IgdbInputResolvable
   IGDB_URL_PATTERN = %r{\Ahttps?://(?:www\.)?igdb\.com/games/([a-z0-9][a-z0-9-]*[a-z0-9])}i
 
   # Parses raw input as either a numeric IGDB ID or an IGDB URL.
-  # Returns [igdb_id, result] on success, or [nil, error_message] on failure.
+  #
+  # Returns a two-element array:
+  #   Success: [Integer igdb_id, Hash api_result]  — api_result has :success, :data keys
+  #   Failure: [nil, String error_message]
   def resolve_igdb_input(raw_input)
     search = Games::Igdb::Search::GameSearch.new
 
