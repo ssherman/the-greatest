@@ -8,10 +8,15 @@ test.describe('Games Search', () => {
     await expect(page.getByText('Enter a search term to find video games')).toBeVisible();
   });
 
-  test('search with query returns results', async ({ page }) => {
+  test('search with query shows results or no-results message', async ({ page }) => {
     await page.goto('/search?q=Super Mario Bros');
 
     await expect(page.getByRole('heading', { name: /Search Results for/ })).toBeVisible();
+
+    // Should either show game cards or a "No results found" message
+    const hasResults = await page.locator('.grid .card').first().isVisible().catch(() => false);
+    const hasNoResults = await page.getByText('No results found for').isVisible().catch(() => false);
+    expect(hasResults || hasNoResults).toBeTruthy();
   });
 
   test('search bar in navbar submits search', async ({ page }) => {
