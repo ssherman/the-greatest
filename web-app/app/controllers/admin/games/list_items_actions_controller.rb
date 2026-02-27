@@ -2,6 +2,7 @@
 
 class Admin::Games::ListItemsActionsController < Admin::Games::BaseController
   include ListItemsActions
+  include IgdbInputResolvable
 
   # Games-specific modal types
   VALID_MODAL_TYPES = %w[edit_metadata link_game search_igdb_games link_igdb_id].freeze
@@ -48,9 +49,10 @@ class Admin::Games::ListItemsActionsController < Admin::Games::BaseController
       return render_modal_error("Please enter an IGDB ID or URL")
     end
 
-    search = Games::Igdb::Search::GameSearch.new
-    igdb_id, result = resolve_igdb_input(raw_input, search)
-    return unless igdb_id
+    igdb_id, result = resolve_igdb_input(raw_input)
+    unless igdb_id
+      return render_modal_error(result)
+    end
 
     unless result[:success] && result[:data]&.any?
       return render_modal_error("IGDB game not found for ID #{igdb_id}")
@@ -128,31 +130,7 @@ class Admin::Games::ListItemsActionsController < Admin::Games::BaseController
     return render json: [] unless result[:success]
 
     games = result[:data] || []
-    render json: games.map { |g|
-      involved_companies = g["involved_companies"] || []
-      developers = involved_companies
-        .select { |ic| ic["developer"] }
-        .map { |ic| ic.dig("company", "name") }
-        .compact
-
-      release_year = if g["first_release_date"]
-        Time.at(g["first_release_date"]).year
-      end
-
-      cover_url = if g.dig("cover", "image_id")
-        "https://images.igdb.com/igdb/image/upload/t_thumb/#{g["cover"]["image_id"]}.jpg"
-      end
-
-      {
-        igdb_id: g["id"],
-        name: g["name"],
-        developers: developers,
-        release_year: release_year,
-        cover_url: cover_url,
-        value: g["id"],
-        text: "#{g["name"]}#{" - #{developers.join(", ")}" if developers.any?}#{" (#{release_year})" if release_year}"
-      }
-    }
+    render json: games.map { |g| format_igdb_game_for_autocomplete(g) }
   end
 
   private
@@ -176,32 +154,6 @@ class Admin::Games::ListItemsActionsController < Admin::Games::BaseController
 
   def shared_modal_component_class
     Admin::Games::Wizard::SharedModalComponent
-  end
-
-  IGDB_URL_PATTERN = %r{\Ahttps?://(?:www\.)?igdb\.com/games/([a-z0-9][a-z0-9-]*[a-z0-9])}i
-
-  # Parses raw input as either a numeric IGDB ID or an IGDB URL.
-  # Returns [igdb_id, result] on success, or renders an error and returns nil.
-  def resolve_igdb_input(raw_input, search)
-    if raw_input.match?(/\A\d+\z/)
-      igdb_id = raw_input.to_i
-      result = search.find_with_details(igdb_id)
-      [igdb_id, result]
-    elsif (match = raw_input.match(IGDB_URL_PATTERN))
-      slug = match[1]
-      slug_result = search.find_by_slug(slug)
-
-      unless slug_result[:success] && slug_result[:data]&.any?
-        render_modal_error("IGDB game not found for slug: #{slug}")
-        return nil
-      end
-
-      igdb_id = slug_result[:data].first["id"]
-      [igdb_id, slug_result]
-    else
-      render_modal_error("Invalid IGDB ID or URL. Enter a numeric ID (e.g., 12515) or IGDB URL.")
-      nil
-    end
   end
 
   def review_step_path

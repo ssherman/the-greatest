@@ -1,4 +1,6 @@
 class Admin::Games::GamesController < Admin::Games::BaseController
+  include IgdbInputResolvable
+
   before_action :set_game, only: [:show, :edit, :update, :destroy]
   before_action :authorize_game, only: [:show, :edit, :update, :destroy]
 
@@ -53,6 +55,51 @@ class Admin::Games::GamesController < Admin::Games::BaseController
   def destroy
     @game.destroy!
     redirect_to admin_games_games_path, notice: "Game deleted successfully."
+  end
+
+  def import_from_igdb
+    authorize Games::Game, :import?
+
+    raw_input = (params[:igdb_url].presence || params[:igdb_id].presence).to_s.strip
+
+    unless raw_input.present?
+      redirect_to admin_games_games_path, alert: "Please provide an IGDB game URL, ID, or search selection"
+      return
+    end
+
+    igdb_id, result_or_error = resolve_igdb_input(raw_input)
+
+    unless igdb_id
+      redirect_to admin_games_games_path, alert: result_or_error
+      return
+    end
+
+    result = DataImporters::Games::Game::Importer.call(igdb_id: igdb_id)
+
+    if result.success?
+      if result.provider_results.empty?
+        redirect_to admin_games_game_path(result.item), notice: "Game already exists"
+      else
+        redirect_to admin_games_game_path(result.item), notice: "Game imported successfully"
+      end
+    else
+      redirect_to admin_games_games_path, alert: "Import failed: #{result.all_errors.join(", ")}"
+    end
+  end
+
+  def igdb_search
+    authorize Games::Game, :import?
+
+    query = params[:q]
+    return render json: [] if query.blank? || query.length < 2
+
+    search = Games::Igdb::Search::GameSearch.new
+    result = search.search_by_name(query, limit: 25, fields: Services::Lists::Games::ListItemEnricher::IGDB_SEARCH_FIELDS)
+
+    return render json: [] unless result[:success]
+
+    games = result[:data] || []
+    render json: games.map { |g| format_igdb_game_for_autocomplete(g) }
   end
 
   def search

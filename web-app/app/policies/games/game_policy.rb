@@ -6,6 +6,10 @@ module Games
       "games"
     end
 
+    def import?
+      manage?
+    end
+
     class Scope < ApplicationPolicy::Scope
       def domain
         "games"
