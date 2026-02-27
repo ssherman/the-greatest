@@ -12,7 +12,7 @@ class Admin::Categories::TableComponent < ViewComponent::Base
   attr_reader :categories, :pagy, :domain_config
 
   def sort_path(column)
-    "#{domain_config[:categories_path]}?sort=#{column}&q=#{helpers.params[:q]}"
+    "#{domain_config[:categories_path]}?sort=#{column}&q=#{CGI.escape(helpers.params[:q].to_s)}"
   end
 
   def category_path(category)
