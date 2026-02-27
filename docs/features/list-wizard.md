@@ -718,16 +718,14 @@ Add a case to `StateManager.for(list)` in [`app/lib/services/lists/wizard/state_
 
 ### Step 7: Add Entry Point
 
-Add wizard link to the list show page:
+The wizard link is rendered automatically by the shared `Admin::Lists::ShowComponent` using `domain_config[:wizard_path_proc]`. To enable it for a new domain, implement the abstract `wizard_path` method in the domain's list controller (subclass of `Admin::ListsBaseController`):
 
-```erb
-<%= link_to admin_books_list_wizard_path(list_id: @list.id), class: "btn btn-secondary" do %>
-  <!-- sparkles icon -->
-  <span>Launch Wizard</span>
-  <% if @list.wizard_state.present? && @list.wizard_state["completed_at"].blank? %>
-    <span class="badge badge-warning badge-sm">In Progress</span>
-  <% end %>
-<% end %>
+```ruby
+# reference only
+# app/controllers/admin/books/lists_controller.rb
+def wizard_path(list)
+  admin_books_list_wizard_path(list_id: list.id)
+end
 ```
 
 ## File Structure Reference
@@ -767,6 +765,12 @@ Add wizard link to the list show page:
 | [`app/components/admin/music/wizard/shared_modal_component.rb`](/web-app/app/components/admin/music/wizard/shared_modal_component.rb) | Base modal component |
 | [`app/components/wizard/item_row_component.rb`](/web-app/app/components/wizard/item_row_component.rb) | Base item row component |
 | [`app/components/admin/music/wizard/item_row_component.rb`](/web-app/app/components/admin/music/wizard/item_row_component.rb) | Music item row component (adds MusicBrainz source badge) |
+
+### Shared Helpers
+
+| File | Purpose |
+|------|---------|
+| [`app/helpers/admin/lists_helper.rb`](/web-app/app/helpers/admin/lists_helper.rb) | Shared `count_items_json` and `items_json_to_string` methods (used by wizard step components and list show views) |
 
 ### Shared Services
 

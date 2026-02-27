@@ -1,91 +1,32 @@
-class Admin::Music::CategoriesController < Admin::Music::BaseController
-  before_action :set_category, only: [:show, :edit, :update, :destroy]
-  before_action :authorize_category, only: [:show, :edit, :update, :destroy]
-
-  def index
-    authorize Music::Category
-    @categories = Music::Category.active.includes(:parent)
-
-    if params[:q].present?
-      @categories = @categories.search_by_name(params[:q])
-    end
-
-    @categories = @categories.order(sortable_column(params[:sort]))
-    @pagy, @categories = pagy(@categories, limit: 25)
-  end
-
-  def show
-    @albums_count = @category.albums.count
-    @artists_count = @category.artists.count
-    @songs_count = @category.songs.count
-  end
-
-  def new
-    @category = Music::Category.new
-    authorize @category
-  end
-
-  def create
-    @category = Music::Category.new(category_params)
-    authorize @category
-
-    if @category.save
-      redirect_to admin_category_path(@category), notice: "Category created successfully."
-    else
-      render :new, status: :unprocessable_entity
-    end
-  end
-
-  def edit
-    # @category loaded by before_action
-  end
-
-  def update
-    if @category.update(category_params)
-      redirect_to admin_category_path(@category), notice: "Category updated successfully."
-    else
-      render :edit, status: :unprocessable_entity
-    end
-  end
-
-  def destroy
-    @category.soft_delete!
-    redirect_to admin_categories_path, notice: "Category deleted successfully."
-  end
-
-  def search
-    categories = Music::Category.active
-
-    if params[:q].present?
-      categories = categories.search_by_name(params[:q])
-    end
-
-    categories = categories.order(:name).limit(20)
-
-    render json: categories.map { |c| {value: c.id, text: "#{c.name} (#{c.category_type&.titleize || "Unknown"})"} }
-  end
+class Admin::Music::CategoriesController < Admin::CategoriesBaseController
+  layout "music/admin"
 
   private
 
-  def set_category
-    @category = Music::Category.find(params[:id])
+  def authenticate_admin!
+    return if current_user&.admin? || current_user&.editor?
+
+    unless current_user&.can_access_domain?("music")
+      redirect_to domain_root_path, alert: "Access denied. You need permission for music admin."
+    end
   end
 
-  def authorize_category
-    authorize @category
-  end
+  protected
 
-  def category_params
-    params.require(:music_category).permit(:name, :description, :category_type, :parent_id)
-  end
+  def model_class = Music::Category
+  def param_key = :music_category
+  def category_path(category) = admin_category_path(category)
+  def categories_path = admin_categories_path
+  def new_category_path = new_admin_category_path
+  def edit_category_path(category) = edit_admin_category_path(category)
+  def domain_label = "Music"
+  def subtitle = "Manage music genres, locations, and subjects"
 
-  def sortable_column(column)
-    allowed_columns = {
-      "name" => "categories.name",
-      "category_type" => "categories.category_type",
-      "item_count" => "categories.item_count DESC"
+  def load_show_stats
+    @stats = {
+      "Albums" => @category.albums.count,
+      "Artists" => @category.artists.count,
+      "Songs" => @category.songs.count
     }
-
-    allowed_columns.fetch(column, "categories.name")
   end
 end

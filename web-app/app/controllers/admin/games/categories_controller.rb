@@ -1,88 +1,30 @@
-class Admin::Games::CategoriesController < Admin::Games::BaseController
-  before_action :set_category, only: [:show, :edit, :update, :destroy]
-  before_action :authorize_category, only: [:show, :edit, :update, :destroy]
-
-  def index
-    authorize Games::Category
-    @categories = Games::Category.active.includes(:parent)
-
-    if params[:q].present?
-      @categories = @categories.search_by_name(params[:q])
-    end
-
-    @categories = @categories.order(sortable_column(params[:sort]))
-    @pagy, @categories = pagy(@categories, limit: 25)
-  end
-
-  def show
-    @games_count = @category.games.count
-  end
-
-  def new
-    @category = Games::Category.new
-    authorize @category
-  end
-
-  def create
-    @category = Games::Category.new(category_params)
-    authorize @category
-
-    if @category.save
-      redirect_to admin_games_category_path(@category), notice: "Category created successfully."
-    else
-      render :new, status: :unprocessable_entity
-    end
-  end
-
-  def edit
-  end
-
-  def update
-    if @category.update(category_params)
-      redirect_to admin_games_category_path(@category), notice: "Category updated successfully."
-    else
-      render :edit, status: :unprocessable_entity
-    end
-  end
-
-  def destroy
-    @category.soft_delete!
-    redirect_to admin_games_categories_path, notice: "Category deleted successfully."
-  end
-
-  def search
-    categories = Games::Category.active
-
-    if params[:q].present?
-      categories = categories.search_by_name(params[:q])
-    end
-
-    categories = categories.order(:name).limit(20)
-
-    render json: categories.map { |c| {value: c.id, text: "#{c.name} (#{c.category_type&.titleize || "Unknown"})"} }
-  end
+class Admin::Games::CategoriesController < Admin::CategoriesBaseController
+  layout "games/admin"
 
   private
 
-  def set_category
-    @category = Games::Category.find(params[:id])
+  def authenticate_admin!
+    return if current_user&.admin? || current_user&.editor?
+
+    unless current_user&.can_access_domain?("games")
+      redirect_to domain_root_path, alert: "Access denied. You need permission for games admin."
+    end
   end
 
-  def authorize_category
-    authorize @category
-  end
+  protected
 
-  def category_params
-    params.require(:games_category).permit(:name, :description, :category_type, :parent_id)
-  end
+  def model_class = Games::Category
+  def param_key = :games_category
+  def category_path(category) = admin_games_category_path(category)
+  def categories_path = admin_games_categories_path
+  def new_category_path = new_admin_games_category_path
+  def edit_category_path(category) = edit_admin_games_category_path(category)
+  def domain_label = "Games"
+  def subtitle = "Manage game genres, locations, and subjects"
 
-  def sortable_column(column)
-    allowed_columns = {
-      "name" => "categories.name",
-      "category_type" => "categories.category_type",
-      "item_count" => "categories.item_count DESC"
+  def load_show_stats
+    @stats = {
+      "Games" => @category.games.count
     }
-
-    allowed_columns.fetch(column, "categories.name")
   end
 end
