@@ -78,7 +78,7 @@ class Games::Game < ApplicationRecord
   validates :title, presence: true
   validates :game_type, presence: true
   validates :release_year,
-    numericality: {only_integer: true, greater_than: 1970, less_than_or_equal_to: Date.current.year + 2},
+    numericality: {only_integer: true, greater_than: 1950, less_than_or_equal_to: Date.current.year + 2},
     allow_nil: true
   validate :parent_game_not_self
   validate :parent_game_valid_for_type

@@ -46,7 +46,7 @@
           <%= f.number_field :release_year,
               class: "input input-bordered w-full #{@game.errors[:release_year].any? ? 'input-error' : ''}",
               placeholder: "e.g., 2023",
-              min: 1970,
+              min: 1951,
               max: Time.current.year + 2 %>
           <label class="label">
             <span class="label-text-alt">Initial release year</span>

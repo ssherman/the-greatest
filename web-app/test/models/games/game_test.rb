@@ -63,9 +63,9 @@ module Games
     test "should require valid release_year if present" do
       @botw.release_year = 2017
       assert @botw.valid?
-      @botw.release_year = 1960
+      @botw.release_year = 1940
       assert_not @botw.valid?
-      assert_includes @botw.errors[:release_year], "must be greater than 1970"
+      assert_includes @botw.errors[:release_year], "must be greater than 1950"
       @botw.release_year = Date.current.year + 10
       assert_not @botw.valid?
     end
