@@ -2,9 +2,10 @@
 
 class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseController
   include ListItemsActions
+  include MusicbrainzInputResolvable
 
   # Song-specific modal types
-  VALID_MODAL_TYPES = %w[edit_metadata link_song search_musicbrainz_recordings search_musicbrainz_artists].freeze
+  VALID_MODAL_TYPES = %w[edit_metadata link_song search_musicbrainz_recordings search_musicbrainz_artists link_musicbrainz_url].freeze
 
   def manual_link
     song_id = params[:song_id]
@@ -40,53 +41,20 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
       return render_modal_error("Please select a recording")
     end
 
-    search = Music::Musicbrainz::Search::RecordingSearch.new
-    response = search.lookup_by_mbid(mb_recording_id)
+    perform_link_musicbrainz_recording(mb_recording_id)
+  end
 
-    if response[:success] && response[:data]["recordings"]&.any?
-      recording = response[:data]["recordings"].first
+  def link_musicbrainz_url
+    raw_input = params[:musicbrainz_input].to_s.strip
 
-      artist_names = extract_artist_names_from_recording(recording)
-      year = extract_year_from_recording(recording)
-
-      # Clear ai_match_invalid when admin manually links MusicBrainz - this overrides AI decision
-      @item.metadata = @item.metadata.except("ai_match_invalid").merge(
-        "mb_recording_id" => mb_recording_id,
-        "mb_recording_name" => recording["title"],
-        "mb_artist_names" => artist_names,
-        "mb_release_year" => year,
-        "musicbrainz_match" => true,
-        "manual_musicbrainz_link" => true
-      )
-      @item.verified = true
-
-      # Also link to existing song if one exists with this recording ID
-      song = Music::Song.joins(:identifiers).find_by(
-        identifiers: {
-          identifier_type: :music_musicbrainz_recording_id,
-          value: mb_recording_id
-        }
-      )
-
-      if song
-        @item.listable = song
-        @item.metadata = @item.metadata.merge(
-          "song_id" => song.id,
-          "song_name" => song.title
-        )
-      else
-        # Clear stale listable when linking to a MusicBrainz recording that has no local song.
-        # This ensures the import step will create the new song rather than keeping a mismatched link.
-        @item.listable = nil
-        @item.metadata = @item.metadata.except("song_id", "song_name")
-      end
-
-      @item.save!
-      render_item_update_success("MusicBrainz recording linked successfully")
-    else
-      error_message = response[:errors]&.first || "Recording not found"
-      render_modal_error(error_message)
+    unless raw_input.present?
+      return render_modal_error("Please enter a MusicBrainz URL or ID")
     end
+
+    mbid, error = resolve_musicbrainz_input(raw_input, expected_type: "recording")
+    return render_modal_error(error) if error
+
+    perform_link_musicbrainz_recording(mbid)
   end
 
   def link_musicbrainz_artist
@@ -166,7 +134,53 @@ class Admin::Music::Songs::ListItemsActionsController < Admin::Music::BaseContro
 
   # Override to add song-specific actions that need @item loaded
   def item_actions_for_set_item
-    super + [:manual_link, :link_musicbrainz_recording, :link_musicbrainz_artist]
+    super + [:manual_link, :link_musicbrainz_recording, :link_musicbrainz_artist, :link_musicbrainz_url]
+  end
+
+  def perform_link_musicbrainz_recording(mb_recording_id)
+    search = Music::Musicbrainz::Search::RecordingSearch.new
+    response = search.lookup_by_mbid(mb_recording_id)
+
+    unless response[:success] && response[:data]["recordings"]&.any?
+      error_message = response[:errors]&.first || "Recording not found in MusicBrainz"
+      return render_modal_error(error_message)
+    end
+
+    recording = response[:data]["recordings"].first
+
+    artist_names = extract_artist_names_from_recording(recording)
+    year = extract_year_from_recording(recording)
+
+    @item.metadata = @item.metadata.except("ai_match_invalid").merge(
+      "mb_recording_id" => mb_recording_id,
+      "mb_recording_name" => recording["title"],
+      "mb_artist_names" => artist_names,
+      "mb_release_year" => year,
+      "musicbrainz_match" => true,
+      "manual_musicbrainz_link" => true
+    )
+    @item.verified = true
+
+    song = Music::Song.joins(:identifiers).find_by(
+      identifiers: {
+        identifier_type: :music_musicbrainz_recording_id,
+        value: mb_recording_id
+      }
+    )
+
+    if song
+      @item.listable = song
+      @item.metadata = @item.metadata.merge(
+        "song_id" => song.id,
+        "song_name" => song.title
+      )
+    else
+      @item.listable = nil
+      @item.metadata = @item.metadata.except("song_id", "song_name")
+    end
+
+    @item.save!
+    render_item_update_success("MusicBrainz recording linked successfully")
   end
 
   def list_class

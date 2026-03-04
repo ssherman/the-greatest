@@ -33,6 +33,7 @@ class Admin::Music::Songs::Wizard::ItemRowComponent < Admin::Music::Wizard::Item
       {type: :link, text: "Link Existing Song", modal_type: :link_song},
       {type: :link, text: "Search MusicBrainz Recordings", modal_type: :search_musicbrainz_recordings},
       {type: :link, text: "Search MusicBrainz Artists", modal_type: :search_musicbrainz_artists},
+      {type: :link, text: "Link by MusicBrainz URL", modal_type: :link_musicbrainz_url},
       {type: :delete, text: "Delete", css_class: "text-error"}
     ]
   end

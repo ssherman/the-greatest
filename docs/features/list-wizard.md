@@ -258,6 +258,7 @@ Song/album leaf controllers implement `list_class`, `entity_id_key`, `enrichment
 | Link Existing Song/Album | Search and link to an entity already in the database |
 | Search MusicBrainz Recordings/Releases | Search for matches within the matched artist's catalog |
 | Search MusicBrainz Artists | Search and replace the artist match |
+| Link by MusicBrainz URL | Paste a MusicBrainz URL or UUID to directly link an item |
 | Delete | Remove the list item permanently |
 
 ### Games

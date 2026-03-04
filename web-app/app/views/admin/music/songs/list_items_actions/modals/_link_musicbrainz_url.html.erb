@@ -1,0 +1,6 @@
+<%= render(Admin::Music::Wizard::LinkMusicbrainzUrlModalComponent.new(
+  list_item: item,
+  form_url: link_musicbrainz_url_admin_songs_list_item_path(list_id: list.id, id: item.id),
+  entity_type: :recording,
+  shared_modal_class: Admin::Music::Songs::Wizard::SharedModalComponent
+)) %>
