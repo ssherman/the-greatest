@@ -2,9 +2,10 @@
 
 class Admin::Music::Albums::ListItemsActionsController < Admin::Music::BaseController
   include ListItemsActions
+  include MusicbrainzInputResolvable
 
   # Album-specific modal types
-  VALID_MODAL_TYPES = %w[edit_metadata link_album search_musicbrainz_releases search_musicbrainz_artists].freeze
+  VALID_MODAL_TYPES = %w[edit_metadata link_album search_musicbrainz_releases search_musicbrainz_artists link_musicbrainz_url].freeze
 
   def skip
     @item.update!(
@@ -48,53 +49,20 @@ class Admin::Music::Albums::ListItemsActionsController < Admin::Music::BaseContr
       return render_modal_error("Please select a release group")
     end
 
-    # Look up the release group from MusicBrainz
-    search = Music::Musicbrainz::Search::ReleaseGroupSearch.new
-    response = search.lookup_by_release_group_mbid(mb_release_group_id)
+    perform_link_musicbrainz_release(mb_release_group_id)
+  end
 
-    unless response[:success] && response[:data]["release-groups"]&.any?
-      return render_modal_error("Release group not found in MusicBrainz")
+  def link_musicbrainz_url
+    raw_input = params[:musicbrainz_input].to_s.strip
+
+    unless raw_input.present?
+      return render_modal_error("Please enter a MusicBrainz URL or ID")
     end
 
-    release_group = response[:data]["release-groups"].first
-    release_group_name = release_group["title"]
-    artist_credits = release_group["artist-credit"] || []
-    artist_names = artist_credits.map { |ac| ac.dig("artist", "name") || ac["name"] }.compact
-    first_release_date = release_group["first-release-date"]
-    release_year = first_release_date&.split("-")&.first&.to_i
+    mbid, error = resolve_musicbrainz_input(raw_input, expected_type: "release-group")
+    return render_modal_error(error) if error
 
-    # Check if we have an existing album with this MusicBrainz ID
-    album = Music::Album.joins(:identifiers).find_by(
-      identifiers: {
-        identifier_type: :music_musicbrainz_release_group_id,
-        value: mb_release_group_id
-      }
-    )
-
-    if album
-      @item.listable = album
-      @item.metadata = @item.metadata.merge(
-        "album_id" => album.id,
-        "album_name" => album.title
-      )
-    else
-      # Clear any existing listable - will be created during import
-      @item.listable = nil
-      @item.metadata = @item.metadata.except("album_id", "album_name")
-    end
-
-    @item.metadata = @item.metadata.merge(
-      "mb_release_group_id" => mb_release_group_id,
-      "mb_release_group_name" => release_group_name,
-      "mb_artist_names" => artist_names,
-      "mb_release_year" => release_year,
-      "musicbrainz_match" => true,
-      "manual_musicbrainz_link" => true
-    ).except("ai_match_invalid")
-    @item.verified = true
-    @item.save!
-
-    render_item_update_success("MusicBrainz release linked")
+    perform_link_musicbrainz_release(mbid)
   end
 
   def link_musicbrainz_artist
@@ -198,7 +166,54 @@ class Admin::Music::Albums::ListItemsActionsController < Admin::Music::BaseContr
 
   # Override to add album-specific actions that need @item loaded
   def item_actions_for_set_item
-    super + [:skip, :manual_link, :link_musicbrainz_release, :link_musicbrainz_artist, :re_enrich, :queue_import]
+    super + [:skip, :manual_link, :link_musicbrainz_release, :link_musicbrainz_artist, :re_enrich, :queue_import, :link_musicbrainz_url]
+  end
+
+  def perform_link_musicbrainz_release(mb_release_group_id)
+    search = Music::Musicbrainz::Search::ReleaseGroupSearch.new
+    response = search.lookup_by_release_group_mbid(mb_release_group_id)
+
+    unless response[:success] && response[:data]["release-groups"]&.any?
+      return render_modal_error("Release group not found in MusicBrainz")
+    end
+
+    release_group = response[:data]["release-groups"].first
+    release_group_name = release_group["title"]
+    artist_credits = release_group["artist-credit"] || []
+    artist_names = artist_credits.map { |ac| ac.dig("artist", "name") || ac["name"] }.compact
+    first_release_date = release_group["first-release-date"]
+    release_year = first_release_date&.split("-")&.first&.to_i
+
+    album = Music::Album.joins(:identifiers).find_by(
+      identifiers: {
+        identifier_type: :music_musicbrainz_release_group_id,
+        value: mb_release_group_id
+      }
+    )
+
+    if album
+      @item.listable = album
+      @item.metadata = @item.metadata.merge(
+        "album_id" => album.id,
+        "album_name" => album.title
+      )
+    else
+      @item.listable = nil
+      @item.metadata = @item.metadata.except("album_id", "album_name")
+    end
+
+    @item.metadata = @item.metadata.merge(
+      "mb_release_group_id" => mb_release_group_id,
+      "mb_release_group_name" => release_group_name,
+      "mb_artist_names" => artist_names,
+      "mb_release_year" => release_year,
+      "musicbrainz_match" => true,
+      "manual_musicbrainz_link" => true
+    ).except("ai_match_invalid")
+    @item.verified = true
+    @item.save!
+
+    render_item_update_success("MusicBrainz release linked")
   end
 
   def list_class

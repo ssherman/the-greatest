@@ -33,6 +33,7 @@ class Admin::Music::Albums::Wizard::ItemRowComponent < Admin::Music::Wizard::Ite
       {type: :link, text: "Link Existing Album", modal_type: :link_album},
       {type: :link, text: "Search MusicBrainz Releases", modal_type: :search_musicbrainz_releases},
       {type: :link, text: "Search MusicBrainz Artists", modal_type: :search_musicbrainz_artists},
+      {type: :link, text: "Link by MusicBrainz URL", modal_type: :link_musicbrainz_url},
       {type: :delete, text: "Delete", css_class: "text-error"}
     ]
   end

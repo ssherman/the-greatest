@@ -641,6 +641,152 @@ class Admin::Music::Songs::ListItemsActionsControllerTest < ActionDispatch::Inte
   # test/controllers/admin/music/musicbrainz_search_controller_test.rb
   # as part of the refactor to consolidate MusicBrainz search endpoints.
 
+  # link_musicbrainz_url action tests
+  test "link_musicbrainz_url links recording via full URL" do
+    mb_recording_id = "1d2be447-71b0-470a-ad38-925ecaf83c08"
+    mock_response = {
+      success: true,
+      data: {
+        "recordings" => [{
+          "id" => mb_recording_id,
+          "title" => "Paranoid Android",
+          "artist-credit" => [{"artist" => {"name" => "Radiohead"}}],
+          "first-release-date" => "1997-05-26"
+        }]
+      }
+    }
+
+    Music::Musicbrainz::Search::RecordingSearch.any_instance
+      .stubs(:lookup_by_mbid)
+      .with(mb_recording_id)
+      .returns(mock_response)
+
+    post link_musicbrainz_url_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
+      params: {musicbrainz_input: "https://musicbrainz.org/recording/#{mb_recording_id}"}
+
+    assert_response :redirect
+    @item.reload
+    assert @item.verified?
+    assert_equal mb_recording_id, @item.metadata["mb_recording_id"]
+    assert_equal "Paranoid Android", @item.metadata["mb_recording_name"]
+    assert_equal "Radiohead", @item.metadata["mb_artist_names"]
+    assert_equal 1997, @item.metadata["mb_release_year"]
+    assert @item.metadata["musicbrainz_match"]
+    assert @item.metadata["manual_musicbrainz_link"]
+  end
+
+  test "link_musicbrainz_url links recording via bare UUID" do
+    mb_recording_id = "1d2be447-71b0-470a-ad38-925ecaf83c08"
+    mock_response = {
+      success: true,
+      data: {
+        "recordings" => [{
+          "id" => mb_recording_id,
+          "title" => "Paranoid Android",
+          "artist-credit" => [{"artist" => {"name" => "Radiohead"}}],
+          "first-release-date" => "1997"
+        }]
+      }
+    }
+
+    Music::Musicbrainz::Search::RecordingSearch.any_instance
+      .stubs(:lookup_by_mbid)
+      .with(mb_recording_id)
+      .returns(mock_response)
+
+    post link_musicbrainz_url_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
+      params: {musicbrainz_input: mb_recording_id}
+
+    assert_response :redirect
+    @item.reload
+    assert @item.verified?
+    assert_equal mb_recording_id, @item.metadata["mb_recording_id"]
+  end
+
+  test "link_musicbrainz_url returns error for wrong URL type" do
+    post link_musicbrainz_url_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
+      params: {musicbrainz_input: "https://musicbrainz.org/release-group/6258df90-78c7-3395-8830-e7b4328a002c"}
+
+    assert_response :redirect
+    @item.reload
+    assert_nil @item.metadata["mb_recording_id"]
+  end
+
+  test "link_musicbrainz_url returns error for invalid input" do
+    post link_musicbrainz_url_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
+      params: {musicbrainz_input: "not a valid url or uuid"}
+
+    assert_response :redirect
+    @item.reload
+    assert_nil @item.metadata["mb_recording_id"]
+  end
+
+  test "link_musicbrainz_url returns error for blank input" do
+    post link_musicbrainz_url_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
+      params: {musicbrainz_input: ""}
+
+    assert_response :redirect
+    @item.reload
+    assert_nil @item.metadata["mb_recording_id"]
+  end
+
+  test "link_musicbrainz_url returns error when API lookup fails" do
+    mb_recording_id = "1d2be447-71b0-470a-ad38-925ecaf83c08"
+    mock_response = {
+      success: false,
+      data: nil,
+      errors: ["Recording not found"]
+    }
+
+    Music::Musicbrainz::Search::RecordingSearch.any_instance
+      .stubs(:lookup_by_mbid)
+      .with(mb_recording_id)
+      .returns(mock_response)
+
+    post link_musicbrainz_url_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
+      params: {musicbrainz_input: mb_recording_id}
+
+    assert_response :redirect
+    @item.reload
+    assert_nil @item.metadata["mb_recording_id"]
+  end
+
+  test "link_musicbrainz_url accepts turbo stream format" do
+    mb_recording_id = "1d2be447-71b0-470a-ad38-925ecaf83c08"
+    mock_response = {
+      success: true,
+      data: {
+        "recordings" => [{
+          "id" => mb_recording_id,
+          "title" => "Paranoid Android",
+          "artist-credit" => [{"artist" => {"name" => "Radiohead"}}],
+          "first-release-date" => "1997"
+        }]
+      }
+    }
+
+    Music::Musicbrainz::Search::RecordingSearch.any_instance
+      .stubs(:lookup_by_mbid)
+      .returns(mock_response)
+
+    post link_musicbrainz_url_admin_songs_list_item_path(list_id: @list.id, id: @item.id),
+      params: {musicbrainz_input: "https://musicbrainz.org/recording/#{mb_recording_id}"},
+      headers: {"Accept" => "text/vnd.turbo-stream.html"}
+
+    assert_response :success
+    @item.reload
+    assert_equal mb_recording_id, @item.metadata["mb_recording_id"]
+  end
+
+  test "link_musicbrainz_url modal renders correctly" do
+    get modal_admin_songs_list_item_path(list_id: @list.id, id: @item.id, modal_type: :link_musicbrainz_url)
+
+    assert_response :success
+    assert_match "Link by MusicBrainz URL", response.body
+    assert_match "turbo-frame", response.body
+    assert_match Admin::Music::Songs::Wizard::SharedModalComponent::FRAME_ID, response.body
+  end
+
   # Authorization tests
   test "requires admin authentication" do
     sign_out

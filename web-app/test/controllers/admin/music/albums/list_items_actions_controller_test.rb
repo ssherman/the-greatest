@@ -530,6 +530,153 @@ class Admin::Music::Albums::ListItemsActionsControllerTest < ActionDispatch::Int
   # test/controllers/admin/music/musicbrainz_search_controller_test.rb
   # as part of the refactor to consolidate MusicBrainz search endpoints.
 
+  # link_musicbrainz_url action tests
+  test "link_musicbrainz_url links release group via full URL" do
+    mb_release_group_id = "6258df90-78c7-3395-8830-e7b4328a002c"
+    mock_response = {
+      success: true,
+      data: {
+        "release-groups" => [{
+          "id" => mb_release_group_id,
+          "title" => "OK Computer",
+          "artist-credit" => [{"artist" => {"name" => "Radiohead"}}],
+          "first-release-date" => "1997-06-16",
+          "primary-type" => "Album"
+        }]
+      }
+    }
+
+    Music::Musicbrainz::Search::ReleaseGroupSearch.any_instance
+      .stubs(:lookup_by_release_group_mbid)
+      .with(mb_release_group_id)
+      .returns(mock_response)
+
+    post link_musicbrainz_url_admin_albums_list_item_path(list_id: @list.id, id: @item.id),
+      params: {musicbrainz_input: "https://musicbrainz.org/release-group/#{mb_release_group_id}"}
+
+    assert_response :redirect
+    @item.reload
+    assert @item.verified?
+    assert_equal mb_release_group_id, @item.metadata["mb_release_group_id"]
+    assert_equal "OK Computer", @item.metadata["mb_release_group_name"]
+    assert_equal ["Radiohead"], @item.metadata["mb_artist_names"]
+    assert_equal 1997, @item.metadata["mb_release_year"]
+    assert @item.metadata["musicbrainz_match"]
+    assert @item.metadata["manual_musicbrainz_link"]
+  end
+
+  test "link_musicbrainz_url links release group via bare UUID" do
+    mb_release_group_id = "6258df90-78c7-3395-8830-e7b4328a002c"
+    mock_response = {
+      success: true,
+      data: {
+        "release-groups" => [{
+          "id" => mb_release_group_id,
+          "title" => "OK Computer",
+          "artist-credit" => [{"artist" => {"name" => "Radiohead"}}],
+          "first-release-date" => "1997"
+        }]
+      }
+    }
+
+    Music::Musicbrainz::Search::ReleaseGroupSearch.any_instance
+      .stubs(:lookup_by_release_group_mbid)
+      .with(mb_release_group_id)
+      .returns(mock_response)
+
+    post link_musicbrainz_url_admin_albums_list_item_path(list_id: @list.id, id: @item.id),
+      params: {musicbrainz_input: mb_release_group_id}
+
+    assert_response :redirect
+    @item.reload
+    assert @item.verified?
+    assert_equal mb_release_group_id, @item.metadata["mb_release_group_id"]
+  end
+
+  test "link_musicbrainz_url returns error for wrong URL type" do
+    post link_musicbrainz_url_admin_albums_list_item_path(list_id: @list.id, id: @item.id),
+      params: {musicbrainz_input: "https://musicbrainz.org/recording/1d2be447-71b0-470a-ad38-925ecaf83c08"}
+
+    assert_response :redirect
+    @item.reload
+    assert_nil @item.metadata["mb_release_group_id"]
+  end
+
+  test "link_musicbrainz_url returns error for invalid input" do
+    post link_musicbrainz_url_admin_albums_list_item_path(list_id: @list.id, id: @item.id),
+      params: {musicbrainz_input: "not a valid url or uuid"}
+
+    assert_response :redirect
+    @item.reload
+    assert_nil @item.metadata["mb_release_group_id"]
+  end
+
+  test "link_musicbrainz_url returns error for blank input" do
+    post link_musicbrainz_url_admin_albums_list_item_path(list_id: @list.id, id: @item.id),
+      params: {musicbrainz_input: ""}
+
+    assert_response :redirect
+    @item.reload
+    assert_nil @item.metadata["mb_release_group_id"]
+  end
+
+  test "link_musicbrainz_url returns error when API lookup fails" do
+    mb_release_group_id = "6258df90-78c7-3395-8830-e7b4328a002c"
+    mock_response = {
+      success: false,
+      data: nil,
+      errors: ["Release group not found"]
+    }
+
+    Music::Musicbrainz::Search::ReleaseGroupSearch.any_instance
+      .stubs(:lookup_by_release_group_mbid)
+      .with(mb_release_group_id)
+      .returns(mock_response)
+
+    post link_musicbrainz_url_admin_albums_list_item_path(list_id: @list.id, id: @item.id),
+      params: {musicbrainz_input: mb_release_group_id}
+
+    assert_response :redirect
+    @item.reload
+    assert_nil @item.metadata["mb_release_group_id"]
+  end
+
+  test "link_musicbrainz_url accepts turbo stream format" do
+    mb_release_group_id = "6258df90-78c7-3395-8830-e7b4328a002c"
+    mock_response = {
+      success: true,
+      data: {
+        "release-groups" => [{
+          "id" => mb_release_group_id,
+          "title" => "OK Computer",
+          "artist-credit" => [{"artist" => {"name" => "Radiohead"}}],
+          "first-release-date" => "1997"
+        }]
+      }
+    }
+
+    Music::Musicbrainz::Search::ReleaseGroupSearch.any_instance
+      .stubs(:lookup_by_release_group_mbid)
+      .returns(mock_response)
+
+    post link_musicbrainz_url_admin_albums_list_item_path(list_id: @list.id, id: @item.id),
+      params: {musicbrainz_input: "https://musicbrainz.org/release-group/#{mb_release_group_id}"},
+      headers: {"Accept" => "text/vnd.turbo-stream.html"}
+
+    assert_response :success
+    @item.reload
+    assert_equal mb_release_group_id, @item.metadata["mb_release_group_id"]
+  end
+
+  test "link_musicbrainz_url modal renders correctly" do
+    get modal_admin_albums_list_item_path(list_id: @list.id, id: @item.id, modal_type: :link_musicbrainz_url)
+
+    assert_response :success
+    assert_match "Link by MusicBrainz URL", response.body
+    assert_match "turbo-frame", response.body
+    assert_match Admin::Music::Albums::Wizard::SharedModalComponent::FRAME_ID, response.body
+  end
+
   # Authorization tests
   test "requires admin authentication" do
     sign_out

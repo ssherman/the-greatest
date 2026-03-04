@@ -1,0 +1,30 @@
+<%= helpers.turbo_frame_tag frame_id do %>
+  <h3 class="font-bold text-lg">Link by MusicBrainz URL</h3>
+  <p class="text-sm text-base-content/70 mt-1"><%= item_label %></p>
+
+  <%= form_with url: form_url,
+                method: :post,
+                data: {
+                  controller: "modal-form",
+                  modal_form_modal_id_value: dialog_id,
+                  turbo_frame: "_top"
+                } do |f| %>
+
+    <div class="form-control mt-4">
+      <label class="label">
+        <span class="label-text"><%= label_text %></span>
+      </label>
+      <input type="text" name="musicbrainz_input"
+             class="input input-bordered w-full"
+             placeholder="<%= placeholder %>"
+             required />
+    </div>
+
+    <div id="<%= error_id %>" class="text-error text-sm mt-2"></div>
+
+    <div class="modal-action">
+      <button type="button" class="btn" onclick="<%= dialog_id %>.close()">Cancel</button>
+      <%= f.submit submit_label, class: "btn btn-primary" %>
+    </div>
+  <% end %>
+<% end %>
