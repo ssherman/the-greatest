@@ -88,6 +88,25 @@
               <% end %>
             <% end %>
           </th>
+          <th>
+            <%
+              updated_direction = (current_sort == "updated_at" && current_direction != "desc") ? "desc" : "asc"
+            %>
+            <%= link_to sort_path("updated_at", updated_direction), data: { turbo_frame: "lists_table" }, class: "link link-hover flex items-center gap-1" do %>
+              <span>Updated</span>
+              <% if current_sort == "updated_at" %>
+                <% if current_direction == "desc" %>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd" />
+                  </svg>
+                <% else %>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                  </svg>
+                <% end %>
+              <% end %>
+            <% end %>
+          </th>
           <th class="text-right">Actions</th>
         </tr>
       </thead>
@@ -147,6 +166,9 @@
             </td>
             <td class="text-sm text-base-content/70">
               <%= time_tag list.created_at, list.created_at.strftime("%b %d, %Y") %>
+            </td>
+            <td class="text-sm text-base-content/70">
+              <%= time_tag list.updated_at, list.updated_at.strftime("%b %d, %Y") %>
             </td>
             <td>
               <div class="flex justify-end gap-1">

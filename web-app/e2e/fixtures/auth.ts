@@ -5,6 +5,8 @@ import { DashboardPage } from '../pages/music/admin/dashboard-page';
 import { ArtistsPage } from '../pages/music/admin/artists-page';
 import { AlbumsPage } from '../pages/music/admin/albums-page';
 import { SongsPage } from '../pages/music/admin/songs-page';
+import { AlbumListsPage } from '../pages/music/admin/album-lists-page';
+import { SongListsPage } from '../pages/music/admin/song-lists-page';
 
 type Fixtures = {
   homePage: HomePage;
@@ -13,6 +15,8 @@ type Fixtures = {
   artistsPage: ArtistsPage;
   albumsPage: AlbumsPage;
   songsPage: SongsPage;
+  albumListsPage: AlbumListsPage;
+  songListsPage: SongListsPage;
 };
 
 export const test = base.extend<Fixtures>({
@@ -33,6 +37,12 @@ export const test = base.extend<Fixtures>({
   },
   songsPage: async ({ page }, use) => {
     await use(new SongsPage(page));
+  },
+  albumListsPage: async ({ page }, use) => {
+    await use(new AlbumListsPage(page));
+  },
+  songListsPage: async ({ page }, use) => {
+    await use(new SongListsPage(page));
   },
 });
 

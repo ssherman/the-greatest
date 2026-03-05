@@ -257,6 +257,45 @@ class ListItemTest < ActiveSupport::TestCase
     assert_nil item2.listable_id
   end
 
+  # Touch parent list tests
+  test "creating a list item should touch the parent list updated_at" do
+    list = lists(:basic_list)
+    original_updated_at = list.updated_at
+
+    travel 1.minute do
+      ListItem.create!(
+        list: list,
+        metadata: {title: "New Item"}
+      )
+    end
+
+    assert list.reload.updated_at > original_updated_at
+  end
+
+  test "updating a list item should touch the parent list updated_at" do
+    item = list_items(:basic_item)
+    list = item.list
+    original_updated_at = list.updated_at
+
+    travel 1.minute do
+      item.update!(position: 99)
+    end
+
+    assert list.reload.updated_at > original_updated_at
+  end
+
+  test "destroying a list item should touch the parent list updated_at" do
+    item = list_items(:basic_item)
+    list = item.list
+    original_updated_at = list.updated_at
+
+    travel 1.minute do
+      item.destroy!
+    end
+
+    assert list.reload.updated_at > original_updated_at
+  end
+
   # Metadata JSONB parsing tests
   test "should parse metadata JSON string to hash on save" do
     json_string = '{"title": "Test Album", "artists": ["Test Artist"], "rank": 1}'

@@ -110,6 +110,7 @@ module ListItemsActions
     items.each do |item|
       item.update!(metadata: item.metadata.except("ai_match_invalid"))
     end
+    @list.touch
 
     redirect_to review_step_path, notice: "#{items.count} items verified"
   end
