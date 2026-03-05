@@ -13,6 +13,9 @@ application.register("authentication", AuthenticationController)
 import AutocompleteController from "./autocomplete_controller"
 application.register("autocomplete", AutocompleteController)
 
+import ClipboardCopyController from "./clipboard_copy_controller"
+application.register("clipboard-copy", ClipboardCopyController)
+
 import MetadataEditorController from "./metadata_editor_controller"
 application.register("metadata-editor", MetadataEditorController)
 
