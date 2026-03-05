@@ -24,7 +24,7 @@
 #  fk_rails_...  (list_id => lists.id)
 #
 class ListItem < ApplicationRecord
-  belongs_to :list
+  belongs_to :list, touch: true
   belongs_to :listable, polymorphic: true, optional: true
   alias_method :item, :listable
 

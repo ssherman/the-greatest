@@ -108,6 +108,29 @@ test.describe('Games Admin Lists', () => {
     await expect(page.getByRole('link', { name: searchName })).toBeVisible();
   });
 
+  test('clicking Updated column header sorts by updated_at', async ({ listsPage, page }) => {
+    await listsPage.goto();
+
+    await expect(listsPage.table).toBeVisible();
+
+    // Click the "Updated" column header to sort ascending
+    const updatedLink = page.getByRole('link', { name: 'Updated', exact: true });
+    await updatedLink.click();
+
+    // After Turbo frame update, the sort link should now toggle to desc
+    await expect(updatedLink).toHaveAttribute('href', /sort=updated_at/);
+    await expect(updatedLink).toHaveAttribute('href', /direction=desc/);
+    await expect(listsPage.table).toBeVisible();
+
+    // Click again to sort descending
+    await updatedLink.click();
+
+    // After second click, should toggle back to asc
+    await expect(updatedLink).toHaveAttribute('href', /sort=updated_at/);
+    await expect(updatedLink).toHaveAttribute('href', /direction=asc/);
+    await expect(listsPage.table).toBeVisible();
+  });
+
   test('status filter updates the table', async ({ listsPage, page }) => {
     await listsPage.goto();
 

@@ -60,6 +60,16 @@ module Admin
           assert_response :success
         end
 
+        test "should sort by updated_at ascending" do
+          get admin_songs_lists_path(sort: "updated_at", direction: "asc")
+          assert_response :success
+        end
+
+        test "should sort by updated_at descending" do
+          get admin_songs_lists_path(sort: "updated_at", direction: "desc")
+          assert_response :success
+        end
+
         test "should ignore invalid sort column" do
           get admin_songs_lists_path(sort: "invalid_column", direction: "asc")
           assert_response :success

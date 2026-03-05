@@ -94,7 +94,8 @@ class Admin::ListsBaseController < Admin::BaseController
       "id" => "lists.id",
       "name" => "lists.name",
       "year_published" => "lists.year_published",
-      "created_at" => "lists.created_at"
+      "created_at" => "lists.created_at",
+      "updated_at" => "lists.updated_at"
     }
 
     allowed_columns.fetch(column.to_s, "lists.name")

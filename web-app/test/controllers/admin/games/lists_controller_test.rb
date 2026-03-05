@@ -74,6 +74,12 @@ module Admin
         assert_response :success
       end
 
+      test "should sort by updated_at" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_games_lists_path(sort: "updated_at")
+        assert_response :success
+      end
+
       test "should use default sort for invalid column" do
         sign_in_as(@admin_user, stub_auth: true)
         get admin_games_lists_path(sort: "invalid_column")
