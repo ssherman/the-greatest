@@ -1,0 +1,25 @@
+<dialog id="research_prompt_modal_dialog" class="modal">
+  <div class="modal-box max-w-3xl" data-controller="clipboard-copy">
+    <h3 class="font-bold text-lg mb-4">Research Prompt</h3>
+    <textarea
+      data-clipboard-copy-target="source"
+      class="textarea textarea-bordered w-full font-mono text-sm"
+      rows="25"
+      readonly
+    ><%= research_prompt %></textarea>
+    <div class="modal-action">
+      <button type="button" class="btn" onclick="research_prompt_modal_dialog.close()">Close</button>
+      <button
+        type="button"
+        class="btn btn-primary"
+        data-action="clipboard-copy#copy"
+        data-clipboard-copy-target="button"
+      >
+        Copy to Clipboard
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
