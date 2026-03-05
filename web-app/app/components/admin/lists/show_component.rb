@@ -16,6 +16,10 @@ class Admin::Lists::ShowComponent < ViewComponent::Base
     domain_config[:extra_show_fields].include?(:musicbrainz_series_id)
   end
 
+  def research_prompt_supported?
+    Admin::Lists::ResearchPromptModalComponent::DOMAIN_CONFIG.key?(list.type)
+  end
+
   def metadata_card_visible?
     list.number_of_voters.present? ||
       list.estimated_quality.present? ||
