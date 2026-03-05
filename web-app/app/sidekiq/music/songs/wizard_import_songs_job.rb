@@ -65,5 +65,6 @@ class Music::Songs::WizardImportSongsJob < Music::BaseWizardImportJob
 
   def mark_series_items_as_verified
     @list.list_items.where(verified: false).where.not(listable_id: nil).update_all(verified: true)
+    @list.touch
   end
 end
