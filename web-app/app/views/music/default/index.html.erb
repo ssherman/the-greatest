@@ -3,19 +3,24 @@
   content_for :meta_description, "Discover definitive rankings of the greatest songs and albums of all time. Expert reviews, curated lists, and comprehensive music analysis."
 %>
 
-<div class="bg-gradient-to-r from-purple-600 to-blue-600 py-16">
-  <div class="container mx-auto px-4">
-    <div class="text-center text-white max-w-3xl mx-auto">
-      <h1 class="mb-4 text-4xl md:text-5xl font-bold">The Greatest Music</h1>
-      <p class="mb-6 text-lg">
-        Discover definitive rankings of the greatest songs, albums, and artists of all time.
-      </p>
-      <div class="flex flex-wrap gap-3 justify-center">
-        <%= link_to "Top Albums", albums_path, class: "btn btn-primary btn-md" %>
-        <%= link_to "Top Songs", songs_path, class: "btn btn-outline btn-md text-white border-white hover:bg-white hover:text-purple-600" %>
-        <%= link_to "Top Artists", artists_path, class: "btn btn-outline btn-md text-white border-white hover:bg-white hover:text-purple-600" %>
-      </div>
+<div class="bg-base-200 border border-base-300 rounded-xl p-8 md:p-12 mb-8">
+  <div class="max-w-4xl lg:max-w-[75%] mx-auto">
+    <p class="mb-6 text-lg leading-relaxed text-base-content/80">
+      Ever wonder which albums and songs truly stand the test of time? We built The Greatest Music to answer that.
+      Our algorithm combines hundreds of "best of" lists -- from critics, musicians, and fans around the world --
+      into one comprehensive ranking. Instead of trusting a single opinion, we look at the bigger picture: where do
+      all these lists agree, and where do they surprise us? Check out the rankings below, or learn
+      <%= link_to "how it all works", music_rankings_path, class: "link link-primary font-semibold" %>.
+    </p>
+    <div class="flex flex-wrap gap-3 justify-center mb-4">
+      <%= link_to "Top Albums", albums_path, class: "btn btn-primary btn-md" %>
+      <%= link_to "Top Songs", songs_path, class: "btn btn-outline btn-md" %>
+      <%= link_to "Top Artists", artists_path, class: "btn btn-outline btn-md" %>
     </div>
+    <p class="text-sm text-base-content/60">
+      Got opinions? Join the conversation on
+      <%= link_to "Discord", "https://discord.com/invite/8JE9fpMtZp", target: "_blank", rel: "noopener", class: "link link-primary font-semibold" %>.
+    </p>
   </div>
 </div>
 

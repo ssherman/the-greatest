@@ -3,15 +3,35 @@
   content_for :meta_description, games_page_description(@year_filter)
 %>
 
+<% if @show_hero %>
+  <div class="bg-base-200 border border-base-300 rounded-xl p-8 md:p-12 mb-8">
+    <div class="max-w-4xl lg:max-w-[75%] mx-auto">
+      <p class="text-lg leading-relaxed mb-4 text-base-content/80">
+        What makes a video game truly great? We set out to find a definitive answer. The Greatest Games aggregates
+        hundreds of "best of" lists from critics, developers, and players worldwide, then runs them through a ranking
+        algorithm that weighs each list's quality, credibility, and scope. The result is a consensus ranking you can
+        actually trust. Curious how it works? Check out our
+        <%= link_to "rankings page", games_rankings_path, class: "link link-primary font-semibold" %>.
+      </p>
+      <p class="text-sm text-base-content/60">
+        Want to talk games? Join us on
+        <%= link_to "Discord", "https://discord.com/invite/8JE9fpMtZp", target: "_blank", rel: "noopener", class: "link link-primary font-semibold" %>.
+      </p>
+    </div>
+  </div>
+<% end %>
+
 <div class="container mx-auto px-4 py-8">
-  <div class="mb-4">
+  <div class="mb-4 text-center">
     <h1 class="text-4xl font-bold text-base-content"><%= games_page_heading(@year_filter) %></h1>
   </div>
 
-  <%= render Games::FilterTabsComponent.new(
-    base_path: video_games_path(ranking_configuration_id: params[:ranking_configuration_id]),
-    year_filter: @year_filter
-  ) %>
+  <div class="flex justify-center">
+    <%= render Games::FilterTabsComponent.new(
+      base_path: video_games_path(ranking_configuration_id: params[:ranking_configuration_id]),
+      year_filter: @year_filter
+    ) %>
+  </div>
 
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
     <% @games.each do |ranked_item| %>

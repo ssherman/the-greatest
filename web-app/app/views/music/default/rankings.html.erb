@@ -1,0 +1,114 @@
+<%
+  content_for :page_title, "How Our Rankings Work | The Greatest Music"
+  content_for :meta_description, "Learn how The Greatest Music ranks albums and songs using hundreds of curated lists, weighted scoring, and transparent algorithms."
+%>
+
+<div class="flex flex-col-reverse lg:flex-row gap-8">
+  <%# Sidebar - shows first on mobile (via flex-col-reverse), right on desktop %>
+  <aside class="lg:order-2 lg:w-72 shrink-0 flex flex-col gap-6">
+    <div class="card bg-base-200">
+      <div class="card-body">
+        <h3 class="card-title text-lg">Join the Community</h3>
+        <p class="text-sm">Got opinions on what belongs at the top? We'd love to hear them.</p>
+        <%= link_to "Join us on Discord", "https://discord.com/invite/8JE9fpMtZp",
+            target: "_blank", rel: "noopener",
+            class: "btn btn-primary btn-sm mt-2" %>
+      </div>
+    </div>
+
+    <div class="card bg-base-200">
+      <div class="card-body">
+        <h3 class="card-title text-lg">Open Source</h3>
+        <p class="text-sm">Our ranking algorithm and site code are fully open source.</p>
+        <ul class="text-sm mt-2 space-y-1">
+          <li><%= link_to "Ranking Algorithm (weighted_list_rank)", "https://github.com/ssherman/weighted_list_rank", target: "_blank", rel: "noopener", class: "link link-primary" %></li>
+          <li><%= link_to "The Greatest (full site source)", "https://github.com/ssherman/the-greatest/", target: "_blank", rel: "noopener", class: "link link-primary" %></li>
+        </ul>
+      </div>
+    </div>
+  </aside>
+
+  <%# Main content %>
+  <div class="lg:order-1 flex-1 min-w-0">
+    <h1 class="text-3xl md:text-4xl font-bold mb-6">How Our Rankings Work</h1>
+
+    <p class="text-base-content/80 mb-8 text-lg leading-relaxed">
+      Most "best of" aggregation sites just count how many lists something appears on and call it a day.
+      We think that misses the point. Not all lists are created equal -- a carefully curated ranking by music
+      critics carries different weight than a fan poll on a random forum. Our algorithm takes that into account.
+    </p>
+
+    <h2 class="text-2xl font-bold mb-4">The Algorithm</h2>
+    <div class="space-y-4 mb-8 text-base-content/80 leading-relaxed">
+      <p>
+        Every list in our system starts with a base quality score. From there, we evaluate each list across
+        several dimensions -- who voted, how many people voted, what the list covers, and whether it focuses
+        on a specific niche or tries to be comprehensive. Lists that are more credible and broader in scope
+        naturally carry more weight in the final rankings.
+      </p>
+      <p>
+        Items that appear on multiple high-quality lists rise to the top. But we also give credit to items that
+        land on a single exceptional list -- consensus matters, but so does expert recognition.
+      </p>
+    </div>
+
+    <h2 class="text-2xl font-bold mb-4">What We Look At</h2>
+    <p class="text-base-content/80 mb-4">
+      Here are some of the factors our algorithm considers when evaluating a list:
+    </p>
+
+    <% if @static_penalties.any? %>
+      <h3 class="text-lg font-semibold mb-2">List Quality Signals</h3>
+      <ul class="list-disc list-inside mb-6 text-base-content/80 space-y-1">
+        <% @static_penalties.each do |penalty| %>
+          <li><%= penalty.name %></li>
+        <% end %>
+      </ul>
+    <% end %>
+
+    <% if @dynamic_penalties.any? %>
+      <h3 class="text-lg font-semibold mb-2">Automatic Adjustments</h3>
+      <ul class="list-disc list-inside mb-8 text-base-content/80 space-y-1">
+        <% @dynamic_penalties.each do |penalty| %>
+          <li><%= penalty.name %></li>
+        <% end %>
+      </ul>
+    <% end %>
+
+    <h2 class="text-2xl font-bold mb-4">Solving for Recency Bias</h2>
+    <p class="text-base-content/80 mb-8 leading-relaxed">
+      One of the trickiest problems in ranking anything is recency bias. A "best albums of all time" list
+      published in 2024 is naturally going to skew toward music from the last few decades -- the voters simply
+      haven't listened to everything from the 1950s. We address this with what we call the List Dates Penalty.
+      When an item was released long before the list was published, we gradually reduce how much that
+      list-placement counts toward the item's ranking. This way, a classic album doesn't get unfairly penalized
+      just because it wasn't top-of-mind for recent voters.
+    </p>
+
+    <h2 class="text-2xl font-bold mb-4">By the Numbers</h2>
+    <div class="stats stats-vertical md:stats-horizontal shadow mb-8 w-full">
+      <div class="stat">
+        <div class="stat-title">Active Lists</div>
+        <div class="stat-value"><%= number_with_delimiter(@active_lists_count) %></div>
+      </div>
+      <div class="stat">
+        <div class="stat-title">Ranked Items</div>
+        <div class="stat-value"><%= number_with_delimiter(@ranked_items_count) %></div>
+      </div>
+      <div class="stat">
+        <div class="stat-title">Median Items per List</div>
+        <div class="stat-value"><%= @median_list_count %></div>
+      </div>
+    </div>
+
+    <h2 class="text-2xl font-bold mb-4">Open Source</h2>
+    <p class="text-base-content/80 mb-4 leading-relaxed">
+      We believe in transparency. Our ranking algorithm is open source -- you can read the code,
+      suggest improvements, or even run it yourself.
+    </p>
+    <ul class="list-disc list-inside text-base-content/80 space-y-1">
+      <li><%= link_to "Ranking Algorithm (weighted_list_rank gem)", "https://github.com/ssherman/weighted_list_rank", target: "_blank", rel: "noopener", class: "link link-primary" %></li>
+      <li><%= link_to "The Greatest (full site source)", "https://github.com/ssherman/the-greatest/", target: "_blank", rel: "noopener", class: "link link-primary" %></li>
+    </ul>
+  </div>
+</div>

@@ -93,6 +93,30 @@ module Games
       assert_match(/coming soon/i, response.body)
     end
 
+    test "root should render hero section when no filters" do
+      get "/"
+      assert_response :success
+      assert_match(/What makes a video game truly great/i, response.body)
+    end
+
+    test "root should not render hero section with year filter" do
+      get "/video-games/1990s"
+      assert_response :success
+      assert_no_match(/What makes a video game truly great/i, response.body)
+    end
+
+    test "root should not render hero section with page param" do
+      get "/?page=2"
+      assert_response :success
+      assert_no_match(/What makes a video game truly great/i, response.body)
+    end
+
+    test "root should not render hero section with ranking_configuration_id param" do
+      get "/rc/#{ranking_configurations(:games_global).id}/video-games"
+      assert_response :success
+      assert_no_match(/What makes a video game truly great/i, response.body)
+    end
+
     test "root should render coming soon when no ranking configuration exists" do
       Games::RankingConfiguration.stubs(:default_primary).returns(nil)
       get "/"
