@@ -16,6 +16,8 @@ class Games::RankedItemsController < RankedItemsController
   def index
     return render "games/ranked_items/coming_soon" unless @ranking_configuration
 
+    @show_hero = !params[:year].present? && !params[:page].present? && !params[:ranking_configuration_id].present?
+
     games_query = @ranking_configuration.ranked_items
       .joins("JOIN games_games ON ranked_items.item_id = games_games.id AND ranked_items.item_type = 'Games::Game'")
       .includes(item: [:categories, :primary_image, {game_companies: :company}])

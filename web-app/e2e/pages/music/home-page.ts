@@ -17,8 +17,8 @@ export class HomePage {
 
   constructor(page: Page) {
     this.page = page;
-    this.heading = page.getByRole('heading', { name: 'The Greatest Music' });
-    this.subtitle = page.getByText('Discover definitive rankings');
+    this.heading = page.getByText('Ever wonder which albums and songs');
+    this.subtitle = page.getByText('Got opinions?');
     this.topAlbumsHeading = page.getByRole('heading', { name: 'Top Ranked Albums' });
     this.topSongsHeading = page.getByRole('heading', { name: 'Top Ranked Songs' });
     this.topAlbumsLink = page.getByRole('link', { name: 'Top Albums' });

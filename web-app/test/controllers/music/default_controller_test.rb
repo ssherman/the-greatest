@@ -22,5 +22,22 @@ module Music
       assert_response :success
       assert_select "meta[name='description']"
     end
+
+    test "should get rankings page" do
+      get music_rankings_url
+      assert_response :success
+    end
+
+    test "rankings page should have page title" do
+      get music_rankings_url
+      assert_response :success
+      assert_select "title"
+    end
+
+    test "rankings page should have SEO meta description" do
+      get music_rankings_url
+      assert_response :success
+      assert_select "meta[name='description']"
+    end
   end
 end

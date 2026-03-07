@@ -14,6 +14,14 @@
   </div>
 
   <% if @query.blank? %>
+    <div class="max-w-xl mx-auto mb-8">
+      <%= form_with url: games_search_path, method: :get, data: { turbo: false } do |f| %>
+        <div class="join w-full">
+          <%= f.search_field :q, placeholder: "Search games...", class: "input join-item flex-1", autofocus: true, autocomplete: "off" %>
+          <button type="submit" class="btn btn-primary join-item" aria-label="Search">Search</button>
+        </div>
+      <% end %>
+    </div>
     <%= render Search::EmptyStateComponent.new(message: "Enter a search term to find video games") %>
 
   <% elsif @total_count == 0 %>

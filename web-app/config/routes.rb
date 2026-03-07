@@ -233,6 +233,7 @@ Rails.application.routes.draw do
 
   # Domain-specific roots using Default controllers
   constraints DomainConstraint.new(Rails.application.config.domains[:music]) do
+    get "rankings", to: "music/default#rankings", as: :music_rankings
     root to: "music/default#index", as: :music_root
   end
 
@@ -331,6 +332,8 @@ Rails.application.routes.draw do
     scope as: "games" do
       get "search", to: "games/searches#index"
     end
+
+    get "rankings", to: "games/default#rankings", as: :games_rankings
 
     # All games routes with optional ranking configuration parameter
     scope "(/rc/:ranking_configuration_id)" do
