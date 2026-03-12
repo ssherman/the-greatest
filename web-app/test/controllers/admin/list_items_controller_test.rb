@@ -226,6 +226,53 @@ module Admin
       assert_match "2 items deleted from list", flash[:notice]
     end
 
+    test "clear_positions should set all positions to nil" do
+      ListItem.create!(list: @album_list, listable: @album, position: 1)
+      ListItem.create!(list: @album_list, listable: music_albums(:abbey_road), position: 2)
+
+      assert_no_difference "ListItem.count" do
+        delete clear_positions_admin_list_list_items_path(@album_list)
+      end
+
+      assert_redirected_to admin_albums_list_path(@album_list)
+      follow_redirect!
+      assert_match "Positions cleared for 2 items", flash[:notice]
+
+      @album_list.list_items.each do |item|
+        assert_nil item.reload.position
+      end
+    end
+
+    test "clear_positions should handle list with no items" do
+      delete clear_positions_admin_list_list_items_path(@album_list)
+
+      assert_redirected_to admin_albums_list_path(@album_list)
+      follow_redirect!
+      assert_match "Positions cleared for 0 items", flash[:notice]
+    end
+
+    test "clear_positions should work for song lists" do
+      ListItem.create!(list: @song_list, listable: @song, position: 1)
+      ListItem.create!(list: @song_list, listable: music_songs(:money), position: 2)
+
+      delete clear_positions_admin_list_list_items_path(@song_list)
+
+      assert_redirected_to admin_songs_list_path(@song_list)
+      @song_list.list_items.each do |item|
+        assert_nil item.reload.position
+      end
+    end
+
+    test "clear_positions should require admin authorization" do
+      item = ListItem.create!(list: @album_list, listable: @album, position: 1)
+      sign_in_as(@regular_user, stub_auth: true)
+
+      delete clear_positions_admin_list_list_items_path(@album_list)
+
+      assert_response :redirect
+      assert_equal 1, item.reload.position
+    end
+
     test "destroy_all should handle empty list gracefully" do
       assert_no_difference "ListItem.count" do
         delete destroy_all_admin_list_list_items_path(@album_list)
