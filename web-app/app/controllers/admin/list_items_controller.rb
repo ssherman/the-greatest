@@ -1,5 +1,5 @@
 class Admin::ListItemsController < Admin::BaseController
-  before_action :set_list, only: [:index, :create, :destroy_all]
+  before_action :set_list, only: [:index, :create, :destroy_all, :clear_positions]
   before_action :set_list_item, only: [:update, :destroy]
 
   private
@@ -161,6 +161,11 @@ class Admin::ListItemsController < Admin::BaseController
     redirect_to redirect_path, notice: "#{deleted_count} items deleted from list."
   rescue ActiveRecord::RecordNotDestroyed => e
     redirect_to redirect_path, alert: "Failed to delete items: #{e.message}"
+  end
+
+  def clear_positions
+    updated_count = @list.list_items.update_all(position: nil)
+    redirect_to redirect_path, notice: "Positions cleared for #{updated_count} items."
   end
 
   private

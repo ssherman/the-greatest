@@ -370,6 +370,7 @@ Rails.application.routes.draw do
       resources :list_items, only: [:index, :create] do
         collection do
           delete :destroy_all
+          delete :clear_positions
         end
       end
     end
