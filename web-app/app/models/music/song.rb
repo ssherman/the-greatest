@@ -38,6 +38,8 @@ class Music::Song < ApplicationRecord
   has_many :identifiers, as: :identifiable, dependent: :destroy
   has_many :list_items, as: :listable, dependent: :destroy
   has_many :lists, through: :list_items
+  has_many :user_list_items, as: :listable, dependent: :destroy
+  has_many :user_lists, through: :user_list_items
 
   # Ranking associations
   has_many :ranked_items, as: :item, dependent: :destroy

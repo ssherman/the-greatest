@@ -1,0 +1,64 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+#
+# Uses Rails polymorphic fixture syntax: `listable: <fixture_name> (<ClassName>)`
+
+# == Schema Information
+#
+# Table name: user_list_items
+#
+#  id            :bigint           not null, primary key
+#  completed_on  :date
+#  listable_type :string           not null
+#  position      :integer          not null
+#  created_at    :datetime         not null
+#  updated_at    :datetime         not null
+#  listable_id   :bigint           not null
+#  user_list_id  :bigint           not null
+#
+# Indexes
+#
+#  index_user_list_items_on_list_and_listable_unique       (user_list_id,listable_type,listable_id) UNIQUE
+#  index_user_list_items_on_listable                       (listable_type,listable_id)
+#  index_user_list_items_on_user_list_id                   (user_list_id)
+#  index_user_list_items_on_user_list_id_and_completed_on  (user_list_id,completed_on)
+#  index_user_list_items_on_user_list_id_and_position      (user_list_id,position)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (user_list_id => user_lists.id)
+#
+regular_user_fav_album_1:
+  user_list: regular_user_music_albums_favorites
+  listable: dark_side_of_the_moon (Music::Album)
+  position: 1
+
+regular_user_fav_album_2:
+  user_list: regular_user_music_albums_favorites
+  listable: abbey_road (Music::Album)
+  position: 2
+  completed_on: 2026-03-15
+
+regular_user_fav_album_3:
+  user_list: regular_user_music_albums_favorites
+  listable: thriller (Music::Album)
+  position: 3
+
+regular_user_custom_album_1:
+  user_list: regular_user_custom_albums
+  listable: nevermind (Music::Album)
+  position: 1
+
+regular_user_fav_song_1:
+  user_list: regular_user_music_songs_favorites
+  listable: time (Music::Song)
+  position: 1
+
+regular_user_fav_game_1:
+  user_list: regular_user_games_favorites
+  listable: breath_of_the_wild (Games::Game)
+  position: 1
+
+regular_user_fav_movie_1:
+  user_list: regular_user_movies_favorites
+  listable: godfather (Movies::Movie)
+  position: 1

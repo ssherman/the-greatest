@@ -157,4 +157,40 @@ class UserTest < ActiveSupport::TestCase
     assert_not user2.valid?
     assert_includes user2.errors[:confirmation_token], "has already been taken"
   end
+
+  # Default user lists
+
+  test "creates 12 default user lists on create" do
+    user = User.create!(email: "defaults@example.com", display_name: "Defaults")
+    assert_equal 12, user.user_lists.count
+  end
+
+  test "default list counts per subclass" do
+    user = User.create!(email: "counts@example.com", display_name: "Counts")
+    assert_equal 3, user.user_lists.where(type: "Music::Albums::UserList").count
+    assert_equal 1, user.user_lists.where(type: "Music::Songs::UserList").count
+    assert_equal 5, user.user_lists.where(type: "Games::UserList").count
+    assert_equal 3, user.user_lists.where(type: "Movies::UserList").count
+  end
+
+  test "default list names follow subclass convention" do
+    user = User.create!(email: "names@example.com", display_name: "Names")
+    name = user.user_lists.where(type: "Music::Albums::UserList", list_type: 0).first.name
+    assert_equal "Favorite Albums", name
+  end
+
+  test "default_user_list_for looks up a default list" do
+    user = User.create!(email: "lookup@example.com", display_name: "Lookup")
+    list = user.default_user_list_for(Games::UserList, :favorites)
+    assert_not_nil list
+    assert_instance_of Games::UserList, list
+    assert list.favorites?
+  end
+
+  test "destroying user destroys user_lists" do
+    user = User.create!(email: "bye@example.com", display_name: "Bye")
+    assert_difference "UserList.count", -12 do
+      user.destroy
+    end
+  end
 end

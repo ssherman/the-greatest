@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_02_26_002022) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_22_002612) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -586,6 +586,37 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_26_002022) do
     t.index ["parent_type", "parent_id"], name: "index_search_index_requests_on_parent_type_and_parent_id"
   end
 
+  create_table "user_list_items", force: :cascade do |t|
+    t.date "completed_on"
+    t.datetime "created_at", null: false
+    t.bigint "listable_id", null: false
+    t.string "listable_type", null: false
+    t.integer "position", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_list_id", null: false
+    t.index ["listable_type", "listable_id"], name: "index_user_list_items_on_listable"
+    t.index ["user_list_id", "completed_on"], name: "index_user_list_items_on_user_list_id_and_completed_on"
+    t.index ["user_list_id", "listable_type", "listable_id"], name: "index_user_list_items_on_list_and_listable_unique", unique: true
+    t.index ["user_list_id", "position"], name: "index_user_list_items_on_user_list_id_and_position"
+    t.index ["user_list_id"], name: "index_user_list_items_on_user_list_id"
+  end
+
+  create_table "user_lists", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.integer "list_type", null: false
+    t.string "name", null: false
+    t.integer "position"
+    t.boolean "public", default: false, null: false
+    t.string "type", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.integer "view_mode"
+    t.index ["public"], name: "index_user_lists_on_public", where: "(public = true)"
+    t.index ["user_id", "type"], name: "index_user_lists_on_user_id_and_type"
+    t.index ["user_id"], name: "index_user_lists_on_user_id"
+  end
+
   create_table "users", force: :cascade do |t|
     t.jsonb "auth_data"
     t.string "auth_uid"
@@ -654,4 +685,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_02_26_002022) do
   add_foreign_key "ranking_configurations", "lists", column: "secondary_mapped_list_id"
   add_foreign_key "ranking_configurations", "ranking_configurations", column: "inherited_from_id"
   add_foreign_key "ranking_configurations", "users"
+  add_foreign_key "user_list_items", "user_lists"
+  add_foreign_key "user_lists", "users"
 end

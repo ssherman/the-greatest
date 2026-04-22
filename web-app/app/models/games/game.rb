@@ -72,6 +72,8 @@ class Games::Game < ApplicationRecord
   has_many :categories, through: :category_items, class_name: "Games::Category", inverse_of: :games
   has_many :list_items, as: :listable, dependent: :destroy
   has_many :lists, through: :list_items
+  has_many :user_list_items, as: :listable, dependent: :destroy
+  has_many :user_lists, through: :user_list_items
   has_many :ranked_items, as: :item, dependent: :destroy
 
   # Validations
