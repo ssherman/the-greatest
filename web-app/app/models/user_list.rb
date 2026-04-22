@@ -9,7 +9,7 @@
 #  position    :integer
 #  public      :boolean          default(FALSE), not null
 #  type        :string           not null
-#  view_mode   :integer
+#  view_mode   :integer          default("default_view"), not null
 #  created_at  :datetime         not null
 #  updated_at  :datetime         not null
 #  user_id     :bigint           not null
@@ -37,7 +37,7 @@ class UserList < ApplicationRecord
   has_many :user_list_items, -> { order(:position) }, dependent: :destroy
 
   # Enums
-  enum :view_mode, {default_view: 0, table_view: 1, grid_view: 2}
+  enum :view_mode, {default_view: 0, table_view: 1, grid_view: 2}, default: :default_view
 
   # Validations
   validates :name, presence: true

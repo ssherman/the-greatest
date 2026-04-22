@@ -60,6 +60,23 @@ class UserListItemTest < ActiveSupport::TestCase
     assert_equal [1, 2], new_positions
   end
 
+  test "shift_positions_up renumbers correctly across multi-item deletes in one transaction" do
+    list = Music::Albums::UserList.create!(user: users(:editor_user), name: "Bulk", list_type: :favorites)
+    a = list.user_list_items.create!(listable: music_albums(:dark_side_of_the_moon))
+    b = list.user_list_items.create!(listable: music_albums(:wish_you_were_here))
+    c = list.user_list_items.create!(listable: music_albums(:abbey_road))
+    d = list.user_list_items.create!(listable: music_albums(:thriller))
+    assert_equal [1, 2, 3, 4], [a.position, b.position, c.position, d.position]
+
+    ActiveRecord::Base.transaction do
+      b.destroy
+      c.destroy
+    end
+
+    remaining = list.user_list_items.ordered.pluck(:listable_id, :position)
+    assert_equal [[a.listable_id, 1], [d.listable_id, 2]], remaining
+  end
+
   test "uniqueness of listable within a list" do
     existing = @list.user_list_items.ordered.first
     dup = @list.user_list_items.build(listable: existing.listable)

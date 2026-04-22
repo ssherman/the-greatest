@@ -56,12 +56,24 @@ class UserListItem < ApplicationRecord
     self.position = max_position + 1
   end
 
-  # Skip when the parent list is being destroyed — `dependent: :destroy` cascades
-  # through items one at a time and siblings are already being deleted.
+  # Renumber surviving siblings to 1..N in position order. A single `UPDATE ... FROM
+  # ROW_NUMBER()` correctly handles multiple deletes in one transaction (a plain
+  # "position -= 1" would leave gaps because each callback reads its own stale
+  # pre-shift position). Skipped when the parent list is being destroyed — in that
+  # case `dependent: :destroy` is cascading and there are no siblings to renumber.
   def shift_positions_up
     return if user_list.nil? || user_list.destroyed?
-    self.class.where(user_list_id: user_list_id)
-      .where("position > ?", position)
-      .update_all("position = position - 1")
+    sql = self.class.sanitize_sql_array([<<~SQL.squish, user_list_id])
+      UPDATE user_list_items
+      SET position = ranked.new_position
+      FROM (
+        SELECT id, ROW_NUMBER() OVER (ORDER BY position, id) AS new_position
+        FROM user_list_items
+        WHERE user_list_id = ?
+      ) ranked
+      WHERE user_list_items.id = ranked.id
+        AND user_list_items.position <> ranked.new_position
+    SQL
+    self.class.connection.execute(sql)
   end
 end
