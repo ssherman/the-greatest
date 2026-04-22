@@ -34,6 +34,10 @@ module Movies
     has_many :category_items, as: :item, dependent: :destroy
     has_many :categories, through: :category_items, class_name: "Movies::Category"
 
+    # User list associations
+    has_many :user_list_items, as: :listable, dependent: :destroy
+    has_many :user_lists, through: :user_list_items
+
     # Enums
     enum :rating, {g: 0, pg: 1, pg_13: 2, r: 3, nc_17: 4, unrated: 5}
 

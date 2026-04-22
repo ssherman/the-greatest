@@ -1,0 +1,74 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+#
+# Note: Fixtures bypass ActiveRecord callbacks, so users loaded from fixtures
+# do NOT get default user lists created automatically. For tests that rely on
+# the default-list creation callback, build users via `User.create!`.
+
+# == Schema Information
+#
+# Table name: user_lists
+#
+#  id          :bigint           not null, primary key
+#  description :text
+#  list_type   :integer          not null
+#  name        :string           not null
+#  position    :integer
+#  public      :boolean          default(FALSE), not null
+#  type        :string           not null
+#  view_mode   :integer          default("default_view"), not null
+#  created_at  :datetime         not null
+#  updated_at  :datetime         not null
+#  user_id     :bigint           not null
+#
+# Indexes
+#
+#  index_user_lists_on_public            (public) WHERE (public = true)
+#  index_user_lists_on_user_id           (user_id)
+#  index_user_lists_on_user_id_and_type  (user_id,type)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (user_id => users.id)
+#
+regular_user_music_albums_favorites:
+  user: regular_user
+  type: Music::Albums::UserList
+  name: Favorite Albums
+  list_type: 0 # favorites
+  public: false
+
+regular_user_music_songs_favorites:
+  user: regular_user
+  type: Music::Songs::UserList
+  name: Favorite Songs
+  list_type: 0 # favorites
+  public: false
+
+regular_user_games_favorites:
+  user: regular_user
+  type: Games::UserList
+  name: Favorite Games
+  list_type: 0 # favorites
+  public: false
+
+regular_user_movies_favorites:
+  user: regular_user
+  type: Movies::UserList
+  name: Favorite Movies
+  list_type: 0 # favorites
+  public: false
+
+regular_user_custom_albums:
+  user: regular_user
+  type: Music::Albums::UserList
+  name: My Desert Island Picks
+  description: Albums I'd take to a desert island
+  list_type: 3 # custom
+  public: true
+
+admin_user_games_favorites:
+  user: admin_user
+  type: Games::UserList
+  name: Favorite Games
+  list_type: 0 # favorites
+  public: false
