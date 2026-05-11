@@ -1,0 +1,7 @@
+<%# Hidden Lucide-icon templates cloned by user_list_widget_controller.js. %>
+<%# Union of icons referenced by every UserList::list_type_icons map plus widget UI. %>
+<template id="user-list-icons">
+  <% %w[heart headphones bookmark check trophy gamepad-2 eye plus].each do |name| %>
+    <span data-icon="<%= name %>"><%= icon name, library: "lucide", class: "size-4" %></span>
+  <% end %>
+</template>

@@ -50,6 +50,14 @@ module Music
       test "list_type enum has favorites, listened, want_to_listen, custom" do
         assert_equal %w[favorites listened want_to_listen custom], Music::Albums::UserList.list_types.keys
       end
+
+      test "list_type_icons covers each non-custom list_type" do
+        icons = Music::Albums::UserList.list_type_icons
+        assert_equal "heart", icons[:favorites]
+        assert_equal "headphones", icons[:listened]
+        assert_equal "bookmark", icons[:want_to_listen]
+        refute icons.key?(:custom)
+      end
     end
   end
 end

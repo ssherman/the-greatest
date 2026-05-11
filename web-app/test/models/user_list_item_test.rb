@@ -112,4 +112,22 @@ class UserListItemTest < ActiveSupport::TestCase
     item = user_list_items(:regular_user_fav_album_1)
     assert_equal users(:regular_user), item.user
   end
+
+  test "after_commit touches user on create" do
+    before = @list.user.reload.updated_at
+    travel 1.minute do
+      @list.user_list_items.create!(listable: @album)
+      assert @list.user.reload.updated_at > before
+    end
+  end
+
+  test "after_commit touches user on destroy" do
+    item = user_list_items(:regular_user_fav_album_1)
+    user = item.user
+    before = user.reload.updated_at
+    travel 1.minute do
+      item.destroy
+      assert user.reload.updated_at > before
+    end
+  end
 end

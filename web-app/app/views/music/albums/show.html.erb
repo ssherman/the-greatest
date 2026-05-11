@@ -51,6 +51,10 @@
           </p>
         <% end %>
 
+        <div class="mb-4" data-listable-type="Music::Album" data-listable-id="<%= @album.id %>">
+          <%= render UserLists::CardWidgetComponent.new(listable: @album) %>
+        </div>
+
         <% if @album.description.present? %>
           <div class="prose max-w-none">
             <p class="text-base-content/70">

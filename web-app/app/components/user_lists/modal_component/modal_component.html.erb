@@ -1,0 +1,58 @@
+<dialog id="user_list_modal" class="modal" data-controller="user-list-modal">
+  <div class="modal-box max-w-lg">
+    <h3 class="font-bold text-lg mb-1">Add to list</h3>
+    <p class="text-sm text-base-content/70 mb-4" data-user-list-modal-target="title"></p>
+
+    <div class="mb-4">
+      <h4 class="font-semibold text-sm uppercase tracking-wide text-base-content/70 mb-2">Your lists</h4>
+      <%# Cap height so a user with many custom lists doesn't push the create
+          form below the modal. Inner rows wrap long names instead of forcing
+          a horizontal scrollbar. %>
+      <div data-user-list-modal-target="existingLists"
+           class="flex flex-col gap-1 max-h-64 overflow-y-auto pr-1"></div>
+    </div>
+
+    <details class="collapse collapse-arrow border border-base-300 bg-base-200/40 rounded-box"
+             data-user-list-modal-target="createDetails">
+      <summary class="collapse-title text-sm font-medium py-3 min-h-0">+ Create a new list</summary>
+      <div class="collapse-content">
+        <form data-user-list-modal-target="createForm"
+              data-action="submit->user-list-modal#createList"
+              class="flex flex-col gap-2 pt-1"
+              novalidate>
+          <input type="text"
+                 name="name"
+                 placeholder="List name"
+                 class="input input-bordered input-sm w-full"
+                 data-user-list-modal-target="nameInput"
+                 data-action="input->user-list-modal#syncCreateButton">
+          <textarea name="description"
+                    placeholder="Description (optional)"
+                    class="textarea textarea-bordered textarea-sm w-full"
+                    rows="2"
+                    data-user-list-modal-target="descriptionInput"></textarea>
+          <label class="label cursor-pointer justify-start gap-2 py-1">
+            <input type="checkbox" class="checkbox checkbox-sm" data-user-list-modal-target="publicInput">
+            <span class="label-text">Make this list public</span>
+          </label>
+          <button type="submit"
+                  class="btn btn-primary btn-sm"
+                  data-user-list-modal-target="submitButton"
+                  disabled>
+            Create list
+          </button>
+          <p class="text-error text-sm hidden" data-user-list-modal-target="formError"></p>
+        </form>
+      </div>
+    </details>
+
+    <div class="modal-action">
+      <form method="dialog">
+        <button class="btn btn-sm">Done</button>
+      </form>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>

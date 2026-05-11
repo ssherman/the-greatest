@@ -23,6 +23,23 @@ class ApplicationController < ActionController::Base
     !!current_user
   end
 
+  # Halts the action with a 401 (JSON) or redirect (HTML) when no user is signed in.
+  # JSON-only controllers can call this in a before_action; the JsonErrorResponses
+  # concern provides the matching error body shape.
+  def require_signed_in!
+    return if current_user
+
+    if request.format.json?
+      render json: {error: {code: "unauthenticated", message: "Sign in required"}},
+        status: :unauthorized
+    else
+      respond_to do |format|
+        format.json { render json: {error: {code: "unauthenticated", message: "Sign in required"}}, status: :unauthorized }
+        format.any { redirect_to "/", alert: "Please sign in to continue." }
+      end
+    end
+  end
+
   private
 
   def set_current_domain

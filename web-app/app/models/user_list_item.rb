@@ -37,11 +37,17 @@ class UserListItem < ApplicationRecord
   # Callbacks
   before_validation :set_position, on: :create
   after_destroy_commit :shift_positions_up
+  after_commit :touch_user, on: [:create, :update, :destroy]
 
   # Scopes
   scope :ordered, -> { order(:position) }
 
   private
+
+  def touch_user
+    return if user.nil? || user.destroyed? || user.new_record?
+    user.touch
+  end
 
   def listable_type_compatible_with_user_list
     return if listable_type.blank? || user_list.blank?

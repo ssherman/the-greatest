@@ -3,7 +3,7 @@
 ## Overview
 User Lists are personal, ordered collections that logged-in users use to organize items they care about across the four media domains (music albums, music songs, games, movies). Each user automatically receives a predefined set of default lists (e.g. "Favorite Albums", "Games I've Played") on signup and can create an unlimited number of additional custom lists.
 
-This feature corresponds to the `user-lists-01` spec (data model and core backend). UI, controller endpoints, and cached-page integration are delivered in a follow-up spec.
+This feature corresponds to the `user-lists-01` spec (data model and core backend) and `user-lists-02a` spec (Add-to-List widget). The `/my/lists` dashboard, list show pages, and drag-and-drop reordering UI are deferred to `user-lists-02c`.
 
 ## Architecture
 
@@ -95,11 +95,95 @@ list.update!(public: true)
 UserList.public_lists.where(user: user)
 ```
 
+## Add-to-List Widget (02a)
+
+The Add-to-List widget appears on every cached item index page (album / song / game cards) and item show page (album, song, game). It lets a signed-in user add or remove the item to/from any of their lists, and inline-create a new custom list, all without leaving the page.
+
+### CloudFlare-Cache Safety
+
+The cached HTML is identical for every visitor — the widget renders an anonymous-looking shell. All per-user state (and the CSRF token used for mutations) is loaded client-side from the uncached `/user_list_state` endpoint, then persisted in `localStorage` (CSRF token excepted — see below). Anonymous clicks open the existing `<dialog id="login_modal">`.
+
+### Bulk State Endpoint
+
+`GET /user_list_state` returns the signed-in user's lists + memberships scoped to `Current.domain`, plus a fresh per-session CSRF token:
+
+```json
+{
+  "version": 1714234567,
+  "domain": "music",
+  "lists": [{ "id": 42, "type": "Music::Albums::UserList", "list_type": "favorites",
+              "name": "Favorite Albums", "default": true, "icon": "heart" }],
+  "memberships": { "Music::Album": { "101": [{ "list_id": 42, "item_id": 555 }] } },
+  "csrf_token": "..."
+}
+```
+
+- `version` is `current_user.updated_at.to_i`. `UserList` and `UserListItem` both `after_commit :touch_user`, so the version bumps whenever the user's list state changes.
+- `memberships[type][id]` is an array of `{list_id, item_id}` tuples — the `item_id` is needed so the modal can DELETE a `UserListItem` on checkbox-uncheck without an extra round-trip.
+- `csrf_token` is held in memory only by the `user-list-state` Stimulus controller. It is never written to localStorage. Mutations `await stateCtrl.ensureCsrf()` before firing, and concurrent callers share an in-flight refresh promise.
+
+### CSRF Strategy (cache-safe)
+
+The standard `<meta name="csrf-token">` flow is unsafe on CDN-cached HTML — every visitor sees the token belonging to whoever (or no one) rendered the cache. Instead:
+
+1. `/user_list_state` is `Cache-Control: no-store, private` and returns `csrf_token: form_authenticity_token`.
+2. The `user-list-state` controller stores the token in `this.csrf` (instance variable) — never persisted.
+3. The modal's `_headers()` `await stateCtrl.ensureCsrf()`, which fetches once if no token is in memory.
+4. `JsonErrorResponses` rescues `ActionController::InvalidAuthenticityToken` so a racey first-fire-before-fetch returns the standard `{error: {code: "forbidden", ...}}` JSON shape rather than a Rails HTML page.
+
+### localStorage Schema Versioning
+
+The `user-list-state` controller stamps every persisted shape with `_schema: <N>`. On hydrate, mismatched entries are discarded and a fresh `/user_list_state` fetch wins. Bump `STATE_SCHEMA` in `user_list_state_controller.js` whenever the persisted shape changes (e.g. memberships went from `[list_id]` to `[{list_id, item_id}]` for 02a → schema 2). The network response is always authoritative — `_doRefresh` always replaces the cache; the version field is for client-side optimistic-update bookkeeping only.
+
+### Mutation Endpoints
+
+| Verb | Path | Purpose |
+|------|------|---------|
+| `POST` | `/user_lists` | Create a custom list (server forces `list_type = :custom`); optional `listable_id` adds the item atomically. |
+| `POST` | `/user_lists/:user_list_id/items` | Add an item to a list (owner-only). |
+| `DELETE` | `/user_lists/:user_list_id/items/:id` | Remove an item from a list (owner-only). |
+
+All four endpoints emit `Cache-Control: no-store, no-cache, must-revalidate, private` via the `Cacheable` concern. Errors use a uniform shape (`{error: {code, message, details?}}`) — codes: `unauthenticated`, `forbidden`, `not_found`, `validation_failed`, `conflict`. The `JsonErrorResponses` controller concern centralizes the rescues for `Pundit::NotAuthorizedError`, `ActiveRecord::RecordNotFound`, `ActiveRecord::RecordInvalid`, and `ActionController::InvalidAuthenticityToken`.
+
+### Authorization
+
+- `UserListPolicy#create?` → `user.present?`
+- `UserListItemPolicy#create?` / `#destroy?` → `record.user_list.user_id == user.id`
+
+`UserListItemsController` loads the parent list via `current_user.user_lists.find(...)` so non-owners get a 404 (existence-hiding) before any policy check.
+
+### Stimulus Controllers
+
+| Controller | Element | Responsibility |
+|---|---|---|
+| `user-list-state` | `<body>` (singleton) | Hydrates from `localStorage`, refreshes from `/user_list_state`, broadcasts `user-list-state:loaded` / `:updated` / `:cleared` events |
+| `user-list-widget` | One per card | Renders icon strip and label from current state; opens login modal (anonymous) or dispatches `user-list-modal:open` (signed in) |
+| `user-list-modal` | `<dialog id="user_list_modal">` (singleton) | Renders one row per list with checkbox; toggles call POST/DELETE endpoints; inline create form posts to `/user_lists` |
+| `toast` | `#toast-region` (singleton) | Listens for `toast:show` events and appends transient alerts |
+
+The state controller stores under `tg:user_list_state:<domain>` (per-domain bucket). Quota errors degrade to in-memory only.
+
+### Icons
+
+This spec adopts the [`rails_icons`](https://github.com/Rails-Designer/rails_icons) gem with the [Lucide](https://lucide.dev/) library project-wide. Server-side: `helpers.icon "heart", library: "lucide", class: "size-4"` (use `helpers.icon` inside ViewComponents). Client-side: each domain layout includes a hidden `<template id="user-list-icons">` (rendered by `app/views/shared/_user_list_icon_template.html.erb`) holding the union of icons used by every `list_type_icons` map (`heart`, `headphones`, `bookmark`, `check`, `trophy`, `gamepad-2`, `eye`, `plus`). The widget Stimulus controller clones nodes from this template by `data-icon` name, keeping the JS bundle small and reusing the exact same SVG output everywhere.
+
+Per-subclass icon mapping lives in `self.list_type_icons` on each STI subclass. `:custom` is never in the icon map — custom lists collapse into a `+N` pill on the card.
+
+### Naming Note
+
+The ViewComponents live under `UserLists::*` (plural namespace) because `UserList` is itself a class — making it a module would conflict with the model. Stimulus controllers and Rails controllers keep the singular `user_list_*` naming.
+
+### Stimulus Property Naming Hazard
+
+The framework's `Controller` base class uses `this.context` internally for scope/targets resolution — every target getter ends up at `this.context.scope.targets`. Custom controllers must NOT assign `this.context = ...` (a 02a near-miss). Use any other property name (`this.openContext` here).
+
 ## What's Not In This Spec
-- JSON CRUD endpoints, UI, "Add to list" widgets, Stimulus controllers, ViewComponents — all deferred to `user-lists-02`.
+- `/my/lists` dashboard, per-list show page, drag-and-drop, view modes, `completed_on` editing — all deferred to `user-lists-02c`.
+- Public-list discovery, "consumed" badge upgrades — deferred to `user-lists-02d` (or folded into 02c).
 - Dynamic community lists aggregated from user favorites — deferred to `user-lists-03`.
 - `Books::UserList` — books item model doesn't exist yet; will be added when the books domain lands.
 
 ## Related Documentation
-- `docs/specs/user-lists-01-data-model.md` — originating spec
+- `docs/specs/completed/user-lists-01-data-model.md` — originating spec
+- `docs/specs/user-lists-02a-add-to-list-widget.md` — widget spec (this implementation)
 - `docs/features/domain-scoped-authorization.md` — admin/editor role model (admin bypass is relevant here)

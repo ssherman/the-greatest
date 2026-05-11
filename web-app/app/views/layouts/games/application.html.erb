@@ -11,7 +11,9 @@
     <%= javascript_include_tag "application", "data-turbo-track": "reload" %>
   </head>
 
-  <body>
+  <body data-controller="user-list-state"
+        data-domain="<%= Current.domain %>"
+        data-signed-in="<%= signed_in? %>">
     <div class="navbar bg-base-200">
       <div class="navbar-start">
         <div class="dropdown">
@@ -73,6 +75,10 @@
         <p>Copyright © 2025 - All rights reserved by <%= domain_name %></p>
       </aside>
     </footer>
+
+    <%= render UserLists::ModalComponent.new %>
+    <%= render Toast::RegionComponent.new %>
+    <%= render "shared/user_list_icon_template" %>
 
     <!-- Login Modal -->
     <dialog id="login_modal" class="modal">

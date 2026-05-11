@@ -48,5 +48,15 @@ module Games
     test "list_type enum keys" do
       assert_equal %w[favorites played beaten want_to_play currently_playing custom], Games::UserList.list_types.keys
     end
+
+    test "list_type_icons covers each non-custom list_type" do
+      icons = Games::UserList.list_type_icons
+      assert_equal "heart", icons[:favorites]
+      assert_equal "check", icons[:played]
+      assert_equal "trophy", icons[:beaten]
+      assert_equal "gamepad-2", icons[:currently_playing]
+      assert_equal "bookmark", icons[:want_to_play]
+      refute icons.key?(:custom)
+    end
   end
 end

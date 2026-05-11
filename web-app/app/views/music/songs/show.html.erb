@@ -26,6 +26,10 @@
         </p>
       <% end %>
 
+      <div class="mb-4" data-listable-type="Music::Song" data-listable-id="<%= @song.id %>">
+        <%= render UserLists::CardWidgetComponent.new(listable: @song) %>
+      </div>
+
       <div class="flex flex-wrap gap-4 mb-6">
         <% if @song.release_year %>
           <div class="badge badge-ghost badge-lg">

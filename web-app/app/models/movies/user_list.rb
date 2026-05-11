@@ -45,5 +45,9 @@ module Movies
         want_to_watch: "Movies I Want to Watch"
       }.fetch(list_type.to_sym)
     end
+
+    def self.list_type_icons
+      {favorites: "heart", watched: "eye", want_to_watch: "bookmark"}
+    end
   end
 end

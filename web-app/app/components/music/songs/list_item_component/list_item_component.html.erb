@@ -21,4 +21,7 @@
   <td class="text-base-content/60">
     <%= song.release_year %>
   </td>
+  <td class="text-right" data-listable-type="Music::Song" data-listable-id="<%= song.id %>">
+    <%= render UserLists::CardWidgetComponent.new(listable: song) %>
+  </td>
 </tr>
