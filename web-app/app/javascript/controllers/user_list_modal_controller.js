@@ -11,12 +11,23 @@ export default class extends Controller {
 
   connect() {
     this._onOpen = this._onOpen.bind(this)
+    this._onStateChange = this._onStateChange.bind(this)
     window.addEventListener("user-list-modal:open", this._onOpen)
+    // Re-render if state arrives while the modal is open (signed-in user
+    // clicked the widget before /user_list_state had returned).
+    window.addEventListener("user-list-state:loaded", this._onStateChange)
+    window.addEventListener("user-list-state:updated", this._onStateChange)
     this.openContext = null
   }
 
   disconnect() {
     window.removeEventListener("user-list-modal:open", this._onOpen)
+    window.removeEventListener("user-list-state:loaded", this._onStateChange)
+    window.removeEventListener("user-list-state:updated", this._onStateChange)
+  }
+
+  _onStateChange() {
+    if (this.element.open && this.openContext) this._render()
   }
 
   _onOpen(event) {
@@ -54,8 +65,15 @@ export default class extends Controller {
 
     const state = this._state()
     if (!state) {
+      // Cookie says signed in (widget gates this) but the bulk-state fetch
+      // hasn't returned yet. Show a loading hint and let _onStateChange
+      // re-render when the response arrives.
+      const stateCtrl = this._stateController()
+      const message = stateCtrl?.cookieUid?.()
+        ? "Loading your lists…"
+        : "Sign in to manage your lists."
       this.existingListsTarget.innerHTML =
-        `<p class="text-sm text-base-content/70">Sign in to manage your lists.</p>`
+        `<p class="text-sm text-base-content/70">${message}</p>`
       return
     }
 

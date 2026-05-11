@@ -35,8 +35,25 @@ export default class extends Controller {
     window.addEventListener("auth:success", this._onAuthSuccess)
     window.addEventListener("auth:signout", this._onAuthSignout)
 
-    this._hydrateFromStorage()
-    this.refresh()
+    // Hydration is gated on the tg_uid cookie (set by AuthController on sign-in,
+    // backfilled by /user_list_state). This prevents a previous user's cache
+    // from rendering on a shared browser after sign-out / session expiry.
+    if (this.cookieUid()) {
+      this._hydrateFromStorage()
+      this.refresh()
+    } else {
+      // No signed-in marker — discard any stale cache and stay anonymous.
+      // We deliberately skip the network fetch: the endpoint requires auth
+      // and would just return 401.
+      this._clearStorage()
+    }
+  }
+
+  // Reads the non-HttpOnly tg_uid cookie set by AuthController on sign-in.
+  // Returns the user id as a string, or null if the cookie is absent.
+  cookieUid() {
+    const m = document.cookie.match(/(?:^|;\s*)tg_uid=([^;]+)/)
+    return m ? decodeURIComponent(m[1]) : null
   }
 
   disconnect() {
@@ -91,6 +108,7 @@ export default class extends Controller {
 
     if (response.status === 401) {
       this._clearStorage()
+      this._clearCookieUid()
       this.signedIn = false
       this.cache = null
       this.csrf = null
@@ -157,6 +175,14 @@ export default class extends Controller {
         window.localStorage.removeItem(this.storageKey)
         return
       }
+      // Bind cache to the current signed-in user. If cookie uid doesn't match
+      // the cached user_id, this is a different user on a shared browser —
+      // discard the previous user's data instead of rendering it.
+      const cookieUid = this.cookieUid()
+      if (parsed.user_id != null && String(parsed.user_id) !== cookieUid) {
+        window.localStorage.removeItem(this.storageKey)
+        return
+      }
       this.cache = parsed
       this.signedIn = true
       this._dispatch("user-list-state:loaded", { state: this.cache })
@@ -176,6 +202,13 @@ export default class extends Controller {
 
   _clearStorage() {
     try { window.localStorage.removeItem(this.storageKey) } catch (_) { /* ignore */ }
+  }
+
+  // Clears the non-HttpOnly tg_uid cookie. Used when the server reports the
+  // session is no longer valid (401) so a stale cookie doesn't keep gating
+  // future hydration as if signed in.
+  _clearCookieUid() {
+    document.cookie = "tg_uid=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax"
   }
 
   _dispatch(name, detail = {}) {

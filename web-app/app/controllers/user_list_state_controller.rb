@@ -23,10 +23,12 @@ class UserListStateController < ApplicationController
     end
 
     memberships = build_memberships(items)
+    ensure_uid_cookie
 
     render json: {
       version: current_user.updated_at.to_i,
       domain: domain.to_s,
+      user_id: current_user.id,
       lists: lists.map { |l| serialize_list(l) },
       memberships: memberships,
       # The cached HTML's <meta name="csrf-token"> belongs to whoever rendered the
@@ -58,6 +60,18 @@ class UserListStateController < ApplicationController
       name: list.name,
       default: list.default?,
       icon: list.class.list_type_icons[icon_key]
+    }
+  end
+
+  # Backfills the tg_uid cookie for sessions established before the cookie was
+  # introduced (or after a manual cookie-clear). Idempotent; setting the same
+  # value is a no-op for the browser.
+  def ensure_uid_cookie
+    return if cookies[AuthController::TG_UID_COOKIE] == current_user.id.to_s
+    cookies[AuthController::TG_UID_COOKIE] = {
+      value: current_user.id.to_s,
+      secure: Rails.env.production?,
+      same_site: :lax
     }
   end
 

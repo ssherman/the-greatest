@@ -97,4 +97,19 @@ class UserListStateControllerTest < ActionDispatch::IntegrationTest
     assert body["csrf_token"].is_a?(String)
     assert_predicate body["csrf_token"], :present?
   end
+
+  test "response includes user_id so the JS cache can bind to identity" do
+    sign_in_as(@user, stub_auth: true)
+    get user_list_state_path, as: :json
+    body = JSON.parse(response.body)
+    assert_equal @user.id, body["user_id"]
+  end
+
+  test "backfills tg_uid cookie for sessions established before the cookie shipped" do
+    sign_in_as(@user, stub_auth: true)
+    cookies.delete(:tg_uid)
+    get user_list_state_path, as: :json
+    assert_response :success
+    assert_equal @user.id.to_s, cookies[:tg_uid]
+  end
 end

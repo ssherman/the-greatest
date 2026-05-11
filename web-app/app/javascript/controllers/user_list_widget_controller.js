@@ -25,10 +25,13 @@ export default class extends Controller {
 
   // If anonymous, opens the login modal. Otherwise dispatches an event to the
   // singleton modal with this card's listable identifiers.
+  // Uses the tg_uid cookie (not in-memory state) so signed-in users who click
+  // before /user_list_state has finished still get the right modal.
   open(event) {
     event?.preventDefault()
-    const state = this._state()
-    if (!state) {
+    const stateCtrl = this._stateController()
+    const signedIn = !!stateCtrl?.cookieUid?.()
+    if (!signedIn) {
       const loginModal = document.getElementById("login_modal")
       loginModal?.showModal?.()
       return
