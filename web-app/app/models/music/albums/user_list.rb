@@ -46,6 +46,10 @@ module Music
           want_to_listen: "Albums I Want to Listen To"
         }.fetch(list_type.to_sym)
       end
+
+      def self.list_type_icons
+        {favorites: "heart", listened: "headphones", want_to_listen: "bookmark"}
+      end
     end
   end
 end

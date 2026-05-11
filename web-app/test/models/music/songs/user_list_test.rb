@@ -44,6 +44,10 @@ module Music
       test "list_type enum has favorites, custom" do
         assert_equal %w[favorites custom], Music::Songs::UserList.list_types.keys
       end
+
+      test "list_type_icons" do
+        assert_equal({favorites: "heart"}, Music::Songs::UserList.list_type_icons)
+      end
     end
   end
 end

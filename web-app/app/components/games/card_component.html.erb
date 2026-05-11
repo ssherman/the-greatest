@@ -1,4 +1,6 @@
-<div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow">
+<div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow"
+     data-listable-type="Games::Game"
+     data-listable-id="<%= item_game.id %>">
   <%= link_to_game item_game, ranking_configuration, data: { turbo_frame: "_top" } do %>
     <figure class="px-4 pt-4">
       <% if item_game.primary_image&.file&.attached? %>
@@ -50,5 +52,9 @@
         <% end %>
       </div>
     <% end %>
+
+    <div class="card-actions justify-end mt-3">
+      <%= render UserLists::CardWidgetComponent.new(listable: item_game) %>
+    </div>
   </div>
 </div>

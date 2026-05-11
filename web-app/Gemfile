@@ -98,3 +98,6 @@ gem "jwt"
 
 # Authorization
 gem "pundit"
+
+# Icon library (Lucide-backed via rails_icons)
+gem "rails_icons", "~> 1.8"

@@ -1,15 +1,19 @@
-<%= link_to_album item_album, ranking_configuration, class: "card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow", data: { turbo_frame: "_top" } do %>
-  <figure class="px-4 pt-4">
-    <% if item_album.primary_image&.file&.attached? %>
-      <%= image_tag rails_public_blob_url(item_album.primary_image.file),
-          alt: item_album.title,
-          class: "rounded-xl w-full aspect-square object-cover" %>
-    <% else %>
-      <div class="bg-base-200 rounded-xl w-full aspect-square flex items-center justify-center">
-        <span class="text-base-content/50">No Image</span>
-      </div>
-    <% end %>
-  </figure>
+<div class="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow"
+     data-listable-type="Music::Album"
+     data-listable-id="<%= item_album.id %>">
+  <%= link_to_album item_album, ranking_configuration, data: { turbo_frame: "_top" } do %>
+    <figure class="px-4 pt-4">
+      <% if item_album.primary_image&.file&.attached? %>
+        <%= image_tag rails_public_blob_url(item_album.primary_image.file),
+            alt: item_album.title,
+            class: "rounded-xl w-full aspect-square object-cover" %>
+      <% else %>
+        <div class="bg-base-200 rounded-xl w-full aspect-square flex items-center justify-center">
+          <span class="text-base-content/50">No Image</span>
+        </div>
+      <% end %>
+    </figure>
+  <% end %>
 
   <div class="card-body p-4">
     <div class="flex items-start justify-between mb-2">
@@ -26,7 +30,7 @@
     </div>
 
     <h2 class="card-title text-lg font-bold text-base-content mb-1">
-      <%= item_album.title %>
+      <%= link_to_album item_album, ranking_configuration, class: "hover:text-primary", data: { turbo_frame: "_top" } %>
     </h2>
 
     <p class="text-base-content/80 mb-3">
@@ -47,5 +51,9 @@
         <% end %>
       </div>
     <% end %>
+
+    <div class="card-actions justify-end mt-3">
+      <%= render UserLists::CardWidgetComponent.new(listable: item_album) %>
+    </div>
   </div>
-<% end %>
+</div>

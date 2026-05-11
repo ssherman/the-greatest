@@ -47,5 +47,15 @@ module Games
         currently_playing: "Games I'm Currently Playing"
       }.fetch(list_type.to_sym)
     end
+
+    def self.list_type_icons
+      {
+        favorites: "heart",
+        played: "check",
+        beaten: "trophy",
+        currently_playing: "gamepad-2",
+        want_to_play: "bookmark"
+      }
+    end
   end
 end

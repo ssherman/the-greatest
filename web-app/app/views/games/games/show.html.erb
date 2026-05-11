@@ -55,6 +55,10 @@
           </p>
         <% end %>
 
+        <div class="mb-4" data-listable-type="Games::Game" data-listable-id="<%= @game.id %>">
+          <%= render UserLists::CardWidgetComponent.new(listable: @game) %>
+        </div>
+
         <% if @game.description.present? %>
           <div class="prose max-w-none">
             <p class="text-base-content/70">

@@ -1,6 +1,13 @@
 class AuthController < ApplicationController
   include Cacheable
 
+  # Non-HttpOnly companion cookie carrying the signed-in user's id. JS reads it
+  # to gate localStorage hydration of /user_list_state state on cached pages —
+  # the HttpOnly session cookie isn't visible to JS and the cached HTML can't
+  # carry per-user markers. Plain (not signed) since user_id is non-sensitive
+  # and forging it doesn't grant access (the HttpOnly session is the real auth).
+  TG_UID_COOKIE = :tg_uid
+
   skip_before_action :verify_authenticity_token, only: [:sign_in, :sign_out, :check_provider]
   before_action :prevent_caching
 
@@ -22,6 +29,11 @@ class AuthController < ApplicationController
     if result[:success]
       session[:user_id] = result[:user].id
       session[:provider] = params[:provider]
+      cookies[TG_UID_COOKIE] = {
+        value: result[:user].id.to_s,
+        secure: Rails.env.production?,
+        same_site: :lax
+      }
 
       render json: {
         success: true,
@@ -49,6 +61,7 @@ class AuthController < ApplicationController
   def sign_out
     session[:user_id] = nil
     session[:provider] = nil
+    cookies.delete(TG_UID_COOKIE)
 
     render json: {success: true}
   end

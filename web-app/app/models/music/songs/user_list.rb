@@ -44,6 +44,10 @@ module Music
           favorites: "Favorite Songs"
         }.fetch(list_type.to_sym)
       end
+
+      def self.list_type_icons
+        {favorites: "heart"}
+      end
     end
   end
 end

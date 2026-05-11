@@ -1,4 +1,7 @@
 Rails.application.routes.draw do
+  # rails_icons preview UI is only useful in development
+  mount RailsIcons::Engine, at: "/rails_icons" if Rails.env.development?
+
   # Music domain routes (scoped within domain constraint)
   constraints DomainConstraint.new(Rails.application.config.domains[:music]) do
     # All music routes are prefixed with 'music_' for route helpers to avoid
@@ -230,6 +233,17 @@ Rails.application.routes.draw do
   post "auth/sign_in"
   post "auth/sign_out"
   post "auth/check_provider"
+
+  # User-list endpoints — global (non-domain-constrained), JSON-only.
+  # The state endpoint is scoped to Current.domain via the controller.
+  get "user_list_state", to: "user_list_state#show", as: :user_list_state
+  post "user_lists", to: "user_lists#create", as: :user_lists
+  post "user_lists/:user_list_id/items",
+    to: "user_list_items#create",
+    as: :user_list_items
+  delete "user_lists/:user_list_id/items/:id",
+    to: "user_list_items#destroy",
+    as: :user_list_item
 
   # Domain-specific roots using Default controllers
   constraints DomainConstraint.new(Rails.application.config.domains[:music]) do

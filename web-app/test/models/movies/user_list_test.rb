@@ -45,5 +45,13 @@ module Movies
     test "list_type enum keys" do
       assert_equal %w[favorites watched want_to_watch custom], Movies::UserList.list_types.keys
     end
+
+    test "list_type_icons" do
+      icons = Movies::UserList.list_type_icons
+      assert_equal "heart", icons[:favorites]
+      assert_equal "eye", icons[:watched]
+      assert_equal "bookmark", icons[:want_to_watch]
+      refute icons.key?(:custom)
+    end
   end
 end

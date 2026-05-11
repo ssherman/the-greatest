@@ -28,6 +28,18 @@ application.register("review-filter", ReviewFilterController)
 import SharedModalController from "./shared_modal_controller"
 application.register("shared-modal", SharedModalController)
 
+import ToastController from "./toast_controller"
+application.register("toast", ToastController)
+
+import UserListModalController from "./user_list_modal_controller"
+application.register("user-list-modal", UserListModalController)
+
+import UserListStateController from "./user_list_state_controller"
+application.register("user-list-state", UserListStateController)
+
+import UserListWidgetController from "./user_list_widget_controller"
+application.register("user-list-widget", UserListWidgetController)
+
 import WizardStepController from "./wizard_step_controller"
 application.register("wizard-step", WizardStepController)
 

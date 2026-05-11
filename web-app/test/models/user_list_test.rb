@@ -161,4 +161,36 @@ class UserListTest < ActiveSupport::TestCase
   test "items association returns the underlying listables" do
     assert_includes @list.items, music_albums(:dark_side_of_the_moon)
   end
+
+  test "list_type_icons defaults to {} on the abstract base" do
+    assert_equal({}, UserList.list_type_icons)
+  end
+
+  test "after_commit touches user on create" do
+    user = users(:editor_user)
+    user.touch(time: 1.hour.ago)
+    before = user.reload.updated_at
+    travel 1.minute do
+      Music::Albums::UserList.create!(user: user, name: "Tracker", list_type: :custom)
+      assert user.reload.updated_at > before
+    end
+  end
+
+  test "after_commit touches user on update" do
+    before = @list.user.reload.updated_at
+    travel 1.minute do
+      @list.update!(name: "Renamed Favorites")
+      assert @list.user.reload.updated_at > before
+    end
+  end
+
+  test "after_commit touches user on destroy" do
+    user = @custom_list.user
+    user_list_items(:regular_user_custom_album_1).destroy
+    before = user.reload.updated_at
+    travel 1.minute do
+      @custom_list.destroy
+      assert user.reload.updated_at > before
+    end
+  end
 end

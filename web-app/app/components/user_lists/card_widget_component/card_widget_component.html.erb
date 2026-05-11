@@ -1,0 +1,14 @@
+<div class="user-list-widget inline-flex items-center gap-2"
+     data-controller="user-list-widget"
+     data-user-list-widget-listable-type-value="<%= listable_type %>"
+     data-user-list-widget-listable-id-value="<%= listable_id %>">
+  <div data-user-list-widget-target="iconStrip" class="flex gap-1 items-center hidden"></div>
+  <button type="button"
+          class="btn btn-sm btn-ghost"
+          data-action="click->user-list-widget#open"
+          data-user-list-widget-target="button"
+          data-listable-title="<%= listable_title %>">
+    <%= helpers.icon "plus", library: "lucide", class: "size-4" %>
+    <span data-user-list-widget-target="label"><%= label %></span>
+  </button>
+</div>
