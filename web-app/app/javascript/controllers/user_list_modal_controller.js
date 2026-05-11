@@ -13,10 +13,12 @@ export default class extends Controller {
     this._onOpen = this._onOpen.bind(this)
     this._onStateChange = this._onStateChange.bind(this)
     window.addEventListener("user-list-modal:open", this._onOpen)
-    // Re-render if state arrives while the modal is open (signed-in user
-    // clicked the widget before /user_list_state had returned).
+    // Re-render if state arrives, updates, or is cleared while the modal is
+    // open. Without :cleared, an open modal showing "Loading your lists…"
+    // would stay stuck after a stale-cookie 401.
     window.addEventListener("user-list-state:loaded", this._onStateChange)
     window.addEventListener("user-list-state:updated", this._onStateChange)
+    window.addEventListener("user-list-state:cleared", this._onStateChange)
     this.openContext = null
   }
 
@@ -24,6 +26,7 @@ export default class extends Controller {
     window.removeEventListener("user-list-modal:open", this._onOpen)
     window.removeEventListener("user-list-state:loaded", this._onStateChange)
     window.removeEventListener("user-list-state:updated", this._onStateChange)
+    window.removeEventListener("user-list-state:cleared", this._onStateChange)
   }
 
   _onStateChange() {
