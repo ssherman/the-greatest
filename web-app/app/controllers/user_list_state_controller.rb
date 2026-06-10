@@ -11,7 +11,7 @@ class UserListStateController < ApplicationController
   # See docs/specs/user-lists-02a-add-to-list-widget.md for the response schema.
   def show
     domain = Current.domain
-    subclass_names = list_subclasses_for(domain).map(&:name)
+    subclass_names = UserList.subclasses_for(domain).map(&:name)
 
     lists = current_user.user_lists.where(type: subclass_names).order(:id).to_a
 
@@ -39,17 +39,6 @@ class UserListStateController < ApplicationController
   end
 
   private
-
-  # Maps the current request domain to the STI subclasses whose state should be loaded.
-  # Books has no UserList subclass yet; movies/games each have one; music has two.
-  def list_subclasses_for(domain)
-    case domain
-    when :music then [Music::Albums::UserList, Music::Songs::UserList]
-    when :games then [Games::UserList]
-    when :movies then [Movies::UserList]
-    else []
-    end
-  end
 
   def serialize_list(list)
     icon_key = list.list_type.to_sym

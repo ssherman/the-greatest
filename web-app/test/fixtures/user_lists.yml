@@ -58,6 +58,13 @@ regular_user_movies_favorites:
   list_type: 0 # favorites
   public: false
 
+regular_user_music_albums_listened:
+  user: regular_user
+  type: Music::Albums::UserList
+  name: Albums I've Listened To
+  list_type: 1 # listened (completed_on enabled)
+  public: false
+
 regular_user_custom_albums:
   user: regular_user
   type: Music::Albums::UserList

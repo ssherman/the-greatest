@@ -2,12 +2,9 @@ class UserListsController < ApplicationController
   include Cacheable
   include JsonErrorResponses
 
-  ALLOWED_TYPES = %w[
-    Music::Albums::UserList
-    Music::Songs::UserList
-    Games::UserList
-    Movies::UserList
-  ].freeze
+  # Derived from the single source of truth so the create allowlist can't drift
+  # from the domain→subclass mapping shared with MyListsController/UserListStateController.
+  ALLOWED_TYPES = UserList::DOMAIN_SUBCLASSES.values.flatten.freeze
 
   before_action :prevent_caching
   before_action :require_signed_in!

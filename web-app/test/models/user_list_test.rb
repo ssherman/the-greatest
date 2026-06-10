@@ -193,4 +193,48 @@ class UserListTest < ActiveSupport::TestCase
       assert user.reload.updated_at > before
     end
   end
+
+  # --- subclasses_for (shared domain → subclass resolver) ---
+
+  test "subclasses_for resolves music to both album and song subclasses" do
+    assert_equal [Music::Albums::UserList, Music::Songs::UserList],
+      UserList.subclasses_for(:music)
+  end
+
+  test "subclasses_for resolves games and movies to a single subclass" do
+    assert_equal [Games::UserList], UserList.subclasses_for(:games)
+    assert_equal [Movies::UserList], UserList.subclasses_for(:movies)
+  end
+
+  test "subclasses_for accepts a string and returns [] for unknown domains" do
+    assert_equal [Games::UserList], UserList.subclasses_for("games")
+    assert_equal [], UserList.subclasses_for(:books)
+    assert_equal [], UserList.subclasses_for(:nope)
+  end
+
+  # --- completed_on capability ---
+
+  test "completed_on_list_types is per-subclass" do
+    assert_equal [:listened], Music::Albums::UserList.completed_on_list_types
+    assert_equal [], Music::Songs::UserList.completed_on_list_types
+    assert_equal [:played, :beaten], Games::UserList.completed_on_list_types
+    assert_equal [:watched], Movies::UserList.completed_on_list_types
+    assert_equal [], UserList.completed_on_list_types
+  end
+
+  test "completed_on_enabled? reflects the list's list_type" do
+    assert user_lists(:regular_user_music_albums_listened).completed_on_enabled?
+    refute @list.completed_on_enabled? # favorites albums
+    refute user_lists(:regular_user_music_songs_favorites).completed_on_enabled?
+  end
+
+  # --- ranking configuration resolution ---
+
+  test "ranking_configuration_class is the matching STI config per subclass" do
+    assert_equal Music::Albums::RankingConfiguration, Music::Albums::UserList.ranking_configuration_class
+    assert_equal Music::Songs::RankingConfiguration, Music::Songs::UserList.ranking_configuration_class
+    assert_equal Games::RankingConfiguration, Games::UserList.ranking_configuration_class
+    assert_equal Movies::RankingConfiguration, Movies::UserList.ranking_configuration_class
+    assert_nil UserList.ranking_configuration_class
+  end
 end

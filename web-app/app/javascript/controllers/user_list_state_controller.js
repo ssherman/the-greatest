@@ -46,7 +46,18 @@ export default class extends Controller {
       // We deliberately skip the network fetch: the endpoint requires auth
       // and would just return 401.
       this._clearStorage()
+      this._updateMyListsNav(false)
     }
+  }
+
+  // Reveals/hides the "My Lists" nav link(s). The link ships hidden in cached
+  // HTML and is revealed client-side once sign-in is detected — same approach as
+  // the Login/Logout toggle — so the navbar stays CDN-cacheable. querySelectorAll
+  // covers both the mobile and desktop menu copies.
+  _updateMyListsNav(visible) {
+    document.querySelectorAll("#navbar_my_lists").forEach((el) => {
+      el.classList.toggle("hidden", !visible)
+    })
   }
 
   // Reads the non-HttpOnly tg_uid cookie set by AuthController on sign-in.
@@ -112,6 +123,7 @@ export default class extends Controller {
       this.signedIn = false
       this.cache = null
       this.csrf = null
+      this._updateMyListsNav(false)
       this._dispatch("user-list-state:cleared")
       return
     }
@@ -123,6 +135,7 @@ export default class extends Controller {
 
     const data = await response.json()
     this.signedIn = true
+    this._updateMyListsNav(true)
     this.csrf = data.csrf_token || null
     // Strip csrf_token from the persisted shape so it never lands in localStorage.
     const { csrf_token: _csrf, ...persistable } = data
@@ -185,6 +198,7 @@ export default class extends Controller {
       }
       this.cache = parsed
       this.signedIn = true
+      this._updateMyListsNav(true)
       this._dispatch("user-list-state:loaded", { state: this.cache })
     } catch (err) {
       console.warn("user-list-state: storage read failed", err)
@@ -224,6 +238,7 @@ export default class extends Controller {
     this.signedIn = false
     this.cache = null
     this.csrf = null
+    this._updateMyListsNav(false)
     this._dispatch("user-list-state:cleared")
   }
 }

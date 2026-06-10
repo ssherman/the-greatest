@@ -131,6 +131,7 @@ GEM
       unicode (>= 0.4.4.5)
     cssbundling-rails (1.4.3)
       railties (>= 6.0.0)
+    csv (3.3.5)
     date (3.5.1)
     debug (1.11.1)
       irb (~> 1.10)
@@ -493,6 +494,7 @@ DEPENDENCIES
   connection_pool
   countries
   cssbundling-rails
+  csv
   debug
   dotenv-rails
   down (~> 5.0)

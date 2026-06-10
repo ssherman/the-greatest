@@ -49,5 +49,17 @@ module Movies
     def self.list_type_icons
       {favorites: "heart", watched: "eye", want_to_watch: "bookmark"}
     end
+
+    def self.completed_on_list_types
+      [:watched]
+    end
+
+    def self.ranking_configuration_class
+      Movies::RankingConfiguration
+    end
+
+    def self.listable_display_includes
+      [:primary_image]
+    end
   end
 end

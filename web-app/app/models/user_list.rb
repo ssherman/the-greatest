@@ -32,9 +32,21 @@ class UserList < ApplicationRecord
     Movies::UserList
   ].freeze
 
+  # Maps a request domain to the UserList STI subclasses that live on it. Music
+  # has two listables (albums + songs); games/movies have one each. Shared by
+  # MyListsController, UserListStateController, and UserListsController so the
+  # domain→subclass mapping can never drift between them. Books has no subclass yet.
+  DOMAIN_SUBCLASSES = {
+    "music" => %w[Music::Albums::UserList Music::Songs::UserList],
+    "games" => %w[Games::UserList],
+    "movies" => %w[Movies::UserList]
+  }.freeze
+
   # Associations
   belongs_to :user
-  has_many :user_list_items, -> { order(:position) }, dependent: :destroy
+  # inverse_of is set explicitly because the order scope disables Rails' automatic
+  # inverse detection; without it, item.user_list would re-query (N+1) in views.
+  has_many :user_list_items, -> { order(:position) }, dependent: :destroy, inverse_of: :user_list
 
   # Enums
   enum :view_mode, {default_view: 0, table_view: 1, grid_view: 2}, default: :default_view
@@ -57,6 +69,12 @@ class UserList < ApplicationRecord
     DEFAULT_SUBCLASSES.map(&:constantize)
   end
 
+  # Resolves the request domain (a Symbol app-wide; hence .to_s) to its live
+  # UserList subclasses. Returns [] for unknown/unsupported domains (e.g. books).
+  def self.subclasses_for(domain)
+    (DOMAIN_SUBCLASSES[domain.to_s] || []).map(&:constantize)
+  end
+
   def self.default_list_types
     raise NotImplementedError, "#{name} must override .default_list_types"
   end
@@ -76,9 +94,34 @@ class UserList < ApplicationRecord
     {}
   end
 
+  # The list_type values (symbols) for which a per-item completion date is
+  # meaningful (e.g. :listened, :watched). Base returns []; subclasses override.
+  # Phase A uses this only to decide whether completed_on is *displayed*; the
+  # inline editor is Phase B.
+  def self.completed_on_list_types
+    []
+  end
+
+  # The RankingConfiguration STI subclass used to sort a list "by ranking".
+  # Base returns nil (no ranking sort available); subclasses that support it override.
+  def self.ranking_configuration_class
+    nil
+  end
+
+  # Associations to eager-load on each listable when rendering the show page, so
+  # the item views stay N+1-free. Base returns []; subclasses declare their own.
+  def self.listable_display_includes
+    []
+  end
+
   # Instance methods
   def default?
     list_type.to_s != "custom"
+  end
+
+  # True when this list's list_type supports a completion date.
+  def completed_on_enabled?
+    self.class.completed_on_list_types.include?(list_type.to_sym)
   end
 
   def reorder_items!(ordered_listable_ids)

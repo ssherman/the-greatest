@@ -1,0 +1,27 @@
+<%= link_to my_list_path(user_list),
+      class: "card bg-base-100 shadow hover:shadow-lg transition-shadow",
+      data: { testid: "user-list-card" } do %>
+  <div class="card-body flex-row items-center gap-4 p-4">
+    <% if icon_name %>
+      <div class="text-primary shrink-0">
+        <%= helpers.icon(icon_name, library: "lucide", class: "size-6") %>
+      </div>
+    <% end %>
+
+    <div class="flex-1 min-w-0">
+      <h2 class="card-title text-base truncate"><%= user_list.name %></h2>
+      <p class="text-sm text-base-content/60">
+        <%= pluralize(item_count, "item") %>
+      </p>
+    </div>
+
+    <div class="flex flex-col items-end gap-1 shrink-0">
+      <% unless user_list.default? %>
+        <span class="badge badge-ghost badge-sm">Custom</span>
+      <% end %>
+      <span class="badge badge-sm <%= user_list.public? ? "badge-success" : "badge-ghost" %>">
+        <%= user_list.public? ? "Public" : "Private" %>
+      </span>
+    </div>
+  </div>
+<% end %>
