@@ -1,0 +1,101 @@
+<%
+  content_for :page_title, "#{@list.name} - My Lists"
+  view_mode_labels = {"default_view" => "List", "table_view" => "Table", "grid_view" => "Grid"}
+  table_layout = UserLists::Show::ItemComponent.table_layout?(
+    listable_class: @list.class.listable_class, view_mode: @view_mode
+  )
+  # Only listables with covers/descriptions get the list/grid view modes; songs
+  # are always tabular, so the switcher is hidden for them.
+  show_view_switcher = UserLists::Show::ItemComponent.card_capable?(@list.class.listable_class)
+  show_completed = @list.completed_on_enabled?
+  ranking_sort = (@sort == "ranking") ? "ranking" : nil
+%>
+
+<div class="container mx-auto px-4 py-8">
+  <div class="flex flex-wrap items-end justify-between gap-4 mb-6">
+    <div>
+      <%= link_to my_lists_path,
+            class: "text-sm text-base-content/60 hover:text-primary",
+            data: { testid: "back-to-lists" } do %>
+        ← My Lists
+      <% end %>
+      <h1 class="text-3xl font-bold"><%= @list.name %></h1>
+      <p class="text-sm text-base-content/60"><%= pluralize(@pagy.count, "item") %></p>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-3" data-testid="list-toolbar">
+      <% if @ranking_available %>
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-semibold uppercase tracking-wide text-base-content/50">Sort</span>
+          <div class="join">
+            <%= link_to "Position", my_list_path(@list, view_mode: @view_mode),
+                  class: "join-item btn btn-sm #{(@sort == "position") ? "btn-primary" : "btn-outline"}" %>
+            <%= link_to "Ranking", my_list_path(@list, sort: "ranking", view_mode: @view_mode),
+                  class: "join-item btn btn-sm #{(@sort == "ranking") ? "btn-primary" : "btn-outline"}" %>
+          </div>
+        </div>
+      <% end %>
+
+      <% if show_view_switcher %>
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-semibold uppercase tracking-wide text-base-content/50">View</span>
+          <div class="join">
+            <% UserList.view_modes.keys.each do |mode| %>
+              <%= link_to view_mode_labels[mode],
+                    my_list_path(@list, view_mode: mode, sort: ranking_sort),
+                    class: "join-item btn btn-sm #{(@view_mode == mode) ? "btn-primary" : "btn-outline"}" %>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+
+      <%= link_to "Download",
+            my_list_path(@list, format: :csv, view_mode: @view_mode, sort: ranking_sort),
+            class: "btn btn-sm btn-outline",
+            data: { turbo: false, testid: "download-csv" } %>
+    </div>
+  </div>
+
+  <% if @pagy.count.zero? %>
+    <div class="text-center py-16" data-testid="empty-list">
+      <p class="text-base-content/70">No items in this list yet.</p>
+    </div>
+  <% else %>
+    <% if @pagy.pages > 1 %>
+      <div class="flex justify-center mb-6"><%== @pagy.series_nav %></div>
+    <% end %>
+
+    <% if table_layout %>
+      <div class="overflow-x-auto">
+        <table class="table">
+          <thead>
+            <tr>
+              <th class="text-center">#</th>
+              <th>Title</th>
+              <th>By</th>
+              <th>Year</th>
+              <% if show_completed %><th>Completed</th><% end %>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <% @items.each do |item| %>
+              <%= render UserLists::Show::ItemComponent.new(item: item, view_mode: @view_mode, position: item.position) %>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% else %>
+      <% container_class = (@view_mode == "grid_view") ? "grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "space-y-6" %>
+      <div class="<%= container_class %>">
+        <% @items.each do |item| %>
+          <%= render UserLists::Show::ItemComponent.new(item: item, view_mode: @view_mode, position: item.position) %>
+        <% end %>
+      </div>
+    <% end %>
+
+    <% if @pagy.pages > 1 %>
+      <div class="flex justify-center mt-6"><%== @pagy.series_nav %></div>
+    <% end %>
+  <% end %>
+</div>

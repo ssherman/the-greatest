@@ -3,7 +3,7 @@
 ## Overview
 User Lists are personal, ordered collections that logged-in users use to organize items they care about across the four media domains (music albums, music songs, games, movies). Each user automatically receives a predefined set of default lists (e.g. "Favorite Albums", "Games I've Played") on signup and can create an unlimited number of additional custom lists.
 
-This feature corresponds to the `user-lists-01` spec (data model and core backend) and `user-lists-02a` spec (Add-to-List widget). The `/my/lists` dashboard, list show pages, and drag-and-drop reordering UI are deferred to `user-lists-02c`.
+This feature corresponds to the `user-lists-01` spec (data model and core backend), the `user-lists-02a` spec (Add-to-List widget), and `user-lists-02` Phase A (the read-only `/my/lists` dashboard and per-list show page). Write/management actions (create, edit, drag-and-drop reorder, remove items, delete list, `completed_on` editing) are Phase B (`user-lists-02f`); public discovery of other users' lists is `user-lists-02d`.
 
 ## Architecture
 
@@ -169,6 +169,62 @@ This spec adopts the [`rails_icons`](https://github.com/Rails-Designer/rails_ico
 
 Per-subclass icon mapping lives in `self.list_type_icons` on each STI subclass. `:custom` is never in the icon map — custom lists collapse into a `+N` pill on the card.
 
+## My Lists Read Surface (02 Phase A)
+
+A signed-in, per-domain surface for browsing your own lists: a `/my/lists` dashboard and a `/my/lists/:id` show page with three view modes, position-vs-ranking sorting, and CSV download. Everything here is **read-only**; the write surface is Phase B (`user-lists-02f`).
+
+### Routing & Layout
+
+`MyListsController` is routed **globally** (outside any `DomainConstraint`), alongside the 02a endpoints:
+
+| Verb | Path | Action | Auth |
+|------|------|--------|------|
+| GET | `/my/lists` | `my_lists#index` | signed-in |
+| GET | `/my/lists/:id(.csv)` | `my_lists#show` | owner |
+| GET | `/user_lists/:id` | `my_lists#show` (compat alias) | owner |
+
+The `/user_lists/:id` route is a **compatibility alias** (`user_list_path`) for the same owner-only show action. The legacy Greatest Books site (and earlier Greatest sites) link to user lists at `/user_lists/:id`; this alias keeps those URLs working once books migrates onto this app. It's a distinct verb/path from the 02a `POST /user_lists` create and the nested `…/items` mutation routes, so there's no conflict. The canonical path remains `/my/lists/:id`; the show page renders its internal links with `my_list_path`.
+
+It resolves `Current.domain` to the relevant STI subclasses via the shared `UserList.subclasses_for(domain)` and selects the per-domain layout dynamically (`layout :resolve_layout`). Unknown hosts (`Current.domain == :books`, no layout yet) fall back to `music/application`. Every action calls `prevent_caching`; because the pages are uncached and rendered for the signed-in user, the standard `<meta name="csrf-token">` flow works here (unlike the cached-page widget).
+
+### Shared domain→subclass resolver
+
+`UserList::DOMAIN_SUBCLASSES` + `UserList.subclasses_for(domain)` are the single source of truth for the domain→subclass mapping. `MyListsController`, `UserListStateController`, and `UserListsController` (`ALLOWED_TYPES`) all derive from it so the mapping can't drift. `Current.domain` is a Symbol app-wide, so the resolver does a `.to_s` lookup.
+
+### Dashboard (`index`)
+
+Lists the current user's lists for `Current.domain` (music shows **both** album and song lists), **defaults first** (in subclass then `list_type` order) then custom lists. Item counts come from a single grouped query (`UserListItem.where(...).group(:user_list_id).count`), never a per-row count. Default lists are auto-created at signup, so there is no zero-state. Each list renders as a `UserLists::Dashboard::ListCardComponent` (name, count, `list_type_icons` icon or "Custom" tag, public/private badge).
+
+### Show (`show`)
+
+Loads the list via `current_user.user_lists.where(type: UserList.subclasses_for(Current.domain).map(&:name)).find` — scoped to **both** the owner and the current domain's STI subclasses. A list belonging to another domain (e.g. a games list opened on the music host) 404s rather than rendering in the wrong layout; non-owner and cross-domain both hide existence via 404. It then renders the list's items in the persisted `view_mode`:
+
+- **`default_view`** ("List") — a compact, full-width row per item: number + title-by-author heading, a small cover thumbnail, the item's **description**, a year/completed line, and the Add-to-list widget. Only for listables with covers/descriptions (albums, games).
+- **`grid_view`** — the existing domain card (`Music::Albums::CardComponent`, `Games::CardComponent`) in a responsive grid.
+- **`table_view`** — a single generic DaisyUI `<table>` row shared across listables.
+
+`UserLists::Show::ItemComponent` unwraps `item.listable` and dispatches: card-capable listables render the list row (default) or the domain card (grid); songs render the rich `Music::Songs::ListItemComponent` row inside a table; anything else renders the generic table row. Its `self.table_layout?(listable_class:, view_mode:)` class method tells the show view which wrapper (`<table>` vs stacked `<div>` vs grid) to render — lists are homogeneous, so it's computed once.
+
+**Songs are table-only.** Songs have no covers and (in practice) no descriptions, so they have no list/grid view; the view-mode switcher is hidden for them (`ItemComponent.card_capable?` is false) and they always render the song table. Sorting and CSV still apply.
+
+Switching `?view_mode=` persists the choice on the list (`update!`). Items eager-load each listable's display associations (e.g. albums → `:artists, :categories, :primary_image`) to stay N+1-free; `belongs_to :user_list` sets `inverse_of` so per-item `completed_on_enabled?` checks don't re-query. Pagy paginates at `limit: 100` (Pagy 43 auto-detects array vs relation and preserves `sort`/`view_mode` in page links).
+
+### Sorting (position vs ranking)
+
+`?sort=position` (default) orders by `UserListItem#position`. `?sort=ranking` orders by the listable's primary ranking configuration, resolved once via `list.class.ranking_configuration_class&.default_primary`. Only the list's own `listable_id`s are looked up against `RankedItem` (`item_id`/`rank`); unranked items sort last. If the subclass has no `ranking_configuration_class` **or** no primary config exists (unseeded env), the Ranking option is hidden and a direct `?sort=ranking` degrades to `position` — never a 500.
+
+### `completed_on` (read-only in Phase A)
+
+Each STI subclass declares which `list_type`s support a completion date via `self.completed_on_list_types` (albums `[:listened]`, games `[:played, :beaten]`, movies `[:watched]`, songs `[]`), mirroring the `list_type_icons` pattern. `completed_on_enabled?` gates display. In Phase A the date renders read-only in the generic table row and the CSV `Completed On` column; the inline editor is Phase B.
+
+### CSV export
+
+`show.csv` streams a UTF-8 CSV with a BOM prefix (Excel-friendly) via `send_data`, filename `"#{list.name.parameterize}-#{Date.current.iso8601}.csv"`. Columns vary per listable (albums/songs: Position, Title, Artists, Year; games/movies: Position, Title, Year), with a `Completed On` column only when `completed_on_enabled?`. The CSV is unpaginated and follows the current sort.
+
+### "My Lists" nav link
+
+Each domain layout (music, games) ships a hidden `<li id="navbar_my_lists" class="hidden">` in both the mobile and desktop menus. The `user-list-state` Stimulus controller reveals it (and re-hides it on signout/401) at the same hook points where it detects sign-in — exactly like the Login/Logout toggle — so the navbar HTML stays identical for every visitor and CDN-cacheable.
+
 ### Naming Note
 
 The ViewComponents live under `UserLists::*` (plural namespace) because `UserList` is itself a class — making it a module would conflict with the model. Stimulus controllers and Rails controllers keep the singular `user_list_*` naming.
@@ -177,13 +233,16 @@ The ViewComponents live under `UserLists::*` (plural namespace) because `UserLis
 
 The framework's `Controller` base class uses `this.context` internally for scope/targets resolution — every target getter ends up at `this.context.scope.targets`. Custom controllers must NOT assign `this.context = ...` (a 02a near-miss). Use any other property name (`this.openContext` here).
 
-## What's Not In This Spec
-- `/my/lists` dashboard, per-list show page, drag-and-drop, view modes, `completed_on` editing — all deferred to `user-lists-02c`.
-- Public-list discovery, "consumed" badge upgrades — deferred to `user-lists-02d` (or folded into 02c).
-- Dynamic community lists aggregated from user favorites — deferred to `user-lists-03`.
-- `Books::UserList` — books item model doesn't exist yet; will be added when the books domain lands.
+## What's Not Yet Implemented
+- Write/management UI — create, edit, drag-and-drop reorder, remove items, delete list, `completed_on` editing — Phase B (`user-lists-02f`).
+- Adding an item from within a list page (autocomplete) — `user-lists-02e`.
+- Public-list discovery, viewing other users' public lists, "consumed" badge upgrades — `user-lists-02d`.
+- Dynamic community lists aggregated from user favorites — `user-lists-03`.
+- `Books::UserList` and a books layout — books item model doesn't exist yet; the read surface works automatically once `Books::UserList` lands.
 
 ## Related Documentation
-- `docs/specs/completed/user-lists-01-data-model.md` — originating spec
-- `docs/specs/user-lists-02a-add-to-list-widget.md` — widget spec (this implementation)
+- `docs/specs/completed/user-lists-01-data-model.md` — data-model spec
+- `docs/specs/completed/user-lists-02a-add-to-list-widget.md` — widget spec
+- `docs/specs/completed/user-lists-02-ui-and-cached-page-integration.md` — My Lists read surface (Phase A, this implementation)
+- `docs/specs/user-lists-02f-list-management-and-editing.md` — write surface (Phase B)
 - `docs/features/domain-scoped-authorization.md` — admin/editor role model (admin bypass is relevant here)

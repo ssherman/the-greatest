@@ -48,6 +48,16 @@ module Music
       def self.list_type_icons
         {favorites: "heart"}
       end
+
+      # Songs have no completion-date list types; inherits [] from the base.
+
+      def self.ranking_configuration_class
+        Music::Songs::RankingConfiguration
+      end
+
+      def self.listable_display_includes
+        [:artists]
+      end
     end
   end
 end

@@ -1,0 +1,69 @@
+<% if render_as_row? %>
+  <% if rich_song_row? %>
+    <%= render Music::Songs::ListItemComponent.new(song: listable, show_index: position) %>
+  <% else %>
+    <%# Generic table row shared across listables. Phase B adds the inline %>
+    <%# completed_on editor + row actions into the actions cell. %>
+    <tr class="hover" data-listable-type="<%= listable.class.name %>" data-listable-id="<%= listable.id %>">
+      <td class="text-center text-base-content/60"><%= position %></td>
+      <td><span class="font-bold"><%= title %></span></td>
+      <td class="text-base-content/70"><%= by_line %></td>
+      <td class="text-base-content/60"><%= year %></td>
+      <% if completed_on_column? %>
+        <td class="text-base-content/60">
+          <% if item.completed_on.present? %>
+            <span class="badge badge-ghost badge-sm"><%= item.completed_on.to_fs(:long) %></span>
+          <% end %>
+        </td>
+      <% end %>
+      <td class="text-right" data-listable-type="<%= listable.class.name %>" data-listable-id="<%= listable.id %>">
+        <%= render UserLists::CardWidgetComponent.new(listable: listable) %>
+      </td>
+    </tr>
+  <% end %>
+<% elsif view_mode == "grid_view" %>
+  <%= render listable_card %>
+<% else %>
+  <%# List ("default") view: number + title-by heading, thumbnail, description. %>
+  <div class="flex flex-col gap-2 border-b border-base-300 pb-6"
+       data-listable-type="<%= listable.class.name %>" data-listable-id="<%= listable.id %>">
+    <h2 class="text-2xl font-bold">
+      <span class="text-base-content/50"><%= position %>.</span>
+      <%= title_link %>
+      <% if by_line.present? %>
+        <span class="font-normal text-base-content/70">by <%= by_line %></span>
+      <% end %>
+    </h2>
+
+    <div class="flex gap-4">
+      <div class="shrink-0 w-20 sm:w-24">
+        <% if cover_image&.file&.attached? %>
+          <%= image_tag rails_public_blob_url(cover_image.file),
+                alt: title,
+                class: "rounded #{cover_aspect_class} w-full object-cover" %>
+        <% else %>
+          <div class="bg-base-200 rounded <%= cover_aspect_class %> w-full flex items-center justify-center">
+            <span class="text-xs text-base-content/50">No Image</span>
+          </div>
+        <% end %>
+      </div>
+
+      <div class="flex-1 min-w-0">
+        <% if description.present? %>
+          <p class="text-base-content/80 mb-2"><%= description %></p>
+        <% end %>
+
+        <p class="text-sm text-base-content/60">
+          <% if year %><%= year %><% end %>
+          <% if completed_on_badge? %>
+            · <span class="badge badge-ghost badge-sm">Completed <%= item.completed_on.to_fs(:long) %></span>
+          <% end %>
+        </p>
+
+        <div class="mt-3">
+          <%= render UserLists::CardWidgetComponent.new(listable: listable) %>
+        </div>
+      </div>
+    </div>
+  </div>
+<% end %>

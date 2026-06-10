@@ -57,5 +57,17 @@ module Games
         want_to_play: "bookmark"
       }
     end
+
+    def self.completed_on_list_types
+      [:played, :beaten]
+    end
+
+    def self.ranking_configuration_class
+      Games::RankingConfiguration
+    end
+
+    def self.listable_display_includes
+      [:categories, {game_companies: :company}, :primary_image]
+    end
   end
 end

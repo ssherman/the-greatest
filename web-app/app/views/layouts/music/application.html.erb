@@ -71,6 +71,8 @@
             </li>
             <li><%= link_to "Artists", artists_path %></li>
             <li><%= link_to "Lists", music_lists_path %></li>
+            <%# Revealed client-side by user_list_state_controller when signed in. %>
+            <li id="navbar_my_lists" class="hidden"><a href="/my/lists">My Lists</a></li>
           </ul>
         </div>
         <%= link_to "/", class: "btn btn-ghost text-xl" do %>
@@ -112,6 +114,8 @@
           </li>
           <li><%= link_to "Artists", artists_path %></li>
           <li><%= link_to "Lists", music_lists_path %></li>
+          <%# Revealed client-side by user_list_state_controller when signed in. %>
+          <li id="navbar_my_lists" class="hidden"><a href="/my/lists">My Lists</a></li>
         </ul>
       </div>
       <div class="navbar-end">

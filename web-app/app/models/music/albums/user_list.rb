@@ -50,6 +50,18 @@ module Music
       def self.list_type_icons
         {favorites: "heart", listened: "headphones", want_to_listen: "bookmark"}
       end
+
+      def self.completed_on_list_types
+        [:listened]
+      end
+
+      def self.ranking_configuration_class
+        Music::Albums::RankingConfiguration
+      end
+
+      def self.listable_display_includes
+        [:artists, :categories, :primary_image]
+      end
     end
   end
 end

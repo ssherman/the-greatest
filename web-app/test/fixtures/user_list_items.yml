@@ -43,6 +43,12 @@ regular_user_fav_album_3:
   listable: thriller (Music::Album)
   position: 3
 
+regular_user_listened_album_1:
+  user_list: regular_user_music_albums_listened
+  listable: wish_you_were_here (Music::Album)
+  position: 1
+  completed_on: 2026-02-01
+
 regular_user_custom_album_1:
   user_list: regular_user_custom_albums
   listable: nevermind (Music::Album)

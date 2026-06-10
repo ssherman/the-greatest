@@ -25,7 +25,7 @@
 #
 class UserListItem < ApplicationRecord
   # Associations
-  belongs_to :user_list, touch: true
+  belongs_to :user_list, touch: true, inverse_of: :user_list_items
   belongs_to :listable, polymorphic: true
   has_one :user, through: :user_list
 

@@ -245,6 +245,17 @@ Rails.application.routes.draw do
     to: "user_list_items#destroy",
     as: :user_list_item
 
+  # My Lists read surface (Phase A) — global, never cached, per-domain layout
+  # resolved from Current.domain in the controller. Owner-only HTML + CSV.
+  get "my/lists", to: "my_lists#index", as: :my_lists
+  get "my/lists/:id", to: "my_lists#show", as: :my_list
+
+  # Compatibility alias: the books site (and earlier Greatest sites) link to a
+  # user list at /user_lists/:id. Point it at the same owner-only show action so
+  # those URLs keep working once books migrates onto this app. (The POST create
+  # and nested item routes below are distinct verbs/paths and don't conflict.)
+  get "user_lists/:id", to: "my_lists#show", as: :user_list
+
   # Domain-specific roots using Default controllers
   constraints DomainConstraint.new(Rails.application.config.domains[:music]) do
     get "rankings", to: "music/default#rankings", as: :music_rankings
