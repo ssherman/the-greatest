@@ -55,14 +55,17 @@ jobs:
           cache-to: type=gha,mode=max
       
       - name: Delete old untagged images
+        continue-on-error: true
         uses: actions/delete-package-versions@v5
         with:
           package-name: ${{ github.event.repository.name }}
           package-type: 'container'
           min-versions-to-keep: 10
           delete-only-untagged-versions: 'true'
-      
+          token: ${{ secrets.REPO_DISPATCH_PAT }}
+
       - name: Delete old tagged images (keep 20 most recent)
+        continue-on-error: true
         uses: actions/delete-package-versions@v5
         with:
           package-name: ${{ github.event.repository.name }}
@@ -70,6 +73,7 @@ jobs:
           min-versions-to-keep: 20
           delete-only-untagged-versions: 'false'
           ignore-versions: '^latest$'
+          token: ${{ secrets.REPO_DISPATCH_PAT }}
       
       - name: Trigger Deploy Workflow
         if: success()
