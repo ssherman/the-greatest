@@ -82,8 +82,8 @@ GEM
       activesupport (>= 6.0.0)
     ast (2.4.3)
     aws-eventstream (1.4.0)
-    aws-partitions (1.1246.0)
-    aws-sdk-core (3.246.0)
+    aws-partitions (1.1259.0)
+    aws-sdk-core (3.251.0)
       aws-eventstream (~> 1, >= 1.3.0)
       aws-partitions (~> 1, >= 1.992.0)
       aws-sigv4 (~> 1.9)
@@ -91,11 +91,11 @@ GEM
       bigdecimal
       jmespath (~> 1, >= 1.6.1)
       logger
-    aws-sdk-kms (1.124.0)
-      aws-sdk-core (~> 3, >= 3.244.0)
+    aws-sdk-kms (1.129.0)
+      aws-sdk-core (~> 3, >= 3.248.0)
       aws-sigv4 (~> 1.5)
-    aws-sdk-s3 (1.221.0)
-      aws-sdk-core (~> 3, >= 3.244.0)
+    aws-sdk-s3 (1.225.0)
+      aws-sdk-core (~> 3, >= 3.248.0)
       aws-sdk-kms (~> 1)
       aws-sigv4 (~> 1.5)
     aws-sigv4 (1.12.1)
@@ -103,7 +103,7 @@ GEM
     base64 (0.3.0)
     bigdecimal (4.1.2)
     bindex (0.8.1)
-    bootsnap (1.24.3)
+    bootsnap (1.24.6)
       msgpack (~> 1.2)
     brakeman (8.0.4)
       racc
@@ -149,13 +149,13 @@ GEM
     erubi (1.13.1)
     et-orbi (1.4.0)
       tzinfo
-    faraday (2.14.1)
+    faraday (2.14.2)
       faraday-net_http (>= 2.0, < 3.5)
       json
       logger
     faraday-follow_redirects (0.5.0)
       faraday (>= 1, < 3)
-    faraday-net_http (3.4.2)
+    faraday-net_http (3.4.4)
       net-http (~> 0.5)
     ffi (1.17.4-aarch64-linux-gnu)
     ffi (1.17.4-aarch64-linux-musl)
@@ -171,7 +171,7 @@ GEM
     flamegraph (0.9.5)
     friendly_id (5.7.0)
       activerecord (>= 4.0.0)
-    fugit (1.12.1)
+    fugit (1.12.2)
       et-orbi (~> 1.4)
       raabro (~> 1.4)
     globalid (1.3.0)
@@ -198,14 +198,14 @@ GEM
       prism (>= 1.3.0)
       rdoc (>= 4.0.0)
       reline (>= 0.4.2)
-    jbuilder (2.14.1)
+    jbuilder (2.15.1)
       actionview (>= 7.0.0)
       activesupport (>= 7.0.0)
     jmespath (1.6.2)
     jsbundling-rails (1.3.1)
       railties (>= 6.0.0)
-    json (2.19.5)
-    jwt (3.1.2)
+    json (2.19.8)
+    jwt (3.2.0)
       base64
     language_server-protocol (3.17.0.5)
     lint_roller (1.1.0)
@@ -222,7 +222,7 @@ GEM
       net-imap
       net-pop
       net-smtp
-    marcel (1.1.0)
+    marcel (1.2.1)
     matrix (0.4.3)
     memory_profiler (1.1.0)
     mini_magick (5.3.1)
@@ -231,11 +231,11 @@ GEM
     minitest (5.27.0)
     mocha (3.1.0)
       ruby2_keywords (>= 0.0.5)
-    msgpack (1.8.0)
+    msgpack (1.8.3)
     multi_json (1.21.1)
     net-http (0.9.1)
       uri (>= 0.11.1)
-    net-imap (0.6.4)
+    net-imap (0.6.4.1)
       date
       net-protocol
     net-pop (0.1.2)
@@ -261,14 +261,14 @@ GEM
       racc (~> 1.4)
     nokogiri (1.19.3-x86_64-linux-musl)
       racc (~> 1.4)
-    openai (0.62.0)
+    openai (0.66.1)
       base64
       cgi
       connection_pool
     opensearch-ruby (3.4.0)
       faraday (>= 1.0, < 3)
       multi_json (>= 1.0)
-    pagy (43.5.3)
+    pagy (43.5.6)
       json
       uri
       yaml
@@ -291,11 +291,11 @@ GEM
       actionpack (>= 7.0.0)
       activesupport (>= 7.0.0)
       rack
-    psych (5.3.1)
+    psych (5.4.0)
       date
       stringio
     public_suffix (7.0.5)
-    puma (8.0.1)
+    puma (8.0.2)
       nio4r (~> 2.0)
     pundit (2.5.2)
       activesupport (>= 3.0.0)
@@ -376,7 +376,7 @@ GEM
       lint_roller (~> 1.1)
       rubocop (>= 1.75.0, < 2.0)
       rubocop-ast (>= 1.47.1, < 2.0)
-    rubocop-rails (2.35.0)
+    rubocop-rails (2.35.4)
       activesupport (>= 4.2.0)
       lint_roller (~> 1.1)
       rack (>= 1.1)
@@ -391,21 +391,21 @@ GEM
       ffi (~> 1.12)
       logger
     ruby2_keywords (0.0.5)
-    ruby_llm-schema (0.3.0)
-    rubyzip (3.3.0)
+    ruby_llm-schema (0.4.0)
+    rubyzip (3.3.1)
     securerandom (0.4.1)
-    selenium-webdriver (4.43.0)
+    selenium-webdriver (4.44.0)
       base64 (~> 0.2)
       logger (~> 1.4)
       rexml (~> 3.2, >= 3.2.5)
       rubyzip (>= 1.2.2, < 4.0)
       websocket (~> 1.0)
-    sidekiq (8.1.4)
+    sidekiq (8.1.6)
       connection_pool (>= 3.0.0)
       json (>= 2.16.0)
       logger (>= 1.7.0)
       rack (>= 3.2.0)
-      redis-client (>= 0.26.0)
+      redis-client (>= 0.29.0)
     sidekiq-cron (2.4.0)
       cronex (>= 0.13.0)
       fugit (~> 1.8, >= 1.11.1)
@@ -428,11 +428,11 @@ GEM
       railties (>= 6.0.0)
     stringio (3.2.0)
     thor (1.5.0)
-    thruster (0.1.20)
-    thruster (0.1.20-aarch64-linux)
-    thruster (0.1.20-arm64-darwin)
-    thruster (0.1.20-x86_64-darwin)
-    thruster (0.1.20-x86_64-linux)
+    thruster (0.1.21)
+    thruster (0.1.21-aarch64-linux)
+    thruster (0.1.21-arm64-darwin)
+    thruster (0.1.21-x86_64-darwin)
+    thruster (0.1.21-x86_64-linux)
     timeout (0.6.1)
     tsort (0.2.0)
     turbo-rails (2.0.23)
@@ -450,7 +450,7 @@ GEM
     vacuum (4.3.0)
       aws-sigv4 (~> 1.0)
       http (>= 4.0, < 6.0)
-    view_component (4.9.0)
+    view_component (4.12.0)
       actionview (>= 7.1.0)
       activesupport (>= 7.1.0)
       concurrent-ruby (~> 1)
@@ -463,7 +463,7 @@ GEM
       crack (>= 0.3.2)
       hashdiff (>= 0.4.0, < 2.0.0)
     websocket (1.2.11)
-    websocket-driver (0.8.0)
+    websocket-driver (0.8.1)
       base64
       websocket-extensions (>= 0.1.0)
     websocket-extensions (0.1.5)
@@ -471,7 +471,7 @@ GEM
     xpath (3.2.0)
       nokogiri (~> 1.8)
     yaml (0.4.0)
-    zeitwerk (2.7.5)
+    zeitwerk (2.8.2)
 
 PLATFORMS
   aarch64-linux
