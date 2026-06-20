@@ -187,6 +187,21 @@ The `/user_lists/:id` route is a **compatibility alias** (`user_list_path`) for 
 
 It resolves `Current.domain` to the relevant STI subclasses via the shared `UserList.subclasses_for(domain)` and selects the per-domain layout dynamically (`layout :resolve_layout`). Unknown hosts (`Current.domain == :books`, no layout yet) fall back to `music/application`. Every action calls `prevent_caching`; because the pages are uncached and rendered for the signed-in user, the standard `<meta name="csrf-token">` flow works here (unlike the cached-page widget).
 
+### Reserved ID Ranges (Books Migration)
+
+The `/user_lists/:id` alias above resolves a list by its **raw primary key**, so the legacy Greatest Books URLs only keep working if book lists are imported with their **original IDs preserved**. To guarantee that without PK collisions, the low ID range on `users` and `user_lists` is reserved for the future books import:
+
+| Table | Reserved for books (preserved IDs) | New-app rows (relocated + future) |
+|---|---|---|
+| `users` | `[1, 1_000_000_000)` | `>= 1_000_000_000` |
+| `user_lists` | `[1, 1_000_000_000)` | `>= 1_000_000_000` |
+
+The ceiling lives in `Services::BooksMigration::ID_CEILING` (`app/lib/services/books_migration.rb`), reused by the migration and any future books ETL. The migration `db/migrate/20260612235510_reserve_books_id_ranges.rb` calls `Services::BooksMigration::IdRangeReservationService`, which (in one transaction) relocates any existing new-app rows up by the ceiling — remapping every FK that references `users`/`user_lists` (see `FOREIGN_KEYS` in the same file) — then bumps both sequences above the ceiling. It is idempotent (safe to re-run) and irreversible by design (restore from a snapshot to undo).
+
+> **Schema-dump caveat:** `db/schema.rb` does **not** capture sequence `RESTART` values, so `db:schema:load` (CI, fresh dev DBs) starts the sequences at `1` again. This is acceptable — the reservation only needs to hold in **production** (and any environment that will receive the books import). Do not switch to `structure.sql` for this alone.
+
+See `docs/specs/completed/books-migration-01-id-range-reservation.md` for the full rationale and acceptance criteria.
+
 ### Shared domain→subclass resolver
 
 `UserList::DOMAIN_SUBCLASSES` + `UserList.subclasses_for(domain)` are the single source of truth for the domain→subclass mapping. `MyListsController`, `UserListStateController`, and `UserListsController` (`ALLOWED_TYPES`) all derive from it so the mapping can't drift. `Current.domain` is a Symbol app-wide, so the resolver does a `.to_s` lookup.

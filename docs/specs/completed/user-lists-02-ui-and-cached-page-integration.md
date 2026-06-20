@@ -316,7 +316,7 @@ No new dependency in Phase A (no SortableJS). Update the manifest with `bin/rail
 
 #### Post-completion follow-ups (2026-06-10)
 - **Show toolbar contrast (visual review)**: the sort (`Position/Ranking`) and view (`List/Table/Grid`) `join` groups were dark-on-dark and read as one undifferentiated bar, with the active item barely distinguishable. Reworked `my_lists/show.html.erb`: added `Sort`/`View` section labels, the selected button is now solid `btn-primary` (was a faint `btn-active`), unselected buttons are `btn-outline` so each reads as a button on the dark base, and `gap-x-6` separates the groups. Presentational only.
-- **`/user_lists/:id` compatibility alias**: added a global `GET /user_lists/:id` route (`user_list_path`) pointing at the same owner-only `my_lists#show` action. The legacy Greatest Books site (and earlier Greatest sites) link to lists at `/user_lists/:id`; this keeps those URLs working once books migrates onto this app, with **no redirect** and no SEO loss. Distinct verb/path from the 02a `POST /user_lists` create and the nested `…/items` routes, so no conflict (verified via `recognize_path`). Preserving book PKs to make this safe is specced separately in `docs/specs/books-migration-01-id-range-reservation.md`.
+- **`/user_lists/:id` compatibility alias**: added a global `GET /user_lists/:id` route (`user_list_path`) pointing at the same owner-only `my_lists#show` action. The legacy Greatest Books site (and earlier Greatest sites) link to lists at `/user_lists/:id`; this keeps those URLs working once books migrates onto this app, with **no redirect** and no SEO loss. Distinct verb/path from the 02a `POST /user_lists` create and the nested `…/items` routes, so no conflict (verified via `recognize_path`). Preserving book PKs to make this safe is specced separately in `docs/specs/completed/books-migration-01-id-range-reservation.md`.
 - **Cross-domain leak fix (bug)**: `show` loaded the list scoped to the owner but **not** the domain, so manually entering a games list's id on the music host rendered it in the music layout. Fixed by scoping the lookup to the current domain's STI subclasses (`current_user.user_lists.where(type: UserList.subclasses_for(Current.domain).map(&:name)).find`); a cross-domain id now 404s, identical to the non-owner existence-hiding 404 (chosen over a cross-subdomain redirect for simplicity). Also protects the CSV path and the new alias, which share the same `@list` lookup.
 
 ### Deviations From Plan
@@ -341,7 +341,7 @@ No new dependency in Phase A (no SortableJS). Update the manifest with `bin/rail
 ## Future Improvements
 - See `02f` (write surface), `02e` (add item from list page), `02d` (public discovery / badges).
 - List-level drag reordering of the dashboard (uses `user_lists.position`).
-- **Books migration prep** — reserve the low PK range on `users`/`user_lists` before importing the legacy books site so the `/user_lists/:id` alias resolves preserved book IDs without collision: `docs/specs/books-migration-01-id-range-reservation.md`.
+- **Books migration prep** — reserve the low PK range on `users`/`user_lists` before importing the legacy books site so the `/user_lists/:id` alias resolves preserved book IDs without collision: `docs/specs/completed/books-migration-01-id-range-reservation.md`.
 
 ## Related PRs
 - _to be filled when the PR is opened_

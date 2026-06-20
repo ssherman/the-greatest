@@ -1,12 +1,12 @@
 # Books Migration — ID Range Reservation for `users` & `user_lists`
 
 ## Status
-- **Status**: Not Started
+- **Status**: Completed
 - **Priority**: High (time-sensitive — must run while new-app data is still small)
 - **Created**: 2026-06-10
-- **Started**:
-- **Completed**:
-- **Developer**:
+- **Started**: 2026-06-12
+- **Completed**: 2026-06-20 (code + tests merged; migration run + verified on dev. **Production run is a deploy-time operational step — snapshot first.**)
+- **Developer**: Shane Sherman
 
 ## Overview
 Reserve the low primary-key ID range on `users` and `user_lists` for the future Greatest Books migration, so that when the books site's ~265k `user_lists` (and their owning `users`) are imported **preserving their original auto-increment IDs**, they don't collide with IDs the new app mints for music/games users in the meantime.
@@ -69,13 +69,13 @@ The mechanism is two-part, run **now** while music/games data is negligible: (1)
 - **Reversibility**: sequence `RESTART` is not cleanly reversible (define `down` as a no-op with a comment, or restore from snapshot).
 
 ## Acceptance Criteria
-- [ ] A guarded, idempotent migration sets the `users` and `user_lists` sequences to `>= 1_000_000_000` (only bumping when below it).
-- [ ] All pre-existing `users`/`user_lists` rows with `id < 1_000_000_000` are relocated to `>= 1_000_000_000` (or deleted + recreated, if explicitly chosen), with every FK in the remap set repointed and no orphaned dependents.
-- [ ] After running: `User.create!(...).id >= 1_000_000_000` and `UserList`-subclass create yields `id >= 1_000_000_000` (test asserts the boundary).
-- [ ] `user_list_items` for relocated lists still resolve to the correct parent (FK integrity test).
-- [ ] Re-running the migration is a no-op and does not error; loading a fresh schema (CI) does not error (sequence simply starts at 1 there — documented).
-- [ ] A simulated books import (insert a row at a low reserved id, e.g. `id = 42`) succeeds without collision and `GET /user_lists/42` resolves it.
-- [ ] Reserved ranges + the schema-dump caveat are documented in `docs/features/user-lists.md` (or a new books-migration doc) and cross-linked.
+- [x] A guarded, idempotent migration sets the `users` and `user_lists` sequences to `>= 1_000_000_000` (only bumping when below it).
+- [x] All pre-existing `users`/`user_lists` rows with `id < 1_000_000_000` are relocated to `>= 1_000_000_000` (renumber in place), with every FK in the remap set repointed and no orphaned dependents.
+- [x] After running: `User.create!(...).id >= 1_000_000_000` and `UserList`-subclass create yields `id >= 1_000_000_000` (test asserts the boundary).
+- [x] `user_list_items` for relocated lists still resolve to the correct parent (FK integrity test).
+- [x] Re-running the migration is a no-op and does not error; loading a fresh schema (CI) does not error (sequence simply starts at 1 there — documented).
+- [x] A simulated books import (insert a row at a low reserved id, `id = 42`) succeeds without collision (service test asserts the row persists and is findable; `GET /user_lists/:id` resolution is covered by the existing `my_lists_controller` tests).
+- [x] Reserved ranges + the schema-dump caveat are documented in `docs/features/user-lists.md` and cross-linked.
 
 ### Golden Examples
 ```text
@@ -147,25 +147,50 @@ end
 
 ## Implementation Notes (living)
 - Approach taken:
+  - Logic lives in a service object, `Services::BooksMigration::IdRangeReservationService` (`app/lib/services/books_migration/id_range_reservation_service.rb`), matching the project's "skinny models, fat services" convention and making it independently unit-testable. The thin migration `db/migrate/20260612235510_reserve_books_id_ranges.rb` just calls the service and raises on failure.
+  - The ceiling + the full FK remap set live as constants in the Zeitwerk explicit-namespace file `app/lib/services/books_migration.rb` (`Services::BooksMigration::ID_CEILING`, `Services::BooksMigration::FOREIGN_KEYS`), reusable by the future books ETL.
+  - **Relocation = additive bijection.** Every reserved-range PK (and every FK referencing it) is shifted by exactly `ID_CEILING` (`UPDATE … SET id = id + CEILING WHERE id < CEILING`). Parents and children shift by the same constant, so a child's repointed FK always lands on its parent's new id. This is trivially collision-free and idempotent (the `< CEILING` guard skips already-relocated rows).
+  - **FK handling = drop → shift → re-add, in one transaction.** FKs are non-deferrable `ON UPDATE NO ACTION`, so a plain parent UPDATE would violate them mid-statement. The service drops the involved FKs, shifts the ids, then re-adds the FKs — and re-adding a validated FK *is* the "no orphaned dependents before commit" integrity check (Postgres scans every row). Portable, no special DB privileges, no constraint-definition changes.
+  - **Sequence bump** uses `ALTER SEQUENCE … RESTART WITH GREATEST(CEILING, MAX(id)+1)`, guarded by `last_value < target` so it only ever moves forward and a re-run is a no-op.
 - Important decisions:
-  - **Open decision — relocate vs delete+recreate the existing new-app rows.** Recommended: **renumber in place** (preserves real user data; few rows; single transaction with FK remap). Fallback the owner floated: delete all new-app `user_lists` and let the signup callback recreate defaults — simpler but destroys any custom lists and won't re-create defaults for *existing* users without a backfill. Decide before implementing.
-  - **Open decision — `users` relocation blast radius.** Renumbering a `user` repoints 7 FK columns (see remap set). Confirm nothing keys off `users.id` outside FKs (sessions/auth key off firebase uid/email — verify). If relocation is judged too risky, the alternative is to offset *book users* on import into a separate high block instead (book user IDs are less URL-facing than list IDs) — but that diverges from the uniform low-range reservation; default is uniform.
+  - **Resolved — relocate vs delete+recreate.** Chose **renumber in place** (owner confirmed). Local DB had real synced-prod data (20 users, 242 user_lists incl. custom lists); deletion would destroy them. FKs remapped: `user_lists.user_id` (×242) and `lists.submitted_by_id` (×14) for users; `user_list_items.user_list_id` (×20) for user_lists.
+  - **Resolved — `users` relocation blast radius.** Verified nothing keys off `users.id` outside FKs: there is no `sessions` table; auth keys off Firebase `auth_uid`/`email`. The full 7-FK `users` remap set was re-confirmed against current `db/schema.rb` (version `2026_04_22_040533`) — unchanged from the spec's list.
   - **Ceiling value** = `1_000_000_000`. Re-confirm books max id near migration time stays well under it.
 
 ### Key Files Touched (paths only)
-- `db/migrate/` (new migration[s])
-- `db/schema.rb` (version bump only; no column diff)
-- `docs/features/user-lists.md` (or new `docs/features/books-migration.md`)
-- `test/...` (migration boundary + FK integrity tests)
+- `web-app/db/migrate/20260612235510_reserve_books_id_ranges.rb` (new migration)
+- `web-app/app/lib/services/books_migration.rb` (namespace + `ID_CEILING`/`FOREIGN_KEYS` constants)
+- `web-app/app/lib/services/books_migration/id_range_reservation_service.rb` (relocation + sequence-bump logic)
+- `web-app/db/schema.rb` (version bump only → `2026_06_12_235510`; no column diff)
+- `web-app/test/lib/services/books_migration/id_range_reservation_service_test.rb` (boundary + FK integrity + idempotency + simulated book-import tests)
+- `docs/features/user-lists.md` (reserved ranges + schema-dump caveat, cross-linked)
 
 ### Challenges & Resolutions
-- …
+- **Non-deferrable FK constraints** would reject a parent-PK UPDATE mid-statement → resolved by dropping + re-adding the FKs within the transaction (re-add doubles as the integrity check).
+- **`PendingMigrationError` when running tests** (migration newer than `schema.rb`) → applied the migration to the **test** DB (`RAILS_ENV=test bin/rails db:migrate`), which also produced the `schema.rb` version bump, while leaving the synced-prod dev data untouched until the owner runs `db:migrate` on dev.
 
 ### Deviations From Plan
-- …
+- **Logic in a `Services::` object, not inline in the migration** (the spec's reference snippet inlined it). Done for testability + the project's "skinny models, fat services" convention; the constant lives in the service namespace rather than a standalone initializer.
+- **Additive `+CEILING` offset** rather than compacting relocated ids to start exactly at `CEILING` (the golden example showed `1000000000..`). New ids are `CEILING + old_id` (e.g. user 5 → `1000000005`). This is a pure bijection → simpler, provably collision-free, and idempotent; it still satisfies every acceptance criterion (`id >= 1_000_000_000`).
 
 ## Acceptance Results
-- Date, verifier, artifacts:
+- **Date**: 2026-06-20
+- **Verifier**: Shane Sherman
+- **Tests**: `web-app/test/lib/services/books_migration/id_range_reservation_service_test.rb` — 5 runs / 16 assertions, 0 failures. Full sweep of `test/lib/services/`, `user_test`, `user_list_test`, `user_list_item_test` — 490 runs / 1596 assertions, 0 failures.
+- **Dev DB run** (synced-prod data: 20 users, 242 user_lists) — `bin/rails db:migrate` applied `20260612235510_reserve_books_id_ranges`; post-run verification:
+
+| Check | Result |
+|---|---|
+| `users` with `id < 1e9` | **0 / 20** (min id `1000000001`) |
+| `user_lists` with `id < 1e9` | **0 / 242** (min id `1000000001`) |
+| `users_id_seq.last_value` | `1000000021` |
+| `user_lists_id_seq.last_value` | `1000000243` |
+| Orphaned `user_lists` / `user_list_items` / `lists` | **0 / 0 / 0** |
+| `User.create!` boundary | id `1000000021` (≥ 1e9) ✓ |
+| `Games::UserList.create!` boundary | id `1000000255` (≥ 1e9) ✓ |
+
+- **FKs remapped**: `user_lists.user_id` (×242), `lists.submitted_by_id` (×14), `user_list_items.user_list_id` (×20) — zero orphans.
+- **Outstanding (operational)**: run in production after a DB snapshot; re-confirm legacy books `MAX(id)` is still well under `1_000_000_000` near migration time. The migration is idempotent, so a re-run after a partial failure is safe.
 
 ## Future Improvements
 - When migrating additional books tables, make a per-table reservation decision (URL-facing PK → preserve in a reserved block; non-URL-facing → free to renumber) and record it here or in a sibling spec.
@@ -176,5 +201,5 @@ end
 
 ## Documentation Updated
 - [ ] `documentation.md`
-- [ ] `docs/features/user-lists.md` (reserved ranges + alias dependency)
-- [ ] Class docs (if a `BooksMigration` constant/helper is introduced)
+- [x] `docs/features/user-lists.md` (reserved ranges + alias dependency + schema-dump caveat)
+- [x] Class docs (`Services::BooksMigration` namespace + service carry inline doc comments)
