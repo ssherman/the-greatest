@@ -5,7 +5,7 @@
 - **Priority**: High (time-sensitive — must run while new-app data is still small)
 - **Created**: 2026-06-10
 - **Started**: 2026-06-12
-- **Completed**: 2026-06-20 (code + tests merged. Ceilings corrected to **per-table** values on 2026-06-20 — see Deviations; dev re-verification pending a DB restore. **Production run is a deploy-time operational step — snapshot first.**)
+- **Completed**: 2026-06-20 (code + tests merged. Ceilings corrected to **per-table** values on 2026-06-20 — see Deviations; dev DB re-verified on restored data (see Acceptance Results). **Production run is a deploy-time operational step — snapshot first.**)
 - **Developer**: Shane Sherman
 
 ## Overview
@@ -180,19 +180,22 @@ end
 - **Date**: 2026-06-20
 - **Verifier**: Shane Sherman
 - **Tests (per-table ceilings)**: `web-app/test/lib/services/books_migration/id_range_reservation_service_test.rb` — 5 runs / 16 assertions, 0 failures, asserting the per-table boundaries (`users` ≥ 150k, `user_lists` ≥ 1M).
-- **Dev DB re-verification: PENDING.** The original dev run used the superseded uniform-`1_000_000_000` logic; it is **not** representative of the shipping per-table behavior. The owner is restoring the dev DB to re-run `20260612235510_reserve_books_id_ranges` with the corrected ceilings. Expected post-run:
+- **Dev DB re-verification (per-table ceilings): PASSED** — restored the dev DB to genuine pre-migration state (`users` `1..21`, `user_lists` `1..254`) and ran `20260612235510_reserve_books_id_ranges`:
 
-| Check | Expectation (per-table) |
-|---|---|
-| `users` with `id < 150_000` | **0** (relocated to old id + 150_000) |
-| `user_lists` with `id < 1_000_000` | **0** (relocated to old id + 1_000_000) |
-| `users_id_seq.last_value` | `≥ 150_000` (or `MAX(id)+1` if higher) |
-| `user_lists_id_seq.last_value` | `≥ 1_000_000` (or `MAX(id)+1` if higher) |
-| Orphaned `user_lists` / `user_list_items` / `lists` | **0 / 0 / 0** |
-| `User.create!` boundary | `id ≥ 150_000` |
-| `Games::UserList.create!` boundary | `id ≥ 1_000_000` |
+| Check | Before | After |
+|---|---|---|
+| `users` id range | `1 .. 21` (seq `22`) | `150001 .. 150021` (seq `150022`) — each `+150_000` |
+| `user_lists` id range | `1 .. 254` (seq `255`) | `1000001 .. 1000254` (seq `1000255`) — each `+1_000_000` |
+| `users` with `id < 150_000` | 21 | **0** |
+| `user_lists` with `id < 1_000_000` | 254 | **0** |
+| FK columns below their referenced ceiling (`user_lists.user_id`, `lists.submitted_by_id` ×14, `user_list_items.user_list_id` ×22) | — | **0** |
+| Orphaned `user_lists` / `user_list_items` / `lists` | 0 / 0 / 0 | **0 / 0 / 0** |
+| `User.create!` boundary | — | id `150022` (≥ 150k) ✓ |
+| `Games::UserList.create!` boundary | — | id `≥ 1_000_000` ✓ |
+| Idempotency (second service run) | — | no-op; min ids unchanged ✓ |
 
-- **Outstanding (operational)**: re-run + verify on the restored dev DB; then run in production after a DB snapshot. Re-confirm legacy books `MAX(id)` is still well under each (tight) ceiling near migration time — `users` < 150k, `user_lists` < 1M. The migration is idempotent, so a re-run after a partial failure is safe.
+- Spot-checked chain held end-to-end after relocation: `user_list_items.id=1` → `user_list_id=1000030` → owner `user_id=150001`.
+- **Outstanding (operational)**: run in production after a DB snapshot. Re-confirm legacy books `MAX(id)` is still well under each (tight) ceiling near migration time — `users` < 150k, `user_lists` < 1M. The migration is idempotent, so a re-run after a partial failure is safe.
 
 ## Future Improvements
 - When migrating additional books tables, make a per-table reservation decision (URL-facing PK → preserve in a reserved block; non-URL-facing → free to renumber) and record it here or in a sibling spec.
