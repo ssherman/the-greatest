@@ -5,13 +5,13 @@
 - **Priority**: High (time-sensitive — must run while new-app data is still small)
 - **Created**: 2026-06-10
 - **Started**: 2026-06-12
-- **Completed**: 2026-06-20 (code + tests merged; migration run + verified on dev. **Production run is a deploy-time operational step — snapshot first.**)
+- **Completed**: 2026-06-20 (code + tests merged. Ceilings corrected to **per-table** values on 2026-06-20 — see Deviations; dev re-verification pending a DB restore. **Production run is a deploy-time operational step — snapshot first.**)
 - **Developer**: Shane Sherman
 
 ## Overview
-Reserve the low primary-key ID range on `users` and `user_lists` for the future Greatest Books migration, so that when the books site's ~265k `user_lists` (and their owning `users`) are imported **preserving their original auto-increment IDs**, they don't collide with IDs the new app mints for music/games users in the meantime.
+Reserve the low primary-key ID range on `users` and `user_lists` for the future Greatest Books migration, so that when the books site's `user_lists` (~604k and growing) and their owning `users` (~69k) are imported **preserving their original auto-increment IDs**, they don't collide with IDs the new app mints for music/games/movies users in the meantime.
 
-The mechanism is two-part, run **now** while music/games data is negligible: (1) bump the Postgres sequences for both tables above a reserved ceiling so all *new* rows land in the high range; (2) relocate the handful of *existing* music/games rows that currently occupy the reserved low range up into the high range (FKs remapped).
+The mechanism is two-part, run **now** while music/games/movies data is negligible: (1) bump the Postgres sequences for both tables above a reserved, **per-table** ceiling so all *new* rows land in the high range; (2) relocate the handful of *existing* new-app rows that currently occupy the reserved low range up into the high range (FKs remapped).
 
 - **Goal**: Guarantee that books rows can be imported with `id` unchanged, with zero PK collisions and zero broken URLs.
 - **Non-goals**: The actual books ETL/import job; the `Books::UserList` STI subclass; the books domain layout; migrating any books table *other* than `users`/`user_lists` (each gets its own reservation decision when its import is specced).
@@ -19,24 +19,26 @@ The mechanism is two-part, run **now** while music/games data is negligible: (1)
 ## Context & Links
 - **Why book IDs must be preserved**: the compatibility alias `GET /user_lists/:id` (`user_list_path`) was added so legacy books URLs keep resolving after migration. See `config/routes.rb` and `docs/features/user-lists.md` (“My Lists Read Surface → Routing & Layout”). Preserving book PKs means those URLs work with **zero redirects**.
 - **Schema (authoritative)**: `db/schema.rb` — `user_lists`, `user_list_items`, `users`.
-- **Books inventory at time of writing**: ~265,341 `user_lists` on the legacy books site (will grow before migration).
+- **Books inventory (production, legacy books site, 2026-06)**: `UserList.order(:id).last.id` → **603,614**; `User.order(:id).last.id` → **69,198**. These are **max IDs**, not counts, and **will grow** before migration completes.
 - Related: `docs/specs/completed/user-lists-01-data-model.md`, `docs/specs/completed/user-lists-02-ui-and-cached-page-integration.md`.
 
 ## Interfaces & Contracts
 
 ### Domain Model (diffs only)
 - **No column or index changes.** This is a sequence + data-relocation migration only.
-- Both PKs are already `bigint` (range ~9.2×10¹⁸), so the reserved ceiling costs nothing in storage and leaves effectively unlimited headroom above it.
+- Both PKs are already `bigint` (range ~9.2×10¹⁸), so the reserved ceilings cost nothing in storage and leave effectively unlimited headroom above them.
 - New migration(s) under `db/migrate/` (raw SQL via `execute`/`ActiveRecord::Base.connection`). No schema.rb column diff results; see "Schema-dump caveat" below.
-- A single source-of-truth constant for the ceiling (proposed home: a small initializer or a constant on a migration helper, e.g. `BooksMigration::ID_CEILING`), referenced by the migration and any future books ETL.
+- A single source-of-truth constant for the **per-table** ceilings (home: the Zeitwerk namespace file `app/lib/services/books_migration.rb`, `Services::BooksMigration::RESERVED_CEILINGS`), referenced by the migration and any future books ETL.
 
 ### Reserved ID Ranges
-| Table | Reserved for books (preserved IDs) | New-app rows (relocated + future) | Sequence restart value |
-|---|---|---|---|
-| `users` | `[1, 1_000_000_000)` | `>= 1_000_000_000` | `1_000_000_000` |
-| `user_lists` | `[1, 1_000_000_000)` | `>= 1_000_000_000` | `1_000_000_000` |
+| Table | Reserved for books (preserved IDs) | New-app rows (relocated + future) | Sequence restart value | Books max id today | Headroom |
+|---|---|---|---|---|---|
+| `users` | `[1, 150_000)` | `>= 150_000` | `150_000` | 69,198 | ~2.2× |
+| `user_lists` | `[1, 1_000_000)` | `>= 1_000_000` | `1_000_000` | 603,614 | ~1.65× |
 
-> Ceiling `1_000_000_000` is ~3,700× the current book max (265,341) — ample room for books to keep growing before migration. `user_list_items.id` is **not** reserved (not URL-facing); its IDs may be freshly assigned on import as long as `user_list_id` is remapped.
+> **Per-table ceilings** (owner decision): `users` = `150_000`, `user_lists` = `1_000_000`. `user_list_items.id` is **not** reserved (not URL-facing); its IDs may be freshly assigned on import as long as `user_list_id` is remapped.
+>
+> ⚠️ **These ceilings are deliberately tight** (~1.65–2.2× over today's books max). Books rows keep their original sub-ceiling IDs and the books site keeps growing until migration, so the ceiling must still exceed the books max id **at import time**. **Re-confirm both books max IDs immediately before the books import** (`User.order(:id).last.id`, `UserList.order(:id).last.id`); raise a ceiling if either is approaching it (cost is zero on a bigint PK).
 
 ### Endpoints
 | Verb | Path | Purpose | Params/Body | Auth |
@@ -52,12 +54,13 @@ The mechanism is two-part, run **now** while music/games data is negligible: (1)
 ### Behaviors (pre/postconditions)
 - **Preconditions**: run while new-app `users`/`user_lists` counts are small; no books data present yet in the new app.
 - **Postconditions**:
-  - The next `User.create!` and `UserList.create!` both yield `id >= 1_000_000_000`.
-  - No `users` or `user_lists` row exists with `id < 1_000_000_000` (the reserved range is empty and stays empty until the books import fills it).
+  - The next `User.create!` yields `id >= 150_000`; the next `UserList`-subclass create yields `id >= 1_000_000`.
+  - No `users` row exists with `id < 150_000` and no `user_lists` row exists with `id < 1_000_000` (each reserved range is empty and stays empty until the books import fills it).
   - All FK references for any relocated row are repointed; no orphaned `user_list_items`, `ai_chats`, etc.
 - **Edge cases & failure modes**:
-  - **Existing rows in the reserved range** — music/games already minted IDs 1,2,3…. These MUST be relocated (or deleted+recreated) before/with the sequence bump, else book IDs 1..N collide with them. The sequence bump alone is insufficient.
-  - **Idempotency** — the migration must be safe to re-run: only `RESTART` a sequence if its current value is below the ceiling; skip relocation for rows already `>= ceiling`.
+  - **Existing rows in the reserved range** — music/games/movies already minted IDs 1,2,3…. These MUST be relocated (or deleted+recreated) before/with the sequence bump, else book IDs 1..N collide with them. The sequence bump alone is insufficient.
+  - **Books growth past a tight ceiling** — because the ceilings are tight, re-confirm both books max IDs immediately before import (see Reserved ID Ranges warning) and raise a ceiling if books has grown near it.
+  - **Idempotency** — the migration must be safe to re-run: only `RESTART` a sequence if its current value is below the (per-table) ceiling; skip relocation for rows already `>= ceiling`.
   - **Schema-dump caveat** — `db/schema.rb` does NOT capture sequence `RESTART` values, so `db:schema:load` (CI, fresh dev DBs) will start sequences at 1 again. That's acceptable: the reservation only needs to hold in **production** (and any environment that will receive the books import). Document it; do not switch to `structure.sql` for this alone.
   - **Sequence below table max** — never `RESTART` to a value `<= MAX(id)` of the table; guard with `GREATEST(ceiling, max_id + 1)`.
   - **Relocation collisions** — when renumbering in place, assign new IDs from the top of the sequence (post-bump) so renumbered rows can't collide with each other or future inserts.
@@ -69,24 +72,25 @@ The mechanism is two-part, run **now** while music/games data is negligible: (1)
 - **Reversibility**: sequence `RESTART` is not cleanly reversible (define `down` as a no-op with a comment, or restore from snapshot).
 
 ## Acceptance Criteria
-- [x] A guarded, idempotent migration sets the `users` and `user_lists` sequences to `>= 1_000_000_000` (only bumping when below it).
-- [x] All pre-existing `users`/`user_lists` rows with `id < 1_000_000_000` are relocated to `>= 1_000_000_000` (renumber in place), with every FK in the remap set repointed and no orphaned dependents.
-- [x] After running: `User.create!(...).id >= 1_000_000_000` and `UserList`-subclass create yields `id >= 1_000_000_000` (test asserts the boundary).
+- [x] A guarded, idempotent migration sets the `users` sequence to `>= 150_000` and the `user_lists` sequence to `>= 1_000_000` (only bumping when below the per-table target).
+- [x] All pre-existing `users` rows with `id < 150_000` and `user_lists` rows with `id < 1_000_000` are relocated to `>= ceiling` (renumber in place), with every FK in the remap set repointed and no orphaned dependents.
+- [x] After running: `User.create!(...).id >= 150_000` and a `UserList`-subclass create yields `id >= 1_000_000` (test asserts each boundary).
 - [x] `user_list_items` for relocated lists still resolve to the correct parent (FK integrity test).
-- [x] Re-running the migration is a no-op and does not error; loading a fresh schema (CI) does not error (sequence simply starts at 1 there — documented).
-- [x] A simulated books import (insert a row at a low reserved id, `id = 42`) succeeds without collision (service test asserts the row persists and is findable; `GET /user_lists/:id` resolution is covered by the existing `my_lists_controller` tests).
-- [x] Reserved ranges + the schema-dump caveat are documented in `docs/features/user-lists.md` and cross-linked.
+- [x] Re-running the migration is a no-op and does not error; loading a fresh schema (CI) does not error (sequences simply start at 1 there — documented).
+- [x] A simulated books import (insert a row at a low reserved id, `user_lists.id = 42`) succeeds without collision (service test asserts the row persists and is findable; `GET /user_lists/:id` resolution is covered by the existing `my_lists_controller` tests).
+- [x] Reserved ranges (per-table) + the schema-dump caveat are documented in `docs/features/user-lists.md` and cross-linked.
 
 ### Golden Examples
 ```text
-# Before (new-app, music/games only)
+# Before (new-app, music/games/movies only)
 SELECT last_value FROM user_lists_id_seq;   -> 7
-SELECT id FROM user_lists ORDER BY id;       -> 1,2,3,4,5,6,7   (music/games)
+SELECT id FROM user_lists ORDER BY id;       -> 1,2,3,4,5,6,7   (new-app)
 
-# After this migration
-SELECT last_value FROM user_lists_id_seq;   -> 1000000000
-SELECT id FROM user_lists ORDER BY id;       -> 1000000000 .. 1000000006   (relocated)
--- reserved range [1, 1e9) is now empty
+# After this migration (relocation = additive +ceiling shift; user_lists ceiling = 1_000_000)
+SELECT last_value FROM user_lists_id_seq;   -> 1000007
+SELECT id FROM user_lists ORDER BY id;       -> 1000001 .. 1000007   (relocated: old id + 1_000_000)
+-- reserved range [1, 1_000_000) is now empty
+-- users behaves the same with its own ceiling 150_000 (old id 5 -> 150005)
 
 # Later, at books import (preserving original IDs)
 INSERT INTO user_lists (id, ...) VALUES (42, ...);   -- no collision
@@ -95,26 +99,24 @@ GET /user_lists/42                                   -- 200, owner-only show
 
 ### Optional Reference Snippet (≤40 lines, non-authoritative)
 ```ruby
-# reference only — guarded, idempotent sequence bump (relocation handled separately)
-class ReserveBooksIdRanges < ActiveRecord::Migration[8.0]
-  CEILING = 1_000_000_000
+# reference only — actual logic lives in
+# app/lib/services/books_migration/id_range_reservation_service.rb
+RESERVED_CEILINGS = { "users" => 150_000, "user_lists" => 1_000_000 }.freeze
 
-  def up
-    %w[users user_lists].each do |table|
-      seq      = "#{table}_id_seq"
-      max_id   = select_value("SELECT COALESCE(MAX(id), 0) FROM #{table}").to_i
-      last_val = select_value("SELECT last_value FROM #{seq}").to_i
-      target   = [CEILING, max_id + 1].max
-      # only move the sequence forward; never backward
-      execute("ALTER SEQUENCE #{seq} RESTART WITH #{target}") if last_val < target
-    end
-    # NOTE: relocating existing sub-ceiling rows + FK remap is a separate,
-    # transactional data step (see "FKs to remap"); do it BEFORE book import.
-  end
+# Relocation is a per-table additive bijection (FKs dropped → shifted → re-added
+# in one transaction; re-adding a validated FK is the no-orphans integrity check):
+RESERVED_CEILINGS.each do |table, ceiling|
+  execute("UPDATE #{table} SET id = id + #{ceiling} WHERE id < #{ceiling}")
+end
+# ...then shift every FK column by its *referenced* table's ceiling, then:
 
-  def down
-    # Sequence reservation is intentionally irreversible; restore from snapshot.
-  end
+# Guarded, idempotent sequence bump — only ever moves forward:
+RESERVED_CEILINGS.each do |table, ceiling|
+  seq      = "#{table}_id_seq"
+  max_id   = select_value("SELECT COALESCE(MAX(id), 0) FROM #{table}").to_i
+  last_val = select_value("SELECT last_value FROM #{seq}").to_i
+  target   = [ceiling, max_id + 1].max
+  execute("ALTER SEQUENCE #{seq} RESTART WITH #{target}") if last_val < target
 end
 ```
 
@@ -148,18 +150,18 @@ end
 ## Implementation Notes (living)
 - Approach taken:
   - Logic lives in a service object, `Services::BooksMigration::IdRangeReservationService` (`app/lib/services/books_migration/id_range_reservation_service.rb`), matching the project's "skinny models, fat services" convention and making it independently unit-testable. The thin migration `db/migrate/20260612235510_reserve_books_id_ranges.rb` just calls the service and raises on failure.
-  - The ceiling + the full FK remap set live as constants in the Zeitwerk explicit-namespace file `app/lib/services/books_migration.rb` (`Services::BooksMigration::ID_CEILING`, `Services::BooksMigration::FOREIGN_KEYS`), reusable by the future books ETL.
-  - **Relocation = additive bijection.** Every reserved-range PK (and every FK referencing it) is shifted by exactly `ID_CEILING` (`UPDATE … SET id = id + CEILING WHERE id < CEILING`). Parents and children shift by the same constant, so a child's repointed FK always lands on its parent's new id. This is trivially collision-free and idempotent (the `< CEILING` guard skips already-relocated rows).
+  - The per-table ceilings + the full FK remap set live as constants in the Zeitwerk explicit-namespace file `app/lib/services/books_migration.rb` (`Services::BooksMigration::RESERVED_CEILINGS`, `Services::BooksMigration::FOREIGN_KEYS`), reusable by the future books ETL.
+  - **Relocation = per-table additive bijection.** Every reserved-range PK is shifted by *its own table's* ceiling (`UPDATE … SET id = id + ceiling WHERE id < ceiling`); every FK column is shifted by its *referenced* table's ceiling. A parent and the FKs pointing at it shift by the same amount, so a child's repointed FK always lands on its parent's new id. This is trivially collision-free and idempotent (the `< ceiling` guard skips already-relocated rows).
   - **FK handling = drop → shift → re-add, in one transaction.** FKs are non-deferrable `ON UPDATE NO ACTION`, so a plain parent UPDATE would violate them mid-statement. The service drops the involved FKs, shifts the ids, then re-adds the FKs — and re-adding a validated FK *is* the "no orphaned dependents before commit" integrity check (Postgres scans every row). Portable, no special DB privileges, no constraint-definition changes.
-  - **Sequence bump** uses `ALTER SEQUENCE … RESTART WITH GREATEST(CEILING, MAX(id)+1)`, guarded by `last_value < target` so it only ever moves forward and a re-run is a no-op.
+  - **Sequence bump** uses `ALTER SEQUENCE … RESTART WITH GREATEST(ceiling, MAX(id)+1)` per table, guarded by `last_value < target` so it only ever moves forward and a re-run is a no-op.
 - Important decisions:
+  - **Resolved — per-table ceilings.** `users` = `150_000`, `user_lists` = `1_000_000` (owner decision). The original implementation shipped a uniform `1_000_000_000`; corrected to per-table on 2026-06-20 to keep new-app IDs compact while preserving ample headroom over the legacy books max (see Deviations). Because the ceilings are tight, re-confirm the legacy books `MAX(id)` is well under each ceiling near migration time.
   - **Resolved — relocate vs delete+recreate.** Chose **renumber in place** (owner confirmed). Local DB had real synced-prod data (20 users, 242 user_lists incl. custom lists); deletion would destroy them. FKs remapped: `user_lists.user_id` (×242) and `lists.submitted_by_id` (×14) for users; `user_list_items.user_list_id` (×20) for user_lists.
   - **Resolved — `users` relocation blast radius.** Verified nothing keys off `users.id` outside FKs: there is no `sessions` table; auth keys off Firebase `auth_uid`/`email`. The full 7-FK `users` remap set was re-confirmed against current `db/schema.rb` (version `2026_04_22_040533`) — unchanged from the spec's list.
-  - **Ceiling value** = `1_000_000_000`. Re-confirm books max id near migration time stays well under it.
 
 ### Key Files Touched (paths only)
 - `web-app/db/migrate/20260612235510_reserve_books_id_ranges.rb` (new migration)
-- `web-app/app/lib/services/books_migration.rb` (namespace + `ID_CEILING`/`FOREIGN_KEYS` constants)
+- `web-app/app/lib/services/books_migration.rb` (namespace + `RESERVED_CEILINGS`/`FOREIGN_KEYS` constants)
 - `web-app/app/lib/services/books_migration/id_range_reservation_service.rb` (relocation + sequence-bump logic)
 - `web-app/db/schema.rb` (version bump only → `2026_06_12_235510`; no column diff)
 - `web-app/test/lib/services/books_migration/id_range_reservation_service_test.rb` (boundary + FK integrity + idempotency + simulated book-import tests)
@@ -171,26 +173,26 @@ end
 
 ### Deviations From Plan
 - **Logic in a `Services::` object, not inline in the migration** (the spec's reference snippet inlined it). Done for testability + the project's "skinny models, fat services" convention; the constant lives in the service namespace rather than a standalone initializer.
-- **Additive `+CEILING` offset** rather than compacting relocated ids to start exactly at `CEILING` (the golden example showed `1000000000..`). New ids are `CEILING + old_id` (e.g. user 5 → `1000000005`). This is a pure bijection → simpler, provably collision-free, and idempotent; it still satisfies every acceptance criterion (`id >= 1_000_000_000`).
+- **Additive `+ceiling` offset** rather than compacting relocated ids to start exactly at `ceiling`. New ids are `ceiling + old_id` (e.g. user `5` → `150005`, user_list `5` → `1000005`). This is a pure bijection → simpler, provably collision-free, and idempotent; it still satisfies every acceptance criterion (`id >= ceiling`).
+- **Per-table ceilings (`users` 150k / `user_lists` 1M) instead of the originally-shipped uniform `1_000_000_000`.** The first cut implemented the pre-rewrite spec's uniform ceiling; the per-table values were the owner's intended design and got corrected in the service, constant, and tests on 2026-06-20. The relocation/FK-shift logic is unchanged in shape — only the shift amount is now keyed to the referenced table's ceiling.
 
 ## Acceptance Results
 - **Date**: 2026-06-20
 - **Verifier**: Shane Sherman
-- **Tests**: `web-app/test/lib/services/books_migration/id_range_reservation_service_test.rb` — 5 runs / 16 assertions, 0 failures. Full sweep of `test/lib/services/`, `user_test`, `user_list_test`, `user_list_item_test` — 490 runs / 1596 assertions, 0 failures.
-- **Dev DB run** (synced-prod data: 20 users, 242 user_lists) — `bin/rails db:migrate` applied `20260612235510_reserve_books_id_ranges`; post-run verification:
+- **Tests (per-table ceilings)**: `web-app/test/lib/services/books_migration/id_range_reservation_service_test.rb` — 5 runs / 16 assertions, 0 failures, asserting the per-table boundaries (`users` ≥ 150k, `user_lists` ≥ 1M).
+- **Dev DB re-verification: PENDING.** The original dev run used the superseded uniform-`1_000_000_000` logic; it is **not** representative of the shipping per-table behavior. The owner is restoring the dev DB to re-run `20260612235510_reserve_books_id_ranges` with the corrected ceilings. Expected post-run:
 
-| Check | Result |
+| Check | Expectation (per-table) |
 |---|---|
-| `users` with `id < 1e9` | **0 / 20** (min id `1000000001`) |
-| `user_lists` with `id < 1e9` | **0 / 242** (min id `1000000001`) |
-| `users_id_seq.last_value` | `1000000021` |
-| `user_lists_id_seq.last_value` | `1000000243` |
+| `users` with `id < 150_000` | **0** (relocated to old id + 150_000) |
+| `user_lists` with `id < 1_000_000` | **0** (relocated to old id + 1_000_000) |
+| `users_id_seq.last_value` | `≥ 150_000` (or `MAX(id)+1` if higher) |
+| `user_lists_id_seq.last_value` | `≥ 1_000_000` (or `MAX(id)+1` if higher) |
 | Orphaned `user_lists` / `user_list_items` / `lists` | **0 / 0 / 0** |
-| `User.create!` boundary | id `1000000021` (≥ 1e9) ✓ |
-| `Games::UserList.create!` boundary | id `1000000255` (≥ 1e9) ✓ |
+| `User.create!` boundary | `id ≥ 150_000` |
+| `Games::UserList.create!` boundary | `id ≥ 1_000_000` |
 
-- **FKs remapped**: `user_lists.user_id` (×242), `lists.submitted_by_id` (×14), `user_list_items.user_list_id` (×20) — zero orphans.
-- **Outstanding (operational)**: run in production after a DB snapshot; re-confirm legacy books `MAX(id)` is still well under `1_000_000_000` near migration time. The migration is idempotent, so a re-run after a partial failure is safe.
+- **Outstanding (operational)**: re-run + verify on the restored dev DB; then run in production after a DB snapshot. Re-confirm legacy books `MAX(id)` is still well under each (tight) ceiling near migration time — `users` < 150k, `user_lists` < 1M. The migration is idempotent, so a re-run after a partial failure is safe.
 
 ## Future Improvements
 - When migrating additional books tables, make a per-table reservation decision (URL-facing PK → preserve in a reserved block; non-URL-facing → free to renumber) and record it here or in a sibling spec.

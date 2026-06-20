@@ -193,10 +193,12 @@ The `/user_lists/:id` alias above resolves a list by its **raw primary key**, so
 
 | Table | Reserved for books (preserved IDs) | New-app rows (relocated + future) |
 |---|---|---|
-| `users` | `[1, 1_000_000_000)` | `>= 1_000_000_000` |
-| `user_lists` | `[1, 1_000_000_000)` | `>= 1_000_000_000` |
+| `users` | `[1, 150_000)` | `>= 150_000` |
+| `user_lists` | `[1, 1_000_000)` | `>= 1_000_000` |
 
-The ceiling lives in `Services::BooksMigration::ID_CEILING` (`app/lib/services/books_migration.rb`), reused by the migration and any future books ETL. The migration `db/migrate/20260612235510_reserve_books_id_ranges.rb` calls `Services::BooksMigration::IdRangeReservationService`, which (in one transaction) relocates any existing new-app rows up by the ceiling — remapping every FK that references `users`/`user_lists` (see `FOREIGN_KEYS` in the same file) — then bumps both sequences above the ceiling. It is idempotent (safe to re-run) and irreversible by design (restore from a snapshot to undo).
+The **per-table** ceilings live in `Services::BooksMigration::RESERVED_CEILINGS` (`app/lib/services/books_migration.rb`), reused by the migration and any future books ETL. The migration `db/migrate/20260612235510_reserve_books_id_ranges.rb` calls `Services::BooksMigration::IdRangeReservationService`, which (in one transaction) relocates any existing new-app rows up by their table's ceiling — remapping every FK that references `users`/`user_lists` (see `FOREIGN_KEYS` in the same file) — then bumps both sequences above their ceiling. It is idempotent (safe to re-run) and irreversible by design (restore from a snapshot to undo).
+
+> **Tight ceilings:** these are only ~1.65–2.2× over the legacy books site's current `MAX(id)` (`user_lists` ~604k, `users` ~69k as of 2026-06). Books rows keep their original sub-ceiling IDs and the books site keeps growing, so **re-confirm both legacy `MAX(id)` values are still well under their ceiling immediately before the books import** and raise a ceiling if needed (zero cost on a bigint PK).
 
 > **Schema-dump caveat:** `db/schema.rb` does **not** capture sequence `RESTART` values, so `db:schema:load` (CI, fresh dev DBs) starts the sequences at `1` again. This is acceptable — the reservation only needs to hold in **production** (and any environment that will receive the books import). Do not switch to `structure.sql` for this alone.
 

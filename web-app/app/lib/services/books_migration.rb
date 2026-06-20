@@ -3,12 +3,19 @@
 module Services
   # Reserves the low primary-key ID range on `users` and `user_lists` for the
   # future Greatest Books migration. Books rows are imported preserving their
-  # original auto-increment IDs in `[1, ID_CEILING)`; every new-app row lives at
-  # `>= ID_CEILING`. See docs/specs/completed/books-migration-01-id-range-reservation.md.
+  # original auto-increment IDs in `[1, ceiling)`; every new-app row lives at
+  # `>= ceiling`. See docs/specs/completed/books-migration-01-id-range-reservation.md.
   module BooksMigration
-    # Reserved ceiling: ~3,700x the current book max (~265k) — ample headroom
-    # before migration, and trivial for a bigint PK (range ~9.2e18).
-    ID_CEILING = 1_000_000_000
+    # Per-table reserved ceilings: books rows keep their original IDs below the
+    # ceiling; new-app rows are relocated to and minted at `>= ceiling`. Sized
+    # with headroom over the legacy books site's current MAX(id) (user_lists
+    # ~604k, users ~69k as of 2026-06). These are deliberately tight — re-confirm
+    # the legacy MAX(id) is still well under each ceiling before the books import,
+    # and raise a ceiling if needed (cost is zero on a bigint PK).
+    RESERVED_CEILINGS = {
+      "users" => 150_000,
+      "user_lists" => 1_000_000
+    }.freeze
 
     # Reserved table => the FK columns that must be remapped when one of its rows
     # is relocated out of the reserved range. Verified against db/schema.rb

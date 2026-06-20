@@ -7,9 +7,9 @@ module Services
     # books import can preserve its original IDs without collision.
     #
     # The relocation is a pure additive bijection: every reserved-range id (and
-    # every FK referencing it) is shifted by exactly ID_CEILING. This makes the
-    # operation trivially collision-free and idempotent — the `< ID_CEILING`
-    # guard means a second run skips rows that were already relocated.
+    # every FK referencing it) is shifted by that table's reserved ceiling. This
+    # makes the operation trivially collision-free and idempotent — the
+    # `< ceiling` guard means a second run skips rows that were already relocated.
     #
     # FK constraints are non-deferrable (ON UPDATE NO ACTION), so a plain parent
     # UPDATE would violate them mid-statement. We drop the involved FKs, shift the
@@ -29,7 +29,7 @@ module Services
           add_foreign_keys
           bump_sequences
         end
-        success({ceiling: ID_CEILING})
+        success({ceilings: RESERVED_CEILINGS})
       rescue => e
         failure(e.message)
       end
@@ -41,19 +41,22 @@ module Services
       end
 
       # Shift reserved-table PKs, then every FK column that references them, by
-      # ID_CEILING. Parents and children shift by the same constant, so a child's
-      # repointed FK lands exactly on its parent's new id. Already-relocated rows
-      # (>= ID_CEILING) are skipped, which is what makes a re-run a no-op.
+      # the referenced table's reserved ceiling. A parent and the FKs pointing at
+      # it shift by the same amount, so a child's repointed FK lands exactly on
+      # its parent's new id. Already-relocated rows (>= ceiling) are skipped,
+      # which is what makes a re-run a no-op.
       def relocate_rows
         FOREIGN_KEYS.each_key do |table|
+          ceiling = RESERVED_CEILINGS.fetch(table)
           connection.execute(
-            "UPDATE #{table} SET id = id + #{ID_CEILING} WHERE id < #{ID_CEILING}"
+            "UPDATE #{table} SET id = id + #{ceiling} WHERE id < #{ceiling}"
           )
         end
 
-        each_foreign_key do |child, column|
+        each_foreign_key do |child, column, table|
+          ceiling = RESERVED_CEILINGS.fetch(table)
           connection.execute(
-            "UPDATE #{child} SET #{column} = #{column} + #{ID_CEILING} WHERE #{column} < #{ID_CEILING}"
+            "UPDATE #{child} SET #{column} = #{column} + #{ceiling} WHERE #{column} < #{ceiling}"
           )
         end
       end
@@ -81,13 +84,14 @@ module Services
       # sequence already sits at/above the target.
       def bump_sequences
         FOREIGN_KEYS.each_key do |table|
+          ceiling = RESERVED_CEILINGS.fetch(table)
           seq = connection.select_value(
             "SELECT pg_get_serial_sequence(#{connection.quote(table)}, 'id')"
           )
           next if seq.blank?
 
           max_id = connection.select_value("SELECT COALESCE(MAX(id), 0) FROM #{table}").to_i
-          target = [ID_CEILING, max_id + 1].max
+          target = [ceiling, max_id + 1].max
           last_value = connection.select_value("SELECT last_value FROM #{seq}").to_i
 
           connection.execute("ALTER SEQUENCE #{seq} RESTART WITH #{target}") if last_value < target

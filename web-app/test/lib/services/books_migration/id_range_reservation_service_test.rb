@@ -1,7 +1,8 @@
 require "test_helper"
 
 class Services::BooksMigration::IdRangeReservationServiceTest < ActiveSupport::TestCase
-  CEILING = Services::BooksMigration::ID_CEILING
+  USERS_CEILING = Services::BooksMigration::RESERVED_CEILINGS.fetch("users")
+  LISTS_CEILING = Services::BooksMigration::RESERVED_CEILINGS.fetch("user_lists")
 
   # Controlled low-id rows seeded into the reserved range. Fixtures use hashed
   # (pseudo-random) ids, so we insert known ids via raw SQL to assert relocation
@@ -20,38 +21,38 @@ class Services::BooksMigration::IdRangeReservationServiceTest < ActiveSupport::T
     result = Services::BooksMigration::IdRangeReservationService.call
     assert result[:success], "service should succeed: #{result[:error]}"
 
-    # PKs shifted by exactly the ceiling.
-    assert_equal RESERVED_USER_ID + CEILING, relocated_id("users", RESERVED_USER_ID)
-    assert_equal RESERVED_LIST_ID + CEILING, relocated_id("user_lists", RESERVED_LIST_ID)
+    # PKs shifted by their own table's ceiling.
+    assert_equal RESERVED_USER_ID + USERS_CEILING, relocated_id("users", RESERVED_USER_ID)
+    assert_equal RESERVED_LIST_ID + LISTS_CEILING, relocated_id("user_lists", RESERVED_LIST_ID)
 
-    # user_lists.user_id -> users remapped to the relocated parent.
-    assert_equal RESERVED_USER_ID + CEILING,
-      @conn.select_value("SELECT user_id FROM user_lists WHERE id = #{RESERVED_LIST_ID + CEILING}").to_i
+    # user_lists.user_id -> users remapped to the relocated parent (users ceiling).
+    assert_equal RESERVED_USER_ID + USERS_CEILING,
+      @conn.select_value("SELECT user_id FROM user_lists WHERE id = #{RESERVED_LIST_ID + LISTS_CEILING}").to_i
 
-    # lists.submitted_by_id -> users remapped.
-    assert_equal RESERVED_USER_ID + CEILING,
+    # lists.submitted_by_id -> users remapped (users ceiling).
+    assert_equal RESERVED_USER_ID + USERS_CEILING,
       @conn.select_value("SELECT submitted_by_id FROM lists WHERE id = #{RESERVED_OTHER_LIST_ID}").to_i
 
-    # user_list_items.user_list_id -> user_lists remapped (FK integrity: parent exists).
-    assert_equal RESERVED_LIST_ID + CEILING,
+    # user_list_items.user_list_id -> user_lists remapped (user_lists ceiling; FK integrity: parent exists).
+    assert_equal RESERVED_LIST_ID + LISTS_CEILING,
       @conn.select_value("SELECT user_list_id FROM user_list_items WHERE id = #{RESERVED_ITEM_ID}").to_i
   end
 
   test "leaves no users or user_lists rows below the ceiling" do
     Services::BooksMigration::IdRangeReservationService.call
 
-    assert_equal 0, @conn.select_value("SELECT COUNT(*) FROM users WHERE id < #{CEILING}").to_i
-    assert_equal 0, @conn.select_value("SELECT COUNT(*) FROM user_lists WHERE id < #{CEILING}").to_i
+    assert_equal 0, @conn.select_value("SELECT COUNT(*) FROM users WHERE id < #{USERS_CEILING}").to_i
+    assert_equal 0, @conn.select_value("SELECT COUNT(*) FROM user_lists WHERE id < #{LISTS_CEILING}").to_i
   end
 
   test "next User and UserList creates land at or above the ceiling" do
     Services::BooksMigration::IdRangeReservationService.call
 
     user = User.create!(email: "post-migration@example.com", role: :user)
-    assert_operator user.id, :>=, CEILING
+    assert_operator user.id, :>=, USERS_CEILING
 
     list = Games::UserList.create!(name: "Post Migration", list_type: :custom, user: user)
-    assert_operator list.id, :>=, CEILING
+    assert_operator list.id, :>=, LISTS_CEILING
   end
 
   test "is idempotent: a second run is a no-op and does not error" do
@@ -88,7 +89,8 @@ class Services::BooksMigration::IdRangeReservationServiceTest < ActiveSupport::T
 
   # `id + ceiling` for a row originally seeded at `original_id`, or nil if absent.
   def relocated_id(table, original_id)
-    @conn.select_value("SELECT id FROM #{table} WHERE id = #{original_id + CEILING}")&.to_i
+    ceiling = Services::BooksMigration::RESERVED_CEILINGS.fetch(table)
+    @conn.select_value("SELECT id FROM #{table} WHERE id = #{original_id + ceiling}")&.to_i
   end
 
   def seed_reserved_range_rows

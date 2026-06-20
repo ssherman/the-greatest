@@ -1,7 +1,8 @@
 class ReserveBooksIdRanges < ActiveRecord::Migration[8.1]
   # Reserves the low PK range on `users`/`user_lists` for the future books
   # import (preserves original book IDs with zero collisions). Relocates the
-  # handful of existing new-app rows up by ID_CEILING and bumps both sequences.
+  # handful of existing new-app rows up by each table's reserved ceiling and
+  # bumps both sequences.
   # See docs/specs/completed/books-migration-01-id-range-reservation.md.
   #
   # Idempotent — safe to re-run. Note: db/schema.rb does NOT capture sequence
