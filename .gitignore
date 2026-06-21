@@ -43,3 +43,5 @@ terraform.rc
 
 # Ignore lock file (debatable - see note below)
 # .terraform.lock.hcl
+# Local DB dumps pulled from S3 by bin/refresh-dev-db.sh
+postgres_*_backup_*.sql.gz
