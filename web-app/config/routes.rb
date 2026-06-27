@@ -245,6 +245,10 @@ Rails.application.routes.draw do
     to: "user_list_items#destroy",
     as: :user_list_item
 
+  # Type-scoped typeahead for the "add item from list page" search box (02e).
+  # Signed-in, never cached; scoped by listable_type (e.g. Music::Album).
+  get "listable_search", to: "listable_searches#index", as: :listable_search
+
   # My Lists read surface (Phase A) — global, never cached, per-domain layout
   # resolved from Current.domain in the controller. Owner-only HTML + CSV.
   get "my/lists", to: "my_lists#index", as: :my_lists

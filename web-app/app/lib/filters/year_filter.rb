@@ -4,7 +4,7 @@ module Filters
     RANGE_PATTERN = /^(\d{4})-(\d{4})$/
     SINGLE_PATTERN = /^(\d{4})$/
 
-    Result = Struct.new(:start_year, :end_year, :display, :type, keyword_init: true)
+    Result = Struct.new(:start_year, :end_year, :display, :type)
 
     def self.parse(param, mode: nil)
       return nil if param.blank?

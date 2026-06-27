@@ -1,7 +1,7 @@
 module Music
   class Artist
     class Merger
-      Result = Struct.new(:success?, :data, :errors, keyword_init: true)
+      Result = Struct.new(:success?, :data, :errors)
 
       attr_reader :source_artist, :target_artist, :stats
 

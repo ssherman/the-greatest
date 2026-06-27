@@ -118,7 +118,7 @@ namespace :music do
       puts "\nTotal songs in items_json: #{songs.length}"
 
       song_ids = songs.map { |s| s["song_id"] }.compact
-      song_id_counts = song_ids.group_by(&:itself).transform_values(&:count)
+      song_id_counts = song_ids.tally
       duplicates_by_song_id = song_id_counts.select { |k, v| v > 1 }
 
       if duplicates_by_song_id.any?
@@ -132,7 +132,7 @@ namespace :music do
       end
 
       mb_ids = songs.map { |s| s["mb_recording_id"] }.compact
-      mb_id_counts = mb_ids.group_by(&:itself).transform_values(&:count)
+      mb_id_counts = mb_ids.tally
       duplicates_by_mb_id = mb_id_counts.select { |k, v| v > 1 }
 
       if duplicates_by_mb_id.any?

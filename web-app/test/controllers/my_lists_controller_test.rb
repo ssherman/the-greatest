@@ -93,6 +93,13 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Favorite Albums"
   end
 
+  test "show wraps the item count and list in the list_items turbo frame so adds reload only it" do
+    sign_in_as(@user, stub_auth: true)
+    get my_list_path(@albums_favorites)
+    assert_response :success
+    assert_select "turbo-frame#list_items [data-testid='list-item-count']"
+  end
+
   test "non-owner gets a 404" do
     host! Rails.application.config.domains[:games]
     sign_in_as(@user, stub_auth: true)
