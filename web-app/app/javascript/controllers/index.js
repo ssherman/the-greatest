@@ -31,6 +31,9 @@ application.register("shared-modal", SharedModalController)
 import ToastController from "./toast_controller"
 application.register("toast", ToastController)
 
+import UserListAddItemController from "./user_list_add_item_controller"
+application.register("user-list-add-item", UserListAddItemController)
+
 import UserListModalController from "./user_list_modal_controller"
 application.register("user-list-modal", UserListModalController)
 

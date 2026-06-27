@@ -1,0 +1,16 @@
+<div class="mb-6 max-w-xl"
+     data-controller="user-list-add-item"
+     data-action="autocomplete:selected->user-list-add-item#add"
+     data-user-list-add-item-user-list-id-value="<%= list.id %>"
+     data-user-list-add-item-list-name-value="<%= list.name %>"
+     data-testid="add-item-search">
+  <label class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-1 block">
+    Add to this list
+  </label>
+  <%= render AutocompleteComponent.new(
+        name: "add_listable_id",
+        url: search_url,
+        placeholder: placeholder,
+        min_length: 2
+      ) %>
+</div>

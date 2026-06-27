@@ -8,7 +8,7 @@ module Games
       end
 
       def fields(*names)
-        self.class.new(@clauses.merge(fields: names.map(&:to_s).join(", ")))
+        self.class.new(@clauses.merge(fields: names.join(", ")))
       end
 
       def fields_all
@@ -16,7 +16,7 @@ module Games
       end
 
       def exclude(*names)
-        self.class.new(@clauses.merge(exclude: names.map(&:to_s).join(", ")))
+        self.class.new(@clauses.merge(exclude: names.join(", ")))
       end
 
       def where(conditions)

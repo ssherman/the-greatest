@@ -20,7 +20,6 @@
         ← My Lists
       <% end %>
       <h1 class="text-3xl font-bold"><%= @list.name %></h1>
-      <p class="text-sm text-base-content/60"><%= pluralize(@pagy.count, "item") %></p>
     </div>
 
     <div class="flex flex-wrap items-center gap-x-6 gap-y-3" data-testid="list-toolbar">
@@ -56,46 +55,56 @@
     </div>
   </div>
 
-  <% if @pagy.count.zero? %>
-    <div class="text-center py-16" data-testid="empty-list">
-      <p class="text-base-content/70">No items in this list yet.</p>
-    </div>
-  <% else %>
-    <% if @pagy.pages > 1 %>
-      <div class="flex justify-center mb-6"><%== @pagy.series_nav %></div>
-    <% end %>
+  <%= render UserLists::Show::AddItemComponent.new(list: @list) %>
 
-    <% if table_layout %>
-      <div class="overflow-x-auto">
-        <table class="table">
-          <thead>
-            <tr>
-              <th class="text-center">#</th>
-              <th>Title</th>
-              <th>By</th>
-              <th>Year</th>
-              <% if show_completed %><th>Completed</th><% end %>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            <% @items.each do |item| %>
-              <%= render UserLists::Show::ItemComponent.new(item: item, view_mode: @view_mode, position: item.position) %>
-            <% end %>
-          </tbody>
-        </table>
+  <%# Only this frame reloads after an add (user-list-add-item controller calls %>
+  <%# frame.reload), so the page doesn't flash and the success toast stays up. %>
+  <%= turbo_frame_tag "list_items" do %>
+    <p class="text-sm text-base-content/60 mb-4" data-testid="list-item-count">
+      <%= pluralize(@pagy.count, "item") %>
+    </p>
+
+    <% if @pagy.count.zero? %>
+      <div class="text-center py-16" data-testid="empty-list">
+        <p class="text-base-content/70">No items in this list yet.</p>
       </div>
     <% else %>
-      <% container_class = (@view_mode == "grid_view") ? "grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "space-y-6" %>
-      <div class="<%= container_class %>">
-        <% @items.each do |item| %>
-          <%= render UserLists::Show::ItemComponent.new(item: item, view_mode: @view_mode, position: item.position) %>
-        <% end %>
-      </div>
-    <% end %>
+      <% if @pagy.pages > 1 %>
+        <div class="flex justify-center mb-6"><%== @pagy.series_nav %></div>
+      <% end %>
 
-    <% if @pagy.pages > 1 %>
-      <div class="flex justify-center mt-6"><%== @pagy.series_nav %></div>
+      <% if table_layout %>
+        <div class="overflow-x-auto">
+          <table class="table">
+            <thead>
+              <tr>
+                <th class="text-center">#</th>
+                <th>Title</th>
+                <th>By</th>
+                <th>Year</th>
+                <% if show_completed %><th>Completed</th><% end %>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <% @items.each do |item| %>
+                <%= render UserLists::Show::ItemComponent.new(item: item, view_mode: @view_mode, position: item.position) %>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% else %>
+        <% container_class = (@view_mode == "grid_view") ? "grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "space-y-6" %>
+        <div class="<%= container_class %>">
+          <% @items.each do |item| %>
+            <%= render UserLists::Show::ItemComponent.new(item: item, view_mode: @view_mode, position: item.position) %>
+          <% end %>
+        </div>
+      <% end %>
+
+      <% if @pagy.pages > 1 %>
+        <div class="flex justify-center mt-6"><%== @pagy.series_nav %></div>
+      <% end %>
     <% end %>
   <% end %>
 </div>

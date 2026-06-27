@@ -1,0 +1,10 @@
+# Standard (RuboCop) configuration overrides.
+
+ignore:
+  # On Ruby 3.2+, Standard's Style/RedundantStructKeywordInit flags
+  # `Struct.new(..., keyword_init: true)` as redundant. We keep it on purpose:
+  # the Service Pattern in AGENTS.md mandates keyword-only Result structs so a
+  # caller can never construct one positionally and silently scramble fields.
+  # Disable the cop project-wide to honor that documented contract.
+  - "**/*":
+    - Style/RedundantStructKeywordInit
