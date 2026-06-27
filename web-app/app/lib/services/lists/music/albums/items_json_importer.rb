@@ -3,7 +3,7 @@ module Services
     module Music
       module Albums
         class ItemsJsonImporter
-          Result = Struct.new(:success, :data, :message, :imported_count, :created_directly_count, :skipped_count, :error_count)
+          Result = Struct.new(:success, :data, :message, :imported_count, :created_directly_count, :skipped_count, :error_count, keyword_init: true)
 
           def self.call(list:)
             new(list: list).call

@@ -2,7 +2,7 @@
 
 module ItemRankings
   class Calculator
-    Result = Struct.new(:success?, :data, :errors)
+    Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
     attr_reader :ranking_configuration
 

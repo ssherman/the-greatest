@@ -4,7 +4,7 @@ module Services
   module Music
     module Songs
       class RecordingIdEnricher
-        Result = Struct.new(:success?, :data, :errors)
+        Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
         SEARCH_LIMIT = 50
 

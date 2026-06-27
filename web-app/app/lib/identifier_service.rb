@@ -2,7 +2,7 @@
 # Provides CRUD operations and lookup methods for external identifiers
 class IdentifierService
   # Result object for service responses
-  Result = Struct.new(:success?, :data, :errors)
+  Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
   # Add an identifier to an object
   # @param identifiable [ActiveRecord::Base] The object to add identifier to
