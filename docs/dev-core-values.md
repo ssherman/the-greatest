@@ -71,14 +71,15 @@
 ## 5. Skinny Models, Fat Services
 - **Model responsibilities**: Models handle ONLY validations, associations, and scopes
 - **Service objects**: Extract all business logic into services
-- **Service organization**: Namespace services by domain
+- **Service organization**: Services live under `app/lib/services/`, wrapped in the `Services`
+  module and namespaced by domain
   ```
-  app/services/
-    books/
-      import_service.rb
-      metadata_enrichment_service.rb
-    # Shared services
-    recommendation_service.rb
+  app/lib/services/
+    music/
+      amazon_product_service.rb   # Services::Music::AmazonProductService
+    lists/
+      import_service.rb           # Services::Lists::ImportService
+    authentication_service.rb     # Services::AuthenticationService (shared)
   ```
 
 ## 6. Multi-Domain Architecture
