@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_01_062742) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_01_063230) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -109,6 +109,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_062742) do
     t.index ["first_published_year"], name: "index_books_books_on_first_published_year"
     t.index ["original_language_id"], name: "index_books_books_on_original_language_id"
     t.index ["slug"], name: "index_books_books_on_slug", unique: true
+  end
+
+  create_table "books_credits", force: :cascade do |t|
+    t.bigint "author_id", null: false
+    t.datetime "created_at", null: false
+    t.bigint "creditable_id", null: false
+    t.string "creditable_type", null: false
+    t.integer "position"
+    t.integer "role", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["author_id", "role"], name: "index_books_credits_on_author_id_and_role"
+    t.index ["author_id"], name: "index_books_credits_on_author_id"
+    t.index ["creditable_type", "creditable_id"], name: "index_books_credits_on_creditable"
   end
 
   create_table "books_editions", force: :cascade do |t|
@@ -733,6 +746,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_062742) do
   add_foreign_key "books_book_authors", "books_books", column: "book_id"
   add_foreign_key "books_books", "books_editions", column: "default_edition_id"
   add_foreign_key "books_books", "languages", column: "original_language_id"
+  add_foreign_key "books_credits", "books_authors", column: "author_id"
   add_foreign_key "books_editions", "books_books", column: "book_id"
   add_foreign_key "books_editions", "languages"
   add_foreign_key "categories", "categories", column: "parent_id"

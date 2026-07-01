@@ -28,6 +28,7 @@ class Books::Author < ApplicationRecord
 
   enum :kind, { person: 0, organization: 1, pseudonym: 2, collective: 3 }
 
+  has_many :credits, class_name: "Books::Credit", dependent: :destroy
   has_many :book_authors, class_name: "Books::BookAuthor", dependent: :destroy
   has_many :books, through: :book_authors, class_name: "Books::Book"
   has_many :identifiers, as: :identifiable, dependent: :destroy
