@@ -4,7 +4,7 @@
 #
 #  id                   :bigint           not null, primary key
 #  alternate_titles     :string           default([]), not null, is an Array
-#  book_kind            :integer          default(0), not null
+#  book_kind            :integer          default("standalone"), not null
 #  description          :text
 #  first_published_year :integer
 #  slug                 :string           not null
@@ -13,18 +13,21 @@
 #  title                :string           not null
 #  created_at           :datetime         not null
 #  updated_at           :datetime         not null
+#  default_edition_id   :bigint
 #  original_language_id :bigint
 #
 # Indexes
 #
 #  index_books_books_on_alternate_titles      (alternate_titles) USING gin
 #  index_books_books_on_book_kind             (book_kind)
+#  index_books_books_on_default_edition_id    (default_edition_id)
 #  index_books_books_on_first_published_year  (first_published_year)
 #  index_books_books_on_original_language_id  (original_language_id)
 #  index_books_books_on_slug                  (slug) UNIQUE
 #
 # Foreign Keys
 #
+#  fk_rails_...  (default_edition_id => books_editions.id)
 #  fk_rails_...  (original_language_id => languages.id)
 #
 class Books::Book < ApplicationRecord
@@ -36,6 +39,8 @@ class Books::Book < ApplicationRecord
   enum :book_kind, { standalone: 0, collection: 1 }
 
   belongs_to :original_language, class_name: "Language", optional: true
+  belongs_to :default_edition, class_name: "Books::Edition", optional: true
+  has_many :editions, class_name: "Books::Edition", dependent: :destroy
 
   has_many :identifiers, as: :identifiable, dependent: :destroy
   has_many :ai_chats, as: :parent, dependent: :destroy
