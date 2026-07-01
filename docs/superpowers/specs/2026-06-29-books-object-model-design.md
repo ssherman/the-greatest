@@ -175,7 +175,7 @@ broadly-defined "Author"). The **role is always on the relationship** (`BookAuth
 author); `has_many :author_relationships` (+ inverse). Shared polymorphics: `identifiers`
 (**the §6 #3 fix** — VIAF/ISNI/Wikidata/OpenLibrary/Goodreads/LibraryThing/LCNAF, replacing the lone
 `wikipedia_url` column), `images` (photo), `external_links`, `category_items`/`categories`,
-`ranked_items` (authors are rankable — "Greatest Authors"), `ai_chats`. **Ranked & listable.**
+`ranked_items` (authors are rankable — "Greatest Authors"), `ai_chats`. **Author ranking/lists backend deferred — §12;** ships a forward-looking `ranked_items` (like `Music::Artist`); list associations omitted until the author-specific config/list types exist.
 
 ### 4.4 `Books::Series` — grouping/navigation (NOT ranked, NOT listed)
 
@@ -364,11 +364,11 @@ here. **The column is created in this spec; the actual data migration** (legacy
 | Cover / photo | `Image` (+ `primary_image`) | Edition (cover), Author (photo); Book optional canonical override → display falls back `book.primary_image → default_edition cover` |
 | Buy / info links | `ExternalLink` | Edition (format-specific buy links), Book/Author (info links) — retires `primary_amazon_url`/`primary_bookshop_org_url` |
 | Genre / subject / origin | `CategoryItem` → `Books::Category` (STI) | Book, Author (origin = `location` type) |
-| Curated / user lists | `ListItem` / `UserListItem` | Book, Author only |
-| Rankings | `RankedItem` → `Books::RankingConfiguration` | Book, Author only |
+| Curated / user lists | `ListItem` / `UserListItem` | **Book** (Author lists deferred — §12) |
+| Rankings | `RankedItem` → `Books::RankingConfiguration` | **Book** (Author ranking deferred — §12) |
 | Ranking penalties | `Penalty` (STI `Books::Penalty`) | existing list-penalty system |
 | AI enrichment | `AiChat` | all entities |
-| Search | `SearchIndexable` + `as_indexed_json` | Book, Author, Series |
+| Search | `as_indexed_json` only — indexing backend deferred (§12) | Book, Author, Series |
 
 ## 11. How this resolves the legacy issues
 
@@ -399,6 +399,8 @@ here. **The column is created in this spec; the actual data migration** (legacy
    (public beta) to the app's hostname→site switch. Deployment/DNS task, independent of this model.
 4. **Public UI, controllers, ViewComponents, Avo admin resources.**
 5. **`Publisher`** (entity or `Edition.publisher_name` string) — add when import data arrives.
+6. **Books search backend**: OpenSearch index classes (`Search::Books::{Book,Author,Series}Index`) + wiring the types into `Search::IndexerJob`. `SearchIndexable` is intentionally NOT included on the books models yet — it would enqueue `SearchIndexRequest` rows that nothing processes (and never index books). `as_indexed_json` is retained, ready for when the backend lands.
+7. **Author ranking & lists**: `Books::Authors::RankingConfiguration` + `Books::Authors::List` STI types plus `RankedItem`/`ListItem` validator cases, to make `Books::Author` genuinely rankable/listable. Author currently ships only a forward-looking `ranked_items` (matching `Music::Artist`); the list associations were removed until this backend exists.
 
 ## 13. Implementation phasing (for the plan)
 

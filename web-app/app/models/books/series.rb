@@ -18,11 +18,9 @@
 #
 # Foreign Keys
 #
-#  fk_rails_...  (representative_book_id => books_books.id)
+#  fk_rails_...  (representative_book_id => books_books.id) ON DELETE => nullify
 #
 class Books::Series < ApplicationRecord
-  include SearchIndexable
-
   extend FriendlyId
   friendly_id :title, use: [ :slugged, :finders ]
 

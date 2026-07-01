@@ -18,7 +18,7 @@
 #
 # Foreign Keys
 #
-#  fk_rails_...  (representative_book_id => books_books.id)
+#  fk_rails_...  (representative_book_id => books_books.id) ON DELETE => nullify
 #
 asoiaf:
   title: A Song of Ice and Fire

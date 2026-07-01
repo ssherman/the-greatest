@@ -20,7 +20,7 @@ require "test_helper"
 #
 # Foreign Keys
 #
-#  fk_rails_...  (representative_book_id => books_books.id)
+#  fk_rails_...  (representative_book_id => books_books.id) ON DELETE => nullify
 #
 module Books
   class SeriesTest < ActiveSupport::TestCase
@@ -41,6 +41,14 @@ module Books
 
     test "representative_book is optional" do
       assert_nil books_series(:asoiaf).representative_book
+    end
+
+    test "destroying a representative book nullifies the link instead of raising" do
+      series = Books::Series.create!(title: "Temp Series")
+      book = Books::Book.create!(title: "Representative Book")
+      series.update!(representative_book: book)
+      assert_nothing_raised { book.destroy }
+      assert_nil series.reload.representative_book_id
     end
   end
 end
