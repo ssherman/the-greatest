@@ -22,17 +22,32 @@ class Identifier < ApplicationRecord
 
   # Enums - Domain-prefixed identifier types
   enum :identifier_type, {
-    # Books
-    books_isbn10: 0,
-    books_isbn13: 1,
-    books_asin: 2,
-    books_ean13: 3,
-    books_goodreads_id: 4,
-    books_librarything_id: 5,
-    books_openlibrary_id: 6,
-    books_bookshop_org_id: 7,
-    books_worldcat_id: 8,
-    books_google_books_id: 9,
+    # Books - Work level (Books::Book)
+    books_work_oclc_id: 0,
+    books_work_wikidata_qid: 1,
+    books_work_openlibrary_id: 2,
+    books_work_goodreads_id: 3,
+    books_work_librarything_id: 4,
+
+    # Books - Edition level (Books::Edition)
+    books_edition_isbn13: 10,
+    books_edition_isbn10: 11,
+    books_edition_asin: 12,
+    books_edition_ean13: 13,
+    books_edition_oclc_number: 14,
+    books_edition_goodreads_id: 15,
+    books_edition_openlibrary_id: 16,
+    books_edition_google_id: 17,
+    books_edition_bookshop_org_id: 18,
+
+    # Books - Author level (Books::Author)
+    books_author_viaf: 30,
+    books_author_isni: 31,
+    books_author_wikidata_qid: 32,
+    books_author_openlibrary_id: 33,
+    books_author_goodreads_id: 34,
+    books_author_librarything_id: 35,
+    books_author_lcnaf: 36,
 
     # Music - Artists
     music_musicbrainz_artist_id: 100,
@@ -61,8 +76,8 @@ class Identifier < ApplicationRecord
   # Validations
   validates :identifiable, presence: true
   validates :identifier_type, presence: true
-  validates :value, presence: true, length: {maximum: 255}
-  validates :value, uniqueness: {scope: [:identifiable_type, :identifiable_id, :identifier_type]}
+  validates :value, presence: true, length: { maximum: 255 }
+  validates :value, uniqueness: { scope: [ :identifiable_type, :identifiable_id, :identifier_type ] }
 
   # Scopes
   scope :for_domain, ->(domain) { where(identifiable_type: domain) }
@@ -70,28 +85,36 @@ class Identifier < ApplicationRecord
   scope :by_value, ->(value) { where(value: value) }
 
   # Class methods for domain filtering
-  def self.books
-    for_domain(["Books::Book"])
+  def self.books_works
+    for_domain([ "Books::Book" ])
+  end
+
+  def self.books_editions
+    for_domain([ "Books::Edition" ])
+  end
+
+  def self.books_authors
+    for_domain([ "Books::Author" ])
   end
 
   def self.music_artists
-    for_domain(["Music::Artist"])
+    for_domain([ "Music::Artist" ])
   end
 
   def self.music_albums
-    for_domain(["Music::Album"])
+    for_domain([ "Music::Album" ])
   end
 
   def self.music_songs
-    for_domain(["Music::Song"])
+    for_domain([ "Music::Song" ])
   end
 
   def self.music_releases
-    for_domain(["Music::Release"])
+    for_domain([ "Music::Release" ])
   end
 
   def self.games
-    for_domain(["Games::Game"])
+    for_domain([ "Games::Game" ])
   end
 
   # Instance methods
