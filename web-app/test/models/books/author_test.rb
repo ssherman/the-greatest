@@ -1,5 +1,27 @@
 require "test_helper"
 
+# == Schema Information
+#
+# Table name: books_authors
+#
+#  id              :bigint           not null, primary key
+#  alternate_names :string           default([]), not null, is an Array
+#  birth_year      :integer
+#  death_year      :integer
+#  description     :text
+#  kind            :integer          default("person"), not null
+#  name            :string           not null
+#  slug            :string           not null
+#  sort_name       :string
+#  created_at      :datetime         not null
+#  updated_at      :datetime         not null
+#
+# Indexes
+#
+#  index_books_authors_on_alternate_names  (alternate_names) USING gin
+#  index_books_authors_on_kind             (kind)
+#  index_books_authors_on_slug             (slug) UNIQUE
+#
 module Books
   class AuthorTest < ActiveSupport::TestCase
     test "is valid with a name" do

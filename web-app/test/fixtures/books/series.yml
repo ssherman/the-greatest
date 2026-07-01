@@ -1,3 +1,25 @@
+# == Schema Information
+#
+# Table name: books_series
+#
+#  id                     :bigint           not null, primary key
+#  description            :text
+#  slug                   :string           not null
+#  title                  :string           not null
+#  created_at             :datetime         not null
+#  updated_at             :datetime         not null
+#  representative_book_id :bigint
+#
+# Indexes
+#
+#  index_books_series_on_representative_book_id  (representative_book_id)
+#  index_books_series_on_slug                    (slug) UNIQUE
+#  index_books_series_on_title                   (title)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (representative_book_id => books_books.id)
+#
 asoiaf:
   title: A Song of Ice and Fire
   slug: a-song-of-ice-and-fire

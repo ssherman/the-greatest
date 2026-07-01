@@ -7,7 +7,7 @@ require "test_helper"
 #  id              :bigint           not null, primary key
 #  creditable_type :string           not null
 #  position        :integer
-#  role            :integer          default(0), not null
+#  role            :integer          default("translator"), not null
 #  created_at      :datetime         not null
 #  updated_at      :datetime         not null
 #  author_id       :bigint           not null

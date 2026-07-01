@@ -6,7 +6,7 @@
 #
 #  id               :bigint           not null, primary key
 #  book_binding     :integer
-#  edition_type     :integer          default(0), not null
+#  edition_type     :integer          default("standard"), not null
 #  metadata         :jsonb            not null
 #  page_count       :integer
 #  popularity       :integer
