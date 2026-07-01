@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_01_055517) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_01_060741) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -59,6 +59,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_055517) do
     t.bigint "user_id"
     t.index ["parent_type", "parent_id"], name: "index_ai_chats_on_parent"
     t.index ["user_id"], name: "index_ai_chats_on_user_id"
+  end
+
+  create_table "books_books", force: :cascade do |t|
+    t.string "alternate_titles", default: [], null: false, array: true
+    t.integer "book_kind", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.integer "first_published_year"
+    t.bigint "original_language_id"
+    t.string "slug", null: false
+    t.string "sort_title"
+    t.string "subtitle"
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.index ["alternate_titles"], name: "index_books_books_on_alternate_titles", using: :gin
+    t.index ["book_kind"], name: "index_books_books_on_book_kind"
+    t.index ["first_published_year"], name: "index_books_books_on_first_published_year"
+    t.index ["original_language_id"], name: "index_books_books_on_original_language_id"
+    t.index ["slug"], name: "index_books_books_on_slug", unique: true
   end
 
   create_table "categories", force: :cascade do |t|
@@ -659,6 +678,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_055517) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "ai_chats", "users"
+  add_foreign_key "books_books", "languages", column: "original_language_id"
   add_foreign_key "categories", "categories", column: "parent_id"
   add_foreign_key "category_items", "categories"
   add_foreign_key "domain_roles", "users"

@@ -1,0 +1,50 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+# == Schema Information
+#
+# Table name: books_books
+#
+#  id                   :bigint           not null, primary key
+#  alternate_titles     :string           default([]), not null, is an Array
+#  book_kind            :integer          default(0), not null
+#  description          :text
+#  first_published_year :integer
+#  slug                 :string           not null
+#  sort_title           :string
+#  subtitle             :string
+#  title                :string           not null
+#  created_at           :datetime         not null
+#  updated_at           :datetime         not null
+#  original_language_id :bigint
+#
+# Indexes
+#
+#  index_books_books_on_alternate_titles      (alternate_titles) USING gin
+#  index_books_books_on_book_kind             (book_kind)
+#  index_books_books_on_first_published_year  (first_published_year)
+#  index_books_books_on_original_language_id  (original_language_id)
+#  index_books_books_on_slug                  (slug) UNIQUE
+#
+# Foreign Keys
+#
+#  fk_rails_...  (original_language_id => languages.id)
+#
+war_and_peace:
+  title: War and Peace
+  slug: war-and-peace
+  first_published_year: 1869
+  original_language: russian
+  book_kind: 0
+  alternate_titles: ["Voyna i mir"]
+
+crime_and_punishment:
+  title: Crime and Punishment
+  slug: crime-and-punishment
+  first_published_year: 1866
+  original_language: russian
+  book_kind: 0
+
+combo_steinbeck:
+  title: Of Mice and Men / Cannery Row
+  slug: of-mice-and-men-cannery-row
+  book_kind: 1
