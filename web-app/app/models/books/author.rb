@@ -7,7 +7,7 @@
 #  birth_year      :integer
 #  death_year      :integer
 #  description     :text
-#  kind            :integer          default(0), not null
+#  kind            :integer          default("person"), not null
 #  name            :string           not null
 #  slug            :string           not null
 #  sort_name       :string
@@ -28,6 +28,8 @@ class Books::Author < ApplicationRecord
 
   enum :kind, { person: 0, organization: 1, pseudonym: 2, collective: 3 }
 
+  has_many :book_authors, class_name: "Books::BookAuthor", dependent: :destroy
+  has_many :books, through: :book_authors, class_name: "Books::Book"
   has_many :identifiers, as: :identifiable, dependent: :destroy
   has_many :ai_chats, as: :parent, dependent: :destroy
   has_many :images, as: :parent, dependent: :destroy
