@@ -468,12 +468,12 @@ git commit -m "Add Books::Book (Work) model"
 
 **Interfaces:**
 - Consumes: `Books::Book` (Task 3), `Language` (Task 1).
-- Produces: `Books::Edition` with `book_id`, `title`, `subtitle`, `edition_type` enum, `language_id`, `binding` enum, `publication_year`, `volume_number`, `page_count`, `popularity`, `metadata` jsonb; `belongs_to :book`, `belongs_to :language`. Adds `Books::Book#editions` and `#default_edition`. Table `books_editions`.
+- Produces: `Books::Edition` with `book_id`, `title`, `subtitle`, `edition_type` enum, `language_id`, `book_binding` enum, `publication_year`, `volume_number`, `page_count`, `popularity`, `metadata` jsonb; `belongs_to :book`, `belongs_to :language`. Adds `Books::Book#editions` and `#default_edition`. Table `books_editions`.
 
 - [ ] **Step 1: Generate the model**
 
 ```bash
-bin/rails generate model Books::Edition book:references title:string subtitle:string edition_type:integer language:references binding:integer publication_year:integer volume_number:integer page_count:integer popularity:integer metadata:jsonb
+bin/rails generate model Books::Edition book:references title:string subtitle:string edition_type:integer language:references book_binding:integer publication_year:integer volume_number:integer page_count:integer popularity:integer metadata:jsonb
 ```
 
 - [ ] **Step 2: Replace the migration** (`*_create_books_editions.rb`):
@@ -487,7 +487,7 @@ class CreateBooksEditions < ActiveRecord::Migration[8.0]
       t.string :subtitle
       t.integer :edition_type, null: false, default: 0
       t.references :language, foreign_key: {to_table: :languages}
-      t.integer :binding
+      t.integer :book_binding
       t.integer :publication_year
       t.integer :volume_number
       t.integer :page_count
@@ -568,7 +568,7 @@ wp_maude:
   title: War and Peace
   edition_type: 0
   language: english (Language)
-  binding: 1
+  book_binding: 1
   publication_year: 1990
 
 wp_volume_one:
@@ -589,7 +589,7 @@ Expected: FAIL (model lacks enums/associations).
 ```ruby
 class Books::Edition < ApplicationRecord
   enum :edition_type, {standard: 0, annotated: 1, illustrated: 2, critical: 3, abridged: 4, revised: 5}, prefix: :edition_type
-  enum :binding, {hardcover: 0, paperback: 1, mass_market: 2, ebook: 3, audiobook: 4, library_binding: 5, leather_bound: 6, other: 7}, prefix: true
+  enum :book_binding, {hardcover: 0, paperback: 1, mass_market: 2, ebook: 3, audiobook: 4, library_binding: 5, leather_bound: 6, other: 7}, prefix: :book_binding
 
   belongs_to :book, class_name: "Books::Book"
   belongs_to :language, class_name: "Language", optional: true
@@ -605,7 +605,7 @@ class Books::Edition < ApplicationRecord
   validates :edition_type, presence: true
 
   scope :complete, -> { where(volume_number: nil) }
-  scope :by_binding, ->(value) { where(binding: value) }
+  scope :by_binding, ->(value) { where(book_binding: value) }
 end
 ```
 

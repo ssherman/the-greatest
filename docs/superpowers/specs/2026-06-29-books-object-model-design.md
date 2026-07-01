@@ -135,7 +135,7 @@ user-facing discovery so `collection` books stay matchable by importers but hidd
 | `subtitle` | string | nullable |
 | `edition_type` | integer enum | `standard: 0, annotated: 1, illustrated: 2, critical: 3, abridged: 4, revised: 5` — the §7.3 fix (variants are Editions, not dup Works) |
 | `language_id` | bigint FK | → `languages`; **a translation is an Edition with a different language** + a `translator` Credit (§7.6 fix) |
-| `binding` | integer enum | `hardcover, paperback, mass_market, ebook, audiobook, library_binding, leather_bound, other` |
+| `book_binding` | integer enum | `hardcover, paperback, mass_market, ebook, audiobook, library_binding, leather_bound, other` (named `book_binding`, not `binding`, to avoid shadowing `Kernel#binding`) |
 | `publication_year` | integer | nullable |
 | `volume_number` | integer | nullable; set on volume-split editions; `null` = complete edition (§6, Scenario 2) |
 | `page_count` | integer | nullable |
