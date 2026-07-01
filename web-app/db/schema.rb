@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_01_061824) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_01_062313) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -59,6 +59,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_061824) do
     t.bigint "user_id"
     t.index ["parent_type", "parent_id"], name: "index_ai_chats_on_parent"
     t.index ["user_id"], name: "index_ai_chats_on_user_id"
+  end
+
+  create_table "books_authors", force: :cascade do |t|
+    t.string "alternate_names", default: [], null: false, array: true
+    t.integer "birth_year"
+    t.datetime "created_at", null: false
+    t.integer "death_year"
+    t.text "description"
+    t.integer "kind", default: 0, null: false
+    t.string "name", null: false
+    t.string "slug", null: false
+    t.string "sort_name"
+    t.datetime "updated_at", null: false
+    t.index ["alternate_names"], name: "index_books_authors_on_alternate_names", using: :gin
+    t.index ["kind"], name: "index_books_authors_on_kind"
+    t.index ["slug"], name: "index_books_authors_on_slug", unique: true
   end
 
   create_table "books_books", force: :cascade do |t|

@@ -1,0 +1,18 @@
+tolstoy:
+  name: Leo Tolstoy
+  slug: leo-tolstoy
+  kind: 0
+  birth_year: 1828
+  death_year: 1910
+  alternate_names: ["Lev Tolstoy", "Lev Nikolayevich Tolstoy"]
+
+king:
+  name: Stephen King
+  slug: stephen-king
+  kind: 0
+  birth_year: 1947
+
+bachman:
+  name: Richard Bachman
+  slug: richard-bachman
+  kind: 2
