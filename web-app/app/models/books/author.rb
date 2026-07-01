@@ -41,6 +41,10 @@ class Books::Author < ApplicationRecord
   has_many :category_items, as: :item, dependent: :destroy, inverse_of: :item
   has_many :categories, through: :category_items, class_name: "Books::Category"
   has_many :ranked_items, as: :item, dependent: :destroy
+  has_many :list_items, as: :listable, dependent: :destroy
+  has_many :lists, through: :list_items
+  has_many :user_list_items, as: :listable, dependent: :destroy
+  has_many :user_lists, through: :user_list_items
 
   validates :name, presence: true
   validates :kind, presence: true

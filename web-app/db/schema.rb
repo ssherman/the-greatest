@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_01_065235) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_01_071505) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -795,7 +795,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_065235) do
   add_foreign_key "books_book_authors", "books_books", column: "book_id"
   add_foreign_key "books_book_relationships", "books_books", column: "book_id"
   add_foreign_key "books_book_relationships", "books_books", column: "related_book_id"
-  add_foreign_key "books_books", "books_editions", column: "default_edition_id"
+  add_foreign_key "books_books", "books_editions", column: "default_edition_id", on_delete: :nullify
   add_foreign_key "books_books", "languages", column: "original_language_id"
   add_foreign_key "books_credits", "books_authors", column: "author_id"
   add_foreign_key "books_editions", "books_books", column: "book_id"

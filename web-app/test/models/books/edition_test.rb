@@ -58,5 +58,14 @@ module Books
     test "book has many editions" do
       assert_includes books_books(:war_and_peace).editions, books_editions(:wp_maude)
     end
+
+    test "complete scope excludes volume editions" do
+      assert_includes Books::Edition.complete, books_editions(:wp_maude)
+      assert_not_includes Books::Edition.complete, books_editions(:wp_volume_one)
+    end
+
+    test "by_binding scope filters" do
+      assert_includes Books::Edition.by_binding(:paperback), books_editions(:wp_maude)
+    end
   end
 end

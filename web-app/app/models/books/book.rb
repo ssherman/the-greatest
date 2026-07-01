@@ -27,7 +27,7 @@
 #
 # Foreign Keys
 #
-#  fk_rails_...  (default_edition_id => books_editions.id)
+#  fk_rails_...  (default_edition_id => books_editions.id) ON DELETE => nullify
 #  fk_rails_...  (original_language_id => languages.id)
 #
 class Books::Book < ApplicationRecord
@@ -44,6 +44,7 @@ class Books::Book < ApplicationRecord
   has_many :authors, through: :book_authors, class_name: "Books::Author"
   has_many :editions, class_name: "Books::Edition", dependent: :destroy
 
+  has_many :credits, as: :creditable, class_name: "Books::Credit", dependent: :destroy
   has_many :identifiers, as: :identifiable, dependent: :destroy
   has_many :ai_chats, as: :parent, dependent: :destroy
   has_many :images, as: :parent, dependent: :destroy
@@ -73,6 +74,7 @@ class Books::Book < ApplicationRecord
       title: title,
       alternate_titles: alternate_titles,
       author_names: authors.map(&:name),
+      author_ids: authors.map(&:id),
       category_ids: categories.active.pluck(:id)
     }
   end

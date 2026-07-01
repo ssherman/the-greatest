@@ -29,7 +29,7 @@
 #
 # Foreign Keys
 #
-#  fk_rails_...  (default_edition_id => books_editions.id)
+#  fk_rails_...  (default_edition_id => books_editions.id) ON DELETE => nullify
 #  fk_rails_...  (original_language_id => languages.id)
 #
 war_and_peace:

@@ -44,5 +44,20 @@ module Books
     test "by_role scope filters" do
       assert_includes Books::Credit.by_role(:translator), books_credits(:wp_translator)
     end
+
+    test "requires a creditable" do
+      credit = Books::Credit.new(author: books_authors(:garnett), role: :translator)
+      assert_not credit.valid?
+      assert_includes credit.errors[:creditable], "must exist"
+    end
+
+    test "ordered scope sorts by position then id" do
+      book = Books::Book.create!(title: "Credit Order Test Book")
+      c2 = Books::Credit.create!(author: books_authors(:tolstoy), creditable: book, role: :foreword, position: 2)
+      c1 = Books::Credit.create!(author: books_authors(:garnett), creditable: book, role: :translator, position: 1)
+      ordered = Books::Credit.where(creditable: book).ordered
+      assert_equal c1, ordered.first
+      assert_equal c2, ordered.last
+    end
   end
 end

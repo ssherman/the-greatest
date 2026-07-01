@@ -3,7 +3,7 @@
 # Table name: books_book_relationships
 #
 #  id              :bigint           not null, primary key
-#  relation_type   :integer          default(0), not null
+#  relation_type   :integer          default("contains"), not null
 #  created_at      :datetime         not null
 #  updated_at      :datetime         not null
 #  book_id         :bigint           not null

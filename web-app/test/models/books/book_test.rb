@@ -29,7 +29,7 @@ require "test_helper"
 #
 # Foreign Keys
 #
-#  fk_rails_...  (default_edition_id => books_editions.id)
+#  fk_rails_...  (default_edition_id => books_editions.id) ON DELETE => nullify
 #  fk_rails_...  (original_language_id => languages.id)
 #
 module Books
@@ -67,6 +67,27 @@ module Books
       assert_equal "War and Peace", json[:title]
       assert_kind_of Array, json[:alternate_titles]
       assert_kind_of Array, json[:author_names]
+    end
+
+    test "book has work-level credits" do
+      credit = Books::Credit.create!(author: books_authors(:tolstoy), creditable: books_books(:war_and_peace), role: :foreword)
+      assert_includes books_books(:war_and_peace).credits, credit
+    end
+
+    test "destroying a book with default_edition and a work-level credit succeeds" do
+      book = Books::Book.create!(title: "Ephemeral Book")
+      edition = book.editions.create!
+      book.update!(default_edition: edition)
+      credit = Books::Credit.create!(author: books_authors(:tolstoy), creditable: book, role: :foreword)
+      edition_id = edition.id
+      credit_id = credit.id
+      assert_nothing_raised { book.destroy }
+      assert_not Books::Edition.exists?(edition_id)
+      assert_not Books::Credit.exists?(credit_id)
+    end
+
+    test "as_indexed_json includes author_ids" do
+      assert_includes books_books(:war_and_peace).as_indexed_json[:author_ids], books_authors(:tolstoy).id
     end
   end
 end

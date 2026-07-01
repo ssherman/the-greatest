@@ -42,7 +42,7 @@ class Books::Series < ApplicationRecord
   before_validation :normalize_title
 
   def resolved_representative_book
-    representative_book || series_books.order(:position).first&.book
+    representative_book || series_books.first&.book
   end
 
   def as_indexed_json

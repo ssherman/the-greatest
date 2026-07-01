@@ -1,5 +1,27 @@
 require "test_helper"
 
+# == Schema Information
+#
+# Table name: books_book_relationships
+#
+#  id              :bigint           not null, primary key
+#  relation_type   :integer          default("contains"), not null
+#  created_at      :datetime         not null
+#  updated_at      :datetime         not null
+#  book_id         :bigint           not null
+#  related_book_id :bigint           not null
+#
+# Indexes
+#
+#  index_books_book_relationships_on_book_id          (book_id)
+#  index_books_book_relationships_on_related_book_id  (related_book_id)
+#  index_books_book_relationships_unique              (book_id,related_book_id,relation_type) UNIQUE
+#
+# Foreign Keys
+#
+#  fk_rails_...  (book_id => books_books.id)
+#  fk_rails_...  (related_book_id => books_books.id)
+#
 module Books
   class BookRelationshipTest < ActiveSupport::TestCase
     test "a collection contains component works" do

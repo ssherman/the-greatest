@@ -52,5 +52,9 @@ module Books
       assert_equal "Leo Tolstoy", json[:name]
       assert_kind_of Array, json[:alternate_names]
     end
+
+    test "author is listable" do
+      assert_equal [], books_authors(:tolstoy).list_items.to_a
+    end
   end
 end
