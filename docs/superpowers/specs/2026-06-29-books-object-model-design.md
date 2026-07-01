@@ -103,6 +103,7 @@ title/name normalization via `Services::Text::QuoteNormalizer`; Rails 8 enum syn
 | `title` | string | required |
 | `subtitle` | string | nullable |
 | `sort_title` | string | normalized for sorting ("Hobbit, The") |
+| `alternate_titles` | string[] | GIN-indexed. Variant/alternate title strings with **no** edition/ISBN data — especially the large dataset accumulated over years of legacy dupe-merges. The Work-level home for import-matching recall, mirroring `Author.alternate_names`; indexed into search. Alt titles that *do* have their own ISBN/edition data become `Edition`s instead (§8.3) |
 | `slug` | string | FriendlyId, unique |
 | `description` | text | single canonical description (replaces the legacy 4-description mess, §3.1). AI/import provenance lives in `AiChat` + `ExternalLink`, not extra columns |
 | `first_published_year` | integer | nullable; the Work's original year |
@@ -327,6 +328,20 @@ title); (4) fuzzy search + AI confirmation for the remainder. It will use a non-
 (tombstone/redirect via `merged_into_id`) with a `Books::BookMerge` audit trail. **None of this is
 in scope for the object-model spec** — those are additive columns/classes layered on later. See §12.
 
+### 8.3 Title recall — `alternate_titles` (this spec; data migration deferred)
+
+`Books::Book.alternate_titles` (string[], GIN-indexed; symmetric with `Author.alternate_names`)
+holds ISBN-less variant title strings — including the large dataset accumulated over years of legacy
+dupe-merges (each legacy merge folded the loser's title into the winner's `alternate_titles`). This
+is a proven recall aid that prevents duplicate creation on Goodreads/user imports where the incoming
+title doesn't exactly match, and it is indexed via `as_indexed_json`. It is a *recall* signal feeding
+steps 3–4 of the cascade (§8.2) — **not** the sole identity signal (the old site's weakness, legacy
+§7.1), because strong identifiers (steps 1–2) take priority and AI confirmation guards fuzzy matches.
+Alt titles that carry their own ISBN/edition data become `Edition`s; those that are just strings live
+here. **The column is created in this spec; the actual data migration** (legacy
+`books.alternate_titles` → new `books.alternate_titles`) **runs with the deferred data-import work
+(§12).**
+
 ## 9. Origin/nationality & language
 
 - **Origin/nationality** (the "Greatest French / Asian / Roman books" facet): modeled as
@@ -366,7 +381,7 @@ in scope for the object-model spec** — those are additive columns/classes laye
 | §6 #7 `Author#merge` loses metadata | Deferred to dedup spec; non-destructive redirect planned (§8.2) |
 | §6 #8 no author batch-dedup | Authors get identifiers + the same (deferred) redirect mechanism |
 | §6 #13–17 orphaned OpenLibrary/versions/nationalities/origin dupes | Clean-slate model; origin unified into `location` categories (§9) |
-| §7.1 chronic duplicate books | Identifier backbone (§8.1) + deferred deterministic cascade (§8.2), replacing fuzzy-only matching |
+| §7.1 chronic duplicate books | Identifier backbone (§8.1) + deferred deterministic cascade (§8.2), replacing fuzzy-*only* matching; `Book.alternate_titles` (§8.3) preserves the legacy alt-title dataset as a recall aid |
 | §7.2 no series / multi-volume modeling | `Series` + `SeriesBook` (Scenario 3); `volume_number` Editions (Scenario 2); representative-book resolution (§7) |
 | §7.3 variant expressions become dup Works | `Edition.edition_type` |
 | §7.4 combos pollute search | `book_kind: collection` + `selectable` scope; optional `contains` |
