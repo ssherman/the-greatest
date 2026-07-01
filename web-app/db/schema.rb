@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_01_063230) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_01_063730) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -59,6 +59,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_063230) do
     t.bigint "user_id"
     t.index ["parent_type", "parent_id"], name: "index_ai_chats_on_parent"
     t.index ["user_id"], name: "index_ai_chats_on_user_id"
+  end
+
+  create_table "books_author_relationships", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.bigint "from_author_id", null: false
+    t.integer "relation_type", default: 0, null: false
+    t.bigint "to_author_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["from_author_id", "to_author_id", "relation_type"], name: "index_books_author_relationships_unique", unique: true
+    t.index ["from_author_id"], name: "index_books_author_relationships_on_from_author_id"
+    t.index ["to_author_id"], name: "index_books_author_relationships_on_to_author_id"
   end
 
   create_table "books_authors", force: :cascade do |t|
@@ -742,6 +753,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_063230) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "ai_chats", "users"
+  add_foreign_key "books_author_relationships", "books_authors", column: "from_author_id"
+  add_foreign_key "books_author_relationships", "books_authors", column: "to_author_id"
   add_foreign_key "books_book_authors", "books_authors", column: "author_id"
   add_foreign_key "books_book_authors", "books_books", column: "book_id"
   add_foreign_key "books_books", "books_editions", column: "default_edition_id"

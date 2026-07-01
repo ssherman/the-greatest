@@ -28,6 +28,8 @@ class Books::Author < ApplicationRecord
 
   enum :kind, { person: 0, organization: 1, pseudonym: 2, collective: 3 }
 
+  has_many :author_relationships, class_name: "Books::AuthorRelationship", foreign_key: :from_author_id, dependent: :destroy
+  has_many :inverse_author_relationships, class_name: "Books::AuthorRelationship", foreign_key: :to_author_id, dependent: :destroy
   has_many :credits, class_name: "Books::Credit", dependent: :destroy
   has_many :book_authors, class_name: "Books::BookAuthor", dependent: :destroy
   has_many :books, through: :book_authors, class_name: "Books::Book"
