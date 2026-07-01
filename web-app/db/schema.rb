@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_01_063730) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_01_064321) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -153,6 +153,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_063730) do
     t.index ["edition_type"], name: "index_books_editions_on_edition_type"
     t.index ["language_id"], name: "index_books_editions_on_language_id"
     t.index ["volume_number"], name: "index_books_editions_on_volume_number"
+  end
+
+  create_table "books_series", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.bigint "representative_book_id"
+    t.string "slug", null: false
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.index ["representative_book_id"], name: "index_books_series_on_representative_book_id"
+    t.index ["slug"], name: "index_books_series_on_slug", unique: true
+    t.index ["title"], name: "index_books_series_on_title"
   end
 
   create_table "categories", force: :cascade do |t|
@@ -762,6 +774,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_063730) do
   add_foreign_key "books_credits", "books_authors", column: "author_id"
   add_foreign_key "books_editions", "books_books", column: "book_id"
   add_foreign_key "books_editions", "languages"
+  add_foreign_key "books_series", "books_books", column: "representative_book_id"
   add_foreign_key "categories", "categories", column: "parent_id"
   add_foreign_key "category_items", "categories"
   add_foreign_key "domain_roles", "users"
