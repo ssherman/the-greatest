@@ -56,6 +56,8 @@ class Books::Book < ApplicationRecord
   has_many :user_list_items, as: :listable, dependent: :destroy
   has_many :user_lists, through: :user_list_items
   has_many :ranked_items, as: :item, dependent: :destroy
+  has_many :series_books, class_name: "Books::SeriesBook", dependent: :destroy
+  has_many :series, through: :series_books, class_name: "Books::Series"
 
   validates :title, presence: true
 

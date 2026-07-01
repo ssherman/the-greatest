@@ -28,6 +28,9 @@ class Books::Series < ApplicationRecord
 
   belongs_to :representative_book, class_name: "Books::Book", optional: true
 
+  has_many :series_books, -> { order(:position) }, class_name: "Books::SeriesBook", dependent: :destroy
+  has_many :books, through: :series_books, class_name: "Books::Book"
+
   has_many :identifiers, as: :identifiable, dependent: :destroy
   has_many :images, as: :parent, dependent: :destroy
   has_one :primary_image, -> { where(primary: true) }, as: :parent, class_name: "Image"
@@ -37,6 +40,10 @@ class Books::Series < ApplicationRecord
   validates :title, presence: true
 
   before_validation :normalize_title
+
+  def resolved_representative_book
+    representative_book || series_books.order(:position).first&.book
+  end
 
   def as_indexed_json
     { title: title }

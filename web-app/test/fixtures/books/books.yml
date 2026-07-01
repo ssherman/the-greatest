@@ -51,3 +51,15 @@ combo_steinbeck:
   title: Of Mice and Men / Cannery Row
   slug: of-mice-and-men-cannery-row
   book_kind: 1
+
+got:
+  title: A Game of Thrones
+  slug: a-game-of-thrones
+  first_published_year: 1996
+  book_kind: 0
+
+clash:
+  title: A Clash of Kings
+  slug: a-clash-of-kings
+  first_published_year: 1998
+  book_kind: 0
