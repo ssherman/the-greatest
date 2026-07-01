@@ -564,18 +564,18 @@ end
 
 ```yaml
 wp_maude:
-  book: war_and_peace (Books::Book)
+  book: war_and_peace
   title: War and Peace
   edition_type: 0
-  language: english (Language)
+  language: english
   book_binding: 1
   publication_year: 1990
 
 wp_volume_one:
-  book: war_and_peace (Books::Book)
+  book: war_and_peace
   title: "War and Peace, Volume 1"
   edition_type: 0
-  language: english (Language)
+  language: english
   volume_number: 1
 ```
 
@@ -888,8 +888,8 @@ end
 
 ```yaml
 war_and_peace_tolstoy:
-  book: war_and_peace (Books::Book)
-  author: tolstoy (Books::Author)
+  book: war_and_peace
+  author: tolstoy
   position: 1
   role: 0
   credited_as: Lev Tolstoy
@@ -1031,7 +1031,7 @@ Replace `test/fixtures/books/credits.yml`:
 
 ```yaml
 wp_translator:
-  author: garnett (Books::Author)
+  author: garnett
   creditable: wp_maude (Books::Edition)
   role: 0
   position: 1
@@ -1153,8 +1153,8 @@ end
 
 ```yaml
 bachman_is_king:
-  from_author: bachman (Books::Author)
-  to_author: king (Books::Author)
+  from_author: bachman
+  to_author: king
   relation_type: 0
 ```
 
@@ -1434,20 +1434,20 @@ Replace `test/fixtures/books/series_books.yml`:
 
 ```yaml
 asoiaf_got:
-  series: asoiaf (Books::Series)
-  book: got (Books::Book)
+  series: asoiaf
+  book: got
   position: 1.0
   numbered: true
 
 asoiaf_novella:
-  series: asoiaf (Books::Series)
-  book: crime_and_punishment (Books::Book)
+  series: asoiaf
+  book: crime_and_punishment
   position: 1.5
   numbered: false
 
 asoiaf_clash:
-  series: asoiaf (Books::Series)
-  book: clash (Books::Book)
+  series: asoiaf
+  book: clash
   position: 2.0
   numbered: true
 ```
@@ -1601,13 +1601,13 @@ Replace `test/fixtures/books/book_relationships.yml`:
 
 ```yaml
 combo_contains_omam:
-  book: combo_steinbeck (Books::Book)
-  related_book: of_mice_and_men (Books::Book)
+  book: combo_steinbeck
+  related_book: of_mice_and_men
   relation_type: 0
 
 combo_contains_cannery:
-  book: combo_steinbeck (Books::Book)
-  related_book: cannery_row (Books::Book)
+  book: combo_steinbeck
+  related_book: cannery_row
   relation_type: 0
 ```
 
