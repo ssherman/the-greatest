@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_01_064754) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_01_065235) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -99,6 +99,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_064754) do
     t.index ["author_id"], name: "index_books_book_authors_on_author_id"
     t.index ["book_id", "author_id"], name: "index_books_book_authors_on_book_id_and_author_id", unique: true
     t.index ["book_id"], name: "index_books_book_authors_on_book_id"
+  end
+
+  create_table "books_book_relationships", force: :cascade do |t|
+    t.bigint "book_id", null: false
+    t.datetime "created_at", null: false
+    t.bigint "related_book_id", null: false
+    t.integer "relation_type", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["book_id", "related_book_id", "relation_type"], name: "index_books_book_relationships_unique", unique: true
+    t.index ["book_id"], name: "index_books_book_relationships_on_book_id"
+    t.index ["related_book_id"], name: "index_books_book_relationships_on_related_book_id"
   end
 
   create_table "books_books", force: :cascade do |t|
@@ -782,6 +793,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_01_064754) do
   add_foreign_key "books_author_relationships", "books_authors", column: "to_author_id"
   add_foreign_key "books_book_authors", "books_authors", column: "author_id"
   add_foreign_key "books_book_authors", "books_books", column: "book_id"
+  add_foreign_key "books_book_relationships", "books_books", column: "book_id"
+  add_foreign_key "books_book_relationships", "books_books", column: "related_book_id"
   add_foreign_key "books_books", "books_editions", column: "default_edition_id"
   add_foreign_key "books_books", "languages", column: "original_language_id"
   add_foreign_key "books_credits", "books_authors", column: "author_id"

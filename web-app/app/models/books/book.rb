@@ -58,6 +58,9 @@ class Books::Book < ApplicationRecord
   has_many :ranked_items, as: :item, dependent: :destroy
   has_many :series_books, class_name: "Books::SeriesBook", dependent: :destroy
   has_many :series, through: :series_books, class_name: "Books::Series"
+  has_many :book_relationships, class_name: "Books::BookRelationship", dependent: :destroy
+  has_many :related_books, through: :book_relationships, class_name: "Books::Book"
+  has_many :inverse_book_relationships, class_name: "Books::BookRelationship", foreign_key: :related_book_id, dependent: :destroy
 
   validates :title, presence: true
 
