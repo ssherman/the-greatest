@@ -56,5 +56,24 @@ module Books
     test "book as_indexed_json includes author names" do
       assert_includes books_books(:war_and_peace).as_indexed_json[:author_names], "Leo Tolstoy"
     end
+
+    # Search freshness: adding/removing authorship reindexes the book
+    test "creating a book author enqueues the book for reindexing" do
+      book = books_books(:crime_and_punishment)
+      author = books_authors(:garnett)
+
+      assert_difference -> { SearchIndexRequest.where(parent_type: "Books::Book", parent_id: book.id, action: SearchIndexRequest.actions[:index_item]).count }, 1 do
+        Books::BookAuthor.create!(book: book, author: author, position: 1)
+      end
+    end
+
+    test "destroying a book author enqueues the book for reindexing" do
+      book_author = books_book_authors(:war_and_peace_tolstoy)
+      book_id = book_author.book_id
+
+      assert_difference -> { SearchIndexRequest.where(parent_type: "Books::Book", parent_id: book_id, action: SearchIndexRequest.actions[:index_item]).count }, 1 do
+        book_author.destroy!
+      end
+    end
   end
 end
