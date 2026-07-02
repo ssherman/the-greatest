@@ -52,5 +52,29 @@ module Books
       assert_equal "Leo Tolstoy", json[:name]
       assert_kind_of Array, json[:alternate_names]
     end
+
+    # SearchIndexable concern tests
+    test "should create search index request on create" do
+      assert_difference "SearchIndexRequest.count", 1 do
+        Books::Author.create!(name: "Test Search Author")
+      end
+
+      request = SearchIndexRequest.last
+      assert_equal "Books::Author", request.parent_type
+      assert request.index_item?
+    end
+
+    test "should create search index request on destroy" do
+      author = books_authors(:garnett)
+
+      assert_difference "SearchIndexRequest.count", 1 do
+        author.destroy!
+      end
+
+      request = SearchIndexRequest.last
+      assert_equal author.id, request.parent_id
+      assert_equal "Books::Author", request.parent_type
+      assert request.unindex_item?
+    end
   end
 end

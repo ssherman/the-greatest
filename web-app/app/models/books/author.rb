@@ -21,11 +21,13 @@
 #  index_books_authors_on_slug             (slug) UNIQUE
 #
 class Books::Author < ApplicationRecord
+  include SearchIndexable
+
   extend FriendlyId
 
-  friendly_id :name, use: [:slugged, :finders]
+  friendly_id :name, use: [ :slugged, :finders ]
 
-  enum :kind, {person: 0, organization: 1, pseudonym: 2, collective: 3}
+  enum :kind, { person: 0, organization: 1, pseudonym: 2, collective: 3 }
 
   has_many :author_relationships, class_name: "Books::AuthorRelationship", foreign_key: :from_author_id, dependent: :destroy
   has_many :inverse_author_relationships, class_name: "Books::AuthorRelationship", foreign_key: :to_author_id, dependent: :destroy

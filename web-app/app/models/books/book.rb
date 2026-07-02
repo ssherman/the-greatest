@@ -31,6 +31,8 @@
 #  fk_rails_...  (original_language_id => languages.id)
 #
 class Books::Book < ApplicationRecord
+  include SearchIndexable
+
   extend FriendlyId
 
   friendly_id :title, use: [ :slugged, :finders ]

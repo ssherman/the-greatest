@@ -7,7 +7,7 @@ class Search::IndexerJob
     Rails.logger.info "Starting search indexing job"
 
     # Process each indexed model type
-    %w[Music::Artist Music::Album Music::Song Games::Game].each do |model_type|
+    %w[Music::Artist Music::Album Music::Song Games::Game Books::Book Books::Author].each do |model_type|
       process_requests_for_type(model_type)
     end
 
@@ -26,7 +26,7 @@ class Search::IndexerJob
     Rails.logger.info "Processing #{requests.size} search index requests for #{model_type}"
 
     # Group by parent and action to deduplicate - only process each item once per action
-    grouped_requests = requests.group_by { |r| [r.parent_type, r.parent_id, r.action] }
+    grouped_requests = requests.group_by { |r| [ r.parent_type, r.parent_id, r.action ] }
 
     Rails.logger.info "Deduplicated to #{grouped_requests.size} unique items for #{model_type}"
 
