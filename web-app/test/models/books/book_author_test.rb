@@ -86,5 +86,19 @@ module Books
 
       assert SearchIndexRequest.where(parent_type: "Books::Book", parent_id: book_id, action: SearchIndexRequest.actions[:unindex_item]).exists?
     end
+
+    test "reassigning a book author's book_id reindexes both the old and new book" do
+      old_book = Books::Book.create!(title: "Reassign Old Book")
+      new_book = Books::Book.create!(title: "Reassign New Book")
+      author = Books::Author.create!(name: "Reassigned Author")
+      book_author = Books::BookAuthor.create!(book: old_book, author: author, position: 1)
+
+      SearchIndexRequest.delete_all
+
+      book_author.update!(book: new_book)
+
+      assert SearchIndexRequest.where(parent_type: "Books::Book", parent_id: old_book.id, action: SearchIndexRequest.actions[:index_item]).exists?, "old book should be reindexed"
+      assert SearchIndexRequest.where(parent_type: "Books::Book", parent_id: new_book.id, action: SearchIndexRequest.actions[:index_item]).exists?, "new book should be reindexed"
+    end
   end
 end
