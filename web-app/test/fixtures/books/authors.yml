@@ -1,0 +1,45 @@
+# == Schema Information
+#
+# Table name: books_authors
+#
+#  id              :bigint           not null, primary key
+#  alternate_names :string           default([]), not null, is an Array
+#  birth_year      :integer
+#  death_year      :integer
+#  description     :text
+#  kind            :integer          default("person"), not null
+#  name            :string           not null
+#  slug            :string           not null
+#  sort_name       :string
+#  created_at      :datetime         not null
+#  updated_at      :datetime         not null
+#
+# Indexes
+#
+#  index_books_authors_on_alternate_names  (alternate_names) USING gin
+#  index_books_authors_on_kind             (kind)
+#  index_books_authors_on_slug             (slug) UNIQUE
+#
+tolstoy:
+  name: Leo Tolstoy
+  slug: leo-tolstoy
+  kind: 0
+  birth_year: 1828
+  death_year: 1910
+  alternate_names: ["Lev Tolstoy", "Lev Nikolayevich Tolstoy"]
+
+king:
+  name: Stephen King
+  slug: stephen-king
+  kind: 0
+  birth_year: 1947
+
+bachman:
+  name: Richard Bachman
+  slug: richard-bachman
+  kind: 2
+
+garnett:
+  name: Constance Garnett
+  slug: constance-garnett
+  kind: 0

@@ -1,0 +1,28 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+# == Schema Information
+#
+# Table name: books_author_relationships
+#
+#  id             :bigint           not null, primary key
+#  relation_type  :integer          default("pseudonym_of"), not null
+#  created_at     :datetime         not null
+#  updated_at     :datetime         not null
+#  from_author_id :bigint           not null
+#  to_author_id   :bigint           not null
+#
+# Indexes
+#
+#  index_books_author_relationships_on_from_author_id  (from_author_id)
+#  index_books_author_relationships_on_to_author_id    (to_author_id)
+#  index_books_author_relationships_unique             (from_author_id,to_author_id,relation_type) UNIQUE
+#
+# Foreign Keys
+#
+#  fk_rails_...  (from_author_id => books_authors.id)
+#  fk_rails_...  (to_author_id => books_authors.id)
+#
+bachman_is_king:
+  from_author: bachman
+  to_author: king
+  relation_type: 0

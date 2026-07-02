@@ -1,0 +1,44 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+# == Schema Information
+#
+# Table name: books_series_books
+#
+#  id             :bigint           not null, primary key
+#  numbered       :boolean          default(TRUE), not null
+#  position       :decimal(8, 2)
+#  position_label :string
+#  created_at     :datetime         not null
+#  updated_at     :datetime         not null
+#  book_id        :bigint           not null
+#  series_id      :bigint           not null
+#
+# Indexes
+#
+#  index_books_series_books_on_book_id                (book_id)
+#  index_books_series_books_on_series_id              (series_id)
+#  index_books_series_books_on_series_id_and_book_id  (series_id,book_id) UNIQUE
+#
+# Foreign Keys
+#
+#  fk_rails_...  (book_id => books_books.id)
+#  fk_rails_...  (series_id => books_series.id)
+#
+
+asoiaf_got:
+  series: asoiaf
+  book: got
+  position: 1.0
+  numbered: true
+
+asoiaf_novella:
+  series: asoiaf
+  book: crime_and_punishment
+  position: 1.5
+  numbered: false
+
+asoiaf_clash:
+  series: asoiaf
+  book: clash
+  position: 2.0
+  numbered: true

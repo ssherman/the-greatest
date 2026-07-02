@@ -1,0 +1,31 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+# == Schema Information
+#
+# Table name: books_credits
+#
+#  id              :bigint           not null, primary key
+#  creditable_type :string           not null
+#  position        :integer
+#  role            :integer          default("translator"), not null
+#  created_at      :datetime         not null
+#  updated_at      :datetime         not null
+#  author_id       :bigint           not null
+#  creditable_id   :bigint           not null
+#
+# Indexes
+#
+#  index_books_credits_on_author_id           (author_id)
+#  index_books_credits_on_author_id_and_role  (author_id,role)
+#  index_books_credits_on_creditable          (creditable_type,creditable_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (author_id => books_authors.id)
+#
+wp_translator:
+  author: garnett
+  creditable: wp_maude
+  creditable_type: Books::Edition
+  role: 0
+  position: 1

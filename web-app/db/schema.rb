@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_12_235510) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_01_163004) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -59,6 +59,136 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_12_235510) do
     t.bigint "user_id"
     t.index ["parent_type", "parent_id"], name: "index_ai_chats_on_parent"
     t.index ["user_id"], name: "index_ai_chats_on_user_id"
+  end
+
+  create_table "books_author_relationships", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.bigint "from_author_id", null: false
+    t.integer "relation_type", default: 0, null: false
+    t.bigint "to_author_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["from_author_id", "to_author_id", "relation_type"], name: "index_books_author_relationships_unique", unique: true
+    t.index ["from_author_id"], name: "index_books_author_relationships_on_from_author_id"
+    t.index ["to_author_id"], name: "index_books_author_relationships_on_to_author_id"
+  end
+
+  create_table "books_authors", force: :cascade do |t|
+    t.string "alternate_names", default: [], null: false, array: true
+    t.integer "birth_year"
+    t.datetime "created_at", null: false
+    t.integer "death_year"
+    t.text "description"
+    t.integer "kind", default: 0, null: false
+    t.string "name", null: false
+    t.string "slug", null: false
+    t.string "sort_name"
+    t.datetime "updated_at", null: false
+    t.index ["alternate_names"], name: "index_books_authors_on_alternate_names", using: :gin
+    t.index ["kind"], name: "index_books_authors_on_kind"
+    t.index ["slug"], name: "index_books_authors_on_slug", unique: true
+  end
+
+  create_table "books_book_authors", force: :cascade do |t|
+    t.bigint "author_id", null: false
+    t.bigint "book_id", null: false
+    t.datetime "created_at", null: false
+    t.string "credited_as"
+    t.integer "position"
+    t.integer "role", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["author_id"], name: "index_books_book_authors_on_author_id"
+    t.index ["book_id", "author_id"], name: "index_books_book_authors_on_book_id_and_author_id", unique: true
+    t.index ["book_id"], name: "index_books_book_authors_on_book_id"
+  end
+
+  create_table "books_book_relationships", force: :cascade do |t|
+    t.bigint "book_id", null: false
+    t.datetime "created_at", null: false
+    t.bigint "related_book_id", null: false
+    t.integer "relation_type", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["book_id", "related_book_id", "relation_type"], name: "index_books_book_relationships_unique", unique: true
+    t.index ["book_id"], name: "index_books_book_relationships_on_book_id"
+    t.index ["related_book_id"], name: "index_books_book_relationships_on_related_book_id"
+  end
+
+  create_table "books_books", force: :cascade do |t|
+    t.string "alternate_titles", default: [], null: false, array: true
+    t.integer "book_kind", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.bigint "default_edition_id"
+    t.text "description"
+    t.integer "first_published_year"
+    t.bigint "original_language_id"
+    t.string "slug", null: false
+    t.string "sort_title"
+    t.string "subtitle"
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.index ["alternate_titles"], name: "index_books_books_on_alternate_titles", using: :gin
+    t.index ["book_kind"], name: "index_books_books_on_book_kind"
+    t.index ["default_edition_id"], name: "index_books_books_on_default_edition_id"
+    t.index ["first_published_year"], name: "index_books_books_on_first_published_year"
+    t.index ["original_language_id"], name: "index_books_books_on_original_language_id"
+    t.index ["slug"], name: "index_books_books_on_slug", unique: true
+  end
+
+  create_table "books_credits", force: :cascade do |t|
+    t.bigint "author_id", null: false
+    t.datetime "created_at", null: false
+    t.bigint "creditable_id", null: false
+    t.string "creditable_type", null: false
+    t.integer "position"
+    t.integer "role", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["author_id", "role"], name: "index_books_credits_on_author_id_and_role"
+    t.index ["author_id"], name: "index_books_credits_on_author_id"
+    t.index ["creditable_type", "creditable_id"], name: "index_books_credits_on_creditable"
+  end
+
+  create_table "books_editions", force: :cascade do |t|
+    t.integer "book_binding"
+    t.bigint "book_id", null: false
+    t.datetime "created_at", null: false
+    t.integer "edition_type", default: 0, null: false
+    t.bigint "language_id"
+    t.jsonb "metadata", default: {}, null: false
+    t.integer "page_count"
+    t.integer "popularity"
+    t.integer "publication_year"
+    t.string "subtitle"
+    t.string "title"
+    t.datetime "updated_at", null: false
+    t.integer "volume_number"
+    t.index ["book_id"], name: "index_books_editions_on_book_id"
+    t.index ["edition_type"], name: "index_books_editions_on_edition_type"
+    t.index ["language_id"], name: "index_books_editions_on_language_id"
+    t.index ["volume_number"], name: "index_books_editions_on_volume_number"
+  end
+
+  create_table "books_series", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.bigint "representative_book_id"
+    t.string "slug", null: false
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.index ["representative_book_id"], name: "index_books_series_on_representative_book_id"
+    t.index ["slug"], name: "index_books_series_on_slug", unique: true
+    t.index ["title"], name: "index_books_series_on_title"
+  end
+
+  create_table "books_series_books", force: :cascade do |t|
+    t.bigint "book_id", null: false
+    t.datetime "created_at", null: false
+    t.boolean "numbered", default: true, null: false
+    t.decimal "position", precision: 8, scale: 2
+    t.string "position_label"
+    t.bigint "series_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["book_id"], name: "index_books_series_books_on_book_id"
+    t.index ["series_id", "book_id"], name: "index_books_series_books_on_series_id_and_book_id", unique: true
+    t.index ["series_id"], name: "index_books_series_books_on_series_id"
   end
 
   create_table "categories", force: :cascade do |t|
@@ -238,6 +368,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_12_235510) do
     t.datetime "updated_at", null: false
     t.index ["parent_type", "parent_id", "primary"], name: "index_images_on_parent_and_primary"
     t.index ["parent_type", "parent_id"], name: "index_images_on_parent"
+  end
+
+  create_table "languages", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "iso_639_1", limit: 2
+    t.string "iso_639_3", limit: 3
+    t.string "name", null: false
+    t.string "slug", null: false
+    t.datetime "updated_at", null: false
+    t.index ["iso_639_3"], name: "index_languages_on_iso_639_3", unique: true
+    t.index ["name"], name: "index_languages_on_name"
+    t.index ["slug"], name: "index_languages_on_slug", unique: true
   end
 
   create_table "list_items", force: :cascade do |t|
@@ -647,6 +789,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_12_235510) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "ai_chats", "users"
+  add_foreign_key "books_author_relationships", "books_authors", column: "from_author_id"
+  add_foreign_key "books_author_relationships", "books_authors", column: "to_author_id"
+  add_foreign_key "books_book_authors", "books_authors", column: "author_id"
+  add_foreign_key "books_book_authors", "books_books", column: "book_id"
+  add_foreign_key "books_book_relationships", "books_books", column: "book_id"
+  add_foreign_key "books_book_relationships", "books_books", column: "related_book_id"
+  add_foreign_key "books_books", "books_editions", column: "default_edition_id", on_delete: :nullify
+  add_foreign_key "books_books", "languages", column: "original_language_id"
+  add_foreign_key "books_credits", "books_authors", column: "author_id"
+  add_foreign_key "books_editions", "books_books", column: "book_id"
+  add_foreign_key "books_editions", "languages"
+  add_foreign_key "books_series", "books_books", column: "representative_book_id", on_delete: :nullify
+  add_foreign_key "books_series_books", "books_books", column: "book_id"
+  add_foreign_key "books_series_books", "books_series", column: "series_id"
   add_foreign_key "categories", "categories", column: "parent_id"
   add_foreign_key "category_items", "categories"
   add_foreign_key "domain_roles", "users"

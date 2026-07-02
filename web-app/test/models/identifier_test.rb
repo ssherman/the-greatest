@@ -169,9 +169,29 @@ class IdentifierTest < ActiveSupport::TestCase
   end
 
   # Class Method Tests
-  test "books scope returns book identifiers" do
-    # This would need book fixtures to fully test
-    results = Identifier.books
+  test "books identifier types are organized by entity level" do
+    assert_equal 0, Identifier.identifier_types["books_work_oclc_id"]
+    assert_equal 10, Identifier.identifier_types["books_edition_isbn13"]
+    assert_equal 30, Identifier.identifier_types["books_author_viaf"]
+  end
+
+  test "music and games identifier types are unchanged" do
+    assert_equal 100, Identifier.identifier_types["music_musicbrainz_artist_id"]
+    assert_equal 400, Identifier.identifier_types["games_igdb_id"]
+  end
+
+  test "books_works scope returns work-level book identifiers" do
+    results = Identifier.books_works
+    assert_equal 0, results.count # No book fixtures currently
+  end
+
+  test "books_editions scope returns edition-level book identifiers" do
+    results = Identifier.books_editions
+    assert_equal 0, results.count # No book fixtures currently
+  end
+
+  test "books_authors scope returns author-level book identifiers" do
+    results = Identifier.books_authors
     assert_equal 0, results.count # No book fixtures currently
   end
 
