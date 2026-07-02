@@ -2,7 +2,7 @@
 
 ## Overview
 
-The app uses the `opensearch-ruby` gem directly (no abstraction layer like Searchkick). All integration code is hand-rolled under `app/lib/search/`. OpenSearch powers full-text search and autocomplete for music (artists, albums, songs) and games.
+The app uses the `opensearch-ruby` gem directly (no abstraction layer like Searchkick). All integration code is hand-rolled under `app/lib/search/`. OpenSearch powers full-text search and autocomplete for music (artists, albums, songs), games, and books (books, authors).
 
 **Connection**: A single `OPENSEARCH_URL` environment variable. No Rails initializer — clients are instantiated inline in the base classes.
 
@@ -71,6 +71,13 @@ app/lib/search/
       game_general.rb
       game_autocomplete.rb
       game_by_title.rb
+  books/
+    book_index.rb
+    author_index.rb
+    search/
+      book_general.rb
+      author_general.rb
+      book_autocomplete.rb
 
 app/models/
   concerns/search_indexable.rb   # AR concern: after_commit hooks for index queue
@@ -94,7 +101,7 @@ Any model that `include SearchIndexable` gets:
 - `after_commit on: [:create, :update]` → creates a `SearchIndexRequest` with `action: :index_item`
 - `after_commit on: :destroy` → creates a `SearchIndexRequest` with `action: :unindex_item`
 
-Currently included in: `Music::Album`, `Music::Song`, `Music::Artist`, `Games::Game`
+Currently included in: `Music::Album`, `Music::Song`, `Music::Artist`, `Games::Game`, `Books::Book`, `Books::Author`
 
 ### 2. SearchIndexRequest Queue Table
 
@@ -117,12 +124,23 @@ When a `CategoryItem` is saved or destroyed (category added/removed from an item
 
 **Note**: Uses `after_save` / `after_destroy` (not `after_commit`) — see commented-out `after_commit` lines. This is inconsistent with `SearchIndexable`.
 
+### Author & authorship change reindexing
+
+Book documents embed author_names/author_ids. Two after_commit triggers keep them fresh
+(dedup in Search::IndexerJob makes redundant enqueues harmless):
+
+- Books::BookAuthor (create/update/destroy) enqueues its book for reindex — covers adding,
+  removing, reordering, and reassigning authorship.
+- Books::Author, when its `name` changes, enqueues all of the author's books for reindex.
+
+Author alternate_names are not embedded in book documents, so only name changes cascade.
+
 ### 4. IndexerJob (Sidekiq Cron)
 
 **File**: `app/sidekiq/search/indexer_job.rb`
 **Schedule**: Every 30 seconds (`config/schedule.yml`)
 
-For each model type (`Music::Artist`, `Music::Album`, `Music::Song`, `Games::Game`):
+For each model type (`Music::Artist`, `Music::Album`, `Music::Song`, `Games::Game`, `Books::Book`, `Books::Author`):
 
 1. Fetches up to **1,000** oldest `SearchIndexRequest` rows
 2. **Deduplicates** by `[parent_type, parent_id, action]` — multiple rapid saves produce only one index operation
@@ -153,6 +171,16 @@ Each model defines what gets indexed:
 **Games::Game**:
 ```ruby
 { title:, developer_names:, developer_ids:, platform_ids:, category_ids: }
+```
+
+**Books::Book**:
+```ruby
+{ title:, subtitle:, alternate_titles:, author_names:, author_ids:, category_ids:, book_kind: }
+```
+
+**Books::Author**:
+```ruby
+{ name:, alternate_names:, category_ids: }
 ```
 
 ## Index Definitions
@@ -331,6 +359,9 @@ Single section: games card grid using `Games::CardComponent`, plus shared `Searc
 | `search:music:recreate_songs` | Reindex songs only |
 | `search:games:recreate_and_reindex_all` | Drop + recreate + reindex games index |
 | `search:games:recreate_games` | Reindex games only |
+| `search:books:recreate_and_reindex_all` | Drop + recreate + reindex all books indices (Books, Authors) |
+| `search:books:recreate_books` | Reindex books only |
+| `search:books:recreate_authors` | Reindex authors only |
 
 All tasks call `IndexClass.reindex_all` which handles delete + create + bulk index via `find_in_batches(batch_size: 1000)`.
 
