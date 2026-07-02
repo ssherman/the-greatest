@@ -47,7 +47,7 @@ module Books
     end
 
     test "series lists its books ordered by position" do
-      assert_equal [ books_books(:got), books_series_books(:asoiaf_novella).book, books_books(:clash) ],
+      assert_equal [books_books(:got), books_series_books(:asoiaf_novella).book, books_books(:clash)],
         books_series(:asoiaf).books.to_a
     end
 

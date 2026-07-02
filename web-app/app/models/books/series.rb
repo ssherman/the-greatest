@@ -22,7 +22,8 @@
 #
 class Books::Series < ApplicationRecord
   extend FriendlyId
-  friendly_id :title, use: [ :slugged, :finders ]
+
+  friendly_id :title, use: [:slugged, :finders]
 
   belongs_to :representative_book, class_name: "Books::Book", optional: true
 
@@ -44,7 +45,7 @@ class Books::Series < ApplicationRecord
   end
 
   def as_indexed_json
-    { title: title }
+    {title: title}
   end
 
   private

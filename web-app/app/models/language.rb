@@ -18,9 +18,10 @@
 #
 class Language < ApplicationRecord
   extend FriendlyId
-  friendly_id :name, use: [ :slugged, :finders ]
+
+  friendly_id :name, use: [:slugged, :finders]
 
   validates :name, presence: true
-  validates :iso_639_1, length: { is: 2 }, allow_blank: true
-  validates :iso_639_3, length: { is: 3 }, allow_blank: true, uniqueness: { allow_nil: true }
+  validates :iso_639_1, length: {is: 2}, allow_blank: true
+  validates :iso_639_3, length: {is: 3}, allow_blank: true, uniqueness: {allow_nil: true}
 end

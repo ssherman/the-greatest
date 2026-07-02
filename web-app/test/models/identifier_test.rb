@@ -149,7 +149,7 @@ class IdentifierTest < ActiveSupport::TestCase
 
   # Scope Tests
   test "for_domain scope filters by identifiable_type" do
-    results = Identifier.for_domain([ "Music::Artist" ])
+    results = Identifier.for_domain(["Music::Artist"])
     assert_includes results, identifiers(:david_bowie_musicbrainz)
     assert_includes results, identifiers(:pink_floyd_musicbrainz)
     refute_includes results, identifiers(:dark_side_musicbrainz_release_group)

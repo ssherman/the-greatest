@@ -76,8 +76,8 @@ class Identifier < ApplicationRecord
   # Validations
   validates :identifiable, presence: true
   validates :identifier_type, presence: true
-  validates :value, presence: true, length: { maximum: 255 }
-  validates :value, uniqueness: { scope: [ :identifiable_type, :identifiable_id, :identifier_type ] }
+  validates :value, presence: true, length: {maximum: 255}
+  validates :value, uniqueness: {scope: [:identifiable_type, :identifiable_id, :identifier_type]}
 
   # Scopes
   scope :for_domain, ->(domain) { where(identifiable_type: domain) }
@@ -86,35 +86,35 @@ class Identifier < ApplicationRecord
 
   # Class methods for domain filtering
   def self.books_works
-    for_domain([ "Books::Book" ])
+    for_domain(["Books::Book"])
   end
 
   def self.books_editions
-    for_domain([ "Books::Edition" ])
+    for_domain(["Books::Edition"])
   end
 
   def self.books_authors
-    for_domain([ "Books::Author" ])
+    for_domain(["Books::Author"])
   end
 
   def self.music_artists
-    for_domain([ "Music::Artist" ])
+    for_domain(["Music::Artist"])
   end
 
   def self.music_albums
-    for_domain([ "Music::Album" ])
+    for_domain(["Music::Album"])
   end
 
   def self.music_songs
-    for_domain([ "Music::Song" ])
+    for_domain(["Music::Song"])
   end
 
   def self.music_releases
-    for_domain([ "Music::Release" ])
+    for_domain(["Music::Release"])
   end
 
   def self.games
-    for_domain([ "Games::Game" ])
+    for_domain(["Games::Game"])
   end
 
   # Instance methods

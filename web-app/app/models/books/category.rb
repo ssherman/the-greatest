@@ -35,7 +35,7 @@ module Books
     has_many :books, through: :category_items, source: :item, source_type: "Books::Book"
     has_many :authors, through: :category_items, source: :item, source_type: "Books::Author"
 
-    scope :by_book_ids, ->(book_ids) { joins(:category_items).where(category_items: { item_type: "Books::Book", item_id: book_ids }) }
-    scope :by_author_ids, ->(author_ids) { joins(:category_items).where(category_items: { item_type: "Books::Author", item_id: author_ids }) }
+    scope :by_book_ids, ->(book_ids) { joins(:category_items).where(category_items: {item_type: "Books::Book", item_id: book_ids}) }
+    scope :by_author_ids, ->(author_ids) { joins(:category_items).where(category_items: {item_type: "Books::Author", item_id: author_ids}) }
   end
 end

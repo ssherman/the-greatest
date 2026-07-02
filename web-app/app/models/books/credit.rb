@@ -22,7 +22,7 @@
 #  fk_rails_...  (author_id => books_authors.id)
 #
 class Books::Credit < ApplicationRecord
-  enum :role, { translator: 0, illustrator: 1, editor: 2, introduction: 3, foreword: 4, afterword: 5, narrator: 6, cover_artist: 7, contributor: 8, ghostwriter: 9 }
+  enum :role, {translator: 0, illustrator: 1, editor: 2, introduction: 3, foreword: 4, afterword: 5, narrator: 6, cover_artist: 7, contributor: 8, ghostwriter: 9}
 
   belongs_to :author, class_name: "Books::Author"
   belongs_to :creditable, polymorphic: true

@@ -21,12 +21,12 @@
 #  fk_rails_...  (to_author_id => books_authors.id)
 #
 class Books::AuthorRelationship < ApplicationRecord
-  enum :relation_type, { pseudonym_of: 0, member_of: 1 }, prefix: true
+  enum :relation_type, {pseudonym_of: 0, member_of: 1}, prefix: true
 
   belongs_to :from_author, class_name: "Books::Author"
   belongs_to :to_author, class_name: "Books::Author"
 
-  validates :from_author_id, uniqueness: { scope: [ :to_author_id, :relation_type ] }
+  validates :from_author_id, uniqueness: {scope: [:to_author_id, :relation_type]}
   validate :no_self_reference
 
   private

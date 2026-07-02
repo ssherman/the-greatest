@@ -32,9 +32,10 @@
 #
 class Books::Book < ApplicationRecord
   extend FriendlyId
-  friendly_id :title, use: [ :slugged, :finders ]
 
-  enum :book_kind, { standalone: 0, collection: 1 }
+  friendly_id :title, use: [:slugged, :finders]
+
+  enum :book_kind, {standalone: 0, collection: 1}
 
   belongs_to :original_language, class_name: "Language", optional: true
   belongs_to :default_edition, class_name: "Books::Edition", optional: true

@@ -30,8 +30,8 @@
 #  fk_rails_...  (language_id => languages.id)
 #
 class Books::Edition < ApplicationRecord
-  enum :edition_type, { standard: 0, annotated: 1, illustrated: 2, critical: 3, abridged: 4, revised: 5 }, prefix: :edition_type
-  enum :book_binding, { hardcover: 0, paperback: 1, mass_market: 2, ebook: 3, audiobook: 4, library_binding: 5, leather_bound: 6, other: 7 }, prefix: :book_binding
+  enum :edition_type, {standard: 0, annotated: 1, illustrated: 2, critical: 3, abridged: 4, revised: 5}, prefix: :edition_type
+  enum :book_binding, {hardcover: 0, paperback: 1, mass_market: 2, ebook: 3, audiobook: 4, library_binding: 5, leather_bound: 6, other: 7}, prefix: :book_binding
 
   belongs_to :book, class_name: "Books::Book"
   belongs_to :language, class_name: "Language", optional: true

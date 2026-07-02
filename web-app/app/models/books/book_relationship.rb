@@ -21,12 +21,12 @@
 #  fk_rails_...  (related_book_id => books_books.id)
 #
 class Books::BookRelationship < ApplicationRecord
-  enum :relation_type, { contains: 0, abridgement_of: 1, adaptation_of: 2, revision_of: 3, related_to: 4 }, prefix: true
+  enum :relation_type, {contains: 0, abridgement_of: 1, adaptation_of: 2, revision_of: 3, related_to: 4}, prefix: true
 
   belongs_to :book, class_name: "Books::Book"
   belongs_to :related_book, class_name: "Books::Book"
 
-  validates :book_id, uniqueness: { scope: [ :related_book_id, :relation_type ] }
+  validates :book_id, uniqueness: {scope: [:related_book_id, :relation_type]}
   validate :no_self_reference
 
   scope :containing, -> { where(relation_type: :contains) }

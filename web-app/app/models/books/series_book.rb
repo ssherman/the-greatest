@@ -26,5 +26,5 @@ class Books::SeriesBook < ApplicationRecord
   belongs_to :series, class_name: "Books::Series"
   belongs_to :book, class_name: "Books::Book"
 
-  validates :series_id, uniqueness: { scope: :book_id }
+  validates :series_id, uniqueness: {scope: :book_id}
 end

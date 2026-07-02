@@ -49,13 +49,13 @@ module Books
     test "by_book_ids scope filters" do
       fiction = Books::Category.create!(name: "Fiction", category_type: :genre)
       CategoryItem.create!(category: fiction, item: books_books(:war_and_peace))
-      assert_includes Books::Category.by_book_ids([ books_books(:war_and_peace).id ]), fiction
+      assert_includes Books::Category.by_book_ids([books_books(:war_and_peace).id]), fiction
     end
 
     test "by_author_ids scope filters" do
       russia = Books::Category.create!(name: "Russia", category_type: :location)
       CategoryItem.create!(category: russia, item: books_authors(:tolstoy))
-      assert_includes Books::Category.by_author_ids([ books_authors(:tolstoy).id ]), russia
+      assert_includes Books::Category.by_author_ids([books_authors(:tolstoy).id]), russia
     end
   end
 end
