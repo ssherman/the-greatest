@@ -76,5 +76,24 @@ module Books
       assert_equal "Books::Author", request.parent_type
       assert request.unindex_item?
     end
+
+    # Search freshness: renaming an author reindexes their books
+    test "renaming an author enqueues its books for reindexing" do
+      author = books_authors(:tolstoy)
+      book = books_books(:war_and_peace) # linked via war_and_peace_tolstoy fixture
+
+      assert_difference -> { SearchIndexRequest.where(parent_type: "Books::Book", parent_id: book.id, action: SearchIndexRequest.actions[:index_item]).count }, 1 do
+        author.update!(name: "Lev Tolstoy")
+      end
+    end
+
+    test "a non-name author change does not enqueue its books for reindexing" do
+      author = books_authors(:tolstoy)
+      book = books_books(:war_and_peace)
+
+      assert_no_difference -> { SearchIndexRequest.where(parent_type: "Books::Book", parent_id: book.id, action: SearchIndexRequest.actions[:index_item]).count } do
+        author.update!(birth_year: 1829)
+      end
+    end
   end
 end
