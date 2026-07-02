@@ -8,7 +8,7 @@ module Search
       end
 
       def self.model_includes
-        [ :authors ]
+        [:authors]
       end
 
       def self.index_definition
@@ -29,7 +29,7 @@ module Search
               analyzer: {
                 folding: {
                   tokenizer: "standard",
-                  filter: [ "lowercase", "asciifolding" ]
+                  filter: ["lowercase", "asciifolding"]
                 },
                 autocomplete: {
                   type: "custom",

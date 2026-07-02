@@ -25,7 +25,7 @@ module Search
               analyzer: {
                 folding: {
                   tokenizer: "standard",
-                  filter: [ "lowercase", "asciifolding" ]
+                  filter: ["lowercase", "asciifolding"]
                 },
                 autocomplete: {
                   type: "custom",

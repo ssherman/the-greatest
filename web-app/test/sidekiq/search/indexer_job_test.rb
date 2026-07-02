@@ -30,9 +30,9 @@ class Search::IndexerJobTest < ActiveSupport::TestCase
     Search::Music::SongIndex.stubs(:model_includes).returns([])
 
     # Expect bulk_index to be called for each type
-    Search::Music::ArtistIndex.expects(:bulk_index).with([ @artist ])
-    Search::Music::AlbumIndex.expects(:bulk_index).with([ @album ])
-    Search::Music::SongIndex.expects(:bulk_index).with([ @song ])
+    Search::Music::ArtistIndex.expects(:bulk_index).with([@artist])
+    Search::Music::AlbumIndex.expects(:bulk_index).with([@album])
+    Search::Music::SongIndex.expects(:bulk_index).with([@song])
 
     @job.perform
 
@@ -47,9 +47,9 @@ class Search::IndexerJobTest < ActiveSupport::TestCase
     SearchIndexRequest.create!(parent: @song, action: :unindex_item)
 
     # Expect bulk_unindex to be called for each type
-    Search::Music::ArtistIndex.expects(:bulk_unindex).with([ @artist.id ])
-    Search::Music::AlbumIndex.expects(:bulk_unindex).with([ @album.id ])
-    Search::Music::SongIndex.expects(:bulk_unindex).with([ @song.id ])
+    Search::Music::ArtistIndex.expects(:bulk_unindex).with([@artist.id])
+    Search::Music::AlbumIndex.expects(:bulk_unindex).with([@album.id])
+    Search::Music::SongIndex.expects(:bulk_unindex).with([@song.id])
 
     @job.perform
 
@@ -64,7 +64,7 @@ class Search::IndexerJobTest < ActiveSupport::TestCase
     Search::Music::ArtistIndex.stubs(:model_includes).returns([])
 
     # Should only call bulk_index once with the artist
-    Search::Music::ArtistIndex.expects(:bulk_index).once.with([ @artist ])
+    Search::Music::ArtistIndex.expects(:bulk_index).once.with([@artist])
 
     @job.perform
 
@@ -80,8 +80,8 @@ class Search::IndexerJobTest < ActiveSupport::TestCase
     Search::Music::ArtistIndex.stubs(:model_includes).returns([])
 
     # Should call both bulk_index and bulk_unindex
-    Search::Music::ArtistIndex.expects(:bulk_index).with([ @artist ])
-    Search::Music::ArtistIndex.expects(:bulk_unindex).with([ @artist.id ])
+    Search::Music::ArtistIndex.expects(:bulk_index).with([@artist])
+    Search::Music::ArtistIndex.expects(:bulk_unindex).with([@artist.id])
 
     @job.perform
 
@@ -117,7 +117,7 @@ class Search::IndexerJobTest < ActiveSupport::TestCase
     @artist.destroy!
 
     # Should still call bulk_unindex with the ID
-    Search::Music::ArtistIndex.expects(:bulk_unindex).with([ artist_id ])
+    Search::Music::ArtistIndex.expects(:bulk_unindex).with([artist_id])
 
     @job.perform
 
@@ -129,17 +129,17 @@ class Search::IndexerJobTest < ActiveSupport::TestCase
     SearchIndexRequest.create!(parent: @album, action: :index_item)
 
     # Mock that album index requires associations
-    Search::Music::AlbumIndex.stubs(:model_includes).returns([ :artists, :categories ])
+    Search::Music::AlbumIndex.stubs(:model_includes).returns([:artists, :categories])
 
     # The job will call find_by first, then reload with includes
     Music::Album.expects(:find_by).with(id: @album.id).returns(@album)
 
     # Mock the ActiveRecord chain for the includes reload
     relation_mock = mock("relation")
-    relation_mock.expects(:includes).with([ :artists, :categories ]).returns([ @album ])
-    Music::Album.expects(:where).with(id: [ @album.id ]).returns(relation_mock)
+    relation_mock.expects(:includes).with([:artists, :categories]).returns([@album])
+    Music::Album.expects(:where).with(id: [@album.id]).returns(relation_mock)
 
-    Search::Music::AlbumIndex.expects(:bulk_index).with([ @album ])
+    Search::Music::AlbumIndex.expects(:bulk_index).with([@album])
 
     @job.perform
 
@@ -152,7 +152,7 @@ class Search::IndexerJobTest < ActiveSupport::TestCase
     1005.times { SearchIndexRequest.create!(parent: @artist, action: :index_item) }
 
     Search::Music::ArtistIndex.stubs(:model_includes).returns([])
-    Search::Music::ArtistIndex.expects(:bulk_index).with([ @artist ])
+    Search::Music::ArtistIndex.expects(:bulk_index).with([@artist])
 
     @job.perform
 
@@ -180,8 +180,8 @@ class Search::IndexerJobTest < ActiveSupport::TestCase
     Search::Music::AlbumIndex.stubs(:model_includes).returns([])
 
     # Both should be processed since we're not limiting
-    Search::Music::ArtistIndex.expects(:bulk_index).with([ @artist ])
-    Search::Music::AlbumIndex.expects(:bulk_index).with([ @album ])
+    Search::Music::ArtistIndex.expects(:bulk_index).with([@artist])
+    Search::Music::AlbumIndex.expects(:bulk_index).with([@album])
 
     @job.perform
 
@@ -234,7 +234,7 @@ class Search::IndexerJobTest < ActiveSupport::TestCase
     SearchIndexRequest.create!(parent: @game, action: :index_item)
 
     Search::Games::GameIndex.stubs(:model_includes).returns([])
-    Search::Games::GameIndex.expects(:bulk_index).with([ @game ])
+    Search::Games::GameIndex.expects(:bulk_index).with([@game])
 
     @job.perform
 
@@ -244,7 +244,7 @@ class Search::IndexerJobTest < ActiveSupport::TestCase
   test "should process unindex requests for Games::Game" do
     SearchIndexRequest.create!(parent: @game, action: :unindex_item)
 
-    Search::Games::GameIndex.expects(:bulk_unindex).with([ @game.id ])
+    Search::Games::GameIndex.expects(:bulk_unindex).with([@game.id])
 
     @job.perform
 
@@ -255,7 +255,7 @@ class Search::IndexerJobTest < ActiveSupport::TestCase
     SearchIndexRequest.create!(parent: @book, action: :index_item)
 
     Search::Books::BookIndex.stubs(:model_includes).returns([])
-    Search::Books::BookIndex.expects(:bulk_index).with([ @book ])
+    Search::Books::BookIndex.expects(:bulk_index).with([@book])
 
     @job.perform
 
@@ -266,7 +266,7 @@ class Search::IndexerJobTest < ActiveSupport::TestCase
     SearchIndexRequest.create!(parent: @author, action: :index_item)
 
     Search::Books::AuthorIndex.stubs(:model_includes).returns([])
-    Search::Books::AuthorIndex.expects(:bulk_index).with([ @author ])
+    Search::Books::AuthorIndex.expects(:bulk_index).with([@author])
 
     @job.perform
 
@@ -276,7 +276,7 @@ class Search::IndexerJobTest < ActiveSupport::TestCase
   test "should process unindex requests for Books::Book" do
     SearchIndexRequest.create!(parent: @book, action: :unindex_item)
 
-    Search::Books::BookIndex.expects(:bulk_unindex).with([ @book.id ])
+    Search::Books::BookIndex.expects(:bulk_unindex).with([@book.id])
 
     @job.perform
 
@@ -290,8 +290,8 @@ class Search::IndexerJobTest < ActiveSupport::TestCase
     Search::Music::ArtistIndex.stubs(:model_includes).returns([])
     Search::Games::GameIndex.stubs(:model_includes).returns([])
 
-    Search::Music::ArtistIndex.expects(:bulk_index).with([ @artist ])
-    Search::Games::GameIndex.expects(:bulk_index).with([ @game ])
+    Search::Music::ArtistIndex.expects(:bulk_index).with([@artist])
+    Search::Games::GameIndex.expects(:bulk_index).with([@game])
 
     @job.perform
 

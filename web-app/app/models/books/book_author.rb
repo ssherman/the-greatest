@@ -23,12 +23,12 @@
 #  fk_rails_...  (book_id => books_books.id)
 #
 class Books::BookAuthor < ApplicationRecord
-  enum :role, { author: 0, editor: 1 }
+  enum :role, {author: 0, editor: 1}
 
   belongs_to :book, class_name: "Books::Book"
   belongs_to :author, class_name: "Books::Author"
 
-  validates :book_id, uniqueness: { scope: :author_id }
+  validates :book_id, uniqueness: {scope: :author_id}
 
   after_commit :queue_book_for_reindexing
 

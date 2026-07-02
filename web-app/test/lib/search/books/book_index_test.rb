@@ -24,7 +24,7 @@ module Search
 
         assert definition[:settings][:analysis][:analyzer][:folding]
         assert_equal "standard", definition[:settings][:analysis][:analyzer][:folding][:tokenizer]
-        assert_equal [ "lowercase", "asciifolding" ], definition[:settings][:analysis][:analyzer][:folding][:filter]
+        assert_equal ["lowercase", "asciifolding"], definition[:settings][:analysis][:analyzer][:folding][:filter]
 
         properties = definition[:mappings][:properties]
         assert_equal "text", properties[:title][:type]

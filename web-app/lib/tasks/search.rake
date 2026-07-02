@@ -10,9 +10,9 @@ namespace :search do
       puts "\nThis will delete existing indices and recreate them with updated mappings.\n\n"
 
       indices = [
-        { klass: Search::Music::ArtistIndex, name: "Artists", model: Music::Artist },
-        { klass: Search::Music::AlbumIndex, name: "Albums", model: Music::Album },
-        { klass: Search::Music::SongIndex, name: "Songs", model: Music::Song }
+        {klass: Search::Music::ArtistIndex, name: "Artists", model: Music::Artist},
+        {klass: Search::Music::AlbumIndex, name: "Albums", model: Music::Album},
+        {klass: Search::Music::SongIndex, name: "Songs", model: Music::Song}
       ]
 
       indices.each do |index_info|
@@ -91,8 +91,8 @@ namespace :search do
       puts "\nThis will delete existing indices and recreate them with updated mappings.\n\n"
 
       indices = [
-        { klass: Search::Books::BookIndex, name: "Books", model: Books::Book },
-        { klass: Search::Books::AuthorIndex, name: "Authors", model: Books::Author }
+        {klass: Search::Books::BookIndex, name: "Books", model: Books::Book},
+        {klass: Search::Books::AuthorIndex, name: "Authors", model: Books::Author}
       ]
 
       indices.each do |index_info|

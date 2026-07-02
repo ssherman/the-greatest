@@ -36,7 +36,7 @@ module Search
             from: from,
             query: ::Search::Shared::Utils.build_bool_query(
               should: should_clauses,
-              filter: [ { term: { book_kind: "standalone" } } ],
+              filter: [{term: {book_kind: "standalone"}}],
               minimum_should_match: 1
             )
           }
