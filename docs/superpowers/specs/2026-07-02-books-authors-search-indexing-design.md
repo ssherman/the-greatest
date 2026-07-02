@@ -82,12 +82,21 @@ liberally is safe (redundant requests collapse to a single op). Two triggers:
   (`alternate_names` is not embedded in the book document, so only `name` changes need to
   cascade.)
 
-**Destroyed-parent tolerance:** when a `Books::Book` is destroyed, its dependent
-`book_authors` are destroyed too, and the `BookAuthor` trigger enqueues an `index_item` for
-the now-deleted book. `Search::IndexerJob` resolves the model via `find_by(id:)`, gets `nil`,
-and skips it (logging a warning) — the same tolerance the existing `CategoryItem` path relies
-on. No special guard is required. This uses `after_commit` (only enqueue if the transaction
-committed), which is more correct than `CategoryItem`'s `after_save`/`after_destroy`.
+**Destroyed-parent handling:** when a `Books::Book` is destroyed, its dependent
+`book_authors` are destroyed too, and the `BookAuthor` trigger fires (`after_commit`) after
+the book row is already gone. The trigger **must guard on book existence**
+(`return unless Books::Book.exists?(book_id)`) before enqueuing — otherwise
+`SearchIndexRequest.create!(parent_id: book_id, …)` raises `ActiveRecord::RecordInvalid`
+("Parent must exist"), because `SearchIndexRequest belongs_to :parent` is presence-validated
+(`belongs_to_required_by_default`). An earlier draft of this spec wrongly assumed the enqueue
+could dangle and be skipped later by `Search::IndexerJob`'s `find_by(id:)` — but the enqueue
+fails first, so the guard is required. (The `CategoryItem` precedent sidesteps this by passing
+`parent: <in-memory object>`, which passes the presence check; this trigger passes a raw
+`parent_id:`, so it needs the explicit `exists?` guard.) When the book is destroyed, the guard
+skips the stale `index_item`; the book's own `SearchIndexable` `after_commit on: :destroy`
+still enqueues the `unindex_item`, so the index stays consistent. This uses `after_commit`
+(only enqueue if the transaction committed), which is more correct than `CategoryItem`'s
+`after_save`/`after_destroy`.
 
 ## 4. Document shape (`as_indexed_json`)
 
