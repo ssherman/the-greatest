@@ -75,5 +75,16 @@ module Books
         book_author.destroy!
       end
     end
+
+    test "destroying a book that has authors does not raise and enqueues the book's unindex" do
+      book = Books::Book.create!(title: "Destroyable Book")
+      author = Books::Author.create!(name: "Destroyable Author")
+      Books::BookAuthor.create!(book: book, author: author, position: 1)
+      book_id = book.id
+
+      assert_nothing_raised { book.destroy! }
+
+      assert SearchIndexRequest.where(parent_type: "Books::Book", parent_id: book_id, action: SearchIndexRequest.actions[:unindex_item]).exists?
+    end
   end
 end

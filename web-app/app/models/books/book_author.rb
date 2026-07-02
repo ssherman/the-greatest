@@ -35,6 +35,7 @@ class Books::BookAuthor < ApplicationRecord
   private
 
   def queue_book_for_reindexing
+    return unless Books::Book.exists?(book_id)
     SearchIndexRequest.create!(parent_type: "Books::Book", parent_id: book_id, action: :index_item)
   end
 end
