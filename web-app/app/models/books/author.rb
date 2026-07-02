@@ -21,6 +21,10 @@
 #  index_books_authors_on_slug             (slug) UNIQUE
 #
 class Books::Author < ApplicationRecord
+  include SearchIndexable
+
+  after_commit :queue_books_for_reindexing, if: :saved_change_to_name?
+
   extend FriendlyId
 
   friendly_id :name, use: [:slugged, :finders]
@@ -58,5 +62,11 @@ class Books::Author < ApplicationRecord
 
   def normalize_name
     self.name = Services::Text::QuoteNormalizer.call(name) if name.present?
+  end
+
+  def queue_books_for_reindexing
+    book_ids.each do |book_id|
+      SearchIndexRequest.create!(parent_type: "Books::Book", parent_id: book_id, action: :index_item)
+    end
   end
 end

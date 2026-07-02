@@ -81,4 +81,48 @@ namespace :search do
       puts "Games index recreated and reindexed"
     end
   end
+
+  namespace :books do
+    desc "Recreate and reindex all books indices (Books, Authors)"
+    task recreate_and_reindex_all: :environment do
+      puts "=" * 80
+      puts "Search Books Indices - Recreation and Reindexing"
+      puts "=" * 80
+      puts "\nThis will delete existing indices and recreate them with updated mappings.\n\n"
+
+      indices = [
+        {klass: Search::Books::BookIndex, name: "Books", model: Books::Book},
+        {klass: Search::Books::AuthorIndex, name: "Authors", model: Books::Author}
+      ]
+
+      indices.each do |index_info|
+        record_count = index_info[:model].count
+        puts "[#{index_info[:name]}] Starting recreation and reindex (#{record_count} records to index)..."
+
+        index_info[:klass].reindex_all
+
+        puts "[#{index_info[:name]}] ✓ Complete!"
+      end
+
+      puts "\n" + "=" * 80
+      puts "All books indices recreated and reindexed successfully!"
+      puts "=" * 80
+    end
+
+    desc "Recreate Books index"
+    task recreate_books: :environment do
+      record_count = Books::Book.count
+      puts "Recreating Books index (#{record_count} records)..."
+      Search::Books::BookIndex.reindex_all
+      puts "✓ Books index recreated and reindexed"
+    end
+
+    desc "Recreate Authors index"
+    task recreate_authors: :environment do
+      record_count = Books::Author.count
+      puts "Recreating Authors index (#{record_count} records)..."
+      Search::Books::AuthorIndex.reindex_all
+      puts "✓ Authors index recreated and reindexed"
+    end
+  end
 end

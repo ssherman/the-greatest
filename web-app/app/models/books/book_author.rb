@@ -29,4 +29,19 @@ class Books::BookAuthor < ApplicationRecord
   belongs_to :author, class_name: "Books::Author"
 
   validates :book_id, uniqueness: {scope: :author_id}
+
+  after_commit :queue_book_for_reindexing
+
+  private
+
+  def queue_book_for_reindexing
+    queue_reindex(book_id)
+    queue_reindex(book_id_before_last_save) if saved_change_to_book_id?
+  end
+
+  def queue_reindex(id)
+    return if id.nil?
+    return unless Books::Book.exists?(id)
+    SearchIndexRequest.create!(parent_type: "Books::Book", parent_id: id, action: :index_item)
+  end
 end

@@ -21,13 +21,13 @@ bin/setup                     # install deps, prepare db, boot
 bin/rails test                # unit/integration (Minitest)
 bin/rails test test/models/music/   # scope to a namespace/dir
 bin/rails db:test:prepare test test:system   # what CI runs (system tests included)
-bin/rubocop                   # lint (omakase); CI enforces `bin/rubocop -f github`. `-a` autocorrects
+bundle exec standardrb        # lint (Ruby Standard style, see .standard.yml); `--fix` autocorrects. NOT bin/rubocop (omakase — conflicting style)
 bin/brakeman --no-pager       # security scan (CI-enforced)
 yarn test:e2e                 # Playwright E2E (needs local dev server + e2e/.env)
 yarn build:all                # JS (Rollup) + per-domain CSS (Tailwind)
 ```
 
-CI (`.github/workflows/ci.yml`) must be green: brakeman, rubocop, and `test test:system` all pass.
+CI (`.github/workflows/ci.yml`) must be green: brakeman, standardrb, and `test test:system` all pass.
 
 ## Where code actually lives
 

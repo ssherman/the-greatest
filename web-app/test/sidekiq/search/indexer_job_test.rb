@@ -7,6 +7,8 @@ class Search::IndexerJobTest < ActiveSupport::TestCase
     @album = music_albums(:dark_side_of_the_moon)
     @song = music_songs(:money)
     @game = games_games(:breath_of_the_wild)
+    @book = books_books(:war_and_peace)
+    @author = books_authors(:tolstoy)
 
     # Clear any existing requests
     SearchIndexRequest.delete_all
@@ -243,6 +245,38 @@ class Search::IndexerJobTest < ActiveSupport::TestCase
     SearchIndexRequest.create!(parent: @game, action: :unindex_item)
 
     Search::Games::GameIndex.expects(:bulk_unindex).with([@game.id])
+
+    @job.perform
+
+    assert_equal 0, SearchIndexRequest.count
+  end
+
+  test "should process index requests for Books::Book" do
+    SearchIndexRequest.create!(parent: @book, action: :index_item)
+
+    Search::Books::BookIndex.stubs(:model_includes).returns([])
+    Search::Books::BookIndex.expects(:bulk_index).with([@book])
+
+    @job.perform
+
+    assert_equal 0, SearchIndexRequest.count
+  end
+
+  test "should process index requests for Books::Author" do
+    SearchIndexRequest.create!(parent: @author, action: :index_item)
+
+    Search::Books::AuthorIndex.stubs(:model_includes).returns([])
+    Search::Books::AuthorIndex.expects(:bulk_index).with([@author])
+
+    @job.perform
+
+    assert_equal 0, SearchIndexRequest.count
+  end
+
+  test "should process unindex requests for Books::Book" do
+    SearchIndexRequest.create!(parent: @book, action: :unindex_item)
+
+    Search::Books::BookIndex.expects(:bulk_unindex).with([@book.id])
 
     @job.perform
 

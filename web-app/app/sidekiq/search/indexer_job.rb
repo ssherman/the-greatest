@@ -7,7 +7,7 @@ class Search::IndexerJob
     Rails.logger.info "Starting search indexing job"
 
     # Process each indexed model type
-    %w[Music::Artist Music::Album Music::Song Games::Game].each do |model_type|
+    %w[Music::Artist Music::Album Music::Song Games::Game Books::Book Books::Author].each do |model_type|
       process_requests_for_type(model_type)
     end
 

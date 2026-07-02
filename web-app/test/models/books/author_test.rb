@@ -52,5 +52,48 @@ module Books
       assert_equal "Leo Tolstoy", json[:name]
       assert_kind_of Array, json[:alternate_names]
     end
+
+    # SearchIndexable concern tests
+    test "should create search index request on create" do
+      assert_difference "SearchIndexRequest.count", 1 do
+        Books::Author.create!(name: "Test Search Author")
+      end
+
+      request = SearchIndexRequest.last
+      assert_equal "Books::Author", request.parent_type
+      assert request.index_item?
+    end
+
+    test "should create search index request on destroy" do
+      author = books_authors(:garnett)
+
+      assert_difference "SearchIndexRequest.count", 1 do
+        author.destroy!
+      end
+
+      request = SearchIndexRequest.last
+      assert_equal author.id, request.parent_id
+      assert_equal "Books::Author", request.parent_type
+      assert request.unindex_item?
+    end
+
+    # Search freshness: renaming an author reindexes their books
+    test "renaming an author enqueues its books for reindexing" do
+      author = books_authors(:tolstoy)
+      book = books_books(:war_and_peace) # linked via war_and_peace_tolstoy fixture
+
+      assert_difference -> { SearchIndexRequest.where(parent_type: "Books::Book", parent_id: book.id, action: SearchIndexRequest.actions[:index_item]).count }, 1 do
+        author.update!(name: "Lev Tolstoy")
+      end
+    end
+
+    test "a non-name author change does not enqueue its books for reindexing" do
+      author = books_authors(:tolstoy)
+      book = books_books(:war_and_peace)
+
+      assert_no_difference -> { SearchIndexRequest.where(parent_type: "Books::Book", parent_id: book.id, action: SearchIndexRequest.actions[:index_item]).count } do
+        author.update!(birth_year: 1829)
+      end
+    end
   end
 end

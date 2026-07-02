@@ -31,6 +31,8 @@
 #  fk_rails_...  (original_language_id => languages.id)
 #
 class Books::Book < ApplicationRecord
+  include SearchIndexable
+
   extend FriendlyId
 
   friendly_id :title, use: [:slugged, :finders]
@@ -71,10 +73,12 @@ class Books::Book < ApplicationRecord
   def as_indexed_json
     {
       title: title,
+      subtitle: subtitle,
       alternate_titles: alternate_titles,
       author_names: authors.map(&:name),
       author_ids: authors.map(&:id),
-      category_ids: categories.active.pluck(:id)
+      category_ids: categories.active.pluck(:id),
+      book_kind: book_kind
     }
   end
 

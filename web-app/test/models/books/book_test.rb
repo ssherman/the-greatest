@@ -89,5 +89,41 @@ module Books
     test "as_indexed_json includes author_ids" do
       assert_includes books_books(:war_and_peace).as_indexed_json[:author_ids], books_authors(:tolstoy).id
     end
+
+    # SearchIndexable concern tests
+    test "should create search index request on create" do
+      assert_difference "SearchIndexRequest.count", 1 do
+        Books::Book.create!(title: "Test Search Book")
+      end
+
+      request = SearchIndexRequest.last
+      assert_equal "Books::Book", request.parent_type
+      assert request.index_item?
+    end
+
+    test "should create search index request on update" do
+      book = books_books(:war_and_peace)
+
+      assert_difference "SearchIndexRequest.count", 1 do
+        book.update!(subtitle: "Updated Subtitle")
+      end
+
+      request = SearchIndexRequest.last
+      assert_equal book, request.parent
+      assert request.index_item?
+    end
+
+    test "should create search index request on destroy" do
+      book = books_books(:crime_and_punishment)
+
+      assert_difference "SearchIndexRequest.count", 1 do
+        book.destroy!
+      end
+
+      request = SearchIndexRequest.last
+      assert_equal book.id, request.parent_id
+      assert_equal "Books::Book", request.parent_type
+      assert request.unindex_item?
+    end
   end
 end
