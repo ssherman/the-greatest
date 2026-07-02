@@ -33,9 +33,9 @@
 class Books::Book < ApplicationRecord
   extend FriendlyId
 
-  friendly_id :title, use: [:slugged, :finders]
+  friendly_id :title, use: [ :slugged, :finders ]
 
-  enum :book_kind, {standalone: 0, collection: 1}
+  enum :book_kind, { standalone: 0, collection: 1 }
 
   belongs_to :original_language, class_name: "Language", optional: true
   belongs_to :default_edition, class_name: "Books::Edition", optional: true
@@ -71,10 +71,12 @@ class Books::Book < ApplicationRecord
   def as_indexed_json
     {
       title: title,
+      subtitle: subtitle,
       alternate_titles: alternate_titles,
       author_names: authors.map(&:name),
       author_ids: authors.map(&:id),
-      category_ids: categories.active.pluck(:id)
+      category_ids: categories.active.pluck(:id),
+      book_kind: book_kind
     }
   end
 
