@@ -252,6 +252,34 @@ types), `public`, `description`, `position`, `view_mode` (old `nil` → new `def
 | `User.external_provider`, `User.role` | identical ints — direct |
 | `user_lists.view_mode` | old `{default_view:nil, table_view:1, grid_view:2}` → new `{default_view:0,…}` | `nil` → `0` |
 
+## Legacy data volumes (local restore 2026-07-03)
+
+Full prod dump restored locally into `the_greatest_books_legacy` (container `the-greatest-db-1`,
+`localhost:6543`), 0 errors. The `ol_editions`/`ol_works`/`ol_covers` tables are empty (truncated in
+prod long ago). Counts / max-ids that size the phases:
+
+| Table | Rows | max(id) | Note |
+|---|---|---|---|
+| `books` | 126,204 | 141,785 | preserve id; `setval` after |
+| `authors` | 58,193 | 66,839 | preserve id; `setval` after |
+| `book_authors` | 126,869 | — | join |
+| `editions` | 148,296 | — | → `books_editions` |
+| `book_identifiers` | 421,698 | — | → `identifiers` |
+| `categories` | 73,913 | — | fresh id + map |
+| `book_categories` | 1,828,730 | — | → `category_items` (heavy — batch) |
+| `lists` | 1,030 | **1,175** | **Phase 0 reservation ceiling must exceed 1,175 + growth** |
+| `list_items` | 65,252 | — | |
+| `ranking_configurations` | 47 total / **4 active** | — | migrate non-archived only |
+| `ranked_lists` | 17,379 | — | active RCs only |
+| `ranked_books` | 1,853,585 | — | **not migrated** (recomputed) |
+| `list_cons` | 1,869 | — | → penalties (active RCs only) |
+| `list_con_lists` | 48,720 | — | → `list_penalties` (static only) |
+| `users` | 69,459 | 69,498 | reserved ceiling 150k ✓ (~2.15× headroom) |
+| `user_lists` | 282,922 | 604,880 | reserved ceiling 1M ✓ (~1.65× — tight; re-confirm near import) |
+| `user_list_books` | 3,096,597 | — | → `user_list_items` (heaviest — batch) |
+| `links` | 13,404 | — | → `external_links` |
+| `languages` | 201 | — | |
+
 ## Out of scope (no new-site equivalent, or per owner)
 `ai_chats`, `ai_responses`, `goodreads_books`, `goodreads_imports`, `subscriptions`, `reading_goals`,
 `reading_goal_books`, `donations`, `saved_searches`, `recommendation_configs`, `merge_runs`,
