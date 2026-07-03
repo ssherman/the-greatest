@@ -128,6 +128,15 @@ class Services::BooksMigration::IdRangeReservationServiceTest < ActiveSupport::T
       "reservation must not add a ranked_lists -> lists FK"
   end
 
+  test "re-adds the real lists foreign keys after relocation" do
+    Services::BooksMigration::IdRangeReservationService.call
+
+    assert @conn.foreign_key_exists?("list_items", "lists", column: "list_id")
+    assert @conn.foreign_key_exists?("list_penalties", "lists", column: "list_id")
+    assert @conn.foreign_key_exists?("ranking_configurations", "lists", column: "primary_mapped_list_id")
+    assert @conn.foreign_key_exists?("ranking_configurations", "lists", column: "secondary_mapped_list_id")
+  end
+
   test "leaves no lists rows below the lists ceiling" do
     Services::BooksMigration::IdRangeReservationService.call
 

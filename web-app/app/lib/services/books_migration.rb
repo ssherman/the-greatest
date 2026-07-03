@@ -20,7 +20,7 @@ module Services
 
     # Reserved table => the FK columns that must be remapped when one of its rows
     # is relocated out of the reserved range. Verified against db/schema.rb
-    # (version 2026_04_22_040533). Any FK added before this migration ships must
+    # (version 2026_07_03_190903). Any FK added before this migration ships must
     # be added here.
     #
     #   "users"      <- ai_chats.user_id, domain_roles.user_id,
