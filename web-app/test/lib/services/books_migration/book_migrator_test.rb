@@ -53,4 +53,15 @@ class Services::BooksMigration::BookMigratorTest < ActiveSupport::TestCase
     fresh = Books::Book.create!(title: "Post Migration Book")
     assert_operator fresh.id, :>, 90005
   end
+
+  test "fails the row (naming the legacy book id) when a non-nil legacy language has no id map" do
+    result = run_migrator([
+      {"id" => 90010, "title" => "Unmapped Lang Book", "original_language_id" => 999_999}
+    ])
+
+    refute result[:success]
+    assert_includes result[:error], "legacy id=90010"
+    assert_includes result[:error], "999999"
+    assert_nil Books::Book.find_by(id: 90010)
+  end
 end
