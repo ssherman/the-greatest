@@ -1,6 +1,6 @@
 # Books Editions Migration — Design
 
-**Status:** Approved 2026-07-04 (one flagged decision — see `default_edition_id`).
+**Status:** Approved 2026-07-04. `default_edition_id` = leave NULL for editionless books (no synthesis) — confirmed by owner.
 **Scope:** A single migration increment on top of Phase 1a (languages/authors) and Phase 1b (books/book_authors, both merged): legacy `editions` → `books_editions`, plus the `default_edition_id` back-reference on the already-migrated `books_books`.
 **Parent design:** `docs/superpowers/specs/2026-07-03-old-site-data-migration-design.md`.
 
@@ -77,11 +77,11 @@ LegacyIdMap.record(model: "Books::Edition", legacy_id: attrs["id"], new_id: edit
 
 `save!` + `LegacyIdMap.record` run in a **per-row transaction** so a crash between them can't leave a mapped-but-unrecorded edition that a re-run would duplicate. Re-running finds the existing edition via the map and updates it in place — idempotent.
 
-## `default_edition_id` back-reference — ⚠️ flagged decision
+## `default_edition_id` back-reference
 
 **Data:** 87,536 of 126,204 books (69%) have **no** legacy edition; only 38,668 do.
 
-**Decision (made in the owner's absence — confirm or override):** do **not** fabricate editions. In `finalize`, a single set-based SQL statement sets `default_edition_id` to each book's most-popular edition, for books that have editions only:
+**Decision (confirmed by owner 2026-07-04):** do **not** fabricate editions. In `finalize`, a single set-based SQL statement sets `default_edition_id` to each book's most-popular edition, for books that have editions only:
 
 ```sql
 UPDATE books_books b
