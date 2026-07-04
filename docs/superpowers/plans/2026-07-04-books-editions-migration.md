@@ -448,9 +448,13 @@ First, proactively scan for orphaned edition `book_id`s (a legacy edition whose 
 
 ```bash
 bin/rails runner '
+# Legacy editions and primary books_books live in SEPARATE databases, so this
+# must be TWO queries diffed in Ruby (no cross-DB subquery).
 klass = Class.new(LegacyBooks::Record) { self.table_name = "editions" }
-orphans = klass.where.not(book_id: nil).where.not(book_id: Books::Book.select(:id)).count
-puts "orphan_edition_book_ids=#{orphans}"'
+legacy_book_ids = klass.where.not(book_id: nil).distinct.pluck(:book_id)
+existing = Books::Book.where(id: legacy_book_ids).pluck(:id).to_set
+orphans = legacy_book_ids.reject { |bid| existing.include?(bid) }
+puts "orphan_edition_book_ids=#{orphans.size}"'
 ```
 Expected: `orphan_edition_book_ids=0`. If non-zero, report the ids — the run will name the first offending edition, and it is idempotent/resumable.
 
