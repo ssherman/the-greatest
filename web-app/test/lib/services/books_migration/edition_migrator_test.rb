@@ -67,4 +67,25 @@ class Services::BooksMigration::EditionMigratorTest < ActiveSupport::TestCase
     run_migrator([{"id" => 5006, "book_id" => other.id, "title" => "E", "book_binding" => 0}])
     assert_nil editionless.reload.default_edition_id
   end
+
+  test "finalize prefers a valued popularity over a nil-popularity edition (NULLS LAST)" do
+    book = Books::Book.create!(title: "Nulls Last Parent")
+    run_migrator([
+      {"id" => 5007, "book_id" => book.id, "title" => "NilPop", "popularity" => nil, "book_binding" => 0},
+      {"id" => 5008, "book_id" => book.id, "title" => "ValPop", "popularity" => 5, "book_binding" => 0}
+    ])
+    valued_id = LegacyIdMap.lookup(model: "Books::Edition", legacy_id: 5008)
+    assert_equal valued_id, book.reload.default_edition_id
+  end
+
+  test "finalize breaks equal-popularity ties by lowest edition id" do
+    book = Books::Book.create!(title: "Tiebreak Parent")
+    run_migrator([
+      {"id" => 5009, "book_id" => book.id, "title" => "A", "popularity" => 7, "book_binding" => 0},
+      {"id" => 5010, "book_id" => book.id, "title" => "B", "popularity" => 7, "book_binding" => 0}
+    ])
+    id_5009 = LegacyIdMap.lookup(model: "Books::Edition", legacy_id: 5009)
+    id_5010 = LegacyIdMap.lookup(model: "Books::Edition", legacy_id: 5010)
+    assert_equal [id_5009, id_5010].min, book.reload.default_edition_id
+  end
 end

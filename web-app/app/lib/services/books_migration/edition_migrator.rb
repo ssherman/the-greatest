@@ -31,7 +31,9 @@ module Services
       # desc, nulls last, id asc), for books that have editions only. Set-based SQL
       # bypasses AR callbacks (no SearchIndexRequest flood — finalize runs OUTSIDE
       # the without_search_indexing block) and is idempotent. Editionless books
-      # keep default_edition_id NULL (no synthesis).
+      # keep default_edition_id NULL (no synthesis). Authoritative: recomputes on
+      # every run (meant for a pre-launch cutover), so re-running tracks the
+      # current most-popular edition rather than preserving a hand-picked default.
       def finalize
         Books::Book.connection.execute(<<~SQL)
           UPDATE books_books b

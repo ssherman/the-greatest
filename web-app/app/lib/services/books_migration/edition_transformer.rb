@@ -47,7 +47,7 @@ module Services
 
       def self.publisher_name(metadata)
         return nil unless metadata.is_a?(Hash)
-        metadata.dig(*PUBLISHER_PATH).presence
+        PUBLISHER_PATH.reduce(metadata) { |node, key| node.is_a?(Hash) ? node[key] : nil }.presence
       end
       private_class_method :publisher_name
     end

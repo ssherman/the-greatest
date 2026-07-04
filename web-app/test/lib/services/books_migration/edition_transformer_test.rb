@@ -55,4 +55,9 @@ class Services::BooksMigration::EditionTransformerTest < ActiveSupport::TestCase
     assert_nil transform("metadata" => blank)[:publisher_name]
     assert_nil transform("metadata" => nil)[:publisher_name]
   end
+
+  test "publisher_name is nil when an intermediate metadata node is not a hash" do
+    weird = {"amazon" => {"ItemInfo" => {"ByLineInfo" => "unexpected string"}}}
+    assert_nil transform("metadata" => weird)[:publisher_name]
+  end
 end
