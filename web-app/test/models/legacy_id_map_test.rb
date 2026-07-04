@@ -8,9 +8,13 @@ class LegacyIdMapTest < ActiveSupport::TestCase
 
   test "record is idempotent and updates new_id on the same key" do
     LegacyIdMap.record(model: "Language", legacy_id: 7, new_id: 42)
+    original_created_at = LegacyIdMap.where(model: "Language", legacy_id: 7).pick(:created_at)
+
     LegacyIdMap.record(model: "Language", legacy_id: 7, new_id: 99)
+
     assert_equal 1, LegacyIdMap.where(model: "Language", legacy_id: 7).count
     assert_equal 99, LegacyIdMap.lookup(model: "Language", legacy_id: 7)
+    assert_equal original_created_at, LegacyIdMap.where(model: "Language", legacy_id: 7).pick(:created_at)
   end
 
   test "lookup returns nil for an unknown key" do

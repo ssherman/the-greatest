@@ -4,9 +4,12 @@ class LegacyIdMap < ApplicationRecord
   validates :new_id, presence: true
 
   def self.record(model:, legacy_id:, new_id:)
+    now = Time.current
     upsert(
-      {model: model, legacy_id: legacy_id, new_id: new_id, created_at: Time.current, updated_at: Time.current},
-      unique_by: [:model, :legacy_id]
+      {model: model, legacy_id: legacy_id, new_id: new_id, created_at: now, updated_at: now},
+      unique_by: [:model, :legacy_id],
+      update_only: [:new_id, :updated_at],
+      record_timestamps: false
     )
     new_id
   end
