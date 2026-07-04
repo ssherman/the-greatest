@@ -19,6 +19,11 @@ namespace :data_migration do
     pp Services::BooksMigration::BookAuthorMigrator.call
   end
 
+  desc "Migrate legacy editions into books_editions (fresh ids + map; sets default_edition_id)"
+  task editions: :environment do
+    pp Services::BooksMigration::EditionMigrator.call
+  end
+
   desc "Run all Phase-1 migrators in dependency order"
-  task all: [:languages, :authors, :books, :book_authors]
+  task all: [:languages, :authors, :books, :book_authors, :editions]
 end
