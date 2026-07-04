@@ -195,6 +195,9 @@ The `/user_lists/:id` alias above resolves a list by its **raw primary key**, so
 |---|---|---|
 | `users` | `[1, 150_000)` | `>= 150_000` |
 | `user_lists` | `[1, 1_000_000)` | `>= 1_000_000` |
+| `lists` | `[1, 10_000)` | `>= 10_000` |
+
+`lists` was reserved in a later migration (`db/migrate/*_reserve_lists_id_range.rb`) so legacy `/lists/:id` URLs keep resolving after import. Its ceiling (`10_000`) must exceed the **new-app** `lists` `MAX(id)` at run time (the relocation is an additive shift, collision-free only when all rows are below the ceiling) — re-confirm before running in production. The reservation also remaps the one **polymorphic** reference to lists, `ai_chats.parent` (`parent_type = 'List'`), which has no FK. See `docs/superpowers/plans/2026-07-03-lists-id-range-reservation.md`.
 
 The **per-table** ceilings live in `Services::BooksMigration::RESERVED_CEILINGS` (`app/lib/services/books_migration.rb`), reused by the migration and any future books ETL. The migration `db/migrate/20260612235510_reserve_books_id_ranges.rb` calls `Services::BooksMigration::IdRangeReservationService`, which (in one transaction) relocates any existing new-app rows up by their table's ceiling — remapping every FK that references `users`/`user_lists` (see `FOREIGN_KEYS` in the same file) — then bumps both sequences above their ceiling. It is idempotent (safe to re-run) and irreversible by design (restore from a snapshot to undo).
 

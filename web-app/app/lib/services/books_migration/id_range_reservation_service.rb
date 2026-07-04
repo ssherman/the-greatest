@@ -24,9 +24,10 @@ module Services
 
       def call
         ActiveRecord::Base.transaction do
-          drop_foreign_keys
+          dropped = drop_foreign_keys
           relocate_rows
-          add_foreign_keys
+          relocate_polymorphic_rows
+          add_foreign_keys(dropped)
           bump_sequences
         end
         success({ceilings: RESERVED_CEILINGS})
@@ -61,21 +62,39 @@ module Services
         end
       end
 
-      def drop_foreign_keys
-        each_foreign_key do |child, column, table|
-          if connection.foreign_key_exists?(child, table, column: column)
-            connection.remove_foreign_key(child, table, column: column)
+      # Polymorphic references have no FK to drop/re-add; shift the id column for
+      # rows whose *_type matches the reserved table, by that table's ceiling.
+      def relocate_polymorphic_rows
+        POLYMORPHIC_FOREIGN_KEYS.each do |table, refs|
+          ceiling = RESERVED_CEILINGS.fetch(table)
+          refs.each do |child, id_column, type_column, type_value|
+            connection.execute(
+              "UPDATE #{child} SET #{id_column} = #{id_column} + #{ceiling} " \
+              "WHERE #{type_column} = #{connection.quote(type_value)} AND #{id_column} < #{ceiling}"
+            )
           end
         end
       end
 
+      # Returns the FKs it actually dropped, so add_foreign_keys re-adds only
+      # those — a column in FOREIGN_KEYS without a real DB FK (ranked_lists.list_id)
+      # is shifted but must NOT gain a new FK.
+      def drop_foreign_keys
+        dropped = []
+        each_foreign_key do |child, column, table|
+          if connection.foreign_key_exists?(child, table, column: column)
+            connection.remove_foreign_key(child, table, column: column)
+            dropped << [child, column, table]
+          end
+        end
+        dropped
+      end
+
       # Re-adding a validated FK forces Postgres to verify every child row points
       # at a real parent — the integrity guarantee, done by the database.
-      def add_foreign_keys
-        each_foreign_key do |child, column, table|
-          unless connection.foreign_key_exists?(child, table, column: column)
-            connection.add_foreign_key(child, table, column: column)
-          end
+      def add_foreign_keys(dropped)
+        dropped.each do |child, column, table|
+          connection.add_foreign_key(child, table, column: column)
         end
       end
 
