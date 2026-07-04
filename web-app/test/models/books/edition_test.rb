@@ -11,6 +11,7 @@ require "test_helper"
 #  page_count       :integer
 #  popularity       :integer
 #  publication_year :integer
+#  publisher_name   :string
 #  subtitle         :string
 #  title            :string
 #  volume_number    :integer

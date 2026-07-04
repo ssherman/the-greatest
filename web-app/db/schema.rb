@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_04_034424) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_04_204010) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -156,6 +156,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_04_034424) do
     t.integer "page_count"
     t.integer "popularity"
     t.integer "publication_year"
+    t.string "publisher_name"
     t.string "subtitle"
     t.string "title"
     t.datetime "updated_at", null: false
