@@ -35,7 +35,13 @@ class Books::Book < ApplicationRecord
 
   extend FriendlyId
 
-  friendly_id :title, use: [:slugged, :finders]
+  # Most titles slug from the title exactly as `friendly_id :title` would. But a
+  # few titles slugify to a FriendlyId reserved word (e.g. "Images", "Users" — see
+  # config/initializers/friendly_id.rb), which would raise a validation error. For
+  # ONLY those, slug_candidates supplies a "<title> book" fallback instead; every
+  # other title keeps its plain-title slug and FriendlyId's normal duplicate-title
+  # conflict handling, unchanged.
+  friendly_id :slug_candidates, use: [:slugged, :finders]
 
   enum :book_kind, {standalone: 0, collection: 1}
 
@@ -86,5 +92,11 @@ class Books::Book < ApplicationRecord
 
   def normalize_title
     self.title = Services::Text::QuoteNormalizer.call(title) if title.present?
+  end
+
+  def slug_candidates
+    words = friendly_id_config.reserved_words
+    return title unless words.present? && words.include?(normalize_friendly_id(title))
+    ["#{title} book"]
   end
 end

@@ -100,5 +100,23 @@ module Books
       assert SearchIndexRequest.where(parent_type: "Books::Book", parent_id: old_book.id, action: SearchIndexRequest.actions[:index_item]).exists?, "old book should be reindexed"
       assert SearchIndexRequest.where(parent_type: "Books::Book", parent_id: new_book.id, action: SearchIndexRequest.actions[:index_item]).exists?, "new book should be reindexed"
     end
+
+    test "reindex is suppressed inside without_search_indexing" do
+      author = Books::Author.create!(name: "Guard Author")
+      book = Books::Book.create!(title: "Guard Book")
+      assert_no_difference -> { SearchIndexRequest.count } do
+        Services::BooksMigration.without_search_indexing do
+          Books::BookAuthor.create!(book: book, author: author)
+        end
+      end
+    end
+
+    test "reindex still fires outside suppression" do
+      author = Books::Author.create!(name: "Unguarded Author")
+      book = Books::Book.create!(title: "Unguarded Book")
+      assert_difference -> { SearchIndexRequest.where(parent_type: "Books::Book").count }, 1 do
+        Books::BookAuthor.create!(book: book, author: author)
+      end
+    end
   end
 end

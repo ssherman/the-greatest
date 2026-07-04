@@ -18,12 +18,14 @@ module Services
           legacy_each do |attrs|
             upsert_row(attrs)
             @count += 1
+          rescue => e
+            raise "#{model_key} migration failed at legacy id=#{attrs["id"]} (#{@count} rows succeeded): #{e.message}"
           end
         end
         finalize
         {success: true, data: {model: model_key, count: @count}}
       rescue => e
-        {success: false, error: e.message}
+        {success: false, error: e.message, data: {model: model_key, count: @count}}
       end
 
       private

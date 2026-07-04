@@ -35,6 +35,7 @@ class Books::BookAuthor < ApplicationRecord
   private
 
   def queue_book_for_reindexing
+    return if Services::BooksMigration.search_indexing_suppressed?
     queue_reindex(book_id)
     queue_reindex(book_id_before_last_save) if saved_change_to_book_id?
   end
