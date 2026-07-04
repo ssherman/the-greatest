@@ -19,6 +19,10 @@ class ReserveListsIdRange < ActiveRecord::Migration[8.1]
 
   def down
     # Intentionally irreversible: relocating rows and restarting sequences cannot
-    # be cleanly undone. Restore from a snapshot if reversal is ever needed.
+    # be cleanly undone. Raising (rather than a silent no-op) stops db:rollback
+    # from marking this version reverted while the DB stays in the reserved
+    # state — which would let a later db:migrate re-run `up` and, post-import,
+    # relocate the preserved book-list IDs. Restore from a snapshot to reverse.
+    raise ActiveRecord::IrreversibleMigration
   end
 end
