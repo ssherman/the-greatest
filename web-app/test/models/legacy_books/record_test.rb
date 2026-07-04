@@ -1,0 +1,14 @@
+require "test_helper"
+
+module LegacyBooks
+  class RecordTest < ActiveSupport::TestCase
+    test "Record is an abstract read-only base" do
+      assert LegacyBooks::Record.abstract_class?
+    end
+
+    test "legacy models point at the legacy tables" do
+      assert_equal "authors", LegacyBooks::Author.table_name
+      assert_equal "languages", LegacyBooks::Language.table_name
+    end
+  end
+end
