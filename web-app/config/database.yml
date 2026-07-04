@@ -25,42 +25,25 @@ default: &default
   password: <%= ENV["POSTGRES_PASSWORD"] %>
 
 development:
-  <<: *default
-  database: the_greatest_development
-
-  # The specified database role being used to connect to PostgreSQL.
-  # To create additional roles in PostgreSQL see `$ createuser --help`.
-  # When left blank, PostgreSQL will use the default role. This is
-  # the same name as the operating system user running Rails.
-  #username: the_greatest
-
-  # The password associated with the PostgreSQL role (username).
-  #password:
-
-  # Connect on a TCP socket. Omitted by default since the client uses a
-  # domain socket that doesn't need configuration. Windows does not have
-  # domain sockets, so uncomment these lines.
-  #host: localhost
-
-  # The TCP port the server listens on. Defaults to 5432.
-  # If your server runs on a different port number, change accordingly.
-  #port: 5432
-
-  # Schema search path. The server defaults to $user,public
-  #schema_search_path: myapp,sharedapp,public
-
-  # Minimum log levels, in increasing order:
-  #   debug5, debug4, debug3, debug2, debug1,
-  #   log, notice, warning, error, fatal, and panic
-  # Defaults to warning.
-  #min_messages: notice
+  primary:
+    <<: *default
+    database: the_greatest_development
+  legacy_books:
+    <<: *default
+    database: the_greatest_books_legacy
+    replica: true
 
 # Warning: The database defined as "test" will be erased and
 # re-generated from your development database when you run "rake".
 # Do not set this db to the same as development or production.
 test:
-  <<: *default
-  database: the_greatest_test
+  primary:
+    <<: *default
+    database: the_greatest_test
+  legacy_books:
+    <<: *default
+    database: <%= ENV.fetch("LEGACY_BOOKS_TEST_DATABASE", "the_greatest_books_legacy_test") %>
+    replica: true
 
 # As with config/credentials.yml, you never want to store sensitive information,
 # like your database password, in your source code. If your source code is
@@ -83,9 +66,18 @@ test:
 # for a full overview on how database connection configuration can be specified.
 #
 production:
-  <<: *default
-  host: <%= ENV.fetch("POSTGRES_HOST", "localhost") %>
-  port: <%= ENV.fetch("POSTGRES_PORT", "5432") %>
-  database: <%= ENV.fetch("POSTGRES_DATABASE", "the_greatest_production") %>
-  username: <%= ENV.fetch("POSTGRES_USER", "the_greatest") %>
-  password: <%= ENV["POSTGRES_PASSWORD"] %>
+  primary:
+    <<: *default
+    host: <%= ENV.fetch("POSTGRES_HOST", "localhost") %>
+    port: <%= ENV.fetch("POSTGRES_PORT", "5432") %>
+    database: <%= ENV.fetch("POSTGRES_DATABASE", "the_greatest_production") %>
+    username: <%= ENV.fetch("POSTGRES_USER", "the_greatest") %>
+    password: <%= ENV["POSTGRES_PASSWORD"] %>
+  legacy_books:
+    <<: *default
+    host: <%= ENV.fetch("LEGACY_BOOKS_HOST", ENV.fetch("POSTGRES_HOST", "localhost")) %>
+    port: <%= ENV.fetch("LEGACY_BOOKS_PORT", ENV.fetch("POSTGRES_PORT", "5432")) %>
+    database: <%= ENV.fetch("LEGACY_BOOKS_DATABASE", "the_greatest_books") %>
+    username: <%= ENV.fetch("LEGACY_BOOKS_USER", ENV.fetch("POSTGRES_USER", "the_greatest")) %>
+    password: <%= ENV.fetch("LEGACY_BOOKS_PASSWORD", ENV["POSTGRES_PASSWORD"]) %>
+    replica: true

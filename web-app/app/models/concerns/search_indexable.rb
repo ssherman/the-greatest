@@ -11,10 +11,12 @@ module SearchIndexable
   private
 
   def queue_for_indexing
+    return if Services::BooksMigration.search_indexing_suppressed?
     SearchIndexRequest.create!(parent: self, action: :index_item)
   end
 
   def queue_for_unindexing
+    return if Services::BooksMigration.search_indexing_suppressed?
     SearchIndexRequest.create!(parent: self, action: :unindex_item)
   end
 end

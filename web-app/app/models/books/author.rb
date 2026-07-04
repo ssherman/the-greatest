@@ -65,6 +65,8 @@ class Books::Author < ApplicationRecord
   end
 
   def queue_books_for_reindexing
+    return if Services::BooksMigration.search_indexing_suppressed?
+
     book_ids.each do |book_id|
       SearchIndexRequest.create!(parent_type: "Books::Book", parent_id: book_id, action: :index_item)
     end

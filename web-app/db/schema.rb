@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_04_014923) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_04_034424) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -380,6 +380,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_04_014923) do
     t.index ["iso_639_3"], name: "index_languages_on_iso_639_3", unique: true
     t.index ["name"], name: "index_languages_on_name"
     t.index ["slug"], name: "index_languages_on_slug", unique: true
+  end
+
+  create_table "legacy_id_maps", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.bigint "legacy_id", null: false
+    t.string "model", null: false
+    t.bigint "new_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["model", "legacy_id"], name: "index_legacy_id_maps_on_model_and_legacy_id", unique: true
   end
 
   create_table "list_items", force: :cascade do |t|
