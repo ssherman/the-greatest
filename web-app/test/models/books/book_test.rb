@@ -49,6 +49,22 @@ module Books
       assert_equal "don-quixote", book.slug
     end
 
+    test "a title that slugifies to a reserved word gets a non-reserved fallback slug" do
+      book = Books::Book.create!(title: "Images")
+      assert_equal "images-book", book.slug
+      assert_not_includes Books::Book.friendly_id_config.reserved_words, book.slug
+    end
+
+    test "a second reserved-word title also falls back cleanly" do
+      book = Books::Book.create!(title: "Users")
+      assert_equal "users-book", book.slug
+    end
+
+    test "a non-reserved title still slugifies directly from the title" do
+      book = Books::Book.create!(title: "A Perfectly Normal Book Title ABC")
+      assert_equal "a-perfectly-normal-book-title-abc", book.slug
+    end
+
     test "defaults to standalone kind" do
       assert_predicate Books::Book.new(title: "X"), :standalone?
     end
