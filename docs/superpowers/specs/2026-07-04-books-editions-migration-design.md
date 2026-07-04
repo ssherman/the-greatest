@@ -25,6 +25,7 @@ New `books_editions` columns: `id, book_binding, edition_type(NOT NULL default s
 | `popularity` | `popularity` | direct (30,476 nil — allowed) |
 | `book_binding` (int) | `book_binding` | **enum re-encode by symbol** (see below) |
 | `metadata` (jsonb) | `metadata` | copy as-is; `nil` → `{}` (target is NOT NULL; all 148,296 rows have it) |
+| `metadata → amazon.ItemInfo.ByLineInfo.Manufacturer.DisplayValue` | `publisher_name` (**new column**) | extract publisher (97% coverage — see below); `nil` if absent |
 | `book_id` | `book_id` | direct **passthrough** — books preserve their id, so no remap. Set in the migrator (parent FK). |
 | — | `edition_type` | **omit** → model default `:standard` |
 | `description` | — | **drop** (0 non-blank in legacy; no target column) |
@@ -34,7 +35,11 @@ New `books_editions` columns: `id, book_binding, edition_type(NOT NULL default s
 
 `subtitle`, `page_count`, `volume_number`: no legacy source → left nil.
 
-The transformer is **pure** (String-keyed hash in → symbol-keyed attrs out, no DB): it returns `{title:, publication_year:, popularity:, book_binding:, metadata:}`. `book_id` (the parent FK, a direct passthrough) is set by the migrator; `language_id` has no legacy source and is left nil (the model defaults it). This mirrors the established transformer/migrator split.
+The transformer is **pure** (String-keyed hash in → symbol-keyed attrs out, no DB): it returns `{title:, publication_year:, popularity:, book_binding:, publisher_name:, metadata:}`. `book_id` (the parent FK, a direct passthrough) is set by the migrator; `language_id` has no legacy source and is left nil (the model defaults it). This mirrors the established transformer/migrator split.
+
+## Publisher name (new column)
+
+The legacy `metadata` is an Amazon PA-API v5 response (every edition has a single top-level `amazon` key). The publisher lives at `amazon.ItemInfo.ByLineInfo.Manufacturer.DisplayValue` — present on **144,112 of 148,296 editions (97%)**, with clean values ("Random House Publishing Group", "Modern Library Inc", "Tantor Media", …). `Books::Edition` has no publisher column today, so a schema migration adds `publisher_name :string` (nullable, no index — nothing queries it yet). The transformer extracts it via `metadata.dig("amazon", "ItemInfo", "ByLineInfo", "Manufacturer", "DisplayValue")`, coerced blank→nil (`.presence`); `nil` for the ~3% without it. It does **not** fall back to `ByLineInfo.Brand.DisplayValue` (a different semantic — imprint/brand, e.g. "Audible"). The full `metadata` blob is still copied through, so the raw data remains available.
 
 ## `book_binding` re-encoding (map by symbol — never copy ints)
 
@@ -108,6 +113,7 @@ Add `data_migration:editions` (runs `Services::BooksMigration::EditionMigrator.c
 
 ## Files
 
+- Migration: `add_column :books_editions, :publisher_name, :string` (via `bin/rails generate migration`).
 - Create `web-app/app/models/legacy_books/edition.rb` (`self.table_name = "editions"`).
 - Create `web-app/app/lib/services/books_migration/edition_transformer.rb` (pure).
 - Create `web-app/app/lib/services/books_migration/edition_migrator.rb` (fresh id + map, `finalize` = `default_edition_id` back-reference).
@@ -118,12 +124,12 @@ Add `data_migration:editions` (runs `Services::BooksMigration::EditionMigrator.c
 
 Connection-free unit tests (stub `legacy_each` with Mocha `multiple_yields`; never open the legacy connection):
 
-- **Transformer:** each legacy binding int maps to the correct new symbol; `audible` and `audio` both → `:audiobook`; `collectable` → `:other`; `nil` binding → `nil`; unknown int → raise; `metadata` nil → `{}`; `edition_type` not emitted (model default applies); pure (no DB).
-- **Migrator:** creates editions with fresh ids, records `LegacyIdMap("Books::Edition")`, sets `book_id` directly; idempotent (re-run updates in place, no dupes, map stable); search indexing suppressed during load; `finalize` sets `default_edition_id` to the most-popular edition (popularity desc, nulls last, id asc tiebreak) and leaves a book with no editions at `NULL`.
+- **Transformer:** each legacy binding int maps to the correct new symbol; `audible` and `audio` both → `:audiobook`; `collectable` → `:other`; `nil` binding → `nil`; unknown int → raise; `metadata` nil → `{}`; **`publisher_name` extracted from the Amazon manufacturer path, nil when absent/blank**; `edition_type` not emitted (model default applies); pure (no DB).
+- **Migrator:** creates editions with fresh ids, records `LegacyIdMap("Books::Edition")`, sets `book_id` directly, **persists `publisher_name` while preserving the full `metadata`**; idempotent (re-run updates in place, no dupes, map stable); search indexing suppressed during load; `finalize` sets `default_edition_id` to the most-popular edition (popularity desc, nulls last, id asc tiebreak) and leaves a book with no editions at `NULL`.
 
 ## End-to-end verification (real legacy DB, dev target)
 
-Run `data_migration:editions`; expect `EditionMigrator.call` → `{success: true, count: 148296}`; `Books::Edition.count == 148296`; `LegacyIdMap.where(model: "Books::Edition").count == 148296`; `Books::Book.where.not(default_edition_id: nil).count == 38668`; `pending_book_index == 0`. Proactively scan for legacy editions whose `book_id` has no migrated book (orphaned FK) before/after the run, the way the blank-title scan preempted issues in Phase 1b.
+Run `data_migration:editions`; expect `EditionMigrator.call` → `{success: true, count: 148296}`; `Books::Edition.count == 148296`; `LegacyIdMap.where(model: "Books::Edition").count == 148296`; `Books::Book.where.not(default_edition_id: nil).count == 38668`; `Books::Edition.where.not(publisher_name: nil).count == 144112`; `pending_book_index == 0`. Proactively scan for legacy editions whose `book_id` has no migrated book (orphaned FK) before/after the run, the way the blank-title scan preempted issues in Phase 1b.
 
 ## Out of scope (per parent design)
 

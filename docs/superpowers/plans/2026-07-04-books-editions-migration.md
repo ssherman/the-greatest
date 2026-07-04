@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Migrate legacy `editions` → `books_editions` (fresh id + `LegacyIdMap`, `book_binding` re-encoded by symbol) and set `default_edition_id` on the already-migrated books, on top of the Phase 1a/1b ETL framework.
+**Goal:** Migrate legacy `editions` → `books_editions` (fresh id + `LegacyIdMap`, `book_binding` re-encoded by symbol, `publisher_name` extracted from the Amazon metadata) and set `default_edition_id` on the already-migrated books, on top of the Phase 1a/1b ETL framework.
 
-**Architecture:** One more `Services::BooksMigration::Migrator` subclass reusing the base (batched read → pure `EditionTransformer` → idempotent upsert through the real `Books::Edition`, search suppressed). Editions take fresh auto ids; the `LegacyIdMap("Books::Edition")` is the dedup key (needed later by identifiers). `default_edition_id` is set in `finalize` by one set-based `UPDATE` (most-popular edition per book; editionless books stay NULL — no synthesis).
+**Architecture:** One more `Services::BooksMigration::Migrator` subclass reusing the base (batched read → pure `EditionTransformer` → idempotent upsert through the real `Books::Edition`, search suppressed). Editions take fresh auto ids; the `LegacyIdMap("Books::Edition")` is the dedup key (needed later by identifiers). A new `publisher_name` column captures the publisher pulled from the legacy Amazon metadata blob. `default_edition_id` is set in `finalize` by one set-based `UPDATE` (most-popular edition per book; editionless books stay NULL — no synthesis).
 
 **Tech Stack:** Rails 8.1, PostgreSQL 17, Minitest + Mocha + fixtures, `Services::` migrators.
 
@@ -13,12 +13,13 @@
 ## Global Constraints
 
 - Run all commands from `/home/shane/dev/the-greatest/web-app`.
-- Lint with `bundle exec standardrb` (NOT rubocop). Tests: `bin/rails test`.
-- Legacy dev DB `the_greatest_books_legacy` on `localhost:6543`. Volume: `editions` 148,296; 38,668 of 126,204 books have ≥1 edition.
+- Lint with `bundle exec standardrb` (NOT rubocop). Tests: `bin/rails test`. Use Rails generators for the migration (never hand-create).
+- Legacy dev DB `the_greatest_books_legacy` on `localhost:6543`. Volume: `editions` 148,296; 38,668 of 126,204 books have ≥1 edition; publisher present on 144,112 editions (97%).
 - **Fresh ids** (editions aren't URL-facing) — no `reset_pk_sequence!`. Idempotency via `LegacyIdMap("Books::Edition")`: `save!` + `LegacyIdMap.record` in a **per-row transaction**.
 - Transformer is **PURE** (String-keyed hash in → symbol-keyed attrs out, no DB). `book_id` (direct passthrough — books preserve id) is set by the migrator; `language_id` has no legacy source (left nil).
 - `book_binding`: re-encode **by symbol, never copy ints**. Unknown non-nil legacy value → **raise**; `nil` → `nil`.
-- Write through the real `Books::Edition`: `edition_type` omitted (model default `:standard`); `metadata` is `jsonb NOT NULL`, so `nil` → `{}`.
+- `publisher_name`: new nullable column `books_editions.publisher_name`; extract via `metadata.dig("amazon", "ItemInfo", "ByLineInfo", "Manufacturer", "DisplayValue")`, blank→nil (`.presence`); `nil` if absent. **No** fallback to `ByLineInfo.Brand`.
+- Write through the real `Books::Edition`: `edition_type` omitted (model default `:standard`); `metadata` is `jsonb NOT NULL`, so `nil` → `{}` (full blob still copied).
 - `default_edition_id`: set in `finalize` by one set-based SQL `UPDATE` — most-popular edition (`popularity DESC NULLS LAST, id ASC`), books-with-editions only; editionless books stay `NULL` (**no synthesis**). Raw SQL bypasses AR callbacks (no `SearchIndexRequest` flood; `finalize` runs outside `without_search_indexing`).
 - Migrator tests are **connection-free**: stub `legacy_each` (Mocha `multiple_yields`); never open the legacy connection.
 - SKIP (deferred/out of scope): identifiers (`ol_edition_id`, `identifiers`/`flat_identifiers` jsonb), `book_versions`, `language_id`, `description`, `last_refreshed`.
@@ -26,14 +27,55 @@
 
 ---
 
-### Task 1: EditionTransformer (pure) + book_binding re-encoding
+### Task 1: Add `publisher_name` column to `books_editions`
+
+**Files:**
+- Create: migration `web-app/db/migrate/*_add_publisher_name_to_books_editions.rb`
+- Modify (auto): `web-app/db/schema.rb`, `web-app/app/models/books/edition.rb` (annotaterb schema comment)
+
+- [ ] **Step 1: Generate the migration**
+
+Run: `bin/rails generate migration AddPublisherNameToBooksEditions publisher_name:string`
+Expected: creates `db/migrate/<timestamp>_add_publisher_name_to_books_editions.rb` containing:
+
+```ruby
+class AddPublisherNameToBooksEditions < ActiveRecord::Migration[8.1]
+  def change
+    add_column :books_editions, :publisher_name, :string
+  end
+end
+```
+
+(No index — nothing queries `publisher_name` yet.)
+
+- [ ] **Step 2: Migrate**
+
+Run: `bin/rails db:migrate`
+Expected: migration runs; `db/schema.rb` updated with `publisher_name`; annotaterb re-annotates `app/models/books/edition.rb` with the new column.
+
+- [ ] **Step 3: Verify the column exists**
+
+Run: `bin/rails runner 'puts Books::Edition.column_names.include?("publisher_name")'`
+Expected: `true`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+bundle exec standardrb --fix db/migrate/*_add_publisher_name_to_books_editions.rb
+git add db/migrate/*_add_publisher_name_to_books_editions.rb db/schema.rb app/models/books/edition.rb
+git commit -m "Add publisher_name column to books_editions"
+```
+
+---
+
+### Task 2: EditionTransformer (pure) — binding re-encoding + publisher extraction
 
 **Files:**
 - Create: `web-app/app/lib/services/books_migration/edition_transformer.rb`
 - Test: `web-app/test/lib/services/books_migration/edition_transformer_test.rb`
 
 **Interfaces:**
-- Produces: `EditionTransformer.call(attrs) -> {title:, publication_year:, popularity:, book_binding:, metadata:}` (pure, String-keyed hash in). `book_binding` is a NEW `Books::Edition` enum **symbol** (or nil). No `book_id`/`language_id`/`edition_type` keys emitted.
+- Produces: `EditionTransformer.call(attrs) -> {title:, publication_year:, popularity:, book_binding:, publisher_name:, metadata:}` (pure, String-keyed hash in). `book_binding` is a NEW `Books::Edition` enum **symbol** (or nil); `publisher_name` is a String (or nil). No `book_id`/`language_id`/`edition_type` keys emitted.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -85,6 +127,18 @@ class Services::BooksMigration::EditionTransformerTest < ActiveSupport::TestCase
   test "nil metadata becomes an empty hash (column is NOT NULL)" do
     assert_equal({}, transform("metadata" => nil)[:metadata])
   end
+
+  test "extracts publisher_name from the amazon ByLineInfo manufacturer path" do
+    md = {"amazon" => {"ItemInfo" => {"ByLineInfo" => {"Manufacturer" => {"DisplayValue" => "Random House"}}}}}
+    assert_equal "Random House", transform("metadata" => md)[:publisher_name]
+  end
+
+  test "publisher_name is nil when the manufacturer path is absent, blank, or metadata is nil" do
+    assert_nil transform("metadata" => {"amazon" => {"ItemInfo" => {}}})[:publisher_name]
+    blank = {"amazon" => {"ItemInfo" => {"ByLineInfo" => {"Manufacturer" => {"DisplayValue" => ""}}}}}
+    assert_nil transform("metadata" => blank)[:publisher_name]
+    assert_nil transform("metadata" => nil)[:publisher_name]
+  end
 end
 ```
 
@@ -103,9 +157,10 @@ module Services
     # Legacy `editions` row -> new Books::Edition attributes. PURE (String-keyed
     # hash in -> symbol-keyed attrs out, no DB). `book_id` (direct passthrough)
     # and `language_id` (no legacy source) are handled by the migrator. `edition_type`
-    # is omitted so the model default (:standard) applies. The legacy `book_binding`
-    # integer is re-encoded to the NEW enum BY SYMBOL (never by int) — the old and
-    # new enums assign different integers to the same names.
+    # is omitted so the model default (:standard) applies. `book_binding` is re-encoded
+    # to the NEW enum BY SYMBOL (never by int) — the old and new enums assign different
+    # integers to the same names. `publisher_name` is pulled from the legacy Amazon
+    # PA-API metadata (ByLineInfo.Manufacturer); the full metadata blob is still copied.
     class EditionTransformer
       # legacy book_binding int -> legacy symbol
       LEGACY_BINDING = {
@@ -122,12 +177,15 @@ module Services
         leather_bound: :leather_bound, other: :other
       }.freeze
 
+      PUBLISHER_PATH = ["amazon", "ItemInfo", "ByLineInfo", "Manufacturer", "DisplayValue"].freeze
+
       def self.call(attrs)
         {
           title: attrs["title"],
           publication_year: attrs["publication_year"],
           popularity: attrs["popularity"],
           book_binding: book_binding(attrs["book_binding"]),
+          publisher_name: publisher_name(attrs["metadata"]),
           metadata: attrs["metadata"] || {}
         }
       end
@@ -140,6 +198,12 @@ module Services
         BINDING_TO_NEW.fetch(legacy_sym)
       end
       private_class_method :book_binding
+
+      def self.publisher_name(metadata)
+        return nil unless metadata.is_a?(Hash)
+        metadata.dig(*PUBLISHER_PATH).presence
+      end
+      private_class_method :publisher_name
     end
   end
 end
@@ -148,19 +212,19 @@ end
 - [ ] **Step 4: Run it — verify it passes**
 
 Run: `bin/rails test test/lib/services/books_migration/edition_transformer_test.rb`
-Expected: PASS (6 runs).
+Expected: PASS (8 runs).
 
 - [ ] **Step 5: Lint + commit**
 
 ```bash
 bundle exec standardrb --fix app/lib/services/books_migration/edition_transformer.rb test/lib/services/books_migration/edition_transformer_test.rb
 git add app/lib/services/books_migration/edition_transformer.rb test/lib/services/books_migration/edition_transformer_test.rb
-git commit -m "Add EditionTransformer (pure book_binding re-encoding)"
+git commit -m "Add EditionTransformer (book_binding re-encode + publisher extraction)"
 ```
 
 ---
 
-### Task 2: LegacyBooks::Edition + EditionMigrator (fresh id + map + default_edition_id)
+### Task 3: LegacyBooks::Edition + EditionMigrator (fresh id + map + default_edition_id)
 
 **Files:**
 - Create: `web-app/app/models/legacy_books/edition.rb`
@@ -169,7 +233,7 @@ git commit -m "Add EditionTransformer (pure book_binding re-encoding)"
 
 **Interfaces:**
 - Consumes: `EditionTransformer.call`, `Migrator` base, `LegacyIdMap.record/lookup`, `Books::Edition`, `Books::Book`.
-- Produces: `EditionMigrator` (fresh id; records `LegacyIdMap(model: "Books::Edition")`; `book_id` direct; `finalize` sets `default_edition_id`). Result shape `{success:, data: {model: "Books::Edition", count:}}`.
+- Produces: `EditionMigrator` (fresh id; records `LegacyIdMap(model: "Books::Edition")`; `book_id` direct; persists `publisher_name`; `finalize` sets `default_edition_id`). Result shape `{success:, data: {model: "Books::Edition", count:}}`.
 
 - [ ] **Step 1: Create the legacy model**
 
@@ -197,12 +261,13 @@ class Services::BooksMigration::EditionMigratorTest < ActiveSupport::TestCase
     migrator.call
   end
 
-  test "creates editions with fresh ids, records the id map, and sets book_id directly" do
+  test "creates editions with fresh ids, records the id map, sets book_id, and extracts publisher_name" do
     book = Books::Book.create!(title: "Edition Parent")
+    md = {"amazon" => {"ItemInfo" => {"ByLineInfo" => {"Manufacturer" => {"DisplayValue" => "Penguin"}}}}}
 
     result = run_migrator([
       {"id" => 5001, "book_id" => book.id, "title" => "HC", "publication_year" => 1990,
-       "popularity" => 10, "book_binding" => 1, "metadata" => {"a" => 1}}
+       "popularity" => 10, "book_binding" => 1, "metadata" => md}
     ])
 
     assert result[:success], result[:error]
@@ -217,7 +282,8 @@ class Services::BooksMigration::EditionMigratorTest < ActiveSupport::TestCase
     assert_equal 1990, edition.publication_year
     assert_equal "hardcover", edition.book_binding
     assert_equal "standard", edition.edition_type
-    assert_equal({"a" => 1}, edition.metadata)
+    assert_equal "Penguin", edition.publisher_name
+    assert_equal md, edition.metadata
   end
 
   test "is idempotent: re-running updates in place without duplicating or remapping" do
@@ -331,12 +397,12 @@ Expected: all pass.
 ```bash
 bundle exec standardrb --fix app/models/legacy_books/edition.rb app/lib/services/books_migration/edition_migrator.rb test/lib/services/books_migration/edition_migrator_test.rb
 git add app/models/legacy_books/edition.rb app/lib/services/books_migration/edition_migrator.rb test/lib/services/books_migration/edition_migrator_test.rb
-git commit -m "Add editions migrator (fresh id + map + default_edition_id back-reference)"
+git commit -m "Add editions migrator (fresh id + map + publisher + default_edition_id)"
 ```
 
 ---
 
-### Task 3: Orchestrator wiring + end-to-end dev run
+### Task 4: Orchestrator wiring + end-to-end dev run
 
 **Files:**
 - Modify: `web-app/lib/tasks/data_migration.rake`
@@ -391,9 +457,9 @@ Expected: `orphan_edition_book_ids=0`. If non-zero, report the ids — the run w
 Then run:
 ```bash
 bin/rails data_migration:editions
-bin/rails runner 'puts "editions=#{Books::Edition.count} edition_maps=#{LegacyIdMap.where(model: "Books::Edition").count} books_with_default=#{Books::Book.where.not(default_edition_id: nil).count} pending_book_index=#{SearchIndexRequest.where(parent_type: "Books::Book").count}"'
+bin/rails runner 'puts "editions=#{Books::Edition.count} edition_maps=#{LegacyIdMap.where(model: "Books::Edition").count} books_with_default=#{Books::Book.where.not(default_edition_id: nil).count} with_publisher=#{Books::Edition.where.not(publisher_name: nil).count} pending_book_index=#{SearchIndexRequest.where(parent_type: "Books::Book").count}"'
 ```
-Expected: `editions` result `{success: true, ...}` `count: 148296`; then `editions=148296 edition_maps=148296 books_with_default=38668 pending_book_index=0`.
+Expected: `editions` result `{success: true, ...}` `count: 148296`; then `editions=148296 edition_maps=148296 books_with_default=38668 with_publisher=144112 pending_book_index=0`.
 
 > If a run returns `{success: false, ...}`, the error names the offending legacy edition id and the count that succeeded — report it; the run is idempotent, so it resumes after the row is understood.
 
@@ -402,14 +468,15 @@ Expected: `editions` result `{success: true, ...}` `count: 148296`; then `editio
 ## Self-Review
 
 **1. Spec coverage:**
-- editions → books_editions, fresh id + `LegacyIdMap`, per-row transaction idempotency → Task 2. ✓
-- `book_binding` re-encode by symbol, unknown→raise, nil→nil → Task 1. ✓
-- field mapping (title/publication_year/popularity/metadata nil→{}, edition_type default, book_id direct, language_id nil) → Tasks 1+2. ✓
-- `default_edition_id` set-based SQL, most-popular, editionless→NULL, no synthesis → Task 2 `finalize`. ✓
-- search suppression (load suppressed; finalize bypasses callbacks) → Task 2. ✓
-- orchestrator + e2e (+ orphan scan) → Task 3. ✓
+- `publisher_name` column + extraction (Amazon manufacturer path, blank→nil, no Brand fallback) → Tasks 1+2. ✓
+- editions → books_editions, fresh id + `LegacyIdMap`, per-row transaction idempotency → Task 3. ✓
+- `book_binding` re-encode by symbol, unknown→raise, nil→nil → Task 2. ✓
+- field mapping (title/publication_year/popularity/metadata nil→{}, edition_type default, book_id direct, language_id nil) → Tasks 2+3. ✓
+- `default_edition_id` set-based SQL, most-popular, editionless→NULL, no synthesis → Task 3 `finalize`. ✓
+- search suppression (load suppressed; finalize bypasses callbacks) → Task 3. ✓
+- orchestrator + e2e (+ orphan scan + publisher coverage) → Task 4. ✓
 - Skipped-by-design (identifiers, book_versions, language_id, description) — stated in Global Constraints. ✓
 
 **2. Placeholder scan:** No TBD/TODO; complete code in every code step.
 
-**3. Type consistency:** `EditionTransformer.call(attrs)` (String-keyed) → symbol-keyed hash, consistent Task 1↔2. `LegacyIdMap.record/lookup(model:, legacy_id:[, new_id:])` keyword signatures match Phase 1a. Subclass hooks (`legacy_model`, `model_key`, `upsert_row`, `finalize`) match the base contract. `model_key` == `"Books::Edition"` used consistently for both the result shape and the `LegacyIdMap` model key.
+**3. Type consistency:** `EditionTransformer.call(attrs)` (String-keyed) → symbol-keyed hash `{…, publisher_name:, metadata:}`, consistent Task 2↔3. `LegacyIdMap.record/lookup(model:, legacy_id:[, new_id:])` keyword signatures match Phase 1a. Subclass hooks (`legacy_model`, `model_key`, `upsert_row`, `finalize`) match the base contract. `model_key` == `"Books::Edition"` used consistently for both the result shape and the `LegacyIdMap` model key. `publisher_name` column (Task 1) exists before the migrator persists it (Task 3).
