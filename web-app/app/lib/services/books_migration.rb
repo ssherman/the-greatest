@@ -61,5 +61,22 @@ module Services
         ["ai_chats", "parent_id", "parent_type", "List"]
       ]
     }.freeze
+
+    SUPPRESS_KEY = :books_migration_suppress_search
+
+    # Runs the block with SearchIndexable enqueuing disabled on this thread, so a
+    # bulk migration doesn't create a SearchIndexRequest per row. Always restores
+    # the flag, even on error.
+    def self.without_search_indexing
+      previous = Thread.current[SUPPRESS_KEY]
+      Thread.current[SUPPRESS_KEY] = true
+      yield
+    ensure
+      Thread.current[SUPPRESS_KEY] = previous
+    end
+
+    def self.search_indexing_suppressed?
+      Thread.current[SUPPRESS_KEY] == true
+    end
   end
 end
