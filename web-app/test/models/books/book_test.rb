@@ -65,6 +65,13 @@ module Books
       assert_equal "a-perfectly-normal-book-title-abc", book.slug
     end
 
+    test "a duplicate non-reserved title keeps default conflict handling, not the reserved fallback" do
+      Books::Book.create!(title: "Repeated Title XYZ")
+      second = Books::Book.create!(title: "Repeated Title XYZ")
+      assert_not_equal "repeated-title-xyz", second.slug
+      assert_not_equal "repeated-title-xyz-book", second.slug
+    end
+
     test "defaults to standalone kind" do
       assert_predicate Books::Book.new(title: "X"), :standalone?
     end
