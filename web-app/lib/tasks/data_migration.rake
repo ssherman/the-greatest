@@ -24,6 +24,14 @@ namespace :data_migration do
     pp Services::BooksMigration::EditionMigrator.call
   end
 
+  desc "Migrate legacy identifiers (goodreads + openlibrary) into identifiers"
+  task identifiers: :environment do
+    pp Services::BooksMigration::BookIdentifierMigrator.call
+    pp Services::BooksMigration::BookWorkIdentifierMigrator.call
+    pp Services::BooksMigration::AuthorIdentifierMigrator.call
+    pp Services::BooksMigration::EditionIdentifierMigrator.call
+  end
+
   desc "Run all Phase-1 migrators in dependency order"
-  task all: [:languages, :authors, :books, :book_authors, :editions]
+  task all: [:languages, :authors, :books, :book_authors, :editions, :identifiers]
 end
