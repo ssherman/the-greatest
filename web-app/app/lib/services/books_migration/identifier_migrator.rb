@@ -14,6 +14,11 @@ module Services
 
       private
 
+      # The identifiable target (Books::Book/Author/Edition) must already exist —
+      # languages/authors/books/editions migrate before identifiers. A source id
+      # with no migrated target fails Identifier's belongs_to presence validation
+      # and hard-aborts the run (the per-row error names the offending legacy id;
+      # the run is idempotent, so it resumes after the data is corrected).
       def upsert_identifier(identifiable_type:, identifiable_id:, identifier_type:, value:)
         return if value.blank? || identifiable_id.nil?
         Identifier.find_or_create_by!(

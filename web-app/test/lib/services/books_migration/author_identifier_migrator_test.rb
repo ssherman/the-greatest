@@ -21,4 +21,13 @@ class Services::BooksMigration::AuthorIdentifierMigratorTest < ActiveSupport::Te
       run_migrator([{"id" => author.id, "ol_author_id" => nil}])
     end
   end
+
+  test "is idempotent" do
+    author = Books::Author.create!(name: "Idem OL Author")
+    rows = [{"id" => author.id, "ol_author_id" => "/authors/OL1A"}]
+    run_migrator(rows)
+    assert_no_difference -> { Identifier.count } do
+      run_migrator(rows)
+    end
+  end
 end

@@ -30,4 +30,20 @@ class Services::BooksMigration::BookWorkIdentifierMigratorTest < ActiveSupport::
       run_migrator(rows)
     end
   end
+
+  test "book goodreads dedups against an identical book_identifiers goodreads, and coexists when different" do
+    book = Books::Book.create!(title: "Cross Source Book")
+    # book_identifiers type-5 source creates goodreads "123"
+    bi = Services::BooksMigration::BookIdentifierMigrator.new
+    bi.stubs(:legacy_each).multiple_yields([{"id" => 1, "book_id" => book.id, "identifier_type" => 5, "identifier" => "123"}])
+    bi.call
+    # same value from books.goodreads_id -> no new row (natural-key dedup)
+    assert_no_difference -> { Identifier.count } do
+      run_migrator([{"id" => book.id, "ol_work_id" => nil, "goodreads_id" => "123"}])
+    end
+    # different value from books.goodreads_id -> a second, distinct goodreads row
+    assert_difference -> { Identifier.where(identifiable: book, identifier_type: :books_work_goodreads_id).count }, 1 do
+      run_migrator([{"id" => book.id, "ol_work_id" => nil, "goodreads_id" => "456"}])
+    end
+  end
 end
