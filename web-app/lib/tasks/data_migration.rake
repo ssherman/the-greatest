@@ -32,6 +32,16 @@ namespace :data_migration do
     pp Services::BooksMigration::EditionIdentifierMigrator.call
   end
 
+  desc "Migrate legacy categories into Books::Category (fresh ids + map; preserves slug + parent)"
+  task categories: :environment do
+    pp Services::BooksMigration::CategoryMigrator.call
+  end
+
+  desc "Migrate legacy book_categories into category_items (bulk upsert; recomputes item_count)"
+  task category_items: :environment do
+    pp Services::BooksMigration::CategoryItemMigrator.call
+  end
+
   desc "Run all Phase-1 migrators in dependency order"
-  task all: [:languages, :authors, :books, :book_authors, :editions, :identifiers]
+  task all: [:languages, :authors, :books, :book_authors, :editions, :identifiers, :categories, :category_items]
 end
