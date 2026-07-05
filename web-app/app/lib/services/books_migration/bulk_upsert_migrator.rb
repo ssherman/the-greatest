@@ -7,6 +7,9 @@ module Services
     # run resumes idempotently). Idempotent on the target's unique index. Subclasses
     # define: legacy_model, model_key, target_model, unique_by, build_rows(attrs);
     # optionally preload_context / finalize / upsert_batch.
+    #
+    # NOTE: finalize runs OUTSIDE without_search_indexing (after the block). Keep it
+    # callback-free (raw SQL / update_all), or search-index requests will leak.
     class BulkUpsertMigrator < Migrator
       UPSERT_BATCH = 1000
 
