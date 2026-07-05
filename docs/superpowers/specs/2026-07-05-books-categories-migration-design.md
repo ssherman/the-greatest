@@ -199,7 +199,7 @@ Expected: both migrators `{success: true, ...}`; `cats=73913`, `deleted=21182`, 
 - A known slug survives verbatim: `Books::Category.find_by(slug: "metaphysical-visionary-fiction")` is present (name "Speculative Fiction").
 - `item_count` is populated: top categories by `item_count` match the legacy `book_count` order (Fiction, Nonfiction, …), soft-deleted categories have `item_count = 0`.
 - No `category_items` reference a soft-deleted category:
-  `CategoryItem.joins("JOIN categories c ON c.id = category_items.category_id").where(categories: {deleted: true}).count` = 0.
+  `CategoryItem.joins(:category).where(item_type: "Books::Book", categories: {deleted: true}).count` = 0.
 
 > A `{success: false, ...}` result names the offending legacy row id and the count that succeeded; the run is idempotent, so it resumes.
 

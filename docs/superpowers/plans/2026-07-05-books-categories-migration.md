@@ -744,7 +744,7 @@ Expected: both migrators `{success: true, ...}`; then `cats=73913 deleted=21182 
 Spot-checks:
 ```bash
 bin/rails runner 'c = Books::Category.find_by(slug: "metaphysical-visionary-fiction"); puts "slug-preserved: #{c&.name.inspect} (want \"Speculative Fiction\")"'
-bin/rails runner 'puts "orphaned-items-on-deleted-cats: #{CategoryItem.joins("JOIN categories c ON c.id = category_items.category_id").where(categories: {deleted: true}).count} (want 0)"'
+bin/rails runner 'puts "orphaned-items-on-deleted-cats: #{CategoryItem.joins(:category).where(item_type: "Books::Book", categories: {deleted: true}).count} (want 0)"'
 bin/rails runner 'puts Books::Category.where(deleted: false).order(item_count: :desc).limit(3).pluck(:name, :item_count).inspect'
 ```
 Expected: the slug resolves to "Speculative Fiction"; 0 category_items reference a soft-deleted category; top categories by `item_count` are the high-volume ones (Fiction, Nonfiction, …).
