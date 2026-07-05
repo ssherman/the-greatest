@@ -33,6 +33,14 @@ class Services::BooksMigration::CategoryItemMigratorTest < ActiveSupport::TestCa
     end
   end
 
+  test "raises on a book_category whose category was not migrated (missing prerequisite)" do
+    book = Books::Book.create!(title: "Unmigrated Cat Book")
+    result = run_migrator([{"id" => 8, "category_id" => 424242, "book_id" => book.id}])
+    assert_not result[:success]
+    assert_match "legacy_id=424242", result[:error]
+    assert_match "Books::Category", result[:error]
+  end
+
   test "is idempotent on the (category, item_type, item_id) key" do
     make_category(8003)
     book = Books::Book.create!(title: "Idem Item Book")

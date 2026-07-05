@@ -1,12 +1,15 @@
 module Services
   module BooksMigration
     # Bulk join migrator: legacy book_categories -> polymorphic category_items, via
-    # BulkUpsertMigrator (batched upsert_all). The category id-map is preloaded from
-    # LegacyIdMap joined to ACTIVE (deleted: false) categories only, so the ~915 legacy
-    # book_categories that point at a soft-deleted category get no map hit and are
-    # dropped (legacy data corruption). item_id is book_id directly (books preserve
-    # their id). finalize recomputes categories.item_count (upsert_all bypasses the
-    # counter_cache), scoped to Books::Category.
+    # BulkUpsertMigrator (batched upsert_all). Preloads the migrated categories from
+    # LegacyIdMap: the active (deleted: false) subset becomes the id-map, and the full
+    # set of migrated legacy ids (active + soft-deleted) is remembered. A book_category
+    # whose category is migrated-but-soft-deleted is dropped (the ~915 legacy corruption
+    # rows); one whose category is NOT migrated at all raises (missing prerequisite:
+    # categories not run, or a partial/failed run) rather than silently dropping to a
+    # success-looking low count — mirrors BookMigrator#remap_language. item_id is book_id
+    # directly (books preserve their id). finalize recomputes categories.item_count
+    # (upsert_all bypasses the counter_cache), scoped to Books::Category.
     class CategoryItemMigrator < BulkUpsertMigrator
       private
 
@@ -27,18 +30,24 @@ module Services
       end
 
       def preload_context
-        @category_map = LegacyIdMap
+        rows = LegacyIdMap
           .where(model: "Books::Category")
           .joins("INNER JOIN categories ON categories.id = legacy_id_maps.new_id")
-          .where(categories: {deleted: false})
-          .pluck(:legacy_id, :new_id)
-          .to_h
+          .pluck(:legacy_id, :new_id, "categories.deleted")
+        @known_category_ids = rows.map(&:first).to_set
+        @active_category_map = rows.each_with_object({}) do |(legacy_id, new_id, deleted), map|
+          map[legacy_id] = new_id unless deleted
+        end
       end
 
       def build_rows(attrs)
-        new_category_id = @category_map[attrs["category_id"]]
-        return [] unless new_category_id
-        [{category_id: new_category_id, item_type: "Books::Book", item_id: attrs["book_id"]}]
+        legacy_category_id = attrs["category_id"]
+        new_category_id = @active_category_map[legacy_category_id]
+        return [{category_id: new_category_id, item_type: "Books::Book", item_id: attrs["book_id"]}] if new_category_id
+        # No active mapping: a migrated-but-soft-deleted category is a deliberate drop
+        # (legacy corruption); an unmigrated one is a missing prerequisite -> raise.
+        return [] if @known_category_ids.include?(legacy_category_id)
+        raise "no LegacyIdMap for Books::Category legacy_id=#{legacy_category_id} (run the categories migrator first)"
       end
 
       def finalize
