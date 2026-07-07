@@ -34,18 +34,17 @@ module Services
               identifiable_type: "Books::Book",
               identifiable_id: book_id,
               identifier_type: identifier_type,
-              value: value.to_s.strip
+              value: value
             )
           end
         end
 
         Array(ids["asin"]).each do |value|
-          stripped = value.to_s.strip
           upsert_identifier(
             identifiable_type: "Books::Book",
             identifiable_id: book_id,
-            identifier_type: self.class.asin_identifier_type(stripped),
-            value: stripped
+            identifier_type: self.class.asin_identifier_type(value),
+            value: value
           )
         end
       end

@@ -66,4 +66,10 @@ class Services::BooksMigration::BookIdentifierMigratorTest < ActiveSupport::Test
       run_migrator([{"id" => 6, "book_id" => book.id, "identifier_type" => 5, "identifier" => "42"}])
     end
   end
+
+  test "strips surrounding whitespace from the stored value" do
+    book = Books::Book.create!(title: "Whitespace Book")
+    run_migrator([{"id" => 30, "book_id" => book.id, "identifier_type" => 1, "identifier" => "  0375755349  "}])
+    assert_equal "0375755349", Identifier.find_by(identifiable: book).value
+  end
 end

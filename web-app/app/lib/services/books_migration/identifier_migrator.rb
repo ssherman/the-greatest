@@ -32,6 +32,7 @@ module Services
       # and hard-aborts the run (the per-row error names the offending legacy id;
       # the run is idempotent, so it resumes after the data is corrected).
       def upsert_identifier(identifiable_type:, identifiable_id:, identifier_type:, value:)
+        value = value.to_s.strip
         return if value.blank? || identifiable_id.nil?
         Identifier.find_or_create_by!(
           identifiable_type: identifiable_type,
