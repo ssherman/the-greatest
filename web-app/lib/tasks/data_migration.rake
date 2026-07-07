@@ -24,12 +24,13 @@ namespace :data_migration do
     pp Services::BooksMigration::EditionMigrator.call
   end
 
-  desc "Migrate legacy identifiers (goodreads + openlibrary) into identifiers"
+  desc "Migrate legacy identifiers (goodreads + openlibrary + ISBN family) into identifiers"
   task identifiers: :environment do
     pp Services::BooksMigration::BookIdentifierMigrator.call
     pp Services::BooksMigration::BookWorkIdentifierMigrator.call
     pp Services::BooksMigration::AuthorIdentifierMigrator.call
     pp Services::BooksMigration::EditionIdentifierMigrator.call
+    pp Services::BooksMigration::EditionIsbnIdentifierMigrator.call
   end
 
   desc "Migrate legacy categories into Books::Category (fresh ids + map; preserves slug + parent)"
