@@ -28,6 +28,10 @@ class Identifier < ApplicationRecord
     books_work_openlibrary_id: 2,
     books_work_goodreads_id: 3,
     books_work_librarything_id: 4,
+    books_work_isbn13: 5,
+    books_work_isbn10: 6,
+    books_work_asin: 7,
+    books_work_ean13: 8,
 
     # Books - Edition level (Books::Edition)
     books_edition_isbn13: 10,

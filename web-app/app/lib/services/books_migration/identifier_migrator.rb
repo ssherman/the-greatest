@@ -12,6 +12,18 @@ module Services
         value.to_s.rpartition("/").last.presence
       end
 
+      # ISBN-10 shape: 10 chars, first 9 digits, last a digit or X (check digit).
+      # Legacy Amazon "asin" values are ISBN-10 for print books but "B0..." codes
+      # for Kindle; the check keys on shape (not "starts with B") so Kindle ASINs,
+      # which have letters in the first 9 positions, are preserved as ASINs.
+      ISBN10_SHAPE = /\A\d{9}[\dX]\z/i
+
+      # Pure: given a legacy "asin" value, return the work-level identifier_type
+      # symbol. ISBN-10-shaped -> :books_work_isbn10, else -> :books_work_asin.
+      def self.asin_identifier_type(value)
+        ISBN10_SHAPE.match?(value.to_s.strip) ? :books_work_isbn10 : :books_work_asin
+      end
+
       private
 
       # The identifiable target (Books::Book/Author/Edition) must already exist —
