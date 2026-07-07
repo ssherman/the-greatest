@@ -266,4 +266,11 @@ class IdentifierTest < ActiveSupport::TestCase
     # Currently the model doesn't strip, but the service does
     assert_equal "  test-mbid-with-spaces  ", identifier.value
   end
+
+  test "defines work-level ISBN-family identifier types at slots 5-8" do
+    assert_equal 5, Identifier.identifier_types["books_work_isbn13"]
+    assert_equal 6, Identifier.identifier_types["books_work_isbn10"]
+    assert_equal 7, Identifier.identifier_types["books_work_asin"]
+    assert_equal 8, Identifier.identifier_types["books_work_ean13"]
+  end
 end
