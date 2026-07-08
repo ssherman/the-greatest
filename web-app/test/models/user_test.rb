@@ -12,7 +12,10 @@
 #  email                  :string
 #  email_verified         :boolean          default(FALSE), not null
 #  external_provider      :integer
+#  external_provider_uid  :string
 #  last_sign_in_at        :datetime
+#  legacy_migrated        :boolean
+#  legacy_v1_data         :text
 #  name                   :string
 #  original_signup_domain :string
 #  photo_url              :string
@@ -25,11 +28,12 @@
 #
 # Indexes
 #
-#  index_users_on_auth_uid            (auth_uid)
-#  index_users_on_confirmation_token  (confirmation_token) UNIQUE
-#  index_users_on_confirmed_at        (confirmed_at)
-#  index_users_on_external_provider   (external_provider)
-#  index_users_on_stripe_customer_id  (stripe_customer_id)
+#  index_users_on_auth_uid                   (auth_uid)
+#  index_users_on_confirmation_token         (confirmation_token) UNIQUE
+#  index_users_on_confirmed_at               (confirmed_at)
+#  index_users_on_external_provider          (external_provider)
+#  index_users_on_external_provider_and_uid  (external_provider,external_provider_uid)
+#  index_users_on_stripe_customer_id         (stripe_customer_id)
 #
 require "test_helper"
 
@@ -192,5 +196,11 @@ class UserTest < ActiveSupport::TestCase
     assert_difference "UserList.count", -12 do
       user.destroy
     end
+  end
+
+  test "has the legacy-migration columns" do
+    assert_includes User.column_names, "external_provider_uid"
+    assert_includes User.column_names, "legacy_migrated"
+    assert_includes User.column_names, "legacy_v1_data"
   end
 end

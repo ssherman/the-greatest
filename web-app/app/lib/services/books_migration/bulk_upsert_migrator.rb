@@ -45,8 +45,15 @@ module Services
       end
 
       def flush(rows)
-        target_model.upsert_all(rows, unique_by: unique_by, record_timestamps: true)
+        target_model.upsert_all(rows, unique_by: unique_by, record_timestamps: record_timestamps?)
         @count += rows.size
+      end
+
+      # Whether upsert_all should auto-fill created_at/updated_at. Default true;
+      # a subclass that preserves legacy timestamps (and supplies them in build_rows)
+      # overrides this to false.
+      def record_timestamps?
+        true
       end
     end
   end
