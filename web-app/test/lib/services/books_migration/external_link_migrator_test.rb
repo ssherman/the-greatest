@@ -131,6 +131,14 @@ module Services
         refute result[:success]
         assert_match(/4242/, result[:error])
       end
+
+      test "fails loud naming the legacy id when the submitting user is missing" do
+        missing_user = User.maximum(:id).to_i + 999_999
+        result = run_migrator([legacy_row("id" => 4343, "user_id" => missing_user)])
+
+        refute result[:success]
+        assert_match(/4343/, result[:error])
+      end
     end
   end
 end
