@@ -89,4 +89,10 @@ class Services::BooksMigration::UserMigratorTest < ActiveSupport::TestCase
     run_migrator([legacy_attrs("id" => 90010, "provider_data" => "{\"2\":{\"providerId\":\"google.com\"}}")])
     assert_equal({"2" => {"providerId" => "google.com"}}, User.find(90010).provider_data)
   end
+
+  test "stores a blank provider_data as nil without crashing" do
+    result = run_migrator([legacy_attrs("id" => 90011, "provider_data" => "")])
+    assert result[:success], result[:error]
+    assert_nil User.find(90011).provider_data
+  end
 end
