@@ -4,6 +4,11 @@ namespace :data_migration do
     pp Services::BooksMigration::LanguageMigrator.call
   end
 
+  desc "Migrate legacy users into the global users table (preserves ids)"
+  task users: :environment do
+    pp Services::BooksMigration::UserMigrator.call
+  end
+
   desc "Migrate legacy authors into books_authors (preserves ids)"
   task authors: :environment do
     pp Services::BooksMigration::AuthorMigrator.call
@@ -44,5 +49,5 @@ namespace :data_migration do
   end
 
   desc "Run all Phase-1 migrators in dependency order"
-  task all: [:languages, :authors, :books, :book_authors, :editions, :identifiers, :categories, :category_items]
+  task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers, :categories, :category_items]
 end
