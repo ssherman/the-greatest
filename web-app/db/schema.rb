@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_04_204010) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_08_053017) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -780,7 +780,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_04_204010) do
     t.string "email"
     t.boolean "email_verified", default: false, null: false
     t.integer "external_provider"
+    t.string "external_provider_uid"
     t.datetime "last_sign_in_at"
+    t.boolean "legacy_migrated"
+    t.text "legacy_v1_data"
     t.string "name"
     t.string "original_signup_domain"
     t.string "photo_url"
@@ -792,6 +795,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_04_204010) do
     t.index ["auth_uid"], name: "index_users_on_auth_uid"
     t.index ["confirmation_token"], name: "index_users_on_confirmation_token", unique: true
     t.index ["confirmed_at"], name: "index_users_on_confirmed_at"
+    t.index ["external_provider", "external_provider_uid"], name: "index_users_on_external_provider_and_uid"
     t.index ["external_provider"], name: "index_users_on_external_provider"
     t.index ["stripe_customer_id"], name: "index_users_on_stripe_customer_id"
   end
