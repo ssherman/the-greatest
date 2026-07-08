@@ -33,6 +33,7 @@ class Services::BooksMigration::UserMigratorTest < ActiveSupport::TestCase
     assert_equal "{\"id\":\"90001\",\"provider\":\"facebook\"}", u.legacy_v1_data
     assert_equal "google", u.external_provider  # raw int 2 -> :google
     assert_equal "user", u.role                 # raw int 0 -> :user
+    assert_equal({"uid" => "fb-9"}, u.auth_data)
   end
 
   test "keeps a null email (presence validation bypassed)" do

@@ -336,7 +336,7 @@ module Services
           photo_url: attrs["photo_url"],
           auth_uid: attrs["auth_uid"],
           auth_data: attrs["auth_data"],
-          provider_data: attrs["provider_data"],
+          provider_data: parse_provider_data(attrs["provider_data"]),
           email_verified: attrs["email_verified"],
           external_provider: attrs["external_provider"],
           role: attrs["role"],
@@ -349,6 +349,16 @@ module Services
           created_at: attrs["created_at"],
           updated_at: attrs["updated_at"]
         }]
+      end
+
+      # Legacy provider_data is a JSON string, but the new column uses
+      # `serialize coder: JSON`, so upsert_all must receive the already-parsed
+      # Hash (passing the raw string double-encodes it). Blank/nil -> nil; a
+      # malformed JSON string raises (the base rescue names the legacy id and
+      # aborts the run, which is idempotent-resumable).
+      def parse_provider_data(value)
+        return nil if value.blank?
+        JSON.parse(value)
       end
     end
   end

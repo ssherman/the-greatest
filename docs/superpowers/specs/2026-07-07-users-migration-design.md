@@ -74,7 +74,7 @@ Add a composite index `index_users_on_external_provider_and_uid` on `(external_p
 | `photo_url` | `photo_url` | direct |
 | `auth_uid` | `auth_uid` | direct (null for most V1) |
 | `auth_data` | `auth_data` | jsonb passthrough |
-| `provider_data` | `provider_data` | passthrough (already a JSON string; matches `serialize` storage) |
+| `provider_data` | `provider_data` | **parse** the legacy JSON string to a Hash before upsert (the new column's `serialize coder: JSON` re-encodes; passing the raw string would double-encode). Blank/nil → nil |
 | `email_verified` | `email_verified` | direct (0 nulls; NOT NULL default false) |
 | `external_provider` | `external_provider` | raw int (nullable) |
 | `role` | `role` | raw int (NOT NULL) |
