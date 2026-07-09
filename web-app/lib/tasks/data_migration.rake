@@ -53,6 +53,16 @@ namespace :data_migration do
     pp Services::BooksMigration::ExternalLinkMigrator.call
   end
 
+  desc "Migrate legacy lists into Books::List (preserve id; status symbol-remap)"
+  task lists: :environment do
+    pp Services::BooksMigration::ListMigrator.call
+  end
+
+  desc "Migrate legacy list_items into list_items (listable = Books::Book; fresh id)"
+  task list_items: :environment do
+    pp Services::BooksMigration::ListItemMigrator.call
+  end
+
   desc "Run all Phase-1 migrators in dependency order"
-  task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers, :categories, :category_items, :external_links]
+  task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers, :categories, :category_items, :external_links, :lists, :list_items]
 end
