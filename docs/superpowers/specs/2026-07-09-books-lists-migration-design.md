@@ -30,7 +30,7 @@ Facts that drive the design:
 | `list_items` `book_id` missing from `Books::Book` | **0** of 24,362 distinct | fail-loud guard (D-li-failloud) |
 | duplicate `[list_id, book_id]` | **0** | natural key clean → safe upsert, no intra-batch conflict |
 | `list_items.position` | 38,183 null (58%), **0 ≤ 0** | null→null (model allows blank; non-null all > 0) |
-| `pending_book_data` (text, JSON) | 948 non-blank (e.g. `{"title":…,"authors":…}`) | `metadata ← parse(pending_book_data)` |
+| `pending_book_data` (text) | 948 non-blank, **mixed serialization**: 546 JSON objects `{"title":…,"authors":…}` + 402 YAML `--- !ruby/hash:ActiveSupport::HashWithIndifferentAccess\ntitle:…` (legacy Rails `serialize` drift) | `metadata ← parse(pending_book_data)` — parse **both** formats (D-metadata) |
 | `list_items.verified` | no legacy column | default `false` |
 | timestamps | `lists` and `list_items` `created_at` span years | **preserved** |
 
@@ -42,7 +42,7 @@ Facts that drive the design:
 - **D-items-json — skip `books_json`** (owner decision, 2026-07-09): `items_json` is left **nil** for all lists. `books_json` is ~55% null / ~17% empty-string / only 7.5% real arrays, and the authoritative, structured item data is migrated into `list_items`. Avoids storing junk that would fail `items_json_format` on any later AR edit.
 - **D-write-list-items — `BulkUpsertMigrator`** on the unique index `[list_id, listable_type, listable_id]` (like `CategoryItemMigrator`). All 65,252 rows have a non-null `book_id`, so there are **no NULL-in-unique-index** rows (Postgres treats NULLs as distinct, which would break upsert idempotency) and **no pending items**. The **0 duplicate `[list_id, book_id]`** finding guarantees no intra-batch `ON CONFLICT` double-touch. Legacy timestamps preserved.
 - **D-li-failloud — guard the polymorphic `listable`.** `list_items.listable` has no DB FK (polymorphic), so a `book_id` with no migrated `Books::Book` would silently create a dangling item. `preload_context` loads the `Books::Book` id set; `build_rows` **raises** naming the legacy `list_item` id + `book_id` if the book is missing (mirrors `CategoryItemMigrator`). `list_id` has a real DB FK to `lists` (all present; lists migrate first).
-- **D-metadata — parse `pending_book_data` to a Hash** before upsert (plain jsonb column; a raw string would store as a jsonb string scalar). Blank → nil; malformed JSON raises (base rescue names the legacy id). Mirrors `UserMigrator#parse_provider_data`.
+- **D-metadata — parse `pending_book_data` (JSON *or* YAML) to a plain Hash** before upsert (plain jsonb column; a raw string would store as a jsonb string scalar). The legacy column mixes two serializations (Rails `serialize` drift): JSON objects (`{…}`) and YAML tagged `!ruby/hash:ActiveSupport::HashWithIndifferentAccess`. Detect by leading `---` → `YAML.safe_load(str, permitted_classes: [Symbol, ActiveSupport::HashWithIndifferentAccess], aliases: true)`, else `JSON.parse`, then `.to_h` (string keys, jsonb-storable). Blank → nil; an unparseable value raises (base rescue names the legacy id). All 948 real values verified to normalize to `{"title"=>…, "authors"=>…}`. (Discovered at e2e — the fail-loud guard correctly halted on the first YAML row rather than storing junk.)
 - **D-no-finalize — none.** No counter caches on `lists`/`list_items`; sequence already reserved (no `setval`).
 
 ## Schema change
