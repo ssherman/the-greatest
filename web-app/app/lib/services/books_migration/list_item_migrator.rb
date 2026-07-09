@@ -6,8 +6,9 @@ module Services
     # NULL-in-unique-index rows and (since [list_id, book_id] is unique in the source) no
     # intra-batch ON CONFLICT double-touch. listable has no DB FK (polymorphic), so a
     # book_id with no migrated Books::Book is a fail-loud raise naming the legacy
-    # list_item id (preloaded id set). metadata <- parsed pending_book_data (plain jsonb;
-    # a raw string would store as a jsonb string scalar). verified defaults false. Legacy
+    # list_item id (preloaded id set). metadata <- pending_book_data parsed from either
+    # JSON or YAML (legacy serialize drift) into a plain Hash (plain jsonb; a raw string
+    # would store as a jsonb string scalar). verified defaults false. Legacy
     # created_at/updated_at preserved.
     class ListItemMigrator < BulkUpsertMigrator
       private
@@ -56,7 +57,13 @@ module Services
 
       def parse_metadata(value)
         return nil if value.blank?
-        JSON.parse(value)
+        str = value.strip
+        parsed = if str.start_with?("---")
+          YAML.safe_load(str, permitted_classes: [Symbol, ActiveSupport::HashWithIndifferentAccess], aliases: true)
+        else
+          JSON.parse(str)
+        end
+        parsed.to_h
       end
     end
   end

@@ -50,6 +50,14 @@ module Services
         assert_equal({"title" => "T", "authors" => "A"}, item.metadata)
       end
 
+      test "parses YAML-serialized pending_book_data into metadata" do
+        yaml = "--- !ruby/hash:ActiveSupport::HashWithIndifferentAccess\ntitle: Dune\nauthors: Frank Herbert\n"
+        run_migrator([legacy_row("pending_book_data" => yaml)])
+
+        item = ListItem.find_by(list_id: @list.id, listable_id: @book.id)
+        assert_equal({"title" => "Dune", "authors" => "Frank Herbert"}, item.metadata)
+      end
+
       test "null position and blank pending_book_data become nil" do
         run_migrator([legacy_row("position" => nil, "pending_book_data" => "")])
 
