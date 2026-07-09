@@ -9,8 +9,6 @@ module Services
     # (nil; real items live in list_items). Legacy created_at/updated_at preserved.
     # Idempotent on id.
     class ListMigrator < BulkUpsertMigrator
-      # old {unapproved:0, approved:1, active:2, rejected:3, inactive:4, pending:5}
-      # new {unapproved:0, approved:1, rejected:2, active:3}
       STATUS_MAP = {0 => 0, 1 => 1, 2 => 3, 3 => 2, 4 => 0, 5 => 0}.freeze
 
       private
