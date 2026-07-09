@@ -48,6 +48,11 @@ namespace :data_migration do
     pp Services::BooksMigration::CategoryItemMigrator.call
   end
 
+  desc "Migrate legacy links into external_links (Books::Book parent; source inferred from host)"
+  task external_links: :environment do
+    pp Services::BooksMigration::ExternalLinkMigrator.call
+  end
+
   desc "Run all Phase-1 migrators in dependency order"
-  task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers, :categories, :category_items]
+  task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers, :categories, :category_items, :external_links]
 end
