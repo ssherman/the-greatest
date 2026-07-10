@@ -63,6 +63,16 @@ namespace :data_migration do
     pp Services::BooksMigration::ListItemMigrator.call
   end
 
+  desc "Migrate active legacy ranking_configurations into Books::RankingConfiguration (fresh ids + map)"
+  task ranking_configurations: :environment do
+    pp Services::BooksMigration::RankingConfigurationMigrator.call
+  end
+
+  desc "Migrate legacy ranked_lists (active RCs only) into ranked_lists (bulk upsert; natural key)"
+  task ranked_lists: :environment do
+    pp Services::BooksMigration::RankedListMigrator.call
+  end
+
   desc "Run all Phase-1 migrators in dependency order"
-  task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers, :categories, :category_items, :external_links, :lists, :list_items]
+  task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers, :categories, :category_items, :external_links, :lists, :list_items, :ranking_configurations, :ranked_lists]
 end
