@@ -12,6 +12,7 @@
 #
 # Indexes
 #
+#  index_ranked_lists_on_list_and_config_unique    (list_id,ranking_configuration_id) UNIQUE
 #  index_ranked_lists_on_list_id                   (list_id)
 #  index_ranked_lists_on_ranking_configuration_id  (ranking_configuration_id)
 #
