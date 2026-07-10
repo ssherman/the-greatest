@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_08_053017) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_10_014343) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -689,6 +689,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_08_053017) do
     t.bigint "ranking_configuration_id", null: false
     t.datetime "updated_at", null: false
     t.integer "weight"
+    t.index ["list_id", "ranking_configuration_id"], name: "index_ranked_lists_on_list_and_config_unique", unique: true
     t.index ["list_id"], name: "index_ranked_lists_on_list_id"
     t.index ["ranking_configuration_id"], name: "index_ranked_lists_on_ranking_configuration_id"
   end
