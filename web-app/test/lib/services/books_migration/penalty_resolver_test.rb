@@ -36,9 +36,9 @@ class Services::BooksMigration::PenaltyResolverTest < ActiveSupport::TestCase
   end
 
   test "percentage_western (type 1) always creates a Books penalty" do
-    strategy, payload = resolver.call(lc("name" => %q{List: only covers mostly "Western Canon" books}, "dynamic_type" => 1))
+    strategy, payload = resolver.call(lc("name" => 'List: only covers mostly "Western Canon" books', "dynamic_type" => 1))
     assert_equal :create_books, strategy
-    assert_equal %q{List: only covers mostly "Western Canon" books}, payload[:name]
+    assert_equal 'List: only covers mostly "Western Canon" books', payload[:name]
     assert_equal "percentage_western", payload[:dynamic_type]
   end
 

@@ -17,7 +17,7 @@ module Services
       GLOBAL_ALIASES = {
         "List: contains over 500 books(Quantity over Quality)" => "List: contains over 500 items(Quantity over Quality)",
         "List: Creator of the list, sells the books on the list" => "List: Creator of the list, sells the items on the list",
-        %q{List: criteria is not just "best/favorite"} => "List: criteria is not just best/favorite"
+        'List: criteria is not just "best/favorite"' => "List: criteria is not just best/favorite"
       }.freeze
 
       def initialize(globals_by_name:, globals_by_dynamic_type:)

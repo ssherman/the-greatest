@@ -64,7 +64,7 @@ class Services::BooksMigration::PenaltyMigratorTest < ActiveSupport::TestCase
   end
 
   test "creates the percentage_western Books::Penalty for dynamic_type 1" do
-    run_migrator([legacy(8004, "name" => %q{List: only covers mostly "Western Canon" books}, "dynamic_type" => 1)])
+    run_migrator([legacy(8004, "name" => 'List: only covers mostly "Western Canon" books', "dynamic_type" => 1)])
     penalty = mapped(8004)
     assert_equal "Books::Penalty", penalty.type
     assert_equal "percentage_western", penalty.dynamic_type
