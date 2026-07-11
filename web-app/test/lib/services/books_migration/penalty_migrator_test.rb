@@ -63,6 +63,17 @@ class Services::BooksMigration::PenaltyMigratorTest < ActiveSupport::TestCase
     assert_equal @voter_names.id, LegacyIdMap.lookup(model: MODEL_KEY, legacy_id: 8003)
   end
 
+  test "does not reuse a user-owned Global::Penalty; creates a system Books::Penalty instead" do
+    user_global = Global::Penalty.create!(name: "List: honorable mention", user_id: users(:regular_user).id)
+    assert_difference -> { Books::Penalty.count }, 1 do
+      run_migrator([legacy(8009, "name" => "List: honorable mention")])
+    end
+    penalty = mapped(8009)
+    assert_equal "Books::Penalty", penalty.type
+    assert_not_equal user_global.id, penalty.id
+    assert_nil penalty.user_id
+  end
+
   test "creates the percentage_western Books::Penalty for dynamic_type 1" do
     run_migrator([legacy(8004, "name" => 'List: only covers mostly "Western Canon" books', "dynamic_type" => 1)])
     penalty = mapped(8004)

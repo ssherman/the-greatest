@@ -48,7 +48,7 @@ module Services
 
       def resolver
         @resolver ||= begin
-          globals = Penalty.where(type: "Global::Penalty").to_a
+          globals = Penalty.where(type: "Global::Penalty", user_id: nil).to_a
           PenaltyResolver.new(
             globals_by_name: globals.index_by(&:name),
             globals_by_dynamic_type: globals.select(&:dynamic_type).index_by(&:dynamic_type)
