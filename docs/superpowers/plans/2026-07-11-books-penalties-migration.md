@@ -260,8 +260,12 @@ require "test_helper"
 class Services::BooksMigration::PenaltyMigratorTest < ActiveSupport::TestCase
   MODEL_KEY = "Penalty"
 
+  # NOTE: test/fixtures/penalties.yml already loads a Global::Penalty with
+  # dynamic_type 0 (number_of_voters) and a Books::Penalty with dynamic_type 1
+  # (percentage_western). Pick dynamic_type 2 here so the resolver's
+  # globals_by_dynamic_type lookup is unambiguous (no fixture uses type 2).
   setup do
-    @voter_count = Global::Penalty.create!(name: "Voters: Voter Count", dynamic_type: :number_of_voters)
+    @voter_names = Global::Penalty.create!(name: "Voters: Unknown Names", dynamic_type: :voter_names_unknown)
     @not_critics = Global::Penalty.create!(name: "Voters: not critics, authors, or experts")
     LegacyIdMap.record(model: "Books::RankingConfiguration", legacy_id: 48, new_id: 999_048)
   end
@@ -311,9 +315,9 @@ class Services::BooksMigration::PenaltyMigratorTest < ActiveSupport::TestCase
     assert_equal @not_critics.id, LegacyIdMap.lookup(model: MODEL_KEY, legacy_id: 8002)
   end
 
-  test "reuses the number_of_voters global for a dynamic_type 0 list_con" do
-    run_migrator([legacy(8003, "name" => "Voters: Voter Count", "dynamic_type" => 0)])
-    assert_equal @voter_count.id, LegacyIdMap.lookup(model: MODEL_KEY, legacy_id: 8003)
+  test "reuses the voter_names_unknown global for a dynamic_type 2 list_con" do
+    run_migrator([legacy(8003, "name" => "Voters: Unknown Names", "dynamic_type" => 2)])
+    assert_equal @voter_names.id, LegacyIdMap.lookup(model: MODEL_KEY, legacy_id: 8003)
   end
 
   test "creates the percentage_western Books::Penalty for dynamic_type 1" do
@@ -669,7 +673,7 @@ class Services::BooksMigration::ListPenaltyMigratorTest < ActiveSupport::TestCas
     missing = List.maximum(:id).to_i + 999_999
     result = run_migrator([lcl(5, "list_id" => missing)])
     refute result[:success]
-    assert_match(/5/, result[:error])
+    assert_match(/list_con_list id=5/, result[:error])
   end
 
   test "is idempotent on [list_id, penalty_id]" do
@@ -733,8 +737,8 @@ module Services
       def preload_context
         @penalty_map = LegacyIdMap.where(model: "Penalty").pluck(:legacy_id, :new_id).to_h
         raise "no migrated penalties; run data_migration:penalties first" if @penalty_map.empty?
-        static_penalty_ids = Penalty.static.pluck(:id).to_set
-        @static_list_con_ids = @penalty_map.select { |_legacy_id, new_id| static_penalty_ids.include?(new_id) }.keys
+        @static_penalty_ids = Penalty.static.pluck(:id).to_set
+        @static_list_con_ids = @penalty_map.select { |_legacy_id, new_id| @static_penalty_ids.include?(new_id) }.keys
         @list_ids = Books::List.pluck(:id).to_set
         @seen = Set.new
       end
@@ -757,6 +761,8 @@ module Services
 
       def build_rows(attrs)
         penalty_id = @penalty_map.fetch(attrs["list_con_id"])
+        return [] unless @static_penalty_ids.include?(penalty_id) # dynamic-target rows drop (ListPenalty is static-only)
+
         list_id = attrs["list_id"]
         unless @list_ids.include?(list_id)
           raise "no migrated Books::List for legacy list_con_lists.list_id=#{list_id.inspect} (list_con_list id=#{attrs["id"]})"
