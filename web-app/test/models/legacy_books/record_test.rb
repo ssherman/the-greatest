@@ -9,6 +9,8 @@ module LegacyBooks
     test "legacy models point at the legacy tables" do
       assert_equal "authors", LegacyBooks::Author.table_name
       assert_equal "languages", LegacyBooks::Language.table_name
+      assert_equal "list_cons", LegacyBooks::ListCon.table_name
+      assert_equal "list_con_lists", LegacyBooks::ListConList.table_name
     end
   end
 end
