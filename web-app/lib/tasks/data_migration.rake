@@ -73,6 +73,17 @@ namespace :data_migration do
     pp Services::BooksMigration::RankedListMigrator.call
   end
 
+  desc "Migrate legacy list_cons into penalties + penalty_applications (active RCs; reuse Global seeds)"
+  task penalties: :environment do
+    pp Services::BooksMigration::PenaltyMigrator.call
+    pp Services::BooksMigration::PenaltyApplicationMigrator.call
+  end
+
+  desc "Migrate legacy list_con_lists into list_penalties (static penalties only)"
+  task list_penalties: :environment do
+    pp Services::BooksMigration::ListPenaltyMigrator.call
+  end
+
   desc "Run all Phase-1 migrators in dependency order"
-  task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers, :categories, :category_items, :external_links, :lists, :list_items, :ranking_configurations, :ranked_lists]
+  task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers, :categories, :category_items, :external_links, :lists, :list_items, :ranking_configurations, :ranked_lists, :penalties, :list_penalties]
 end
