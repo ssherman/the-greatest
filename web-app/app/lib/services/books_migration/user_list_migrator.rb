@@ -4,7 +4,9 @@ module Services
     # because `user_lists` is a reserved-ceiling table (RESERVED_CEILINGS = 1_000_000) and
     # the legacy MAX(id) is 604,880 — every new-app row already lives at >= 1_000_001. It is
     # also load-bearing: the /user_lists/:id compatibility alias resolves a list by its raw
-    # primary key, so the legacy books URLs only keep working if the ids survive.
+    # primary key, so preserving the ids is what lets the legacy books URLs keep working once
+    # books is wired into that alias (today it 404s regardless, since UserList.subclasses_for
+    # returns [] for the books domain).
     #
     # list_type is symbol-remapped: legacy is [read, reading, want_to_read, favorite, custom]
     # but every new-app subclass puts a plural `favorites` at 0. view_mode's legacy default
