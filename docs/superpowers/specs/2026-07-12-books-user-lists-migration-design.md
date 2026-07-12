@@ -184,3 +184,37 @@ Fail loud, never silently skip:
 | re-run | counts and positions unchanged |
 
 Full suite (`bin/rails test`) green.
+
+## Verification (e2e vs the real legacy database, 2026-07-12)
+
+Run against the restored legacy database in development, twice (the second run proving idempotency).
+
+**Pre-flight.** Prerequisites present: 69,480 users (69,459 legacy + 21 new-app), 126,204 `Books::Book`, 254 pre-existing Music/Games/Movies `user_lists`. Reserved-ceiling re-confirmed as `IdRangeReservationService` requires: legacy `MAX(user_lists.id)` = **604,880** against a ceiling of **1,000,000** → `ok=true`.
+
+**Load times.** `user_lists` 282,922 rows in **28s**. `user_list_items` 3,096,597 rows in **3m26s**.
+
+| assertion | expected | observed |
+|---|---|---|
+| `Books::UserList` count | 282,922 | **282,922** ✅ |
+| by `list_type` | favorites 69,428 / read 69,440 / reading 69,423 / want_to_read 69,400 / custom 5,231 | **exact** ✅ |
+| `view_mode` | default_view 282,244 / table_view 422 / grid_view 256 | **exact** ✅ |
+| `public = true` | 115 | **115** ✅ |
+| id range (ids preserved) | 265,341..604,880 | **265,341..604,880** ✅ |
+| duplicate `(user_id, list_type)` among non-custom | 0 | **0** ✅ |
+| `user_list_items` on Books lists | 3,096,597 | **3,096,597** ✅ |
+| non-`Books::Book` `listable_type` | 0 | **0** ✅ |
+| `completed_on` non-null | 79,721 | **79,721** ✅ |
+| sentinel positions surviving | 0 | **0** ✅ |
+| min position | 1 | **1** ✅ |
+| duplicate `(user_list_id, position)` | 0 | **0** ✅ |
+| `completed_on` outside the `read` list | 0 | **0** ✅ |
+
+**Position normalization proved exactly, not just approximately.** A per-list aggregate over all 282,922 Books lists found **0** lists where `MAX(position) <> COUNT(*)` or `MIN(position) <> 1`. Together with the zero-duplicates result, that means every list's positions are exactly the set `{1..N}`. Spot-check on the largest list (id 537,509, 12,408 items): positions are exactly `1..12408`.
+
+**Other domains untouched.** The renumber's `WHERE ul.type = 'Books::UserList'` scoping held on real data: the 26 pre-existing Music/Games/Movies `user_list_items` still carry their original positions, and the 254 non-Books `user_lists` are unchanged. Totals: `user_list_items` 3,096,623 = 3,096,597 + 26.
+
+**Idempotency.** Both migrations re-run start to finish. Every count above is identical, and positions remain exactly 1..N — confirming the design note that the item migrator's re-run resets positions to their legacy values and `finalize` renumbers them back to the same result, converging rather than drifting.
+
+**Suite:** 4,526 runs, 0 failures, 0 errors. `standardrb` clean. `brakeman` unchanged (31 pre-existing warnings, 0 new).
+
+One caveat worth carrying forward: `NULL_POSITION_SENTINEL` is exactly `INT_MAX`, and `position` is a 4-byte integer. Between the first batch and `finalize`, sentinel rows are live in the table — so if a user could add an item to a not-yet-finalized `Books::UserList`, `UserListItem#set_position`'s `MAX(position) + 1` would overflow. This is inert today because `D-data-only` leaves `Books::UserList` unreachable from any UI. Whoever wires the books UI should ensure the migration has already run, or run it in a quiet window.
