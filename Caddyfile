@@ -27,3 +27,7 @@ dev.thegreatestmusic.org {
 dev.thegreatest.games {
 	import common
 }
+
+dev-new.thegreatestbooks.org {
+	import common
+}

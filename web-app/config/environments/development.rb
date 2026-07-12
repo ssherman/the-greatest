@@ -65,4 +65,5 @@ Rails.application.configure do
   config.hosts << "dev.thegreatestmusic.org"
   config.hosts << "dev.thegreatestmovies.org"
   config.hosts << "dev.thegreatest.games"
+  config.hosts << "dev-new.thegreatestbooks.org"
 end
