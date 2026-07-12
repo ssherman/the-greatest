@@ -84,6 +84,11 @@ namespace :data_migration do
     pp Services::BooksMigration::ListPenaltyMigrator.call
   end
 
+  desc "Migrate legacy user_lists into Books::UserList (preserve id; list_type + view_mode symbol-remap)"
+  task user_lists: :environment do
+    pp Services::BooksMigration::UserListMigrator.call
+  end
+
   desc "Run all Phase-1 migrators in dependency order"
   task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers, :categories, :category_items, :external_links, :lists, :list_items, :ranking_configurations, :ranked_lists, :penalties, :list_penalties]
 end
