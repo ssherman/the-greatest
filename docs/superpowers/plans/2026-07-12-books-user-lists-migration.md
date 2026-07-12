@@ -37,13 +37,16 @@ The one piece of new product code. Everything downstream depends on this class e
 
 - [ ] **Step 1: Generate the model and its test with the Rails generator**
 
-The project requires generators (they create the matching test file). `--parent` makes it an STI subclass; `--no-migration` is essential — this table already exists.
+The project requires generators (they create the matching test file). `--parent` makes it an STI subclass. Both other flags are load-bearing:
+
+- `--no-migration` — this table already exists.
+- `--no-fixture` — **without this the generator writes `test/fixtures/books/user_lists.yml`, and the entire test suite dies at fixture load**, because that path's accessor maps to a `books_user_lists` table that does not exist. STI subclasses share the base table's single `test/fixtures/user_lists.yml`. (The empty `test/fixtures/music/albums/` and `test/fixtures/music/songs/` directories in this repo are the fossil of this exact mistake.)
 
 ```bash
-bin/rails generate model Books::UserList --parent UserList --no-migration
+bin/rails generate model Books::UserList --parent UserList --no-migration --no-fixture
 ```
 
-Expected: creates `app/models/books/user_list.rb` and `test/models/books/user_list_test.rb`. It must NOT create anything under `db/migrate/`. If it does, delete the migration file.
+Expected: creates exactly `app/models/books/user_list.rb` and `test/models/books/user_list_test.rb`. Verify with `git status` that it created nothing under `db/migrate/` or `test/fixtures/`. If it did, delete those files.
 
 - [ ] **Step 2: Write the failing test**
 
@@ -180,14 +183,23 @@ bin/rails test test/models/books/user_list_test.rb
 
 Expected: PASS, 10 runs, 0 failures, 0 errors.
 
-- [ ] **Step 6: Annotate the model and lint**
+- [ ] **Step 6: Annotate the model, revert the collateral, and lint**
+
+`annotaterb` has no per-file mode — it walks every model. With the legacy database connected in development it also (re-)annotates all 16 `app/models/legacy_books/*.rb` shims plus `legacy_id_map.rb` and its test, dirtying 18 files that have nothing to do with this task. Run it for the real output, then revert everything else.
 
 ```bash
 bundle exec annotaterb models
+git checkout -- app/models/legacy_books/ app/models/legacy_id_map.rb test/models/legacy_id_map_test.rb
+git status --porcelain
+```
+
+Expected after the revert: **exactly two** modified paths — `app/models/books/user_list.rb` and `test/models/books/user_list_test.rb` — each now carrying the `user_lists` schema comment block that every sibling `UserList` subclass has. If `git status` shows any `legacy_books` file still modified, revert it too; none of them belong in this commit.
+
+```bash
 bundle exec standardrb app/models/books/user_list.rb test/models/books/user_list_test.rb
 ```
 
-Expected: `annotaterb` prepends the `user_lists` schema comment block to both files (matching every sibling model); `standardrb` reports no offenses.
+Expected: no offenses.
 
 - [ ] **Step 7: Update the feature doc**
 
