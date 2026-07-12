@@ -11,6 +11,8 @@ module LegacyBooks
       assert_equal "languages", LegacyBooks::Language.table_name
       assert_equal "list_cons", LegacyBooks::ListCon.table_name
       assert_equal "list_con_lists", LegacyBooks::ListConList.table_name
+      assert_equal "user_lists", LegacyBooks::UserList.table_name
+      assert_equal "user_list_books", LegacyBooks::UserListBook.table_name
     end
   end
 end

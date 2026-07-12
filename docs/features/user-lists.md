@@ -13,7 +13,8 @@ UserList                                 (base class, abstract)
 ├── Music::Albums::UserList              list_type: favorites, listened, want_to_listen, custom
 ├── Music::Songs::UserList               list_type: favorites, custom
 ├── Games::UserList                      list_type: favorites, played, beaten, want_to_play, currently_playing, custom
-└── Movies::UserList                     list_type: favorites, watched, want_to_watch, custom
+├── Movies::UserList                     list_type: favorites, watched, want_to_watch, custom
+└── Books::UserList                      list_type: favorites, read, reading, want_to_read, custom
 
 UserListItem                             (single class, polymorphic via `listable`)
 ```
@@ -258,7 +259,7 @@ The framework's `Controller` base class uses `this.context` internally for scope
 - Adding an item from within a list page (autocomplete) — `user-lists-02e`.
 - Public-list discovery, viewing other users' public lists, "consumed" badge upgrades — `user-lists-02d`.
 - Dynamic community lists aggregated from user favorites — `user-lists-03`.
-- `Books::UserList` and a books layout — books item model doesn't exist yet; the read surface works automatically once `Books::UserList` lands.
+- A books layout and books UI wiring. `Books::UserList` exists (Phase 3 of the books data migration) but is deliberately **data-only**: it is absent from both `DEFAULT_SUBCLASSES` (so new signups still get **12** default lists, not 16) and `DOMAIN_SUBCLASSES` (so `/my_lists` does not serve the books domain). The books domain has no public routes, no book show page, and no `Search::ListableAutocomplete` config yet. Wiring books in is **not** a two-constant change — besides adding `Books::UserList` to `DEFAULT_SUBCLASSES`/`DOMAIN_SUBCLASSES`, it needs: a `:books` case in `MyListsController#resolve_layout` (currently falls through to the music layout); a `Search::ListableAutocomplete` config for `Books::Book`; and a books layout. It also needs `MyListsController#csv_headers`/`#csv_row` to use `Books::Book#first_published_year` instead of `#release_year` — `Books::Book` has no `release_year` column (every other listable does, which is why this was never caught), so shipping the naive two-constant change would 500 on the first "Download CSV" click on a books list.
 
 ## Related Documentation
 - `docs/specs/completed/user-lists-01-data-model.md` — data-model spec
