@@ -13,7 +13,8 @@ UserList                                 (base class, abstract)
 ├── Music::Albums::UserList              list_type: favorites, listened, want_to_listen, custom
 ├── Music::Songs::UserList               list_type: favorites, custom
 ├── Games::UserList                      list_type: favorites, played, beaten, want_to_play, currently_playing, custom
-└── Movies::UserList                     list_type: favorites, watched, want_to_watch, custom
+├── Movies::UserList                     list_type: favorites, watched, want_to_watch, custom
+└── Books::UserList                      list_type: favorites, read, reading, want_to_read, custom
 
 UserListItem                             (single class, polymorphic via `listable`)
 ```
@@ -258,7 +259,7 @@ The framework's `Controller` base class uses `this.context` internally for scope
 - Adding an item from within a list page (autocomplete) — `user-lists-02e`.
 - Public-list discovery, viewing other users' public lists, "consumed" badge upgrades — `user-lists-02d`.
 - Dynamic community lists aggregated from user favorites — `user-lists-03`.
-- `Books::UserList` and a books layout — books item model doesn't exist yet; the read surface works automatically once `Books::UserList` lands.
+- A books layout and books UI wiring. `Books::UserList` exists (Phase 3 of the books data migration) but is deliberately **data-only**: it is absent from both `DEFAULT_SUBCLASSES` (so new signups still get **12** default lists, not 16) and `DOMAIN_SUBCLASSES` (so `/my_lists` does not serve the books domain). The books domain has no public routes, no book show page, and no `Search::ListableAutocomplete` config yet. Adding it to those two constants is the follow-up once the books public UI lands.
 
 ## Related Documentation
 - `docs/specs/completed/user-lists-01-data-model.md` — data-model spec
