@@ -270,6 +270,10 @@ Rails.application.routes.draw do
     root to: "movies/default#index", as: :movies_root
   end
 
+  constraints DomainConstraint.new(Rails.application.config.domains[:books]) do
+    root to: "books/default#index", as: :books_root
+  end
+
   constraints DomainConstraint.new(Rails.application.config.domains[:games]) do
     # Admin interface for games domain
     namespace :admin, module: "admin/games", as: "admin_games" do

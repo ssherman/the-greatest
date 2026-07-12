@@ -67,8 +67,9 @@ class MyListsController < ApplicationController
 
   private
 
-  # Music shares the music layout; books has no layout yet, so unknown domains
-  # fall back to it rather than referencing a nonexistent books/application.
+  # Music shares the music layout. Books has a layout now, but My Lists is not
+  # wired for books yet (csv_row calls listable.release_year, which
+  # Books::Book does not have), so books still falls back to music.
   def resolve_layout
     case Current.domain
     when :games then "games/application"

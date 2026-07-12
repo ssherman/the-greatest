@@ -6,7 +6,7 @@ Rails.application.configure do
     music: ENV.fetch("MUSIC_DOMAIN", "dev.thegreatestmusic.org"),
     movies: ENV.fetch("MOVIES_DOMAIN", "dev.thegreatestmovies.org"),
     games: ENV.fetch("GAMES_DOMAIN", "dev.thegreatest.games"),
-    books: ENV.fetch("BOOKS_DOMAIN", "localhost:3000") # default for development
+    books: ENV.fetch("BOOKS_DOMAIN", "dev-new.thegreatestbooks.org")
   }
 
   # Domain-specific settings
@@ -41,7 +41,7 @@ Rails.application.configure do
     books: {
       name: "The Greatest Books",
       color_scheme: "purple",
-      layout: "application",
+      layout: "books/application",
       images_cdn: {
         production: "https://images.thegreatestbooks.org",
         default: "https://images-dev.thegreatestbooks.org"
