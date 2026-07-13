@@ -95,7 +95,8 @@ There is no test CI (`.github/workflows/` holds only the Docker build and the de
 | D8 | Fix `calculate_books_year_range` in this project | It is a stub (`# For now, use a reasonable estimate until we have book models with data`) hardcoding a ~5,026-year range from 3000 BCE. Every books list therefore covers a near-zero fraction of the range and takes a near-maximum list-dates penalty. The books RC admin's "Refresh Rankings" button runs straight through it. ~10 lines, books-only blast radius, and books rankings are not public yet so changing the numbers is safe. |
 | D9 | Array columns (`alternate_titles`, `alternate_names`) use a comma-separated text input, split in the controller | No new form machinery; matches how an admin thinks about the field. |
 | D10 | Series and editions search via SQL `ILIKE`; books and authors via OpenSearch | Only `BookIndex` and `AuthorIndex` exist. Building series/edition indexes is not justified by the admin's needs. |
-| D11 | Ship as six independent increments, each its own plan + PR | Increment 1 is a behavior-neutral refactor of *existing* code and deserves to be reviewed on its own, separate from new books code. |
+| D11 | Ship as seven independent increments, each its own plan + PR | Increments 1 and 2 are refactors of *existing* shared code and deserve review on their own, separate from new books code. |
+| D12 | A modal renders **once per page**, never once per row — and list items paginate | `views/admin/list_items/index.html.erb:77` currently loops `list_items.each { render Admin::EditListItemModalComponent }`, emitting one `<dialog>` per row, and `Admin::ListItemsController#index` loads every item with no pagination. Books' largest list has **6,933 items** — that page would emit 6,933 dialogs, each with a form and a typeahead. Music and games only survive this because their lists are small. See increment 2. |
 
 ## Architecture
 
@@ -150,15 +151,17 @@ Each is an independent plan + PR. Each must leave the suite green.
 
 **1 — Domain registry + layout fix.** `Admin::DomainRouting`, `Admin::DomainNav`, `Admin::DomainScopedAuth`, dynamic layout, data-driven sidebar. **Music and games only — no books code.** Behavior-neutral except that games finally gets the games layout on Penalties / Users / RankedList#show. The existing 4,500-test suite is the safety net: it must pass with no edits beyond the layout-bug assertions.
 
-**2 — Books shell.** `layouts/books/admin.html.erb`, `Admin::Books::BaseController`, dashboard, the seven policies, books entries in `DomainRouting` + `DomainNav`, routes skeleton, books added to `test/controllers/admin/domain_isolation_test.rb`.
+**2 — Single-instance modals + list-item pagination (D12).** Still music/games only, no books code. Rework `views/admin/list_items/index.html.erb` to render **one** `Admin::EditListItemModalComponent` shell per page — a single `<dialog>` wrapping a `turbo_frame_tag` — with each row's edit button setting the frame's `src` to a new `GET /admin/list_items/:id/edit` returning just the form. This follows the pattern the wizard already uses (`SharedModalComponent::FRAME_ID` + `modal/:modal_type` on-demand load). Add pagination to `Admin::ListItemsController#index`, which currently loads every item unbounded. Ordered after increment 1 so `EditListItemModalComponent` can consume `DomainRouting` rather than its own case statement.
 
-**3 — Books + Editions.** Book CRUD + OpenSearch index + typeahead; nested edition CRUD + `set_default`; inline BookAuthors, Credits, BookRelationships; images and category_items wired in.
+**3 — Books shell.** `layouts/books/admin.html.erb`, `Admin::Books::BaseController`, dashboard, the seven policies, books entries in `DomainRouting` + `DomainNav`, routes skeleton, books added to `test/controllers/admin/domain_isolation_test.rb`.
 
-**4 — Authors + Series.** Author CRUD + OpenSearch index + inline AuthorRelationships + images; Series CRUD + inline SeriesBooks + `representative_book` + images.
+**4 — Books + Editions.** Book CRUD + OpenSearch index + typeahead; nested edition CRUD + `set_default`; inline BookAuthors, Credits, BookRelationships; images and category_items wired in.
 
-**5 — Categories, Lists, Ranking configurations.** Three thin base-class subclasses, plus the `calculate_books_year_range` fix (D8).
+**5 — Authors + Series.** Author CRUD + OpenSearch index + inline AuthorRelationships + images; Series CRUD + inline SeriesBooks + `representative_book` + images.
 
-**6 — Playwright suite.** `e2e/tests/books/admin/` mirroring games' nine specs.
+**6 — Categories, Lists, Ranking configurations.** Three thin base-class subclasses, plus the `calculate_books_year_range` fix (D8).
+
+**7 — Playwright suite.** `e2e/tests/books/admin/` mirroring games' nine specs.
 
 ## Testing
 
@@ -174,7 +177,8 @@ Each is an independent plan + PR. Each must leave the suite green.
 | Risk | Mitigation |
 |---|---|
 | Increment 1 silently changes music/games admin behavior | It is behavior-neutral by design and covered by 4,500 existing tests. If a test needs editing, stop and ask why. |
-| `Admin::AddCategoryModalComponent` may render a `<select>` of all categories — books has 73,913 | Verify during increment 5; if so, it must use the existing `search` autocomplete endpoint instead. This would be a latent bug for music/games too (they have far fewer categories, so it never hurt). |
+| Increment 2 *is* a deliberate behavior change to music/games (one modal, paginated items) | It is a bug fix, not a refactor — hence its own PR. The visible change is that list-item edit forms load on demand instead of being pre-rendered. |
+| Other per-row modal renders exist that this spec has not found | Audit during increment 2: `Admin::AddCategoryModalComponent` is **verified clean** (rendered once per show page, uses the autocomplete `search_url`, not a `<select>` of all 73,913 categories). The books show pages built in increments 4–5 must follow D12 from the start. |
 | The books CSS bundle may not carry the DaisyUI admin components | Verify when building `layouts/books/admin.html.erb` in increment 2. Same Tailwind 4 + DaisyUI 5 setup as games, so expected to work. |
 | `calculate_books_year_range` changes the weights of the 4 existing books RCs | Intended. Books rankings are not public yet. |
 | Nested-param collision in `parent_from_params` | Prevented by construction — the lookup is scoped by domain (D3). |
