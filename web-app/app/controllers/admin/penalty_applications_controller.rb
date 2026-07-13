@@ -1,5 +1,5 @@
 class Admin::PenaltyApplicationsController < Admin::BaseController
-  include RankingConfigurationDomainAuth
+  include Admin::DomainScopedAuth
 
   before_action :set_ranking_configuration, only: [:index, :create]
   before_action :set_penalty_application, only: [:update, :destroy]
@@ -124,6 +124,15 @@ class Admin::PenaltyApplicationsController < Admin::BaseController
   end
 
   private
+
+  def domain_for_auth
+    config = RankingConfiguration.find_by(id: ranking_configuration_id_for_auth)
+    Admin::DomainRouting.domain_for(config)&.to_s if config
+  end
+
+  def access_denied_message(_domain)
+    "Access denied."
+  end
 
   def ranking_configuration_id_for_auth
     params[:ranking_configuration_id] || PenaltyApplication.find_by(id: params[:id])&.ranking_configuration_id

@@ -96,4 +96,19 @@ class Admin::DomainIsolationTest < ActionDispatch::IntegrationTest
     get admin_albums_path
     assert_response :success
   end
+
+  test "a games-domain user reaches games admin but not music admin" do
+    games_user = users(:regular_user)
+    games_user.domain_roles.create!(domain: :games, permission_level: :editor)
+
+    host! Rails.application.config.domains[:games]
+    sign_in_as(games_user, stub_auth: true)
+    get admin_games_games_path
+    assert_response :success
+
+    host! Rails.application.config.domains[:music]
+    sign_in_as(games_user, stub_auth: true)
+    get admin_albums_path
+    assert_redirected_to music_root_path
+  end
 end
