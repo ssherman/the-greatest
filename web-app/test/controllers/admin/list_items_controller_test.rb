@@ -506,5 +506,23 @@ module Admin
       get admin_list_list_items_path(games_list)
       assert_response :redirect
     end
+
+    test "edit renders the form for the shared modal frame" do
+      list_item = ListItem.create!(list: @album_list, listable: @album, position: 1)
+
+      get edit_admin_list_item_path(list_item)
+
+      assert_response :success
+      assert_select "turbo-frame##{Admin::EditListItemModalComponent::FRAME_ID}"
+    end
+
+    test "should require admin authorization for edit" do
+      list_item = ListItem.create!(list: @album_list, listable: @album, position: 1)
+      sign_in_as(@regular_user, stub_auth: true)
+
+      get edit_admin_list_item_path(list_item)
+
+      assert_response :redirect
+    end
   end
 end

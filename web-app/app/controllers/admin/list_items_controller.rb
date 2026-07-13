@@ -1,6 +1,6 @@
 class Admin::ListItemsController < Admin::BaseController
   before_action :set_list, only: [:index, :create, :destroy_all, :clear_positions]
-  before_action :set_list_item, only: [:update, :destroy]
+  before_action :set_list_item, only: [:edit, :update, :destroy]
 
   private
 
@@ -26,6 +26,10 @@ class Admin::ListItemsController < Admin::BaseController
   def index
     @list_items = @list.list_items.includes(:listable).order(:position)
     render layout: false
+  end
+
+  def edit
+    render Admin::EditListItemFormComponent.new(list_item: @list_item), layout: false
   end
 
   def create

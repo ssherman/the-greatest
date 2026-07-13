@@ -409,7 +409,7 @@ Rails.application.routes.draw do
     end
 
     resources :list_penalties, only: [:destroy]
-    resources :list_items, only: [:update, :destroy]
+    resources :list_items, only: [:edit, :update, :destroy]
     resources :category_items, only: [:destroy]
     resources :images, only: [:update, :destroy], controller: "images" do
       member do
