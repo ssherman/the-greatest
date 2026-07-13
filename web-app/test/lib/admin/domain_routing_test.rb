@@ -36,6 +36,10 @@ module Admin
       assert_nil Admin::DomainRouting.path_for(::Music::Album.new)
     end
 
+    test "path_for returns nil for a nil record instead of raising" do
+      assert_nil Admin::DomainRouting.path_for(nil)
+    end
+
     test "list_config returns the listable type, paths and label" do
       list = lists(:music_albums_list)
       config = Admin::DomainRouting.list_config(list)
