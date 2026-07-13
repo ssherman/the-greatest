@@ -187,23 +187,10 @@ class Admin::ListItemsController < Admin::BaseController
   end
 
   def expected_listable_type_for(list)
-    case list.class.name
-    when "Music::Albums::List" then "Music::Album"
-    when "Music::Songs::List" then "Music::Song"
-    when "Games::List" then "Games::Game"
-    end
+    Admin::DomainRouting.list_config(list)&.dig(:listable_type)
   end
 
   def redirect_path
-    case @list.class.name
-    when "Music::Albums::List"
-      admin_albums_list_path(@list)
-    when "Music::Songs::List"
-      admin_songs_list_path(@list)
-    when "Games::List"
-      admin_games_list_path(@list)
-    else
-      music_root_path
-    end
+    Admin::DomainRouting.list_config(@list)&.dig(:path) || music_root_path
   end
 end

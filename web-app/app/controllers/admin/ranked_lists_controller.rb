@@ -120,15 +120,6 @@ class Admin::RankedListsController < Admin::BaseController
   end
 
   def redirect_path
-    case @ranking_configuration.type
-    when /^Music::Albums::/
-      admin_albums_ranking_configuration_path(@ranking_configuration)
-    when /^Music::Songs::/
-      admin_songs_ranking_configuration_path(@ranking_configuration)
-    when /^Games::/
-      admin_games_ranking_configuration_path(@ranking_configuration)
-    else
-      music_root_path
-    end
+    Admin::DomainRouting.ranking_configuration_config(@ranking_configuration)&.dig(:path) || music_root_path
   end
 end

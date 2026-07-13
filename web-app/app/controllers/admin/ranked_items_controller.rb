@@ -5,13 +5,8 @@ class Admin::RankedItemsController < Admin::BaseController
     @ranking_configuration = RankingConfiguration.find(params[:ranking_configuration_id])
     @ranked_items = @ranking_configuration.ranked_items
 
-    # Eager-load associations based on configuration type
-    case @ranking_configuration.type
-    when "Music::Albums::RankingConfiguration", "Music::Songs::RankingConfiguration"
-      @ranked_items = @ranked_items.includes(item: :artists)
-    when "Games::RankingConfiguration"
-      @ranked_items = @ranked_items.includes(item: :companies)
-    end
+    includes = Admin::DomainRouting.ranking_configuration_config(@ranking_configuration)&.dig(:ranked_item_includes)
+    @ranked_items = @ranked_items.includes(includes) if includes
 
     @ranked_items = @ranked_items.order(rank: :asc)
 

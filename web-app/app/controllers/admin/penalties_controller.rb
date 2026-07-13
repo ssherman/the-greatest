@@ -62,20 +62,7 @@ class Admin::PenaltiesController < Admin::BaseController
   end
 
   def get_penalty_class(type_string)
-    case type_string
-    when "Global::Penalty"
-      Global::Penalty
-    when "Music::Penalty"
-      Music::Penalty
-    when "Books::Penalty"
-      Books::Penalty
-    when "Movies::Penalty"
-      Movies::Penalty
-    when "Games::Penalty"
-      Games::Penalty
-    else
-      Global::Penalty
-    end
+    Admin::DomainRouting.penalty_class(type_string)
   end
 
   def penalty_params

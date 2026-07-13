@@ -84,16 +84,7 @@ class Admin::CategoryItemsController < Admin::BaseController
   private
 
   def set_item
-    @item = if params[:artist_id]
-      Music::Artist.find(params[:artist_id])
-    elsif params[:album_id]
-      Music::Album.find(params[:album_id])
-    elsif params[:song_id]
-      Music::Song.find(params[:song_id])
-    elsif params[:game_id]
-      Games::Game.find(params[:game_id])
-      # Future: elsif params[:book_id], params[:movie_id], etc.
-    end
+    @item = Admin::DomainRouting.parent_from_params(params, domain: current_domain)
   end
 
   def set_category_item
@@ -105,18 +96,6 @@ class Admin::CategoryItemsController < Admin::BaseController
   end
 
   def redirect_path
-    case @item.class.name
-    when "Music::Artist"
-      admin_artist_path(@item)
-    when "Music::Album"
-      admin_album_path(@item)
-    when "Music::Song"
-      admin_song_path(@item)
-    when "Games::Game"
-      admin_games_game_path(@item)
-    # Future: when "Books::Book", "Movies::Movie", etc.
-    else
-      admin_root_path
-    end
+    Admin::DomainRouting.path_for(@item) || admin_root_path
   end
 end
