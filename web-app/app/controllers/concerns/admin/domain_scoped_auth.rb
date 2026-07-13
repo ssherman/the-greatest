@@ -17,6 +17,11 @@ module Admin
       current_domain&.to_s
     end
 
+    def domain_with_admin_for(record)
+      domain = Admin::DomainRouting.domain_for(record)
+      domain.to_s if domain && Admin::DomainNav.config_for(domain)
+    end
+
     def access_denied_message(domain)
       "Access denied. You need permission for #{domain || "this"} admin."
     end

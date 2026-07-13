@@ -18,8 +18,7 @@ class Admin::RankedItemsController < Admin::BaseController
   private
 
   def domain_for_auth
-    config = RankingConfiguration.find_by(id: ranking_configuration_id_for_auth)
-    Admin::DomainRouting.domain_for(config)&.to_s if config
+    domain_with_admin_for(RankingConfiguration.find_by(id: ranking_configuration_id_for_auth))
   end
 
   def access_denied_message(_domain)

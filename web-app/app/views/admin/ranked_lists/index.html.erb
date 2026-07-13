@@ -20,15 +20,7 @@
             <tr>
               <td>
                 <div class="font-semibold">
-                  <%= link_to ranked_list.list.name,
-                      case ranked_list.list.type
-                      when "Music::Albums::List"
-                        admin_albums_list_path(ranked_list.list)
-                      when "Music::Songs::List"
-                        admin_songs_list_path(ranked_list.list)
-                      end,
-                      class: "link link-primary",
-                      data: { turbo_frame: "_top" } %>
+                  <%= ranked_list_link(ranked_list.list, data: {turbo_frame: "_top"}) %>
                 </div>
               </td>
               <td>
