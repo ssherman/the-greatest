@@ -2,10 +2,16 @@ class Admin::BaseController < ApplicationController
   include Pagy::Method
   include Cacheable
 
+  layout :admin_layout
+
   before_action :authenticate_admin!
   before_action :prevent_caching
 
   private
+
+  def admin_layout
+    Admin::DomainNav.layout_for(current_domain)
+  end
 
   def authenticate_admin!
     # Global admin or editor has full access

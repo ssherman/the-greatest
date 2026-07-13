@@ -246,4 +246,30 @@ class Admin::PenaltiesControllerTest < ActionDispatch::IntegrationTest
     get admin_penalty_url(@global_penalty)
     assert_response :success
   end
+
+  test "renders the games layout when browsing from the games host" do
+    host! Rails.application.config.domains[:games]
+    sign_in_as(@admin, stub_auth: true)
+
+    get admin_penalties_path
+
+    assert_response :success
+    assert_select "aside[data-testid=admin-sidebar]"
+    assert_select "title", text: /The Greatest Games/
+    assert_match %r{/assets/games-[^"]*\.css}, response.body
+    assert_no_match %r{/assets/music-[^"]*\.css}, response.body
+  end
+
+  test "renders the music layout when browsing from the music host" do
+    host! Rails.application.config.domains[:music]
+    sign_in_as(@admin, stub_auth: true)
+
+    get admin_penalties_path
+
+    assert_response :success
+    assert_select "aside[data-testid=admin-sidebar]"
+    assert_select "title", text: /The Greatest Music/
+    assert_match %r{/assets/music-[^"]*\.css}, response.body
+    assert_no_match %r{/assets/games-[^"]*\.css}, response.body
+  end
 end

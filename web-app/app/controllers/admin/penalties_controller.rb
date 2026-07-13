@@ -1,5 +1,4 @@
 class Admin::PenaltiesController < Admin::BaseController
-  layout "music/admin"
   before_action :set_penalty, only: [:show, :edit, :update, :destroy]
 
   def index

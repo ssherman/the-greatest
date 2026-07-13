@@ -1,8 +1,6 @@
 class Admin::RankedListsController < Admin::BaseController
   include RankingConfigurationDomainAuth
 
-  layout "music/admin", only: [:show]
-
   before_action :set_ranking_configuration, only: [:index, :create]
   before_action :set_ranked_list, only: [:show, :destroy]
 

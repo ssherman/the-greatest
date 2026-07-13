@@ -1,5 +1,4 @@
 class Admin::UsersController < Admin::BaseController
-  layout "music/admin"
   before_action :require_admin_role!
   before_action :set_user, only: [:show, :edit, :update, :destroy]
 
