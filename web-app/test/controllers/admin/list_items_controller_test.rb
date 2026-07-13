@@ -507,6 +507,20 @@ module Admin
       assert_response :redirect
     end
 
+    test "index paginates list items" do
+      60.times { |i| @album_list.list_items.create!(position: 100 + i) }
+
+      get admin_list_list_items_path(@album_list)
+
+      assert_response :success
+      assert_select "tbody tr", count: 50
+
+      get admin_list_list_items_path(@album_list, page: 2)
+
+      assert_response :success
+      assert_select "tbody tr", minimum: 1
+    end
+
     test "edit renders the form for the shared modal frame" do
       list_item = ListItem.create!(list: @album_list, listable: @album, position: 1)
 

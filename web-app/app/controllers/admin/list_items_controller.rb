@@ -24,7 +24,7 @@ class Admin::ListItemsController < Admin::BaseController
   public
 
   def index
-    @list_items = @list.list_items.includes(:listable).order(:position)
+    load_list_items
     render layout: false
   end
 
@@ -37,6 +37,7 @@ class Admin::ListItemsController < Admin::BaseController
 
     if @list_item.save
       @list.reload
+      load_list_items
       respond_to do |format|
         format.turbo_stream do
           render turbo_stream: [
@@ -48,7 +49,7 @@ class Admin::ListItemsController < Admin::BaseController
             turbo_stream.replace(
               "list_items_list",
               template: "admin/list_items/index",
-              locals: {list: @list, list_items: @list.list_items.includes(:listable).order(:position)}
+              locals: {list: @list, list_items: @list_items, pagy: @pagy}
             ),
             turbo_stream.replace(
               "add_item_to_list_modal",
@@ -87,6 +88,7 @@ class Admin::ListItemsController < Admin::BaseController
 
     if @list_item.update(update_params)
       @list.reload
+      load_list_items
       respond_to do |format|
         format.turbo_stream do
           render turbo_stream: [
@@ -98,7 +100,7 @@ class Admin::ListItemsController < Admin::BaseController
             turbo_stream.replace(
               "list_items_list",
               template: "admin/list_items/index",
-              locals: {list: @list, list_items: @list.list_items.includes(:listable).order(:position)}
+              locals: {list: @list, list_items: @list_items, pagy: @pagy}
             )
           ]
         end
@@ -126,6 +128,7 @@ class Admin::ListItemsController < Admin::BaseController
     @list = @list_item.list
     @list_item.destroy!
     @list.reload
+    load_list_items
 
     respond_to do |format|
       format.turbo_stream do
@@ -138,7 +141,7 @@ class Admin::ListItemsController < Admin::BaseController
           turbo_stream.replace(
             "list_items_list",
             template: "admin/list_items/index",
-            locals: {list: @list, list_items: @list.list_items.includes(:listable).order(:position)}
+            locals: {list: @list, list_items: @list_items, pagy: @pagy}
           ),
           turbo_stream.replace(
             "add_item_to_list_modal",
@@ -173,6 +176,13 @@ class Admin::ListItemsController < Admin::BaseController
   end
 
   private
+
+  def load_list_items
+    @pagy, @list_items = pagy(
+      @list.list_items.includes(:listable).order(:position),
+      limit: 50
+    )
+  end
 
   def set_list
     @list = List.find(params[:list_id])
