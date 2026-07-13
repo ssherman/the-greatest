@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 class Admin::CloudflareController < Admin::BaseController
-  layout "music/admin"
   before_action :require_privileged_role!
 
   def purge_cache

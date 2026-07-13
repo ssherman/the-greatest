@@ -150,4 +150,28 @@ class Admin::DomainRolesControllerTest < ActionDispatch::IntegrationTest
     assert_match(/name="domain_role\[domain\]"/, response.body, "Domain select should have name='domain_role[domain]'")
     assert_match(/name="domain_role\[permission_level\]"/, response.body, "Permission level select should have name='domain_role[permission_level]'")
   end
+
+  test "renders the games layout when browsing from the games host" do
+    host! Rails.application.config.domains[:games]
+    sign_in_as(@admin, stub_auth: true)
+
+    get admin_user_domain_roles_url(@contractor)
+
+    assert_response :success
+    assert_select "title", text: /The Greatest Games/
+    assert_match %r{/assets/games-[^"]*\.css}, response.body
+    assert_no_match %r{/assets/music-[^"]*\.css}, response.body
+  end
+
+  test "renders the music layout when browsing from the music host" do
+    host! Rails.application.config.domains[:music]
+    sign_in_as(@admin, stub_auth: true)
+
+    get admin_user_domain_roles_url(@contractor)
+
+    assert_response :success
+    assert_select "title", text: /The Greatest Music/
+    assert_match %r{/assets/music-[^"]*\.css}, response.body
+    assert_no_match %r{/assets/games-[^"]*\.css}, response.body
+  end
 end
