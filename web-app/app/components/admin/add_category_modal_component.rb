@@ -10,11 +10,8 @@ class Admin::AddCategoryModalComponent < ViewComponent::Base
   end
 
   def search_url
-    if Admin::DomainRouting.domain_for(@item) == :games
-      helpers.search_admin_games_categories_path
-    else
+    Admin::DomainNav.config_for(Admin::DomainRouting.domain_for(@item))&.dig(:categories_search_path) ||
       helpers.search_admin_categories_path
-    end
   end
 
   def item_type_label

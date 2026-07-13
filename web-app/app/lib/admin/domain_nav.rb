@@ -28,6 +28,7 @@ module Admin
         section_icon: ICONS[:album],
         logo: {type: :image, value: "music/logo.gif"},
         root_path: -> { URL_HELPERS.admin_root_path },
+        categories_search_path: -> { URL_HELPERS.search_admin_categories_path },
         items: [
           {label: "Artists", icon: :artist, path: -> { URL_HELPERS.admin_artists_path }},
           {label: "Albums", icon: :album, path: -> { URL_HELPERS.admin_albums_path }},
@@ -48,6 +49,7 @@ module Admin
         section_icon: ICONS[:game],
         logo: {type: :emoji, value: "🎮"},
         root_path: -> { URL_HELPERS.admin_root_path },
+        categories_search_path: -> { URL_HELPERS.search_admin_games_categories_path },
         items: [
           {label: "Games", icon: :game, path: -> { URL_HELPERS.admin_games_games_path }},
           {label: "Companies", icon: :company, path: -> { URL_HELPERS.admin_games_companies_path }},
@@ -71,6 +73,7 @@ module Admin
 
         config.merge(
           root_path: config[:root_path].call,
+          categories_search_path: config[:categories_search_path].call,
           items: config[:items].map do |item|
             item.merge(path: item[:path].call, icon: ICONS.fetch(item[:icon]))
           end

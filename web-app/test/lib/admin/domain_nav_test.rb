@@ -44,5 +44,12 @@ module Admin
     test "config_for returns nil for a domain with no admin" do
       assert_nil Admin::DomainNav.config_for(:books)
     end
+
+    test "every domain in CONFIGS has a categories_search_path" do
+      Admin::DomainNav::CONFIGS.each_key do |domain|
+        assert Admin::DomainNav.config_for(domain)[:categories_search_path].present?,
+          "#{domain} config is missing categories_search_path"
+      end
+    end
   end
 end

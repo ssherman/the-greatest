@@ -272,4 +272,19 @@ class Admin::PenaltiesControllerTest < ActionDispatch::IntegrationTest
     assert_match %r{/assets/music-[^"]*\.css}, response.body
     assert_no_match %r{/assets/games-[^"]*\.css}, response.body
   end
+
+  test "renders the sidebar with no domain nav section when browsing from the books host" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@admin, stub_auth: true)
+
+    get admin_penalties_path
+
+    assert_response :success
+    assert_select "aside[data-testid=admin-sidebar]" do
+      assert_select "a[href=?]", admin_penalties_path
+      assert_select "a[href=?]", admin_users_path
+      assert_select "a[href=?]", admin_artists_path, count: 0
+      assert_select "a[href=?]", admin_games_games_path, count: 0
+    end
+  end
 end
