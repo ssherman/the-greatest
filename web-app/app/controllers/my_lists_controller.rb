@@ -67,9 +67,12 @@ class MyListsController < ApplicationController
 
   private
 
-  # Music shares the music layout. Books has a layout now, but My Lists is not
-  # wired for books yet (csv_row calls listable.release_year, which
-  # Books::Book does not have), so books still falls back to music.
+  # resolve_layout runs for every action, but books never gets past the
+  # UserList::DOMAIN_SUBCLASSES guard (no "books" key): subclasses_for(:books)
+  # is [], so index renders an empty dashboard here and show/csv 404 on
+  # RecordNotFound before csv_row runs. Adding "books" to that hash would
+  # surface csv_row's listable.release_year call, which Books::Book lacks (it
+  # has first_published_year), on top of this music-skinned layout.
   def resolve_layout
     case Current.domain
     when :games then "games/application"

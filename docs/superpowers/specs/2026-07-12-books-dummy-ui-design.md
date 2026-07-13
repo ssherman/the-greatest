@@ -111,13 +111,16 @@ Leave the stale `192.168.139.157 dev.thegreatestbooks.org` line alone — it bel
 ### 4. Production runbook (strict order)
 
 1. **Cert.** Restructure `deployment/scripts/generate-certs.sh` per D8 and add `new.thegreatestbooks.org` with no SANs. Run it on the server. DNS-01 means no A record is required for issuance. `renew-certs.sh` needs no change — bare `certbot renew` picks up the new lineage automatically.
-2. **nginx.** In `deployment/nginx/the-greatest.conf.template`, add `new.thegreatestbooks.org` to the port-80 `server_name` list and add a `443` block mirroring the music one: its own cert paths (`${CERT_PATH}/new.thegreatestbooks.org/`), the `/__/auth` Firebase proxy location, `proxy_pass http://rails_app`. Deploy and confirm nginx reloads clean.
+2. **nginx.** In `deployment/nginx/the-greatest.conf.template`, add `new.thegreatestbooks.org` to the port-80 `server_name` list and add a `443` block mirroring the music one: its own cert paths (`${CERT_PATH}/new.thegreatestbooks.org/`), the `/__/auth` Firebase proxy location, `proxy_pass http://rails_app`. Deploy, then verify manually — the deploy workflow runs `docker compose up -d`, which does not wait for containers to stay healthy, so a **green GitHub Actions run is not evidence nginx came up**. If the cert path is wrong, nginx exits after starting and crash-loops (`restart: unless-stopped`) while it's still taking music, movies, and games down with it. Confirm with `docker compose ps` / `logs nginx` and a curl of all three existing apexes.
 3. **Rails env.** `SOPS_AGE_KEY_FILE=~/.config/sops/age/production.txt sops secrets/.env.production` → add `BOOKS_DOMAIN=new.thegreatestbooks.org`. Commit the re-encrypted file; deploy.
-4. **Cloudflare zone audit.** Before touching DNS, list the books zone's page rules and cache rules. This zone fronts the **live legacy site**, so a "Cache Everything" rule matching `*thegreatestbooks.org/*` would blanket-cache `new.` too. Report findings; add a bypass rule for `new.thegreatestbooks.org` if one exists.
-5. **DNS.** Create A `new` → `45.33.28.21`, proxied — matching the other apexes — via the Cloudflare REST API with the existing token and `BOOKS_CLOUDFLARE_ZONE_ID`.
-6. **Verify.** `curl -sI https://new.thegreatestbooks.org/` → 200, and the page renders the books placeholder.
+4. **Cloudflare zone audit.** Before touching DNS, list the books zone's page rules and cache rules. This zone fronts the **live legacy site**, so a rule matching the whole zone rather than the apex/`www` hosts specifically would apply to `new.` too — whether it's a "Cache Everything" rule (stale HTML) or a zone-wide redirect rule (bounces `new.` back to the old site). Reject/adjust any such rule; add a bypass/exclusion for `new.thegreatestbooks.org` if one exists.
+5. **Firebase authorized domains (owner action).** The books layout ships a working Login button (`Authentication::WidgetComponent` → `signInWithRedirect`); Firebase rejects sign-in from any hostname not on its Authorized domains allowlist, which lives in the Firebase console, not this repo. In Firebase Console → Authentication → Settings → Authorized domains, confirm `new.thegreatestbooks.org` and `dev-new.thegreatestbooks.org` are both present; add whichever is missing, before or alongside DNS. Untested by CI — the books E2E spec asserts the login button is visible but never clicks it.
+6. **DNS.** Create A `new` → `45.33.28.21`, proxied — matching the other apexes — via the Cloudflare REST API with the existing token and `BOOKS_CLOUDFLARE_ZONE_ID`.
+7. **Verify.** `curl -sI https://new.thegreatestbooks.org/` → 200, and the page renders the books placeholder.
 
-**Rollback:** delete the DNS record. The hostname stops resolving; the nginx block and cert sit idle and harm nothing.
+**Rollback (cert/nginx failure, steps 1-2):** `deployment/nginx/the-greatest.conf.template` is not baked into the nginx image (`Dockerfile` never `COPY`s it; `docker-compose.prod.yml` bind-mounts it read-only), so recovery is a server-side edit, not a rebuild: remove the `new.thegreatestbooks.org` 443 block from the template and `docker compose up -d --force-recreate nginx` — seconds, no CI round-trip. This is the primary recovery path for a bad cert.
+
+**Rollback (bad rollout after DNS exists, step 6+):** delete the DNS record. The hostname stops resolving; the nginx block and cert sit idle and harm nothing. (This does not help a cert/nginx failure — the other three sites share the same nginx container regardless of the books DNS record.)
 
 ## Tests
 
@@ -139,9 +142,10 @@ All must pass before the work is called done:
 
 | Risk | Mitigation |
 |---|---|
-| nginx `443` block referencing a missing cert → container fails → **all four sites down** | D6: issue the cert on the server first, deploy the nginx change second, confirm reload before walking away. |
+| nginx `443` block referencing a missing cert → container fails → **all four sites down**, and a green deploy doesn't reveal it (`docker compose up -d` doesn't wait for health) | D6: issue the cert on the server first, deploy the nginx change second; always confirm with `docker compose ps`/`logs nginx` + curl, never trust Actions status alone. Fast rollback: the nginx config is bind-mounted, not baked into the image, so a server-side template edit + `--force-recreate nginx` recovers in seconds. |
 | Cloudflare token lacks DNS-edit on the books zone → Caddy can't get a dev cert | Verify early (step 3); mint a broader token if needed. |
-| Legacy zone cache rules blanket-caching `new.` | Runbook step 4 audits before DNS is created. |
+| Legacy zone cache **or redirect** rules matching the whole zone → `new.` gets stale content or bounces to the old site | Runbook step 4 audits both rule types before DNS is created; reject anything zone-wide. |
+| Firebase rejects login on the new hostname (`auth/unauthorized-domain`) — untested by CI | Runbook step 5: confirm `new.` and `dev-new.` are in Firebase Console → Authentication → Settings → Authorized domains before/alongside DNS. |
 | `bin/rails generate controller` scaffolds unwanted files | Review the generated file list; keep the controller + test, drop helper/system-test cruft. |
 
 ## Non-goals restated

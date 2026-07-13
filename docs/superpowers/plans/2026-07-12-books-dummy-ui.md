@@ -762,7 +762,7 @@ curl -s "https://api.cloudflare.com/client/v4/zones/$BOOKS_CLOUDFLARE_ZONE_ID/ru
   -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | python3 -m json.tool
 ```
 
-Report what you find to the owner. If any rule matches the whole zone (rather than the apex/`www` hosts specifically) and sets cache-everything, stop and agree a bypass rule for `new.thegreatestbooks.org` before continuing.
+Report what you find to the owner. This zone may also carry zone-wide **redirect** rules (`http_request_dynamic_redirect`), not just cache rules — a redirect matching the whole zone would bounce `new.` to the old site exactly like a cache-everything rule would serve it stale HTML. Acceptance criterion: reject/adjust ANY rule that matches the whole zone rather than the apex/`www` hosts specifically, whatever its action (cache, redirect, transform). Stop and agree a bypass/exclusion for `new.thegreatestbooks.org` before continuing if one is found.
 
 - [ ] **Step 2: Issue the production cert — BEFORE merging**
 
@@ -804,6 +804,8 @@ Open a PR from `books-dummy-ui` to `main` and merge it (or merge locally and pus
 
 - [ ] **Step 4: Verify nginx came up and the other three sites are unharmed**
 
+The deploy workflow runs `docker compose -f docker-compose.prod.yml up -d`, which starts containers but does not wait for them to stay healthy. If the cert path is wrong, nginx **exits after starting** — `set -e` in the deploy script does not trip (the `up -d` command itself still returns 0), so the GitHub Actions run goes **green**, and `restart: unless-stopped` sends the nginx container into a crash loop while music, movies, and games are down. A green Actions run is not evidence that nginx came up. The checks below are the ONLY detection mechanism — always run them after this deploy, regardless of Actions status:
+
 ```bash
 ssh deploy@45.33.28.21
 cd /home/deploy/apps/the-greatest
@@ -823,7 +825,16 @@ curl -sI https://thegreatestmovies.org/ | head -1
 
 Expected: `HTTP/2 200` for each.
 
-**If nginx failed to start:** revert the Task 6 commit on main and redeploy immediately — that restores the other three sites. Then diagnose the cert path before retrying.
+**If nginx failed to start**, recover in seconds, on the server, with no CI round-trip. `deployment/nginx/the-greatest.conf.template` is not baked into the nginx image — `deployment/nginx/Dockerfile` never `COPY`s it, and `docker-compose.prod.yml` bind-mounts it read-only into `/etc/nginx/templates/the-greatest.conf.template`. So editing it on the server and recreating the container is enough; no image rebuild, no `git revert`, no waiting on CI:
+
+```bash
+cd /home/deploy/apps/the-greatest
+# delete the new.thegreatestbooks.org 443 block from deployment/nginx/the-greatest.conf.template
+docker compose -f docker-compose.prod.yml up -d --force-recreate nginx
+# once the cert is in place: git checkout -- deployment/nginx/the-greatest.conf.template
+```
+
+Re-run the `ps` / `logs` / curl checks above to confirm recovery before diagnosing the cert path.
 
 - [ ] **Step 5: Confirm the origin serves books before DNS points at it**
 
@@ -836,7 +847,13 @@ curl -sk --resolve new.thegreatestbooks.org:443:45.33.28.21 https://new.thegreat
 
 Expected: `200` and `data-theme="cmyk"`. This proves the whole chain (nginx block → cert → `BOOKS_DOMAIN` → books route) works before a single visitor can reach the hostname.
 
-- [ ] **Step 6: Create the Cloudflare DNS record**
+- [ ] **Step 6: Confirm Firebase authorized domains (owner action)**
+
+The books layout ships a working Login button (`#navbar_login_button` → `login_modal` → `Authentication::WidgetComponent` → `signInWithRedirect`). Firebase rejects sign-in from any hostname not on its *Authorized domains* allowlist (`auth/unauthorized-domain`). That allowlist lives in the Firebase console, not in this repo, so nothing in the branch proves it — and it is untested by CI: the books E2E spec (Task 4) asserts the login button is visible but never clicks it.
+
+In Firebase Console → Authentication → Settings → Authorized domains, confirm both `new.thegreatestbooks.org` and `dev-new.thegreatestbooks.org` are present; add whichever is missing. Do this before or alongside Step 7 (DNS) — login will 400 with `auth/unauthorized-domain` on the new host until it's done, even though the rest of the page works.
+
+- [ ] **Step 7: Create the Cloudflare DNS record**
 
 Run (from `web-app/`):
 
@@ -851,7 +868,7 @@ curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$BOOKS_CLOUDFLARE_ZO
 
 Expected: `success: True []`. Proxied matches the other three apexes.
 
-- [ ] **Step 7: Verify the live site**
+- [ ] **Step 8: Verify the live site**
 
 ```bash
 curl -sI https://new.thegreatestbooks.org/ | head -1
@@ -863,7 +880,7 @@ Expected: `HTTP/2 200` and a title containing `The Greatest Books` for the new h
 
 Open `https://new.thegreatestbooks.org/` in a browser and confirm the cmyk theme, Playfair heading, and Lora body text render.
 
-**Rollback at any point after Step 6:** delete the DNS record and the hostname stops resolving; the nginx block and cert sit idle and harm nothing.
+**Rollback at any point after Step 7:** delete the DNS record and the hostname stops resolving; the nginx block and cert sit idle and harm nothing. This is the rollback for a bad rollout once DNS exists — for an nginx crash caused by a missing/bad cert (before or after DNS), use the fast nginx-only recovery in Step 4 instead; deleting DNS does nothing for that failure mode since the other three sites share the same nginx container.
 
 ```bash
 set -a && source .env && set +a
