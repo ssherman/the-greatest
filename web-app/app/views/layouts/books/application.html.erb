@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html data-theme="cmyk">
+  <head>
+    <title><%= content_for?(:page_title) ? yield(:page_title) : "Greatest Books Ranked | The Greatest Books" %></title>
+    <meta name="description" content="<%= content_for?(:meta_description) ? yield(:meta_description) : "Discover definitive rankings of the greatest books of all time. Aggregated from the best book lists ever published." %>">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
+
+    <%= stylesheet_link_tag "books", "data-turbo-track": "reload" %>
+    <%= javascript_include_tag "application", "data-turbo-track": "reload" %>
+  </head>
+
+  <body>
+    <div class="navbar bg-base-200">
+      <div class="navbar-start">
+        <div class="dropdown">
+          <div tabindex="0" role="button" class="btn btn-ghost lg:hidden">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" />
+            </svg>
+          </div>
+          <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
+            <li><%= link_to "Books", "/" %></li>
+            <li><%= link_to "Authors", "/" %></li>
+            <li><%= link_to "Lists", "/" %></li>
+          </ul>
+        </div>
+        <%= link_to "/", class: "btn btn-ghost text-xl" do %>
+          <span class="text-2xl mr-2">📚</span>
+          <%= domain_name %>
+        <% end %>
+      </div>
+      <div class="navbar-center hidden lg:flex">
+        <ul class="menu menu-horizontal px-1">
+          <li><%= link_to "Books", "/" %></li>
+          <li><%= link_to "Authors", "/" %></li>
+          <li><%= link_to "Lists", "/" %></li>
+        </ul>
+      </div>
+      <div class="navbar-end">
+        <button class="btn btn-primary" onclick="login_modal.showModal()" id="navbar_login_button">Login</button>
+      </div>
+    </div>
+
+    <main class="container mx-auto px-4 py-8">
+      <%= yield %>
+    </main>
+
+    <footer class="footer footer-center p-10 bg-base-200 text-base-content">
+      <aside>
+        <p>Copyright © 2026 - All rights reserved by <%= domain_name %></p>
+      </aside>
+    </footer>
+
+    <!-- Login Modal -->
+    <dialog id="login_modal" class="modal">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Sign In</h3>
+        <%= render Authentication::WidgetComponent.new(reload_after_auth: true) %>
+        <div class="modal-action">
+          <form method="dialog">
+            <button class="btn">Close</button>
+          </form>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+      </form>
+    </dialog>
+  </body>
+</html>

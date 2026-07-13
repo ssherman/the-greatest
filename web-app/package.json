@@ -10,10 +10,11 @@
   },
   "scripts": {
     "build": "rollup -c --bundleConfigAsCjs rollup.config.js",
-    "build:css": "yarn build:css:music && yarn build:css:movies && yarn build:css:games",
+    "build:css": "yarn build:css:music && yarn build:css:movies && yarn build:css:games && yarn build:css:books",
     "build:css:music": "npx @tailwindcss/cli -i ./app/assets/stylesheets/music/application.css -o ./app/assets/builds/music.css --minify",
     "build:css:movies": "npx @tailwindcss/cli -i ./app/assets/stylesheets/movies/application.css -o ./app/assets/builds/movies.css --minify",
     "build:css:games": "npx @tailwindcss/cli -i ./app/assets/stylesheets/games/application.css -o ./app/assets/builds/games.css --minify",
+    "build:css:books": "npx @tailwindcss/cli -i ./app/assets/stylesheets/books/application.css -o ./app/assets/builds/books.css --minify",
     "build:all": "yarn build && yarn build:css",
     "test:e2e": "npx playwright test --config=e2e/playwright.config.ts",
     "test:e2e:ui": "npx playwright test --config=e2e/playwright.config.ts --ui",

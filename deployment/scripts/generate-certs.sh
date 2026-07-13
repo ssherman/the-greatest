@@ -19,10 +19,13 @@ if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
     exit 1
 fi
 
+# Format: cert-name;comma-separated-SANs;registration-email
+# An empty SAN field means the cert covers only the cert-name.
 DOMAINS=(
-    "thegreatestmusic.org"
-    "thegreatest.games"
-    "thegreatestmovies.org"
+    "thegreatestmusic.org;www.thegreatestmusic.org;admin@thegreatestmusic.org"
+    "thegreatest.games;www.thegreatest.games;admin@thegreatest.games"
+    "thegreatestmovies.org;www.thegreatestmovies.org;admin@thegreatestmovies.org"
+    "new.thegreatestbooks.org;;admin@thegreatestbooks.org"
 )
 
 echo "Generating SSL certificates using certbot Docker container..."
@@ -36,8 +39,18 @@ dns_cloudflare_api_token = $CLOUDFLARE_API_TOKEN
 EOF
 chmod 600 "$TEMP_CREDS"
 
-for domain in "${DOMAINS[@]}"; do
-    echo "Generating certificate for $domain and www.$domain..."
+for entry in "${DOMAINS[@]}"; do
+    IFS=';' read -r cert_name sans email <<< "$entry"
+
+    domain_args=(-d "$cert_name")
+    if [ -n "$sans" ]; then
+        IFS=',' read -ra san_list <<< "$sans"
+        for san in "${san_list[@]}"; do
+            domain_args+=(-d "$san")
+        done
+    fi
+
+    echo "Generating certificate for $cert_name (${#domain_args[@]} names)..."
 
     docker run --rm \
         -v "$CERT_DIR:/etc/letsencrypt" \
@@ -46,17 +59,16 @@ for domain in "${DOMAINS[@]}"; do
         --dns-cloudflare \
         --dns-cloudflare-credentials /cloudflare.ini \
         --dns-cloudflare-propagation-seconds 60 \
-        -d "$domain" \
-        -d "www.$domain" \
+        "${domain_args[@]}" \
         --non-interactive \
         --agree-tos \
-        --email "admin@$domain" \
-        --cert-name "$domain"
+        --email "$email" \
+        --cert-name "$cert_name"
 
     if [ $? -eq 0 ]; then
-        echo "✓ Certificate for $domain generated successfully"
+        echo "✓ Certificate for $cert_name generated successfully"
     else
-        echo "✗ Failed to generate certificate for $domain"
+        echo "✗ Failed to generate certificate for $cert_name"
         exit 1
     fi
     echo ""
@@ -65,8 +77,9 @@ done
 echo "All certificates generated successfully!"
 echo ""
 echo "Certificate locations:"
-for domain in "${DOMAINS[@]}"; do
-    echo "  $domain: $CERT_DIR/live/$domain/"
+for entry in "${DOMAINS[@]}"; do
+    IFS=';' read -r cert_name _ _ <<< "$entry"
+    echo "  $cert_name: $CERT_DIR/live/$cert_name/"
 done
 
 echo ""

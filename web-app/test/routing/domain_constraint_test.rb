@@ -36,4 +36,16 @@ class DomainConstraintTest < ActionDispatch::IntegrationTest
     request3.host = "dev.thegreatest.games"
     assert_not constraint.matches?(request3)
   end
+
+  test "books domain constraint matches the books host only" do
+    constraint = DomainConstraint.new(Rails.application.config.domains[:books])
+
+    request = ActionDispatch::TestRequest.create
+    request.host = "dev-new.thegreatestbooks.org"
+    assert constraint.matches?(request)
+
+    other = ActionDispatch::TestRequest.create
+    other.host = "dev.thegreatestmusic.org"
+    assert_not constraint.matches?(other)
+  end
 end

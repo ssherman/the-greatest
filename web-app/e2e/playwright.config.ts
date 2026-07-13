@@ -42,5 +42,13 @@ export default defineConfig({
       testMatch: /games\/.*/,
       dependencies: ['games-setup'],
     },
+    {
+      name: 'books',
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: 'https://dev-new.thegreatestbooks.org',
+      },
+      testMatch: /books\/.*/,
+    },
   ],
 });
