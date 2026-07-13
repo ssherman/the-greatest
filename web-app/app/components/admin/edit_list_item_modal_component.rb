@@ -4,30 +4,15 @@ class Admin::EditListItemModalComponent < ViewComponent::Base
   def initialize(list_item:)
     @list_item = list_item
     @list = list_item.list
+    @config = Admin::DomainRouting.list_config(@list) || {}
   end
 
   def autocomplete_url
-    case @list.class.name
-    when "Music::Albums::List"
-      Rails.application.routes.url_helpers.search_admin_albums_path
-    when "Music::Songs::List"
-      Rails.application.routes.url_helpers.search_admin_songs_path
-    when "Games::List"
-      Rails.application.routes.url_helpers.search_admin_games_games_path
-    end
+    @config[:autocomplete_path]
   end
 
   def item_label
-    case @list.class.name
-    when "Music::Albums::List"
-      "Album"
-    when "Music::Songs::List"
-      "Song"
-    when "Games::List"
-      "Game"
-    else
-      "Item"
-    end
+    @config.fetch(:item_label, "Item")
   end
 
   def item_display_name

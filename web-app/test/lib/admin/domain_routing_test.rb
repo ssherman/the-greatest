@@ -40,6 +40,16 @@ module Admin
       assert_nil Admin::DomainRouting.path_for(nil)
     end
 
+    test "category_items_path_for returns the nested category items path" do
+      album = music_albums(:dark_side_of_the_moon)
+      assert_equal "/admin/albums/#{album.to_param}/category_items",
+        Admin::DomainRouting.category_items_path_for(album)
+    end
+
+    test "category_items_path_for returns nil for an entity without categories" do
+      assert_nil Admin::DomainRouting.category_items_path_for(games_companies(:nintendo))
+    end
+
     test "list_config returns the listable type, paths and label" do
       list = lists(:music_albums_list)
       config = Admin::DomainRouting.list_config(list)

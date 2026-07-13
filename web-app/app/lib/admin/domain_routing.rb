@@ -3,11 +3,23 @@ module Admin
     URL_HELPERS = Rails.application.routes.url_helpers
 
     ENTITIES = {
-      "Music::Artist" => {domain: :music, path: ->(r) { URL_HELPERS.admin_artist_path(r) }},
-      "Music::Album" => {domain: :music, path: ->(r) { URL_HELPERS.admin_album_path(r) }},
-      "Music::Song" => {domain: :music, path: ->(r) { URL_HELPERS.admin_song_path(r) }},
-      "Games::Game" => {domain: :games, path: ->(r) { URL_HELPERS.admin_games_game_path(r) }},
-      "Games::Company" => {domain: :games, path: ->(r) { URL_HELPERS.admin_games_company_path(r) }}
+      "Music::Artist" => {
+        domain: :music,
+        path: ->(r) { URL_HELPERS.admin_artist_path(r) },
+        category_items_path: ->(r) { URL_HELPERS.admin_artist_category_items_path(r) }
+      },
+      "Music::Album" => {
+        domain: :music,
+        path: ->(r) { URL_HELPERS.admin_album_path(r) },
+        category_items_path: ->(r) { URL_HELPERS.admin_album_category_items_path(r) }
+      },
+      "Music::Song" => {domain: :music, path: ->(r) { URL_HELPERS.admin_song_path(r) }, category_items_path: nil},
+      "Games::Game" => {
+        domain: :games,
+        path: ->(r) { URL_HELPERS.admin_games_game_path(r) },
+        category_items_path: ->(r) { URL_HELPERS.admin_games_game_category_items_path(r) }
+      },
+      "Games::Company" => {domain: :games, path: ->(r) { URL_HELPERS.admin_games_company_path(r) }, category_items_path: nil}
     }.freeze
 
     NESTED_PARENTS = {
@@ -106,6 +118,10 @@ module Admin
         return nil if record.nil? || !record.persisted?
 
         ENTITIES.dig(record.class.name, :path)&.call(record)
+      end
+
+      def category_items_path_for(record)
+        ENTITIES.dig(record.class.name, :category_items_path)&.call(record)
       end
 
       def list_config(list)
