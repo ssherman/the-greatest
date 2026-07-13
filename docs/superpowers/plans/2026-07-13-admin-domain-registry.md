@@ -564,7 +564,13 @@ This is the one deliberate behavior change in the increment: a games admin visit
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `test/controllers/admin/penalties_controller_test.rb` (inside the existing class — read it first to match its `setup` and its `sign_in_as` usage):
+**Assert on artifacts the LAYOUT owns — not on the sidebar.** `app/views/admin/shared/_sidebar.html.erb` already branches on `current_domain` independently of which layout wraps it, so the sidebar's `<h1>` reads "The Greatest Games" **even inside the music layout**. An `assert_select "h1", text: "The Greatest Games"` therefore passes before the fix and proves nothing. (`assert_select` matching *any* `h1` on the page compounds it — there are two.)
+
+What the layout actually owns, and what currently leaks under the games host:
+- `<title>` — renders `"Penalties - The Greatest Music"`; must become `"… - The Greatest Games"`.
+- the stylesheet bundle — loads `/assets/music-*.css`; must become `/assets/games-*.css`.
+
+Append to `test/controllers/admin/penalties_controller_test.rb` (inside the existing class — read it first to match its `setup`, fixtures, and `sign_in_as` usage). Match the CSS bundle with a regex, not an exact digest — the fingerprint changes on every asset build:
 
 ```ruby
 test "renders the games layout when browsing from the games host" do
@@ -574,8 +580,8 @@ test "renders the games layout when browsing from the games host" do
   get admin_penalties_path
 
   assert_response :success
-  assert_select "aside[data-testid=admin-sidebar]"
-  assert_select "h1", text: "The Greatest Games"
+  assert_select "title", text: /The Greatest Games/
+  assert_match %r{/assets/games-[^"]*\.css}, response.body
 end
 
 test "renders the music layout when browsing from the music host" do
@@ -585,7 +591,8 @@ test "renders the music layout when browsing from the music host" do
   get admin_penalties_path
 
   assert_response :success
-  assert_select "h1", text: "The Greatest Music"
+  assert_select "title", text: /The Greatest Music/
+  assert_match %r{/assets/music-[^"]*\.css}, response.body
 end
 ```
 
@@ -594,7 +601,9 @@ Add the equivalent pair to `test/controllers/admin/users_controller_test.rb` aga
 - [ ] **Step 2: Run the tests to verify the games one fails**
 
 Run: `bin/rails test test/controllers/admin/penalties_controller_test.rb test/controllers/admin/users_controller_test.rb`
-Expected: the two "games host" tests FAIL — the rendered `h1` is "The Greatest Music", proving the bug. The two "music host" tests PASS.
+Expected: the two "games host" tests FAIL — the `<title>` reads "The Greatest Music" and the page loads `/assets/music-*.css`, proving the bug. The two "music host" tests PASS.
+
+If the games tests pass here, stop: your assertion is not testing the layout.
 
 - [ ] **Step 3: Make the layout dynamic**
 
