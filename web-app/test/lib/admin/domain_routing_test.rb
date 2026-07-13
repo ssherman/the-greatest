@@ -16,55 +16,82 @@ module Admin
       assert_nil Admin::DomainRouting.domain_for(User)
     end
 
-    test "path_for returns the admin show path" do
-      album = music_albums(:dark_side_of_the_moon)
-      assert_equal "/admin/albums/#{album.to_param}", Admin::DomainRouting.path_for(album)
-
-      game = games_games(:breath_of_the_wild)
-      assert_equal "/admin/games/#{game.to_param}", Admin::DomainRouting.path_for(game)
+    test "path_for returns the admin show path for every registered entity" do
+      {
+        music_artists(:david_bowie) => "/admin/artists",
+        music_albums(:dark_side_of_the_moon) => "/admin/albums",
+        music_songs(:time) => "/admin/songs",
+        games_games(:breath_of_the_wild) => "/admin/games",
+        games_companies(:nintendo) => "/admin/companies"
+      }.each do |record, prefix|
+        assert_equal "#{prefix}/#{record.to_param}", Admin::DomainRouting.path_for(record)
+      end
     end
 
     test "path_for returns nil for an unregistered record" do
       assert_nil Admin::DomainRouting.path_for(users(:regular_user))
     end
 
+    test "path_for returns nil for an unpersisted record instead of raising" do
+      assert_nil Admin::DomainRouting.path_for(::Music::Album.new)
+    end
+
     test "list_config returns the listable type, paths and label" do
-      config = Admin::DomainRouting.list_config(::Music::Albums::List.new)
+      list = lists(:music_albums_list)
+      config = Admin::DomainRouting.list_config(list)
 
       assert_equal :music, config[:domain]
       assert_equal "Music::Album", config[:listable_type]
       assert_equal "Album", config[:item_label]
+      assert_equal "/admin/albums/lists/#{list.to_param}", config[:path]
       assert_equal "/admin/albums/search", config[:autocomplete_path]
     end
 
     test "list_config covers every list type the admin can reach" do
-      %w[Music::Albums::List Music::Songs::List Games::List].each do |type|
-        config = Admin::DomainRouting.list_config(type.constantize.new)
-        assert config, "#{type} is not registered"
+      [
+        {list: lists(:music_albums_list), path_prefix: "/admin/albums/lists", autocomplete_path: "/admin/albums/search"},
+        {list: lists(:music_songs_list), path_prefix: "/admin/songs/lists", autocomplete_path: "/admin/songs/search"},
+        {list: lists(:games_list), path_prefix: "/admin/lists", autocomplete_path: "/admin/games/search"}
+      ].each do |example|
+        list = example[:list]
+        config = Admin::DomainRouting.list_config(list)
+
+        assert config, "#{list.class} is not registered"
         assert config[:listable_type].present?
         assert config[:item_label].present?
+        assert_equal "#{example[:path_prefix]}/#{list.to_param}", config[:path]
+        assert_equal example[:autocomplete_path], config[:autocomplete_path]
       end
     end
 
     test "ranking_configuration_config exposes list type and eager-load includes" do
-      config = Admin::DomainRouting.ranking_configuration_config(::Games::RankingConfiguration.new)
+      rc = ranking_configurations(:games_global)
+      config = Admin::DomainRouting.ranking_configuration_config(rc)
 
       assert_equal :games, config[:domain]
       assert_equal "Games::List", config[:list_type]
       assert_equal({item: :companies}, config[:ranked_item_includes])
+      assert_equal "/admin/ranking_configurations/#{rc.to_param}", config[:path]
     end
 
     test "ranking_configuration_config registers all six ranking configuration types" do
-      %w[
-        Music::Albums::RankingConfiguration
-        Music::Songs::RankingConfiguration
-        Music::Artists::RankingConfiguration
-        Games::RankingConfiguration
-        Books::RankingConfiguration
-        Movies::RankingConfiguration
-      ].each do |type|
-        assert Admin::DomainRouting.ranking_configuration_config(type.constantize.new),
-          "#{type} is not registered"
+      [
+        {rc: ranking_configurations(:music_albums_global), path_prefix: "/admin/albums/ranking_configurations"},
+        {rc: ranking_configurations(:music_songs_global), path_prefix: "/admin/songs/ranking_configurations"},
+        {rc: ranking_configurations(:music_artists_global), path_prefix: "/admin/artists/ranking_configurations"},
+        {rc: ranking_configurations(:games_global), path_prefix: "/admin/ranking_configurations"},
+        {rc: ranking_configurations(:books_global), path_prefix: nil},
+        {rc: ranking_configurations(:movies_global), path_prefix: nil}
+      ].each do |example|
+        rc = example[:rc]
+        config = Admin::DomainRouting.ranking_configuration_config(rc)
+
+        assert config, "#{rc.class} is not registered"
+        if example[:path_prefix]
+          assert_equal "#{example[:path_prefix]}/#{rc.to_param}", config[:path]
+        else
+          assert_nil config[:path]
+        end
       end
     end
 

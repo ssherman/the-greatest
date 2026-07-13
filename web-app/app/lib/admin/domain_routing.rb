@@ -103,6 +103,8 @@ module Admin
       end
 
       def path_for(record)
+        return nil unless record.persisted?
+
         ENTITIES.dig(record.class.name, :path)&.call(record)
       end
 
