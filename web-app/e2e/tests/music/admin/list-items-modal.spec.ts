@@ -53,21 +53,34 @@ test.describe('Admin List Items - Single Instance Modal', () => {
     const table = page.locator('turbo-frame#list_items_list table');
     await expect(table).toBeVisible();
 
-    // Add a disposable, unverified item to edit rather than mutating one of the
-    // list's real (curated) rows. Leaving the autocomplete field untouched keeps
-    // it unresolved, which is fine here since we only care about its position.
+    // Add a disposable item rather than mutating one of the list's real (curated)
+    // rows. The row is matched on position AND "Unverified Item" together, and the
+    // count guard below must hold before anything destructive happens: this test
+    // ends by DELETING the row it targets, and it runs against the persistent dev
+    // database. If the locator ever matches more than one row, the test must fail
+    // loudly rather than delete a real curated item.
+    //
+    // The positions stay low on purpose. Items are ordered by position and the
+    // table paginates at 50, so a large sentinel would land on the last page and
+    // never render.
+    const ADDED_POSITION = '1';
+    const EDITED_POSITION = '2';
+
+    const disposableRowAt = (position: string) =>
+      table.locator('tbody tr').filter({ hasText: 'Unverified Item' }).filter({
+        has: page.getByRole('cell', { name: position, exact: true }),
+      });
+
     await page.getByRole('button', { name: '+ Add Album' }).click();
     const addDialog = page.locator('dialog#add_item_to_list_modal_dialog');
     await expect(addDialog).toBeVisible();
-    await addDialog.getByRole('spinbutton').fill('1');
+    await addDialog.getByRole('spinbutton').fill(ADDED_POSITION);
     await addDialog.getByRole('button', { name: 'Add Album', exact: true }).click();
     await expect(addDialog).toBeHidden();
 
-    // The new row is unverified (no listable) and sorts to the top with position 1,
-    // so it's the first "Unverified Item" row in position order.
-    const unverifiedRows = table.locator('tbody tr', { hasText: 'Unverified Item' });
-    const newRow = unverifiedRows.first();
-    await expect(newRow.locator('td').first()).toHaveText('1');
+    // Guard: exactly one row may match, or we would edit and then delete a real item.
+    await expect(disposableRowAt(ADDED_POSITION)).toHaveCount(1);
+    const newRow = disposableRowAt(ADDED_POSITION);
 
     // The edit form is not pre-rendered - only the dialog shell and its (empty) frame exist.
     await expect(page.locator('#edit_list_item_modal_content form')).toHaveCount(0);
@@ -80,17 +93,16 @@ test.describe('Admin List Items - Single Instance Modal', () => {
     const form = page.locator('#edit_list_item_modal_content form');
     await expect(form).toBeVisible();
 
-    await form.getByRole('spinbutton').fill('2');
+    await form.getByRole('spinbutton').fill(EDITED_POSITION);
     await form.getByRole('button', { name: 'Update Item' }).click();
 
     await expect(dialog).toBeHidden();
-
-    const updatedRow = unverifiedRows.first();
-    await expect(updatedRow.locator('td').first()).toHaveText('2');
+    await expect(disposableRowAt(EDITED_POSITION)).toHaveCount(1);
+    await expect(disposableRowAt(ADDED_POSITION)).toHaveCount(0);
 
     // Clean up the disposable item so the list is left as it was found.
     page.once('dialog', (confirmDialog) => confirmDialog.accept());
-    await updatedRow.locator('td').last().getByRole('button').click();
-    await expect(unverifiedRows.first().locator('td').first()).not.toHaveText('2');
+    await disposableRowAt(EDITED_POSITION).locator('td').last().getByRole('button').click();
+    await expect(disposableRowAt(EDITED_POSITION)).toHaveCount(0);
   });
 });
