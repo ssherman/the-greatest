@@ -258,6 +258,7 @@ class Admin::PenaltiesControllerTest < ActionDispatch::IntegrationTest
     assert_select "title", text: /The Greatest Games/
     assert_match %r{/assets/games-[^"]*\.css}, response.body
     assert_no_match %r{/assets/music-[^"]*\.css}, response.body
+    assert_no_match %r{favicon}, response.body
   end
 
   test "renders the music layout when browsing from the music host" do
@@ -271,6 +272,7 @@ class Admin::PenaltiesControllerTest < ActionDispatch::IntegrationTest
     assert_select "title", text: /The Greatest Music/
     assert_match %r{/assets/music-[^"]*\.css}, response.body
     assert_no_match %r{/assets/games-[^"]*\.css}, response.body
+    assert_match %r{music/favicon}, response.body
   end
 
   test "renders the sidebar with no domain nav section when browsing from the books host" do
@@ -286,5 +288,6 @@ class Admin::PenaltiesControllerTest < ActionDispatch::IntegrationTest
       assert_select "a[href=?]", admin_artists_path, count: 0
       assert_select "a[href=?]", admin_games_games_path, count: 0
     end
+    assert_no_match %r{favicon}, response.body
   end
 end

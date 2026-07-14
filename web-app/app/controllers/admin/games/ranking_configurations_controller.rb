@@ -3,8 +3,6 @@ module Admin
     class RankingConfigurationsController < Admin::RankingConfigurationsController
       include Admin::DomainScopedAuth
 
-      layout "games/admin"
-
       private
 
       def policy_class

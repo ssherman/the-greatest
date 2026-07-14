@@ -2,23 +2,38 @@ require "test_helper"
 
 module Admin
   class DomainNavTest < ActiveSupport::TestCase
-    test "layout_for returns the domain admin layout" do
-      assert_equal "music/admin", Admin::DomainNav.layout_for(:music)
-      assert_equal "games/admin", Admin::DomainNav.layout_for(:games)
-      assert_equal "books/admin", Admin::DomainNav.layout_for(:books)
+    test "chrome_for returns theme, stylesheet, title and favicon per domain" do
+      music = Admin::DomainNav.chrome_for(:music)
+      assert_equal "light", music[:theme]
+      assert_equal "music", music[:stylesheet]
+      assert_equal "The Greatest Music", music[:title]
+      assert_equal "music/favicon", music[:favicon_dir]
+
+      games = Admin::DomainNav.chrome_for(:games)
+      assert_equal "light", games[:theme]
+      assert_equal "games", games[:stylesheet]
+      assert_equal "The Greatest Games", games[:title]
+      assert_nil games[:favicon_dir]
+
+      books = Admin::DomainNav.chrome_for(:books)
+      assert_equal "cmyk", books[:theme]
+      assert_equal "books", books[:stylesheet]
+      assert_equal "The Greatest Books", books[:title]
+      assert_nil books[:favicon_dir]
     end
 
-    test "layout_for falls back to music for domains with no admin layout" do
-      assert_equal "music/admin", Admin::DomainNav.layout_for(:movies)
-      assert_equal "music/admin", Admin::DomainNav.layout_for(nil)
-    end
-
-    test "every layout_for result names a template that exists" do
-      [:music, :games, :books, :movies, nil].each do |domain|
-        layout = Admin::DomainNav.layout_for(domain)
-        assert File.exist?(Rails.root.join("app/views/layouts/#{layout}.html.erb")),
-          "layout #{layout} for domain #{domain.inspect} does not exist"
+    test "chrome_for falls back to music chrome for domains with no admin" do
+      [:movies, nil].each do |domain|
+        chrome = Admin::DomainNav.chrome_for(domain)
+        assert_equal "light", chrome[:theme]
+        assert_equal "music", chrome[:stylesheet]
+        assert_equal "The Greatest Music", chrome[:title]
+        assert_equal "music/favicon", chrome[:favicon_dir]
       end
+    end
+
+    test "the single admin layout template exists" do
+      assert File.exist?(Rails.root.join("app/views/layouts/admin.html.erb"))
     end
 
     test "config_for returns title, root path, section heading and nav items" do

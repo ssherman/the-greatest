@@ -1,8 +1,6 @@
 class Admin::Music::CategoriesController < Admin::CategoriesBaseController
   include Admin::DomainScopedAuth
 
-  layout "music/admin"
-
   protected
 
   def model_class = Music::Category

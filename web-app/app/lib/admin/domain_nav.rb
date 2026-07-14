@@ -2,7 +2,7 @@ module Admin
   module DomainNav
     URL_HELPERS = Rails.application.routes.url_helpers
 
-    FALLBACK_LAYOUT = "music/admin"
+    FALLBACK_DOMAIN = :music
 
     ICONS = {
       artist: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z",
@@ -23,7 +23,9 @@ module Admin
 
     CONFIGS = {
       music: {
-        layout: "music/admin",
+        theme: "light",
+        stylesheet: "music",
+        favicon_dir: "music/favicon",
         title: "The Greatest Music",
         section_label: "Music",
         section_icon: ICONS[:album],
@@ -44,7 +46,9 @@ module Admin
         ]
       },
       games: {
-        layout: "games/admin",
+        theme: "light",
+        stylesheet: "games",
+        favicon_dir: nil,
         title: "The Greatest Games",
         section_label: "Games",
         section_icon: ICONS[:game],
@@ -62,7 +66,9 @@ module Admin
         ]
       },
       books: {
-        layout: "books/admin",
+        theme: "cmyk",
+        stylesheet: "books",
+        favicon_dir: nil,
         title: "The Greatest Books",
         section_label: "Books",
         section_icon: ICONS[:book],
@@ -74,8 +80,14 @@ module Admin
     }.freeze
 
     class << self
-      def layout_for(domain)
-        CONFIGS.dig(domain&.to_sym, :layout) || FALLBACK_LAYOUT
+      def chrome_for(domain)
+        config = CONFIGS[domain&.to_sym] || CONFIGS[FALLBACK_DOMAIN]
+        {
+          theme: config[:theme],
+          stylesheet: config[:stylesheet],
+          title: config[:title],
+          favicon_dir: config[:favicon_dir]
+        }
       end
 
       def config_for(domain)

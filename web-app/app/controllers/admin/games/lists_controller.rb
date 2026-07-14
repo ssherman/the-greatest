@@ -1,8 +1,6 @@
 class Admin::Games::ListsController < Admin::ListsBaseController
   include Admin::DomainScopedAuth
 
-  layout "games/admin"
-
   private
 
   def policy_class

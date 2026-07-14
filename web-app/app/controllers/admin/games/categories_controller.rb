@@ -1,8 +1,6 @@
 class Admin::Games::CategoriesController < Admin::CategoriesBaseController
   include Admin::DomainScopedAuth
 
-  layout "games/admin"
-
   protected
 
   def model_class = Games::Category

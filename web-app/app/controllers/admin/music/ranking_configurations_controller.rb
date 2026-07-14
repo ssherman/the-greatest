@@ -1,8 +1,6 @@
 class Admin::Music::RankingConfigurationsController < Admin::RankingConfigurationsController
   include Admin::DomainScopedAuth
 
-  layout "music/admin"
-
   private
 
   def policy_class

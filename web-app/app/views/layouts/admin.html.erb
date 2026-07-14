@@ -1,12 +1,21 @@
+<% chrome = Admin::DomainNav.chrome_for(current_domain) %>
 <!DOCTYPE html>
-<html lang="en" data-theme="cmyk">
+<html lang="en" data-theme="<%= chrome[:theme] %>">
 <head>
-  <title><%= content_for?(:title) ? yield(:title) : "Admin" %> - The Greatest Books</title>
+  <title><%= content_for?(:title) ? yield(:title) : "Admin" %> - <%= chrome[:title] %></title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <%= csrf_meta_tags %>
   <%= csp_meta_tag %>
 
-  <%= stylesheet_link_tag "books", "data-turbo-track": "reload" %>
+  <% if chrome[:favicon_dir] %>
+    <%= favicon_link_tag "#{chrome[:favicon_dir]}/favicon.ico" %>
+    <link rel="icon" type="image/png" href="<%= image_path("#{chrome[:favicon_dir]}/favicon-96x96.png") %>" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="<%= image_path("#{chrome[:favicon_dir]}/favicon.svg") %>" />
+    <link rel="apple-touch-icon" sizes="180x180" href="<%= image_path("#{chrome[:favicon_dir]}/apple-touch-icon.png") %>" />
+    <meta name="apple-mobile-web-app-title" content="Admin - <%= chrome[:title] %>" />
+  <% end %>
+
+  <%= stylesheet_link_tag chrome[:stylesheet], "data-turbo-track": "reload" %>
   <%= javascript_include_tag "application", "data-turbo-track": "reload" %>
 
   <script>

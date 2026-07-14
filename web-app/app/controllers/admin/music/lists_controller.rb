@@ -1,8 +1,6 @@
 class Admin::Music::ListsController < Admin::ListsBaseController
   include Admin::DomainScopedAuth
 
-  layout "music/admin"
-
   private
 
   def policy_class
