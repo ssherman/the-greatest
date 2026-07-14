@@ -197,7 +197,9 @@ class Admin::ListItemsController < Admin::BaseController
   end
 
   def update_list_item_params
-    params.require(:list_item).permit(:listable_id, :position, :metadata, :verified)
+    permitted = params.require(:list_item).permit(:listable_id, :position, :metadata, :verified)
+    permitted.delete(:listable_id) if permitted[:listable_id].blank?
+    permitted
   end
 
   def expected_listable_type_for(list)

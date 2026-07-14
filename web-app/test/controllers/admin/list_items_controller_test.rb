@@ -424,6 +424,20 @@ module Admin
       assert_equal true, list_item.verified, "Should auto-verify when listable_id changes"
     end
 
+    test "should keep the listable when the autocomplete submits a blank listable_id" do
+      list_item = ListItem.create!(list: @album_list, listable: @album, position: 1, verified: true)
+
+      patch admin_list_item_path(list_item),
+        params: {list_item: {listable_id: "", position: 5}},
+        as: :turbo_stream
+
+      assert_response :success
+      list_item.reload
+      assert_equal @album.id, list_item.listable_id,
+        "An admin editing only the position must not silently detach the item from its album"
+      assert_equal 5, list_item.position
+    end
+
     test "should not auto-verify when listable_id is unchanged" do
       list_item = ListItem.create!(list: @album_list, listable: @album, position: 1, verified: false)
 
