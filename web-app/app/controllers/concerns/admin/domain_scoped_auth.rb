@@ -17,9 +17,11 @@ module Admin
       current_domain&.to_s
     end
 
-    def domain_with_admin_for(record)
-      domain = Admin::DomainRouting.domain_for(record)
-      domain.to_s if domain && Admin::DomainNav.config_for(domain)
+    def domain_with_ranking_configuration_admin_for(ranking_configuration)
+      config = Admin::DomainRouting.ranking_configuration_config(ranking_configuration)
+      return nil if config.nil? || config[:path].blank?
+
+      config[:domain].to_s
     end
 
     def access_denied_message(domain)
