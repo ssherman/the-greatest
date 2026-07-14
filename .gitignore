@@ -45,3 +45,4 @@ terraform.rc
 # .terraform.lock.hcl
 # Local DB dumps pulled from S3 by bin/refresh-dev-db.sh
 postgres_*_backup_*.sql.gz
+tmp/db-snapshots/
