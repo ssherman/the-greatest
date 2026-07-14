@@ -111,4 +111,37 @@ class Admin::DomainIsolationTest < ActionDispatch::IntegrationTest
     get admin_albums_path
     assert_redirected_to music_root_path
   end
+
+  test "a books-domain user reaches books admin but not music admin" do
+    books_user = users(:regular_user)
+    books_user.domain_roles.create!(domain: :books, permission_level: :editor)
+
+    host! Rails.application.config.domains[:books]
+    sign_in_as(books_user, stub_auth: true)
+    get admin_books_root_path
+    assert_response :success
+
+    host! Rails.application.config.domains[:music]
+    sign_in_as(books_user, stub_auth: true)
+    get admin_albums_path
+    assert_redirected_to music_root_path
+  end
+
+  test "a music-domain user cannot reach books admin" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@contractor, stub_auth: true)
+    get admin_books_root_path
+    assert_redirected_to books_root_path
+  end
+
+  test "a books-domain user cannot access the global penalties controller" do
+    books_user = users(:regular_user)
+    books_user.domain_roles.create!(domain: :books, permission_level: :editor)
+
+    host! Rails.application.config.domains[:books]
+    sign_in_as(books_user, stub_auth: true)
+    get admin_penalties_path
+    assert_redirected_to books_root_path
+    assert_equal "Access denied. Admin or editor role required.", flash[:alert]
+  end
 end
