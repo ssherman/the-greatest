@@ -1337,3 +1337,13 @@ yarn test:e2e                 # expect all passing
 Then update `.superpowers/sdd/progress.md` with the increment-3 ledger and surface to the owner:
 - the four deviations above (empty books nav section, no `DomainRouting` books entries yet, `categories_search_path` now optional, E2E pulled forward),
 - the new test count vs. the 4,576 baseline.
+
+---
+
+### Task 1b: Collapse the three admin layouts into one config-driven template
+
+**Inserted after Task 1 by owner decision (2026-07-14).** The task reviewer flagged `layouts/books/admin.html.erb` as the third verbatim copy of the admin layout, and increment 1's `Admin::DomainNav` registry was built so a domain is a config entry, not a new layout file. Owner chose to pay the duplication down now rather than defer.
+
+Full brief (authored directly, not extracted from a numbered section): `.superpowers/sdd/inc3-task-1b-brief.md`.
+
+**Summary:** replace `layouts/{music,games,books}/admin.html.erb` with a single `layouts/admin.html.erb` driven by a new `Admin::DomainNav.chrome_for(current_domain)` → `{theme:, stylesheet:, title:, favicon_dir:}`. `Admin::BaseController` gains `layout "admin"` (replacing `layout :admin_layout` + the `admin_layout` method and `DomainNav.layout_for`/`FALLBACK_LAYOUT`). Remove the 8 redundant `layout "music/admin"`/`layout "games/admin"` overrides in the music/games base + shared-subclass controllers. **Not the simple 3-token swap the design doc implied:** only the music layout carries a favicon block (games/books have none), so `favicon_dir` (music → `"music/favicon"`, else nil) preserves it; and 8 hardcoded overrides break when the templates are deleted. Behavior-neutral: existing penalties/dashboard CSS+title assertions are the contract; add favicon regression pins.
