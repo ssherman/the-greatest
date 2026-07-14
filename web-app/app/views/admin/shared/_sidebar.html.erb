@@ -18,7 +18,7 @@
   <!-- Navigation Menu -->
   <div class="flex-1 overflow-y-auto">
     <ul class="menu p-4 gap-2">
-      <% if nav %>
+      <% if nav && nav[:items].any? %>
         <li>
           <details open>
             <summary class="font-semibold">

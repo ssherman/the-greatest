@@ -271,6 +271,11 @@ Rails.application.routes.draw do
   end
 
   constraints DomainConstraint.new(Rails.application.config.domains[:books]) do
+    # Admin interface for books domain
+    namespace :admin, module: "admin/books", as: "admin_books" do
+      root to: "dashboard#index"
+    end
+
     root to: "books/default#index", as: :books_root
   end
 
