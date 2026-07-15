@@ -23,6 +23,23 @@ class Admin::Books::BooksController < Admin::Books::BaseController
   def show
   end
 
+  def new
+    @book = ::Books::Book.new
+    authorize @book
+  end
+
+  def create
+    @book = ::Books::Book.new
+    assign_book_attributes(@book)
+    authorize @book
+
+    if @book.save
+      redirect_to admin_books_book_path(@book), notice: "Book created."
+    else
+      render :new, status: :unprocessable_entity
+    end
+  end
+
   private
 
   def set_book
@@ -63,5 +80,18 @@ class Admin::Books::BooksController < Admin::Books::BaseController
   def autocomplete_label(book)
     year = book.first_published_year
     "#{book.title}#{" (#{year})" if year.present?}"
+  end
+
+  def book_params
+    params.require(:books_book).permit(
+      :title, :subtitle, :sort_title, :description,
+      :first_published_year, :book_kind, :original_language_id
+    )
+  end
+
+  def assign_book_attributes(record)
+    record.assign_attributes(book_params)
+    raw = params.dig(:books_book, :alternate_titles_string)
+    record.alternate_titles = raw.to_s.split(",").map(&:strip).reject(&:blank?) unless raw.nil?
   end
 end

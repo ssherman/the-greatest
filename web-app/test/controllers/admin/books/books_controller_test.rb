@@ -101,6 +101,45 @@ module Admin
         get admin_books_book_path(@book)
         assert_redirected_to books_root_path
       end
+
+      # New / create
+
+      test "new renders for a writer" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get new_admin_books_book_path
+        assert_response :success
+      end
+
+      test "create makes a book and redirects to it" do
+        sign_in_as(@admin_user, stub_auth: true)
+        assert_difference("::Books::Book.count", 1) do
+          post admin_books_books_path, params: {books_book: {title: "A Brand New Book", book_kind: "standalone", first_published_year: 1999}}
+        end
+        assert_redirected_to admin_books_book_path(::Books::Book.order(:created_at).last)
+      end
+
+      test "create splits comma-separated alternate titles into the array column" do
+        sign_in_as(@admin_user, stub_auth: true)
+        post admin_books_books_path, params: {books_book: {title: "Alt Title Book", book_kind: "standalone", alternate_titles_string: "First Alt,  Second Alt , "}}
+        book = ::Books::Book.find_by(title: "Alt Title Book")
+        assert_equal ["First Alt", "Second Alt"], book.alternate_titles
+      end
+
+      test "create rejects an invalid book" do
+        sign_in_as(@admin_user, stub_auth: true)
+        assert_no_difference("::Books::Book.count") do
+          post admin_books_books_path, params: {books_book: {title: "", book_kind: "standalone"}}
+        end
+        assert_response :unprocessable_entity
+      end
+
+      test "create is forbidden for a regular user" do
+        sign_in_as(@regular_user, stub_auth: true)
+        assert_no_difference("::Books::Book.count") do
+          post admin_books_books_path, params: {books_book: {title: "Nope", book_kind: "standalone"}}
+        end
+        assert_redirected_to books_root_path
+      end
     end
   end
 end

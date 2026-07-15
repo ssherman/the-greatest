@@ -1,0 +1,56 @@
+<%= form_with model: @book, url: (@book.persisted? ? admin_books_book_path(@book) : admin_books_books_path) do |f| %>
+  <% if @book.errors.any? %>
+    <div class="alert alert-error">
+      <ul class="list-disc list-inside">
+        <% @book.errors.full_messages.each do |msg| %><li><%= msg %></li><% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <label class="form-control md:col-span-2">
+      <span class="label-text">Title</span>
+      <%= f.text_field :title, class: "input input-bordered #{"input-error" if @book.errors[:title].any?}", required: true %>
+    </label>
+
+    <label class="form-control">
+      <span class="label-text">Subtitle</span>
+      <%= f.text_field :subtitle, class: "input input-bordered" %>
+    </label>
+
+    <label class="form-control">
+      <span class="label-text">Sort Title</span>
+      <%= f.text_field :sort_title, class: "input input-bordered" %>
+    </label>
+
+    <label class="form-control">
+      <span class="label-text">Kind</span>
+      <%= f.select :book_kind, ::Books::Book.book_kinds.keys.map { |k| [k.titleize, k] }, {}, class: "select select-bordered" %>
+    </label>
+
+    <label class="form-control">
+      <span class="label-text">First Published Year</span>
+      <%= f.number_field :first_published_year, class: "input input-bordered", min: -3000, max: 3000 %>
+    </label>
+
+    <label class="form-control">
+      <span class="label-text">Original Language</span>
+      <%= f.collection_select :original_language_id, Language.order(:name), :id, :name, {include_blank: "—"}, class: "select select-bordered" %>
+    </label>
+
+    <label class="form-control md:col-span-2">
+      <span class="label-text">Alternate Titles (comma-separated)</span>
+      <%= text_field_tag "books_book[alternate_titles_string]", @book.alternate_titles.join(", "), class: "input input-bordered" %>
+    </label>
+
+    <label class="form-control md:col-span-2">
+      <span class="label-text">Description</span>
+      <%= f.text_area :description, rows: 6, class: "textarea textarea-bordered" %>
+    </label>
+  </div>
+
+  <div class="mt-6 flex gap-2">
+    <%= f.submit(@book.persisted? ? "Update Book" : "Create Book", class: "btn btn-primary") %>
+    <%= link_to "Cancel", (@book.persisted? ? admin_books_book_path(@book) : admin_books_books_path), class: "btn btn-ghost" %>
+  </div>
+<% end %>
