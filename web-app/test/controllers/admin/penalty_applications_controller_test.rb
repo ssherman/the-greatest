@@ -222,5 +222,15 @@ module Admin
 
       assert_redirected_to admin_albums_ranking_configuration_path(@album_config)
     end
+
+    test "should deny access to a books ranking configuration for a user with only a books domain role" do
+      books_config = ranking_configurations(:books_global)
+      @regular_user.domain_roles.create!(domain: :books, permission_level: :viewer)
+      sign_in_as(@regular_user, stub_auth: true)
+
+      get admin_ranking_configuration_penalty_applications_path(books_config)
+
+      assert_redirected_to music_root_path
+    end
   end
 end
