@@ -1,4 +1,7 @@
 class Admin::Books::BooksController < Admin::Books::BaseController
+  before_action :set_book, only: [:show]
+  before_action :authorize_book, only: [:show]
+
   def index
     authorize ::Books::Book
     load_books_for_index
@@ -15,6 +18,9 @@ class Admin::Books::BooksController < Admin::Books::BaseController
 
     books = ::Books::Book.where(id: book_ids).in_order_of(:id, book_ids)
     render json: books.map { |b| {value: b.id, text: autocomplete_label(b)} }
+  end
+
+  def show
   end
 
   private

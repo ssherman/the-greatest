@@ -87,6 +87,20 @@ module Admin
         assert_response :success
         assert_equal [], JSON.parse(response.body)
       end
+
+      # Show
+
+      test "show renders for an admin" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_book_path(@book)
+        assert_response :success
+      end
+
+      test "show redirects a regular user" do
+        sign_in_as(@regular_user, stub_auth: true)
+        get admin_books_book_path(@book)
+        assert_redirected_to books_root_path
+      end
     end
   end
 end
