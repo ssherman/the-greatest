@@ -13,6 +13,9 @@
       <% if current_user_can_write? %>
         <%= link_to "Edit", edit_admin_books_book_path(@book), class: "btn btn-primary" %>
       <% end %>
+      <% if current_user_can_delete? %>
+        <%= button_to "Delete", admin_books_book_path(@book), method: :delete, class: "btn btn-error", form: {data: {turbo_confirm: "Delete this book? This cannot be undone."}} %>
+      <% end %>
     </div>
   </div>
 

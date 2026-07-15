@@ -22,6 +22,9 @@
               <% if current_user_can_write? %>
                 <%= link_to "Edit", edit_admin_books_book_path(book), class: "btn btn-ghost btn-xs", data: {turbo_frame: "_top"} %>
               <% end %>
+              <% if current_user_can_delete? %>
+                <%= button_to "Delete", admin_books_book_path(book), method: :delete, class: "btn btn-ghost btn-xs text-error", data: {turbo_confirm: "Are you sure you want to delete #{book.title}?"} %>
+              <% end %>
             </td>
           </tr>
         <% end %>
