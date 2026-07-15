@@ -140,6 +140,52 @@ module Admin
         end
         assert_redirected_to books_root_path
       end
+
+      # Edit / update / destroy
+
+      test "edit renders for a writer" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get edit_admin_books_book_path(@book)
+        assert_response :success
+      end
+
+      test "update changes the book and redirects" do
+        sign_in_as(@admin_user, stub_auth: true)
+        patch admin_books_book_path(@book), params: {books_book: {title: "War and Peace (Revised)"}}
+        assert_redirected_to admin_books_book_path(@book)
+        assert_equal "War and Peace (Revised)", @book.reload.title
+      end
+
+      test "update leaves alternate_titles untouched when the field is absent" do
+        @book.update!(alternate_titles: ["Voyna i mir"])
+        sign_in_as(@admin_user, stub_auth: true)
+        patch admin_books_book_path(@book), params: {books_book: {title: @book.title}}
+        assert_equal ["Voyna i mir"], @book.reload.alternate_titles
+      end
+
+      test "update rejects invalid data" do
+        sign_in_as(@admin_user, stub_auth: true)
+        patch admin_books_book_path(@book), params: {books_book: {title: ""}}
+        assert_response :unprocessable_entity
+        assert @book.reload.title.present?
+      end
+
+      test "destroy deletes the book" do
+        book = ::Books::Book.create!(title: "Disposable", book_kind: "standalone")
+        sign_in_as(@admin_user, stub_auth: true)
+        assert_difference("::Books::Book.count", -1) do
+          delete admin_books_book_path(book)
+        end
+        assert_redirected_to admin_books_books_path
+      end
+
+      test "destroy is forbidden for a regular user" do
+        sign_in_as(@regular_user, stub_auth: true)
+        assert_no_difference("::Books::Book.count") do
+          delete admin_books_book_path(@book)
+        end
+        assert_redirected_to books_root_path
+      end
     end
   end
 end

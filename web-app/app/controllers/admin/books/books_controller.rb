@@ -1,6 +1,6 @@
 class Admin::Books::BooksController < Admin::Books::BaseController
-  before_action :set_book, only: [:show]
-  before_action :authorize_book, only: [:show]
+  before_action :set_book, only: [:show, :edit, :update, :destroy]
+  before_action :authorize_book, only: [:show, :edit, :update, :destroy]
 
   def index
     authorize ::Books::Book
@@ -38,6 +38,24 @@ class Admin::Books::BooksController < Admin::Books::BaseController
     else
       render :new, status: :unprocessable_entity
     end
+  end
+
+  def edit
+  end
+
+  def update
+    assign_book_attributes(@book)
+
+    if @book.save
+      redirect_to admin_books_book_path(@book), notice: "Book updated."
+    else
+      render :edit, status: :unprocessable_entity
+    end
+  end
+
+  def destroy
+    @book.destroy!
+    redirect_to admin_books_books_path, notice: "Book deleted."
   end
 
   private
