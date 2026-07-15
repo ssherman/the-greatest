@@ -1,0 +1,47 @@
+<div class="overflow-x-auto">
+  <table class="table table-zebra">
+    <thead>
+      <tr>
+        <th><%= link_to "Title", admin_books_books_path(sort: "title", q: params[:q]), data: {turbo_frame: "books_table"} %></th>
+        <th><%= link_to "First Published", admin_books_books_path(sort: "first_published_year", q: params[:q]), data: {turbo_frame: "books_table"} %></th>
+        <th><%= link_to "Kind", admin_books_books_path(sort: "book_kind", q: params[:q]), data: {turbo_frame: "books_table"} %></th>
+        <th>Authors</th>
+        <th class="text-right">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% if books.any? %>
+        <% books.each do |book| %>
+          <tr>
+            <td><%= link_to book.title, admin_books_book_path(book), data: {turbo_frame: "_top"} %></td>
+            <td><%= book.first_published_year || "—" %></td>
+            <td><span class="badge badge-ghost"><%= book.book_kind.titleize %></span></td>
+            <td class="text-sm text-base-content/70"><%= book.authors.map(&:name).join(", ") %></td>
+            <td class="text-right">
+              <%= link_to "View", admin_books_book_path(book), class: "btn btn-ghost btn-xs", data: {turbo_frame: "_top"} %>
+              <% if current_user_can_write? %>
+                <%= link_to "Edit", edit_admin_books_book_path(book), class: "btn btn-ghost btn-xs", data: {turbo_frame: "_top"} %>
+              <% end %>
+            </td>
+          </tr>
+        <% end %>
+      <% else %>
+        <tr>
+          <td colspan="5" class="text-center text-base-content/70 py-8">
+            <% if params[:q].present? %>
+              No books match “<%= params[:q] %>”. <%= link_to "Clear", admin_books_books_path, data: {turbo_frame: "books_table"} %>
+            <% else %>
+              No books yet.
+            <% end %>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>
+
+<% if defined?(pagy) && pagy && pagy.pages > 1 %>
+  <div class="mt-4 flex justify-center">
+    <%== pagy.series_nav %>
+  </div>
+<% end %>

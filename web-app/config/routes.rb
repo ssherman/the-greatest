@@ -274,6 +274,12 @@ Rails.application.routes.draw do
     # Admin interface for books domain
     namespace :admin, module: "admin/books", as: "admin_books" do
       root to: "dashboard#index"
+
+      resources :books do
+        collection do
+          get :search
+        end
+      end
     end
 
     root to: "books/default#index", as: :books_root
