@@ -75,7 +75,9 @@ module Admin
         logo: {type: :emoji, value: "📚"},
         root_path: -> { URL_HELPERS.admin_books_root_path },
         categories_search_path: nil,
-        items: []
+        items: [
+          {label: "Books", icon: :book, path: -> { URL_HELPERS.admin_books_books_path }}
+        ]
       }
     }.freeze
 
