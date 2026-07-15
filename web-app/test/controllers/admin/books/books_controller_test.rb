@@ -163,6 +163,13 @@ module Admin
         assert_equal ["Voyna i mir"], @book.reload.alternate_titles
       end
 
+      test "update clears alternate_titles when the field is submitted empty" do
+        @book.update!(alternate_titles: ["Voyna i mir"])
+        sign_in_as(@admin_user, stub_auth: true)
+        patch admin_books_book_path(@book), params: {books_book: {title: @book.title, alternate_titles_string: ""}}
+        assert_equal [], @book.reload.alternate_titles
+      end
+
       test "update rejects invalid data" do
         sign_in_as(@admin_user, stub_auth: true)
         patch admin_books_book_path(@book), params: {books_book: {title: ""}}
