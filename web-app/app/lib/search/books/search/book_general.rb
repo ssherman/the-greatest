@@ -14,8 +14,9 @@ module Search
           min_score = options[:min_score] || 1
           size = options[:size] || 10
           from = options[:from] || 0
+          book_kind = options.fetch(:book_kind, "standalone")
 
-          query_definition = build_query_definition(text, min_score, size, from)
+          query_definition = build_query_definition(text, min_score, size, from, book_kind)
 
           Rails.logger.info "Book search query: #{query_definition.inspect}"
 
@@ -23,7 +24,7 @@ module Search
           extract_hits_with_scores(response)
         end
 
-        def self.build_query_definition(text, min_score, size, from)
+        def self.build_query_definition(text, min_score, size, from, book_kind = "standalone")
           cleaned_text = ::Search::Shared::Utils.normalize_search_text(text)
 
           should_clauses = [
@@ -42,7 +43,7 @@ module Search
             from: from,
             query: ::Search::Shared::Utils.build_bool_query(
               should: should_clauses,
-              filter: [{term: {book_kind: "standalone"}}],
+              filter: book_kind.nil? ? [] : [{term: {book_kind: book_kind}}],
               minimum_should_match: 1
             )
           }

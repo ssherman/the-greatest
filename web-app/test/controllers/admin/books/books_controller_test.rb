@@ -60,6 +60,13 @@ module Admin
         assert_response :success
       end
 
+      test "index search includes collection books, not just standalone" do
+        sign_in_as(@admin_user, stub_auth: true)
+        ::Search::Books::Search::BookGeneral.expects(:call).with("war", size: 1000, book_kind: nil).returns([])
+        get admin_books_books_path(q: "war")
+        assert_response :success
+      end
+
       test "index tolerates a malicious sort param without raising" do
         sign_in_as(@admin_user, stub_auth: true)
         assert_nothing_raised do
@@ -72,7 +79,7 @@ module Admin
 
       test "search returns autocomplete JSON" do
         sign_in_as(@admin_user, stub_auth: true)
-        ::Search::Books::Search::BookAutocomplete.expects(:call).with("war", size: 20).returns([{id: @book.id.to_s, score: 1.0, source: {"title" => @book.title}}])
+        ::Search::Books::Search::BookAutocomplete.expects(:call).with("war", size: 20, book_kind: nil).returns([{id: @book.id.to_s, score: 1.0, source: {"title" => @book.title}}])
         get search_admin_books_books_path(q: "war")
         assert_response :success
         body = JSON.parse(response.body)
