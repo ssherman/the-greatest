@@ -1,7 +1,5 @@
 class Admin::RankedListsController < Admin::BaseController
-  include RankingConfigurationDomainAuth
-
-  layout "music/admin", only: [:show]
+  include Admin::DomainScopedAuth
 
   before_action :set_ranking_configuration, only: [:index, :create]
   before_action :set_ranked_list, only: [:show, :destroy]
@@ -96,6 +94,14 @@ class Admin::RankedListsController < Admin::BaseController
 
   private
 
+  def domain_for_auth
+    domain_with_ranking_configuration_admin_for(RankingConfiguration.find_by(id: ranking_configuration_id_for_auth))
+  end
+
+  def access_denied_message(_domain)
+    "Access denied."
+  end
+
   def ranking_configuration_id_for_auth
     params[:ranking_configuration_id] || RankedList.find_by(id: params[:id])&.ranking_configuration_id
   end
@@ -113,15 +119,6 @@ class Admin::RankedListsController < Admin::BaseController
   end
 
   def redirect_path
-    case @ranking_configuration.type
-    when /^Music::Albums::/
-      admin_albums_ranking_configuration_path(@ranking_configuration)
-    when /^Music::Songs::/
-      admin_songs_ranking_configuration_path(@ranking_configuration)
-    when /^Games::/
-      admin_games_ranking_configuration_path(@ranking_configuration)
-    else
-      music_root_path
-    end
+    Admin::DomainRouting.ranking_configuration_config(@ranking_configuration)&.dig(:path) || music_root_path
   end
 end

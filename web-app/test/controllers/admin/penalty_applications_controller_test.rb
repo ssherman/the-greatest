@@ -206,5 +206,31 @@ module Admin
       assert_response :success
       assert_equal @song_config, PenaltyApplication.last.ranking_configuration
     end
+
+    test "should redirect to the games ranking configuration on html create, not the music homepage" do
+      games_config = ranking_configurations(:games_global)
+
+      post admin_ranking_configuration_penalty_applications_path(games_config),
+        params: {penalty_application: {penalty_id: @global_penalty.id, value: 75}}
+
+      assert_redirected_to admin_games_ranking_configuration_path(games_config)
+    end
+
+    test "should redirect to the albums ranking configuration on html create" do
+      post admin_ranking_configuration_penalty_applications_path(@album_config),
+        params: {penalty_application: {penalty_id: @global_penalty.id, value: 75}}
+
+      assert_redirected_to admin_albums_ranking_configuration_path(@album_config)
+    end
+
+    test "should deny access to a books ranking configuration for a user with only a books domain role" do
+      books_config = ranking_configurations(:books_global)
+      @regular_user.domain_roles.create!(domain: :books, permission_level: :viewer)
+      sign_in_as(@regular_user, stub_auth: true)
+
+      get admin_ranking_configuration_penalty_applications_path(books_config)
+
+      assert_redirected_to music_root_path
+    end
   end
 end

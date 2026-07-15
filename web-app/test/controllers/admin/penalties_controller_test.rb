@@ -246,4 +246,51 @@ class Admin::PenaltiesControllerTest < ActionDispatch::IntegrationTest
     get admin_penalty_url(@global_penalty)
     assert_response :success
   end
+
+  test "renders the games layout when browsing from the games host" do
+    host! Rails.application.config.domains[:games]
+    sign_in_as(@admin, stub_auth: true)
+
+    get admin_penalties_path
+
+    assert_response :success
+    assert_select "aside[data-testid=admin-sidebar]"
+    assert_select "title", text: /The Greatest Games/
+    assert_match %r{/assets/games-[^"]*\.css}, response.body
+    assert_no_match %r{/assets/music-[^"]*\.css}, response.body
+    assert_no_match %r{favicon}, response.body
+  end
+
+  test "renders the music layout when browsing from the music host" do
+    host! Rails.application.config.domains[:music]
+    sign_in_as(@admin, stub_auth: true)
+
+    get admin_penalties_path
+
+    assert_response :success
+    assert_select "aside[data-testid=admin-sidebar]"
+    assert_select "title", text: /The Greatest Music/
+    assert_match %r{/assets/music-[^"]*\.css}, response.body
+    assert_no_match %r{/assets/games-[^"]*\.css}, response.body
+    assert_match %r{music/favicon}, response.body
+  end
+
+  test "renders the books layout with no domain nav section when browsing from the books host" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@admin, stub_auth: true)
+
+    get admin_penalties_path
+
+    assert_response :success
+    assert_select "title", text: /The Greatest Books/
+    assert_match %r{/assets/books-[^"]*\.css}, response.body
+    assert_no_match %r{/assets/music-[^"]*\.css}, response.body
+    assert_select "aside[data-testid=admin-sidebar]" do
+      assert_select "a[href=?]", admin_penalties_path
+      assert_select "a[href=?]", admin_users_path
+      assert_select "a[href=?]", admin_artists_path, count: 0
+      assert_select "a[href=?]", admin_games_games_path, count: 0
+    end
+    assert_no_match %r{favicon}, response.body
+  end
 end

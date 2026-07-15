@@ -117,15 +117,6 @@ class Admin::ListPenaltiesController < Admin::BaseController
   end
 
   def redirect_path
-    case @list.type
-    when /^Music::Albums::/
-      admin_albums_list_path(@list)
-    when /^Music::Songs::/
-      admin_songs_list_path(@list)
-    when "Games::List"
-      admin_games_list_path(@list)
-    else
-      music_root_path
-    end
+    Admin::DomainRouting.list_config(@list)&.dig(:path) || music_root_path
   end
 end

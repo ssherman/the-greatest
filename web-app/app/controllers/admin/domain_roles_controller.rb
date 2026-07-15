@@ -1,5 +1,4 @@
 class Admin::DomainRolesController < Admin::BaseController
-  layout "music/admin"
   before_action :require_admin_role!
   before_action :set_user
   before_action :set_domain_role, only: [:update, :destroy]

@@ -32,7 +32,7 @@ Users can be granted domain-specific permissions via the `domain_roles` table:
 
 ### Authorization Flow
 
-**Global Admin Controllers** (e.g., `Admin::PenaltiesController`, `Admin::ListItemsController`):
+**Global Admin Controllers** (e.g., `Admin::PenaltiesController`):
 ```
 Request → Admin::BaseController#authenticate_admin!
           ├─ Global admin/editor? → Allow
@@ -52,7 +52,7 @@ Action → Pundit Policy (e.g., Music::AlbumPolicy)
           └─ manage? → Only global_admin or domain_admin
 ```
 
-**Important**: Domain-scoped users can ONLY access controllers within their domain namespace. They cannot access global controllers that manage cross-domain resources (penalties, list items, etc.).
+**Important**: Domain-scoped users can ONLY access controllers within their domain namespace, plus a handful of global controllers that derive the domain from the record being operated on instead of from the hostname: `Admin::ListItemsController` and `Admin::ListPenaltiesController` (hand-rolled `authenticate_admin!`, domain from the list's STI type) and `Admin::RankedListsController`, `Admin::RankedItemsController`, `Admin::PenaltyApplicationsController` (via `Admin::DomainScopedAuth#domain_for_auth`, domain from the ranking configuration through `Admin::DomainRouting.domain_for`, restricted to domains that actually have an admin). They cannot access truly global controllers like `Admin::PenaltiesController`.
 
 ### Key Components
 
@@ -66,7 +66,7 @@ Action → Pundit Policy (e.g., Music::AlbumPolicy)
 
 **Controllers:**
 - `Admin::BaseController` - `authenticate_admin!` requires global admin/editor (for global controllers)
-- `Admin::Music::BaseController` - Overrides `authenticate_admin!` to allow music domain roles
+- `Admin::Music::BaseController` - Includes `Admin::DomainScopedAuth` to allow music domain roles
 - `Admin::DomainRolesController` - CRUD for managing user domain roles (global admin only)
 
 ## Usage
@@ -106,3 +106,4 @@ Navigate to `/admin/users/:user_id/domain_roles` to:
 - `docs/models/user.md` - User model with domain role methods
 - `docs/policies/application_policy.md` - Base policy
 - `docs/policies/music/` - Music domain policies
+- `docs/features/admin-domain-registry.md` - `Admin::DomainRouting` and `Admin::DomainNav`, which `domain_for_auth` and `domain_root_path` are built on

@@ -2,6 +2,8 @@ class Admin::BaseController < ApplicationController
   include Pagy::Method
   include Cacheable
 
+  layout "admin"
+
   before_action :authenticate_admin!
   before_action :prevent_caching
 

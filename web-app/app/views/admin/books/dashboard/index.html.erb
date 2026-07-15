@@ -1,0 +1,82 @@
+<% content_for :title, "Dashboard" %>
+
+<div class="space-y-6">
+  <div>
+    <h1 class="text-4xl font-bold">Welcome to Books Admin</h1>
+    <p class="text-lg text-base-content/70 mt-2">Manage books, authors, editions, and more</p>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div class="stats shadow" data-testid="stat-card-books">
+      <div class="stat">
+        <div class="stat-title">Total Books</div>
+        <div class="stat-value text-primary"><%= number_with_delimiter(@book_count) %></div>
+      </div>
+    </div>
+
+    <div class="stats shadow" data-testid="stat-card-authors">
+      <div class="stat">
+        <div class="stat-title">Total Authors</div>
+        <div class="stat-value text-secondary"><%= number_with_delimiter(@author_count) %></div>
+      </div>
+    </div>
+
+    <div class="stats shadow" data-testid="stat-card-editions">
+      <div class="stat">
+        <div class="stat-title">Total Editions</div>
+        <div class="stat-value text-accent"><%= number_with_delimiter(@edition_count) %></div>
+      </div>
+    </div>
+
+    <div class="stats shadow" data-testid="stat-card-series">
+      <div class="stat">
+        <div class="stat-title">Total Series</div>
+        <div class="stat-value text-info"><%= number_with_delimiter(@series_count) %></div>
+      </div>
+    </div>
+
+    <div class="stats shadow" data-testid="stat-card-categories">
+      <div class="stat">
+        <div class="stat-title">Total Categories</div>
+        <div class="stat-value text-warning"><%= number_with_delimiter(@category_count) %></div>
+      </div>
+    </div>
+
+    <div class="stats shadow" data-testid="stat-card-lists">
+      <div class="stat">
+        <div class="stat-title">Total Lists</div>
+        <div class="stat-value text-success"><%= number_with_delimiter(@list_count) %></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">Recently Added Books</h2>
+      <% if @recent_books.any? %>
+        <div class="overflow-x-auto">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>First Published</th>
+                <th>Added</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% @recent_books.each do |book| %>
+                <tr>
+                  <td><%= book.title %></td>
+                  <td><%= book.first_published_year || "-" %></td>
+                  <td class="text-sm text-base-content/70"><%= time_ago_in_words(book.created_at) %> ago</td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% else %>
+        <p class="text-base-content/70">No books yet.</p>
+      <% end %>
+    </div>
+  </div>
+</div>

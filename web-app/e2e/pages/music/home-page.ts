@@ -28,7 +28,7 @@ export class HomePage {
     this.navAlbums = page.locator('.navbar-center').getByText('Albums');
     this.navSongs = page.locator('.navbar-center').getByText('Songs');
     this.navArtists = page.locator('.navbar-center').getByRole('link', { name: 'Artists' });
-    this.navLists = page.locator('.navbar-center').getByRole('link', { name: 'Lists' });
+    this.navLists = page.locator('.navbar-center').getByRole('link', { name: 'Lists', exact: true });
     this.loginButton = page.locator('#navbar_login_button');
   }
 

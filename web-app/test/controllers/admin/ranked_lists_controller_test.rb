@@ -179,5 +179,36 @@ module Admin
       assert_response :success
       assert_equal @song_list, RankedList.last.list
     end
+
+    test "should deny access to a books ranking configuration for a user with only a books domain role" do
+      books_config = ranking_configurations(:books_global)
+      @regular_user.domain_roles.create!(domain: :books, permission_level: :viewer)
+      sign_in_as(@regular_user, stub_auth: true)
+
+      get admin_ranking_configuration_ranked_lists_path(books_config)
+
+      assert_redirected_to music_root_path
+    end
+
+    test "should allow access to a games ranking configuration for a user with only a games domain role" do
+      games_config = ranking_configurations(:games_global)
+      @regular_user.domain_roles.create!(domain: :games, permission_level: :viewer)
+      sign_in_as(@regular_user, stub_auth: true)
+
+      get admin_ranking_configuration_ranked_lists_path(games_config)
+
+      assert_response :success
+    end
+
+    test "show links back to the games ranking configuration, not the music root" do
+      games_ranked_list = ranked_lists(:games_ranked_list)
+      games_config = ranking_configurations(:games_global)
+
+      get admin_ranked_list_path(games_ranked_list)
+
+      assert_response :success
+      assert_select "a[href=?]", admin_games_ranking_configuration_path(games_config),
+        text: "← Back to Ranking Configuration"
+    end
   end
 end

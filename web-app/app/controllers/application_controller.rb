@@ -56,16 +56,11 @@ class ApplicationController < ActionController::Base
   def detect_current_domain
     host = request.host
 
-    case host
-    when Rails.application.config.domains[:music]
-      :music
-    when Rails.application.config.domains[:movies]
-      :movies
-    when Rails.application.config.domains[:games]
-      :games
-    else
-      :books # default
+    Rails.application.config.domains.each do |domain, configured|
+      return domain if configured.split(",").include?(host)
     end
+
+    :books # default for unrecognized hosts
   end
 
   attr_reader :current_domain

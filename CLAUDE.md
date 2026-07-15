@@ -47,6 +47,23 @@ web-app/test/             # mirrors app/, namespaced to match (module Music; cla
 docs/                     # project root, NOT web-app/
 ```
 
+## The development database is not disposable
+
+**The books data exists ONLY in development.** It is not in production, so `bin/refresh-dev-db.sh`
+cannot bring it back — rebuilding it means re-running `data_migration:all` against the legacy DB,
+which takes **hours**.
+
+- **Never run a destructive command against development.** A `PreToolUse` hook
+  (`.claude/hooks/block-destructive-db.sh`) hard-blocks `create_fixtures`, `db:drop`/`db:reset`/
+  `db:schema:load`, bulk `delete_all`/`destroy_all`/`update_all` in `rails runner`, and raw
+  `DROP`/`TRUNCATE`/`DELETE FROM`, unless `RAILS_ENV=test` is explicit.
+- **`ActiveRecord::FixtureSet.create_fixtures` TRUNCATES every table it names.** It is not a read.
+  To inspect a fixture, read the YAML: `sed -n '/^name:/,/^$/p' test/fixtures/<file>.yml`.
+- **Snapshot before bulk work:** `bin/snapshot-dev-db.sh --label pre-migration`, restore with
+  `bin/snapshot-dev-db.sh --restore`. Turns an hours-long rebuild into a ~1 minute restore.
+- `bin/refresh-dev-db.sh` restores music/games/movies from the production backup. It does **not**
+  restore books.
+
 ## Non-negotiable conventions
 
 - **Use Rails generators** — never hand-create models/controllers/jobs/components. Generators create

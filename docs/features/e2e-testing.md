@@ -99,8 +99,22 @@ The Rails dev server must be running and accessible at `https://dev.thegreatestm
 ### 2. Firebase Test Account
 Create a dedicated test account:
 1. In Firebase Console, create an email/password user
-2. In the local Rails database, create a `User` record for that email with admin `DomainRole` for the music domain
-3. Verify you can manually log in at `https://dev.thegreatestmusic.org` with these credentials
+2. Sign in once through the browser as that account — Rails creates the `User` record on first sign-in, with the default `user` role
+3. Give that user the **global admin role** (`role: :admin`):
+   ```bash
+   bin/rails e2e:admin
+   ```
+   The task reads `PLAYWRIGHT_ADMIN_EMAIL` from `e2e/.env` and promotes that user.
+4. Verify you can manually log in at `https://dev.thegreatestmusic.org` with these credentials
+
+A music-only `DomainRole` is **not** enough. The same account drives both the music and games
+suites, and the sidebar specs click **Penalties** and **Users**, which are guarded by
+`require_admin_role!` — a global-admin-only check. Anything less and the admin specs fail in a
+confusing way (see Troubleshooting).
+
+**Re-run `bin/rails e2e:admin` after any dev-database reseed.** The books data migrations rebuild
+the `users` table; the test account survives in Firebase but comes back as a plain `user`, and every
+admin spec then fails.
 
 ### 3. Environment File
 Create `web-app/e2e/.env` (gitignored):
@@ -198,9 +212,28 @@ Available fixtures: `homePage`, `loginPage`, `dashboardPage`, `artistsPage`, `al
 - Check that the Firebase account exists and credentials match `e2e/.env`
 - If the password contains `#`, ensure it's quoted: `PLAYWRIGHT_ADMIN_PASSWORD="pass#word"`
 
-### Auth setup passes but admin tests fail
-- Verify the User record in your local database has an admin DomainRole for the music domain
-- Check that the Rails session cookie domain matches `dev.thegreatestmusic.org`
+### Auth setup passes but admin tests time out on the public homepage
+This is the most common failure, and it does not look like an auth problem. Every admin spec fails
+with `locator.click: Test timeout` waiting for a sidebar link, and the failure screenshot shows the
+**public homepage with a Login button**.
+
+The login actually succeeded. `authenticate_admin!` denied the user and redirected to
+`domain_root_path` — which *is* the public homepage. The account is authenticated but not authorized.
+
+Fix:
+```bash
+bin/rails e2e:admin
+```
+This happens whenever the dev database is reseeded: the Firebase account still exists, so sign-in
+works and Rails auto-creates a fresh `User` with the default `user` role — no admin, no domain roles.
+
+Confirm with:
+```bash
+bin/rails runner 'u = User.find_by(email: "<PLAYWRIGHT_ADMIN_EMAIL>"); puts({role: u&.role, domain_roles: u&.domain_roles&.map(&:domain)}.inspect)'
+```
+You want `role: "admin"`. A music-only `DomainRole` is not enough — see Firebase Test Account above.
+
+Also check that the Rails session cookie domain matches `dev.thegreatestmusic.org`.
 
 ### Stale auth state
 - Delete `e2e/.auth/user.json` and re-run — the setup will re-authenticate

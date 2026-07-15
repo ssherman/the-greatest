@@ -1,15 +1,5 @@
 class Admin::Music::CategoriesController < Admin::CategoriesBaseController
-  layout "music/admin"
-
-  private
-
-  def authenticate_admin!
-    return if current_user&.admin? || current_user&.editor?
-
-    unless current_user&.can_access_domain?("music")
-      redirect_to domain_root_path, alert: "Access denied. You need permission for music admin."
-    end
-  end
+  include Admin::DomainScopedAuth
 
   protected
 

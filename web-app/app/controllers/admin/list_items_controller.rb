@@ -1,6 +1,6 @@
 class Admin::ListItemsController < Admin::BaseController
   before_action :set_list, only: [:index, :create, :destroy_all, :clear_positions]
-  before_action :set_list_item, only: [:update, :destroy]
+  before_action :set_list_item, only: [:edit, :update, :destroy]
 
   private
 
@@ -24,8 +24,12 @@ class Admin::ListItemsController < Admin::BaseController
   public
 
   def index
-    @list_items = @list.list_items.includes(:listable).order(:position)
+    load_list_items
     render layout: false
+  end
+
+  def edit
+    render Admin::EditListItemFormComponent.new(list_item: @list_item), layout: false
   end
 
   def create
@@ -33,6 +37,7 @@ class Admin::ListItemsController < Admin::BaseController
 
     if @list_item.save
       @list.reload
+      load_list_items
       respond_to do |format|
         format.turbo_stream do
           render turbo_stream: [
@@ -44,7 +49,7 @@ class Admin::ListItemsController < Admin::BaseController
             turbo_stream.replace(
               "list_items_list",
               template: "admin/list_items/index",
-              locals: {list: @list, list_items: @list.list_items.includes(:listable).order(:position)}
+              locals: {list: @list, list_items: @list_items, pagy: @pagy}
             ),
             turbo_stream.replace(
               "add_item_to_list_modal",
@@ -83,6 +88,7 @@ class Admin::ListItemsController < Admin::BaseController
 
     if @list_item.update(update_params)
       @list.reload
+      load_list_items
       respond_to do |format|
         format.turbo_stream do
           render turbo_stream: [
@@ -94,7 +100,7 @@ class Admin::ListItemsController < Admin::BaseController
             turbo_stream.replace(
               "list_items_list",
               template: "admin/list_items/index",
-              locals: {list: @list, list_items: @list.list_items.includes(:listable).order(:position)}
+              locals: {list: @list, list_items: @list_items, pagy: @pagy}
             )
           ]
         end
@@ -122,6 +128,7 @@ class Admin::ListItemsController < Admin::BaseController
     @list = @list_item.list
     @list_item.destroy!
     @list.reload
+    load_list_items
 
     respond_to do |format|
       format.turbo_stream do
@@ -134,7 +141,7 @@ class Admin::ListItemsController < Admin::BaseController
           turbo_stream.replace(
             "list_items_list",
             template: "admin/list_items/index",
-            locals: {list: @list, list_items: @list.list_items.includes(:listable).order(:position)}
+            locals: {list: @list, list_items: @list_items, pagy: @pagy}
           ),
           turbo_stream.replace(
             "add_item_to_list_modal",
@@ -170,6 +177,13 @@ class Admin::ListItemsController < Admin::BaseController
 
   private
 
+  def load_list_items
+    @pagy, @list_items = pagy(
+      @list.list_items.includes(:listable).order(:position),
+      limit: 50
+    )
+  end
+
   def set_list
     @list = List.find(params[:list_id])
   end
@@ -183,27 +197,16 @@ class Admin::ListItemsController < Admin::BaseController
   end
 
   def update_list_item_params
-    params.require(:list_item).permit(:listable_id, :position, :metadata, :verified)
+    permitted = params.require(:list_item).permit(:listable_id, :position, :metadata, :verified)
+    permitted.delete(:listable_id) if permitted[:listable_id].blank?
+    permitted
   end
 
   def expected_listable_type_for(list)
-    case list.class.name
-    when "Music::Albums::List" then "Music::Album"
-    when "Music::Songs::List" then "Music::Song"
-    when "Games::List" then "Games::Game"
-    end
+    Admin::DomainRouting.list_config(list)&.dig(:listable_type)
   end
 
   def redirect_path
-    case @list.class.name
-    when "Music::Albums::List"
-      admin_albums_list_path(@list)
-    when "Music::Songs::List"
-      admin_songs_list_path(@list)
-    when "Games::List"
-      admin_games_list_path(@list)
-    else
-      music_root_path
-    end
+    Admin::DomainRouting.list_config(@list)&.dig(:path) || music_root_path
   end
 end

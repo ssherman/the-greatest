@@ -1,18 +1,9 @@
 module Admin
   module Games
     class RankingConfigurationsController < Admin::RankingConfigurationsController
-      layout "games/admin"
+      include Admin::DomainScopedAuth
 
       private
-
-      # Override authenticate_admin! to allow games domain access
-      def authenticate_admin!
-        return if current_user&.admin? || current_user&.editor?
-
-        unless current_user&.can_access_domain?("games")
-          redirect_to domain_root_path, alert: "Access denied. You need permission for games admin."
-        end
-      end
 
       def policy_class
         ::Games::RankingConfigurationPolicy
