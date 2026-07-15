@@ -276,6 +276,7 @@ Rails.application.routes.draw do
       root to: "dashboard#index"
 
       resources :books do
+        resources :images, only: [:index, :create], controller: "/admin/images"
         collection do
           get :search
         end

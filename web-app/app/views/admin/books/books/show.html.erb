@@ -36,6 +36,20 @@
     <div class="space-y-6">
       <div class="card bg-base-100 shadow">
         <div class="card-body">
+          <div class="flex items-center justify-between">
+            <h2 class="card-title text-base">Images</h2>
+            <% if current_user_can_write? %>
+              <button class="btn btn-sm btn-ghost" onclick="add_book_image_modal.showModal()">+ Add</button>
+            <% end %>
+          </div>
+          <%= turbo_frame_tag "images_list", loading: :lazy, src: admin_books_book_images_path(@book) do %>
+            <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
+          <% end %>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
           <h2 class="card-title text-base">Metadata</h2>
           <dl class="space-y-2 text-sm">
             <div><dt class="text-base-content/60">ID</dt><dd><%= @book.id %></dd></div>
@@ -47,4 +61,31 @@
       </div>
     </div>
   </div>
+
+  <% if current_user_can_write? %>
+    <dialog id="add_book_image_modal" class="modal">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Add Image</h3>
+        <%= form_with model: Image.new, url: admin_books_book_images_path(@book), method: :post, data: {controller: "modal-form", modal_form_modal_id_value: "add_book_image_modal"} do |f| %>
+          <label class="form-control">
+            <span class="label-text">File</span>
+            <%= f.file_field :file, accept: "image/jpeg,image/png,image/webp,image/gif", required: true, class: "file-input file-input-bordered" %>
+          </label>
+          <label class="form-control mt-2">
+            <span class="label-text">Notes</span>
+            <%= f.text_field :notes, class: "input input-bordered" %>
+          </label>
+          <label class="label cursor-pointer mt-2 justify-start gap-2">
+            <%= f.check_box :primary, class: "checkbox" %>
+            <span class="label-text">Primary</span>
+          </label>
+          <div class="modal-action">
+            <%= f.submit "Upload", class: "btn btn-primary" %>
+            <button type="button" class="btn" onclick="add_book_image_modal.close()">Cancel</button>
+          </div>
+        <% end %>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
+  <% end %>
 </div>
