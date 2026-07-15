@@ -468,16 +468,28 @@ Append to the test file, inside the class:
 Run: `bin/rails test test/controllers/admin/books/books_controller_test.rb -n /show/`
 Expected: FAIL — `AbstractController::ActionNotFound` / missing template (no `show` action/view).
 
-- [ ] **Step 3: Add the show action**
+- [ ] **Step 3: Wire the before_actions for show, then add the show action**
 
-In `books_controller.rb`, add above `private`:
+Task 1 deliberately did NOT register `before_action :set_book`/`:authorize_book`, because this repo runs `config.action_controller.raise_on_missing_callback_actions = true` — an `only:` list that names an action which doesn't exist yet makes **every** request 404. So each task adds the callbacks only for the actions that exist at its commit.
+
+Add the two before_action lines at the very top of the class body:
+
+```ruby
+class Admin::Books::BooksController < Admin::Books::BaseController
+  before_action :set_book, only: [:show]
+  before_action :authorize_book, only: [:show]
+
+  def index
+```
+
+Then add the `show` action above `private`:
 
 ```ruby
   def show
   end
 ```
 
-(`@book` is already set by `set_book`.)
+(`set_book` now loads `@book` for `show`; `authorize_book` calls `authorize @book`, and Pundit infers `show?` from the action name.)
 
 - [ ] **Step 4: Write the show view**
 
@@ -807,9 +819,16 @@ Append:
 Run: `bin/rails test test/controllers/admin/books/books_controller_test.rb -n /edit|update|destroy/`
 Expected: FAIL — no `edit`/`update`/`destroy`.
 
-- [ ] **Step 3: Add edit + update + destroy**
+- [ ] **Step 3: Grow the before_actions, then add edit + update + destroy**
 
-In `books_controller.rb`:
+First extend both before_action `only:` lists at the top of the class to include the three new actions (they now exist at this commit, so `raise_on_missing_callback_actions` is satisfied):
+
+```ruby
+  before_action :set_book, only: [:show, :edit, :update, :destroy]
+  before_action :authorize_book, only: [:show, :edit, :update, :destroy]
+```
+
+Then add the actions above `private`:
 
 ```ruby
   def edit
@@ -831,7 +850,7 @@ In `books_controller.rb`:
   end
 ```
 
-(`authorize_book` already runs as a `before_action` for these; `set_book` loads `@book`.)
+(`set_book` loads `@book`; `authorize_book` runs `authorize @book`, Pundit inferring `edit?`/`update?`/`destroy?` per action.)
 
 - [ ] **Step 4: Write the edit view**
 
