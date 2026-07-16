@@ -1,0 +1,7 @@
+<% content_for :title, "New Edition" %>
+
+<div class="max-w-3xl space-y-6">
+  <h1 class="text-3xl font-bold">New Edition</h1>
+  <p class="text-base-content/60">for <%= link_to @book.title, admin_books_book_path(@book), class: "link" %></p>
+  <%= render "form" %>
+</div>

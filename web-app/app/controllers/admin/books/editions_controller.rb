@@ -1,5 +1,5 @@
 class Admin::Books::EditionsController < Admin::Books::BaseController
-  before_action :set_book, only: [:index]
+  before_action :set_book, only: [:index, :new, :create]
   before_action :set_edition, only: [:show]
   before_action :authorize_edition, only: [:show]
 
@@ -10,6 +10,22 @@ class Admin::Books::EditionsController < Admin::Books::BaseController
   end
 
   def show
+  end
+
+  def new
+    @edition = @book.editions.build
+    authorize @edition
+  end
+
+  def create
+    @edition = @book.editions.build(edition_params)
+    authorize @edition
+
+    if @edition.save
+      redirect_to admin_books_edition_path(@edition), notice: "Edition created."
+    else
+      render :new, status: :unprocessable_entity
+    end
   end
 
   private
@@ -24,5 +40,13 @@ class Admin::Books::EditionsController < Admin::Books::BaseController
 
   def authorize_edition
     authorize @edition
+  end
+
+  def edition_params
+    params.require(:books_edition).permit(
+      :title, :subtitle, :edition_type, :book_binding,
+      :publication_year, :publisher_name, :page_count,
+      :volume_number, :language_id, :popularity
+    )
   end
 end
