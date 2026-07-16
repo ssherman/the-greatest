@@ -24,7 +24,9 @@ test.describe('books admin — editions', () => {
     // lazy editions frame shows the ★ Default badge.
     await page.getByRole('button', { name: 'Set as default' }).click();
     await expect(page.getByRole('heading', { name: title })).toBeVisible();
-    await page.locator('turbo-frame#book_editions').scrollIntoViewIfNeeded();
+    const editionsFrame = page.locator('turbo-frame#book_editions');
+    await editionsFrame.scrollIntoViewIfNeeded();
+    await expect(editionsFrame.locator('.loading-spinner')).toBeHidden({ timeout: 10000 });
     await expect(page.getByText('★ Default')).toBeVisible();
   });
 });

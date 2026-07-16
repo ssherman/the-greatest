@@ -5,7 +5,7 @@ class Admin::Books::EditionsController < Admin::Books::BaseController
 
   def index
     authorize ::Books::Edition
-    @editions = @book.editions.includes(:language).order(popularity: :desc, id: :asc)
+    @editions = @book.editions.order(popularity: :desc, id: :asc)
     render layout: false
   end
 
