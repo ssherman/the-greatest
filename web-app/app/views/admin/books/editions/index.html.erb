@@ -15,7 +15,7 @@
           <% @editions.each do |edition| %>
             <tr>
               <td>
-                <%= link_to edition.title.presence || edition.edition_type.titleize, admin_books_edition_path(edition), class: "link link-hover", data: {turbo_frame: "_top"} %>
+                <%= link_to edition.display_title, admin_books_edition_path(edition), class: "link link-hover", data: {turbo_frame: "_top"} %>
                 <% if edition.id == @book.default_edition_id %>
                   <span class="badge badge-primary badge-sm ml-1">★ Default</span>
                 <% end %>

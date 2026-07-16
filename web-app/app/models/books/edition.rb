@@ -49,4 +49,8 @@ class Books::Edition < ApplicationRecord
 
   scope :complete, -> { where(volume_number: nil) }
   scope :by_binding, ->(value) { where(book_binding: value) }
+
+  def display_title
+    title.presence || book.title
+  end
 end

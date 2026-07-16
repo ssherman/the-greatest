@@ -73,7 +73,7 @@
           <p class="text-sm text-base-content/60">
             Default:
             <% if @book.default_edition %>
-              <%= link_to (@book.default_edition.title.presence || @book.default_edition.edition_type.titleize), admin_books_edition_path(@book.default_edition), class: "link" %>
+              <%= link_to @book.default_edition.display_title, admin_books_edition_path(@book.default_edition), class: "link" %>
             <% else %>
               —
             <% end %>

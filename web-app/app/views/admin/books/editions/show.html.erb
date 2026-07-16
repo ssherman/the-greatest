@@ -1,9 +1,9 @@
-<% content_for :title, (@edition.title.presence || "Edition ##{@edition.id}") %>
+<% content_for :title, @edition.display_title %>
 
 <div class="space-y-6">
   <div class="flex items-center justify-between">
     <div>
-      <h1 class="text-3xl font-bold"><%= @edition.title.presence || @edition.edition_type.titleize %></h1>
+      <h1 class="text-3xl font-bold"><%= @edition.display_title %></h1>
       <p class="text-base-content/70">
         Edition of <%= link_to @edition.book.title, admin_books_book_path(@edition.book), class: "link" %>
         <% if @edition.id == @edition.book.default_edition_id %>
