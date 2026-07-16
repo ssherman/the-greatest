@@ -24,16 +24,18 @@
               <td><%= edition.book_binding&.titleize || "—" %></td>
               <td><%= edition.publisher_name.presence || "—" %></td>
               <td class="text-right">
-                <%= link_to "View", admin_books_edition_path(edition), class: "btn btn-ghost btn-xs", data: {turbo_frame: "_top"} %>
-                <% if current_user_can_write? %>
-                  <%= link_to "Edit", edit_admin_books_edition_path(edition), class: "btn btn-ghost btn-xs", data: {turbo_frame: "_top"} %>
-                  <% unless edition.id == @book.default_edition_id %>
-                    <%= button_to "Set default", set_default_admin_books_edition_path(edition), method: :post, class: "btn btn-ghost btn-xs", form: {data: {turbo_frame: "_top"}} %>
+                <div class="flex items-center justify-end gap-1">
+                  <%= link_to "View", admin_books_edition_path(edition), class: "btn btn-outline btn-xs whitespace-nowrap", data: {turbo_frame: "_top"} %>
+                  <% if current_user_can_write? %>
+                    <%= link_to "Edit", edit_admin_books_edition_path(edition), class: "btn btn-outline btn-xs whitespace-nowrap", data: {turbo_frame: "_top"} %>
+                    <% unless edition.id == @book.default_edition_id %>
+                      <%= button_to "Set default", set_default_admin_books_edition_path(edition), method: :post, class: "btn btn-outline btn-xs whitespace-nowrap", form: {class: "inline", data: {turbo_frame: "_top"}} %>
+                    <% end %>
                   <% end %>
-                <% end %>
-                <% if current_user_can_delete? %>
-                  <%= button_to "Delete", admin_books_edition_path(edition), method: :delete, class: "btn btn-ghost btn-xs text-error", data: {turbo_confirm: "Delete this edition? This cannot be undone."}, form: {data: {turbo_frame: "_top"}} %>
-                <% end %>
+                  <% if current_user_can_delete? %>
+                    <%= button_to "Delete", admin_books_edition_path(edition), method: :delete, class: "btn btn-outline btn-error btn-xs whitespace-nowrap", data: {turbo_confirm: "Delete this edition? This cannot be undone."}, form: {class: "inline", data: {turbo_frame: "_top"}} %>
+                  <% end %>
+                </div>
               </td>
             </tr>
           <% end %>
