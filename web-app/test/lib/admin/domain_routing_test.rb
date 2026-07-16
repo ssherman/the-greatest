@@ -22,7 +22,8 @@ module Admin
         music_albums(:dark_side_of_the_moon) => "/admin/albums",
         music_songs(:time) => "/admin/songs",
         games_games(:breath_of_the_wild) => "/admin/games",
-        games_companies(:nintendo) => "/admin/companies"
+        games_companies(:nintendo) => "/admin/companies",
+        books_books(:war_and_peace) => "/admin/books"
       }.each do |record, prefix|
         assert_equal "#{prefix}/#{record.to_param}", Admin::DomainRouting.path_for(record)
       end
@@ -142,6 +143,17 @@ module Admin
       )
 
       assert_nil found
+    end
+
+    test "domain_for resolves a Books::Book to books" do
+      assert_equal :books, Admin::DomainRouting.domain_for(books_books(:war_and_peace))
+      assert_equal :books, Admin::DomainRouting.domain_for(::Books::Book)
+    end
+
+    test "parent_from_params resolves a book_id under the books domain" do
+      book = books_books(:war_and_peace)
+      resolved = Admin::DomainRouting.parent_from_params({book_id: book.id}, domain: :books)
+      assert_equal book, resolved
     end
   end
 end

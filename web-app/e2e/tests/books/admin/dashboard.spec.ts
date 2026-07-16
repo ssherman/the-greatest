@@ -22,6 +22,7 @@ test.describe('books admin dashboard', () => {
     await expect(sidebar).toBeVisible();
     await expect(sidebar.getByRole('heading', { name: 'The Greatest Books' })).toBeVisible();
 
+    await expect(sidebar.getByRole('link', { name: 'Books', exact: true })).toBeVisible();
     await expect(sidebar.getByRole('link', { name: 'Penalties' })).toBeVisible();
     await expect(sidebar.getByRole('link', { name: 'Users' })).toBeVisible();
 

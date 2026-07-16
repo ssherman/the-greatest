@@ -51,14 +51,15 @@ module Admin
         assert_no_match %r{/assets/music-[^"]*\.css}, response.body
       end
 
-      test "renders books branding with no empty domain nav section" do
+      test "renders books branding with a Books nav section and the global section" do
         sign_in_as(@admin_user, stub_auth: true)
         get admin_books_root_path
 
         assert_response :success
         assert_select "aside[data-testid=admin-sidebar]" do
           assert_select "h1", text: "The Greatest Books"
-          assert_select "summary", text: /Books/, count: 0
+          assert_select "summary", text: /Books/
+          assert_select "a[href=?]", admin_books_books_path
           assert_select "a[href=?]", admin_penalties_path
           assert_select "a[href=?]", admin_users_path
         end

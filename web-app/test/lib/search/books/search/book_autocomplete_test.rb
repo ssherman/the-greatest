@@ -46,6 +46,19 @@ module Search
           assert_not_includes ids, collection.id.to_s
         end
 
+        test "call includes collection books when book_kind is nil" do
+          standalone = books_books(:of_mice_and_men)
+          collection = books_books(:combo_steinbeck)
+          ::Search::Books::BookIndex.index(standalone)
+          ::Search::Books::BookIndex.index(collection)
+          sleep(0.1)
+
+          results = ::Search::Books::Search::BookAutocomplete.call("Of Mice", book_kind: nil)
+          ids = results.map { |r| r[:id] }
+
+          assert_includes ids, collection.id.to_s
+        end
+
         private
 
         def cleanup_test_index

@@ -1,0 +1,152 @@
+<%= form_with model: @book, url: (@book.persisted? ? admin_books_book_path(@book) : admin_books_books_path), class: "space-y-6" do |f| %>
+  <!-- Error Messages -->
+  <% if @book.errors.any? %>
+    <div class="alert alert-error">
+      <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <div>
+        <h3 class="font-bold"><%= pluralize(@book.errors.count, "error") %> prohibited this book from being saved:</h3>
+        <ul class="list-disc list-inside mt-2">
+          <% @book.errors.full_messages.each do |message| %>
+            <li><%= message %></li>
+          <% end %>
+        </ul>
+      </div>
+    </div>
+  <% end %>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">Basic Information</h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Title -->
+        <div class="form-control md:col-span-2">
+          <%= f.label :title, class: "label" do %>
+            <span class="label-text font-semibold">Title <span class="text-error">*</span></span>
+          <% end %>
+          <%= f.text_field :title,
+              class: "input input-bordered w-full #{@book.errors[:title].any? ? 'input-error' : ''}",
+              placeholder: "Enter book title",
+              required: true,
+              autofocus: true %>
+          <% if @book.errors[:title].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @book.errors[:title].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <!-- Subtitle -->
+        <div class="form-control">
+          <%= f.label :subtitle, class: "label" do %>
+            <span class="label-text font-semibold">Subtitle</span>
+          <% end %>
+          <%= f.text_field :subtitle,
+              class: "input input-bordered w-full #{@book.errors[:subtitle].any? ? 'input-error' : ''}" %>
+          <% if @book.errors[:subtitle].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @book.errors[:subtitle].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <!-- Sort Title -->
+        <div class="form-control">
+          <%= f.label :sort_title, class: "label" do %>
+            <span class="label-text font-semibold">Sort Title</span>
+          <% end %>
+          <%= f.text_field :sort_title,
+              class: "input input-bordered w-full #{@book.errors[:sort_title].any? ? 'input-error' : ''}" %>
+          <% if @book.errors[:sort_title].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @book.errors[:sort_title].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <!-- Kind -->
+        <div class="form-control">
+          <%= f.label :book_kind, class: "label" do %>
+            <span class="label-text font-semibold">Kind</span>
+          <% end %>
+          <%= f.select :book_kind,
+              ::Books::Book.book_kinds.keys.map { |k| [k.titleize, k] },
+              {},
+              class: "select select-bordered w-full #{@book.errors[:book_kind].any? ? 'select-error' : ''}" %>
+          <% if @book.errors[:book_kind].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @book.errors[:book_kind].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <!-- First Published Year -->
+        <div class="form-control">
+          <%= f.label :first_published_year, class: "label" do %>
+            <span class="label-text font-semibold">First Published Year</span>
+          <% end %>
+          <%= f.number_field :first_published_year,
+              class: "input input-bordered w-full #{@book.errors[:first_published_year].any? ? 'input-error' : ''}",
+              min: -3000,
+              max: 3000 %>
+          <% if @book.errors[:first_published_year].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @book.errors[:first_published_year].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <!-- Original Language -->
+        <div class="form-control">
+          <%= f.label :original_language_id, class: "label" do %>
+            <span class="label-text font-semibold">Original Language</span>
+          <% end %>
+          <%= f.collection_select :original_language_id,
+              Language.order(:name),
+              :id,
+              :name,
+              {include_blank: "—"},
+              class: "select select-bordered w-full #{@book.errors[:original_language_id].any? ? 'select-error' : ''}" %>
+          <% if @book.errors[:original_language_id].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @book.errors[:original_language_id].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <!-- Alternate Titles -->
+        <div class="form-control md:col-span-2">
+          <%= f.label :alternate_titles, class: "label" do %>
+            <span class="label-text font-semibold">Alternate Titles</span>
+          <% end %>
+          <%= text_field_tag "books_book[alternate_titles_string]", @book.alternate_titles.join(", "), class: "input input-bordered w-full" %>
+          <label class="label">
+            <span class="label-text-alt">Comma-separated</span>
+          </label>
+        </div>
+
+        <!-- Description -->
+        <div class="form-control md:col-span-2">
+          <%= f.label :description, class: "label" do %>
+            <span class="label-text font-semibold">Description</span>
+          <% end %>
+          <%= f.text_area :description,
+              class: "textarea textarea-bordered w-full h-32 #{@book.errors[:description].any? ? 'textarea-error' : ''}" %>
+          <% if @book.errors[:description].any? %>
+            <label class="label">
+              <span class="label-text-alt text-error"><%= @book.errors[:description].first %></span>
+            </label>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Form Actions -->
+  <div class="flex flex-col sm:flex-row gap-2 justify-end">
+    <%= link_to "Cancel", (@book.persisted? ? admin_books_book_path(@book) : admin_books_books_path), class: "btn btn-ghost" %>
+    <%= f.submit(@book.persisted? ? "Update Book" : "Create Book", class: "btn btn-primary") %>
+  </div>
+<% end %>

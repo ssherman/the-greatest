@@ -60,14 +60,18 @@ module Admin
       assert_nil Admin::DomainNav.config_for(:movies)
     end
 
-    test "config_for returns the books config with no nav items yet" do
+    test "config_for returns the books config with a Books nav item" do
       config = Admin::DomainNav.config_for(:books)
 
       assert_equal "The Greatest Books", config[:title]
       assert_equal "/admin", config[:root_path]
       assert_equal "Books", config[:section_label]
       assert config[:section_icon].present?
-      assert_empty config[:items]
+
+      books_item = config[:items].find { |item| item[:label] == "Books" }
+      assert books_item, "books nav is missing a Books item"
+      assert_equal "/admin/books", books_item[:path]
+      assert books_item[:icon].present?
     end
 
     test "a domain whose nav links to Categories has a categories_search_path" do

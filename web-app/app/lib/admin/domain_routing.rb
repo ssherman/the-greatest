@@ -19,7 +19,12 @@ module Admin
         path: ->(r) { URL_HELPERS.admin_games_game_path(r) },
         category_items_path: ->(r) { URL_HELPERS.admin_games_game_category_items_path(r) }
       },
-      "Games::Company" => {domain: :games, path: ->(r) { URL_HELPERS.admin_games_company_path(r) }, category_items_path: nil}
+      "Games::Company" => {domain: :games, path: ->(r) { URL_HELPERS.admin_games_company_path(r) }, category_items_path: nil},
+      "Books::Book" => {
+        domain: :books,
+        path: ->(r) { URL_HELPERS.admin_books_book_path(r) },
+        category_items_path: nil
+      }
     }.freeze
 
     NESTED_PARENTS = {
@@ -31,6 +36,9 @@ module Admin
       games: {
         game_id: "Games::Game",
         company_id: "Games::Company"
+      },
+      books: {
+        book_id: "Books::Book"
       }
     }.freeze
 
