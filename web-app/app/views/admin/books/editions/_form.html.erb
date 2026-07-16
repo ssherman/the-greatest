@@ -1,0 +1,107 @@
+<%= form_with model: @edition, url: (@edition.persisted? ? admin_books_edition_path(@edition) : admin_books_book_editions_path(@book)), class: "space-y-6" do |f| %>
+  <% if @edition.errors.any? %>
+    <div class="alert alert-error">
+      <div>
+        <h3 class="font-bold"><%= pluralize(@edition.errors.count, "error") %> prohibited this edition from being saved:</h3>
+        <ul class="list-disc list-inside mt-2">
+          <% @edition.errors.full_messages.each do |message| %>
+            <li><%= message %></li>
+          <% end %>
+        </ul>
+      </div>
+    </div>
+  <% end %>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">Edition Details</h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-control">
+          <%= f.label :edition_type, class: "label" do %>
+            <span class="label-text font-semibold">Type <span class="text-error">*</span></span>
+          <% end %>
+          <%= f.select :edition_type,
+              ::Books::Edition.edition_types.keys.map { |k| [k.titleize, k] },
+              {},
+              class: "select select-bordered w-full #{@edition.errors[:edition_type].any? ? 'select-error' : ''}",
+              required: true %>
+          <% if @edition.errors[:edition_type].any? %>
+            <label class="label"><span class="label-text-alt text-error"><%= @edition.errors[:edition_type].first %></span></label>
+          <% end %>
+        </div>
+
+        <div class="form-control">
+          <%= f.label :book_binding, class: "label" do %>
+            <span class="label-text font-semibold">Binding</span>
+          <% end %>
+          <%= f.select :book_binding,
+              ::Books::Edition.book_bindings.keys.map { |k| [k.titleize, k] },
+              {include_blank: "—"},
+              class: "select select-bordered w-full" %>
+        </div>
+
+        <div class="form-control md:col-span-2">
+          <%= f.label :title, class: "label" do %>
+            <span class="label-text font-semibold">Title</span>
+          <% end %>
+          <%= f.text_field :title, class: "input input-bordered w-full", placeholder: "Leave blank to use the book title" %>
+        </div>
+
+        <div class="form-control md:col-span-2">
+          <%= f.label :subtitle, class: "label" do %>
+            <span class="label-text font-semibold">Subtitle</span>
+          <% end %>
+          <%= f.text_field :subtitle, class: "input input-bordered w-full" %>
+        </div>
+
+        <div class="form-control">
+          <%= f.label :publication_year, class: "label" do %>
+            <span class="label-text font-semibold">Publication Year</span>
+          <% end %>
+          <%= f.number_field :publication_year, class: "input input-bordered w-full", min: -3000, max: 3000 %>
+        </div>
+
+        <div class="form-control">
+          <%= f.label :publisher_name, class: "label" do %>
+            <span class="label-text font-semibold">Publisher</span>
+          <% end %>
+          <%= f.text_field :publisher_name, class: "input input-bordered w-full" %>
+        </div>
+
+        <div class="form-control">
+          <%= f.label :page_count, class: "label" do %>
+            <span class="label-text font-semibold">Page Count</span>
+          <% end %>
+          <%= f.number_field :page_count, class: "input input-bordered w-full", min: 0 %>
+        </div>
+
+        <div class="form-control">
+          <%= f.label :volume_number, class: "label" do %>
+            <span class="label-text font-semibold">Volume Number</span>
+          <% end %>
+          <%= f.number_field :volume_number, class: "input input-bordered w-full", min: 0 %>
+        </div>
+
+        <div class="form-control">
+          <%= f.label :language_id, class: "label" do %>
+            <span class="label-text font-semibold">Language</span>
+          <% end %>
+          <%= f.collection_select :language_id, Language.order(:name), :id, :name, {include_blank: "—"}, class: "select select-bordered w-full" %>
+        </div>
+
+        <div class="form-control">
+          <%= f.label :popularity, class: "label" do %>
+            <span class="label-text font-semibold">Popularity</span>
+          <% end %>
+          <%= f.number_field :popularity, class: "input input-bordered w-full" %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex flex-col sm:flex-row gap-2 justify-end">
+    <%= link_to "Cancel", (@edition.persisted? ? admin_books_edition_path(@edition) : admin_books_book_path(@book)), class: "btn btn-ghost" %>
+    <%= f.submit(@edition.persisted? ? "Update Edition" : "Create Edition", class: "btn btn-primary") %>
+  </div>
+<% end %>

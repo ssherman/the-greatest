@@ -1,0 +1,120 @@
+<% content_for :title, @edition.display_title %>
+
+<div class="space-y-6">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-3xl font-bold"><%= @edition.display_title %></h1>
+      <p class="text-base-content/70">
+        Edition of <%= link_to @edition.book.title, admin_books_book_path(@edition.book), class: "link" %>
+        <% if @edition.id == @edition.book.default_edition_id %>
+          <span class="badge badge-primary badge-sm ml-1">★ Default</span>
+        <% end %>
+      </p>
+    </div>
+    <div class="flex gap-2">
+      <%= link_to "Back", admin_books_book_path(@edition.book), class: "btn btn-ghost" %>
+      <% if current_user_can_write? %>
+        <% unless @edition.id == @edition.book.default_edition_id %>
+          <%= button_to "Set as default", set_default_admin_books_edition_path(@edition), method: :post, class: "btn btn-secondary" %>
+        <% end %>
+        <%= link_to "Edit", edit_admin_books_edition_path(@edition), class: "btn btn-primary" %>
+      <% end %>
+      <% if current_user_can_delete? %>
+        <%= button_to "Delete", admin_books_edition_path(@edition), method: :delete, class: "btn btn-error", form: {data: {turbo_confirm: "Delete this edition? This cannot be undone."}} %>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
+          <h2 class="card-title">Details</h2>
+          <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div><dt class="text-sm text-base-content/60">Type</dt><dd><%= @edition.edition_type.titleize %></dd></div>
+            <div><dt class="text-sm text-base-content/60">Binding</dt><dd><%= @edition.book_binding&.titleize || "—" %></dd></div>
+            <div><dt class="text-sm text-base-content/60">Publication Year</dt><dd><%= @edition.publication_year || "—" %></dd></div>
+            <div><dt class="text-sm text-base-content/60">Publisher</dt><dd><%= @edition.publisher_name.presence || "—" %></dd></div>
+            <div><dt class="text-sm text-base-content/60">Page Count</dt><dd><%= @edition.page_count || "—" %></dd></div>
+            <div><dt class="text-sm text-base-content/60">Volume</dt><dd><%= @edition.volume_number || "—" %></dd></div>
+            <div><dt class="text-sm text-base-content/60">Language</dt><dd><%= @edition.language&.name || "—" %></dd></div>
+            <div><dt class="text-sm text-base-content/60">Subtitle</dt><dd><%= @edition.subtitle.presence || "—" %></dd></div>
+          </dl>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
+          <h2 class="card-title text-base">Identifiers <span class="badge badge-ghost"><%= @edition.identifiers.count %></span></h2>
+          <% if @edition.identifiers.any? %>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <% @edition.identifiers.each do |identifier| %>
+                <div>
+                  <dt class="text-sm text-base-content/60"><%= identifier.identifier_type&.titleize %></dt>
+                  <dd class="font-mono text-sm"><%= identifier.value %></dd>
+                </div>
+              <% end %>
+            </div>
+          <% else %>
+            <p class="text-base-content/50 text-sm">No identifiers.</p>
+          <% end %>
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-6">
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
+          <div class="flex items-center justify-between">
+            <h2 class="card-title text-base">Images</h2>
+            <% if current_user_can_write? %>
+              <button class="btn btn-sm btn-ghost" onclick="add_edition_image_modal.showModal()">+ Add</button>
+            <% end %>
+          </div>
+          <%= turbo_frame_tag "images_list", loading: :lazy, src: admin_books_edition_images_path(@edition) do %>
+            <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
+          <% end %>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
+          <h2 class="card-title text-base">Metadata</h2>
+          <dl class="space-y-2 text-sm">
+            <div><dt class="text-base-content/60">ID</dt><dd><%= @edition.id %></dd></div>
+            <div><dt class="text-base-content/60">Popularity</dt><dd><%= @edition.popularity || "—" %></dd></div>
+            <div><dt class="text-base-content/60">Created</dt><dd><%= @edition.created_at.to_date %></dd></div>
+            <div><dt class="text-base-content/60">Updated</dt><dd><%= @edition.updated_at.to_date %></dd></div>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <% if current_user_can_write? %>
+    <dialog id="add_edition_image_modal" class="modal">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Add Image</h3>
+        <%= form_with model: Image.new, url: admin_books_edition_images_path(@edition), method: :post, data: {controller: "modal-form", modal_form_modal_id_value: "add_edition_image_modal"} do |f| %>
+          <label class="form-control">
+            <span class="label-text">File</span>
+            <%= f.file_field :file, accept: "image/jpeg,image/png,image/webp,image/gif", required: true, class: "file-input file-input-bordered" %>
+          </label>
+          <label class="form-control mt-2">
+            <span class="label-text">Notes</span>
+            <%= f.text_field :notes, class: "input input-bordered" %>
+          </label>
+          <label class="label cursor-pointer mt-2 justify-start gap-2">
+            <%= f.check_box :primary, class: "checkbox" %>
+            <span class="label-text">Primary</span>
+          </label>
+          <div class="modal-action">
+            <%= f.submit "Upload", class: "btn btn-primary" %>
+            <button type="button" class="btn" onclick="add_edition_image_modal.close()">Cancel</button>
+          </div>
+        <% end %>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
+  <% end %>
+</div>

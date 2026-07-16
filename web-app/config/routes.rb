@@ -276,6 +276,12 @@ Rails.application.routes.draw do
       root to: "dashboard#index"
 
       resources :books do
+        resources :editions, shallow: true do
+          member do
+            post :set_default
+          end
+          resources :images, only: [:index, :create], controller: "/admin/images"
+        end
         resources :images, only: [:index, :create], controller: "/admin/images"
         collection do
           get :search

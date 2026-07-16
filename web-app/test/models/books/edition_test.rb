@@ -68,5 +68,14 @@ module Books
     test "by_binding scope filters" do
       assert_includes Books::Edition.by_binding(:paperback), books_editions(:wp_maude)
     end
+
+    test "display_title returns the edition title when present" do
+      assert_equal "War and Peace", books_editions(:wp_maude).display_title
+    end
+
+    test "display_title falls back to the book title when the title is blank" do
+      edition = Books::Edition.new(book: books_books(:war_and_peace), title: "")
+      assert_equal books_books(:war_and_peace).title, edition.display_title
+    end
   end
 end

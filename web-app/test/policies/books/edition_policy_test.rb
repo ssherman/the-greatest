@@ -21,6 +21,11 @@ module Books
       refute ::Books::EditionPolicy.new(music_user, @edition).show?
     end
 
+    test "set_default? mirrors update?" do
+      assert ::Books::EditionPolicy.new(users(:admin_user), @edition).set_default?
+      refute ::Books::EditionPolicy.new(users(:regular_user), @edition).set_default?
+    end
+
     test "Scope resolves for books readers only" do
       assert_books_scope(::Books::EditionPolicy, ::Books::Edition)
     end

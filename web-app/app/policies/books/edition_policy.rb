@@ -6,6 +6,10 @@ module Books
       "books"
     end
 
+    def set_default?
+      update?
+    end
+
     class Scope < ApplicationPolicy::Scope
       def domain
         "books"
