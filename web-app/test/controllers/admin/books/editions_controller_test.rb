@@ -151,6 +151,24 @@ module Admin
         end
         assert_redirected_to books_root_path
       end
+
+      # Set default
+
+      test "set_default writes the book's default_edition_id and redirects to the book" do
+        @book.update!(default_edition_id: nil)
+        sign_in_as(@admin_user, stub_auth: true)
+        post set_default_admin_books_edition_path(@edition)
+        assert_redirected_to admin_books_book_path(@book)
+        assert_equal @edition.id, @book.reload.default_edition_id
+      end
+
+      test "set_default is forbidden for a regular user" do
+        @book.update!(default_edition_id: nil)
+        sign_in_as(@regular_user, stub_auth: true)
+        post set_default_admin_books_edition_path(@edition)
+        assert_redirected_to books_root_path
+        assert_nil @book.reload.default_edition_id
+      end
     end
   end
 end

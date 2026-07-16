@@ -1,7 +1,7 @@
 class Admin::Books::EditionsController < Admin::Books::BaseController
   before_action :set_book, only: [:index, :new, :create]
-  before_action :set_edition, only: [:show, :edit, :update, :destroy]
-  before_action :authorize_edition, only: [:show, :edit, :update, :destroy]
+  before_action :set_edition, only: [:show, :edit, :update, :destroy, :set_default]
+  before_action :authorize_edition, only: [:show, :edit, :update, :destroy, :set_default]
 
   def index
     authorize ::Books::Edition
@@ -43,6 +43,11 @@ class Admin::Books::EditionsController < Admin::Books::BaseController
     book = @edition.book
     @edition.destroy!
     redirect_to admin_books_book_path(book), notice: "Edition deleted."
+  end
+
+  def set_default
+    @edition.book.update!(default_edition_id: @edition.id)
+    redirect_to admin_books_book_path(@edition.book), notice: "Default edition updated."
   end
 
   private
