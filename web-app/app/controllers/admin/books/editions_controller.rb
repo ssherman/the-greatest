@@ -1,7 +1,7 @@
 class Admin::Books::EditionsController < Admin::Books::BaseController
   before_action :set_book, only: [:index, :new, :create]
-  before_action :set_edition, only: [:show]
-  before_action :authorize_edition, only: [:show]
+  before_action :set_edition, only: [:show, :edit, :update, :destroy]
+  before_action :authorize_edition, only: [:show, :edit, :update, :destroy]
 
   def index
     authorize ::Books::Edition
@@ -26,6 +26,23 @@ class Admin::Books::EditionsController < Admin::Books::BaseController
     else
       render :new, status: :unprocessable_entity
     end
+  end
+
+  def edit
+  end
+
+  def update
+    if @edition.update(edition_params)
+      redirect_to admin_books_edition_path(@edition), notice: "Edition updated."
+    else
+      render :edit, status: :unprocessable_entity
+    end
+  end
+
+  def destroy
+    book = @edition.book
+    @edition.destroy!
+    redirect_to admin_books_book_path(book), notice: "Edition deleted."
   end
 
   private

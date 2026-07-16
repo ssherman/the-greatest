@@ -103,6 +103,54 @@ module Admin
         end
         assert_redirected_to books_root_path
       end
+
+      # Edit / update
+
+      test "edit renders for a writer" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get edit_admin_books_edition_path(@edition)
+        assert_response :success
+      end
+
+      test "update changes the edition and redirects to it" do
+        sign_in_as(@admin_user, stub_auth: true)
+        patch admin_books_edition_path(@edition), params: {books_edition: {publisher_name: "Revised House"}}
+        assert_redirected_to admin_books_edition_path(@edition)
+        assert_equal "Revised House", @edition.reload.publisher_name
+      end
+
+      test "update rejects invalid data" do
+        sign_in_as(@admin_user, stub_auth: true)
+        patch admin_books_edition_path(@edition), params: {books_edition: {edition_type: ""}}
+        assert_response :unprocessable_entity
+        assert @edition.reload.edition_type.present?
+      end
+
+      # Destroy
+
+      test "destroy deletes the edition and redirects to the book" do
+        edition = @book.editions.create!(edition_type: "revised")
+        sign_in_as(@admin_user, stub_auth: true)
+        assert_difference("::Books::Edition.count", -1) do
+          delete admin_books_edition_path(edition)
+        end
+        assert_redirected_to admin_books_book_path(@book)
+      end
+
+      test "destroying the default edition nullifies the book's default_edition_id" do
+        @book.update!(default_edition: @edition)
+        sign_in_as(@admin_user, stub_auth: true)
+        delete admin_books_edition_path(@edition)
+        assert_nil @book.reload.default_edition_id
+      end
+
+      test "destroy is forbidden for a regular user" do
+        sign_in_as(@regular_user, stub_auth: true)
+        assert_no_difference("::Books::Edition.count") do
+          delete admin_books_edition_path(@edition)
+        end
+        assert_redirected_to books_root_path
+      end
     end
   end
 end
