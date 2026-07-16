@@ -65,6 +65,30 @@
     </div>
   </div>
 
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="card-title text-base">Editions</h2>
+          <p class="text-sm text-base-content/60">
+            Default:
+            <% if @book.default_edition %>
+              <%= link_to (@book.default_edition.title.presence || @book.default_edition.edition_type.titleize), admin_books_edition_path(@book.default_edition), class: "link" %>
+            <% else %>
+              —
+            <% end %>
+          </p>
+        </div>
+        <% if current_user_can_write? %>
+          <%= link_to "+ New Edition", new_admin_books_book_edition_path(@book), class: "btn btn-sm btn-primary" %>
+        <% end %>
+      </div>
+      <%= turbo_frame_tag "book_editions", src: admin_books_book_editions_path(@book), loading: :lazy do %>
+        <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
+      <% end %>
+    </div>
+  </div>
+
   <% if current_user_can_write? %>
     <dialog id="add_book_image_modal" class="modal">
       <div class="modal-box">

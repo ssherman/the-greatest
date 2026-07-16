@@ -1,0 +1,46 @@
+<%= turbo_frame_tag "book_editions" do %>
+  <% if @editions.any? %>
+    <div class="overflow-x-auto">
+      <table class="table table-zebra">
+        <thead>
+          <tr>
+            <th>Edition</th>
+            <th>Year</th>
+            <th>Binding</th>
+            <th>Publisher</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @editions.each do |edition| %>
+            <tr>
+              <td>
+                <%= link_to edition.title.presence || edition.edition_type.titleize, admin_books_edition_path(edition), class: "link link-hover", data: {turbo_frame: "_top"} %>
+                <% if edition.id == @book.default_edition_id %>
+                  <span class="badge badge-primary badge-sm ml-1">★ Default</span>
+                <% end %>
+              </td>
+              <td><%= edition.publication_year || "—" %></td>
+              <td><%= edition.book_binding&.titleize || "—" %></td>
+              <td><%= edition.publisher_name.presence || "—" %></td>
+              <td class="text-right">
+                <%= link_to "View", admin_books_edition_path(edition), class: "btn btn-ghost btn-xs", data: {turbo_frame: "_top"} %>
+                <% if current_user_can_write? %>
+                  <%= link_to "Edit", edit_admin_books_edition_path(edition), class: "btn btn-ghost btn-xs", data: {turbo_frame: "_top"} %>
+                  <% unless edition.id == @book.default_edition_id %>
+                    <%= button_to "Set default", set_default_admin_books_edition_path(edition), method: :post, class: "btn btn-ghost btn-xs", form: {data: {turbo_frame: "_top"}} %>
+                  <% end %>
+                <% end %>
+                <% if current_user_can_delete? %>
+                  <%= button_to "Delete", admin_books_edition_path(edition), method: :delete, class: "btn btn-ghost btn-xs text-error", data: {turbo_confirm: "Delete this edition? This cannot be undone."}, form: {data: {turbo_frame: "_top"}} %>
+                <% end %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <p class="text-base-content/60 text-sm">No editions yet.</p>
+  <% end %>
+<% end %>
