@@ -1,6 +1,6 @@
 class Admin::Books::AuthorsController < Admin::Books::BaseController
   def search
-    results = ::Search::Books::Search::AuthorGeneral.call(params[:q], size: 20)
+    results = ::Search::Books::Search::AuthorAutocomplete.call(params[:q], size: 20)
     author_ids = results.map { |r| r[:id].to_i }
 
     if author_ids.empty?

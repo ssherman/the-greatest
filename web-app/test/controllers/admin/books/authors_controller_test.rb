@@ -18,7 +18,7 @@ module Admin
 
       test "search returns autocomplete JSON for an admin" do
         sign_in_as(@admin_user, stub_auth: true)
-        ::Search::Books::Search::AuthorGeneral.expects(:call).with("tol", size: 20).returns([{id: @author.id.to_s, score: 1.0, source: {"name" => @author.name}}])
+        ::Search::Books::Search::AuthorAutocomplete.expects(:call).with("tol", size: 20).returns([{id: @author.id.to_s, score: 1.0, source: {"name" => @author.name}}])
         get search_admin_books_authors_path(q: "tol")
         assert_response :success
         body = JSON.parse(response.body)
@@ -28,7 +28,7 @@ module Admin
 
       test "search returns an empty array when nothing matches" do
         sign_in_as(@admin_user, stub_auth: true)
-        ::Search::Books::Search::AuthorGeneral.stubs(:call).returns([])
+        ::Search::Books::Search::AuthorAutocomplete.stubs(:call).returns([])
         get search_admin_books_authors_path(q: "zzz")
         assert_response :success
         assert_equal [], JSON.parse(response.body)
