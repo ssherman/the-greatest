@@ -281,8 +281,21 @@ Rails.application.routes.draw do
             post :set_default
           end
           resources :images, only: [:index, :create], controller: "/admin/images"
+          resources :credits, only: [:create]
         end
         resources :images, only: [:index, :create], controller: "/admin/images"
+        resources :book_authors, only: [:create]
+        resources :book_relationships, only: [:create]
+        resources :credits, only: [:create]
+        collection do
+          get :search
+        end
+      end
+
+      resources :book_authors, only: [:update, :destroy]
+      resources :book_relationships, only: [:update, :destroy]
+      resources :credits, only: [:update, :destroy]
+      resources :authors, only: [] do
         collection do
           get :search
         end
