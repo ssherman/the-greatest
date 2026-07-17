@@ -10,6 +10,7 @@ class Admin::Books::BooksController < Admin::Books::BaseController
   def search
     results = ::Search::Books::Search::BookAutocomplete.call(params[:q], size: 20, book_kind: nil)
     book_ids = results.map { |r| r[:id].to_i }
+    book_ids.delete(params[:exclude_id].to_i) if params[:exclude_id].present?
 
     if book_ids.empty?
       render json: []

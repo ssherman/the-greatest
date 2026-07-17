@@ -95,6 +95,16 @@ module Admin
         assert_equal [], JSON.parse(response.body)
       end
 
+      test "search omits the excluded book id" do
+        sign_in_as(@admin_user, stub_auth: true)
+        other = ::Books::Book.create!(title: "Other Book", book_kind: "standalone")
+        ::Search::Books::Search::BookAutocomplete.stubs(:call).returns([{id: @book.id.to_s, score: 1.0, source: {}}, {id: other.id.to_s, score: 0.9, source: {}}])
+        get search_admin_books_books_path(q: "book", exclude_id: @book.id)
+        ids = JSON.parse(response.body).map { |r| r["value"] }
+        assert_not_includes ids, @book.id
+        assert_includes ids, other.id
+      end
+
       # Show
 
       test "show renders for an admin" do

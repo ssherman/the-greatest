@@ -103,6 +103,20 @@
     </div>
   </div>
 
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <div class="flex items-center justify-between">
+        <h2 class="card-title text-base">Related Books <span class="badge badge-ghost"><%= @book.book_relationships.count %></span></h2>
+        <% if current_user_can_write? %>
+          <button class="btn btn-sm btn-primary" onclick="add_book_relationship_modal.showModal()">+ Add</button>
+        <% end %>
+      </div>
+      <%= turbo_frame_tag "book_relationships_list" do %>
+        <%= render "admin/books/books/book_relationships_list", book: @book %>
+      <% end %>
+    </div>
+  </div>
+
   <% if current_user_can_write? %>
     <dialog id="add_book_image_modal" class="modal">
       <div class="modal-box">
@@ -152,6 +166,27 @@
           <div class="modal-action">
             <button type="button" class="btn" onclick="add_book_author_modal.close()">Cancel</button>
             <%= f.submit "Add Author", class: "btn btn-primary" %>
+          </div>
+        <% end %>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
+
+    <dialog id="add_book_relationship_modal" class="modal">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Add Related Book</h3>
+        <%= form_with model: ::Books::BookRelationship.new, url: admin_books_book_book_relationships_path(@book), method: :post, class: "space-y-4", data: {controller: "modal-form", modal_form_modal_id_value: "add_book_relationship_modal"} do |f| %>
+          <div class="form-control">
+            <%= f.label :related_book_id, class: "label" do %><span class="label-text font-semibold">Related Book <span class="text-error">*</span></span><% end %>
+            <%= render AutocompleteComponent.new(name: "books_book_relationship[related_book_id]", url: search_admin_books_books_path(exclude_id: @book.id), placeholder: "Search for a book…", required: true) %>
+          </div>
+          <div class="form-control">
+            <%= f.label :relation_type, class: "label" do %><span class="label-text font-semibold">Relation</span><% end %>
+            <%= f.select :relation_type, ::Books::BookRelationship.relation_types.keys.map { |k| [k.titleize, k] }, {}, class: "select select-bordered w-full" %>
+          </div>
+          <div class="modal-action">
+            <button type="button" class="btn" onclick="add_book_relationship_modal.close()">Cancel</button>
+            <%= f.submit "Add Related Book", class: "btn btn-primary" %>
           </div>
         <% end %>
       </div>
