@@ -117,6 +117,20 @@
     </div>
   </div>
 
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <div class="flex items-center justify-between">
+        <h2 class="card-title text-base">Credits <span class="badge badge-ghost"><%= @book.credits.count %></span></h2>
+        <% if current_user_can_write? %>
+          <button class="btn btn-sm btn-primary" onclick="add_credit_modal.showModal()">+ Add</button>
+        <% end %>
+      </div>
+      <%= turbo_frame_tag "credits_list" do %>
+        <%= render "admin/books/credits/credits_list", creditable: @book %>
+      <% end %>
+    </div>
+  </div>
+
   <% if current_user_can_write? %>
     <dialog id="add_book_image_modal" class="modal">
       <div class="modal-box">
@@ -192,5 +206,7 @@
       </div>
       <form method="dialog" class="modal-backdrop"><button>close</button></form>
     </dialog>
+
+    <%= render "admin/books/credits/add_credit_modal", creditable: @book, create_url: admin_books_book_credits_path(@book) %>
   <% end %>
 </div>
