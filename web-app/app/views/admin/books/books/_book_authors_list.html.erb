@@ -1,0 +1,60 @@
+<%= turbo_frame_tag "book_authors_list" do %>
+  <% if book.book_authors.any? %>
+    <div class="overflow-x-auto">
+      <table class="table table-zebra">
+        <thead>
+          <tr><th>Position</th><th>Author</th><th>Role</th><th>Credited As</th><th class="text-right">Actions</th></tr>
+        </thead>
+        <tbody>
+          <% book.book_authors.order(:position, :id).includes(:author).each do |book_author| %>
+            <tr>
+              <td><span class="badge badge-sm"><%= book_author.position %></span></td>
+              <td><%= book_author.author.name %></td>
+              <td><%= book_author.role.titleize %></td>
+              <td class="text-sm text-base-content/70"><%= book_author.credited_as.presence || "—" %></td>
+              <td class="text-right">
+                <div class="flex items-center justify-end gap-1">
+                  <% if current_user_can_write? %>
+                    <button class="btn btn-outline btn-xs whitespace-nowrap" onclick="edit_book_author_<%= book_author.id %>_modal.showModal()">Edit</button>
+                  <% end %>
+                  <% if current_user_can_write? %>
+                    <%= button_to "Remove", admin_books_book_author_path(book_author), method: :delete, class: "btn btn-outline btn-error btn-xs whitespace-nowrap", data: {turbo_confirm: "Remove #{book_author.author.name} from this book?"}, form: {data: {turbo_frame: "book_authors_list"}} %>
+                  <% end %>
+                </div>
+              </td>
+            </tr>
+
+            <% if current_user_can_write? %>
+              <dialog id="edit_book_author_<%= book_author.id %>_modal" class="modal">
+                <div class="modal-box">
+                  <h3 class="font-bold text-lg mb-4">Edit Author</h3>
+                  <%= form_with model: book_author, url: admin_books_book_author_path(book_author), method: :patch, class: "space-y-4", data: {controller: "modal-form", modal_form_modal_id_value: "edit_book_author_#{book_author.id}_modal", turbo_frame: "book_authors_list"} do |f| %>
+                    <div class="form-control">
+                      <%= f.label :role, class: "label" do %><span class="label-text font-semibold">Role</span><% end %>
+                      <%= f.select :role, ::Books::BookAuthor.roles.keys.map { |k| [k.titleize, k] }, {}, class: "select select-bordered w-full" %>
+                    </div>
+                    <div class="form-control">
+                      <%= f.label :position, class: "label" do %><span class="label-text font-semibold">Position</span><% end %>
+                      <%= f.number_field :position, min: 1, class: "input input-bordered w-full" %>
+                    </div>
+                    <div class="form-control">
+                      <%= f.label :credited_as, class: "label" do %><span class="label-text font-semibold">Credited As</span><% end %>
+                      <%= f.text_field :credited_as, class: "input input-bordered w-full" %>
+                    </div>
+                    <div class="modal-action">
+                      <button type="button" class="btn" onclick="edit_book_author_<%= book_author.id %>_modal.close()">Cancel</button>
+                      <%= f.submit "Update", class: "btn btn-primary" %>
+                    </div>
+                  <% end %>
+                </div>
+                <form method="dialog" class="modal-backdrop"><button>close</button></form>
+              </dialog>
+            <% end %>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <p class="text-base-content/60 text-sm">No authors yet.</p>
+  <% end %>
+<% end %>
