@@ -97,9 +97,7 @@
           <button class="btn btn-sm btn-primary" onclick="add_book_author_modal.showModal()">+ Add</button>
         <% end %>
       </div>
-      <%= turbo_frame_tag "book_authors_list" do %>
-        <%= render "admin/books/books/book_authors_list", book: @book %>
-      <% end %>
+      <%= render "admin/books/books/book_authors_list", book: @book %>
     </div>
   </div>
 
@@ -111,9 +109,7 @@
           <button class="btn btn-sm btn-primary" onclick="add_book_relationship_modal.showModal()">+ Add</button>
         <% end %>
       </div>
-      <%= turbo_frame_tag "book_relationships_list" do %>
-        <%= render "admin/books/books/book_relationships_list", book: @book %>
-      <% end %>
+      <%= render "admin/books/books/book_relationships_list", book: @book %>
     </div>
   </div>
 
@@ -125,9 +121,7 @@
           <button class="btn btn-sm btn-primary" onclick="add_credit_modal.showModal()">+ Add</button>
         <% end %>
       </div>
-      <%= turbo_frame_tag "credits_list" do %>
-        <%= render "admin/books/credits/credits_list", creditable: @book %>
-      <% end %>
+      <%= render "admin/books/credits/credits_list", creditable: @book %>
     </div>
   </div>
 

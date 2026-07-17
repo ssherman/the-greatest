@@ -69,9 +69,7 @@
               <button class="btn btn-sm btn-primary" onclick="add_credit_modal.showModal()">+ Add</button>
             <% end %>
           </div>
-          <%= turbo_frame_tag "credits_list" do %>
-            <%= render "admin/books/credits/credits_list", creditable: @edition %>
-          <% end %>
+          <%= render "admin/books/credits/credits_list", creditable: @edition %>
         </div>
       </div>
     </div>
