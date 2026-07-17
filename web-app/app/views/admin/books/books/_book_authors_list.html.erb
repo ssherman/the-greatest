@@ -17,7 +17,7 @@
                   <% if current_user_can_write? %>
                     <button class="btn btn-outline btn-xs whitespace-nowrap" onclick="edit_book_author_<%= book_author.id %>_modal.showModal()">Edit</button>
                   <% end %>
-                  <% if current_user_can_delete? %>
+                  <% if current_user_can_write? %>
                     <%= button_to "Remove", admin_books_book_author_path(book_author), method: :delete, class: "btn btn-outline btn-error btn-xs whitespace-nowrap", data: {turbo_confirm: "Remove #{book_author.author.name} from this book?"}, form: {data: {turbo_frame: "book_authors_list"}} %>
                   <% end %>
                 </div>

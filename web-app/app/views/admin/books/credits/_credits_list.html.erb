@@ -16,7 +16,7 @@
                   <% if current_user_can_write? %>
                     <button class="btn btn-outline btn-xs whitespace-nowrap" onclick="edit_credit_<%= credit.id %>_modal.showModal()">Edit</button>
                   <% end %>
-                  <% if current_user_can_delete? %>
+                  <% if current_user_can_write? %>
                     <%= button_to "Remove", admin_books_credit_path(credit), method: :delete, class: "btn btn-outline btn-error btn-xs whitespace-nowrap", data: {turbo_confirm: "Remove this credit?"}, form: {data: {turbo_frame: "credits_list"}} %>
                   <% end %>
                 </div>

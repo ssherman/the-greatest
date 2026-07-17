@@ -15,7 +15,7 @@
                   <% if current_user_can_write? %>
                     <button class="btn btn-outline btn-xs whitespace-nowrap" onclick="edit_book_relationship_<%= rel.id %>_modal.showModal()">Edit</button>
                   <% end %>
-                  <% if current_user_can_delete? %>
+                  <% if current_user_can_write? %>
                     <%= button_to "Remove", admin_books_book_relationship_path(rel), method: :delete, class: "btn btn-outline btn-error btn-xs whitespace-nowrap", data: {turbo_confirm: "Remove this relationship?"}, form: {data: {turbo_frame: "book_relationships_list"}} %>
                   <% end %>
                 </div>
