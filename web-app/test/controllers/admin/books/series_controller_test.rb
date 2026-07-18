@@ -156,6 +156,28 @@ module Admin
         end
         assert_redirected_to books_root_path
       end
+
+      # Images
+
+      test "the series images index frame renders for the series" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_series_images_path(@series)
+        assert_response :success
+      end
+
+      test "uploading an image attaches it to the series via the shared images controller" do
+        sign_in_as(@admin_user, stub_auth: true)
+        assert_difference("Image.count", 1) do
+          post admin_books_series_images_path(@series), params: {
+            image: {
+              file: fixture_file_upload("test_image.png", "image/png"),
+              notes: "Cover",
+              primary: true
+            }
+          }
+        end
+        assert_includes @series.reload.images.map(&:id), Image.order(:created_at).last.id
+      end
     end
   end
 end
