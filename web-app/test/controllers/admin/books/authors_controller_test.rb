@@ -115,6 +115,51 @@ module Admin
         get admin_books_author_path(@author)
         assert_redirected_to books_root_path
       end
+
+      # New / create
+
+      test "new renders for a writer" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get new_admin_books_author_path
+        assert_response :success
+      end
+
+      test "create makes an author and redirects to it" do
+        sign_in_as(@admin_user, stub_auth: true)
+        assert_difference("::Books::Author.count", 1) do
+          post admin_books_authors_path, params: {books_author: {name: "A Brand New Author", kind: "person", birth_year: 1950}}
+        end
+        assert_redirected_to admin_books_author_path(::Books::Author.order(:created_at).last)
+      end
+
+      test "create sets the kind" do
+        sign_in_as(@admin_user, stub_auth: true)
+        post admin_books_authors_path, params: {books_author: {name: "A Collective", kind: "collective"}}
+        assert_equal "collective", ::Books::Author.find_by(name: "A Collective").kind
+      end
+
+      test "create splits comma-separated alternate names into the array column" do
+        sign_in_as(@admin_user, stub_auth: true)
+        post admin_books_authors_path, params: {books_author: {name: "Alt Name Author", kind: "person", alternate_names_string: "First Alt,  Second Alt , "}}
+        author = ::Books::Author.find_by(name: "Alt Name Author")
+        assert_equal ["First Alt", "Second Alt"], author.alternate_names
+      end
+
+      test "create rejects an invalid author" do
+        sign_in_as(@admin_user, stub_auth: true)
+        assert_no_difference("::Books::Author.count") do
+          post admin_books_authors_path, params: {books_author: {name: "", kind: "person"}}
+        end
+        assert_response :unprocessable_entity
+      end
+
+      test "create is forbidden for a regular user" do
+        sign_in_as(@regular_user, stub_auth: true)
+        assert_no_difference("::Books::Author.count") do
+          post admin_books_authors_path, params: {books_author: {name: "Nope", kind: "person"}}
+        end
+        assert_redirected_to books_root_path
+      end
     end
   end
 end

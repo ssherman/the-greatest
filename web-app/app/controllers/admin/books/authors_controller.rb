@@ -24,6 +24,23 @@ class Admin::Books::AuthorsController < Admin::Books::BaseController
   def show
   end
 
+  def new
+    @author = ::Books::Author.new
+    authorize @author
+  end
+
+  def create
+    @author = ::Books::Author.new
+    assign_author_attributes(@author)
+    authorize @author
+
+    if @author.save
+      redirect_to admin_books_author_path(@author), notice: "Author created."
+    else
+      render :new, status: :unprocessable_entity
+    end
+  end
+
   private
 
   def load_authors_for_index
@@ -53,6 +70,16 @@ class Admin::Books::AuthorsController < Admin::Books::BaseController
       "death_year" => "books_authors.death_year",
       "created_at" => "books_authors.created_at"
     }.fetch(column, "books_authors.name")
+  end
+
+  def author_params
+    params.require(:books_author).permit(:name, :sort_name, :kind, :birth_year, :death_year, :description)
+  end
+
+  def assign_author_attributes(record)
+    record.assign_attributes(author_params)
+    raw = params.dig(:books_author, :alternate_names_string)
+    record.alternate_names = raw.to_s.split(",").map(&:strip).reject(&:blank?) unless raw.nil?
   end
 
   def set_author
