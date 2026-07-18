@@ -10,6 +10,22 @@ class Admin::Books::SeriesController < Admin::Books::BaseController
   def show
   end
 
+  def new
+    @series = ::Books::Series.new
+    authorize @series
+  end
+
+  def create
+    @series = ::Books::Series.new(series_params)
+    authorize @series
+
+    if @series.save
+      redirect_to admin_books_series_path(@series), notice: "Series created."
+    else
+      render :new, status: :unprocessable_entity
+    end
+  end
+
   private
 
   def load_series_for_index
@@ -30,6 +46,10 @@ class Admin::Books::SeriesController < Admin::Books::BaseController
       "title" => "books_series.title",
       "created_at" => "books_series.created_at"
     }.fetch(column, "books_series.title")
+  end
+
+  def series_params
+    params.require(:books_series).permit(:title, :description)
   end
 
   def set_series

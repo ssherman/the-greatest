@@ -85,6 +85,38 @@ module Admin
         get admin_books_series_path(@series)
         assert_redirected_to books_root_path
       end
+
+      # New / create
+
+      test "new renders for a writer" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get new_admin_books_series_path
+        assert_response :success
+      end
+
+      test "create makes a series and redirects to it" do
+        sign_in_as(@admin_user, stub_auth: true)
+        assert_difference("::Books::Series.count", 1) do
+          post admin_books_series_index_path, params: {books_series: {title: "A Brand New Series", description: "desc"}}
+        end
+        assert_redirected_to admin_books_series_path(::Books::Series.order(:created_at).last)
+      end
+
+      test "create rejects an invalid series" do
+        sign_in_as(@admin_user, stub_auth: true)
+        assert_no_difference("::Books::Series.count") do
+          post admin_books_series_index_path, params: {books_series: {title: ""}}
+        end
+        assert_response :unprocessable_entity
+      end
+
+      test "create is forbidden for a regular user" do
+        sign_in_as(@regular_user, stub_auth: true)
+        assert_no_difference("::Books::Series.count") do
+          post admin_books_series_index_path, params: {books_series: {title: "Nope"}}
+        end
+        assert_redirected_to books_root_path
+      end
     end
   end
 end
