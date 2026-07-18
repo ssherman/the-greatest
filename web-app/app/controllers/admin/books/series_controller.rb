@@ -1,6 +1,6 @@
 class Admin::Books::SeriesController < Admin::Books::BaseController
-  before_action :set_series, only: [:show]
-  before_action :authorize_series, only: [:show]
+  before_action :set_series, only: [:show, :edit, :update, :destroy]
+  before_action :authorize_series, only: [:show, :edit, :update, :destroy]
 
   def index
     authorize ::Books::Series
@@ -24,6 +24,22 @@ class Admin::Books::SeriesController < Admin::Books::BaseController
     else
       render :new, status: :unprocessable_entity
     end
+  end
+
+  def edit
+  end
+
+  def update
+    if @series.update(series_params)
+      redirect_to admin_books_series_path(@series), notice: "Series updated."
+    else
+      render :edit, status: :unprocessable_entity
+    end
+  end
+
+  def destroy
+    @series.destroy!
+    redirect_to admin_books_series_index_path, notice: "Series deleted."
   end
 
   private

@@ -117,6 +117,45 @@ module Admin
         end
         assert_redirected_to books_root_path
       end
+
+      # Edit / update / destroy
+
+      test "edit renders for a writer" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get edit_admin_books_series_path(@series)
+        assert_response :success
+      end
+
+      test "update changes the series and redirects" do
+        sign_in_as(@admin_user, stub_auth: true)
+        patch admin_books_series_path(@series), params: {books_series: {title: "ASOIAF (Revised)"}}
+        assert_redirected_to admin_books_series_path(@series)
+        assert_equal "ASOIAF (Revised)", @series.reload.title
+      end
+
+      test "update rejects invalid data" do
+        sign_in_as(@admin_user, stub_auth: true)
+        patch admin_books_series_path(@series), params: {books_series: {title: ""}}
+        assert_response :unprocessable_entity
+        assert @series.reload.title.present?
+      end
+
+      test "destroy deletes the series" do
+        series = ::Books::Series.create!(title: "Disposable Series")
+        sign_in_as(@admin_user, stub_auth: true)
+        assert_difference("::Books::Series.count", -1) do
+          delete admin_books_series_path(series)
+        end
+        assert_redirected_to admin_books_series_index_path
+      end
+
+      test "destroy is forbidden for a regular user" do
+        sign_in_as(@regular_user, stub_auth: true)
+        assert_no_difference("::Books::Series.count") do
+          delete admin_books_series_path(@series)
+        end
+        assert_redirected_to books_root_path
+      end
     end
   end
 end
