@@ -136,9 +136,12 @@ Mirror 5a authors + 4c/5a inline partials; DaisyUI-5 throughout.
   badge in the header, so nothing goes stale after an inline turbo update — the frame owns all mutable
   content per 5b-4). No categories.
 - **`_series_books_list.html.erb`** — `turbo_frame_tag "series_books_list"` containing: a
-  "Representative: *[resolved_representative_book title or —]*" line, then the table (columns: Position,
-  Book link `turbo_frame: "_top"`, Numbered, Label, Actions). The representative row shows a ★ badge; the
-  others show a "★ Make representative" `button_to` → `make_representative_admin_books_series_book_path`.
+  "Representative: *[the explicit `representative_book` title, or —]*" line, then the table (columns:
+  Position, Book link `turbo_frame: "_top"`, Numbered, Label, Actions). The row whose book **is** the
+  explicit `representative_book_id` shows a ★ badge; every other row shows a "★ Make representative"
+  `button_to` → `make_representative_admin_books_series_book_path`. (Line and badge both key off the
+  explicit `representative_book_id` so they stay consistent — the model's `resolved_representative_book`
+  fallback is a public-display concern, not the admin's.)
   Edit (per-row modal: position/numbered/position_label) + Remove `button_to`, gated `current_user_can_write?`.
   Empty state "No books in this series yet."
 - **Add modal** `add_series_book_modal` — `AutocompleteComponent(name: "books_series_book[book_id]",
