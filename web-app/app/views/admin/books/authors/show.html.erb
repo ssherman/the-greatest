@@ -63,6 +63,43 @@
     </div>
   </div>
 
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <div class="flex items-center justify-between">
+        <h2 class="card-title text-base">Relationships <span class="badge badge-ghost"><%= @author.author_relationships.count %></span></h2>
+        <% if current_user_can_write? %>
+          <button class="btn btn-sm btn-primary" onclick="add_author_relationship_modal.showModal()">+ Add</button>
+        <% end %>
+      </div>
+      <%= render "admin/books/authors/author_relationships_list", author: @author %>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <h2 class="card-title text-base">Inbound Relationships <span class="badge badge-ghost"><%= @author.inverse_author_relationships.count %></span></h2>
+      <% if @author.inverse_author_relationships.any? %>
+        <div class="overflow-x-auto">
+          <table class="table table-zebra">
+            <thead>
+              <tr><th>Author</th><th>Relation</th></tr>
+            </thead>
+            <tbody>
+              <% @author.inverse_author_relationships.includes(:from_author).each do |rel| %>
+                <tr>
+                  <td><%= link_to rel.from_author.name, admin_books_author_path(rel.from_author), class: "link link-hover", data: {turbo_frame: "_top"} %></td>
+                  <td><span class="badge badge-ghost"><%= rel.relation_type.titleize %></span></td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% else %>
+        <p class="text-base-content/60 text-sm">No inbound relationships.</p>
+      <% end %>
+    </div>
+  </div>
+
   <% if current_user_can_write? %>
     <dialog id="add_author_image_modal" class="modal">
       <div class="modal-box">
@@ -83,6 +120,27 @@
           <div class="modal-action">
             <%= f.submit "Upload", class: "btn btn-primary" %>
             <button type="button" class="btn" onclick="add_author_image_modal.close()">Cancel</button>
+          </div>
+        <% end %>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
+
+    <dialog id="add_author_relationship_modal" class="modal">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Add Relationship</h3>
+        <%= form_with model: ::Books::AuthorRelationship.new, url: admin_books_author_author_relationships_path(@author), method: :post, class: "space-y-4", data: {controller: "modal-form", modal_form_modal_id_value: "add_author_relationship_modal"} do |f| %>
+          <div class="form-control">
+            <%= f.label :to_author_id, class: "label" do %><span class="label-text font-semibold">Author <span class="text-error">*</span></span><% end %>
+            <%= render AutocompleteComponent.new(name: "books_author_relationship[to_author_id]", url: search_admin_books_authors_path(exclude_id: @author.id), placeholder: "Search for an author…", required: true) %>
+          </div>
+          <div class="form-control">
+            <%= f.label :relation_type, class: "label" do %><span class="label-text font-semibold">Relation</span><% end %>
+            <%= f.select :relation_type, ::Books::AuthorRelationship.relation_types.keys.map { |k| [k.titleize, k] }, {}, class: "select select-bordered w-full" %>
+          </div>
+          <div class="modal-action">
+            <button type="button" class="btn" onclick="add_author_relationship_modal.close()">Cancel</button>
+            <%= f.submit "Add Relationship", class: "btn btn-primary" %>
           </div>
         <% end %>
       </div>

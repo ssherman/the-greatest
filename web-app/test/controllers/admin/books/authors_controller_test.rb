@@ -235,6 +235,14 @@ module Admin
         end
         assert_includes @author.reload.images.map(&:id), Image.order(:created_at).last.id
       end
+
+      # Inbound relationships card
+
+      test "show renders for an author that has inbound relationships" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_author_path(books_authors(:king))
+        assert_response :success
+      end
     end
   end
 end
