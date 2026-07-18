@@ -1,0 +1,77 @@
+<%= turbo_frame_tag "series_books_list" do %>
+  <p class="text-sm text-base-content/70 mb-3">
+    Representative:
+    <% if series.representative_book %>
+      <%= link_to series.representative_book.title, admin_books_book_path(series.representative_book), class: "link", data: {turbo_frame: "_top"} %>
+    <% else %>
+      —
+    <% end %>
+  </p>
+
+  <% if series.series_books.any? %>
+    <div class="overflow-x-auto">
+      <table class="table table-zebra">
+        <thead>
+          <tr><th>#</th><th>Book</th><th>Numbered</th><th>Label</th><th class="text-right">Actions</th></tr>
+        </thead>
+        <tbody>
+          <% series.series_books.includes(:book).each do |sb| %>
+            <tr>
+              <td><%= sb.position %></td>
+              <td>
+                <%= link_to sb.book.title, admin_books_book_path(sb.book), class: "link link-hover", data: {turbo_frame: "_top"} %>
+                <% if series.representative_book_id == sb.book_id %>
+                  <span class="badge badge-primary badge-sm ml-1">★ Representative</span>
+                <% end %>
+              </td>
+              <td><%= sb.numbered? ? "Yes" : "No" %></td>
+              <td class="text-sm text-base-content/70"><%= sb.position_label.presence || "—" %></td>
+              <td class="text-right">
+                <div class="flex items-center justify-end gap-1">
+                  <% if current_user_can_write? %>
+                    <% if series.representative_book_id != sb.book_id %>
+                      <%= button_to "★ Make representative", make_representative_admin_books_series_book_path(sb), method: :post, class: "btn btn-outline btn-xs whitespace-nowrap", form: {data: {turbo_frame: "series_books_list"}} %>
+                    <% end %>
+                    <button class="btn btn-outline btn-xs whitespace-nowrap" onclick="edit_series_book_<%= sb.id %>_modal.showModal()">Edit</button>
+                    <%= button_to "Remove", admin_books_series_book_path(sb), method: :delete, class: "btn btn-outline btn-error btn-xs whitespace-nowrap", data: {turbo_confirm: "Remove this book from the series?"}, form: {data: {turbo_frame: "series_books_list"}} %>
+                  <% end %>
+                </div>
+              </td>
+            </tr>
+
+            <% if current_user_can_write? %>
+              <dialog id="edit_series_book_<%= sb.id %>_modal" class="modal">
+                <div class="modal-box">
+                  <h3 class="font-bold text-lg mb-4">Edit Series Book</h3>
+                  <%= form_with model: sb, url: admin_books_series_book_path(sb), method: :patch, class: "space-y-4", data: {controller: "modal-form", modal_form_modal_id_value: "edit_series_book_#{sb.id}_modal", turbo_frame: "series_books_list"} do |f| %>
+                    <div class="form-control">
+                      <%= f.label :position, class: "label" do %><span class="label-text font-semibold">Position</span><% end %>
+                      <%= f.number_field :position, step: "0.01", class: "input input-bordered w-full" %>
+                    </div>
+                    <div class="form-control">
+                      <label class="label cursor-pointer justify-start gap-2">
+                        <%= f.check_box :numbered, class: "checkbox" %>
+                        <span class="label-text font-semibold">Numbered</span>
+                      </label>
+                    </div>
+                    <div class="form-control">
+                      <%= f.label :position_label, class: "label" do %><span class="label-text font-semibold">Position Label</span><% end %>
+                      <%= f.text_field :position_label, class: "input input-bordered w-full" %>
+                    </div>
+                    <div class="modal-action">
+                      <button type="button" class="btn" onclick="edit_series_book_<%= sb.id %>_modal.close()">Cancel</button>
+                      <%= f.submit "Update", class: "btn btn-primary" %>
+                    </div>
+                  <% end %>
+                </div>
+                <form method="dialog" class="modal-backdrop"><button>close</button></form>
+              </dialog>
+            <% end %>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <p class="text-base-content/60 text-sm">No books in this series yet.</p>
+  <% end %>
+<% end %>

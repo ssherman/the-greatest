@@ -57,6 +57,18 @@
     </div>
   </div>
 
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <div class="flex items-center justify-between">
+        <h2 class="card-title text-base">Books in Series</h2>
+        <% if current_user_can_write? %>
+          <button class="btn btn-sm btn-primary" onclick="add_series_book_modal.showModal()">+ Add</button>
+        <% end %>
+      </div>
+      <%= render "admin/books/series/series_books_list", series: @series %>
+    </div>
+  </div>
+
   <% if current_user_can_write? %>
     <dialog id="add_series_image_modal" class="modal">
       <div class="modal-box">
@@ -77,6 +89,37 @@
           <div class="modal-action">
             <%= f.submit "Upload", class: "btn btn-primary" %>
             <button type="button" class="btn" onclick="add_series_image_modal.close()">Cancel</button>
+          </div>
+        <% end %>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button>close</button></form>
+    </dialog>
+
+    <dialog id="add_series_book_modal" class="modal">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Add Book to Series</h3>
+        <%= form_with model: ::Books::SeriesBook.new, url: admin_books_series_series_books_path(@series), method: :post, class: "space-y-4", data: {controller: "modal-form", modal_form_modal_id_value: "add_series_book_modal"} do |f| %>
+          <div class="form-control">
+            <%= f.label :book_id, class: "label" do %><span class="label-text font-semibold">Book <span class="text-error">*</span></span><% end %>
+            <%= render AutocompleteComponent.new(name: "books_series_book[book_id]", url: search_admin_books_books_path, placeholder: "Search for a book…", required: true) %>
+          </div>
+          <div class="form-control">
+            <%= f.label :position, class: "label" do %><span class="label-text font-semibold">Position</span><% end %>
+            <%= f.number_field :position, value: @series.series_books.maximum(:position).to_i + 1, step: "0.01", class: "input input-bordered w-full" %>
+          </div>
+          <div class="form-control">
+            <label class="label cursor-pointer justify-start gap-2">
+              <%= f.check_box :numbered, checked: true, class: "checkbox" %>
+              <span class="label-text font-semibold">Numbered</span>
+            </label>
+          </div>
+          <div class="form-control">
+            <%= f.label :position_label, class: "label" do %><span class="label-text font-semibold">Position Label</span><% end %>
+            <%= f.text_field :position_label, class: "input input-bordered w-full" %>
+          </div>
+          <div class="modal-action">
+            <button type="button" class="btn" onclick="add_series_book_modal.close()">Cancel</button>
+            <%= f.submit "Add Book", class: "btn btn-primary" %>
           </div>
         <% end %>
       </div>
