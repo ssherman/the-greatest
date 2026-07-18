@@ -71,6 +71,23 @@ module Admin
         assert_redirected_to books_root_path
         assert_nil @series.reload.representative_book_id
       end
+
+      test "destroy clears the representative when removing the representative book" do
+        sign_in_as(@admin_user, stub_auth: true)
+        sb = books_series_books(:asoiaf_got)
+        @series.update!(representative_book_id: sb.book_id)
+        delete admin_books_series_book_path(sb)
+        assert_nil @series.reload.representative_book_id
+      end
+
+      test "destroy keeps the representative when removing a different book" do
+        sign_in_as(@admin_user, stub_auth: true)
+        rep = books_series_books(:asoiaf_got)
+        other = books_series_books(:asoiaf_clash)
+        @series.update!(representative_book_id: rep.book_id)
+        delete admin_books_series_book_path(other)
+        assert_equal rep.book_id, @series.reload.representative_book_id
+      end
     end
   end
 end

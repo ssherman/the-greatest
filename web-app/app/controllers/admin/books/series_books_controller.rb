@@ -39,6 +39,7 @@ class Admin::Books::SeriesBooksController < Admin::Books::BaseController
   def destroy
     @series = @series_book.series
     authorize @series, :update?, policy_class: ::Books::SeriesPolicy
+    @series.update!(representative_book_id: nil) if @series.representative_book_id == @series_book.book_id
     @series_book.destroy!
 
     respond_to do |format|
