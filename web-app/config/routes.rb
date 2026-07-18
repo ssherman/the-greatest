@@ -303,6 +303,16 @@ Rails.application.routes.draw do
           get :search
         end
       end
+
+      resources :series do
+        resources :images, only: [:index, :create], controller: "/admin/images"
+        resources :series_books, only: [:create]
+      end
+      resources :series_books, only: [:update, :destroy] do
+        member do
+          post :make_representative
+        end
+      end
     end
 
     root to: "books/default#index", as: :books_root

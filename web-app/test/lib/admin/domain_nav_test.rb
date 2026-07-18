@@ -82,6 +82,14 @@ module Admin
       assert authors_item[:icon].present?
     end
 
+    test "the books nav includes a Series item pointing at the index" do
+      config = Admin::DomainNav.config_for(:books)
+      series_item = config[:items].find { |item| item[:label] == "Series" }
+      assert series_item, "books nav is missing a Series item"
+      assert_equal "/admin/series", series_item[:path]
+      assert series_item[:icon].present?
+    end
+
     test "a domain whose nav links to Categories has a categories_search_path" do
       Admin::DomainNav::CONFIGS.each_key do |domain|
         config = Admin::DomainNav.config_for(domain)

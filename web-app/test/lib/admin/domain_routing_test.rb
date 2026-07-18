@@ -183,5 +183,21 @@ module Admin
       resolved = Admin::DomainRouting.parent_from_params({author_id: author.id}, domain: :books)
       assert_equal author, resolved
     end
+
+    test "domain_for resolves a Books::Series to books" do
+      assert_equal :books, Admin::DomainRouting.domain_for(books_series(:asoiaf))
+      assert_equal :books, Admin::DomainRouting.domain_for(::Books::Series)
+    end
+
+    test "path_for resolves a Books::Series admin path" do
+      series = books_series(:asoiaf)
+      assert_equal "/admin/series/#{series.slug}", Admin::DomainRouting.path_for(series)
+    end
+
+    test "parent_from_params resolves a series_id under the books domain" do
+      series = books_series(:asoiaf)
+      resolved = Admin::DomainRouting.parent_from_params({series_id: series.id}, domain: :books)
+      assert_equal series, resolved
+    end
   end
 end

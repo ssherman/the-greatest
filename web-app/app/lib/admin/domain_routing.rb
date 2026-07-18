@@ -34,6 +34,11 @@ module Admin
         domain: :books,
         path: ->(r) { URL_HELPERS.admin_books_author_path(r) },
         category_items_path: nil
+      },
+      "Books::Series" => {
+        domain: :books,
+        path: ->(r) { URL_HELPERS.admin_books_series_path(r) },
+        category_items_path: nil
       }
     }.freeze
 
@@ -50,7 +55,8 @@ module Admin
       books: {
         book_id: "Books::Book",
         edition_id: "Books::Edition",
-        author_id: "Books::Author"
+        author_id: "Books::Author",
+        series_id: "Books::Series"
       }
     }.freeze
 

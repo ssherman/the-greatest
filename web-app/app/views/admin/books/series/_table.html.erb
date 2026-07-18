@@ -1,0 +1,48 @@
+<div class="overflow-x-auto">
+  <table class="table table-zebra">
+    <thead>
+      <tr>
+        <th><%= link_to "Title", admin_books_series_index_path(sort: "title", q: params[:q]), data: {turbo_frame: "series_table"} %></th>
+        <th><%= link_to "Created", admin_books_series_index_path(sort: "created_at", q: params[:q]), data: {turbo_frame: "series_table"} %></th>
+        <th class="text-right">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% if series_collection.any? %>
+        <% series_collection.each do |s| %>
+          <tr>
+            <td><%= link_to s.title, admin_books_series_path(s), data: {turbo_frame: "_top"} %></td>
+            <td class="text-sm text-base-content/70"><%= s.created_at.to_date %></td>
+            <td class="text-right">
+              <div class="flex items-center justify-end gap-1">
+                <%= link_to "View", admin_books_series_path(s), class: "btn btn-outline btn-xs whitespace-nowrap", data: {turbo_frame: "_top"} %>
+                <% if current_user_can_write? %>
+                  <%= link_to "Edit", edit_admin_books_series_path(s), class: "btn btn-outline btn-xs whitespace-nowrap", data: {turbo_frame: "_top"} %>
+                <% end %>
+                <% if current_user_can_delete? %>
+                  <%= button_to "Delete", admin_books_series_path(s), method: :delete, class: "btn btn-outline btn-error btn-xs whitespace-nowrap", form: {class: "inline", data: {turbo_frame: "_top", turbo_confirm: "Delete #{s.title}? This cannot be undone."}} %>
+                <% end %>
+              </div>
+            </td>
+          </tr>
+        <% end %>
+      <% else %>
+        <tr>
+          <td colspan="3" class="text-center text-base-content/70 py-8">
+            <% if params[:q].present? %>
+              No series match “<%= params[:q] %>”. <%= link_to "Clear", admin_books_series_index_path, data: {turbo_frame: "series_table"} %>
+            <% else %>
+              No series yet.
+            <% end %>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>
+
+<% if defined?(pagy) && pagy && pagy.pages > 1 %>
+  <div class="mt-4 flex justify-center">
+    <%== pagy.series_nav %>
+  </div>
+<% end %>
