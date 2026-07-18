@@ -1,4 +1,7 @@
 class Admin::Books::AuthorsController < Admin::Books::BaseController
+  before_action :set_author, only: [:show]
+  before_action :authorize_author, only: [:show]
+
   def index
     authorize ::Books::Author
     load_authors_for_index
@@ -16,6 +19,9 @@ class Admin::Books::AuthorsController < Admin::Books::BaseController
 
     authors = ::Books::Author.where(id: author_ids).in_order_of(:id, author_ids)
     render json: authors.map { |a| {value: a.id, text: a.name} }
+  end
+
+  def show
   end
 
   private
@@ -47,5 +53,13 @@ class Admin::Books::AuthorsController < Admin::Books::BaseController
       "death_year" => "books_authors.death_year",
       "created_at" => "books_authors.created_at"
     }.fetch(column, "books_authors.name")
+  end
+
+  def set_author
+    @author = ::Books::Author.find(params[:id])
+  end
+
+  def authorize_author
+    authorize @author
   end
 end

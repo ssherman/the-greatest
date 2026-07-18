@@ -101,6 +101,20 @@ module Admin
         assert_not_includes ids, @author.id
         assert_includes ids, other.id
       end
+
+      # Show
+
+      test "show renders for an admin" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_author_path(@author)
+        assert_response :success
+      end
+
+      test "show redirects a regular user" do
+        sign_in_as(@regular_user, stub_auth: true)
+        get admin_books_author_path(@author)
+        assert_redirected_to books_root_path
+      end
     end
   end
 end

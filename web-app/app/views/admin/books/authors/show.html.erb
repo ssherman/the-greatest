@@ -1,0 +1,51 @@
+<% content_for :title, @author.name %>
+
+<div class="space-y-6">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-3xl font-bold"><%= @author.name %></h1>
+      <p class="text-lg text-base-content/70"><%= @author.kind.titleize %></p>
+    </div>
+    <div class="flex gap-2">
+      <%= link_to "Back", admin_books_authors_path, class: "btn btn-ghost" %>
+      <% if current_user_can_write? %>
+        <%= link_to "Edit", edit_admin_books_author_path(@author), class: "btn btn-primary" %>
+      <% end %>
+      <% if current_user_can_delete? %>
+        <%= button_to "Delete", admin_books_author_path(@author), method: :delete, class: "btn btn-error", form: {data: {turbo_confirm: "Delete this author? This cannot be undone."}} %>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
+          <h2 class="card-title">Basic Information</h2>
+          <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div><dt class="text-sm text-base-content/60">Kind</dt><dd><%= @author.kind.titleize %></dd></div>
+            <div><dt class="text-sm text-base-content/60">Sort Name</dt><dd><%= @author.sort_name.presence || "—" %></dd></div>
+            <div><dt class="text-sm text-base-content/60">Birth Year</dt><dd><%= @author.birth_year || "—" %></dd></div>
+            <div><dt class="text-sm text-base-content/60">Death Year</dt><dd><%= @author.death_year || "—" %></dd></div>
+            <div class="sm:col-span-2"><dt class="text-sm text-base-content/60">Alternate Names</dt><dd><%= @author.alternate_names.present? ? @author.alternate_names.join(", ") : "—" %></dd></div>
+            <div class="sm:col-span-2"><dt class="text-sm text-base-content/60">Description</dt><dd class="whitespace-pre-line"><%= @author.description.presence || "—" %></dd></div>
+          </dl>
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-6">
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
+          <h2 class="card-title text-base">Metadata</h2>
+          <dl class="space-y-2 text-sm">
+            <div><dt class="text-base-content/60">ID</dt><dd><%= @author.id %></dd></div>
+            <div><dt class="text-base-content/60">Slug</dt><dd><%= @author.slug %></dd></div>
+            <div><dt class="text-base-content/60">Created</dt><dd><%= @author.created_at.to_date %></dd></div>
+            <div><dt class="text-base-content/60">Updated</dt><dd><%= @author.updated_at.to_date %></dd></div>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
