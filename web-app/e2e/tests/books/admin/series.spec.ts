@@ -26,7 +26,6 @@ test.describe("Books admin — series", () => {
     await page.getByRole("button", { name: "Create Series" }).click();
     await expect(page.getByRole("heading", { name: title, level: 1 })).toBeVisible();
 
-    // Add a book via the typeahead
     await page.getByRole("button", { name: "+ Add" }).last().click();
     const modal = page.locator("dialog#add_series_book_modal");
     await expect(modal).toBeVisible();
@@ -37,7 +36,6 @@ test.describe("Books admin — series", () => {
     const frame = page.locator("turbo-frame#series_books_list");
     await expect(frame.getByText("War and Peace", { exact: false })).toBeVisible();
 
-    // Make it representative
     await frame.getByRole("button", { name: "★ Make representative" }).click();
     await expect(frame.getByText("★ Representative")).toBeVisible();
   });
