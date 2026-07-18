@@ -71,6 +71,20 @@ module Admin
         end
         assert_response :success
       end
+
+      # Show
+
+      test "show renders for an admin" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_series_path(@series)
+        assert_response :success
+      end
+
+      test "show redirects a regular user" do
+        sign_in_as(@regular_user, stub_auth: true)
+        get admin_books_series_path(@series)
+        assert_redirected_to books_root_path
+      end
     end
   end
 end

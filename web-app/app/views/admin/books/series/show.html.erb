@@ -1,0 +1,45 @@
+<% content_for :title, @series.title %>
+
+<div class="space-y-6">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-3xl font-bold"><%= @series.title %></h1>
+    </div>
+    <div class="flex gap-2">
+      <%= link_to "Back", admin_books_series_index_path, class: "btn btn-ghost" %>
+      <% if current_user_can_write? %>
+        <%= link_to "Edit", edit_admin_books_series_path(@series), class: "btn btn-primary" %>
+      <% end %>
+      <% if current_user_can_delete? %>
+        <%= button_to "Delete", admin_books_series_path(@series), method: :delete, class: "btn btn-error", form: {data: {turbo_confirm: "Delete this series? This cannot be undone."}} %>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
+          <h2 class="card-title">Basic Information</h2>
+          <dl class="grid grid-cols-1 gap-4">
+            <div><dt class="text-sm text-base-content/60">Description</dt><dd class="whitespace-pre-line"><%= @series.description.presence || "—" %></dd></div>
+          </dl>
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-6">
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
+          <h2 class="card-title text-base">Metadata</h2>
+          <dl class="space-y-2 text-sm">
+            <div><dt class="text-base-content/60">ID</dt><dd><%= @series.id %></dd></div>
+            <div><dt class="text-base-content/60">Slug</dt><dd><%= @series.slug %></dd></div>
+            <div><dt class="text-base-content/60">Created</dt><dd><%= @series.created_at.to_date %></dd></div>
+            <div><dt class="text-base-content/60">Updated</dt><dd><%= @series.updated_at.to_date %></dd></div>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
