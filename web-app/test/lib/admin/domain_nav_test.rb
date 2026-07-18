@@ -74,6 +74,14 @@ module Admin
       assert books_item[:icon].present?
     end
 
+    test "the books nav includes an Authors item" do
+      config = Admin::DomainNav.config_for(:books)
+      authors_item = config[:items].find { |item| item[:label] == "Authors" }
+      assert authors_item, "books nav is missing an Authors item"
+      assert_equal "/admin/authors", authors_item[:path]
+      assert authors_item[:icon].present?
+    end
+
     test "a domain whose nav links to Categories has a categories_search_path" do
       Admin::DomainNav::CONFIGS.each_key do |domain|
         config = Admin::DomainNav.config_for(domain)

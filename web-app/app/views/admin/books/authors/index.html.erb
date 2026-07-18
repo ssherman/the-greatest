@@ -1,0 +1,21 @@
+<% content_for :title, "Authors" %>
+
+<div class="space-y-6">
+  <div class="flex items-center justify-between">
+    <h1 class="text-3xl font-bold">Authors</h1>
+    <% if current_user_can_write? %>
+      <%= link_to "New Author", new_admin_books_author_path, class: "btn btn-primary" %>
+    <% end %>
+  </div>
+
+  <%= render Admin::SearchComponent.new(
+    url: admin_books_authors_path,
+    placeholder: "Search authors by name…",
+    value: params[:q],
+    turbo_frame: "authors_table"
+  ) %>
+
+  <%= turbo_frame_tag "authors_table" do %>
+    <%= render "table", authors: @authors, pagy: @pagy %>
+  <% end %>
+</div>

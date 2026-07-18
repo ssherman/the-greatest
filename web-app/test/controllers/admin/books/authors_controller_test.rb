@@ -33,6 +33,74 @@ module Admin
         assert_response :success
         assert_equal [], JSON.parse(response.body)
       end
+
+      # Authorization
+
+      test "index redirects to root for unauthenticated users" do
+        get admin_books_authors_path
+        assert_redirected_to books_root_path
+      end
+
+      test "index redirects to root for a regular user" do
+        sign_in_as(@regular_user, stub_auth: true)
+        get admin_books_authors_path
+        assert_redirected_to books_root_path
+      end
+
+      test "index allows an admin" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_authors_path
+        assert_response :success
+      end
+
+      test "index allows a books domain editor" do
+        @regular_user.domain_roles.create!(domain: :books, permission_level: :editor)
+        sign_in_as(@regular_user, stub_auth: true)
+        get admin_books_authors_path
+        assert_response :success
+      end
+
+      # Index behavior
+
+      test "index without a query renders the sorted list" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_authors_path
+        assert_response :success
+      end
+
+      test "index with a query loads authors from OpenSearch in relevance order" do
+        sign_in_as(@admin_user, stub_auth: true)
+        ::Search::Books::Search::AuthorGeneral.stubs(:call).returns([{id: @author.id.to_s, score: 1.0, source: {"name" => @author.name}}])
+        get admin_books_authors_path(q: "tol")
+        assert_response :success
+      end
+
+      test "index with a query that matches nothing does not error" do
+        sign_in_as(@admin_user, stub_auth: true)
+        ::Search::Books::Search::AuthorGeneral.stubs(:call).returns([])
+        get admin_books_authors_path(q: "zzzznomatch")
+        assert_response :success
+      end
+
+      test "index tolerates a malicious sort param without raising" do
+        sign_in_as(@admin_user, stub_auth: true)
+        assert_nothing_raised do
+          get admin_books_authors_path(sort: "'; DROP TABLE books_authors; --")
+        end
+        assert_response :success
+      end
+
+      # Typeahead exclude_id
+
+      test "search omits the excluded author id" do
+        sign_in_as(@admin_user, stub_auth: true)
+        other = books_authors(:king)
+        ::Search::Books::Search::AuthorAutocomplete.stubs(:call).returns([{id: @author.id.to_s, score: 1.0, source: {}}, {id: other.id.to_s, score: 0.9, source: {}}])
+        get search_admin_books_authors_path(q: "e", exclude_id: @author.id)
+        ids = JSON.parse(response.body).map { |r| r["value"] }
+        assert_not_includes ids, @author.id
+        assert_includes ids, other.id
+      end
     end
   end
 end
