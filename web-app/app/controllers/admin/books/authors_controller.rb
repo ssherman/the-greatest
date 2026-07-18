@@ -1,6 +1,6 @@
 class Admin::Books::AuthorsController < Admin::Books::BaseController
-  before_action :set_author, only: [:show]
-  before_action :authorize_author, only: [:show]
+  before_action :set_author, only: [:show, :edit, :update, :destroy]
+  before_action :authorize_author, only: [:show, :edit, :update, :destroy]
 
   def index
     authorize ::Books::Author
@@ -39,6 +39,24 @@ class Admin::Books::AuthorsController < Admin::Books::BaseController
     else
       render :new, status: :unprocessable_entity
     end
+  end
+
+  def edit
+  end
+
+  def update
+    assign_author_attributes(@author)
+
+    if @author.save
+      redirect_to admin_books_author_path(@author), notice: "Author updated."
+    else
+      render :edit, status: :unprocessable_entity
+    end
+  end
+
+  def destroy
+    @author.destroy!
+    redirect_to admin_books_authors_path, notice: "Author deleted."
   end
 
   private

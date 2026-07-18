@@ -160,6 +160,59 @@ module Admin
         end
         assert_redirected_to books_root_path
       end
+
+      # Edit / update / destroy
+
+      test "edit renders for a writer" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get edit_admin_books_author_path(@author)
+        assert_response :success
+      end
+
+      test "update changes the author and redirects" do
+        sign_in_as(@admin_user, stub_auth: true)
+        patch admin_books_author_path(@author), params: {books_author: {name: "Lev Tolstoy (Revised)"}}
+        assert_redirected_to admin_books_author_path(@author)
+        assert_equal "Lev Tolstoy (Revised)", @author.reload.name
+      end
+
+      test "update leaves alternate_names untouched when the field is absent" do
+        @author.update!(alternate_names: ["Lev Tolstoy"])
+        sign_in_as(@admin_user, stub_auth: true)
+        patch admin_books_author_path(@author), params: {books_author: {name: @author.name}}
+        assert_equal ["Lev Tolstoy"], @author.reload.alternate_names
+      end
+
+      test "update clears alternate_names when the field is submitted empty" do
+        @author.update!(alternate_names: ["Lev Tolstoy"])
+        sign_in_as(@admin_user, stub_auth: true)
+        patch admin_books_author_path(@author), params: {books_author: {name: @author.name, alternate_names_string: ""}}
+        assert_equal [], @author.reload.alternate_names
+      end
+
+      test "update rejects invalid data" do
+        sign_in_as(@admin_user, stub_auth: true)
+        patch admin_books_author_path(@author), params: {books_author: {name: ""}}
+        assert_response :unprocessable_entity
+        assert @author.reload.name.present?
+      end
+
+      test "destroy deletes the author" do
+        author = ::Books::Author.create!(name: "Disposable Author", kind: "person")
+        sign_in_as(@admin_user, stub_auth: true)
+        assert_difference("::Books::Author.count", -1) do
+          delete admin_books_author_path(author)
+        end
+        assert_redirected_to admin_books_authors_path
+      end
+
+      test "destroy is forbidden for a regular user" do
+        sign_in_as(@regular_user, stub_auth: true)
+        assert_no_difference("::Books::Author.count") do
+          delete admin_books_author_path(@author)
+        end
+        assert_redirected_to books_root_path
+      end
     end
   end
 end
