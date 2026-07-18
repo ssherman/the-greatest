@@ -77,7 +77,8 @@ module Admin
         categories_search_path: nil,
         items: [
           {label: "Books", icon: :book, path: -> { URL_HELPERS.admin_books_books_path }},
-          {label: "Authors", icon: :artist, path: -> { URL_HELPERS.admin_books_authors_path }}
+          {label: "Authors", icon: :artist, path: -> { URL_HELPERS.admin_books_authors_path }},
+          {label: "Series", icon: :series, path: -> { URL_HELPERS.admin_books_series_index_path }}
         ]
       }
     }.freeze
