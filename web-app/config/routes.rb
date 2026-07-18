@@ -295,7 +295,10 @@ Rails.application.routes.draw do
       resources :book_authors, only: [:update, :destroy]
       resources :book_relationships, only: [:update, :destroy]
       resources :credits, only: [:update, :destroy]
-      resources :authors, only: [] do
+      resources :author_relationships, only: [:update, :destroy]
+      resources :authors do
+        resources :images, only: [:index, :create], controller: "/admin/images"
+        resources :author_relationships, only: [:create]
         collection do
           get :search
         end

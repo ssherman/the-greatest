@@ -1,0 +1,48 @@
+<%= turbo_frame_tag "author_relationships_list" do %>
+  <% if author.author_relationships.any? %>
+    <div class="overflow-x-auto">
+      <table class="table table-zebra">
+        <thead>
+          <tr><th>Relation</th><th>Author</th><th class="text-right">Actions</th></tr>
+        </thead>
+        <tbody>
+          <% author.author_relationships.includes(:to_author).each do |rel| %>
+            <tr>
+              <td><span class="badge badge-ghost"><%= rel.relation_type.titleize %></span></td>
+              <td><%= link_to rel.to_author.name, admin_books_author_path(rel.to_author), class: "link link-hover", data: {turbo_frame: "_top"} %></td>
+              <td class="text-right">
+                <div class="flex items-center justify-end gap-1">
+                  <% if current_user_can_write? %>
+                    <button class="btn btn-outline btn-xs whitespace-nowrap" onclick="edit_author_relationship_<%= rel.id %>_modal.showModal()">Edit</button>
+                    <%= button_to "Remove", admin_books_author_relationship_path(rel), method: :delete, class: "btn btn-outline btn-error btn-xs whitespace-nowrap", data: {turbo_confirm: "Remove this relationship?"}, form: {data: {turbo_frame: "author_relationships_list"}} %>
+                  <% end %>
+                </div>
+              </td>
+            </tr>
+
+            <% if current_user_can_write? %>
+              <dialog id="edit_author_relationship_<%= rel.id %>_modal" class="modal">
+                <div class="modal-box">
+                  <h3 class="font-bold text-lg mb-4">Edit Relationship</h3>
+                  <%= form_with model: rel, url: admin_books_author_relationship_path(rel), method: :patch, class: "space-y-4", data: {controller: "modal-form", modal_form_modal_id_value: "edit_author_relationship_#{rel.id}_modal", turbo_frame: "author_relationships_list"} do |f| %>
+                    <div class="form-control">
+                      <%= f.label :relation_type, class: "label" do %><span class="label-text font-semibold">Relation</span><% end %>
+                      <%= f.select :relation_type, ::Books::AuthorRelationship.relation_types.keys.map { |k| [k.titleize, k] }, {}, class: "select select-bordered w-full" %>
+                    </div>
+                    <div class="modal-action">
+                      <button type="button" class="btn" onclick="edit_author_relationship_<%= rel.id %>_modal.close()">Cancel</button>
+                      <%= f.submit "Update", class: "btn btn-primary" %>
+                    </div>
+                  <% end %>
+                </div>
+                <form method="dialog" class="modal-backdrop"><button>close</button></form>
+              </dialog>
+            <% end %>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <p class="text-base-content/60 text-sm">No relationships yet.</p>
+  <% end %>
+<% end %>

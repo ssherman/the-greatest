@@ -1,0 +1,90 @@
+<%= form_with model: @author, url: (@author.persisted? ? admin_books_author_path(@author) : admin_books_authors_path), class: "space-y-6" do |f| %>
+  <% if @author.errors.any? %>
+    <div class="alert alert-error">
+      <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <div>
+        <h3 class="font-bold"><%= pluralize(@author.errors.count, "error") %> prohibited this author from being saved:</h3>
+        <ul class="list-disc list-inside mt-2">
+          <% @author.errors.full_messages.each do |message| %>
+            <li><%= message %></li>
+          <% end %>
+        </ul>
+      </div>
+    </div>
+  <% end %>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">Basic Information</h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="form-control md:col-span-2">
+          <%= f.label :name, class: "label" do %>
+            <span class="label-text font-semibold">Name <span class="text-error">*</span></span>
+          <% end %>
+          <%= f.text_field :name,
+              class: "input input-bordered w-full #{@author.errors[:name].any? ? 'input-error' : ''}",
+              placeholder: "Enter author name",
+              required: true,
+              autofocus: true %>
+          <% if @author.errors[:name].any? %>
+            <label class="label"><span class="label-text-alt text-error"><%= @author.errors[:name].first %></span></label>
+          <% end %>
+        </div>
+
+        <div class="form-control">
+          <%= f.label :sort_name, class: "label" do %>
+            <span class="label-text font-semibold">Sort Name</span>
+          <% end %>
+          <%= f.text_field :sort_name, class: "input input-bordered w-full" %>
+        </div>
+
+        <div class="form-control">
+          <%= f.label :kind, class: "label" do %>
+            <span class="label-text font-semibold">Kind</span>
+          <% end %>
+          <%= f.select :kind,
+              ::Books::Author.kinds.keys.map { |k| [k.titleize, k] },
+              {},
+              class: "select select-bordered w-full #{@author.errors[:kind].any? ? 'select-error' : ''}" %>
+        </div>
+
+        <div class="form-control">
+          <%= f.label :birth_year, class: "label" do %>
+            <span class="label-text font-semibold">Birth Year</span>
+          <% end %>
+          <%= f.number_field :birth_year, class: "input input-bordered w-full", min: -3000, max: 3000 %>
+        </div>
+
+        <div class="form-control">
+          <%= f.label :death_year, class: "label" do %>
+            <span class="label-text font-semibold">Death Year</span>
+          <% end %>
+          <%= f.number_field :death_year, class: "input input-bordered w-full", min: -3000, max: 3000 %>
+        </div>
+
+        <div class="form-control md:col-span-2">
+          <%= f.label :alternate_names, class: "label" do %>
+            <span class="label-text font-semibold">Alternate Names</span>
+          <% end %>
+          <%= text_field_tag "books_author[alternate_names_string]", @author.alternate_names.join(", "), class: "input input-bordered w-full" %>
+          <label class="label"><span class="label-text-alt">Comma-separated</span></label>
+        </div>
+
+        <div class="form-control md:col-span-2">
+          <%= f.label :description, class: "label" do %>
+            <span class="label-text font-semibold">Description</span>
+          <% end %>
+          <%= f.text_area :description, class: "textarea textarea-bordered w-full h-32" %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex flex-col sm:flex-row gap-2 justify-end">
+    <%= link_to "Cancel", (@author.persisted? ? admin_books_author_path(@author) : admin_books_authors_path), class: "btn btn-ghost" %>
+    <%= f.submit(@author.persisted? ? "Update Author" : "Create Author", class: "btn btn-primary") %>
+  </div>
+<% end %>

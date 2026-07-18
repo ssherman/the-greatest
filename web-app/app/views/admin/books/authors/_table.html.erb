@@ -1,0 +1,58 @@
+<div class="overflow-x-auto">
+  <table class="table table-zebra">
+    <thead>
+      <tr>
+        <th><%= link_to "Name", admin_books_authors_path(sort: "name", q: params[:q]), data: {turbo_frame: "authors_table"} %></th>
+        <th><%= link_to "Sort Name", admin_books_authors_path(sort: "sort_name", q: params[:q]), data: {turbo_frame: "authors_table"} %></th>
+        <th><%= link_to "Kind", admin_books_authors_path(sort: "kind", q: params[:q]), data: {turbo_frame: "authors_table"} %></th>
+        <th>Years</th>
+        <th class="text-right">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% if authors.any? %>
+        <% authors.each do |author| %>
+          <tr>
+            <td><%= link_to author.name, admin_books_author_path(author), data: {turbo_frame: "_top"} %></td>
+            <td class="text-sm text-base-content/70"><%= author.sort_name.presence || "—" %></td>
+            <td><span class="badge badge-ghost"><%= author.kind.titleize %></span></td>
+            <td class="text-sm text-base-content/70">
+              <% if author.birth_year.present? || author.death_year.present? %>
+                <%= author.birth_year || "?" %>&ndash;<%= author.death_year %>
+              <% else %>
+                —
+              <% end %>
+            </td>
+            <td class="text-right">
+              <div class="flex items-center justify-end gap-1">
+                <%= link_to "View", admin_books_author_path(author), class: "btn btn-outline btn-xs whitespace-nowrap", data: {turbo_frame: "_top"} %>
+                <% if current_user_can_write? %>
+                  <%= link_to "Edit", edit_admin_books_author_path(author), class: "btn btn-outline btn-xs whitespace-nowrap", data: {turbo_frame: "_top"} %>
+                <% end %>
+                <% if current_user_can_delete? %>
+                  <%= button_to "Delete", admin_books_author_path(author), method: :delete, class: "btn btn-outline btn-error btn-xs whitespace-nowrap", form: {class: "inline", data: {turbo_frame: "_top", turbo_confirm: "Delete #{author.name}? This cannot be undone."}} %>
+                <% end %>
+              </div>
+            </td>
+          </tr>
+        <% end %>
+      <% else %>
+        <tr>
+          <td colspan="5" class="text-center text-base-content/70 py-8">
+            <% if params[:q].present? %>
+              No authors match “<%= params[:q] %>”. <%= link_to "Clear", admin_books_authors_path, data: {turbo_frame: "authors_table"} %>
+            <% else %>
+              No authors yet.
+            <% end %>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>
+
+<% if defined?(pagy) && pagy && pagy.pages > 1 %>
+  <div class="mt-4 flex justify-center">
+    <%== pagy.series_nav %>
+  </div>
+<% end %>
