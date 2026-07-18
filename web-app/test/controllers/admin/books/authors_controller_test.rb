@@ -213,6 +213,28 @@ module Admin
         end
         assert_redirected_to books_root_path
       end
+
+      # Images
+
+      test "the author images index frame renders for the author" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_author_images_path(@author)
+        assert_response :success
+      end
+
+      test "uploading an image attaches it to the author via the shared images controller" do
+        sign_in_as(@admin_user, stub_auth: true)
+        assert_difference("Image.count", 1) do
+          post admin_books_author_images_path(@author), params: {
+            image: {
+              file: fixture_file_upload("test_image.png", "image/png"),
+              notes: "Portrait",
+              primary: true
+            }
+          }
+        end
+        assert_includes @author.reload.images.map(&:id), Image.order(:created_at).last.id
+      end
     end
   end
 end
