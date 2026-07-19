@@ -23,7 +23,7 @@ module Admin
       "Books::Book" => {
         domain: :books,
         path: ->(r) { URL_HELPERS.admin_books_book_path(r) },
-        category_items_path: nil
+        category_items_path: ->(r) { URL_HELPERS.admin_books_book_category_items_path(r) }
       },
       "Books::Edition" => {
         domain: :books,
@@ -33,7 +33,7 @@ module Admin
       "Books::Author" => {
         domain: :books,
         path: ->(r) { URL_HELPERS.admin_books_author_path(r) },
-        category_items_path: nil
+        category_items_path: ->(r) { URL_HELPERS.admin_books_author_category_items_path(r) }
       },
       "Books::Series" => {
         domain: :books,

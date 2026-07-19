@@ -1,0 +1,2 @@
+<% content_for :title, "Edit Category: #{@category.name}" %>
+<%= render Admin::Categories::EditComponent.new(category: @category, domain_config: domain_config) %>

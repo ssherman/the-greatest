@@ -99,5 +99,14 @@ module Admin
           "#{domain} links to Categories but is missing categories_search_path"
       end
     end
+
+    test "the books nav includes a Categories item with a categories_search_path" do
+      config = Admin::DomainNav.config_for(:books)
+      categories_item = config[:items].find { |item| item[:label] == "Categories" }
+      assert categories_item, "books nav is missing a Categories item"
+      assert_equal "/admin/categories", categories_item[:path]
+      assert categories_item[:icon].present?
+      assert config[:categories_search_path].present?
+    end
   end
 end

@@ -1,6 +1,10 @@
 class Admin::CategoryItemsController < Admin::BaseController
+  include Admin::DomainScopedAuth
+
+  before_action :require_domain_write!, only: [:create, :destroy]
   before_action :set_item, only: [:index, :create]
   before_action :set_category_item, only: [:destroy]
+  before_action :ensure_category_domain_matches, only: [:create]
 
   def index
     @category_items = @item.category_items.includes(:category).order("categories.name")
@@ -82,6 +86,38 @@ class Admin::CategoryItemsController < Admin::BaseController
   end
 
   private
+
+  def domain_auth_parent
+    if action_name == "destroy"
+      CategoryItem.find(params[:id]).item
+    else
+      Admin::DomainRouting.parent_from_params(params, domain: current_domain)
+    end
+  end
+
+  # Reject a category whose domain differs from the item's (e.g. a Music::Category
+  # POSTed to a Books::Book), which the typeahead never offers but a crafted
+  # request could send — it would corrupt the category's item_count.
+  def ensure_category_domain_matches
+    category = Category.find_by(id: category_item_params[:category_id])
+    return if category.nil?
+
+    item_domain = Admin::DomainRouting.domain_for(@item)&.to_s
+    category_domain = category.class.module_parent_name&.downcase
+    return if item_domain.present? && item_domain == category_domain
+
+    message = "That category belongs to a different section."
+    respond_to do |format|
+      format.turbo_stream do
+        render turbo_stream: turbo_stream.replace(
+          "flash",
+          partial: "admin/shared/flash",
+          locals: {flash: {error: message}}
+        ), status: :unprocessable_entity
+      end
+      format.html { redirect_to redirect_path, alert: message }
+    end
+  end
 
   def set_item
     @item = Admin::DomainRouting.parent_from_params(params, domain: current_domain)

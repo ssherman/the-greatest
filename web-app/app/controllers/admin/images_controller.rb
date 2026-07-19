@@ -1,4 +1,7 @@
 class Admin::ImagesController < Admin::BaseController
+  include Admin::DomainScopedAuth
+
+  before_action :require_domain_write!, only: [:create, :update, :destroy, :set_primary]
   before_action :set_parent, only: [:index, :create]
   before_action :set_image, only: [:update, :destroy, :set_primary]
 
@@ -133,6 +136,14 @@ class Admin::ImagesController < Admin::BaseController
   end
 
   private
+
+  def domain_auth_parent
+    if action_name.in?(%w[update destroy set_primary])
+      Image.find(params[:id]).parent
+    else
+      Admin::DomainRouting.parent_from_params(params, domain: current_domain)
+    end
+  end
 
   def set_parent
     @parent = Admin::DomainRouting.parent_from_params(params, domain: current_domain)
