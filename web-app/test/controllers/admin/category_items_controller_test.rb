@@ -167,6 +167,44 @@ module Admin
 
       assert_equal initial_count - 1, @rock_category.reload.item_count
     end
+
+    # Domain-scoped editor access (shared-controller domain-auth fix)
+
+    test "allows a music domain editor to create a category_item on a music artist" do
+      @artist.category_items.destroy_all
+      sign_in_as(users(:contractor_user), stub_auth: true) # music editor via domain_roles fixture
+
+      assert_difference "CategoryItem.count", 1 do
+        post admin_artist_category_items_path(@artist),
+          params: {category_item: {category_id: @rock_category.id}},
+          as: :turbo_stream
+      end
+      assert_response :success
+    end
+
+    test "allows a music domain editor to destroy a category_item on a music artist" do
+      category_item = CategoryItem.create!(category: @rock_category, item: @artist)
+      sign_in_as(users(:contractor_user), stub_auth: true)
+
+      assert_difference "CategoryItem.count", -1 do
+        delete admin_category_item_path(category_item), as: :turbo_stream
+      end
+      assert_response :success
+    end
+
+    test "denies a books-only editor on a music artist category_item" do
+      @artist.category_items.destroy_all
+      books_editor = users(:regular_user)
+      books_editor.domain_roles.create!(domain: :books, permission_level: :editor)
+      sign_in_as(books_editor, stub_auth: true)
+
+      assert_no_difference "CategoryItem.count" do
+        post admin_artist_category_items_path(@artist),
+          params: {category_item: {category_id: @rock_category.id}},
+          as: :turbo_stream
+      end
+      assert_redirected_to music_root_path
+    end
   end
 
   class GamesCategoryItemsControllerTest < ActionDispatch::IntegrationTest

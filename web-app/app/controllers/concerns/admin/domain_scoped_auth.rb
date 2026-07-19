@@ -14,7 +14,17 @@ module Admin
     end
 
     def domain_for_auth
+      parent = domain_auth_parent
+      return Admin::DomainRouting.domain_for(parent)&.to_s if parent
+
       current_domain&.to_s
+    end
+
+    # Controllers that manage a nested/polymorphic parent (images, category items)
+    # override this to authorize against the parent record's domain rather than the
+    # request host. Default nil → fall back to current_domain (behavior-neutral).
+    def domain_auth_parent
+      nil
     end
 
     def domain_with_ranking_configuration_admin_for(ranking_configuration)

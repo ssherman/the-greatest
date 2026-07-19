@@ -1,4 +1,6 @@
 class Admin::CategoryItemsController < Admin::BaseController
+  include Admin::DomainScopedAuth
+
   before_action :set_item, only: [:index, :create]
   before_action :set_category_item, only: [:destroy]
 
@@ -82,6 +84,14 @@ class Admin::CategoryItemsController < Admin::BaseController
   end
 
   private
+
+  def domain_auth_parent
+    if params[:id].present?
+      CategoryItem.find(params[:id]).item
+    else
+      Admin::DomainRouting.parent_from_params(params, domain: current_domain)
+    end
+  end
 
   def set_item
     @item = Admin::DomainRouting.parent_from_params(params, domain: current_domain)
