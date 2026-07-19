@@ -326,5 +326,18 @@ module Admin
       end
       assert_response :success
     end
+
+    test "denies a music-only editor injecting ?id= to tag a books book" do
+      @book.category_items.destroy_all
+      music_ci = CategoryItem.find_or_create_by!(category: categories(:music_rock_genre), item: music_artists(:pink_floyd))
+      sign_in_as(users(:contractor_user), stub_auth: true) # music editor, no books role
+
+      assert_no_difference "CategoryItem.count" do
+        post admin_books_book_category_items_path(@book, id: music_ci.id),
+          params: {category_item: {category_id: @genre.id}},
+          as: :turbo_stream
+      end
+      assert_redirected_to books_root_path
+    end
   end
 end

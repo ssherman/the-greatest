@@ -284,6 +284,19 @@ class Admin::ImagesControllerTest < ActionDispatch::IntegrationTest
     end
     assert_redirected_to music_root_path
   end
+
+  test "should deny a music-only editor injecting ?id= to create an image on a books book" do
+    book = books_books(:war_and_peace)
+    host! Rails.application.config.domains[:books]
+    sign_in_as(users(:contractor_user), stub_auth: true) # music editor, no books role
+
+    assert_no_difference("Image.count") do
+      post admin_books_book_images_path(book, id: @image_alt.id), params: {
+        image: {file: fixture_file_upload("test_image.png", "image/png"), notes: "evil"}
+      }
+    end
+    assert_redirected_to books_root_path
+  end
 end
 
 class Admin::GamesImagesControllerTest < ActionDispatch::IntegrationTest

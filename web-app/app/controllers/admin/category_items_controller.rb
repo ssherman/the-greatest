@@ -86,7 +86,7 @@ class Admin::CategoryItemsController < Admin::BaseController
   private
 
   def domain_auth_parent
-    if params[:id].present?
+    if action_name == "destroy"
       CategoryItem.find(params[:id]).item
     else
       Admin::DomainRouting.parent_from_params(params, domain: current_domain)

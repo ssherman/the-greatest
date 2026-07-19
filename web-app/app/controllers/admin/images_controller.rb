@@ -137,7 +137,7 @@ class Admin::ImagesController < Admin::BaseController
   private
 
   def domain_auth_parent
-    if params[:id].present?
+    if action_name.in?(%w[update destroy set_primary])
       Image.find(params[:id]).parent
     else
       Admin::DomainRouting.parent_from_params(params, domain: current_domain)
