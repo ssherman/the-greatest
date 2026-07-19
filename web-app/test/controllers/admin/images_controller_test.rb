@@ -297,6 +297,30 @@ class Admin::ImagesControllerTest < ActionDispatch::IntegrationTest
     end
     assert_redirected_to books_root_path
   end
+
+  test "should deny a music domain viewer from creating an image" do
+    viewer = users(:regular_user)
+    viewer.domain_roles.create!(domain: :music, permission_level: :viewer)
+    sign_in_as(viewer, stub_auth: true)
+
+    assert_no_difference("Image.count") do
+      post admin_artist_images_path(@artist), params: {
+        image: {file: fixture_file_upload("test_image.png", "image/png"), notes: "no"}
+      }
+    end
+    assert_redirected_to music_root_path
+  end
+
+  test "should deny a music domain viewer from destroying an image" do
+    viewer = users(:regular_user)
+    viewer.domain_roles.create!(domain: :music, permission_level: :viewer)
+    sign_in_as(viewer, stub_auth: true)
+
+    assert_no_difference("Image.count") do
+      delete admin_image_path(@image_alt)
+    end
+    assert_redirected_to music_root_path
+  end
 end
 
 class Admin::GamesImagesControllerTest < ActionDispatch::IntegrationTest

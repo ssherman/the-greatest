@@ -1,6 +1,7 @@
 class Admin::ImagesController < Admin::BaseController
   include Admin::DomainScopedAuth
 
+  before_action :require_domain_write!, only: [:create, :update, :destroy, :set_primary]
   before_action :set_parent, only: [:index, :create]
   before_action :set_image, only: [:update, :destroy, :set_primary]
 

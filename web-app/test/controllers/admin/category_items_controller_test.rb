@@ -339,5 +339,54 @@ module Admin
       end
       assert_redirected_to books_root_path
     end
+
+    test "denies a books domain viewer from tagging a book" do
+      @book.category_items.destroy_all
+      viewer = users(:regular_user)
+      viewer.domain_roles.create!(domain: :books, permission_level: :viewer)
+      sign_in_as(viewer, stub_auth: true)
+
+      assert_no_difference "CategoryItem.count" do
+        post admin_books_book_category_items_path(@book),
+          params: {category_item: {category_id: @genre.id}},
+          as: :turbo_stream
+      end
+      assert_redirected_to books_root_path
+    end
+
+    test "denies a books domain viewer from removing a book's category" do
+      category_item = CategoryItem.create!(category: @genre, item: @book)
+      viewer = users(:regular_user)
+      viewer.domain_roles.create!(domain: :books, permission_level: :viewer)
+      sign_in_as(viewer, stub_auth: true)
+
+      assert_no_difference "CategoryItem.count" do
+        delete admin_category_item_path(category_item), as: :turbo_stream
+      end
+      assert_redirected_to books_root_path
+    end
+
+    test "allows a books domain editor to remove a book's category" do
+      category_item = CategoryItem.create!(category: @genre, item: @book)
+      editor = users(:regular_user)
+      editor.domain_roles.create!(domain: :books, permission_level: :editor)
+      sign_in_as(editor, stub_auth: true)
+
+      assert_difference "CategoryItem.count", -1 do
+        delete admin_category_item_path(category_item), as: :turbo_stream
+      end
+      assert_response :success
+    end
+
+    test "rejects tagging a book with a category from another domain" do
+      @book.category_items.destroy_all
+
+      assert_no_difference "CategoryItem.count" do
+        post admin_books_book_category_items_path(@book),
+          params: {category_item: {category_id: categories(:music_rock_genre).id}},
+          as: :turbo_stream
+      end
+      assert_response :unprocessable_entity
+    end
   end
 end
