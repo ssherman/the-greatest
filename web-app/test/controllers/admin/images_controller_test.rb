@@ -251,6 +251,39 @@ class Admin::ImagesControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_match(/turbo-stream/, response.content_type)
   end
+
+  # Domain-scoped editor access (shared-controller domain-auth fix)
+
+  test "should allow a music domain editor to create an image on a music artist" do
+    sign_in_as(users(:contractor_user), stub_auth: true) # music editor via domain_roles fixture
+
+    assert_difference("Image.count", 1) do
+      post admin_artist_images_path(@artist), params: {
+        image: {file: fixture_file_upload("test_image.png", "image/png"), notes: "editor upload"}
+      }
+    end
+  end
+
+  test "should allow a music domain editor to destroy an image" do
+    sign_in_as(users(:contractor_user), stub_auth: true)
+
+    assert_difference("Image.count", -1) do
+      delete admin_image_path(@image_alt)
+    end
+  end
+
+  test "should deny a books-only editor on a music artist image" do
+    books_editor = users(:regular_user)
+    books_editor.domain_roles.create!(domain: :books, permission_level: :editor)
+    sign_in_as(books_editor, stub_auth: true)
+
+    assert_no_difference("Image.count") do
+      post admin_artist_images_path(@artist), params: {
+        image: {file: fixture_file_upload("test_image.png", "image/png"), notes: "nope"}
+      }
+    end
+    assert_redirected_to music_root_path
+  end
 end
 
 class Admin::GamesImagesControllerTest < ActionDispatch::IntegrationTest
