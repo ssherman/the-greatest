@@ -125,6 +125,20 @@
     </div>
   </div>
 
+  <div class="card bg-base-100 shadow">
+    <div class="card-body">
+      <div class="flex items-center justify-between">
+        <h2 class="card-title text-base">Categories <span class="badge badge-ghost"><%= @book.categories.count %></span></h2>
+        <% if current_user_can_write? %>
+          <button class="btn btn-sm btn-primary" onclick="add_category_modal_dialog.showModal()">+ Add</button>
+        <% end %>
+      </div>
+      <%= turbo_frame_tag "category_items_list", loading: :lazy, src: admin_books_book_category_items_path(@book) do %>
+        <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
+      <% end %>
+    </div>
+  </div>
+
   <% if current_user_can_write? %>
     <dialog id="add_book_image_modal" class="modal">
       <div class="modal-box">
@@ -202,5 +216,6 @@
     </dialog>
 
     <%= render "admin/books/credits/add_credit_modal", creditable: @book, create_url: admin_books_book_credits_path(@book) %>
+    <%= render Admin::AddCategoryModalComponent.new(item: @book) %>
   <% end %>
 </div>

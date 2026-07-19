@@ -287,6 +287,7 @@ Rails.application.routes.draw do
         resources :book_authors, only: [:create]
         resources :book_relationships, only: [:create]
         resources :credits, only: [:create]
+        resources :category_items, only: [:index, :create], controller: "/admin/category_items"
         collection do
           get :search
         end
@@ -299,6 +300,7 @@ Rails.application.routes.draw do
       resources :authors do
         resources :images, only: [:index, :create], controller: "/admin/images"
         resources :author_relationships, only: [:create]
+        resources :category_items, only: [:index, :create], controller: "/admin/category_items"
         collection do
           get :search
         end

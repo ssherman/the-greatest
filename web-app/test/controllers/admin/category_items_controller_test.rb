@@ -257,4 +257,74 @@ module Admin
       assert_match "Category removed successfully", response.body
     end
   end
+
+  class BooksCategoryItemsControllerTest < ActionDispatch::IntegrationTest
+    setup do
+      @admin_user = users(:admin_user)
+      @book = books_books(:war_and_peace)
+      @author = books_authors(:tolstoy)
+      @genre = categories(:books_fiction_genre)
+
+      host! Rails.application.config.domains[:books]
+      sign_in_as(@admin_user, stub_auth: true)
+    end
+
+    test "index for a book with categories" do
+      CategoryItem.create!(category: @genre, item: @book)
+      get admin_books_book_category_items_path(@book)
+      assert_response :success
+      assert_match @genre.name, response.body
+    end
+
+    test "index for a book without categories" do
+      @book.category_items.destroy_all
+      get admin_books_book_category_items_path(@book)
+      assert_response :success
+      assert_match "No categories assigned", response.body
+    end
+
+    test "creates a category_item for a book" do
+      @book.category_items.destroy_all
+      assert_difference "CategoryItem.count", 1 do
+        post admin_books_book_category_items_path(@book),
+          params: {category_item: {category_id: @genre.id}},
+          as: :turbo_stream
+      end
+      assert_response :success
+      assert_match "Category added successfully", response.body
+    end
+
+    test "creates a category_item for an author" do
+      @author.category_items.destroy_all
+      assert_difference "CategoryItem.count", 1 do
+        post admin_books_author_category_items_path(@author),
+          params: {category_item: {category_id: @genre.id}},
+          as: :turbo_stream
+      end
+      assert_response :success
+    end
+
+    test "destroys a category_item for a book" do
+      category_item = CategoryItem.create!(category: @genre, item: @book)
+      assert_difference "CategoryItem.count", -1 do
+        delete admin_category_item_path(category_item), as: :turbo_stream
+      end
+      assert_response :success
+      assert_match "Category removed successfully", response.body
+    end
+
+    test "a books domain editor can tag a book" do
+      @book.category_items.destroy_all
+      books_editor = users(:regular_user)
+      books_editor.domain_roles.create!(domain: :books, permission_level: :editor)
+      sign_in_as(books_editor, stub_auth: true)
+
+      assert_difference "CategoryItem.count", 1 do
+        post admin_books_book_category_items_path(@book),
+          params: {category_item: {category_id: @genre.id}},
+          as: :turbo_stream
+      end
+      assert_response :success
+    end
+  end
 end

@@ -199,5 +199,14 @@ module Admin
       resolved = Admin::DomainRouting.parent_from_params({series_id: series.id}, domain: :books)
       assert_equal series, resolved
     end
+
+    test "category_items_path_for resolves for a books book and author" do
+      book = books_books(:war_and_peace)
+      author = books_authors(:tolstoy)
+      assert_equal Rails.application.routes.url_helpers.admin_books_book_category_items_path(book),
+        Admin::DomainRouting.category_items_path_for(book)
+      assert_equal Rails.application.routes.url_helpers.admin_books_author_category_items_path(author),
+        Admin::DomainRouting.category_items_path_for(author)
+    end
   end
 end
