@@ -26,9 +26,11 @@ test.describe("Books admin — categories", () => {
     await page.getByRole("button", { name: "Create Category" }).click();
     await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
 
-    await page.goto("/admin/books");
-    await page.locator("table tbody tr").first().getByRole("link", { name: "View" }).click();
-    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    const bookTitle = `Tag Book ${Date.now()}`;
+    await page.goto("/admin/books/new");
+    await page.locator('input[name="books_book[title]"]').fill(bookTitle);
+    await page.getByRole("button", { name: "Create Book" }).click();
+    await expect(page.getByRole("heading", { name: bookTitle, level: 1 })).toBeVisible();
 
     const categoriesCard = page.locator(".card", { hasText: "Categories" });
     await categoriesCard.getByRole("button", { name: "+ Add" }).click();
