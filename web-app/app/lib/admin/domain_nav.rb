@@ -74,11 +74,12 @@ module Admin
         section_icon: ICONS[:book],
         logo: {type: :emoji, value: "📚"},
         root_path: -> { URL_HELPERS.admin_books_root_path },
-        categories_search_path: nil,
+        categories_search_path: -> { URL_HELPERS.search_admin_books_categories_path },
         items: [
           {label: "Books", icon: :book, path: -> { URL_HELPERS.admin_books_books_path }},
           {label: "Authors", icon: :artist, path: -> { URL_HELPERS.admin_books_authors_path }},
-          {label: "Series", icon: :series, path: -> { URL_HELPERS.admin_books_series_index_path }}
+          {label: "Series", icon: :series, path: -> { URL_HELPERS.admin_books_series_index_path }},
+          {label: "Categories", icon: :category, path: -> { URL_HELPERS.admin_books_categories_path }}
         ]
       }
     }.freeze

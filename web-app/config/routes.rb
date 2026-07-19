@@ -313,6 +313,12 @@ Rails.application.routes.draw do
           post :make_representative
         end
       end
+
+      resources :categories do
+        collection do
+          get :search
+        end
+      end
     end
 
     root to: "books/default#index", as: :books_root

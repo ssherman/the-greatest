@@ -1,0 +1,2 @@
+<% content_for :title, "Categories" %>
+<%= render Admin::Categories::IndexComponent.new(categories: @categories, pagy: @pagy, domain_config: domain_config) %>
