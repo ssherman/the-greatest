@@ -113,6 +113,15 @@ module Books
       assert_includes books_books(:war_and_peace).as_indexed_json[:author_ids], books_authors(:tolstoy).id
     end
 
+    test "release_year returns first_published_year" do
+      book = ::Books::Book.new(first_published_year: 1869)
+      assert_equal 1869, book.release_year
+    end
+
+    test "release_year is nil when first_published_year is nil" do
+      assert_nil ::Books::Book.new(first_published_year: nil).release_year
+    end
+
     # SearchIndexable concern tests
     test "should create search index request on create" do
       assert_difference "SearchIndexRequest.count", 1 do
