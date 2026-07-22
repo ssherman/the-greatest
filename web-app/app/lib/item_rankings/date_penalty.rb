@@ -1,10 +1,6 @@
 # frozen_string_literal: true
 
 module ItemRankings
-  # Pure legacy per-item "list dates" recency penalty, mirroring the legacy
-  # TheGreatestBooks calculate_score_penalty. Returns a penalty fraction (0..1)
-  # or nil (no penalty). Order matches legacy: award lists and items with an
-  # unknown year take the full penalty, checked before the list-year guard.
   class DatePenalty
     def self.call(list_year:, item_year:, yearly_award:, max_age:, max_penalty_percentage:)
       return nil if max_age.nil? || max_penalty_percentage.nil?

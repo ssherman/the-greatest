@@ -76,8 +76,6 @@ class Books::Book < ApplicationRecord
 
   scope :selectable, -> { where(book_kind: :standalone) }
 
-  # The item-ranking calculator and CSV export use the generic `release_year`
-  # interface that every other medium exposes; books store it as first_published_year.
   def release_year
     first_published_year
   end
