@@ -182,8 +182,9 @@ RC's date penalty is a silent no-op, and the new books rankings do not match the
 1. **`Books::Book#release_year`** delegating to `first_published_year` (matches the generic item
    interface every other medium already satisfies; also fixes the known `MyListsController#csv_row` gap
    that calls `listable.release_year`).
-2. Two legacy behaviors into the **shared** `ItemRankings::Calculator#calculate_score_penalty`
-   (general rules — 6b-6):
+2. Extract the pure penalty math into a public, unit-tested `ItemRankings::DatePenalty` PORO (so it's
+   tested directly, not via the private `calculate_score_penalty`, which becomes a thin adapter), and add
+   the two legacy behaviors as **general** rules (6b-6):
    - `list.yearly_award?` → max penalty (`max_penalty_percentage / 100.0`). Live for books' 50 award
      lists; inert for music/games (0 award lists today).
    - `item.release_year` nil (when the RC applies the date penalty with age/pct set) → max penalty

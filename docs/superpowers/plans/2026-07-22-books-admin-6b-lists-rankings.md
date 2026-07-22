@@ -16,7 +16,7 @@
 - Check actual fixture names before referencing; auth in integration tests via `sign_in_as(user, stub_auth: true)`; turbo/JSON requests use `as: :turbo_stream` / `as: :json`.
 - `raise_on_missing_callback_actions` is ON in dev+test — never name an action in a `before_action only: […]` list before it exists.
 - **STI subclasses have no per-model fixtures** (a `test/fixtures/books/lists.yml` would break the suite). Use the shared `test/fixtures/lists.yml` (which has `Books::List` rows) or build records in-test (the games controller tests build lists in-test — mirror that).
-- **`ItemRankings::Calculator#calculate_score_penalty` is `private`.** The parity fix is the crux of this increment and its exact per-branch values can't be isolated through the public `call` (the penalty is one input among list weight/position/bonus-pool to the WeightedListRank gem). Task 2 therefore verifies the branch parity by calling the method via `send` — a deliberate, scoped exception to "never test private methods," because it directly pins legacy behavior.
+- **The legacy date-penalty math is extracted to a public `ItemRankings::DatePenalty` PORO** (Task 2) and unit-tested directly — the calculator's private `calculate_score_penalty` becomes a thin adapter. No private methods are tested; the adapter wiring is covered by the existing public `call`-based calculator tests.
 - The date penalty only runs when `ranking_configuration.apply_list_dates_penalty?` is true (`item_rankings/calculator.rb:80`).
 - Verify with `bin/rails test` (+ `test:system` for UI) and `bundle exec standardrb`; Playwright via `yarn test:e2e`.
 - Commit messages end with `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`. Branch `books-admin-6b` (already created off main).
@@ -90,22 +90,22 @@ EOF
 
 ---
 
-### Task 2: Legacy date-penalty parity in the shared `ItemRankings::Calculator`
+### Task 2: Legacy date-penalty parity — extract `ItemRankings::DatePenalty` + wire it in
 
-Reproduce the legacy TheGreatestBooks date penalty: a yearly-award list, or an item with no publication year, takes the full penalty — checked **before** the `list.year_published` guard (legacy order). This is a shared change (all domains); it's inert for music/games award lists (0 exist) and re-ranks ~1% of their nil-year items.
+Reproduce the legacy TheGreatestBooks date penalty: a yearly-award list, or an item with no publication year, takes the full penalty — checked **before** the `list.year_published` guard (legacy order). Extract the pure math into a public, unit-tested `ItemRankings::DatePenalty` PORO (owner call — no testing of private methods), and make the calculator's `calculate_score_penalty` a thin adapter. This is a shared change (all domains): inert for music/games award lists (0 exist), re-ranks ~1% of their nil-year items.
 
 **Files:**
-- Modify: `web-app/app/lib/item_rankings/calculator.rb` (rewrite `calculate_score_penalty`, ~line 90)
-- Test: `web-app/test/lib/item_rankings/books/calculator_test.rb` (create)
-- Test: `web-app/test/lib/item_rankings/music/albums/calculator_test.rb` (add one cross-domain assertion)
+- Create: `web-app/app/lib/item_rankings/date_penalty.rb`
+- Modify: `web-app/app/lib/item_rankings/calculator.rb` (`calculate_score_penalty` → adapter)
+- Test: `web-app/test/lib/item_rankings/date_penalty_test.rb` (create)
 
 **Interfaces:**
+- Produces: `ItemRankings::DatePenalty.call(list_year:, item_year:, yearly_award:, max_age:, max_penalty_percentage:) → Float | nil` — pure legacy math.
 - Consumes: `Books::Book#release_year` (Task 1); `ranking_configuration.{apply_list_dates_penalty?, max_list_dates_penalty_age, max_list_dates_penalty_percentage}`; `list.{year_published, yearly_award?}`; `list_item.listable`.
-- Produces: `ItemRankings::Calculator#calculate_score_penalty(list, list_item) → Float | nil` with legacy branch order.
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Write the failing PORO test**
 
-Create `web-app/test/lib/item_rankings/books/calculator_test.rb`:
+Create `web-app/test/lib/item_rankings/date_penalty_test.rb`:
 
 ```ruby
 # frozen_string_literal: true
@@ -113,82 +113,77 @@ Create `web-app/test/lib/item_rankings/books/calculator_test.rb`:
 require "test_helper"
 
 module ItemRankings
-  module Books
-    class CalculatorTest < ActiveSupport::TestCase
-      setup do
-        @rc = ranking_configurations(:books_global)
-        @rc.update!(apply_list_dates_penalty: true, max_list_dates_penalty_age: 50, max_list_dates_penalty_percentage: 80)
-        @calculator = ItemRankings::Books::Calculator.new(@rc)
-      end
+  class DatePenaltyTest < ActiveSupport::TestCase
+    def penalty(list_year: 2000, item_year: 1980, yearly_award: false, max_age: 50, max_penalty_percentage: 80)
+      ItemRankings::DatePenalty.call(
+        list_year: list_year, item_year: item_year, yearly_award: yearly_award,
+        max_age: max_age, max_penalty_percentage: max_penalty_percentage
+      )
+    end
 
-      def penalty_for(list_year:, first_published_year:, yearly_award: false)
-        list = ::Books::List.create!(name: "L#{rand(1_000_000)}", status: :approved, year_published: list_year, yearly_award: yearly_award)
-        book = ::Books::Book.create!(title: "B#{rand(1_000_000)}", first_published_year: first_published_year)
-        list_item = list.list_items.create!(listable: book, position: 1)
-        @calculator.send(:calculate_score_penalty, list, list_item)
-      end
+    test "graduated penalty for an item older than the list within max_age" do
+      # year_difference = 20; ((50-20)/50)*80/100 = 0.48
+      assert_in_delta 0.48, penalty(item_year: 1980), 0.0001
+    end
 
-      test "book older than the list within max_age gets a graduated penalty" do
-        # year_difference = 20; ((50-20)/50)*80/100 = 0.48
-        assert_in_delta 0.48, penalty_for(list_year: 2000, first_published_year: 1980), 0.0001
-      end
+    test "max penalty when the item is newer than the list" do
+      assert_in_delta 0.80, penalty(item_year: 2005), 0.0001
+    end
 
-      test "book newer than the list gets the max penalty" do
-        assert_in_delta 0.80, penalty_for(list_year: 2000, first_published_year: 2005), 0.0001
-      end
+    test "no penalty when the item is older than max_age" do
+      assert_nil penalty(item_year: 1940) # diff 60 > 50
+    end
 
-      test "book older than max_age gets no penalty" do
-        # year_difference = 60 > 50
-        assert_nil penalty_for(list_year: 2000, first_published_year: 1940)
-      end
+    test "max penalty when the item has no year" do
+      assert_in_delta 0.80, penalty(item_year: nil), 0.0001
+    end
 
-      test "item with no publication year gets the max penalty" do
-        assert_in_delta 0.80, penalty_for(list_year: 2000, first_published_year: nil), 0.0001
-      end
+    test "a yearly-award list forces max penalty even with a good year gap" do
+      assert_in_delta 0.80, penalty(item_year: 1940, yearly_award: true), 0.0001
+    end
 
-      test "a yearly-award list gives the item the max penalty even with a good year gap" do
-        # would otherwise be no penalty (diff 60 > 50); award forces max
-        assert_in_delta 0.80, penalty_for(list_year: 2000, first_published_year: 1940, yearly_award: true), 0.0001
-      end
+    test "a yearly-award list max-penalizes even with no list year" do
+      assert_in_delta 0.80, penalty(list_year: nil, item_year: 1980, yearly_award: true), 0.0001
+    end
 
-      test "a yearly-award list with no year_published still max-penalizes" do
-        assert_in_delta 0.80, penalty_for(list_year: nil, first_published_year: 1980, yearly_award: true), 0.0001
-      end
+    test "nil when the penalty config is incomplete" do
+      assert_nil penalty(max_age: nil)
+      assert_nil penalty(max_penalty_percentage: nil)
+    end
 
-      test "no penalty config yields nil" do
-        @rc.update!(max_list_dates_penalty_age: nil, max_list_dates_penalty_percentage: nil)
-        assert_nil penalty_for(list_year: 2000, first_published_year: 1990)
-      end
+    test "nil when the list has no year and the item is not award/nil-year" do
+      assert_nil penalty(list_year: nil)
     end
   end
 end
 ```
 
-- [ ] **Step 2: Run to verify failures**
+- [ ] **Step 2: Run to verify failure**
 
-Run: `bin/rails test test/lib/item_rankings/books/calculator_test.rb`
-Expected: FAIL — with the current code, `item with no publication year` returns `nil` (line 95 skip) not `0.80`; `yearly-award` cases don't force max; `yearly-award with no year_published` returns nil at the `list.year_published` guard.
+Run: `bin/rails test test/lib/item_rankings/date_penalty_test.rb`
+Expected: FAIL — `uninitialized constant ItemRankings::DatePenalty`.
 
-- [ ] **Step 3: Rewrite `calculate_score_penalty`**
+- [ ] **Step 3: Create the PORO**
 
-Replace the method in `web-app/app/lib/item_rankings/calculator.rb` (currently ~lines 90-115) with:
+Create `web-app/app/lib/item_rankings/date_penalty.rb`:
 
 ```ruby
-    def calculate_score_penalty(list, list_item)
-      max_age = ranking_configuration.max_list_dates_penalty_age
-      max_penalty_percentage = ranking_configuration.max_list_dates_penalty_percentage
+# frozen_string_literal: true
+
+module ItemRankings
+  # Pure legacy per-item "list dates" recency penalty, mirroring the legacy
+  # TheGreatestBooks calculate_score_penalty. Returns a penalty fraction (0..1)
+  # or nil (no penalty). Order matches legacy: award lists and items with an
+  # unknown year take the full penalty, checked before the list-year guard.
+  class DatePenalty
+    def self.call(list_year:, item_year:, yearly_award:, max_age:, max_penalty_percentage:)
       return nil if max_age.nil? || max_penalty_percentage.nil?
 
-      item = list_item.listable
-      item_year = (item.respond_to?(:release_year) ? item.release_year : nil)
+      return max_penalty_percentage / 100.0 if yearly_award || item_year.nil?
 
-      # Legacy parity: award lists and items with no known year take the full
-      # penalty, regardless of the list's own publication year (checked first).
-      return max_penalty_percentage / 100.0 if list.yearly_award? || item_year.nil?
+      return nil if list_year.nil?
 
-      return nil unless list.year_published.present?
-
-      year_difference = list.year_published - item_year
+      year_difference = list_year - item_year
 
       penalty = if year_difference <= 0
         max_penalty_percentage / 100.0
@@ -201,45 +196,55 @@ Replace the method in `web-app/app/lib/item_rankings/calculator.rb` (currently ~
 
       (penalty == 0) ? nil : penalty
     end
+  end
+end
 ```
 
-- [ ] **Step 4: Run books calculator test to verify pass**
+- [ ] **Step 4: Run the PORO test to verify pass**
 
-Run: `bin/rails test test/lib/item_rankings/books/calculator_test.rb`
-Expected: PASS (all 7).
+Run: `bin/rails test test/lib/item_rankings/date_penalty_test.rb`
+Expected: PASS (all 8).
 
-- [ ] **Step 5: Add the cross-domain assertion (shared behavior)**
+- [ ] **Step 5: Wire the calculator adapter to the PORO**
 
-Add to `web-app/test/lib/item_rankings/music/albums/calculator_test.rb` (inside the existing test class), pinning that the nil-year rule is shared, not books-only. Reuse the RC's already-wired fixture list/album (no fragile `create!`); `update_column` bypasses validations for the nil-year setup:
+Replace `calculate_score_penalty` in `web-app/app/lib/item_rankings/calculator.rb` (currently ~lines 90-115) with a thin adapter that extracts the values and delegates the math:
 
 ```ruby
-        test "an album with no release year gets the max penalty (shared date-penalty parity)" do
-          @ranking_configuration.update!(apply_list_dates_penalty: true, max_list_dates_penalty_age: 30, max_list_dates_penalty_percentage: 50)
-          list_item = @ranking_configuration.ranked_lists.first.list.list_items.first
-          list_item.list.update!(year_published: 2000)
-          list_item.listable.update_column(:release_year, nil)
-          assert_in_delta 0.50, @calculator.send(:calculate_score_penalty, list_item.list, list_item), 0.0001
-        end
+    def calculate_score_penalty(list, list_item)
+      item = list_item.listable
+      item_year = item.respond_to?(:release_year) ? item.release_year : nil
+
+      ItemRankings::DatePenalty.call(
+        list_year: list.year_published,
+        item_year: item_year,
+        yearly_award: list.yearly_award?,
+        max_age: ranking_configuration.max_list_dates_penalty_age,
+        max_penalty_percentage: ranking_configuration.max_list_dates_penalty_percentage
+      )
+    end
 ```
 
-- [ ] **Step 6: Run both calculator tests + full item_rankings suite**
+(The public `call`-based calculator tests — e.g. music albums' "call handles penalty calculations when enabled" — exercise this adapter end-to-end through `prepare_items`; they must stay green, confirming the adapter feeds `item.release_year`/`yearly_award?` correctly.)
+
+- [ ] **Step 6: Run the full item_rankings suite (adapter wiring + no regression)**
 
 Run: `bin/rails test test/lib/item_rankings/`
-Expected: PASS — no regressions in the existing music/movies/games calculator tests.
+Expected: PASS — the existing music/movies/games calculator `call` tests still pass, confirming the adapter refactor is behavior-preserving for the pre-existing cases.
 
 - [ ] **Step 7: standardrb + commit**
 
-Run: `bundle exec standardrb app/lib/item_rankings/calculator.rb test/lib/item_rankings/books/calculator_test.rb test/lib/item_rankings/music/albums/calculator_test.rb` → no offenses.
+Run: `bundle exec standardrb app/lib/item_rankings/date_penalty.rb app/lib/item_rankings/calculator.rb test/lib/item_rankings/date_penalty_test.rb` → no offenses.
 
 ```bash
-git add app/lib/item_rankings/calculator.rb test/lib/item_rankings/books/calculator_test.rb test/lib/item_rankings/music/albums/calculator_test.rb
+git add app/lib/item_rankings/date_penalty.rb app/lib/item_rankings/calculator.rb test/lib/item_rankings/date_penalty_test.rb
 git commit -m "$(cat <<'EOF'
-Match legacy date penalty: yearly-award + nil-year items take max penalty (inc 6b task 2)
+Extract ItemRankings::DatePenalty for legacy date-penalty parity (inc 6b task 2)
 
-Reproduces the legacy TheGreatestBooks calculate_score_penalty: a yearly-award
-list, or an item with no publication year, gets the full penalty, checked
-before the list.year_published guard. Shared across domains (inert for
-music/games award lists; re-ranks their nil-year items, ~1%).
+Pure PORO mirroring the legacy TheGreatestBooks calculate_score_penalty: a
+yearly-award list, or an item with no publication year, takes the full
+penalty, checked before the list.year_published guard. The calculator's
+calculate_score_penalty is now a thin adapter. Shared across domains (inert
+for music/games award lists; re-ranks their nil-year items, ~1%).
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 EOF
@@ -820,7 +825,7 @@ EOF
 - [ ] `bin/rails test` — full suite green (baseline 4805/0 after 6a; expect that plus the new tests).
 - [ ] `bundle exec standardrb` — no offenses.
 - [ ] `yarn test:e2e e2e/tests/books/admin/lists.spec.ts e2e/tests/books/admin/ranking-configurations.spec.ts` — pass (dev server up).
-- [ ] Confirm the only edits to existing music/games tests are the two deliberate denial-test flips (Task 4) and the one shared-calculator assertion (Task 2). Any other change to an existing assertion is a red flag — stop and investigate.
+- [ ] Confirm the only edits to existing music/games tests are the two deliberate denial-test flips (Task 4). Task 2 refactors `calculate_score_penalty` into a `DatePenalty` adapter but changes no existing test. Any other change to an existing assertion is a red flag — stop and investigate.
 - [ ] Sanity-check the reframing held: `grep -rn "num_years_covered" app/` shows no books RC applies it; `calculate_books_year_range` was left untouched.
 
 ## Notes / carried context
