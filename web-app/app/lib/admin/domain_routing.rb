@@ -120,7 +120,7 @@ module Admin
         domain: :books,
         list_type: "Books::List",
         ranked_item_includes: nil,
-        path: nil
+        path: ->(rc) { URL_HELPERS.admin_books_ranking_configuration_path(rc) }
       },
       "Movies::RankingConfiguration" => {
         domain: :movies,

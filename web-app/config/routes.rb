@@ -323,6 +323,11 @@ Rails.application.routes.draw do
       end
 
       resources :lists
+
+      resources :ranking_configurations do
+        member { post :execute_action }
+        collection { post :index_action }
+      end
     end
 
     root to: "books/default#index", as: :books_root

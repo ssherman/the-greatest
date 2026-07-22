@@ -114,5 +114,11 @@ module Admin
       assert item, "books nav is missing a Lists item"
       assert_equal "/admin/lists", item[:path]
     end
+
+    test "the books nav includes a Rankings item" do
+      item = Admin::DomainNav.config_for(:books)[:items].find { |i| i[:label] == "Rankings" }
+      assert item, "books nav is missing a Rankings item"
+      assert_equal "/admin/ranking_configurations", item[:path]
+    end
   end
 end

@@ -96,7 +96,7 @@ module Admin
         {rc: ranking_configurations(:music_songs_global), path_prefix: "/admin/songs/ranking_configurations"},
         {rc: ranking_configurations(:music_artists_global), path_prefix: "/admin/artists/ranking_configurations"},
         {rc: ranking_configurations(:games_global), path_prefix: "/admin/ranking_configurations"},
-        {rc: ranking_configurations(:books_global), path_prefix: nil},
+        {rc: ranking_configurations(:books_global), path_prefix: "/admin/ranking_configurations"},
         {rc: ranking_configurations(:movies_global), path_prefix: nil}
       ].each do |example|
         rc = example[:rc]
@@ -112,10 +112,10 @@ module Admin
     end
 
     test "ranking_configuration_config returns a nil path for domains without an admin" do
-      config = Admin::DomainRouting.ranking_configuration_config(::Books::RankingConfiguration.new)
+      config = Admin::DomainRouting.ranking_configuration_config(::Movies::RankingConfiguration.new)
 
-      assert_equal :books, config[:domain]
-      assert_equal "Books::List", config[:list_type]
+      assert_equal :movies, config[:domain]
+      assert_equal "Movies::List", config[:list_type]
       assert_nil config[:path]
     end
 
@@ -214,6 +214,12 @@ module Admin
         Admin::DomainRouting.category_items_path_for(book)
       assert_equal Rails.application.routes.url_helpers.admin_books_author_category_items_path(author),
         Admin::DomainRouting.category_items_path_for(author)
+    end
+
+    test "RANKING_CONFIGURATIONS resolves a books RC path" do
+      rc = ranking_configurations(:books_global)
+      assert_equal Rails.application.routes.url_helpers.admin_books_ranking_configuration_path(rc),
+        Admin::DomainRouting.ranking_configuration_config(rc)[:path]
     end
   end
 end
