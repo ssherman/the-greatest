@@ -200,6 +200,13 @@ module Admin
       assert_equal series, resolved
     end
 
+    test "LISTS resolves a books list to the books book typeahead" do
+      config = Admin::DomainRouting.list_config(::Books::List.new)
+      assert_equal :books, config[:domain]
+      assert_equal "Book", config[:item_label]
+      assert_equal Rails.application.routes.url_helpers.search_admin_books_books_path, config[:autocomplete_path]
+    end
+
     test "category_items_path_for resolves for a books book and author" do
       book = books_books(:war_and_peace)
       author = books_authors(:tolstoy)

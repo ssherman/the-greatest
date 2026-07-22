@@ -1,0 +1,2 @@
+<% content_for :title, "Edit #{@list.name}" %>
+<%= render Admin::Lists::EditComponent.new(list: @list, domain_config: domain_config) %>

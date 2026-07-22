@@ -321,6 +321,8 @@ Rails.application.routes.draw do
           get :search
         end
       end
+
+      resources :lists
     end
 
     root to: "books/default#index", as: :books_root

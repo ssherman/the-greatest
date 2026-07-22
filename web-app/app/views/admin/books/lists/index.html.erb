@@ -1,0 +1,2 @@
+<% content_for :title, "Book Lists" %>
+<%= render Admin::Lists::IndexComponent.new(lists: @lists, pagy: @pagy, domain_config: domain_config, selected_status: @selected_status, search_query: @search_query) %>

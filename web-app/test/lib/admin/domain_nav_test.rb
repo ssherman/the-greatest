@@ -108,5 +108,11 @@ module Admin
       assert categories_item[:icon].present?
       assert config[:categories_search_path].present?
     end
+
+    test "the books nav includes a Lists item" do
+      item = Admin::DomainNav.config_for(:books)[:items].find { |i| i[:label] == "Lists" }
+      assert item, "books nav is missing a Lists item"
+      assert_equal "/admin/lists", item[:path]
+    end
   end
 end

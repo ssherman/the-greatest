@@ -1,0 +1,2 @@
+<% content_for :title, @list.name %>
+<%= render Admin::Lists::ShowComponent.new(list: @list, domain_config: domain_config) %>
