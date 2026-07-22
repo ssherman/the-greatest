@@ -76,6 +76,10 @@ class Books::Book < ApplicationRecord
 
   scope :selectable, -> { where(book_kind: :standalone) }
 
+  def release_year
+    first_published_year
+  end
+
   def as_indexed_json
     {
       title: title,

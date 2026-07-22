@@ -81,6 +81,13 @@ module Admin
         item_label: "Game",
         path: ->(l) { URL_HELPERS.admin_games_list_path(l) },
         autocomplete_path: -> { URL_HELPERS.search_admin_games_games_path }
+      },
+      "Books::List" => {
+        domain: :books,
+        listable_type: "Books::Book",
+        item_label: "Book",
+        path: ->(l) { URL_HELPERS.admin_books_list_path(l) },
+        autocomplete_path: -> { URL_HELPERS.search_admin_books_books_path }
       }
     }.freeze
 
@@ -113,7 +120,7 @@ module Admin
         domain: :books,
         list_type: "Books::List",
         ranked_item_includes: nil,
-        path: nil
+        path: ->(rc) { URL_HELPERS.admin_books_ranking_configuration_path(rc) }
       },
       "Movies::RankingConfiguration" => {
         domain: :movies,

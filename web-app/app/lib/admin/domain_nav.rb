@@ -79,7 +79,9 @@ module Admin
           {label: "Books", icon: :book, path: -> { URL_HELPERS.admin_books_books_path }},
           {label: "Authors", icon: :artist, path: -> { URL_HELPERS.admin_books_authors_path }},
           {label: "Series", icon: :series, path: -> { URL_HELPERS.admin_books_series_index_path }},
-          {label: "Categories", icon: :category, path: -> { URL_HELPERS.admin_books_categories_path }}
+          {label: "Categories", icon: :category, path: -> { URL_HELPERS.admin_books_categories_path }},
+          {label: "Lists", icon: :list, path: -> { URL_HELPERS.admin_books_lists_path }},
+          {label: "Rankings", icon: :chart, path: -> { URL_HELPERS.admin_books_ranking_configurations_path }}
         ]
       }
     }.freeze

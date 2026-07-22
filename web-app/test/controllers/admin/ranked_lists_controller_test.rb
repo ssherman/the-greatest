@@ -180,14 +180,14 @@ module Admin
       assert_equal @song_list, RankedList.last.list
     end
 
-    test "should deny access to a books ranking configuration for a user with only a books domain role" do
+    test "should allow access to a books ranking configuration for a user with only a books domain role" do
       books_config = ranking_configurations(:books_global)
       @regular_user.domain_roles.create!(domain: :books, permission_level: :viewer)
       sign_in_as(@regular_user, stub_auth: true)
 
       get admin_ranking_configuration_ranked_lists_path(books_config)
 
-      assert_redirected_to music_root_path
+      assert_response :success
     end
 
     test "should allow access to a games ranking configuration for a user with only a games domain role" do

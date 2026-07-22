@@ -88,30 +88,16 @@ module ItemRankings
     end
 
     def calculate_score_penalty(list, list_item)
-      return nil unless list.year_published.present?
-
-      # Get the item to check its release year
       item = list_item.listable
-      return nil unless item&.respond_to?(:release_year) && item.release_year.present?
+      item_year = item.respond_to?(:release_year) ? item.release_year : nil
 
-      max_age = ranking_configuration.max_list_dates_penalty_age
-      max_penalty_percentage = ranking_configuration.max_list_dates_penalty_percentage
-
-      return nil if max_age.nil? || max_penalty_percentage.nil?
-
-      year_difference = list.year_published - item.release_year
-
-      penalty = if year_difference <= 0
-        max_penalty_percentage / 100.0
-      elsif year_difference > max_age
-        nil
-      else
-        # Apply graduated penalty based on age difference
-        p = ((max_age - year_difference).to_f / max_age) * max_penalty_percentage
-        p / 100.0
-      end
-
-      (penalty == 0) ? nil : penalty
+      ItemRankings::DatePenalty.call(
+        list_year: list.year_published,
+        item_year: item_year,
+        yearly_award: list.yearly_award?,
+        max_age: ranking_configuration.max_list_dates_penalty_age,
+        max_penalty_percentage: ranking_configuration.max_list_dates_penalty_percentage
+      )
     end
 
     def update_ranked_items(ranking_data)
