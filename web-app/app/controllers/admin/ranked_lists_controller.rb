@@ -3,6 +3,7 @@ class Admin::RankedListsController < Admin::BaseController
 
   before_action :set_ranking_configuration, only: [:index, :create]
   before_action :set_ranked_list, only: [:show, :destroy]
+  before_action :require_domain_write!, only: [:create, :destroy]
 
   def index
     @ranked_lists = @ranking_configuration.ranked_lists

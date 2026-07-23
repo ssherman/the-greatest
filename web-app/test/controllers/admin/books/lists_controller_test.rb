@@ -42,6 +42,13 @@ module Admin
         assert_no_match "Launch Wizard", response.body
       end
 
+      test "list show renders for a books domain viewer without error" do
+        @regular_user.domain_roles.create!(domain: :books, permission_level: :viewer)
+        sign_in_as(@regular_user, stub_auth: true)
+        get admin_books_list_path(@list)
+        assert_response :success
+      end
+
       test "creates a list for an admin" do
         sign_in_as(@admin_user, stub_auth: true)
         assert_difference("::Books::List.count", 1) do

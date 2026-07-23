@@ -382,6 +382,7 @@ module Admin
       game = games_games(:breath_of_the_wild)
 
       host! Rails.application.config.domains[:games]
+      users(:contractor_user).domain_roles.find_by(domain: :games).update!(permission_level: :editor)
       sign_in_as(users(:contractor_user), stub_auth: true)
 
       assert_difference "ListItem.count", 1 do
@@ -400,6 +401,7 @@ module Admin
       list_item = ListItem.create!(list: games_list, listable: game, position: 1)
 
       host! Rails.application.config.domains[:games]
+      users(:contractor_user).domain_roles.find_by(domain: :games).update!(permission_level: :editor)
       sign_in_as(users(:contractor_user), stub_auth: true)
 
       assert_difference "ListItem.count", -1 do
@@ -471,6 +473,7 @@ module Admin
       list_item = ListItem.create!(list: games_list, listable: game, position: 1, verified: false)
 
       host! Rails.application.config.domains[:games]
+      users(:contractor_user).domain_roles.find_by(domain: :games).update!(permission_level: :editor)
       sign_in_as(users(:contractor_user), stub_auth: true)
 
       patch admin_list_item_path(list_item),
@@ -519,6 +522,56 @@ module Admin
 
       get admin_list_list_items_path(games_list)
       assert_response :redirect
+    end
+
+    test "denies a music domain viewer from creating a list item" do
+      @regular_user.domain_roles.create!(domain: :music, permission_level: :viewer)
+      sign_in_as(@regular_user, stub_auth: true)
+
+      assert_no_difference "ListItem.count" do
+        post admin_list_list_items_path(@album_list),
+          params: {list_item: {listable_id: @album.id, listable_type: "Music::Album", position: 1}}, as: :turbo_stream
+      end
+      assert_redirected_to music_root_path
+    end
+
+    test "denies a music domain viewer from destroying a list item" do
+      list_item = ListItem.create!(list: @album_list, listable: @album, position: 1, verified: true)
+      @regular_user.domain_roles.create!(domain: :music, permission_level: :viewer)
+      sign_in_as(@regular_user, stub_auth: true)
+
+      assert_no_difference "ListItem.count" do
+        delete admin_list_item_path(list_item), as: :turbo_stream
+      end
+      assert_redirected_to music_root_path
+    end
+
+    test "denies a music domain viewer from clearing positions" do
+      ListItem.create!(list: @album_list, listable: @album, position: 1, verified: true)
+      @regular_user.domain_roles.create!(domain: :music, permission_level: :viewer)
+      sign_in_as(@regular_user, stub_auth: true)
+
+      delete clear_positions_admin_list_list_items_path(@album_list), as: :turbo_stream
+      assert_redirected_to music_root_path
+    end
+
+    test "allows a music domain editor to create a list item" do
+      sign_in_as(users(:contractor_user), stub_auth: true) # music editor
+
+      assert_difference "ListItem.count", 1 do
+        post admin_list_list_items_path(@album_list),
+          params: {list_item: {listable_id: @album.id, listable_type: "Music::Album", position: 1}}, as: :turbo_stream
+      end
+      assert_response :success
+    end
+
+    test "still allows a music domain viewer to read the list items (access unchanged)" do
+      ListItem.create!(list: @album_list, listable: @album, position: 1, verified: true)
+      @regular_user.domain_roles.create!(domain: :music, permission_level: :viewer)
+      sign_in_as(@regular_user, stub_auth: true)
+
+      get admin_list_list_items_path(@album_list)
+      assert_response :success
     end
 
     test "index paginates list items" do

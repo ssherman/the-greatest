@@ -232,5 +232,47 @@ module Admin
 
       assert_response :success
     end
+
+    test "denies a music domain viewer from creating a penalty application" do
+      @regular_user.domain_roles.create!(domain: :music, permission_level: :viewer)
+      sign_in_as(@regular_user, stub_auth: true)
+
+      assert_no_difference "PenaltyApplication.count" do
+        post admin_ranking_configuration_penalty_applications_path(@album_config),
+          params: {penalty_application: {penalty_id: @global_penalty.id, value: 75}}, as: :turbo_stream
+      end
+      assert_redirected_to music_root_path
+    end
+
+    test "denies a music domain viewer from updating a penalty application" do
+      pa = PenaltyApplication.create!(ranking_configuration: @album_config, penalty: @global_penalty, value: 75)
+      @regular_user.domain_roles.create!(domain: :music, permission_level: :viewer)
+      sign_in_as(@regular_user, stub_auth: true)
+
+      patch admin_penalty_application_path(pa), params: {penalty_application: {value: 40}}, as: :turbo_stream
+      assert_redirected_to music_root_path
+      assert_equal 75, pa.reload.value
+    end
+
+    test "denies a music domain viewer from destroying a penalty application" do
+      pa = PenaltyApplication.create!(ranking_configuration: @album_config, penalty: @global_penalty, value: 75)
+      @regular_user.domain_roles.create!(domain: :music, permission_level: :viewer)
+      sign_in_as(@regular_user, stub_auth: true)
+
+      assert_no_difference "PenaltyApplication.count" do
+        delete admin_penalty_application_path(pa), as: :turbo_stream
+      end
+      assert_redirected_to music_root_path
+    end
+
+    test "allows a music domain editor to create a penalty application" do
+      sign_in_as(users(:contractor_user), stub_auth: true) # music editor
+
+      assert_difference "PenaltyApplication.count", 1 do
+        post admin_ranking_configuration_penalty_applications_path(@album_config),
+          params: {penalty_application: {penalty_id: @global_penalty.id, value: 75}}, as: :turbo_stream
+      end
+      assert_response :success
+    end
   end
 end

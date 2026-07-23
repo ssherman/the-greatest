@@ -3,6 +3,7 @@ class Admin::PenaltyApplicationsController < Admin::BaseController
 
   before_action :set_ranking_configuration, only: [:index, :create]
   before_action :set_penalty_application, only: [:update, :destroy]
+  before_action :require_domain_write!, only: [:create, :update, :destroy]
 
   def index
     @penalty_applications = @ranking_configuration.penalty_applications.includes(:penalty).order("penalties.name")
