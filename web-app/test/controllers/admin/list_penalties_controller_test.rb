@@ -158,6 +158,7 @@ module Admin
       games_list.list_penalties.destroy_all
 
       host! Rails.application.config.domains[:games]
+      users(:contractor_user).domain_roles.find_by(domain: :games).update!(permission_level: :editor)
       sign_in_as(users(:contractor_user), stub_auth: true)
 
       assert_difference "ListPenalty.count", 1 do
@@ -175,6 +176,7 @@ module Admin
       list_penalty = ListPenalty.create!(list: games_list, penalty: @global_penalty)
 
       host! Rails.application.config.domains[:games]
+      users(:contractor_user).domain_roles.find_by(domain: :games).update!(permission_level: :editor)
       sign_in_as(users(:contractor_user), stub_auth: true)
 
       assert_difference "ListPenalty.count", -1 do
@@ -192,6 +194,47 @@ module Admin
 
       get admin_list_list_penalties_path(games_list)
       assert_response :redirect
+    end
+
+    test "denies a music domain viewer from attaching a list penalty" do
+      @regular_user.domain_roles.create!(domain: :music, permission_level: :viewer)
+      sign_in_as(@regular_user, stub_auth: true)
+
+      assert_no_difference "ListPenalty.count" do
+        post admin_list_list_penalties_path(@album_list),
+          params: {list_penalty: {penalty_id: @global_penalty.id}}, as: :turbo_stream
+      end
+      assert_redirected_to music_root_path
+    end
+
+    test "denies a music domain viewer from detaching a list penalty" do
+      list_penalty = ListPenalty.create!(list: @album_list, penalty: @global_penalty)
+      @regular_user.domain_roles.create!(domain: :music, permission_level: :viewer)
+      sign_in_as(@regular_user, stub_auth: true)
+
+      assert_no_difference "ListPenalty.count" do
+        delete admin_list_penalty_path(list_penalty), as: :turbo_stream
+      end
+      assert_redirected_to music_root_path
+    end
+
+    test "allows a music domain editor to attach a list penalty" do
+      sign_in_as(users(:contractor_user), stub_auth: true) # music editor
+
+      assert_difference "ListPenalty.count", 1 do
+        post admin_list_list_penalties_path(@album_list),
+          params: {list_penalty: {penalty_id: @global_penalty.id}}, as: :turbo_stream
+      end
+      assert_response :success
+    end
+
+    test "still allows a music domain viewer to read the list penalties (access unchanged)" do
+      ListPenalty.create!(list: @album_list, penalty: @global_penalty)
+      @regular_user.domain_roles.create!(domain: :music, permission_level: :viewer)
+      sign_in_as(@regular_user, stub_auth: true)
+
+      get admin_list_list_penalties_path(@album_list)
+      assert_response :success
     end
   end
 end
