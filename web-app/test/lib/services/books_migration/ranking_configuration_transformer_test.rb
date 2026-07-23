@@ -72,7 +72,12 @@ class Services::BooksMigration::RankingConfigurationTransformerTest < ActiveSupp
     assert_equal(-50, out[:min_list_weight])
     assert_equal 2.0, out[:bonus_pool_percentage]
     assert_equal 1.5, out[:exponent]
-    assert_equal 4, out[:algorithm_version]
+    assert_equal 1, out[:algorithm_version]
+  end
+
+  test "forces algorithm_version to 1 regardless of the legacy value" do
+    assert_equal 1, T.call(legacy.merge("algorithm_version" => 4))[:algorithm_version]
+    assert_equal 1, T.call(legacy.merge("algorithm_version" => 2))[:algorithm_version]
   end
 
   test "preserves timestamps" do

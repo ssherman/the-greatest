@@ -20,7 +20,7 @@ module Services
           primary: attrs["primary"],
           archived: false,
           published_at: attrs["published_at"],
-          algorithm_version: attrs["algorithm_version"],
+          algorithm_version: 1,
           inherit_penalties: attrs["inherit_list_cons"],
           min_list_weight: attrs["min_list_weight"],
           max_list_dates_penalty_age: attrs["max_age_for_penalty"],
