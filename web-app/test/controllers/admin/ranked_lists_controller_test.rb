@@ -200,6 +200,38 @@ module Admin
       assert_response :success
     end
 
+    test "denies a music domain viewer from creating a ranked list" do
+      @regular_user.domain_roles.create!(domain: :music, permission_level: :viewer)
+      sign_in_as(@regular_user, stub_auth: true)
+
+      assert_no_difference "RankedList.count" do
+        post admin_ranking_configuration_ranked_lists_path(@album_config),
+          params: {ranked_list: {list_id: @album_list.id}}, as: :turbo_stream
+      end
+      assert_redirected_to music_root_path
+    end
+
+    test "denies a music domain viewer from destroying a ranked list" do
+      ranked_list = RankedList.create!(ranking_configuration: @album_config, list: @album_list, weight: 50)
+      @regular_user.domain_roles.create!(domain: :music, permission_level: :viewer)
+      sign_in_as(@regular_user, stub_auth: true)
+
+      assert_no_difference "RankedList.count" do
+        delete admin_ranked_list_path(ranked_list), as: :turbo_stream
+      end
+      assert_redirected_to music_root_path
+    end
+
+    test "allows a music domain editor to create a ranked list" do
+      sign_in_as(users(:contractor_user), stub_auth: true) # music editor
+
+      assert_difference "RankedList.count", 1 do
+        post admin_ranking_configuration_ranked_lists_path(@album_config),
+          params: {ranked_list: {list_id: @album_list.id}}, as: :turbo_stream
+      end
+      assert_response :success
+    end
+
     test "show links back to the games ranking configuration, not the music root" do
       games_ranked_list = ranked_lists(:games_ranked_list)
       games_config = ranking_configurations(:games_global)
