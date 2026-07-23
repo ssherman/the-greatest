@@ -54,11 +54,13 @@
               <td>
                 <div class="flex gap-2">
                   <%= link_to "View Details", admin_ranked_list_path(ranked_list), class: "btn btn-xs btn-ghost", data: { turbo_frame: "_top" } %>
-                  <%= button_to "Delete",
-                      admin_ranked_list_path(ranked_list),
-                      method: :delete,
-                      class: "btn btn-xs btn-error",
-                      form: { data: { turbo_confirm: "Are you sure you want to remove this list?" } } %>
+                  <% if current_user_can_write? %>
+                    <%= button_to "Delete",
+                        admin_ranked_list_path(ranked_list),
+                        method: :delete,
+                        class: "btn btn-xs btn-error",
+                        form: { data: { turbo_confirm: "Are you sure you want to remove this list?" } } %>
+                  <% end %>
                 </div>
               </td>
             </tr>

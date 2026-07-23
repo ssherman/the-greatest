@@ -231,22 +231,28 @@
             </h2>
             <div class="flex gap-2">
               <% if list.list_items.any? %>
-                <%= button_to clear_positions_admin_list_list_items_path(list),
-                    method: :delete,
-                    class: "btn btn-warning btn-outline btn-sm",
-                    data: { turbo_confirm: "Are you sure you want to clear all positions for #{list.list_items.count} items in this list?" } do %>
-                  Delete All Positions
+                <% if helpers.current_user_can_write? %>
+                  <%= button_to clear_positions_admin_list_list_items_path(list),
+                      method: :delete,
+                      class: "btn btn-warning btn-outline btn-sm",
+                      data: { turbo_confirm: "Are you sure you want to clear all positions for #{list.list_items.count} items in this list?" } do %>
+                    Delete All Positions
+                  <% end %>
                 <% end %>
-                <%= button_to destroy_all_admin_list_list_items_path(list),
-                    method: :delete,
-                    class: "btn btn-error btn-outline btn-sm",
-                    data: { turbo_confirm: "Are you sure you want to delete all #{list.list_items.count} items from this list? This cannot be undone." } do %>
-                  Delete All Items
+                <% if helpers.current_user_can_write? %>
+                  <%= button_to destroy_all_admin_list_list_items_path(list),
+                      method: :delete,
+                      class: "btn btn-error btn-outline btn-sm",
+                      data: { turbo_confirm: "Are you sure you want to delete all #{list.list_items.count} items from this list? This cannot be undone." } do %>
+                    Delete All Items
+                  <% end %>
                 <% end %>
               <% end %>
-              <button class="btn btn-primary btn-sm" onclick="add_item_to_list_modal_dialog.showModal()">
-                + Add <%= domain_config[:item_label] %>
-              </button>
+              <% if helpers.current_user_can_write? %>
+                <button class="btn btn-primary btn-sm" onclick="add_item_to_list_modal_dialog.showModal()">
+                  + Add <%= domain_config[:item_label] %>
+                </button>
+              <% end %>
             </div>
           </div>
           <%= helpers.turbo_frame_tag "list_items_list", loading: :lazy,
@@ -265,9 +271,11 @@
               Penalties
               <span class="badge badge-ghost"><%= list.list_penalties.count %></span>
             </h2>
-            <button class="btn btn-primary btn-sm" onclick="attach_penalty_modal_dialog.showModal()">
-              + Attach Penalty
-            </button>
+            <% if helpers.current_user_can_write? %>
+              <button class="btn btn-primary btn-sm" onclick="attach_penalty_modal_dialog.showModal()">
+                + Attach Penalty
+              </button>
+            <% end %>
           </div>
           <%= helpers.turbo_frame_tag "list_penalties_list", loading: :lazy,
               src: admin_list_list_penalties_path(list) do %>
@@ -337,7 +345,11 @@
   </div>
 </div>
 
-<%= render Admin::AttachPenaltyModalComponent.new(list: list) %>
-<%= render Admin::AddItemToListModalComponent.new(list: list) %>
+<% if helpers.current_user_can_write? %>
+  <%= render Admin::AttachPenaltyModalComponent.new(list: list) %>
+  <%= render Admin::AddItemToListModalComponent.new(list: list) %>
+<% end %>
 <%= render Admin::Lists::ResearchPromptModalComponent.new(list: list) %>
-<%= render Admin::EditListItemModalComponent.new %>
+<% if helpers.current_user_can_write? %>
+  <%= render Admin::EditListItemModalComponent.new %>
+<% end %>

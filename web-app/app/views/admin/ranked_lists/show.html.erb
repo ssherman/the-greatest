@@ -198,11 +198,13 @@
         <div class="card bg-base-100 shadow-xl">
           <div class="card-body">
             <h2 class="card-title">Actions</h2>
-            <%= button_to "Remove List",
-                admin_ranked_list_path(@ranked_list),
-                method: :delete,
-                class: "btn btn-error btn-block",
-                form: { data: { turbo_confirm: "Are you sure you want to remove this list?" } } %>
+            <% if current_user_can_write? %>
+              <%= button_to "Remove List",
+                  admin_ranked_list_path(@ranked_list),
+                  method: :delete,
+                  class: "btn btn-error btn-block",
+                  form: { data: { turbo_confirm: "Are you sure you want to remove this list?" } } %>
+            <% end %>
           </div>
         </div>
       </div>
