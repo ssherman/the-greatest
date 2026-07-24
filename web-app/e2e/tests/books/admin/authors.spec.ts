@@ -26,7 +26,11 @@ test.describe("Books admin — authors", () => {
     await page.getByRole("button", { name: "Create Author" }).click();
     await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
 
-    await page.getByRole("button", { name: "+ Add" }).last().click();
+    const relationshipsCard = page
+      .locator(".card")
+      .filter({ hasText: "Relationships" })
+      .filter({ has: page.getByRole("button", { name: "+ Add" }) });
+    await relationshipsCard.getByRole("button", { name: "+ Add" }).click();
     const modal = page.locator("dialog#add_author_relationship_modal");
     await expect(modal).toBeVisible();
 
@@ -37,5 +41,38 @@ test.describe("Books admin — authors", () => {
     await expect(
       page.locator("turbo-frame#author_relationships_list").getByText("Tolstoy", { exact: false })
     ).toBeVisible();
+  });
+
+  test("clicking an author row navigates to its show page", async ({ page }) => {
+    await page.goto("/admin/authors");
+    await page.locator("table tbody tr").first().getByRole("link").first().click();
+    await expect(page.getByText("Basic Information")).toBeVisible();
+  });
+
+  test("edits an author's name", async ({ page }) => {
+    const name = `E2E Edit Author ${Date.now()}`;
+    await page.goto("/admin/authors/new");
+    await page.locator('input[name="books_author[name]"]').fill(name);
+    await page.getByRole("button", { name: "Create Author" }).click();
+    await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
+
+    await page.getByRole("link", { name: "Edit" }).click();
+    await expect(page).toHaveURL(/\/edit/);
+    const updated = `E2E Updated Author ${Date.now()}`;
+    await page.locator('input[name="books_author[name]"]').fill(updated);
+    await page.getByRole("button", { name: "Update Author" }).click();
+    await expect(page.getByRole("heading", { name: updated, level: 1 })).toBeVisible();
+  });
+
+  test("deletes an author", async ({ page }) => {
+    const name = `E2E Delete Author ${Date.now()}`;
+    await page.goto("/admin/authors/new");
+    await page.locator('input[name="books_author[name]"]').fill(name);
+    await page.getByRole("button", { name: "Create Author" }).click();
+    await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
+
+    page.on("dialog", (d) => d.accept());
+    await page.getByRole("button", { name: "Delete" }).click();
+    await expect(page).toHaveURL(/\/admin\/authors$/);
   });
 });

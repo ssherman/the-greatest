@@ -39,4 +39,39 @@ test.describe("Books admin — series", () => {
     await frame.getByRole("button", { name: "★ Make representative" }).click();
     await expect(frame.getByText("★ Representative")).toBeVisible();
   });
+
+  test("clicking a series row navigates to its show page", async ({ page }) => {
+    await page.goto("/admin/series");
+    await page.locator("table tbody tr").first().getByRole("link").first().click();
+    await expect(page.getByText("Basic Information")).toBeVisible();
+  });
+
+  test("edits a series title", async ({ page }) => {
+    const title = `E2E Edit Series ${Date.now()}`;
+    await page.goto("/admin/series");
+    await page.getByRole("link", { name: "New Series" }).click();
+    await page.locator('input[name="books_series[title]"]').fill(title);
+    await page.getByRole("button", { name: "Create Series" }).click();
+    await expect(page.getByRole("heading", { name: title, level: 1 })).toBeVisible();
+
+    await page.getByRole("link", { name: "Edit" }).click();
+    await expect(page).toHaveURL(/\/edit/);
+    const updated = `E2E Updated Series ${Date.now()}`;
+    await page.locator('input[name="books_series[title]"]').fill(updated);
+    await page.getByRole("button", { name: "Update Series" }).click();
+    await expect(page.getByRole("heading", { name: updated, level: 1 })).toBeVisible();
+  });
+
+  test("deletes a series", async ({ page }) => {
+    const title = `E2E Delete Series ${Date.now()}`;
+    await page.goto("/admin/series");
+    await page.getByRole("link", { name: "New Series" }).click();
+    await page.locator('input[name="books_series[title]"]').fill(title);
+    await page.getByRole("button", { name: "Create Series" }).click();
+    await expect(page.getByRole("heading", { name: title, level: 1 })).toBeVisible();
+
+    page.on("dialog", (d) => d.accept());
+    await page.getByRole("button", { name: "Delete" }).click();
+    await expect(page).toHaveURL(/\/admin\/series$/);
+  });
 });

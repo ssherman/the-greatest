@@ -29,4 +29,42 @@ test.describe('books admin — editions', () => {
     await expect(editionsFrame.locator('.loading-spinner')).toBeHidden({ timeout: 10000 });
     await expect(page.getByText('★ Default')).toBeVisible();
   });
+
+  test('edits an edition', async ({ page }) => {
+    await page.goto('/admin/books/new');
+    const title = `E2E Edition-Edit Book ${Date.now()}`;
+    await page.locator('input[name="books_book[title]"]').fill(title);
+    await page.getByRole('button', { name: 'Create Book' }).click();
+    await expect(page.getByRole('heading', { name: title })).toBeVisible();
+
+    await page.getByRole('link', { name: '+ New Edition' }).click();
+    await expect(page.getByRole('heading', { name: 'New Edition' })).toBeVisible();
+    await page.locator('input[name="books_edition[publisher_name]"]').fill('E2E Press');
+    await page.getByRole('button', { name: 'Create Edition' }).click();
+    await expect(page.getByText('Edition of')).toBeVisible();
+
+    await page.getByRole('link', { name: 'Edit', exact: true }).click();
+    await expect(page).toHaveURL(/\/edit/);
+    await page.locator('input[name="books_edition[publisher_name]"]').fill('E2E Press Revised');
+    await page.getByRole('button', { name: 'Update Edition' }).click();
+    await expect(page.getByText('E2E Press Revised')).toBeVisible();
+  });
+
+  test('deletes an edition', async ({ page }) => {
+    await page.goto('/admin/books/new');
+    const title = `E2E Edition-Delete Book ${Date.now()}`;
+    await page.locator('input[name="books_book[title]"]').fill(title);
+    await page.getByRole('button', { name: 'Create Book' }).click();
+    await expect(page.getByRole('heading', { name: title })).toBeVisible();
+
+    await page.getByRole('link', { name: '+ New Edition' }).click();
+    await page.locator('input[name="books_edition[publisher_name]"]').fill('E2E Delete Press');
+    await page.getByRole('button', { name: 'Create Edition' }).click();
+    await expect(page.getByText('Edition of')).toBeVisible();
+
+    page.on('dialog', (d) => d.accept());
+    await page.getByRole('button', { name: 'Delete' }).click();
+    // Delete of an edition redirects to its book's show page.
+    await expect(page.getByRole('heading', { name: title })).toBeVisible();
+  });
 });
