@@ -26,7 +26,11 @@ test.describe("Books admin — authors", () => {
     await page.getByRole("button", { name: "Create Author" }).click();
     await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
 
-    await page.getByRole("button", { name: "+ Add" }).last().click();
+    const relationshipsCard = page
+      .locator(".card")
+      .filter({ hasText: "Relationships" })
+      .filter({ has: page.getByRole("button", { name: "+ Add" }) });
+    await relationshipsCard.getByRole("button", { name: "+ Add" }).click();
     const modal = page.locator("dialog#add_author_relationship_modal");
     await expect(modal).toBeVisible();
 
