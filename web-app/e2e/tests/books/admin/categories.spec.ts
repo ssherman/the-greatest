@@ -45,4 +45,33 @@ test.describe("Books admin — categories", () => {
       page.locator("turbo-frame#category_items_list").getByText(name, { exact: false })
     ).toBeVisible();
   });
+
+  test("edits a category name", async ({ page }) => {
+    const name = `E2E Edit Genre ${Date.now()}`;
+    await page.goto("/admin/categories");
+    await page.getByRole("link", { name: "New Category" }).click();
+    await page.locator('input[name="books_category[name]"]').fill(name);
+    await page.getByRole("button", { name: "Create Category" }).click();
+    await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
+
+    await page.getByRole("link", { name: "Edit" }).click();
+    await expect(page).toHaveURL(/\/edit/);
+    const updated = `E2E Updated Genre ${Date.now()}`;
+    await page.locator('input[name="books_category[name]"]').fill(updated);
+    await page.getByRole("button", { name: "Update Category" }).click();
+    await expect(page.getByRole("heading", { name: updated, level: 1 })).toBeVisible();
+  });
+
+  test("deletes a category (soft delete)", async ({ page }) => {
+    const name = `E2E Delete Genre ${Date.now()}`;
+    await page.goto("/admin/categories");
+    await page.getByRole("link", { name: "New Category" }).click();
+    await page.locator('input[name="books_category[name]"]').fill(name);
+    await page.getByRole("button", { name: "Create Category" }).click();
+    await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
+
+    page.on("dialog", (d) => d.accept());
+    await page.getByRole("button", { name: "Delete" }).click();
+    await expect(page).toHaveURL(/\/admin\/categories$/);
+  });
 });
