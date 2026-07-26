@@ -94,6 +94,11 @@ namespace :data_migration do
     pp Services::BooksMigration::UserListItemMigrator.call
   end
 
+  desc "Enqueue cover-image import jobs for legacy Book primary_images (reads old R2 via S3 API; needs LEGACY_R2_* env)"
+  task book_images: :environment do
+    pp Services::BooksMigration::BookImageMigrator.call
+  end
+
   desc "Run all Phase-1 migrators in dependency order"
   task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers, :categories, :category_items, :external_links, :lists, :list_items, :ranking_configurations, :ranked_lists, :penalties, :list_penalties, :user_lists, :user_list_items]
 end
