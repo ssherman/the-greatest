@@ -45,24 +45,26 @@ Attach mechanism mirrors the proven `Music::AmazonProductService#download_and_se
 
 ## Source access — old R2 via S3 API (owner-supplied ENV)
 
-New helper `Services::BooksMigration::LegacyR2` builds a configured `Aws::S3::Client` (`aws-sdk-s3` is already in the Gemfile) from four ENV vars the owner provides; nothing is read from the old checkout (it has no `master.key`) and nothing goes through the blocked CDN:
+New helper `Services::BooksMigration::LegacyR2` builds a configured `Aws::S3::Client` (`aws-sdk-s3` is in the Gemfile as `require: false`, so the helper file `require`s it) from four ENV vars the owner provides; nothing is read from the old checkout (it has no `master.key`) and nothing goes through the blocked CDN:
 
 ```
-LEGACY_R2_ENDPOINT            # https://<old-account-id>.r2.cloudflarestorage.com
-LEGACY_R2_ACCESS_KEY_ID
-LEGACY_R2_SECRET_ACCESS_KEY
+LEGACY_R2_ACCOUNT_ID          # endpoint built as https://<account-id>.r2.cloudflarestorage.com
+LEGACY_R2_ACCESS_KEY
+LEGACY_R2_SECRET_KEY
 LEGACY_R2_BUCKET
 ```
 
 ```ruby
+require "aws-sdk-s3"
+
 module Services
   module BooksMigration
     module LegacyR2
       def self.client
         Aws::S3::Client.new(
-          endpoint: ENV.fetch("LEGACY_R2_ENDPOINT"),
-          access_key_id: ENV.fetch("LEGACY_R2_ACCESS_KEY_ID"),
-          secret_access_key: ENV.fetch("LEGACY_R2_SECRET_ACCESS_KEY"),
+          endpoint: "https://#{ENV.fetch("LEGACY_R2_ACCOUNT_ID")}.r2.cloudflarestorage.com",
+          access_key_id: ENV.fetch("LEGACY_R2_ACCESS_KEY"),
+          secret_access_key: ENV.fetch("LEGACY_R2_SECRET_KEY"),
           region: "auto",
           force_path_style: true
         )
@@ -75,6 +77,8 @@ module Services
   end
 end
 ```
+
+**Access verified (2026-07-26):** with the dev `.env` values loaded, this client did a `head_object` on a real legacy Book `primary_image` blob key and returned `content_length=35909` / `content_type=image/jpeg`, exactly matching that blob's `byte_size` in the legacy DB — the full source-access path is proven.
 
 ## Execution architecture — Sidekiq fan-out
 
@@ -167,6 +171,7 @@ Add `data_migration:book_images` to `web-app/lib/tasks/data_migration.rake` (run
 - Create `web-app/app/lib/services/books_migration/book_image_migrator.rb` (streams + enqueues).
 - Generate `web-app/app/sidekiq/books/migrate_cover_image_job.rb` via `bin/rails generate sidekiq:job books/migrate_cover_image` (creates the matching test).
 - Modify `web-app/lib/tasks/data_migration.rake` (add `:book_images`).
+- Document the four `LEGACY_R2_*` var names in the root `.env.example` (done).
 - Tests: `book_image_migrator_test.rb`, `books/migrate_cover_image_job_test.rb` (job test is generated).
 - No schema migration. No new user-facing view → no new Playwright E2E.
 
@@ -183,6 +188,14 @@ With `LEGACY_R2_*` ENV set and the new site's `STORAGE_*` pointing at the dev R2
 2. Let Sidekiq drain (~148k jobs). Then expect `Image.where(parent_type: "Books::Book", primary: true).count == 37296` and `Books::Book.joins(:images).where(images: {primary: true}).distinct.count == 37296`.
 3. Spot-check a sample of book admin show pages (`/admin/books/books/:id`) and the lazy `images_list` frame — covers render, and each has small/medium/large variants.
 4. Re-run the rake task; confirm it is idempotent (no new `Image` rows, jobs no-op on the guard).
+
+## Secrets handling
+
+The four `LEGACY_R2_*` values come from the old site's Rails credentials (`:cloudflare` → `account_id`/`access_key`/`secret_key`/`bucket`; retrieve with `bin/rails credentials:show` in the old checkout). They are transient — needed only for the migration run, not the app's normal runtime — and this repo is open source, so plaintext must never be committed.
+
+- **Dev:** the four vars live in the gitignored `web-app/.env` (loaded by `dotenv-rails`). Already added and verified (see the access smoke test above). Their **names** (blank values) are documented in the tracked root `.env.example` (the `web-app/.env` template).
+- **Prod (at cutover):** the same four vars are added to `secrets/.env.production`, which is **SOPS+age-encrypted** (recipient in `.sops.yaml`) and committed encrypted. Edited self-service via `sops secrets/.env.production` (values never leave the maintainer's machine).
+- **Hygiene:** because the creds are one-time, remove them from `secrets/.env.production` after the prod migration completes so prod runtime carries no unused legacy creds.
 
 ## Rollout & ops
 
