@@ -55,6 +55,19 @@ module Books
       end
     end
 
+    test "re-running for the same book creates no duplicate image" do
+      client = stub_legacy_r2
+      client.stubs(:get_object).returns(s3_response("fake-jpeg-bytes"))
+
+      job = Books::MigrateCoverImageJob.new
+      job.perform(@book.id, "blobkey123", "cover.jpg", "image/jpeg")
+      job.perform(@book.id, "blobkey123", "cover.jpg", "image/jpeg")
+
+      @book.reload
+      assert_equal 1, @book.images.where(primary: true).count
+      assert_equal 1, @book.images.count
+    end
+
     test "is configured to retry" do
       assert_equal 5, Books::MigrateCoverImageJob.get_sidekiq_options["retry"]
     end
