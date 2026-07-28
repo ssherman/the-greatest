@@ -386,6 +386,13 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
   `Descriptions::Resolver.call(descriptions, kind: :summary, locale: "en") -> Description | nil`.
   `descriptions` is any Enumerable of `Description` records. Task 3 calls this.
 
+> **Shipped differently (review finding, human ruling 2026-07-28):** `SOURCE_PRIORITY` as written below
+> is a loose module-level constant beside `Resolver` in `resolver.rb`. Zeitwerk keys autoloads off file
+> names, so it registers `Descriptions::Resolver` but not its sibling constant — a first reference to
+> `Descriptions::SOURCE_PRIORITY` raises `NameError` under `eager_load: false` (development and local
+> test runs). It shipped instead as `Descriptions::SourcePriority::ORDER` in its own file,
+> `app/lib/descriptions/source_priority.rb`. Ordering unchanged. See the spec's Selection section.
+
 - [ ] **Step 1: Write the failing test**
 
 Create `test/lib/descriptions/resolver_test.rb`:

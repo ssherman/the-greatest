@@ -205,7 +205,7 @@ The per-row `license` column makes the encumbered rows queryable for the first t
 | D8 | No `has_one :primary_description` — a `Descriptions::Resolver` over a loaded collection | The winner is computed, not flagged, so a `has_one` scope cannot express it. Entities carry 1–4 rows, so `includes(:descriptions)` is one extra query total. |
 | D9 | Migrate Goodreads rows as a normal source with `license: :proprietary` | The text is already published on the live site; purging would be a new decision that costs 885 books their description. Whether to keep *acquiring* Goodreads text is a separate, later decision. |
 | D10 | Every migrated row gets real provenance; no `:unknown` source value | Provenance was verifiable for every column (see "Current state"). Guessing would put wrong provenance on rows we could not later distinguish from correct ones. |
-| D11 | The backfill marks `rank: :preferred` only where a *human* chose, not on every winner | `use_description = default` (124,065 books) is reproduced exactly by `SOURCE_PRIORITY`. Only the 2,139 explicit choices become `preferred`. `use_description` becomes data rather than a rule. |
+| D11 | The backfill marks `rank: :preferred` only where a *human* chose, not on every winner | `use_description = default` (124,065 books) is reproduced exactly by `SourcePriority::ORDER`. Only the 2,139 explicit choices become `preferred`. `use_description` becomes data rather than a rule. |
 | D12 | Dropping the columns ships as its own PR, after increments a–d run in production | A bad backfill followed by a column drop is unrecoverable, and in dev the books data exists nowhere else. |
 | D13 | Admin panel is a review-and-select surface, not an authoring one | Owner: admins will not manually write descriptions; generation will be AI. `create` remains for override; emphasis is on `set_preferred` and delete. |
 
@@ -278,11 +278,19 @@ nothing.
 ## Selection
 
 ```ruby
+# app/lib/descriptions/source_priority.rb
 module Descriptions
-  SOURCE_PRIORITY = %i[manual ai_generated goodreads wikipedia
-                       openlibrary publisher musicbrainz igdb other].freeze
+  module SourcePriority
+    ORDER = %w[manual ai_generated goodreads wikipedia
+               openlibrary publisher musicbrainz igdb other].freeze
+  end
 end
 ```
+
+It lives in its own file because Zeitwerk keys autoloads off file names: a bare
+`Descriptions::SOURCE_PRIORITY` sitting beside `Resolver` in `resolver.rb` raises `NameError` on first
+reference under `eager_load: false` (development and local test runs) unless something has already
+touched `Resolver`. Strings, not symbols — `description.source` returns a `String`.
 
 `Descriptions::Resolver.call(descriptions, kind: :summary, locale: "en")` is pure and operates on an
 already-loaded collection:
@@ -290,7 +298,7 @@ already-loaded collection:
 1. reject `deprecated`
 2. reject rows not matching `kind` and `locale`
 3. return the `preferred` row if one exists
-4. otherwise return the `normal` row whose `source` comes first in `SOURCE_PRIORITY`
+4. otherwise return the `normal` row whose `source` comes first in `SourcePriority::ORDER`
 5. otherwise `nil`
 
 `ai_generated` ahead of `goodreads` ahead of the sourced-text values reproduces the legacy books
@@ -343,13 +351,13 @@ back-dating from `updated_at` would be a fabrication. `locale: "en"`, `kind: :su
 
 `rank: :preferred` only on the 2,139 books where `use_description != default` — the `:goodreads` row for
 the 2,137 `use_goodreads` books, the raw-`description` row for the 2 `use_description` books. Everything
-else `:normal`, resolved by `SOURCE_PRIORITY`.
+else `:normal`, resolved by `SourcePriority::ORDER`.
 
 ### 2. `Services::BooksMigration::AuthorDescriptionMigrator`
 
 Same shape, reading legacy `authors`. `ai_description` (38,114) → `:ai_generated`; `description`
 (8,670) → `:wikipedia` + `:cc_by_sa_4`, `source_url` ← `description_source_url`. No `preferred` rows —
-`SOURCE_PRIORITY` reproduces `ai_description || description`.
+`SourcePriority::ORDER` reproduces `ai_description || description`.
 
 ### 3. `Services::Descriptions::ColumnBackfill`
 
@@ -464,7 +472,7 @@ passing, `bin/snapshot-dev-db.sh --label pre-descriptions` beforehand, and shipp
 ## Testing
 
 - `DescriptionTest` — enums, uniqueness, `source_name`-required-for-`:other`, CHECK constraint
-- `Descriptions::ResolverTest` — `preferred` wins; `SOURCE_PRIORITY` order; `deprecated` never selected;
+- `Descriptions::ResolverTest` — `preferred` wins; `SourcePriority::ORDER` order; `deprecated` never selected;
   `(kind, locale)` scoping; empty collection → `nil`
 - `DescribableTest` exercised through a real model
 - Three migrator tests against legacy fixtures: the 198,017-row breakdown and a no-op second run
