@@ -20,6 +20,8 @@
 #
 module Movies
   class Movie < ApplicationRecord
+    include Describable
+
     extend FriendlyId
 
     friendly_id :title, use: [:slugged, :finders]

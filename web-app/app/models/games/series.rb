@@ -15,6 +15,8 @@
 #  index_games_series_on_slug  (slug) UNIQUE
 #
 class Games::Series < ApplicationRecord
+  include Describable
+
   extend FriendlyId
 
   friendly_id :name, use: [:slugged, :finders]
