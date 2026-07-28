@@ -230,12 +230,18 @@ end
 
 add_index :descriptions,
   %i[describable_type describable_id kind locale source source_name],
-  unique: true, name: "index_descriptions_on_describable_and_key"
+  unique: true, nulls_not_distinct: true,
+  name: "index_descriptions_on_describable_and_key"
 ```
 
-`source_name` sits **inside** the unique index so two different `:other` sources do not collide. It is
-`NULL` for every non-`:other` row, and Postgres treats `NULL`s as distinct — which would let duplicate
-`:other` rows through. A CHECK constraint closes it:
+`source_name` sits **inside** the unique index so two different `:other` sources do not collide.
+
+**`nulls_not_distinct: true` is load-bearing, not a refinement.** `source_name` is `NULL` for every
+non-`:other` row, and Postgres treats `NULL`s as distinct by default — so without it the index would
+happily accept two `(book, summary, en, wikipedia, NULL)` rows, defeating uniqueness for ~99.99% of the
+table. Requires PostgreSQL 15+ (we run 17.4) and Rails 7.1+ (we run 8.1.3).
+
+A CHECK constraint keeps `:other` rows attributable:
 
 ```sql
 ALTER TABLE descriptions ADD CONSTRAINT descriptions_other_requires_source_name
@@ -248,9 +254,10 @@ class Description < ApplicationRecord
 
   enum :kind,    {summary: 0, long: 1, first_sentence: 2, blurb: 3}
   enum :rank,    {deprecated: -1, normal: 0, preferred: 1}
-  enum :license, {cc0: 0, cc_by_sa_4: 1, proprietary: 2}
+  enum :license, {cc0: 0, cc_by_sa_4: 1, proprietary: 2}, prefix: true
   enum :source,  {manual: 0, ai_generated: 1, wikipedia: 2, openlibrary: 3,
-                  musicbrainz: 4, igdb: 5, publisher: 6, goodreads: 7, other: 9}
+                  musicbrainz: 4, igdb: 5, publisher: 6, goodreads: 7, other: 9},
+                 prefix: true
 
   validates :content, presence: true
   validates :locale, presence: true
@@ -260,6 +267,11 @@ end
 
 `license` is nullable; `NULL` means "not recorded", so there is no `unknown_license` member. The
 `source` enum leaves 8 free for a future value without renumbering `:other`.
+
+`source` and `license` take `prefix: true`, matching `ExternalLink` — bare `amazon?`/`cc0?` would be
+ambiguous, and the prefix is what makes `source_other?` exist for the validation above. `kind` and
+`rank` stay unprefixed: `summary?`, `preferred?`, `deprecated?` read naturally and collide with
+nothing.
 
 ---
 
