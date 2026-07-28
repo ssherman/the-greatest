@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_10_014343) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_28_055556) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -224,6 +224,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_10_014343) do
     t.index ["category_id"], name: "index_category_items_on_category_id"
     t.index ["item_type", "item_id"], name: "index_category_items_on_item"
     t.index ["item_type", "item_id"], name: "index_category_items_on_item_type_and_item_id"
+  end
+
+  create_table "descriptions", force: :cascade do |t|
+    t.text "content", null: false
+    t.datetime "created_at", null: false
+    t.bigint "describable_id", null: false
+    t.string "describable_type", null: false
+    t.integer "kind", default: 0, null: false
+    t.integer "license"
+    t.string "locale", default: "en", null: false
+    t.integer "rank", default: 0, null: false
+    t.datetime "retrieved_at"
+    t.integer "source", null: false
+    t.string "source_name"
+    t.string "source_url"
+    t.datetime "updated_at", null: false
+    t.index ["describable_type", "describable_id", "kind", "locale", "source", "source_name"], name: "index_descriptions_on_describable_and_key", unique: true, nulls_not_distinct: true
+    t.index ["describable_type", "describable_id"], name: "index_descriptions_on_describable"
+    t.check_constraint "source <> 9 OR source_name IS NOT NULL", name: "descriptions_other_requires_source_name"
   end
 
   create_table "domain_roles", force: :cascade do |t|
