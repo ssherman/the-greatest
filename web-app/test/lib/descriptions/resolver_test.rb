@@ -1,9 +1,6 @@
 require "test_helper"
 
 module Descriptions
-  # Ensure module is loaded by accessing Resolver class
-  _ = Resolver
-
   class ResolverTest < ActiveSupport::TestCase
     test "returns the preferred row over a higher-priority normal row" do
       rows = [descriptions(:crime_ai), descriptions(:crime_preferred)]
@@ -53,11 +50,11 @@ module Descriptions
     end
 
     test "SOURCE_PRIORITY covers every source value exactly once" do
-      assert_equal Description.sources.keys.sort, Descriptions::SOURCE_PRIORITY.sort
+      assert_equal Description.sources.keys.sort, Descriptions::SourcePriority::ORDER.sort
     end
 
     test "SOURCE_PRIORITY reproduces the legacy books default order" do
-      priority = Descriptions::SOURCE_PRIORITY
+      priority = Descriptions::SourcePriority::ORDER
       assert priority.index("ai_generated") < priority.index("goodreads")
       assert priority.index("goodreads") < priority.index("wikipedia")
       assert priority.index("wikipedia") < priority.index("openlibrary")

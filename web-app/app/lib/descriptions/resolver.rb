@@ -1,16 +1,4 @@
 module Descriptions
-  SOURCE_PRIORITY = %w[
-    manual
-    ai_generated
-    goodreads
-    wikipedia
-    openlibrary
-    publisher
-    musicbrainz
-    igdb
-    other
-  ].freeze
-
   class Resolver
     def self.call(descriptions, kind: :summary, locale: "en")
       candidates = descriptions.select do |description|
@@ -22,7 +10,7 @@ module Descriptions
 
       pool = candidates.select(&:preferred?)
       pool = candidates if pool.empty?
-      pool.min_by { |description| SOURCE_PRIORITY.index(description.source) || SOURCE_PRIORITY.size }
+      pool.min_by { |description| SourcePriority::ORDER.index(description.source) || SourcePriority::ORDER.size }
     end
   end
 end
