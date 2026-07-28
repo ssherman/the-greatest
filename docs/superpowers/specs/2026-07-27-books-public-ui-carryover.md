@@ -53,6 +53,11 @@ Wire fully:
 - **Public-list viewing stays deferred** to increment 02d. Only 115 of 282,922
   `Books::UserList` rows are public (95 with items); those 404 for non-owners until 02d.
 
+## Open question for the spec
+Which books get a public route? 24,242 are ranked; 101,892 are on zero curated lists (they arrived
+via the Goodreads importer and live on user lists). Not a content-quality problem — just decide
+routing/indexability deliberately rather than by default.
+
 ## Data facts (dev, verified)
 126,254 books · 37,111 with attached primary image · 58,214 authors · 1,044 lists ·
 52,742 active categories (genre 20,270 / location 16,690 / subject 36,969).
