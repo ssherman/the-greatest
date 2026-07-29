@@ -409,9 +409,23 @@ The in-app columns, all at `rank: :normal`:
 | `music_artists.description` | `:ai_generated` | 5,468 |
 | `games_series.description` | `:manual` | 5 |
 
-Plus a safety net: any `Books::Book` or `Books::Author` with a non-empty `description` and no row after
-the legacy backfill — the ~50 books and ~21 authors created in-app rather than migrated — gets a
-`:manual` row.
+**The books/authors safety net belongs to b2, not b1.** Any `Books::Book` or `Books::Author` with a
+non-empty `description` and no row *after the legacy backfill* — the ~50 books and ~21 authors created
+in-app rather than migrated — gets a `:manual` row. Since that is defined relative to the legacy
+migrators having run, it executes after them, in b2. b1 covers only the five games/music columns.
+
+**Use `insert_all`, not `upsert_all`.** Verified on PG 17: an `upsert_all` re-run resets a row's
+`rank: :preferred` back to `:normal` and overwrites edited content, because `ON CONFLICT DO UPDATE`
+writes every supplied column. That would silently undo every editorial choice on each run, directly
+violating D5. `insert_all` with the same `unique_by:` issues `ON CONFLICT DO NOTHING`, leaving existing
+rows alone; both cast enum symbols correctly. This is a one-time column lift — after increment (c) the
+importers write `Description` rows directly and the columns are no longer written — so skip-on-conflict
+is the correct semantic.
+
+**Open question for b2:** the same clobber applies to `BookDescriptionMigrator` and
+`AuthorDescriptionMigrator`, which inherit `BulkUpsertMigrator`'s `upsert_all`. Unlike b1 they
+*intentionally* write `rank: :preferred` for the 2,139 legacy `use_description` books, so they cannot
+simply switch. Decide their re-run semantics deliberately when planning b2.
 
 `rank: :normal`, not `:preferred` — corrected 2026-07-28. Every entity this backfill touches receives
 exactly **one** row (games get only `:igdb`, music only `:ai_generated`, `games_series` only `:manual`,
