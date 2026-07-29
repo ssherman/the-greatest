@@ -16,6 +16,7 @@
 #  index_music_albums_on_slug          (slug) UNIQUE
 #
 class Music::Album < ApplicationRecord
+  include Describable
   include SearchIndexable
 
   extend FriendlyId

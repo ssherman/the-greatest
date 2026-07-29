@@ -21,6 +21,7 @@
 #  index_books_authors_on_slug             (slug) UNIQUE
 #
 class Books::Author < ApplicationRecord
+  include Describable
   include SearchIndexable
 
   after_commit :queue_books_for_reindexing, if: :saved_change_to_name?

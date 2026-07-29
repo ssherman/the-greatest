@@ -31,6 +31,7 @@
 #  fk_rails_...  (original_language_id => languages.id)
 #
 class Books::Book < ApplicationRecord
+  include Describable
   include SearchIndexable
 
   extend FriendlyId

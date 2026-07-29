@@ -27,6 +27,7 @@
 #  fk_rails_...  (series_id => games_series.id)
 #
 class Games::Game < ApplicationRecord
+  include Describable
   include SearchIndexable
 
   extend FriendlyId

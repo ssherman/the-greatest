@@ -20,6 +20,8 @@
 #
 module Movies
   class Person < ApplicationRecord
+    include Describable
+
     extend FriendlyId
 
     friendly_id :name, use: [:slugged, :finders]

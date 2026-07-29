@@ -1,0 +1,119 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+# == Schema Information
+#
+# Table name: descriptions
+#
+#  id               :bigint           not null, primary key
+#  content          :text             not null
+#  describable_type :string           not null
+#  kind             :integer          default("summary"), not null
+#  license          :integer
+#  locale           :string           default("en"), not null
+#  rank             :integer          default("normal"), not null
+#  retrieved_at     :datetime
+#  source           :integer          not null
+#  source_name      :string
+#  source_url       :string
+#  created_at       :datetime         not null
+#  updated_at       :datetime         not null
+#  describable_id   :bigint           not null
+#
+# Indexes
+#
+#  index_descriptions_on_describable          (describable_type,describable_id)
+#  index_descriptions_on_describable_and_key  (describable_type,describable_id,kind,locale,source,source_name) UNIQUE NULLS NOT DISTINCT
+#  index_descriptions_one_preferred_per_key   (describable_type,describable_id,kind,locale) UNIQUE WHERE (rank = 1)
+#
+war_and_peace_ai:
+  describable: war_and_peace (Books::Book)
+  kind: summary
+  locale: en
+  source: ai_generated
+  content: "An epic chronicle of Russian society through the Napoleonic wars."
+  rank: normal
+
+war_and_peace_wikipedia:
+  describable: war_and_peace (Books::Book)
+  kind: summary
+  locale: en
+  source: wikipedia
+  content: "A literary work by the Russian author Leo Tolstoy."
+  rank: normal
+  source_url: "https://en.wikipedia.org/wiki/War_and_Peace"
+  license: cc_by_sa_4
+  retrieved_at: 2026-07-27 12:00:00
+
+war_and_peace_fr:
+  describable: war_and_peace (Books::Book)
+  kind: summary
+  locale: fr
+  source: ai_generated
+  content: "Une chronique de la societe russe pendant les guerres napoleoniennes."
+  rank: normal
+
+war_and_peace_long:
+  describable: war_and_peace (Books::Book)
+  kind: long
+  locale: en
+  source: ai_generated
+  content: "A much longer treatment of the same novel, used to prove kind scoping."
+  rank: normal
+
+crime_preferred:
+  describable: crime_and_punishment (Books::Book)
+  kind: summary
+  locale: en
+  source: manual
+  content: "A hand-written editorial summary."
+  rank: preferred
+
+crime_ai:
+  describable: crime_and_punishment (Books::Book)
+  kind: summary
+  locale: en
+  source: ai_generated
+  content: "An AI summary that must lose to the preferred row."
+  rank: normal
+
+crime_deprecated:
+  describable: crime_and_punishment (Books::Book)
+  kind: summary
+  locale: en
+  source: goodreads
+  content: "Known-bad text that must never be selected."
+  rank: deprecated
+  license: proprietary
+
+lonely_deprecated:
+  describable: combo_steinbeck (Books::Book)
+  kind: summary
+  locale: en
+  source: ai_generated
+  content: "The only row on this book, and it is deprecated."
+  rank: deprecated
+
+dark_side_ai:
+  describable: dark_side_of_the_moon (Music::Album)
+  kind: summary
+  locale: en
+  source: ai_generated
+  content: "A concept album exploring conflict, greed, time and mental illness."
+  rank: preferred
+
+botw_igdb:
+  describable: breath_of_the_wild (Games::Game)
+  kind: summary
+  locale: en
+  source: igdb
+  content: "An open-air adventure across the kingdom of Hyrule."
+  rank: preferred
+
+tolstoy_google:
+  describable: tolstoy (Books::Author)
+  kind: summary
+  locale: en
+  source: other
+  source_name: "Google Books"
+  content: "Russian writer widely regarded as one of the greatest novelists."
+  rank: normal

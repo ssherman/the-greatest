@@ -17,6 +17,8 @@
 #  index_games_companies_on_slug  (slug) UNIQUE
 #
 class Games::Company < ApplicationRecord
+  include Describable
+
   extend FriendlyId
 
   friendly_id :name, use: [:slugged, :finders]
