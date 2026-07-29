@@ -49,15 +49,16 @@ module Descriptions
       assert_equal manual, Descriptions::Resolver.call([ai, manual])
     end
 
-    test "SOURCE_PRIORITY covers every source value exactly once" do
+    test "SourcePriority::ORDER covers every source value exactly once" do
       assert_equal Description.sources.keys.sort, Descriptions::SourcePriority::ORDER.sort
     end
 
-    test "SOURCE_PRIORITY reproduces the legacy books default order" do
+    test "SourcePriority::ORDER ranks ai_generated and goodreads ahead of every raw-description-derived source" do
       priority = Descriptions::SourcePriority::ORDER
-      assert priority.index("ai_generated") < priority.index("goodreads")
-      assert priority.index("goodreads") < priority.index("wikipedia")
-      assert priority.index("wikipedia") < priority.index("openlibrary")
+      %w[wikipedia openlibrary publisher other].each do |sourced|
+        assert priority.index("ai_generated") < priority.index(sourced)
+        assert priority.index("goodreads") < priority.index(sourced)
+      end
     end
   end
 end

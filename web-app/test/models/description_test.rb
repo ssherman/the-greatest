@@ -23,6 +23,7 @@ require "test_helper"
 #
 #  index_descriptions_on_describable          (describable_type,describable_id)
 #  index_descriptions_on_describable_and_key  (describable_type,describable_id,kind,locale,source,source_name) UNIQUE NULLS NOT DISTINCT
+#  index_descriptions_one_preferred_per_key   (describable_type,describable_id,kind,locale) UNIQUE WHERE (rank = 1)
 #
 class DescriptionTest < ActiveSupport::TestCase
   test "belongs to a polymorphic describable" do
@@ -110,6 +111,22 @@ class DescriptionTest < ActiveSupport::TestCase
       describable: books_books(:war_and_peace),
       kind: :summary, locale: "en", source: :other, source_name: nil, content: "unattributed"
     )
-    assert_raises(ActiveRecord::StatementInvalid) { invalid.save(validate: false) }
+    assert_raises(ActiveRecord::CheckViolation) { invalid.save(validate: false) }
+  end
+
+  test "database rejects blank content even when validations are skipped" do
+    blank = Description.new(
+      describable: books_books(:war_and_peace),
+      kind: :blurb, locale: "en", source: :ai_generated, content: "   "
+    )
+    assert_raises(ActiveRecord::CheckViolation) { blank.save(validate: false) }
+  end
+
+  test "database rejects a second preferred row for the same describable, kind, and locale" do
+    conflict = Description.new(
+      describable: books_books(:crime_and_punishment),
+      kind: :summary, locale: "en", source: :wikipedia, content: "a second preferred row", rank: :preferred
+    )
+    assert_raises(ActiveRecord::RecordNotUnique) { conflict.save(validate: false) }
   end
 end

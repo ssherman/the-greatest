@@ -21,6 +21,7 @@
 #
 #  index_descriptions_on_describable          (describable_type,describable_id)
 #  index_descriptions_on_describable_and_key  (describable_type,describable_id,kind,locale,source,source_name) UNIQUE NULLS NOT DISTINCT
+#  index_descriptions_one_preferred_per_key   (describable_type,describable_id,kind,locale) UNIQUE WHERE (rank = 1)
 #
 class Description < ApplicationRecord
   belongs_to :describable, polymorphic: true
@@ -34,6 +35,7 @@ class Description < ApplicationRecord
 
   validates :content, presence: true
   validates :locale, presence: true
+  validates :source, presence: true
   validates :source_name, presence: true, if: :source_other?
   validates :source, uniqueness: {
     scope: [:describable_type, :describable_id, :kind, :locale, :source_name]

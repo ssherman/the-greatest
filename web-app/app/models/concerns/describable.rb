@@ -2,7 +2,7 @@ module Describable
   extend ActiveSupport::Concern
 
   included do
-    has_many :descriptions, as: :describable, dependent: :destroy
+    has_many :descriptions, -> { order(:id) }, as: :describable, dependent: :destroy
   end
 
   def primary_description(kind: :summary, locale: "en")

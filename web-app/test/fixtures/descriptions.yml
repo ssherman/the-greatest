@@ -23,6 +23,7 @@
 #
 #  index_descriptions_on_describable          (describable_type,describable_id)
 #  index_descriptions_on_describable_and_key  (describable_type,describable_id,kind,locale,source,source_name) UNIQUE NULLS NOT DISTINCT
+#  index_descriptions_one_preferred_per_key   (describable_type,describable_id,kind,locale) UNIQUE WHERE (rank = 1)
 #
 war_and_peace_ai:
   describable: war_and_peace (Books::Book)

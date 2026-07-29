@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_28_055556) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_29_021921) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -241,7 +241,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_28_055556) do
     t.string "source_url"
     t.datetime "updated_at", null: false
     t.index ["describable_type", "describable_id", "kind", "locale", "source", "source_name"], name: "index_descriptions_on_describable_and_key", unique: true, nulls_not_distinct: true
+    t.index ["describable_type", "describable_id", "kind", "locale"], name: "index_descriptions_one_preferred_per_key", unique: true, where: "(rank = 1)"
     t.index ["describable_type", "describable_id"], name: "index_descriptions_on_describable"
+    t.check_constraint "length(btrim(content)) > 0", name: "descriptions_content_not_blank"
     t.check_constraint "source <> 9 OR source_name IS NOT NULL", name: "descriptions_other_requires_source_name"
   end
 
