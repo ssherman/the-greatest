@@ -201,7 +201,7 @@ The per-row `license` column makes the encumbered rows queryable for the first t
 | D4 | `rank` enum `{deprecated: -1, normal: 0, preferred: 1}` — not a `primary` boolean | Wikidata's model. `deprecated` lets a known-bad row stay for idempotent re-import while being permanently excluded from display; a boolean cannot express that. |
 | D5 | Importers may only create/update the row matching their own `source`, and may **never** write `rank`. Only *deliberate selection operations* set `preferred` — and those are usually programmatic, not per-record clicks. | Makes the Jellyfin lock-flag failure mode structurally impossible. Replaces `pinned_at`/`pinned_by` from the research recommendation — with this invariant, `rank: :preferred` already *is* the record of the selection. **Corrected 2026-07-28:** an earlier wording said "only humans set `preferred`", which misdescribes the real workflow. On the legacy site the owner's main use of `use_description` was a **bulk button that flipped every book on a list to Goodreads**, because the books were that year's releases and the AI did not know them. The distinction that matters is not human-vs-machine but *syncing a source* (never touches `rank`) vs *choosing which source wins* (may). |
 | D14 | The DB enforces at most one `preferred` row per `(describable, kind, locale)` — partial unique index `WHERE rank = 1` | D5 is otherwise only a convention, and the operations that set `preferred` are bulk writes, which is exactly where a convention breaks silently. A bulk switch that sets new `preferred` rows without clearing the old ones would leave every affected record double-flagged, with no error and no symptom — the resolver would quietly fall back to source priority, the very thing `preferred` exists to override. Added while the table was empty; after the backfill it would cost a 198k-row validation pass. Consequence: increment (c)'s `set_preferred` must demote-then-promote inside a transaction, so it cannot mirror `Image#unset_other_primary_images` (an `after_save` that promotes first). |
-| D15 | `content` carries a DB check constraint `length(btrim(content)) > 0`, not just `validates :content, presence: true` | `null: false` does not stop `""`, and the backfill's `upsert_all` bypasses validations. Verified empirically: a blank-content row was accepted under `upsert_all`. A `build_rows` that tests truthiness instead of `.presence` would land empty descriptions in production *and still pass the row-count verification*. **Known gap:** single-argument `btrim` trims ASCII spaces only, so `"\t\n"` passes the DB check while being `.blank?` in Ruby. Not load-bearing — the failure mode being guarded produces `""` — but worth widening if increment (b) touches this migration anyway. |
+| D15 | `content` carries a DB check constraint `length(btrim(content)) > 0`, not just `validates :content, presence: true` | `null: false` does not stop `""`, and the backfill's `upsert_all` bypasses validations. Verified empirically: a blank-content row was accepted under `upsert_all`. A `build_rows` that tests truthiness instead of `.presence` would land empty descriptions in production *and still pass the row-count verification*. **Known gap:** single-argument `btrim` trims ASCII spaces only, so `"\t\n"` passes the DB check while being `.blank?` in Ruby. Not load-bearing — the failure mode being guarded produces `""` — but worth widening if increment (b2) touches this migration anyway. |
 | D6 | `license` and `source_url` per row; `retrieved_at` per row | Wikidata CC0 vs Wikipedia CC BY-SA arrive from the same integration. TMDB's 6-month cache limit needs `retrieved_at` the day we add a TMDB importer. |
 | D7 | Read through `primary_description`; drop the eleven columns | Owner's call over keeping the column as a maintained cache. One representation, nothing to drift. |
 | D8 | No `has_one :primary_description` — a `Descriptions::Resolver` over a loaded collection | The winner is computed, not flagged, so a `has_one` scope cannot express it. Entities carry 1–4 rows, so `includes(:descriptions)` is one extra query total. |
@@ -571,10 +571,26 @@ Gate before claiming done: `bin/rails test`, `bin/rails test:system`, `bundle ex
 | | Content | Behaviour change |
 |---|---|---|
 | a | `Description` model, schema, `Descriptions::Resolver`, `Describable`, tests | none |
-| b | Three backfill migrators + rake tasks + verification | none |
+| b1 | `Services::DescriptionColumnBackfill` — games + music, 11,382 rows | none |
+| b2 | `BookDescriptionMigrator` + `AuthorDescriptionMigrator` — 186,635 rows | none |
 | c | Write path: AI tasks, IGDB providers, admin panel, strip nine forms | yes |
 | d | Read path: five public + nine admin views, `AttributionComponent`, includes | yes |
 | e | Drop the eleven `description` columns | separate PR, post-production |
+
+**Why (b) splits.** The three backfills are not alike. `DescriptionColumnBackfill` reads the *current*
+database, needs no legacy connection, and moves 11,382 rows; the two legacy migrators need the
+`legacy_books` connection up and move 186,635. Running the small one first exercises the entire
+`upsert_all` path end to end — the `nulls_not_distinct` conflict target, enum-symbol serialisation, and
+all four constraints — against data that cannot fail for legacy-connection reasons, before 186k rows
+depend on that machinery. Nothing downstream is unblocked by the split ((c) and (d) span every domain
+at once), so this is purely de-risking.
+
+**b1 does not subclass `BulkUpsertMigrator`.** That base class and its parent `Migrator` both live under
+`Services::BooksMigration`, stream from a `legacy_model`, and wrap the load in
+`Services::BooksMigration.without_search_indexing`. `DescriptionColumnBackfill` has no legacy model and
+no search-indexing concern (`Description` is not `SearchIndexable`, and no `description` field is
+indexed). It is a standalone service that calls `upsert_all` directly, so b2's migrators remain the
+only `BulkUpsertMigrator` subclasses.
 
 ---
 
