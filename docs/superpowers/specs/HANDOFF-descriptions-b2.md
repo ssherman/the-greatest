@@ -33,28 +33,19 @@ a description in the new app, because `BookTransformer` ported the wrong column 
 displays `description_to_display`, which resolves to `ai_generated_description` for 87.5% of books.
 The books public UI is blocked on this.
 
-## The decision b2 has to make, and it is not settled
+## Conflict semantics — settled, do not re-litigate
 
-`BulkUpsertMigrator` uses `upsert_all`. **Verified on PG 17 that an `upsert_all` re-run resets a row's
-`rank: :preferred` to `:normal` and overwrites edited content**, because `ON CONFLICT DO UPDATE` writes
-every supplied column. b1 sidestepped this by using `insert_all` (`ON CONFLICT DO NOTHING`).
+Override `BulkUpsertMigrator`'s `upsert_all` with **`insert_all`**, same as b1. No `finalize` pass. On a
+clean table the rows do not exist, so the 2,139 legacy `use_description` books get `rank: :preferred` on
+first insert; later runs skip existing keys while still picking up anything new.
 
-b2 cannot simply copy that: per D11 it **intentionally** writes `rank: :preferred` for the 2,139 books
-whose legacy `use_description` was not `default`.
+The owner ruled on 2026-07-29 that this is a **one-time lift** — no descriptions get edited on the legacy
+site before launch — so there is no need to re-sync changed legacy text, and no need to design for it.
 
-There is a second, sharper problem. `index_descriptions_one_preferred_per_key` is a partial unique index
-on `(describable, kind, locale) WHERE rank = 1`. After increment (c) ships and an admin flips a book's
-preferred row from `goodreads` to `ai_generated`, a b2 re-run emits `(ai_generated, rank: normal)` and
-`(goodreads, rank: preferred)` for that book in one statement. If the `goodreads` row is processed
-first, the partial index is momentarily double-occupied and PostgreSQL raises `PG::UniqueViolation` —
-which `ON CONFLICT` cannot absorb, because the arbiter is the *other* index. **The whole 1000-row batch
-aborts,** and whether it fires depends on `build_rows` emission order.
-
-The spec records a recommended resolution: `insert_all` for every row exactly as b1 does, then a
-separate `finalize` pass setting `preferred` only where no `preferred` row already exists for that
-`(describable, kind, locale)`. That keeps b1 and b2 consistent and makes the rank write a deliberate
-single-purpose statement. **Confirm this with the owner before planning** — it is a real fork, not a
-detail.
+Naive `upsert_all` is not an option: it resets `rank: :preferred` to `:normal` and overwrites content on
+every run, and can transiently double-occupy `index_descriptions_one_preferred_per_key`, raising a
+`PG::UniqueViolation` that `ON CONFLICT` cannot absorb (the arbiter is the *other* index), aborting the
+whole batch.
 
 ## Landmines
 

@@ -423,20 +423,21 @@ rows alone; both cast enum symbols correctly. This is a one-time column lift —
 importers write `Description` rows directly and the columns are no longer written — so skip-on-conflict
 is the correct semantic.
 
-**Open question for b2:** the same clobber applies to `BookDescriptionMigrator` and
-`AuthorDescriptionMigrator`, which inherit `BulkUpsertMigrator`'s `upsert_all`. Unlike b1 they
-*intentionally* write `rank: :preferred` for the 2,139 legacy `use_description` books, so they cannot
-simply switch. Compounding this, `upsert_all`'s `ON CONFLICT DO UPDATE` also risks
-`index_descriptions_one_preferred_per_key` (D14): after increment (c) ships and an admin flips a book's
-preferred row from `goodreads` to `ai_generated`, a b2 re-run emits `(ai_generated, rank: normal)` and
-`(goodreads, rank: preferred)` for that book in one statement. If the `goodreads` row is processed
-first, the partial index is momentarily double-occupied and PostgreSQL raises `PG::UniqueViolation`,
-which `ON CONFLICT` cannot absorb because the arbiter is the *other* index — aborting the whole
-1000-row batch. Whether it fires depends on `build_rows` emission order. **Recommended resolution:**
-`insert_all` for all rows exactly as b1 does, then a separate `finalize` pass setting `preferred` only
-where no `preferred` row already exists for that `(describable, kind, locale)`. That keeps b1 and b2
-consistent and makes the rank write a deliberate single-purpose statement rather than a side effect of
-a 186k-row upsert. Decide their re-run semantics deliberately when planning b2.
+**b2 uses `insert_all` too — settled 2026-07-29, do not re-litigate.** `BookDescriptionMigrator` and
+`AuthorDescriptionMigrator` override `BulkUpsertMigrator`'s `upsert_all` with `insert_all`, same as b1.
+No `finalize` pass is needed: on a clean table the rows do not exist yet, so the 2,139 legacy
+`use_description` books get `rank: :preferred` on first insert. Later runs skip existing keys while
+still picking up books and sources that are new since the last run.
+
+The owner's ruling is that this migration is a **one-time lift** — no descriptions will be edited on the
+legacy site before launch — so nothing needs to re-sync changed legacy text. Should that ever become
+necessary, the safe form is `upsert_all(rows, unique_by: ..., update_only: [:content])`, which refreshes
+text without touching `rank`.
+
+Naive `upsert_all` is simply wrong here and is not an option: it would reset an editor's
+`rank: :preferred` to `:normal` and overwrite edited content on every run, and it can transiently
+double-occupy `index_descriptions_one_preferred_per_key` (D14) — raising a `PG::UniqueViolation` that
+`ON CONFLICT` cannot absorb, since the arbiter is the *other* index, aborting the whole 1000-row batch.
 
 `rank: :normal`, not `:preferred` — corrected 2026-07-28. Every entity this backfill touches receives
 exactly **one** row (games get only `:igdb`, music only `:ai_generated`, `games_series` only `:manual`,
