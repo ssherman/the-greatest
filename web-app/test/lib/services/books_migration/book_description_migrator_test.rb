@@ -93,6 +93,24 @@ class Services::BooksMigration::BookDescriptionMigratorTest < ActiveSupport::Tes
     assert_equal "normal", Description.find_by(describable: @book, source: :ai_generated).rank
   end
 
+  # Direct behavioural guard on index_descriptions_one_preferred_per_key: with all three legacy
+  # columns populated, exactly one of the three resulting rows may be `preferred`.
+  test "creates exactly one preferred row, the goodreads one, when every legacy column has text" do
+    result = run_migrator([legacy_book(@book.id,
+      "ai_generated_description" => "An AI summary.",
+      "goodreads_description" => "A Goodreads blurb.",
+      "description" => "A Wikipedia paragraph.",
+      "description_source_name" => "wikipedia",
+      "use_description" => 1)])
+
+    assert result[:success], result[:error]
+    assert_equal 3, result[:data][:count]
+
+    preferred = descriptions_for(@book).where(rank: :preferred)
+    assert_equal 1, preferred.count
+    assert_equal "goodreads", preferred.sole.source
+  end
+
   test "marks only the raw-description row preferred for a use_description book" do
     run_migrator([legacy_book(@book.id,
       "ai_generated_description" => "An AI summary.",

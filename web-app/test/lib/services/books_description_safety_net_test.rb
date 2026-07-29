@@ -41,15 +41,19 @@ module Services
       assert_empty Description.where(describable: book, source: :manual)
     end
 
-    test "skips a book whose existing row is for a different kind or locale, only when none exists at all" do
+    test "writes a (summary, en) row for a book whose only existing row is a different kind, since that is the key it writes" do
       book = books_books(:of_mice_and_men)
       book.update_column(:description, "In-app text.")
       Description.create!(describable: book, kind: :long, locale: "en",
         source: :ai_generated, content: "A long-kind row.", rank: :normal)
 
-      assert_no_difference -> { Description.where(describable: book).count } do
+      assert_difference -> { Description.where(describable: book).count }, 1 do
         Services::BooksDescriptionSafetyNet.call
       end
+
+      row = Description.find_by(describable: book, kind: :summary, locale: "en")
+      assert_equal "manual", row.source
+      assert_equal "In-app text.", row.content
     end
 
     test "skips nil, empty and whitespace-only description columns" do

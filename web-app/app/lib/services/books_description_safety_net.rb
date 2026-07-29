@@ -69,7 +69,8 @@ module Services
     # find_each's batch ordering unambiguous. describable_id is NOT NULL, so there is no
     # NOT IN NULL trap.
     def undescribed(model_name)
-      described_ids = Description.where(describable_type: model_name).select(:describable_id)
+      described_ids = Description.where(describable_type: model_name, kind: :summary, locale: "en")
+        .select(:describable_id)
       model_name.constantize
         .where.not(description: [nil, ""])
         .where.not(id: described_ids)

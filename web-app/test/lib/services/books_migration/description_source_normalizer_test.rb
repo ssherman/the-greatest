@@ -35,6 +35,12 @@ class Services::BooksMigration::DescriptionSourceNormalizerTest < ActiveSupport:
     end
   end
 
+  test "maps a non-breaking-space label to :other Unattributed, since strip only removes ASCII whitespace" do
+    label = " "
+    assert_equal({source: :other, source_name: "Unattributed", license: nil}, normalize(label),
+      "expected #{label.inspect} to normalise to Unattributed")
+  end
+
   test "keeps an unrecognised label as :other with its case preserved and whitespace stripped" do
     assert_equal({source: :other, source_name: "Amazon.com", license: nil}, normalize("Amazon.com"))
     assert_equal({source: :other, source_name: "Publisher's Weekly", license: nil}, normalize("  Publisher's Weekly  "))

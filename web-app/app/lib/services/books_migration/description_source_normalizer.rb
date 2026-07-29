@@ -40,7 +40,7 @@ module Services
           {source: named[:source], source_name: nil, license: named[:license]}
         elsif GOOGLE_LABELS.include?(label.downcase)
           {source: :other, source_name: GOOGLE_NAME, license: nil}
-        elsif label.empty?
+        elsif label.blank?
           {source: :other, source_name: UNATTRIBUTED_NAME, license: nil}
         else
           {source: :other, source_name: label, license: nil}

@@ -106,17 +106,23 @@ namespace :data_migration do
 
   desc "Backfill Description rows from the legacy books description columns (all three; insert_all, skip-on-conflict)"
   task book_descriptions: :environment do
-    pp Services::BooksMigration::BookDescriptionMigrator.call
+    result = Services::BooksMigration::BookDescriptionMigrator.call
+    pp result
+    abort "book_descriptions failed: #{result[:error]}" unless result[:success]
   end
 
   desc "Backfill Description rows from the legacy authors description columns (ai_description + description)"
   task author_descriptions: :environment do
-    pp Services::BooksMigration::AuthorDescriptionMigrator.call
+    result = Services::BooksMigration::AuthorDescriptionMigrator.call
+    pp result
+    abort "author_descriptions failed: #{result[:error]}" unless result[:success]
   end
 
   desc "Give a :manual Description row to in-app books/authors the legacy backfill did not cover (run LAST)"
   task description_safety_net: :environment do
-    pp Services::BooksDescriptionSafetyNet.call
+    result = Services::BooksDescriptionSafetyNet.call
+    pp result
+    abort "description_safety_net failed: #{result.errors.inspect}" unless result.success?
   end
 
   # Order is load-bearing: the safety net's "no row" is defined relative to the two legacy
