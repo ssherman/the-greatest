@@ -199,7 +199,9 @@ The per-row `license` column makes the encumbered rows queryable for the first t
 | D2 | `kind` enum, default `:summary` | The one dimension every surveyed system has. One integer column now; a migration across every row later. |
 | D3 | `locale` string, default `"en"` | Books span many original languages. Cheap now, expensive to add to a table with a unique index later. |
 | D4 | `rank` enum `{deprecated: -1, normal: 0, preferred: 1}` — not a `primary` boolean | Wikidata's model. `deprecated` lets a known-bad row stay for idempotent re-import while being permanently excluded from display; a boolean cannot express that. |
-| D5 | Importers may only create/update the row matching their own `source`, and may **never** write `rank`. Only humans set `preferred`. | Makes the Jellyfin lock-flag failure mode structurally impossible. Replaces `pinned_at`/`pinned_by` from the research recommendation — with this invariant, `rank: :preferred` already *is* the record of the human choice. |
+| D5 | Importers may only create/update the row matching their own `source`, and may **never** write `rank`. Only *deliberate selection operations* set `preferred` — and those are usually programmatic, not per-record clicks. | Makes the Jellyfin lock-flag failure mode structurally impossible. Replaces `pinned_at`/`pinned_by` from the research recommendation — with this invariant, `rank: :preferred` already *is* the record of the selection. **Corrected 2026-07-28:** an earlier wording said "only humans set `preferred`", which misdescribes the real workflow. On the legacy site the owner's main use of `use_description` was a **bulk button that flipped every book on a list to Goodreads**, because the books were that year's releases and the AI did not know them. The distinction that matters is not human-vs-machine but *syncing a source* (never touches `rank`) vs *choosing which source wins* (may). |
+| D14 | The DB enforces at most one `preferred` row per `(describable, kind, locale)` — partial unique index `WHERE rank = 1` | D5 is otherwise only a convention, and the operations that set `preferred` are bulk writes, which is exactly where a convention breaks silently. A bulk switch that sets new `preferred` rows without clearing the old ones would leave every affected record double-flagged, with no error and no symptom — the resolver would quietly fall back to source priority, the very thing `preferred` exists to override. Added while the table was empty; after the backfill it would cost a 198k-row validation pass. Consequence: increment (c)'s `set_preferred` must demote-then-promote inside a transaction, so it cannot mirror `Image#unset_other_primary_images` (an `after_save` that promotes first). |
+| D15 | `content` carries a DB check constraint `length(btrim(content)) > 0`, not just `validates :content, presence: true` | `null: false` does not stop `""`, and the backfill's `upsert_all` bypasses validations. Verified empirically: a blank-content row was accepted under `upsert_all`. A `build_rows` that tests truthiness instead of `.presence` would land empty descriptions in production *and still pass the row-count verification*. **Known gap:** single-argument `btrim` trims ASCII spaces only, so `"\t\n"` passes the DB check while being `.blank?` in Ruby. Not load-bearing — the failure mode being guarded produces `""` — but worth widening if increment (b) touches this migration anyway. |
 | D6 | `license` and `source_url` per row; `retrieved_at` per row | Wikidata CC0 vs Wikipedia CC BY-SA arrive from the same integration. TMDB's 6-month cache limit needs `retrieved_at` the day we add a TMDB importer. |
 | D7 | Read through `primary_description`; drop the eleven columns | Owner's call over keeping the column as a maintained cache. One representation, nothing to drift. |
 | D8 | No `has_one :primary_description` — a `Descriptions::Resolver` over a loaded collection | The winner is computed, not flagged, so a `has_one` scope cannot express it. Entities carry 1–4 rows, so `includes(:descriptions)` is one extra query total. |
@@ -246,6 +248,16 @@ A CHECK constraint keeps `:other` rows attributable:
 ```sql
 ALTER TABLE descriptions ADD CONSTRAINT descriptions_other_requires_source_name
   CHECK (source <> 9 OR source_name IS NOT NULL);
+```
+
+Two further DB-level guards, added because `upsert_all` bypasses every model validation (D14, D15):
+
+```ruby
+add_check_constraint :descriptions, "length(btrim(content)) > 0",
+  name: "descriptions_content_not_blank"
+
+add_index :descriptions, [:describable_type, :describable_id, :kind, :locale],
+  unique: true, where: "rank = 1", name: "index_descriptions_one_preferred_per_key"
 ```
 
 ```ruby
@@ -343,8 +355,13 @@ double-create.
 
 Source-name normalisation (strip, downcase): `wikipedia` → `:wikipedia` + `:cc_by_sa_4` ·
 `openlibrary` → `:openlibrary` + `:cc0` · `google`, `google books` → `:other` + `source_name: "Google Books"` ·
-`publisher` → `:publisher` · everything else → `:other` + `source_name` verbatim · blank → `:other` +
+`publisher` → `:publisher` · everything else → `:other` + **stripped** `source_name` · blank → `:other` +
 `source_name: "Unattributed"`.
+
+`source_name` is stripped, not stored verbatim: legacy holds `"Publisher "` (98 rows, trailing space)
+alongside `"Publisher"`, and since `source_name` sits inside the unique key those would become two
+distinct rows and two near-duplicate source labels in the admin UI. Case is preserved — only whitespace
+is trimmed.
 
 `source_url` ← `description_source_url`. `retrieved_at` stays NULL — legacy never recorded it, and
 back-dating from `updated_at` would be a fabrication. `locale: "en"`, `kind: :summary` throughout.
@@ -359,9 +376,16 @@ Same shape, reading legacy `authors`. `ai_description` (38,114) → `:ai_generat
 (8,670) → `:wikipedia` + `:cc_by_sa_4`, `source_url` ← `description_source_url`. No `preferred` rows —
 `SourcePriority::ORDER` reproduces `ai_description || description`.
 
-### 3. `Services::Descriptions::ColumnBackfill`
+### 3. `Services::DescriptionColumnBackfill`
 
-The in-app columns, all at `rank: :preferred` so display is byte-identical:
+**Not** `Services::Descriptions::ColumnBackfill`. Inside `module Services; module Descriptions`, the
+constant `Descriptions` resolves lexically to `Services::Descriptions` — itself — so
+`Descriptions::SourcePriority::ORDER` and `Descriptions::Resolver` both raise `NameError`. (The model
+`Description` still resolves; only the `Descriptions::` namespace is shadowed.) This is the same
+landmine as `Services::BooksMigration`'s bare `Music::`. If a `Services::Descriptions` namespace is
+ever wanted anyway, every reference must be written `::Descriptions::…`.
+
+The in-app columns, all at `rank: :normal`:
 
 | Column | `source` | Rows |
 |---|---|---|
@@ -374,6 +398,35 @@ The in-app columns, all at `rank: :preferred` so display is byte-identical:
 Plus a safety net: any `Books::Book` or `Books::Author` with a non-empty `description` and no row after
 the legacy backfill — the ~50 books and ~21 authors created in-app rather than migrated — gets a
 `:manual` row.
+
+`rank: :normal`, not `:preferred` — corrected 2026-07-28. Every entity this backfill touches receives
+exactly **one** row (games get only `:igdb`, music only `:ai_generated`, `games_series` only `:manual`,
+and the safety net fires only where no row exists). With one row the two ranks display identically,
+so `preferred` buys nothing while manufacturing ~11,382 records of a choice nobody made — contradicting
+D5. The cost lands later: an editor writes a `:manual` description for an album and it does not display,
+because a backfill marked the AI row preferred. Under D14's partial unique index this is also the shape
+that would collide first.
+
+### Verified safe for the backfill (probed on PG 17, 2026-07-28)
+
+- `upsert_all(unique_by: :index_descriptions_on_describable_and_key)` **does** infer the arbiter against
+  a `NULLS NOT DISTINCT` index — rows with a NULL `source_name` de-duplicate correctly.
+- `upsert_all` serialises enum **symbols** through the model's attribute types, so `build_rows` can emit
+  `{source: :ai_generated, rank: :normal}` with no manual integer mapping.
+- The `descriptions_other_requires_source_name` check constraint **is** enforced under `upsert_all`
+  (raises `ActiveRecord::CheckViolation`).
+- `unique_by:` addressed by index name matches the existing `BulkUpsertMigrator` contract, so the
+  migrators need no base-class change.
+
+### Landmine for the backfill
+
+Two rows sharing the conflict key **in the same `upsert_all` batch** raise
+`PG::CardinalityViolation: ON CONFLICT DO UPDATE command cannot affect row a second time`, killing the
+whole batch — the same failure `ListPenaltyMigrator` needed its `@seen` set for. `build_rows` looks safe
+by construction here (each legacy book yields at most one row per source, and no normalisation target
+collides with `:ai_generated` or `:goodreads`), but that safety is incidental: if `description_source_name`
+normalisation ever maps onto a source another column already claims, the batch dies. Either dedup per
+batch or state in a comment why one is unnecessary.
 
 ### Verification
 
@@ -433,8 +486,21 @@ end
 ```
 
 `turbo_frame_tag "descriptions_list"`, `Admin::DomainScopedAuth` + `require_domain_write!`.
-`set_preferred` demotes the sibling `preferred` row for the same `(kind, locale)`, mirroring
-`Image#unset_other_primary_images`.
+
+`set_preferred` **demotes the sibling then promotes, inside a transaction.** It cannot mirror
+`Image#unset_other_primary_images`, which is an `after_save` that promotes first — under D14's partial
+unique index that ordering violates the constraint mid-callback.
+
+**Two things not to copy from `Admin::ImagesController` verbatim:** the polymorphic association is
+`describable`, not `parent` (per the `_able` convention), so `params[:parent_type]` and `parent.images`
+have no equivalent here. And per D13 this panel is a review-and-select surface, not an authoring one —
+`create` exists for override, but the emphasis is view / `set_preferred` / delete.
+
+**Bulk set-preferred by list.** The legacy site's real workflow for `use_description` was a button that
+flipped *every book on a list* to Goodreads, because the list was that year's releases and the AI did
+not know them. That is the operation to build, not per-record curation: given a list and a target
+source, clear `preferred` across the affected rows and set it on the chosen source's rows, in one
+transaction. D14's index makes forgetting the clear step raise rather than silently double-flag.
 
 The description field comes out of the nine admin forms. Descriptions become editable only after
 create, since the nested panel needs a persisted parent — identical to how images behave today.

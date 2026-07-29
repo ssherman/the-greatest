@@ -686,4 +686,4 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 ## Not in this increment
 
-Increment (b) adds `BooksMigration::BookDescriptionMigrator`, `BooksMigration::AuthorDescriptionMigrator`, and `Services::Descriptions::ColumnBackfill`. Increment (c) cuts the write paths over. Increment (d) cuts the read paths over and adds `Descriptions::AttributionComponent`. Increment (e) drops the eleven `description` columns. Each gets its own plan.
+Increment (b) adds `BooksMigration::BookDescriptionMigrator`, `BooksMigration::AuthorDescriptionMigrator`, and `Services::DescriptionColumnBackfill` (**not** `Services::Descriptions::ColumnBackfill` — inside `module Services` the constant `Descriptions` resolves lexically to `Services::Descriptions`, so every `Descriptions::Resolver` / `Descriptions::SourcePriority` reference would `NameError`). Increment (c) cuts the write paths over. Increment (d) cuts the read paths over and adds `Descriptions::AttributionComponent`. Increment (e) drops the eleven `description` columns. Each gets its own plan.
