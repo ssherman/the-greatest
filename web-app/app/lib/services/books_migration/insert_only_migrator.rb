@@ -9,7 +9,13 @@ module Services
     # rank: :preferred back to :normal and overwrite edited content, violating D5. It can
     # also transiently double-occupy index_descriptions_one_preferred_per_key (D14), raising
     # a PG::UniqueViolation that ON CONFLICT cannot absorb -- the arbiter is the other index
-    # -- aborting the whole batch. These backfills are a one-time lift, so skip-on-conflict
+    # -- aborting the whole batch. Switching to insert_all does not close this specific
+    # hazard: the ON CONFLICT arbiter is the natural-key index either way, so a new
+    # rank: :preferred row landing on a record that already carries a preferred row from a
+    # different source still raises PG::UniqueViolation against the other index and aborts
+    # the batch. Not reachable today -- no Books::Book had any Description row before this
+    # run -- and closed before increment (c) ships the admin set-preferred UI, which
+    # demotes-then-promotes inside a transaction. These backfills are a one-time lift, so skip-on-conflict
     # is the correct semantic: later runs leave existing rows alone while still picking up
     # records and sources that are new since the last run, and no finalize pass is needed.
     # Were re-syncing changed source text ever wanted, the safe form is
