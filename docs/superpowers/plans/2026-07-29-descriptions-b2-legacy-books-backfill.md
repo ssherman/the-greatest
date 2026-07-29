@@ -75,6 +75,7 @@ These are the numbers the plan's assertions use. They were measured, not taken f
 |---|---|
 | Create `web-app/db/migrate/<ts>_widen_description_content_not_blank_constraint.rb` | Close D15's `btrim` gap so the DB guard matches Ruby's `.blank?` |
 | Create `web-app/app/lib/services/books_migration/description_source_normalizer.rb` | Pure: dirty legacy source label → `{source:, source_name:, license:}`. Shared by both migrators |
+| Create `web-app/app/lib/services/books_migration/insert_only_migrator.rb` | `BulkUpsertMigrator` with `flush` overridden to `insert_all`. Holds the why-not-upsert reasoning once; both description migrators subclass it |
 | Create `web-app/app/lib/services/books_migration/book_description_migrator.rb` | Legacy `books`' three description columns → `Description` rows |
 | Create `web-app/app/lib/services/books_migration/author_description_migrator.rb` | Legacy `authors`' two description columns → `Description` rows |
 | Create `web-app/app/lib/services/books_description_safety_net.rb` | In-app books/authors with a description and no row → `:manual` row. Runs last |
@@ -338,16 +339,21 @@ git commit -m "Add DescriptionSourceNormalizer for the legacy description backfi
 
 ---
 
-### Task 3: `BookDescriptionMigrator`
+### Task 3: `InsertOnlyMigrator` + `BookDescriptionMigrator`
+
+Creates the shared `insert_all` base class alongside the first migrator that needs it, so the why-not-`upsert_all` reasoning is written once rather than duplicated into Task 4.
 
 **Files:**
+- Create: `web-app/app/lib/services/books_migration/insert_only_migrator.rb`
 - Create: `web-app/app/lib/services/books_migration/book_description_migrator.rb`
 - Test: `web-app/test/lib/services/books_migration/book_description_migrator_test.rb`
 - Read for the pattern: `web-app/app/lib/services/books_migration/list_item_migrator.rb`, `web-app/app/lib/services/books_migration/bulk_upsert_migrator.rb`
 
 **Interfaces:**
 - Consumes: `Services::BooksMigration::DescriptionSourceNormalizer.call(raw_label) → {source:, source_name:, license:}` (Task 2). `Services::BooksMigration::BulkUpsertMigrator`, whose `call` returns `{success: true, data: {model:, count:}}` or `{success: false, error:, data: {model:, count:}}`, and whose private template methods are `legacy_model`, `model_key`, `target_model`, `unique_by`, `build_rows(attrs)`, and optionally `preload_context`, `legacy_each`, `flush(rows)`, `record_timestamps?`.
-- Produces: `Services::BooksMigration::BookDescriptionMigrator.call` (inherited `self.call`) → the same Result hash, with `data[:model] == "Books::Book Description"` and `data[:count]` the number of rows Postgres actually inserted. Task 6 calls it from rake. Task 5's safety net depends on it having run.
+- Produces:
+  - `Services::BooksMigration::InsertOnlyMigrator < BulkUpsertMigrator` — overrides **only** the private `flush(rows)`, to `target_model.insert_all(rows, unique_by: unique_by, record_timestamps: record_timestamps?)`, accumulating `ActiveRecord::Result#length` into `@count`. Adds no other behaviour and defines no other method. Task 4 subclasses it.
+  - `Services::BooksMigration::BookDescriptionMigrator.call` (inherited `self.call`) → the same Result hash, with `data[:model] == "Books::Book Description"` and `data[:count]` the number of rows Postgres actually inserted. Task 6 calls it from rake. Task 5's safety net depends on it having run.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -548,7 +554,50 @@ Run: `bin/rails test test/lib/services/books_migration/book_description_migrator
 
 Expected: FAIL with `NameError: uninitialized constant Services::BooksMigration::BookDescriptionMigrator`.
 
-- [ ] **Step 3: Write the implementation**
+- [ ] **Step 3a: Write the shared `insert_all` base class**
+
+Create `web-app/app/lib/services/books_migration/insert_only_migrator.rb`:
+
+```ruby
+module Services
+  module BooksMigration
+    # BulkUpsertMigrator that writes with insert_all (ON CONFLICT DO NOTHING) instead of
+    # upsert_all. Everything else -- streaming, batching, per-batch statements, the Result
+    # hash, fail-loud error wrapping -- is inherited unchanged.
+    #
+    # Why, for the description backfill it exists to serve: upsert_all's ON CONFLICT DO
+    # UPDATE writes every supplied column, so a re-run would reset an editor's
+    # rank: :preferred back to :normal and overwrite edited content, violating D5. It can
+    # also transiently double-occupy index_descriptions_one_preferred_per_key (D14), raising
+    # a PG::UniqueViolation that ON CONFLICT cannot absorb -- the arbiter is the other index
+    # -- aborting the whole batch. These backfills are a one-time lift, so skip-on-conflict
+    # is the correct semantic: later runs leave existing rows alone while still picking up
+    # records and sources that are new since the last run, and no finalize pass is needed.
+    # Were re-syncing changed source text ever wanted, the safe form is
+    # upsert_all(rows, unique_by: ..., update_only: [:content]) -- it refreshes text without
+    # touching rank.
+    #
+    # Switching to insert_all also removes the intra-batch PG::CardinalityViolation that
+    # ListPenaltyMigrator needed an @seen set for: DO NOTHING skips a repeated conflict key
+    # rather than raising. A subclass that reintroduces upsert_all must reintroduce the
+    # dedup with it.
+    #
+    # ActiveRecord::Result#length is the number of rows Postgres actually inserted, so
+    # @count -- and the Result hash built from it -- honestly reports 0 on a no-op re-run
+    # rather than re-counting skipped rows.
+    class InsertOnlyMigrator < BulkUpsertMigrator
+      private
+
+      def flush(rows)
+        result = target_model.insert_all(rows, unique_by: unique_by, record_timestamps: record_timestamps?)
+        @count += result.length
+      end
+    end
+  end
+end
+```
+
+- [ ] **Step 3b: Write the migrator**
 
 Create `web-app/app/lib/services/books_migration/book_description_migrator.rb`:
 
@@ -564,31 +613,19 @@ module Services
     # BookTransformer took the raw column, while the legacy site displays
     # description_to_display, which resolves to ai_generated_description for 87.5% of books.
     #
-    # Writes with insert_all (ON CONFLICT DO NOTHING), NOT the base class's upsert_all.
-    # upsert_all would reset an editor's rank: :preferred back to :normal and overwrite
-    # edited content on every re-run, violating D5, and its DO UPDATE can transiently
-    # double-occupy index_descriptions_one_preferred_per_key (D14) -- a PG::UniqueViolation
-    # that ON CONFLICT cannot absorb, because the arbiter is the other index, aborting the
-    # whole batch. This is a one-time lift (no descriptions are edited on the legacy site
-    # before launch), so skip-on-conflict is the correct semantic. Were re-syncing changed
-    # legacy text ever needed, the safe form is
-    # upsert_all(rows, unique_by: ..., update_only: [:content]), which refreshes text
-    # without touching rank. No finalize pass: on a clean table the rows do not exist, so
-    # the legacy use_description books get rank: :preferred on first insert.
+    # insert_all rather than upsert_all comes from InsertOnlyMigrator; see its header for why.
     #
     # No intra-batch dedup set is needed. Each legacy book yields at most one row per source
     # value: :ai_generated, :goodreads, and one normalised source that is never either of
     # those (DescriptionSourceNormalizer never returns them -- a raw description labelled
-    # "Goodreads" becomes :other). Under insert_all a repeated conflict key is skipped
-    # rather than raising the DO UPDATE PG::CardinalityViolation that ListPenaltyMigrator
-    # needed an @seen set for -- but a future switch back to upsert_all would reintroduce it.
+    # "Goodreads" becomes :other).
     #
     # rank: :preferred goes only where a human chose (D11). use_description = default is
     # reproduced exactly by SourcePriority::ORDER, so only the explicit choices are marked,
     # and only when the chosen column actually holds text: 658 of the 2,137 legacy
     # use_goodreads books have no goodreads_description, and legacy description_to_display
     # falls through to the AI text for them.
-    class BookDescriptionMigrator < BulkUpsertMigrator
+    class BookDescriptionMigrator < InsertOnlyMigrator
       USE_GOODREADS = 1
       USE_DESCRIPTION = 2
 
@@ -679,13 +716,6 @@ module Services
           license: license
         }
       end
-
-      # insert_all's ActiveRecord::Result#length is the number of rows Postgres actually
-      # inserted, so a re-run reports 0 instead of re-counting skipped rows.
-      def flush(rows)
-        result = target_model.insert_all(rows, unique_by: unique_by, record_timestamps: record_timestamps?)
-        @count += result.length
-      end
     end
   end
 end
@@ -700,9 +730,13 @@ Expected: PASS, 12 runs, 0 failures.
 - [ ] **Step 5: Lint and commit**
 
 ```bash
-cd web-app && bundle exec standardrb --fix app/lib/services/books_migration/book_description_migrator.rb test/lib/services/books_migration/book_description_migrator_test.rb
-git add web-app/app/lib/services/books_migration/book_description_migrator.rb web-app/test/lib/services/books_migration/book_description_migrator_test.rb
-git commit -m "Add BookDescriptionMigrator for the legacy books description columns"
+cd web-app && bundle exec standardrb --fix app/lib/services/books_migration/insert_only_migrator.rb app/lib/services/books_migration/book_description_migrator.rb test/lib/services/books_migration/book_description_migrator_test.rb
+git add web-app/app/lib/services/books_migration/insert_only_migrator.rb web-app/app/lib/services/books_migration/book_description_migrator.rb web-app/test/lib/services/books_migration/book_description_migrator_test.rb
+git commit -m "Add BookDescriptionMigrator for the legacy books description columns
+
+Writes via a new InsertOnlyMigrator base class: insert_all's skip-on-conflict
+is what keeps a re-run from resetting rank: :preferred and overwriting edited
+content the way upsert_all would."
 ```
 
 ---
@@ -716,7 +750,7 @@ Same shape as Task 3, two columns instead of three, no `preferred` rows, and the
 - Test: `web-app/test/lib/services/books_migration/author_description_migrator_test.rb`
 
 **Interfaces:**
-- Consumes: `Services::BooksMigration::DescriptionSourceNormalizer.call(raw_label) → {source:, source_name:, license:}` (Task 2); `Services::BooksMigration::BulkUpsertMigrator` (same template methods listed in Task 3).
+- Consumes: `Services::BooksMigration::DescriptionSourceNormalizer.call(raw_label) → {source:, source_name:, license:}` (Task 2); `Services::BooksMigration::InsertOnlyMigrator` (Task 3), which already overrides `flush` to `insert_all` — **do not redefine `flush` here**; and through it `BulkUpsertMigrator`'s template methods (same list as Task 3).
 - Produces: `Services::BooksMigration::AuthorDescriptionMigrator.call` → `{success:, data: {model: "Books::Author Description", count:}}` or `{success: false, error:, data:}`. Task 6 calls it from rake.
 
 - [ ] **Step 1: Write the failing test**
@@ -885,10 +919,10 @@ module Services
     # its 659 unsourced rows -- asserting cc_by_sa_4 on text with nothing to attribute to
     # would be a claim increment (d)'s AttributionComponent could not honour (D10).
     #
-    # insert_all rather than the base class's upsert_all, and no intra-batch dedup set:
-    # see BookDescriptionMigrator's header for the full reasoning. Each legacy author yields
-    # at most one row per source value, and the normaliser never returns :ai_generated.
-    class AuthorDescriptionMigrator < BulkUpsertMigrator
+    # insert_all rather than upsert_all comes from InsertOnlyMigrator; see its header for
+    # why. No intra-batch dedup set is needed: each legacy author yields at most one row per
+    # source value, and the normaliser never returns :ai_generated.
+    class AuthorDescriptionMigrator < InsertOnlyMigrator
       LEGACY_COLUMNS = %i[
         id
         ai_description
@@ -963,15 +997,12 @@ module Services
           license: license
         }
       end
-
-      def flush(rows)
-        result = target_model.insert_all(rows, unique_by: unique_by, record_timestamps: record_timestamps?)
-        @count += result.length
-      end
     end
   end
 end
 ```
+
+`flush` is **not** redefined here — `InsertOnlyMigrator` (Task 3) already provides the `insert_all` write.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
@@ -1567,6 +1598,6 @@ not claim CC BY-SA."
 
 **2. Placeholder scan.** Every code step carries real code. No TBD, no "add error handling", no "similar to Task N" — Task 4 repeats its test and implementation in full rather than referring back to Task 3. The only deliberately open value is Task 10's ranked-book coverage percentage, which is informational and explicitly not a gate.
 
-**3. Type consistency.** `DescriptionSourceNormalizer.call` returns `{source:, source_name:, license:}` in Task 2 and is destructured with exactly those three keys in Tasks 3 and 4. `BulkUpsertMigrator`'s template methods (`legacy_model`, `model_key`, `target_model`, `unique_by`, `preload_context`, `legacy_each`, `build_rows`, `flush`, `record_timestamps?`) match the base class as read from source. The migrators return the base class's `{success:, data: {model:, count:}}` hash; the safety net returns the `Result` struct with `success?`/`data`/`errors` — two different shapes on purpose, matching `BulkUpsertMigrator` and `DescriptionColumnBackfill` respectively, and Task 6's rake tasks and Task 7's expected output reflect the difference. `flush` returns/accumulates `ActiveRecord::Result#length` consistently in all three writers.
+**3. Type consistency.** `DescriptionSourceNormalizer.call` returns `{source:, source_name:, license:}` in Task 2 and is destructured with exactly those three keys in Tasks 3 and 4. `BulkUpsertMigrator`'s template methods (`legacy_model`, `model_key`, `target_model`, `unique_by`, `preload_context`, `legacy_each`, `build_rows`, `flush`, `record_timestamps?`) match the base class as read from source. `flush` is overridden exactly once, in `InsertOnlyMigrator` (Task 3); Tasks 3 and 4 both inherit it and neither redefines it. The migrators return the base class's `{success:, data: {model:, count:}}` hash; the safety net returns the `Result` struct with `success?`/`data`/`errors` — two different shapes on purpose, matching `BulkUpsertMigrator` and `DescriptionColumnBackfill` respectively, and Task 6's rake tasks and Task 7's expected output reflect the difference. All three writers accumulate `ActiveRecord::Result#length` rather than `rows.size`, so counts report real inserts.
 
 **One deliberate addition beyond the spec's b2 scope:** Task 1's constraint widening. D15 invited it ("worth widening if increment (b2) touches this migration anyway"), and the legacy data b2 reads contains a real whitespace-only value, so the guard is reachable rather than theoretical. It is a self-contained 4-line migration in its own commit and can be dropped without affecting Tasks 2–7.
