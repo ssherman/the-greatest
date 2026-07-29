@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_29_031328) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_29_221159) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -243,7 +243,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_29_031328) do
     t.index ["describable_type", "describable_id", "kind", "locale", "source", "source_name"], name: "index_descriptions_on_describable_and_key", unique: true, nulls_not_distinct: true
     t.index ["describable_type", "describable_id", "kind", "locale"], name: "index_descriptions_one_preferred_per_key", unique: true, where: "(rank = 1)"
     t.index ["describable_type", "describable_id"], name: "index_descriptions_on_describable"
-    t.check_constraint "length(btrim(content)) > 0", name: "descriptions_content_not_blank"
+    t.check_constraint "length(btrim(content, ' \t\n\r\f\v'::text)) > 0", name: "descriptions_content_not_blank"
     t.check_constraint "source = 9 AND source_name IS NOT NULL OR source <> 9 AND source_name IS NULL", name: "descriptions_source_name_matches_source"
   end
 

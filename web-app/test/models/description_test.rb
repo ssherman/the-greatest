@@ -158,4 +158,18 @@ class DescriptionTest < ActiveSupport::TestCase
     )
     assert_raises(ActiveRecord::RecordNotUnique) { conflict.save(validate: false) }
   end
+
+  test "the DB rejects whitespace-only content even when validations are bypassed" do
+    assert_raises(ActiveRecord::StatementInvalid) do
+      Description.insert_all([{
+        describable_type: "Books::Book",
+        describable_id: books_books(:of_mice_and_men).id,
+        kind: :summary,
+        locale: "en",
+        source: :manual,
+        content: "\t\n",
+        rank: :normal
+      }])
+    end
+  end
 end
