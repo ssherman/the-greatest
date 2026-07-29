@@ -411,16 +411,18 @@ and music page silently loses its description.
 **Verification is invariant-based, not the hardcoded `11382` used for the dev run above.** Production
 will legitimately produce a different total: dev's games/music data came from a production backup of
 unknown age, and IGDB/AI imports run continuously against production. The invariant that holds in any
-environment is that, for each model in `SOURCE_BY_MODEL`, its `Description` row count equals the number
-of source records with a non-blank `description`:
+environment is that, for each model in `SOURCE_BY_MODEL`, the count of `Description` rows **at the key
+this backfill writes** equals the number of source records with a non-blank `description`:
 
 ```bash
 bin/rails runner '
 ok = true
-Services::DescriptionColumnBackfill::SOURCE_BY_MODEL.each_key do |model_name|
+Services::DescriptionColumnBackfill::SOURCE_BY_MODEL.each do |model_name, source|
   model = model_name.constantize
-  expected = model.where("description IS NOT NULL AND btrim(description) <> ?", "").count
-  actual = Description.where(describable_type: model_name).count
+  expected = model.where("btrim(coalesce(description, ?), ?) <> ?", "", " \t\n\r\f\v", "").count
+  actual = Description.where(
+    describable_type: model_name, source: source, kind: :summary, locale: "en", source_name: nil
+  ).count
   match = expected == actual
   ok &&= match
   puts "#{model_name}: expected=#{expected} actual=#{actual} #{match ? "OK" : "MISMATCH"}"
@@ -428,6 +430,19 @@ end
 puts ok ? "invariant holds" : "invariant VIOLATED"
 '
 ```
+
+Two details in that query are load-bearing, and both were review findings:
+
+**`actual` is scoped to `(source, kind, locale, source_name)`, not just `describable_type`.** A record
+having a description from another source is an explicitly supported state once increment (c)'s write
+paths and admin editing ship — an album can carry both an `:ai_generated` row from this backfill and a
+`:manual` row an editor wrote. An unscoped count includes both, so a *complete* backfill reports
+`MISMATCH`. Verified: adding one editorial row moved `Music::Album` from `actual=3649` to `actual=3650`
+against `expected=3649`.
+
+**`expected` trims the same characters Ruby's `.blank?` does**, not just ASCII spaces. The backfill
+skips on `.presence`, so a description of `"\t\n"` produces no row; single-argument `btrim` would count
+it as non-blank and report a false `MISMATCH`. `coalesce` folds the `NULL` case into the same test.
 
 Expected: `invariant holds`, with each line showing `expected == actual` regardless of what the total
 is. A `MISMATCH` line names the model to start diagnosing from — the dev run's `11382`/per-model split
