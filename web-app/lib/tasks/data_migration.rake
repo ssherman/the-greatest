@@ -104,6 +104,26 @@ namespace :data_migration do
     pp Services::DescriptionColumnBackfill.call
   end
 
+  desc "Backfill Description rows from the legacy books description columns (all three; insert_all, skip-on-conflict)"
+  task book_descriptions: :environment do
+    pp Services::BooksMigration::BookDescriptionMigrator.call
+  end
+
+  desc "Backfill Description rows from the legacy authors description columns (ai_description + description)"
+  task author_descriptions: :environment do
+    pp Services::BooksMigration::AuthorDescriptionMigrator.call
+  end
+
+  desc "Give a :manual Description row to in-app books/authors the legacy backfill did not cover (run LAST)"
+  task description_safety_net: :environment do
+    pp Services::BooksDescriptionSafetyNet.call
+  end
+
+  # Order is load-bearing: the safety net's "no row" is defined relative to the two legacy
+  # migrators having run. Run it first and it stamps :manual onto legacy-sourced text.
+  desc "Run the books/authors description backfill in order (both legacy migrators, then the safety net)"
+  task descriptions: [:book_descriptions, :author_descriptions, :description_safety_net]
+
   desc "Run all Phase-1 migrators in dependency order"
   task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers, :categories, :category_items, :external_links, :lists, :list_items, :ranking_configurations, :ranked_lists, :penalties, :list_penalties, :user_lists, :user_list_items]
 end
