@@ -68,6 +68,7 @@ module Services
     end
 
     test "does not create rows for books" do
+      books_books(:war_and_peace).update_column(:description, "in-app text that must not be backfilled")
       before = Description.where(describable_type: ["Books::Book", "Books::Author"]).count
 
       Services::DescriptionColumnBackfill.call

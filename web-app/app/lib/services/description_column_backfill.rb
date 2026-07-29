@@ -17,12 +17,15 @@ module Services
     end
 
     def call
+      current_model_name = nil
       counts = SOURCE_BY_MODEL.each_with_object({}) do |(model_name, source), acc|
+        current_model_name = model_name
         acc[model_name] = backfill(model_name.constantize, source)
       end
       Result.new(success?: true, data: {counts: counts, total: counts.values.sum}, errors: [])
     rescue => e
-      Result.new(success?: false, data: {}, errors: [e.message])
+      failed_model = current_model_name || "description column backfill"
+      Result.new(success?: false, data: {}, errors: ["#{failed_model} backfill failed: #{e.message}"])
     end
 
     private

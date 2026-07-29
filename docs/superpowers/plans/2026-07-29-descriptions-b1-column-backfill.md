@@ -395,6 +395,44 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 - A second run changes nothing and preserves an edited row's rank and content
 - No schema change, no page behaviour change — the eleven `description` columns are still authoritative
 
+## Production run
+
+Development already has this data (see "Verified current state" above and the dev-run steps in Task
+2); production does not yet.
+
+```bash
+bin/rails data_migration:description_columns
+```
+
+**Ordering dependency:** increment (d) flips five public views to read `primary_description`. If
+`data_migration:description_columns` has not been run in production before (d) deploys, every games
+and music page silently loses its description.
+
+**Verification is invariant-based, not the hardcoded `11382` used for the dev run above.** Production
+will legitimately produce a different total: dev's games/music data came from a production backup of
+unknown age, and IGDB/AI imports run continuously against production. The invariant that holds in any
+environment is that, for each model in `SOURCE_BY_MODEL`, its `Description` row count equals the number
+of source records with a non-blank `description`:
+
+```bash
+bin/rails runner '
+ok = true
+Services::DescriptionColumnBackfill::SOURCE_BY_MODEL.each_key do |model_name|
+  model = model_name.constantize
+  expected = model.where("description IS NOT NULL AND btrim(description) <> ?", "").count
+  actual = Description.where(describable_type: model_name).count
+  match = expected == actual
+  ok &&= match
+  puts "#{model_name}: expected=#{expected} actual=#{actual} #{match ? "OK" : "MISMATCH"}"
+end
+puts ok ? "invariant holds" : "invariant VIOLATED"
+'
+```
+
+Expected: `invariant holds`, with each line showing `expected == actual` regardless of what the total
+is. A `MISMATCH` line names the model to start diagnosing from — the dev run's `11382`/per-model split
+above is **not** the number to expect in production.
+
 ## Not in this increment
 
 b2 adds `BookDescriptionMigrator` (139,851 rows) and `AuthorDescriptionMigrator` (46,784), both of which need the `legacy_books` connection, plus the books/authors safety net that has to run after them. (c) cuts the write paths over. (d) cuts the read paths over. (e) drops the eleven columns.
