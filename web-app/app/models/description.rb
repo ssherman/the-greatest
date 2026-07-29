@@ -37,6 +37,7 @@ class Description < ApplicationRecord
   validates :locale, presence: true
   validates :source, presence: true
   validates :source_name, presence: true, if: :source_other?
+  validates :source_name, absence: true, unless: :source_other?
   validates :source, uniqueness: {
     scope: [:describable_type, :describable_id, :kind, :locale, :source_name]
   }

@@ -246,9 +246,23 @@ table. Requires PostgreSQL 15+ (we run 17.4) and Rails 7.1+ (we run 8.1.3).
 A CHECK constraint keeps `:other` rows attributable:
 
 ```sql
-ALTER TABLE descriptions ADD CONSTRAINT descriptions_other_requires_source_name
-  CHECK (source <> 9 OR source_name IS NOT NULL);
+ALTER TABLE descriptions ADD CONSTRAINT descriptions_source_name_matches_source
+  CHECK ((source = 9 AND source_name IS NOT NULL) OR (source <> 9 AND source_name IS NULL));
 ```
+
+**Biconditional, not one-way.** An earlier version only required `source_name` *for* `:other`, which
+let a named source keep a stale one — and because `source_name` sits inside the natural-key index, a
+`wikipedia` row holding a leftover `source_name` and a `wikipedia` row with `NULL` are distinct index
+entries, so both survive. That is two descriptions of the same source for one
+`(describable, kind, locale)`, exactly what the natural key exists to prevent. Reproduced and then
+re-verified closed against the test database. The reachable path is increment (c)'s admin `update`:
+an editor switching a row from `:other` to a named source through a form that does not clear
+`source_name`. Mirrored in the model as
+`validates :source_name, absence: true, unless: :source_other?`.
+
+`source_name` is therefore strictly the `:other` escape hatch, matching `ExternalLink#source_display_name`
+(`source_other? ? source_name : source.humanize`). A publisher-specific label is expressible as
+`:other` + `"Penguin Classics"`, so nothing is lost.
 
 Two further DB-level guards, added because `upsert_all` bypasses every model validation (D14, D15):
 

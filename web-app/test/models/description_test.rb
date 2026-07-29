@@ -114,6 +114,35 @@ class DescriptionTest < ActiveSupport::TestCase
     assert_raises(ActiveRecord::CheckViolation) { invalid.save(validate: false) }
   end
 
+  test "rejects a source_name on a named source" do
+    named = descriptions(:war_and_peace_wikipedia)
+    named.source_name = "Google Books"
+    assert_not named.valid?
+    assert_includes named.errors[:source_name], "must be blank"
+  end
+
+  test "database rejects a source_name on a named source even when validations are skipped" do
+    stale = Description.new(
+      describable: books_books(:war_and_peace),
+      kind: :blurb, locale: "en", source: :wikipedia,
+      source_name: "Google Books", content: "stale source_name"
+    )
+    assert_raises(ActiveRecord::CheckViolation) { stale.save(validate: false) }
+  end
+
+  test "a named source cannot keep a source_name and shadow a second row of the same source" do
+    book = books_books(:crime_and_punishment)
+    stale = Description.new(
+      describable: book, kind: :long, locale: "en", source: :other,
+      source_name: "Google Books", content: "starts as other"
+    )
+    stale.save!
+
+    stale.source = :wikipedia
+    assert_not stale.valid?, "changing to a named source must not leave source_name populated"
+    assert_raises(ActiveRecord::CheckViolation) { stale.save(validate: false) }
+  end
+
   test "database rejects blank content even when validations are skipped" do
     blank = Description.new(
       describable: books_books(:war_and_peace),
