@@ -201,13 +201,13 @@ The per-row `license` column makes the encumbered rows queryable for the first t
 | D4 | `rank` enum `{deprecated: -1, normal: 0, preferred: 1}` — not a `primary` boolean | Wikidata's model. `deprecated` lets a known-bad row stay for idempotent re-import while being permanently excluded from display; a boolean cannot express that. |
 | D5 | Importers may only create/update the row matching their own `source`, and may **never** write `rank`. Only *deliberate selection operations* set `preferred` — and those are usually programmatic, not per-record clicks. | Makes the Jellyfin lock-flag failure mode structurally impossible. Replaces `pinned_at`/`pinned_by` from the research recommendation — with this invariant, `rank: :preferred` already *is* the record of the selection. **Corrected 2026-07-28:** an earlier wording said "only humans set `preferred`", which misdescribes the real workflow. On the legacy site the owner's main use of `use_description` was a **bulk button that flipped every book on a list to Goodreads**, because the books were that year's releases and the AI did not know them. The distinction that matters is not human-vs-machine but *syncing a source* (never touches `rank`) vs *choosing which source wins* (may). |
 | D14 | The DB enforces at most one `preferred` row per `(describable, kind, locale)` — partial unique index `WHERE rank = 1` | D5 is otherwise only a convention, and the operations that set `preferred` are bulk writes, which is exactly where a convention breaks silently. A bulk switch that sets new `preferred` rows without clearing the old ones would leave every affected record double-flagged, with no error and no symptom — the resolver would quietly fall back to source priority, the very thing `preferred` exists to override. Added while the table was empty; after the backfill it would cost a 198k-row validation pass. Consequence: increment (c)'s `set_preferred` must demote-then-promote inside a transaction, so it cannot mirror `Image#unset_other_primary_images` (an `after_save` that promotes first). |
-| D15 | `content` carries a DB check constraint `length(btrim(content)) > 0`, not just `validates :content, presence: true` | `null: false` does not stop `""`, and b2's migrators' `upsert_all` bypasses validations. Verified empirically: a blank-content row was accepted under `upsert_all`. A `build_rows` that tests truthiness instead of `.presence` would land empty descriptions in production *and still pass the row-count verification*. **Known gap:** single-argument `btrim` trims ASCII spaces only, so `"\t\n"` passes the DB check while being `.blank?` in Ruby. Not load-bearing — the failure mode being guarded produces `""` — but worth widening if increment (b2) touches this migration anyway. |
+| D15 | `content` carries a DB check constraint `length(btrim(content)) > 0`, not just `validates :content, presence: true` | `null: false` does not stop `""`, and b2's migrators' `upsert_all` bypasses validations. Verified empirically: a blank-content row was accepted under `upsert_all`. A `build_rows` that tests truthiness instead of `.presence` would land empty descriptions in production *and still pass the row-count verification*. **Known gap:** single-argument `btrim` trims ASCII spaces only, so `"\t\n"` passes the DB check while being `.blank?` in Ruby. Not load-bearing — the failure mode being guarded produces `""` — but worth widening if increment (b2) touches this migration anyway. Widened in b2 to `length(btrim(content, E' \t\n\r\f\v')) > 0`. The gap was reachable: legacy `books.ai_generated_description` holds one whitespace-only value. |
 | D6 | `license` and `source_url` per row; `retrieved_at` per row | Wikidata CC0 vs Wikipedia CC BY-SA arrive from the same integration. TMDB's 6-month cache limit needs `retrieved_at` the day we add a TMDB importer. |
 | D7 | Read through `primary_description`; drop the eleven columns | Owner's call over keeping the column as a maintained cache. One representation, nothing to drift. |
 | D8 | No `has_one :primary_description` — a `Descriptions::Resolver` over a loaded collection | The winner is computed, not flagged, so a `has_one` scope cannot express it. Entities carry 1–4 rows, so `includes(:descriptions)` is one extra query total. |
 | D9 | Migrate Goodreads rows as a normal source with `license: :proprietary` | The text is already published on the live site; purging would be a new decision that costs 885 books their description. Whether to keep *acquiring* Goodreads text is a separate, later decision. |
 | D10 | Every migrated row gets real provenance; no `:unknown` source value | Provenance was verifiable for every column (see "Current state"). Guessing would put wrong provenance on rows we could not later distinguish from correct ones. |
-| D11 | The backfill marks `rank: :preferred` only where a *human* chose, not on every winner | `use_description = default` (124,065 books) is reproduced exactly by `SourcePriority::ORDER`. Only the 2,139 explicit choices become `preferred`. `use_description` becomes data rather than a rule. |
+| D11 | The backfill marks `rank: :preferred` only where a *human* chose, not on every winner | `use_description = default` (124,065 books) is reproduced exactly by `SourcePriority::ORDER`. Only **1,481** of the 2,139 explicit choices actually hold text and become `preferred` — the other 658 `use_goodreads` books have no Goodreads text and fall through to `SourcePriority::ORDER` like the `default` books. `use_description` becomes data rather than a rule. |
 | D12 | Dropping the columns ships as its own PR, after increments a–d run in production | A bad backfill followed by a column drop is unrecoverable, and in dev the books data exists nowhere else. |
 | D13 | Admin panel is a review-and-select surface, not an authoring one | Owner: admins will not manually write descriptions; generation will be AI. `create` remains for override; emphasis is on `set_preferred` and delete. |
 
@@ -364,7 +364,7 @@ double-create.
 
 | Legacy column | `source` | `license` | Rows |
 |---|---|---|---|
-| `ai_generated_description` | `:ai_generated` | NULL | 111,447 |
+| `ai_generated_description` | `:ai_generated` | NULL | 111,446 (111,447 non-blank in SQL; one is whitespace-only and `.presence` skips it — D15's gap in real data) |
 | `goodreads_description` | `:goodreads` | `:proprietary` | 8,162 |
 | `description` | normalised from `description_source_name` | per source | 20,242 |
 
@@ -381,14 +381,20 @@ is trimmed.
 `source_url` ← `description_source_url`. `retrieved_at` stays NULL — legacy never recorded it, and
 back-dating from `updated_at` would be a fabrication. `locale: "en"`, `kind: :summary` throughout.
 
-`rank: :preferred` only on the 2,139 books where `use_description != default` — the `:goodreads` row for
-the 2,137 `use_goodreads` books, the raw-`description` row for the 2 `use_description` books. Everything
-else `:normal`, resolved by `SourcePriority::ORDER`.
+`rank: :preferred` only where the chosen column actually holds text — **1,481** rows: the `:goodreads`
+row for the 1,479 `use_goodreads` books that have Goodreads text (the other 658 have none, and legacy
+`description_to_display` falls through to the AI text, which `SourcePriority::ORDER` reproduces), plus
+the raw row for the 2 `use_description` books. Everything else `:normal`, resolved by
+`SourcePriority::ORDER`.
 
 ### 2. `Services::BooksMigration::AuthorDescriptionMigrator`
 
 Same shape, reading legacy `authors`. `ai_description` (38,114) → `:ai_generated`; `description`
-(8,670) → `:wikipedia` + `:cc_by_sa_4`, `source_url` ← `description_source_url`. No `preferred` rows —
+(8,670) → **8,218** `:wikipedia` + `:cc_by_sa_4` where `description_source` says so, and **452**
+`:other` + `source_name: "Unattributed"`, `license: nil` where it states no source and carries no
+`description_source_url`. Blanket CC BY-SA would assert an attribution increment (d)'s
+`AttributionComponent` could not honour (D10); this is the same rule the books migrator applies to its
+659 unsourced rows, via the shared `DescriptionSourceNormalizer`. No `preferred` rows —
 `SourcePriority::ORDER` reproduces `ai_description || description`.
 
 ### 3. `Services::DescriptionColumnBackfill`
@@ -411,8 +417,10 @@ The in-app columns, all at `rank: :normal`:
 | `games_series.description` | `:manual` | 5 |
 
 **The books/authors safety net belongs to b2, not b1.** Any `Books::Book` or `Books::Author` with a
-non-empty `description` and no row *after the legacy backfill* — the ~50 books and ~21 authors created
-in-app rather than migrated — gets a `:manual` row. Since that is defined relative to the legacy
+non-empty `description` and no row *after the legacy backfill* gets a `:manual` row — measured **0** in
+dev on 2026-07-29: all 50 in-app-created books and all 21 in-app-created authors have a blank
+`description`. 0 is a pass. The service still ships — production is a different dataset, and it catches
+records created between the migrator run and its own. Since that is defined relative to the legacy
 migrators having run, it executes after them, in b2. b1 covers only the five games/music columns.
 
 **Use `insert_all`, not `upsert_all`.** Verified on PG 17: an `upsert_all` re-run resets a row's
@@ -425,9 +433,9 @@ is the correct semantic.
 
 **b2 uses `insert_all` too — settled 2026-07-29, do not re-litigate.** `BookDescriptionMigrator` and
 `AuthorDescriptionMigrator` override `BulkUpsertMigrator`'s `upsert_all` with `insert_all`, same as b1.
-No `finalize` pass is needed: on a clean table the rows do not exist yet, so the 2,139 legacy
-`use_description` books get `rank: :preferred` on first insert. Later runs skip existing keys while
-still picking up books and sources that are new since the last run.
+No `finalize` pass is needed: on a clean table the rows do not exist yet, so the **1,481** rows across
+the 2,139 legacy `use_description` books that actually hold text get `rank: :preferred` on first insert.
+Later runs skip existing keys while still picking up books and sources that are new since the last run.
 
 The owner's ruling is that this migration is a **one-time lift** — no descriptions will be edited on the
 legacy site before launch — so nothing needs to re-sync changed legacy text. Should that ever become
@@ -474,11 +482,11 @@ Exact counts, then a no-op second run:
 
 | Group | Rows |
 |---|---|
-| books | 139,851 |
+| books | 139,850 |
 | authors | 46,784 |
 | games | 2,265 |
 | music | 9,117 |
-| **total** | **198,017** |
+| **total** | **198,016** |
 
 Plus a spot-check that `Books::Book#primary_description&.content` equals legacy
 `Book#description_to_display` for a sample spanning all four `use_description`/winner combinations.
@@ -511,8 +519,9 @@ The five public views become `@game.primary_description&.content`, wrapped in th
 only site rendering a blurb per row.
 
 `Descriptions::AttributionComponent` renders a credit line and licence link when `license == :cc_by_sa_4`,
-using `source_url`. This closes the CC BY-SA gap the legacy site has today: ~461 book pages and all
-8,670 Wikipedia-sourced author descriptions.
+using `source_url`. This closes the CC BY-SA gap the legacy site has today: ~461 book pages and
+**8,218** Wikipedia-sourced author descriptions (the other 452 carry no stated source, so they are
+`:other` with `license: nil` and render no attribution line).
 
 ### Admin
 
@@ -582,7 +591,7 @@ passing, `bin/snapshot-dev-db.sh --label pre-descriptions` beforehand, and shipp
 - `Descriptions::ResolverTest` — `preferred` wins; `SourcePriority::ORDER` order; `deprecated` never selected;
   `(kind, locale)` scoping; empty collection → `nil`
 - `DescribableTest` exercised through a real model
-- Three migrator tests against legacy fixtures: the 198,017-row breakdown and a no-op second run
+- Three migrator tests against legacy fixtures: the 198,016-row breakdown and a no-op second run
 - `Admin::DescriptionsControllerTest` — CRUD, `set_preferred`, and the `require_domain_write!` denial cases
 - **Regression test for the clobber bug:** AI regeneration writes its own row and leaves a `manual`
   `preferred` row untouched
@@ -599,14 +608,14 @@ Gate before claiming done: `bin/rails test`, `bin/rails test:system`, `bundle ex
 |---|---|---|
 | a | `Description` model, schema, `Descriptions::Resolver`, `Describable`, tests | none |
 | b1 | `Services::DescriptionColumnBackfill` — games + music, 11,382 rows | none |
-| b2 | `BookDescriptionMigrator` + `AuthorDescriptionMigrator` — 186,635 rows | none |
+| b2 | `BookDescriptionMigrator` + `AuthorDescriptionMigrator` — 186,634 rows | none |
 | c | Write path: AI tasks, IGDB providers, admin panel, strip nine forms | yes |
 | d | Read path: five public + nine admin views, `AttributionComponent`, includes | yes |
 | e | Drop the eleven `description` columns | separate PR, post-production |
 
 **Why (b) splits.** The three backfills are not alike. `DescriptionColumnBackfill` reads the *current*
 database, needs no legacy connection, moves 11,382 rows, and writes with `insert_all`; the two legacy
-migrators need the `legacy_books` connection up, move 186,635 rows, and write with `upsert_all`. Running
+migrators need the `legacy_books` connection up, move 186,634 rows, and write with `upsert_all`. Running
 the small one first exercises arbiter inference against the `NULLS NOT DISTINCT` index (proven by an
 idempotent second run over rows whose `source_name` is NULL), enum-symbol serialisation, and the two
 check constraints — against data that cannot fail for legacy-connection reasons, before 186k rows depend
