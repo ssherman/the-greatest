@@ -1,0 +1,15 @@
+<% rows = defined?(descriptions) ? descriptions : @descriptions %>
+<% parent_entity = defined?(parent) ? parent : @parent %>
+<%= turbo_frame_tag "descriptions_list" do %>
+  <% if rows.any? %>
+    <div class="space-y-3">
+      <% rows.each do |description| %>
+        <%= render "admin/descriptions/description_card", description: description, parent: parent_entity %>
+      <% end %>
+    </div>
+  <% else %>
+    <p class="text-base-content/60 text-sm">No descriptions yet.</p>
+  <% end %>
+
+  <%= render "admin/descriptions/new_form", parent: parent_entity %>
+<% end %>

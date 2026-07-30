@@ -1,0 +1,39 @@
+<div class="form-control">
+  <%= f.label :content, class: "label" do %>
+    <span class="label-text font-semibold">Content <span class="text-error">*</span></span>
+  <% end %>
+  <%= f.text_area :content, class: "textarea textarea-bordered w-full h-32", required: true %>
+</div>
+
+<div class="form-control">
+  <%= f.label :source, class: "label" do %>
+    <span class="label-text font-semibold">Source <span class="text-error">*</span></span>
+  <% end %>
+  <%= f.select :source, Description.sources.keys.map { |s| [s.humanize, s] },
+      {}, class: "select select-bordered w-full", required: true %>
+</div>
+
+<div class="form-control">
+  <%= f.label :source_name, class: "label" do %>
+    <span class="label-text font-semibold">Source Name</span>
+  <% end %>
+  <%= f.text_field :source_name, class: "input input-bordered w-full" %>
+  <label class="label">
+    <span class="label-text-alt">Required only when Source is "Other"</span>
+  </label>
+</div>
+
+<div class="form-control">
+  <%= f.label :source_url, class: "label" do %>
+    <span class="label-text font-semibold">Source URL</span>
+  <% end %>
+  <%= f.url_field :source_url, class: "input input-bordered w-full" %>
+</div>
+
+<div class="form-control">
+  <%= f.label :license, class: "label" do %>
+    <span class="label-text font-semibold">License</span>
+  <% end %>
+  <%= f.select :license, Description.licenses.keys.map { |l| [l.humanize, l] },
+      {include_blank: "Not recorded"}, class: "select select-bordered w-full" %>
+</div>
