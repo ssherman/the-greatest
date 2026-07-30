@@ -68,9 +68,9 @@ module DataImporters
 
           test "populate leaves the game saveable with a description attached" do
             search_service = mock
-            search_service.expects(:find_with_details).with(7346).returns(
-              success: true,
-              data: [{"name" => "Breath of the Wild 2", "summary" => "A summary."}]
+            search_service.stubs(:find_with_details).with(7346).returns(
+              {success: true, data: [{"name" => "Breath of the Wild 2", "summary" => "A summary."}]},
+              {success: true, data: [{"name" => "Breath of the Wild 2", "summary" => "An updated summary."}]}
             )
             ::Games::Igdb::Search::GameSearch.stubs(:new).returns(search_service)
 
@@ -80,6 +80,14 @@ module DataImporters
 
             assert @game.valid?, @game.errors.full_messages.join(", ")
             assert_nothing_raised { @game.save! }
+
+            assert_no_difference "Description.count" do
+              @provider.populate(@game, query: ImportQuery.new(igdb_id: 7346))
+              @game.save!
+            end
+
+            assert_equal "An updated summary.",
+              @game.descriptions.reload.find_by(source: :igdb).content
           end
 
           test "populate creates IGDB identifier" do

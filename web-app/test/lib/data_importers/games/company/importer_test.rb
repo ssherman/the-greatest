@@ -72,7 +72,9 @@ module DataImporters
 
           assert result.success?
           assert_equal existing_company, result.item
-          assert_equal "Updated description", result.item.reload.description
+          row = result.item.reload.descriptions.find_by(source: :igdb)
+          assert_equal "Updated description", row.content
+          assert_nil result.item.description
         end
 
         test "call fails when igdb_id is invalid" do
