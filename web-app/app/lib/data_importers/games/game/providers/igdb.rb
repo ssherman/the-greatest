@@ -73,7 +73,7 @@ module DataImporters
           # Maps IGDB game data to model attributes
           def populate_game_data(game, game_data)
             game.title = game_data["name"] if game_data["name"].present?
-            game.description = game_data["summary"] if game_data["summary"].present?
+            game.assign_description(source: :igdb, content: game_data["summary"]) if game_data["summary"].present?
 
             # Extract year from IGDB first_release_date (Unix timestamp)
             if game_data["first_release_date"].present?
