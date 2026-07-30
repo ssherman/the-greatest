@@ -37,12 +37,10 @@ module Services
           end
 
           def process_and_persist(provider_response)
-            # provider_response[:parsed] is validated data from schema
             data = provider_response[:parsed]
 
-            # Only update the artist if the AI provided a description
             if data[:description].present? && !data[:abstained]
-              parent.update!(description: data[:description])
+              parent.assign_description(source: :ai_generated, content: data[:description])&.save!
             end
 
             Services::Ai::Result.new(success: true, data: data, ai_chat: chat)

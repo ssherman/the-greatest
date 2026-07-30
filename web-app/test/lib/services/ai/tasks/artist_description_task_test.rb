@@ -54,9 +54,52 @@ module Services
             result = @task.send(:process_and_persist, provider_response)
 
             assert result.success?
-            @artist.reload
-            assert_equal "Pink Floyd is a British progressive rock band known for their concept albums.", @artist.description
+            row = @artist.descriptions.reload.find_by(source: :ai_generated)
+            assert_equal "Pink Floyd is a British progressive rock band known for their concept albums.", row.content
+            assert_equal "summary", row.kind
+            assert_equal "en", row.locale
             assert_equal chat, result.ai_chat
+          end
+
+          test "process_and_persist does not write the description column" do
+            provider_response = {
+              parsed: {
+                description: "A new AI description.",
+                abstained: false,
+                abstain_reason: nil
+              }
+            }
+            original_column = @artist.description
+
+            @task.send(:process_and_persist, provider_response)
+
+            assert_equal original_column, @artist.reload.description
+          end
+
+          # Regression: the old parent.update!(description:) clobbered whatever was there.
+          test "process_and_persist leaves a preferred manual description untouched" do
+            artist = music_artists(:roger_waters)
+            manual = artist.descriptions.create!(
+              kind: :summary, locale: "en", source: :manual,
+              content: "Hand-written by an editor.", rank: :preferred
+            )
+            task = ArtistDescriptionTask.new(parent: artist)
+            provider_response = {
+              parsed: {
+                description: "AI text that must not win.",
+                abstained: false,
+                abstain_reason: nil
+              }
+            }
+
+            task.send(:process_and_persist, provider_response)
+
+            manual.reload
+            assert_equal "Hand-written by an editor.", manual.content
+            assert_equal "preferred", manual.rank
+            assert_equal "AI text that must not win.",
+              artist.descriptions.reload.find_by(source: :ai_generated).content
+            assert_equal manual, artist.primary_description
           end
 
           test "process_and_persist does not update when abstained" do
