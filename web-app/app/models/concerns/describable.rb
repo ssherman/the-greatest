@@ -14,11 +14,11 @@ module Describable
   # rather than find_or_initialize_by: the latter queries and returns an instance
   # that is not in the association target, which autosave never sees, so the write
   # is silently lost. Never assigns rank (D5).
-  def assign_description(source:, content:, **attrs)
+  def assign_description(source:, content:, kind: :summary, locale: "en", **attrs)
     return nil if content.blank?
 
-    row = descriptions.detect { |d| d.kind == "summary" && d.locale == "en" && d.source == source.to_s } ||
-      descriptions.build(kind: :summary, locale: "en", source: source)
+    row = descriptions.detect { |d| d.kind == kind.to_s && d.locale == locale && d.source == source.to_s } ||
+      descriptions.build(kind: kind, locale: locale, source: source)
     row.assign_attributes(content: content, retrieved_at: Time.current, **attrs)
     row
   end

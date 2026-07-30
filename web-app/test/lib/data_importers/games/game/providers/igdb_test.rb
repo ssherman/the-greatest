@@ -74,12 +74,15 @@ module DataImporters
             )
             ::Games::Igdb::Search::GameSearch.stubs(:new).returns(search_service)
 
-            assert_difference "Description.count", 1 do
-              @provider.populate(@game, query: ImportQuery.new(igdb_id: 7346))
-            end
+            @provider.populate(@game, query: ImportQuery.new(igdb_id: 7346))
+            assert_equal 1, @game.descriptions.size
 
             assert @game.valid?, @game.errors.full_messages.join(", ")
-            assert_nothing_raised { @game.save! }
+            assert_no_difference "Description.count" do
+              @game.save!
+            end
+            assert_equal "A summary.",
+              @game.descriptions.reload.find_by(source: :igdb).content
 
             assert_no_difference "Description.count" do
               @provider.populate(@game, query: ImportQuery.new(igdb_id: 7346))

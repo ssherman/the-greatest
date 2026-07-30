@@ -103,12 +103,12 @@ module Services
           end
 
           test "process_and_persist does not update when abstained" do
-            original_description = @artist.description
+            assert_nil @artist.descriptions.find_by(source: :ai_generated)
             provider_response = {
               parsed: {
-                description: nil,
+                description: "Text the AI abstained on.",
                 abstained: true,
-                abstain_reason: "Not enough information about this artist"
+                abstain_reason: "Not familiar with this artist"
               }
             }
 
@@ -118,12 +118,11 @@ module Services
             result = @task.send(:process_and_persist, provider_response)
 
             assert result.success?
-            @artist.reload
-            assert_equal original_description, @artist.description
+            assert_nil @artist.descriptions.reload.find_by(source: :ai_generated)
           end
 
           test "process_and_persist does not update when description is blank" do
-            original_description = @artist.description
+            assert_nil @artist.descriptions.find_by(source: :ai_generated)
             provider_response = {
               parsed: {
                 description: "",
@@ -138,8 +137,7 @@ module Services
             result = @task.send(:process_and_persist, provider_response)
 
             assert result.success?
-            @artist.reload
-            assert_equal original_description, @artist.description
+            assert_nil @artist.descriptions.reload.find_by(source: :ai_generated)
           end
 
           test "ResponseSchema has correct structure" do

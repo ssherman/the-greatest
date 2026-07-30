@@ -215,6 +215,19 @@ If the books data is not in production, `BookDescriptionMigrator` raises on the 
 `abort` added in b2's final review stops the chain before the safety net can run. No partial state.
 b1 is independent of all of this and can run regardless.
 
+### c1 alone is not deployable
+
+The backfill constraint above covers *existing* descriptions. c1 (the write path) also affects
+*newly written* ones: after c1, a freshly imported IGDB game or company, and every AI description
+regeneration, write only a `Description` row — but every public and admin view still reads the
+`description` **column** until increment (d). So a game imported the day after c1 deploys would show
+no description anywhere, and without c2's admin panel there would be no way to even see the text that
+was written. Existing data is unaffected; this only bites records touched after c1 deploys.
+
+c1 must therefore not reach production on its own — it needs (d), the read path, for newly-written
+descriptions to be visible. c2's admin panel makes them at least inspectable sooner, but does not
+substitute for (d).
+
 ## Suggested increments
 
 1. **Write path** — `autosave: true`, `Describable#assign_description`, 4 sites rewired, clobber

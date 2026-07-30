@@ -94,6 +94,34 @@ class DescribableTest < ActiveSupport::TestCase
     assert_equal "cc_by_sa_4", row.license
   end
 
+  test "assign_description keeps kind: long and kind: summary as distinct rows" do
+    album = music_albums(:animals)
+
+    long_row = album.assign_description(source: :ai_generated, content: "The long version.", kind: :long)
+    summary_row = album.assign_description(source: :ai_generated, content: "The summary version.", kind: :summary)
+    album.save!
+
+    assert_not_equal long_row.id, summary_row.id
+    assert_equal 2, album.descriptions.reload.size
+    assert_equal "The long version.", album.descriptions.find_by(kind: :long).content
+    assert_equal "The summary version.", album.descriptions.find_by(kind: :summary).content
+  end
+
+  test "assign_description with kind: long twice updates the same row" do
+    album = music_albums(:animals)
+
+    first = album.assign_description(source: :ai_generated, content: "First long text.", kind: :long)
+    album.save!
+
+    assert_no_difference "Description.count" do
+      second = album.assign_description(source: :ai_generated, content: "Second long text.", kind: :long)
+      assert_equal first.id, second.id
+      album.save!
+    end
+
+    assert_equal "Second long text.", album.descriptions.reload.find_by(kind: :long).content
+  end
+
   # dark_side_ai is an existing ai_generated row on this album, at rank: preferred.
   test "assign_description updates the existing row for that source instead of building a second" do
     album = music_albums(:dark_side_of_the_moon)
