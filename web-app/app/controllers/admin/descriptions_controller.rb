@@ -58,7 +58,7 @@ class Admin::DescriptionsController < Admin::BaseController
 
   def domain_auth_parent
     if action_name.in?(%w[update destroy set_preferred])
-      Description.find(params[:id]).describable
+      find_description.describable
     else
       Admin::DomainRouting.parent_from_params(params, domain: current_domain)
     end
@@ -69,7 +69,14 @@ class Admin::DescriptionsController < Admin::BaseController
   end
 
   def set_description
-    @description = Description.find(params[:id])
+    @description = find_description
+  end
+
+  # domain_auth_parent (require_domain_write!) and set_description both need the
+  # record, and the former runs first as a before_action — memoize so a single
+  # mutating request issues one SELECT, not two.
+  def find_description
+    @description ||= Description.find(params[:id])
   end
 
   # rank is deliberately absent (C4): only set_preferred changes it, transactionally.

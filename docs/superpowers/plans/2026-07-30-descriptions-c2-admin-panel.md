@@ -730,6 +730,8 @@ cd web-app && bundle exec standardrb && bin/rails db:test:prepare test test:syst
 
 Expected: `standardrb` clean; suite green (4,963 runs as of c1, plus this increment's tests); system tests green.
 
+**Correction (final whole-branch review, 2026-07-30):** `test:system` cannot pass as written — `test/system/admin/music/songs/wizard_review_step_test.rb` calls `page.set_rack_session`, which comes from the `rack_session_access` gem, and that gem is absent from both `Gemfile` and `Gemfile.lock`. This is **pre-existing on `main`** (predates this branch), not something this increment introduced or can fix in scope. Run `bin/rails test` (unit/integration) for this gate instead, and don't re-flag `test:system` red on future increments until the gem is added separately.
+
 - [ ] **Step 2: Confirm the forms are clean**
 
 ```bash

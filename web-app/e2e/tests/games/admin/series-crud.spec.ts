@@ -39,7 +39,6 @@ test.describe('Games Admin Series', () => {
     await expect(page).toHaveURL(/\/admin\/series\/new/);
 
     await page.getByLabel(/Name/).fill(uniqueName);
-    await page.getByLabel(/Description/).fill('An E2E test series description');
     await page.getByRole('button', { name: 'Create Series' }).click();
 
     await page.waitForURL(/\/admin\/series\//);

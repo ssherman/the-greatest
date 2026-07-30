@@ -1,29 +1,32 @@
-<button type="button" class="btn btn-primary btn-sm" onclick="add_description_modal.showModal()">
-  + Add Description
-</button>
+<% if current_user_can_write? %>
+  <button type="button" class="btn btn-primary btn-sm" onclick="add_description_modal.showModal()">
+    + Add Description
+  </button>
 
-<dialog id="add_description_modal" class="modal">
-  <div class="modal-box">
-    <h3 class="font-bold text-lg">Add Description</h3>
+  <dialog id="add_description_modal" class="modal">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg">Add Description</h3>
 
-    <%= form_with model: Description.new,
-                  url: Admin::DomainRouting.descriptions_path_for(parent),
-                  method: :post,
-                  namespace: "new_description",
-                  class: "space-y-4 mt-4",
-                  data: {
-                    controller: "modal-form",
-                    modal_form_modal_id_value: "add_description_modal"
-                  } do |f| %>
-      <%= render "admin/descriptions/form_fields", f: f %>
+      <%= form_with model: Description.new,
+                    url: Admin::DomainRouting.descriptions_path_for(parent),
+                    method: :post,
+                    namespace: "new_description",
+                    class: "space-y-4 mt-4",
+                    data: {
+                      controller: "modal-form conditional-field",
+                      modal_form_modal_id_value: "add_description_modal",
+                      conditional_field_match_value: "other"
+                    } do |f| %>
+        <%= render "admin/descriptions/form_fields", f: f %>
 
-      <div class="modal-action">
-        <button type="button" class="btn" onclick="add_description_modal.close()">Cancel</button>
-        <%= f.submit "Add Description", class: "btn btn-primary" %>
-      </div>
-    <% end %>
-  </div>
-  <form method="dialog" class="modal-backdrop">
-    <button>close</button>
-  </form>
-</dialog>
+        <div class="modal-action">
+          <button type="button" class="btn" onclick="add_description_modal.close()">Cancel</button>
+          <%= f.submit "Add Description", class: "btn btn-primary" %>
+        </div>
+      <% end %>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button>close</button>
+    </form>
+  </dialog>
+<% end %>

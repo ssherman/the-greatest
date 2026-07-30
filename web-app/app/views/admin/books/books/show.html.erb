@@ -30,7 +30,6 @@
             <div><dt class="text-sm text-base-content/60">Sort Title</dt><dd><%= @book.sort_title.presence || "—" %></dd></div>
             <div><dt class="text-sm text-base-content/60">Original Language</dt><dd><%= @book.original_language&.name || "—" %></dd></div>
             <div class="sm:col-span-2"><dt class="text-sm text-base-content/60">Alternate Titles</dt><dd><%= @book.alternate_titles.present? ? @book.alternate_titles.join(", ") : "—" %></dd></div>
-            <div class="sm:col-span-2"><dt class="text-sm text-base-content/60">Description</dt><dd class="whitespace-pre-line"><%= @book.description.presence || "—" %></dd></div>
           </dl>
         </div>
       </div>

@@ -10,16 +10,17 @@
     <span class="label-text font-semibold">Source <span class="text-error">*</span></span>
   <% end %>
   <%= f.select :source, Description.sources.keys.map { |s| [s.humanize, s] },
-      {}, class: "select select-bordered w-full", required: true %>
+      {}, class: "select select-bordered w-full", required: true,
+      data: {conditional_field_target: "select", action: "change->conditional-field#toggle"} %>
 </div>
 
-<div class="form-control">
+<div class="form-control" data-conditional-field-target="field">
   <%= f.label :source_name, class: "label" do %>
     <span class="label-text font-semibold">Source Name</span>
   <% end %>
   <%= f.text_field :source_name, class: "input input-bordered w-full" %>
   <label class="label">
-    <span class="label-text-alt">Required only when Source is "Other"</span>
+    <span class="label-text-alt">Shown only when Source is "Other"</span>
   </label>
 </div>
 

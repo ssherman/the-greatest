@@ -28,7 +28,6 @@
             <div><dt class="text-sm text-base-content/60">Birth Year</dt><dd><%= @author.birth_year || "—" %></dd></div>
             <div><dt class="text-sm text-base-content/60">Death Year</dt><dd><%= @author.death_year || "—" %></dd></div>
             <div class="sm:col-span-2"><dt class="text-sm text-base-content/60">Alternate Names</dt><dd><%= @author.alternate_names.present? ? @author.alternate_names.join(", ") : "—" %></dd></div>
-            <div class="sm:col-span-2"><dt class="text-sm text-base-content/60">Description</dt><dd class="whitespace-pre-line"><%= @author.description.presence || "—" %></dd></div>
           </dl>
         </div>
       </div>

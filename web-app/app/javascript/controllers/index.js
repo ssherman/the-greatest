@@ -16,6 +16,9 @@ application.register("autocomplete", AutocompleteController)
 import ClipboardCopyController from "./clipboard_copy_controller"
 application.register("clipboard-copy", ClipboardCopyController)
 
+import ConditionalFieldController from "./conditional_field_controller"
+application.register("conditional-field", ConditionalFieldController)
+
 import MetadataEditorController from "./metadata_editor_controller"
 application.register("metadata-editor", MetadataEditorController)
 

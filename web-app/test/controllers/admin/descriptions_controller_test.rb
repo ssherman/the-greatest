@@ -67,8 +67,9 @@ class Admin::DescriptionsControllerTest < ActionDispatch::IntegrationTest
     assert_no_difference "Description.count" do
       post admin_album_descriptions_path(album), params: {
         description: {content: "Unattributed.", source: "other"}
-      }
+      }, as: :turbo_stream
     end
+    assert_response :unprocessable_entity
   end
 
   test "create with a blank source_name succeeds and normalizes to nil" do
@@ -91,8 +92,9 @@ class Admin::DescriptionsControllerTest < ActionDispatch::IntegrationTest
     assert_no_difference "Description.count" do
       post admin_album_descriptions_path(album), params: {
         description: {content: "Unattributed.", source: "other", source_name: ""}
-      }
+      }, as: :turbo_stream
     end
+    assert_response :unprocessable_entity
   end
 
   test "create rejects a duplicate natural key without raising" do
@@ -101,8 +103,9 @@ class Admin::DescriptionsControllerTest < ActionDispatch::IntegrationTest
     assert_no_difference "Description.count" do
       post admin_album_descriptions_path(@album), params: {
         description: {content: "A second ai_generated row.", source: "ai_generated"}
-      }
+      }, as: :turbo_stream
     end
+    assert_response :unprocessable_entity
   end
 
   test "create ignores a rank parameter" do
@@ -114,6 +117,19 @@ class Admin::DescriptionsControllerTest < ActionDispatch::IntegrationTest
     }
 
     assert_equal "normal", Description.last.rank
+  end
+
+  test "create ignores kind and locale parameters" do
+    sign_in_as(@admin_user, stub_auth: true)
+    album = music_albums(:animals)
+
+    post admin_album_descriptions_path(album), params: {
+      description: {content: "Sneaky kind and locale.", source: "manual", kind: "long", locale: "fr"}
+    }
+
+    row = Description.last
+    assert_equal "summary", row.kind
+    assert_equal "en", row.locale
   end
 
   test "updates content" do
@@ -147,6 +163,18 @@ class Admin::DescriptionsControllerTest < ActionDispatch::IntegrationTest
     patch admin_description_path(row), params: {description: {rank: "preferred"}}
 
     assert_equal "normal", row.reload.rank
+  end
+
+  test "update ignores kind and locale parameters" do
+    sign_in_as(@admin_user, stub_auth: true)
+
+    patch admin_description_path(@description), params: {
+      description: {content: "Edited.", kind: "long", locale: "fr"}
+    }
+
+    @description.reload
+    assert_equal "summary", @description.kind
+    assert_equal "en", @description.locale
   end
 
   test "destroys a description" do
@@ -230,5 +258,72 @@ class Admin::DescriptionsControllerTest < ActionDispatch::IntegrationTest
     assert_no_difference "Description.count" do
       delete admin_description_path(@description)
     end
+  end
+
+  # Domain-scoped editor access (shared-controller domain-auth fix, mirrors
+  # Admin::ImagesControllerTest's "Domain-scoped editor access" section)
+
+  test "should deny a music domain editor on update of a books description" do
+    book_description = descriptions(:war_and_peace_ai)
+    sign_in_as(users(:contractor_user), stub_auth: true) # music editor, no books role
+
+    patch admin_description_path(book_description), params: {
+      description: {content: "Hacked."}
+    }
+
+    assert_redirected_to music_root_path
+    assert_not_equal "Hacked.", book_description.reload.content
+  end
+
+  test "should deny a music domain editor on destroy of a books description" do
+    book_description = descriptions(:war_and_peace_ai)
+    sign_in_as(users(:contractor_user), stub_auth: true)
+
+    assert_no_difference "Description.count" do
+      delete admin_description_path(book_description)
+    end
+    assert_redirected_to music_root_path
+  end
+
+  test "should deny a music domain editor on set_preferred of a books description" do
+    book_description = descriptions(:war_and_peace_ai)
+    sign_in_as(users(:contractor_user), stub_auth: true)
+
+    post set_preferred_admin_description_path(book_description)
+
+    assert_redirected_to music_root_path
+    assert_not_equal "preferred", book_description.reload.rank
+  end
+
+  test "should allow a music domain viewer to view the index" do
+    viewer = users(:regular_user)
+    viewer.domain_roles.create!(domain: :music, permission_level: :viewer)
+    sign_in_as(viewer, stub_auth: true)
+
+    get admin_album_descriptions_path(@album)
+    assert_response :success
+  end
+
+  test "should deny a music domain viewer from creating a description" do
+    viewer = users(:regular_user)
+    viewer.domain_roles.create!(domain: :music, permission_level: :viewer)
+    sign_in_as(viewer, stub_auth: true)
+
+    assert_no_difference "Description.count" do
+      post admin_album_descriptions_path(@album), params: {
+        description: {content: "No.", source: "manual"}
+      }
+    end
+    assert_redirected_to music_root_path
+  end
+
+  test "should allow a music domain editor to update a music description" do
+    sign_in_as(users(:contractor_user), stub_auth: true)
+
+    patch admin_description_path(@description), params: {
+      description: {content: "Edited by editor."}
+    }
+
+    assert_equal "Edited by editor.", @description.reload.content
   end
 end

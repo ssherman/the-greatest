@@ -103,15 +103,6 @@
                 <p class="font-mono text-sm text-base-content/70"><%= @game.slug %></p>
               </div>
             <% end %>
-
-            <% if @game.description.present? %>
-              <div class="md:col-span-2">
-                <label class="label">
-                  <span class="label-text font-semibold">Description</span>
-                </label>
-                <p class="whitespace-pre-wrap"><%= @game.description %></p>
-              </div>
-            <% end %>
           </div>
         </div>
       </div>

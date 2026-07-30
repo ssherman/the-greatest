@@ -45,8 +45,9 @@
                   namespace: "description_#{description.id}",
                   class: "space-y-4 mt-4",
                   data: {
-                    controller: "modal-form",
-                    modal_form_modal_id_value: "edit_description_#{description.id}_modal"
+                    controller: "modal-form conditional-field",
+                    modal_form_modal_id_value: "edit_description_#{description.id}_modal",
+                    conditional_field_match_value: "other"
                   } do |f| %>
       <%= render "admin/descriptions/form_fields", f: f %>
 

@@ -88,13 +88,6 @@
               <p class="text-base font-mono text-sm"><%= @song.isrc.presence || "—" %></p>
             </div>
 
-            <% if @song.description.present? %>
-              <div class="col-span-2">
-                <p class="text-sm font-semibold text-base-content/70">Description</p>
-                <p class="text-base"><%= @song.description %></p>
-              </div>
-            <% end %>
-
             <% if @song.notes.present? %>
               <div class="col-span-2">
                 <p class="text-sm font-semibold text-base-content/70">Internal Notes</p>
