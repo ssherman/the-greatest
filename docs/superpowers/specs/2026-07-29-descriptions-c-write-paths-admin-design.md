@@ -44,7 +44,7 @@ written at all. Two halves:
 | # | Decision | Rationale |
 |---|---|---|
 | C1 | `has_many :descriptions` gains `autosave: true` | Rails autosaves *new* children on parent save but **not modified existing ones**. The IGDB providers assign in memory and `ImporterBase#run_providers_with_saving` calls `item.save!`, so without this a **re-import** of a game that already has an `:igdb` row would assign the new summary and silently not persist it. `Identifier` dodges this only because both its attributes are lookup keys, so a found record is never dirty; `content` is not a lookup key. **The delta cuts both ways:** without `autosave`, Rails validates and saves only *new* children in the collection; with it, *changed persisted* children are validated and saved too. So an invalid changed child can now block a parent's save where previously it would have been silently ignored — which is the correct trade (silent data loss is worse than a loud failure), but it is a new failure path and gets its own test. Escape hatch if it ever misbehaves: `row.save! if persisted?` inside the helper instead, with no app-wide change. |
-| C2 | One `Describable#assign_description` helper; callers persist | The two write paths genuinely differ — the AI tasks' parent is always persisted, the IGDB providers' may be a brand-new record that cannot be saved independently. A helper that only *assigns* serves both, and puts the lookup rule and D5's never-write-`rank` invariant in one place instead of four. |
+| C2 | One `Describable#assign_description` helper; callers persist | The two write paths genuinely differ — the AI tasks' parent is always persisted, the IGDB providers' may be a brand-new record that cannot be saved independently. A helper that only *assigns* serves both, and puts the lookup rule and D5's never-write-`rank` invariant in one place instead of four. `kind:` and `locale:` are real keyword arguments, not part of `**attrs`: splatting them into `assign_attributes` while the lookup hardcoded `summary`/`en` would let a caller build a `summary` row and then override it to `long`, so the next `kind: :long` call would miss it on lookup and build a duplicate, violating the natural-key unique index. |
 | C2a | The helper looks the row up with `detect` over the association, **never `find_or_initialize_by`** | Verified empirically on PG 17 / Rails 8.1, and this is the one that would have shipped a silent bug. `find_or_initialize_by` on a *persisted* parent issues a query and returns a **detached instance that is not in the association's target**; `autosave` only iterates the target, so the parent save is a silent no-op and the content never changes — precisely the failure C1 exists to prevent. `detect` returns the target instance (or `build` puts a new one there), so autosave sees it. Costs one association load; entities carry 1–4 rows (D8), and `primary_description` already operates on the loaded collection. Also removes a second hazard: on a *new* parent, `find_or_initialize_by`'s null-scope query cannot see an already-built in-memory row, so a repeat call would build a duplicate and the natural-key index would reject the save. `detect` finds it. |
 | C3 | Admin `create` offers a full source picker plus `source_url` and `license` | Owner's call. Restricting humans to `:manual` sounds safer but is not: an admin pasting Wikipedia text would be recorded as `:manual`, which is wrong provenance (D10) **and** an unattributed CC BY-SA use, since increment (d)'s `AttributionComponent` keys off `license` + `source_url`. Mislabelling is possible but visible; silent misattribution is neither. |
 | C4 | `rank` appears in no form; only `set_preferred` changes it | D5. A form that could set `preferred` directly would skip the demotion and hit `index_descriptions_one_preferred_per_key`, raising `PG::UniqueViolation`. |
@@ -58,11 +58,11 @@ written at all. Two halves:
 # app/models/concerns/describable.rb
 has_many :descriptions, -> { order(:id) }, as: :describable, dependent: :destroy, autosave: true
 
-def assign_description(source:, content:, **attrs)
+def assign_description(source:, content:, kind: :summary, locale: "en", **attrs)
   return nil if content.blank?
 
-  row = descriptions.detect { |d| d.kind == "summary" && d.locale == "en" && d.source == source.to_s } ||
-    descriptions.build(kind: :summary, locale: "en", source: source)
+  row = descriptions.detect { |d| d.kind == kind.to_s && d.locale == locale && d.source == source.to_s } ||
+    descriptions.build(kind: kind, locale: locale, source: source)
   row.assign_attributes(content: content, retrieved_at: Time.current, **attrs)
   row
 end
@@ -72,7 +72,8 @@ Never assigns `rank` (D5). Returns `nil` on blank content, so `descriptions_cont
 never abort a caller's save. `detect`, not `find_or_initialize_by` — see C2a; the latter returns a
 detached instance and silently loses the write.
 
-`d.source == source.to_s` because the enum reader returns a `String` while callers pass a `Symbol`.
+`d.kind == kind.to_s` and `d.source == source.to_s` because the enum readers return a `String`
+while callers pass a `Symbol`.
 
 ### Verified behaviour (PG 17 / Rails 8.1, 2026-07-30)
 
