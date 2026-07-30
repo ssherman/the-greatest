@@ -161,7 +161,6 @@ module Admin
           post admin_albums_path, params: {
             music_album: {
               title: "New Album",
-              description: "A great album",
               release_year: 2020
             }
           }
@@ -176,8 +175,7 @@ module Admin
         assert_no_difference("::Music::Album.count") do
           post admin_albums_path, params: {
             music_album: {
-              title: "",
-              description: "Missing title"
+              title: ""
             }
           }
         end

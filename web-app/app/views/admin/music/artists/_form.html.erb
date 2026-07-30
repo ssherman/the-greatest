@@ -149,24 +149,6 @@
             <% end %>
           </div>
         </div>
-
-        <!-- Description -->
-        <div class="form-control md:col-span-2">
-          <%= f.label :description, class: "label" do %>
-            <span class="label-text font-semibold">Description</span>
-          <% end %>
-          <%= f.text_area :description,
-              class: "textarea textarea-bordered w-full h-32 #{@artist.errors[:description].any? ? 'textarea-error' : ''}",
-              placeholder: "Enter a description of the artist..." %>
-          <label class="label">
-            <span class="label-text-alt">Biographical information, career highlights, notable achievements</span>
-          </label>
-          <% if @artist.errors[:description].any? %>
-            <label class="label">
-              <span class="label-text-alt text-error"><%= @artist.errors[:description].first %></span>
-            </label>
-          <% end %>
-        </div>
       </div>
     </div>
   </div>

@@ -57,24 +57,6 @@
             </label>
           <% end %>
         </div>
-
-        <!-- Description -->
-        <div class="form-control md:col-span-2">
-          <%= f.label :description, class: "label" do %>
-            <span class="label-text font-semibold">Description</span>
-          <% end %>
-          <%= f.text_area :description,
-              class: "textarea textarea-bordered w-full h-32 #{@album.errors[:description].any? ? 'textarea-error' : ''}",
-              placeholder: "Enter a description of the album..." %>
-          <label class="label">
-            <span class="label-text-alt">Album overview, themes, production details, critical reception</span>
-          </label>
-          <% if @album.errors[:description].any? %>
-            <label class="label">
-              <span class="label-text-alt text-error"><%= @album.errors[:description].first %></span>
-            </label>
-          <% end %>
-        </div>
       </div>
 
       <div class="alert alert-info mt-4">

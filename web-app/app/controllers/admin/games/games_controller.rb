@@ -166,7 +166,7 @@ class Admin::Games::GamesController < Admin::Games::BaseController
 
   def game_params
     params.require(:games_game).permit(
-      :title, :description, :release_year, :game_type,
+      :title, :release_year, :game_type,
       :parent_game_id, :series_id
     )
   end

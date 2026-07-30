@@ -97,7 +97,7 @@ module Admin
       test "create makes a series and redirects to it" do
         sign_in_as(@admin_user, stub_auth: true)
         assert_difference("::Books::Series.count", 1) do
-          post admin_books_series_index_path, params: {books_series: {title: "A Brand New Series", description: "desc"}}
+          post admin_books_series_index_path, params: {books_series: {title: "A Brand New Series"}}
         end
         assert_redirected_to admin_books_series_path(::Books::Series.order(:created_at).last)
       end

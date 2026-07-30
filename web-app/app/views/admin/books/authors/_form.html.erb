@@ -72,13 +72,6 @@
           <%= text_field_tag "books_author[alternate_names_string]", @author.alternate_names.join(", "), class: "input input-bordered w-full" %>
           <label class="label"><span class="label-text-alt">Comma-separated</span></label>
         </div>
-
-        <div class="form-control md:col-span-2">
-          <%= f.label :description, class: "label" do %>
-            <span class="label-text font-semibold">Description</span>
-          <% end %>
-          <%= f.text_area :description, class: "textarea textarea-bordered w-full h-32" %>
-        </div>
       </div>
     </div>
   </div>

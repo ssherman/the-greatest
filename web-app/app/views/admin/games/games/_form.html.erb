@@ -113,24 +113,6 @@
             <span class="label-text-alt">Optional: Assign to a game franchise/series</span>
           </label>
         </div>
-
-        <!-- Description -->
-        <div class="form-control md:col-span-2">
-          <%= f.label :description, class: "label" do %>
-            <span class="label-text font-semibold">Description</span>
-          <% end %>
-          <%= f.text_area :description,
-              class: "textarea textarea-bordered w-full h-32 #{@game.errors[:description].any? ? 'textarea-error' : ''}",
-              placeholder: "Enter a description of the game..." %>
-          <label class="label">
-            <span class="label-text-alt">Game overview, gameplay, themes, critical reception</span>
-          </label>
-          <% if @game.errors[:description].any? %>
-            <label class="label">
-              <span class="label-text-alt text-error"><%= @game.errors[:description].first %></span>
-            </label>
-          <% end %>
-        </div>
       </div>
 
       <div class="alert alert-info mt-4">

@@ -87,6 +87,6 @@ class Admin::Games::SeriesController < Admin::Games::BaseController
   end
 
   def series_params
-    params.require(:games_series).permit(:name, :description)
+    params.require(:games_series).permit(:name)
   end
 end

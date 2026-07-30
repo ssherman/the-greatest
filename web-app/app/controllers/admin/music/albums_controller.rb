@@ -174,7 +174,6 @@ class Admin::Music::AlbumsController < Admin::Music::BaseController
   def album_params
     params.require(:music_album).permit(
       :title,
-      :description,
       :release_year
     )
   end

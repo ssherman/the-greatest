@@ -94,6 +94,6 @@ class Admin::Games::CompaniesController < Admin::Games::BaseController
   end
 
   def company_params
-    params.require(:games_company).permit(:name, :description, :country, :year_founded)
+    params.require(:games_company).permit(:name, :country, :year_founded)
   end
 end
