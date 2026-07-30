@@ -71,6 +71,30 @@ class Admin::DescriptionsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "create with a blank source_name succeeds and normalizes to nil" do
+    sign_in_as(@admin_user, stub_auth: true)
+    album = music_albums(:animals)
+
+    assert_difference "Description.count", 1 do
+      post admin_album_descriptions_path(album), params: {
+        description: {content: "Blank source name.", source: "manual", source_name: ""}
+      }
+    end
+
+    assert_nil Description.last.source_name
+  end
+
+  test "create still requires source_name for :other when a blank string is submitted" do
+    sign_in_as(@admin_user, stub_auth: true)
+    album = music_albums(:animals)
+
+    assert_no_difference "Description.count" do
+      post admin_album_descriptions_path(album), params: {
+        description: {content: "Unattributed.", source: "other", source_name: ""}
+      }
+    end
+  end
+
   test "create rejects a duplicate natural key without raising" do
     sign_in_as(@admin_user, stub_auth: true)
 
@@ -100,6 +124,18 @@ class Admin::DescriptionsControllerTest < ActionDispatch::IntegrationTest
     }
 
     assert_equal "Edited by an admin.", @description.reload.content
+  end
+
+  test "update with a blank source_name on a named-source row succeeds" do
+    sign_in_as(@admin_user, stub_auth: true)
+
+    patch admin_description_path(@description), params: {
+      description: {content: "Edited by an admin.", source_name: ""}
+    }
+
+    @description.reload
+    assert_equal "Edited by an admin.", @description.content
+    assert_nil @description.source_name
   end
 
   test "update ignores a rank parameter" do
@@ -147,9 +183,10 @@ class Admin::DescriptionsControllerTest < ActionDispatch::IntegrationTest
 
   test "set_preferred only demotes within the same kind and locale" do
     sign_in_as(@admin_user, stub_auth: true)
-    books_books(:war_and_peace)
     other_kind = descriptions(:war_and_peace_long)
     other_kind.update!(rank: :preferred)
+    other_locale = descriptions(:war_and_peace_fr)
+    other_locale.update!(rank: :preferred)
     target = descriptions(:war_and_peace_ai)
     host! Rails.application.config.domains[:books]
     sign_in_as(@admin_user, stub_auth: true)
@@ -158,6 +195,20 @@ class Admin::DescriptionsControllerTest < ActionDispatch::IntegrationTest
 
     assert_equal "preferred", target.reload.rank
     assert_equal "preferred", other_kind.reload.rank
+    assert_equal "preferred", other_locale.reload.rank
+  end
+
+  test "set_preferred only demotes within the same describable" do
+    sign_in_as(@admin_user, stub_auth: true)
+    sibling_preferred = descriptions(:crime_preferred)
+    target = descriptions(:war_and_peace_ai)
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@admin_user, stub_auth: true)
+
+    post set_preferred_admin_description_path(target)
+
+    assert_equal "preferred", target.reload.rank
+    assert_equal "preferred", sibling_preferred.reload.rank
   end
 
   test "regular users cannot create, update, destroy or set_preferred" do

@@ -57,6 +57,24 @@ class DescriptionTest < ActiveSupport::TestCase
     assert wikipedia.valid?
   end
 
+  test "normalizes a blank source_name to nil on assignment" do
+    named = descriptions(:war_and_peace_wikipedia)
+    named.source_name = ""
+    assert_nil named.source_name
+    assert named.valid?
+
+    built = Description.new(source_name: "")
+    assert_nil built.source_name
+  end
+
+  test "a blank source_name still fails presence for :other after normalization" do
+    other = descriptions(:tolstoy_google)
+    other.source_name = ""
+    assert_nil other.source_name
+    assert_not other.valid?
+    assert_includes other.errors[:source_name], "can't be blank"
+  end
+
   test "rank supports a negative deprecated value" do
     assert_equal(-1, Description.ranks["deprecated"])
     assert descriptions(:crime_deprecated).deprecated?

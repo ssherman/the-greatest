@@ -33,6 +33,8 @@ class Description < ApplicationRecord
                  musicbrainz: 4, igdb: 5, publisher: 6, goodreads: 7, other: 9},
     prefix: true
 
+  normalizes :source_name, with: ->(value) { value.presence }
+
   validates :content, presence: true
   validates :locale, presence: true
   validates :source, presence: true

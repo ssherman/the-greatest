@@ -4,7 +4,7 @@
   <% if rows.any? %>
     <div class="space-y-3">
       <% rows.each do |description| %>
-        <%= render "admin/descriptions/description_card", description: description, parent: parent_entity %>
+        <%= render "admin/descriptions/description_card", description: description %>
       <% end %>
     </div>
   <% else %>
