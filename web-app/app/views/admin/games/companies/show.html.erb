@@ -197,6 +197,19 @@
         </div>
       </div>
 
+      <!-- Descriptions -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">Descriptions</h2>
+          <%= turbo_frame_tag "descriptions_list", loading: :lazy,
+              src: admin_games_company_descriptions_path(@company) do %>
+            <div class="flex justify-center py-4">
+              <span class="loading loading-spinner loading-md"></span>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
       <!-- Statistics -->
       <div class="card bg-base-100 shadow-xl">
         <div class="card-body">

@@ -53,6 +53,15 @@
 
       <div class="card bg-base-100 shadow">
         <div class="card-body">
+          <h2 class="card-title text-base">Descriptions</h2>
+          <%= turbo_frame_tag "descriptions_list", loading: :lazy, src: admin_books_book_descriptions_path(@book) do %>
+            <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
+          <% end %>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
           <h2 class="card-title text-base">Metadata</h2>
           <dl class="space-y-2 text-sm">
             <div><dt class="text-base-content/60">ID</dt><dd><%= @book.id %></dd></div>
