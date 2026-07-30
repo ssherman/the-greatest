@@ -45,6 +45,7 @@ written at all. Two halves:
 |---|---|---|
 | C1 | `has_many :descriptions` gains `autosave: true` | Rails autosaves *new* children on parent save but **not modified existing ones**. The IGDB providers assign in memory and `ImporterBase#run_providers_with_saving` calls `item.save!`, so without this a **re-import** of a game that already has an `:igdb` row would assign the new summary and silently not persist it. `Identifier` dodges this only because both its attributes are lookup keys, so a found record is never dirty; `content` is not a lookup key. **The delta cuts both ways:** without `autosave`, Rails validates and saves only *new* children in the collection; with it, *changed persisted* children are validated and saved too. So an invalid changed child can now block a parent's save where previously it would have been silently ignored — which is the correct trade (silent data loss is worse than a loud failure), but it is a new failure path and gets its own test. Escape hatch if it ever misbehaves: `row.save! if persisted?` inside the helper instead, with no app-wide change. |
 | C2 | One `Describable#assign_description` helper; callers persist | The two write paths genuinely differ — the AI tasks' parent is always persisted, the IGDB providers' may be a brand-new record that cannot be saved independently. A helper that only *assigns* serves both, and puts the lookup rule and D5's never-write-`rank` invariant in one place instead of four. |
+| C2a | The helper looks the row up with `detect` over the association, **never `find_or_initialize_by`** | Verified empirically on PG 17 / Rails 8.1, and this is the one that would have shipped a silent bug. `find_or_initialize_by` on a *persisted* parent issues a query and returns a **detached instance that is not in the association's target**; `autosave` only iterates the target, so the parent save is a silent no-op and the content never changes — precisely the failure C1 exists to prevent. `detect` returns the target instance (or `build` puts a new one there), so autosave sees it. Costs one association load; entities carry 1–4 rows (D8), and `primary_description` already operates on the loaded collection. Also removes a second hazard: on a *new* parent, `find_or_initialize_by`'s null-scope query cannot see an already-built in-memory row, so a repeat call would build a duplicate and the natural-key index would reject the save. `detect` finds it. |
 | C3 | Admin `create` offers a full source picker plus `source_url` and `license` | Owner's call. Restricting humans to `:manual` sounds safer but is not: an admin pasting Wikipedia text would be recorded as `:manual`, which is wrong provenance (D10) **and** an unattributed CC BY-SA use, since increment (d)'s `AttributionComponent` keys off `license` + `source_url`. Mislabelling is possible but visible; silent misattribution is neither. |
 | C4 | `rank` appears in no form; only `set_preferred` changes it | D5. A form that could set `preferred` directly would skip the demotion and hit `index_descriptions_one_preferred_per_key`, raising `PG::UniqueViolation`. |
 | C5 | `kind` and `locale` are hardcoded `:summary` / `"en"` on create | Every row in the app is that today. D2/D3 justify the *columns* existing for a future the UI does not need yet. Rows at other values still list and delete; they just cannot be created here. |
@@ -60,13 +61,29 @@ has_many :descriptions, -> { order(:id) }, as: :describable, dependent: :destroy
 def assign_description(source:, content:, **attrs)
   return nil if content.blank?
 
-  descriptions.find_or_initialize_by(kind: :summary, locale: "en", source: source)
-    .tap { |d| d.assign_attributes(content: content, retrieved_at: Time.current, **attrs) }
+  row = descriptions.detect { |d| d.kind == "summary" && d.locale == "en" && d.source == source.to_s } ||
+    descriptions.build(kind: :summary, locale: "en", source: source)
+  row.assign_attributes(content: content, retrieved_at: Time.current, **attrs)
+  row
 end
 ```
 
 Never assigns `rank` (D5). Returns `nil` on blank content, so `descriptions_content_not_blank` can
-never abort a caller's save.
+never abort a caller's save. `detect`, not `find_or_initialize_by` — see C2a; the latter returns a
+detached instance and silently loses the write.
+
+`d.source == source.to_s` because the enum reader returns a `String` while callers pass a `Symbol`.
+
+### Verified behaviour (PG 17 / Rails 8.1, 2026-07-30)
+
+| Case | Result |
+|---|---|
+| `find_or_initialize_by` + `parent.save!`, persisted parent, existing row | **Silently does not update** — instance is not in the association target |
+| ...same, association pre-loaded | **Still does not update** — `find_by` issues a fresh query either way |
+| `detect` + `parent.save!`, persisted parent, existing row | Updates correctly |
+| `detect` + `parent.save!` **without** `autosave: true` | **Does not update** — so C1's association change is genuinely required |
+| `build` on a new parent, no `autosave` | Saves (new children always do), so `autosave` matters only for the changed-existing case |
+| `autosave: true` with an invalid changed child | Blocks the parent save with `RecordInvalid` — the new failure path named in C1 |
 
 | Site | Parent state | How it persists |
 |---|---|---|
@@ -168,7 +185,9 @@ config, not sourced content.
   untouched in both content and rank.
 - **`set_preferred` demotes the incumbent** rather than raising `PG::UniqueViolation`.
 - **IGDB re-import persists a changed summary** — the C1 autosave gap. This is the test that fails if
-  `autosave: true` is ever removed.
+  `autosave: true` is ever removed **or** if the helper's `detect` is refactored back into
+  `find_or_initialize_by` (C2a). Both regressions are silent without it, so it is the single most
+  load-bearing test in this increment.
 - **An import still succeeds end-to-end** with the description association in play, proving `autosave`
   did not introduce a child-validation path that blocks `item.save!`.
 - Updated importer and controller tests for the nine stripped forms.
