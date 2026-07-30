@@ -34,18 +34,19 @@ test.describe('Admin Descriptions Panel', () => {
       await frame.getByRole('button', { name: '+ Add Description', exact: true }).click();
       await expect(addDialog).toBeVisible();
 
-      // Landmine (discovered while writing this test, not just theorized): the shared
-      // _form_fields partial is rendered once per open dialog (this add form, plus one
-      // edit form per existing description card), and Rails' default field ids
-      // ("description_content", "description_source_name", ...) are identical across
-      // every rendering. That means the page can legitimately have more than one
-      // element sharing the same id, so label[for=...]/getByLabel resolution is not
-      // reliable here - it can silently resolve to a field inside a different,
-      // currently-closed dialog instead of this open one. data-testid is the only
-      // way to reliably scope to the field inside *this* dialog.
-      await addDialog.getByTestId('description-content-input').fill(content);
-      await addDialog.getByTestId('description-source-select').selectOption('other');
-      await addDialog.getByTestId('description-source-name-input').fill(sourceName);
+      // The shared _form_fields partial is rendered once per open dialog (this add
+      // form, plus one edit form per existing description card). It used to default
+      // to Rails' bare field ids ("description_content", ...), which collided across
+      // every rendering and broke label[for=...]/getByLabel resolution - fixed
+      // upstream by giving each form_with call a unique `namespace:`, so every field
+      // id (and its label's `for`) is now scoped per-dialog and getByLabel is
+      // reliable again.
+      await addDialog.getByLabel('Content').fill(content);
+      // "Source" is a substring of "Source Name" and "Source URL" too, so match the
+      // full visible label text (including the required-field asterisk) exactly to
+      // avoid ambiguity with those two.
+      await addDialog.getByLabel('Source *', { exact: true }).selectOption('other');
+      await addDialog.getByLabel('Source Name').fill(sourceName);
       await addDialog.getByRole('button', { name: 'Add Description', exact: true }).click();
 
       // Landmine (flagged in review): this add-modal lives INSIDE the descriptions_list

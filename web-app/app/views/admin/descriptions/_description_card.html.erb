@@ -42,6 +42,7 @@
     <%= form_with model: description,
                   url: admin_description_path(description),
                   method: :patch,
+                  namespace: "description_#{description.id}",
                   class: "space-y-4 mt-4",
                   data: {
                     controller: "modal-form",

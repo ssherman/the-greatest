@@ -9,6 +9,7 @@
     <%= form_with model: Description.new,
                   url: Admin::DomainRouting.descriptions_path_for(parent),
                   method: :post,
+                  namespace: "new_description",
                   class: "space-y-4 mt-4",
                   data: {
                     controller: "modal-form",
