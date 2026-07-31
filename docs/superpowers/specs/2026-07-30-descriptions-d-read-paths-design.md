@@ -87,8 +87,15 @@ the preload is a measurable regression rather than a rounding error. Pinned by a
 
 - Existing controller/integration tests for the five public pages keep passing unchanged; they assert
   status codes rather than copy, per the project convention.
-- One test per domain asserting a record with a description still renders it, and one asserting a
-  record without one renders no description block — behaviour, not markup.
+- One test per domain asserting a record's description **text** reaches the response body, and one
+  asserting a record with no description still renders successfully.
+
+  This is deliberately close to the project's "controller tests assert behaviour, never HTML/CSS/copy"
+  rule, so the distinction matters: a description's `content` is **data**, not designer-changeable
+  copy — a designer cannot freely change it, and if it stops appearing the increment has silently
+  failed in the one way nothing else would catch. So `assert_includes response.body, description.content`
+  is in bounds. Asserting the wrapper classes, the `prose` div or any surrounding wording is **not** —
+  those are exactly what a designer may change freely.
 - A query-count test on `music/albums/lists/show` proving the preload works.
 - **No new Playwright.** These are existing pages being rewired, not new user-facing flows. Existing
   E2E over those pages must keep passing.
