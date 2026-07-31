@@ -565,19 +565,25 @@ git commit -m "Add books paging styles, robots meta, and layout accessibility fi
 
 ---
 
-### Task 5: Books::CardComponent
+### Task 5: Card component, routes, and the ranked grid
 
-Implements spec decisions **D10** (denser grid sizing) and **D11** (serve the original cover blob), plus bugs **B1** (no lazy loading), **B5** (dead `hover:badge-primary`), and **B9** (two links per card).
+Implements spec decisions **D5** (root is the index), **D5a** (path-based pagination), **D2**/**D4** (indexability), **D10** (denser grid sizing), **D11** (serve the original cover blob), plus bugs **B1** (no lazy loading), **B5** (dead `hover:badge-primary`), **B7** (no nested container), and **B9** (two links per card). Deletes `Books::DefaultController`, whose root route the grid takes over.
+
+The card and the grid are one task because neither is independently testable: the card template calls `book_path`, which does not exist until this task's routes land, so the component cannot render on its own.
 
 **Files:**
-- Create: `app/components/books/card_component.rb`, `app/components/books/card_component.html.erb`
-- Test: `test/components/books/card_component_test.rb`
+- Create: `app/components/books/card_component.rb`, `app/components/books/card_component.html.erb`, `app/controllers/books/ranked_items_controller.rb`, `app/views/books/ranked_items/index.html.erb`
+- Modify: `config/routes.rb`
+- Delete: `app/controllers/books/default_controller.rb`, `app/views/books/default/index.html.erb`, `test/controllers/books/default_controller_test.rb`
+- Test: `test/components/books/card_component_test.rb`, `test/controllers/books/ranked_items_controller_test.rb`
 
 **Interfaces:**
-- Consumes: nothing.
-- Produces: `Books::CardComponent.new(ranked_item:, index:)`. `ranked_item` is a `RankedItem` whose `item` is a `Books::Book`; `index` is the zero-based position on the page and controls the eager/lazy image split.
+- Consumes: `Books::RankedBooksQuery.call(ranking_configuration:)` (Task 3), the `:page_path` pagy option (Task 1), `books_robots_content` (Task 2).
+- Produces: `Books::CardComponent.new(ranked_item:, index:)` — `ranked_item` is a `RankedItem` whose `item` is a `Books::Book`; `index` is the zero-based position on the page and controls the eager/lazy image split. Named routes `books_root_path`, `books_page_path(page)`, `books_rc_path(rc_id)`, `books_rc_page_path(rc_id, page)`, and `book_path(slug)` (whose controller arrives in Task 6).
 
-**Background.** Book covers are 326×500 (median 28.5 KB) against games' 810×1080. The card must therefore stay in a 163–231px band or covers upscale and go soft — that is what drives the grid ladder in Task 6. The first 6 cards load eagerly with `fetchpriority="high"` because the LCP element on `/` is a first-row cover and Chrome does not prioritise lazy images.
+**Background.** Book covers are 326×500 (median 28.5 KB) against games' 810×1080. The card must therefore stay in a 163–231px band or covers upscale and go soft — that is what drives the grid ladder below. The first 6 cards load eagerly with `fetchpriority="high"` because the LCP element on `/` is a first-row cover and Chrome does not prioritise lazy images.
+
+**Order note.** Steps 1–4 build the component, Steps 5–12 the routes, controller, and view. The component test in Step 2 will not pass until the routes land in Step 7; Step 11 runs both suites together.
 
 - [ ] **Step 1: Generate the component**
 
@@ -737,36 +743,7 @@ Replace `app/components/books/card_component.html.erb`:
 
 Two load-bearing details. `.card` is already `position: relative` in DaisyUI 5, so `after:inset-0` anchors correctly and gives one stretched link per card. When increment 3 adds `UserLists::CardWidgetComponent`, its wrapper **must** carry `relative z-10` or the stretched-link overlay makes the button unclickable.
 
-- [ ] **Step 5: Run the test to verify it passes**
-
-Run: `bin/rails test test/components/books/card_component_test.rb`
-Expected: FAIL on the `book_path` assertion — that route does not exist until Task 6. This is expected; proceed and re-run at the end of Task 6.
-
-- [ ] **Step 6: Commit**
-
-```bash
-bundle exec standardrb --fix app/components/books/card_component.rb test/components/books/card_component_test.rb
-git add app/components/books test/components/books
-git commit -m "Add Books::CardComponent for the ranked grid"
-```
-
----
-
-### Task 6: Routes, ranked-items controller, and the grid page
-
-Implements spec decisions **D5** (root is the index), **D5a** (path-based pagination), **D2**/**D4** (indexability), and **B7** (no nested container). Deletes `Books::DefaultController`, whose route root now takes over.
-
-**Files:**
-- Create: `app/controllers/books/ranked_items_controller.rb`, `app/views/books/ranked_items/index.html.erb`
-- Modify: `config/routes.rb`
-- Delete: `app/controllers/books/default_controller.rb`, `app/views/books/default/index.html.erb`, `test/controllers/books/default_controller_test.rb`
-- Test: `test/controllers/books/ranked_items_controller_test.rb`
-
-**Interfaces:**
-- Consumes: `Books::RankedBooksQuery.call` (Task 3), `Books::CardComponent.new(ranked_item:, index:)` (Task 5), the `:page_path` pagy option (Task 1).
-- Produces: named routes `books_root_path`, `books_page_path(page)`, `books_rc_path(rc_id)`, `books_rc_page_path(rc_id, page)`, and `book_path(slug)` (the detail route, implemented in Task 7).
-
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 5: Write the failing ranked-items controller test**
 
 Create `test/controllers/books/ranked_items_controller_test.rb`:
 
@@ -844,12 +821,12 @@ module Books
 end
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [ ] **Step 6: Run the test to verify it fails**
 
 Run: `bin/rails test test/controllers/books/ranked_items_controller_test.rb`
 Expected: FAIL — routes do not exist.
 
-- [ ] **Step 3: Add the routes**
+- [ ] **Step 7: Add the routes**
 
 In `config/routes.rb`, inside the books `DomainConstraint` block, **replace** the existing line:
 
@@ -875,7 +852,7 @@ with:
       as: :books_rc_page, constraints: {page: /\d+/}
 ```
 
-- [ ] **Step 4: Write the controller**
+- [ ] **Step 8: Write the controller**
 
 Create `app/controllers/books/ranked_items_controller.rb`:
 
@@ -930,7 +907,7 @@ class Books::RankedItemsController < RankedItemsController
 end
 ```
 
-- [ ] **Step 5: Write the grid view**
+- [ ] **Step 9: Write the grid view**
 
 Create `app/views/books/ranked_items/index.html.erb`. Note there is **no** `container mx-auto px-4 py-8` wrapper — the layout's `<main>` already provides one, and doubling it costs 32px of width on a 375px phone:
 
@@ -978,7 +955,7 @@ Create `app/views/books/ranked_items/index.html.erb`. Note there is **no** `cont
 </div>
 ```
 
-- [ ] **Step 6: Delete the placeholder controller**
+- [ ] **Step 10: Delete the placeholder controller**
 
 ```bash
 git rm app/controllers/books/default_controller.rb \
@@ -988,12 +965,12 @@ git rm app/controllers/books/default_controller.rb \
 
 `Books::DefaultHelper` stays — it now holds `books_robots_content`.
 
-- [ ] **Step 7: Run the tests**
+- [ ] **Step 11: Run the tests**
 
 Run: `bin/rails test test/controllers/books/ranked_items_controller_test.rb test/components/books/card_component_test.rb`
 Expected: PASS for both, including the `Books::CardComponent` `book_path` assertion deferred from Task 5.
 
-- [ ] **Step 8: Lint and commit**
+- [ ] **Step 12: Lint and commit**
 
 ```bash
 bundle exec standardrb --fix app/controllers/books/ranked_items_controller.rb test/controllers/books/ranked_items_controller_test.rb
@@ -1003,7 +980,7 @@ git commit -m "Add books ranked grid at root with path-based pagination"
 
 ---
 
-### Task 7: Book detail page
+### Task 6: Book detail page
 
 Implements spec decisions **D1** (every book routes, unranked are noindex), **D6** (explicit slug lookup), and **D9** (license byline only where required), plus bug **B2** (never use `prose`).
 
@@ -1242,7 +1219,7 @@ git commit -m "Add books detail page at /book/:slug"
 
 ---
 
-### Task 8: Legacy redirects and the numeric-slug collision guard
+### Task 7: Legacy redirects and the numeric-slug collision guard
 
 Implements spec decision **D6**. This is the highest-risk task in the increment: `/books/:id` is the legacy *canonical* book URL carrying roughly 156,000 indexed pages, and 124 of the 137 purely-numeric slugs collide with a real book id.
 
@@ -1365,7 +1342,7 @@ git commit -m "Add 301 redirects from legacy books urls to /book/:slug"
 
 ---
 
-### Task 9: Playwright coverage and full verification
+### Task 8: Playwright coverage and full verification
 
 **Files:**
 - Modify: `e2e/tests/books/homepage.spec.ts`
@@ -1488,11 +1465,12 @@ Expected: succeeds and emits `app/assets/builds/books.css` and `app/assets/build
 
 - [ ] **Step 6: Run the Playwright books project**
 
-Start the dev server in one terminal (`bin/dev`), then run:
+The dev server is already running and `https://dev-new.thegreatestbooks.org/` was confirmed reachable (HTTP 200) before this plan was dispatched — do not start another one.
 
-`npx playwright test --config=e2e/playwright.config.ts --project=books`
+Run: `npx playwright test --config=e2e/playwright.config.ts --project=books`
+Expected: PASS.
 
-Expected: PASS. This requires the `dev-new.thegreatestbooks.org` entry in the Windows hosts file pointing at the WSL IP. If every spec times out on a page that is not the books site, the hosts entry or Caddy is the problem, not the code.
+E2E runs against the **development** database, which holds 24,242 real ranked books — so pagination, covers, and detail pages all have real data. If every spec fails identically on a page that is not the books site, that is the hosts-file or Caddy routing, not the code: report it rather than editing specs to make it pass.
 
 - [ ] **Step 7: Manual check**
 
@@ -1509,10 +1487,12 @@ git commit -m "Add Playwright coverage for the books grid and detail page"
 
 ## Self-Review
 
-**Spec coverage.** Every increment-1 item in the spec maps to a task: routes and the URL map (6, 8), robots plumbing D2/D4 (2, 4), `Pagy::PathBasedPaging` D5a (1), `Books::RankedBooksQuery` D7/D8 (3), the grid D10 (5, 6), `/book/:slug` D1/D6/D9 (7), legacy 301s D6 (8), `books/paging.css` B3/B4 (4), layout fixes B6/B7 (4), Playwright (9). Bugs B1, B5, B9 are handled in Task 5; B2 in Task 7. B8 belongs to increment 2 (list pagination inside a Turbo Frame) and is correctly out of scope here.
+**Spec coverage.** Every increment-1 item in the spec maps to a task: routes and the URL map (5, 7), robots plumbing D2/D4 (2, 4, 5), `Pagy::PathBasedPaging` D5a (1), `Books::RankedBooksQuery` D7/D8 (3), the grid D5/D10/D11 (5), `/book/:slug` D1/D6/D9 (6), legacy 301s D6 (7), `books/paging.css` B3/B4 (4), layout fixes B6/B7 (4, 5), Playwright (8). Bugs B1, B5, B9 are handled in Task 5; B2 in Task 6. B8 belongs to increment 2 (list pagination inside a Turbo Frame) and is correctly out of scope here.
 
 **Deliberately deferred.** `/lists` and `/lists/:id` and the nav entry pointing at them (increment 2); all user-list wiring (increment 3); converting the other 12 public pagy call sites and fixing music/games/movies `paging.css` (spec follow-up 1, its own PR); the 8.9 MB cover PNG (spec follow-up 2, a data fix).
 
-**Type consistency.** `Books::RankedBooksQuery.call(ranking_configuration:)` is defined in Task 3 and called with that exact keyword in Task 6. `Books::CardComponent.new(ranked_item:, index:)` is defined in Task 5 and rendered with those keywords in Task 6. `books_robots_content` is defined in Task 2 and called in Task 4's layout. `book_path(slug)` is declared in Task 6 and consumed by Tasks 5, 7, and 8. `Books::PublicIndexing.enabled?` is defined in Task 2 and stubbed in its own test only.
+**Type consistency.** `Books::RankedBooksQuery.call(ranking_configuration:)` is defined in Task 3 and called with that exact keyword in Task 5. `Books::CardComponent.new(ranked_item:, index:)` is defined and rendered within Task 5. `books_robots_content` is defined in Task 2 and called in Task 4's layout. `book_path(slug)` is declared in Task 5 and consumed by Tasks 5, 6, and 7. `Books::PublicIndexing.enabled?` is defined in Task 2 and stubbed in its own test only.
 
-**Known ordering dependency.** Task 5's component test asserts `book_path`, which does not exist until Task 6. This is called out explicitly in Task 5 Step 5 and re-verified in Task 6 Step 7. If tasks are executed by independent subagents, Task 5 and Task 6 must run in order.
+**Why Task 5 is large.** The card component and the grid were originally separate tasks, but the card template calls `book_path`, so it cannot render — let alone be tested — until the routes land. Neither half is independently reviewable, which is the criterion for merging them.
+
+**On Task 3's query-count assertion.** Step 4 tells the implementer to run `assert_queries_count(4)` and correct the number to whatever the preload actually produces. This is deliberate and is not "adjusting an assertion until it passes": the exact count is not knowable a priori, and the value of the test is that it *pins* the count so a future change reintroducing an N+1 fails loudly. The implementer must not remove the assertion or widen it to a range.
