@@ -44,10 +44,10 @@
         <% end %>
       </div>
 
-      <% if @song.description.present? %>
+      <% if (description = @song.primary_description) %>
         <div class="prose max-w-none mb-6">
           <p class="text-base-content/70">
-            <%= @song.description %>
+            <%= description.content %>
           </p>
         </div>
       <% end %>
