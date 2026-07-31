@@ -60,7 +60,7 @@ module Books
     end
 
     def self.listable_display_includes
-      [:authors, :categories, :primary_image]
+      [:authors, :categories, :primary_image, :descriptions]
     end
   end
 end

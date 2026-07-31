@@ -59,10 +59,10 @@
           <%= render UserLists::CardWidgetComponent.new(listable: @game) %>
         </div>
 
-        <% if @game.description.present? %>
+        <% if (description = @game.primary_description) %>
           <div class="prose max-w-none">
             <p class="text-base-content/70">
-              <%= @game.description %>
+              <%= description.content %>
             </p>
           </div>
         <% end %>

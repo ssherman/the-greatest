@@ -156,10 +156,10 @@
                   <% end %>
 
                   <!-- Description -->
-                  <% if album.description.present? %>
+                  <% if (description = album.primary_description) %>
                     <div>
                       <p class="text-base-content/70 text-sm line-clamp-3">
-                        <%= album.description %>
+                        <%= description.content %>
                       </p>
                     </div>
                   <% end %>

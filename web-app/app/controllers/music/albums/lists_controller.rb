@@ -33,6 +33,7 @@ class Music::Albums::ListsController < ApplicationController
       listable: [
         :artists,
         :categories,
+        :descriptions,
         {primary_image: {file_attachment: {blob: {variant_records: {image_attachment: :blob}}}}}
       ]
     ).order(:position)
