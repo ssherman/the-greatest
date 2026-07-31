@@ -51,7 +51,7 @@ gem "openai"
 gem "opensearch-ruby"
 gem "sidekiq"
 gem "sidekiq-cron"
-gem "pagy"
+gem "pagy", "~> 43.5"
 
 # Load environment variables from .env file
 # gem "dotenv-rails"

@@ -1,0 +1,74 @@
+require "test_helper"
+
+module Books
+  class BooksControllerTest < ActionDispatch::IntegrationTest
+    setup do
+      host! "dev-new.thegreatestbooks.org"
+      @rc = ranking_configurations(:books_global)
+      @book = books_books(:war_and_peace)
+    end
+
+    test "renders a book by slug" do
+      get "/book/#{@book.slug}"
+      assert_response :success
+    end
+
+    test "404s for an unknown slug" do
+      get "/book/no-such-book"
+      assert_response :not_found
+    end
+
+    test "does not fall back to a primary key lookup" do
+      get "/book/#{@book.id}"
+      assert_response :not_found
+    end
+
+    test "marks a ranked book indexable" do
+      RankedItem.create!(item: @book, ranking_configuration: @rc, rank: 1, score: 100)
+
+      get "/book/#{@book.slug}"
+
+      assert @controller.view_assigns["indexable"]
+    end
+
+    test "marks an unranked book not indexable" do
+      get "/book/#{@book.slug}"
+
+      refute @controller.view_assigns["indexable"]
+    end
+
+    test "renders a book whose slug is purely numeric" do
+      numeric = Books::Book.create!(title: "Nineteen Eighty-Four Vol 1", slug: "1984")
+
+      get "/book/1984"
+
+      assert_response :success
+      assert_equal numeric.id, @controller.view_assigns["book"].id
+    end
+
+    test "sanitizes description content before rendering" do
+      Description.create!(
+        describable: @book,
+        kind: :summary,
+        locale: "en",
+        source: :manual,
+        content: "Nice book. <img src=x onerror=alert(1)>"
+      )
+
+      get "/book/#{@book.slug}"
+
+      assert_response :success
+      refute_includes response.body, "onerror"
+    end
+    test "treats a book with a null rank as unranked instead of raising" do
+      item = RankedItem.new(item: @book, ranking_configuration: @rc, rank: nil, score: 10)
+      item.save!(validate: false)
+
+      get "/book/#{@book.slug}"
+
+      assert_response :success
+      assert_nil @controller.view_assigns["ranked_item"]
+      refute @controller.view_assigns["indexable"]
+    end
+  end
+end

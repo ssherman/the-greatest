@@ -1,0 +1,101 @@
+<%
+  author_names = @book.book_authors.map { |ba| ba.author.name }.join(", ")
+  content_for :page_title, "#{@book.title}#{" by #{author_names}" if author_names.present?} | The Greatest Books"
+  content_for :meta_description, "Read about #{@book.title}#{" by #{author_names}" if author_names.present?}, its ranking, categories, and the best-books lists it appears on."
+%>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+  <div class="lg:col-span-1">
+    <div class="card bg-base-100 shadow-xl sticky top-8">
+      <figure class="p-4 lg:p-6">
+        <% if @book.primary_image&.file&.attached? %>
+          <%= image_tag rails_public_blob_url(@book.primary_image.file),
+              alt: "Cover of #{@book.title}",
+              loading: "eager", fetchpriority: "high", decoding: "async",
+              class: "w-full max-w-[180px] sm:max-w-[240px] lg:max-w-none h-auto mx-auto rounded-lg shadow-md" %>
+        <% else %>
+          <div class="w-full max-w-[180px] sm:max-w-[240px] lg:max-w-none mx-auto aspect-[2/3] bg-base-200 rounded-lg flex items-center justify-center" aria-hidden="true">
+            <span class="text-5xl opacity-40">📖</span>
+          </div>
+        <% end %>
+      </figure>
+      <% if @book.first_published_year %>
+        <div class="card-body pt-0">
+          <div class="badge badge-primary">First published <%= @book.first_published_year %></div>
+        </div>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="lg:col-span-2 space-y-6">
+    <div>
+      <h1 class="text-3xl sm:text-4xl font-bold text-balance"><%= @book.title %></h1>
+      <% if @book.subtitle.present? %>
+        <p class="text-xl text-base-content/70 mt-2"><%= @book.subtitle %></p>
+      <% end %>
+      <% if author_names.present? %>
+        <p class="text-lg text-base-content/80 mt-2">by <%= author_names %></p>
+      <% end %>
+      <% if @ranked_item %>
+        <p class="text-base-content/70 mt-3">
+          <% if @ranked_item.rank == 1 %>
+            The <strong>greatest</strong> book of all time
+          <% else %>
+            The <strong><%= @ranked_item.rank.ordinalize %></strong> greatest book of all time
+          <% end %>
+        </p>
+      <% end %>
+    </div>
+
+    <% if @description %>
+      <div>
+        <div class="max-w-[68ch] text-base sm:text-lg leading-relaxed text-base-content/80 space-y-4">
+          <%= simple_format(@description.content, {}, wrapper_tag: "p") %>
+        </div>
+        <% if @description.license_cc_by_sa_4? || @description.license_cc0? %>
+          <p class="text-xs text-base-content/70 mt-3">
+            Source:
+            <% source_label = @description.source_name.presence || @description.source.titleize %>
+            <% if @description.source_url.present? %>
+              <%= link_to source_label, @description.source_url, class: "link", rel: "noopener nofollow", target: "_blank" %>
+            <% else %>
+              <%= source_label %>
+            <% end %>
+            · <%= @description.license_cc_by_sa_4? ? "CC BY-SA 4.0" : "CC0" %>
+          </p>
+        <% end %>
+      </div>
+    <% end %>
+
+    <% if @categories_by_type.any? %>
+      <div class="card bg-base-100 shadow-md">
+        <div class="card-body">
+          <h2 class="card-title text-xl">Categories</h2>
+          <% @categories_by_type.each do |category_type, categories| %>
+            <div class="mt-3 first:mt-0">
+              <h3 class="text-sm font-semibold text-base-content/70 mb-2 uppercase"><%= category_type.to_s.titleize %></h3>
+              <div class="flex flex-wrap gap-2">
+                <% categories.each do |category| %>
+                  <span class="badge badge-ghost"><%= category.name %></span>
+                <% end %>
+              </div>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    <% end %>
+
+    <% if @list_items.any? %>
+      <div class="card bg-base-100 shadow-md">
+        <div class="card-body">
+          <h2 class="card-title text-xl">Appears on <%= pluralize(@list_items.size, "list") %></h2>
+          <ul class="space-y-1">
+            <% @list_items.each do |list_item| %>
+              <li class="text-base-content/80"><%= list_item.list.name %></li>
+            <% end %>
+          </ul>
+        </div>
+      </div>
+    <% end %>
+  </div>
+</div>

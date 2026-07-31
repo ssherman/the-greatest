@@ -1,0 +1,11 @@
+.pagy {
+  @apply flex flex-wrap justify-center items-center gap-1 font-semibold text-sm;
+
+  a { @apply btn btn-sm btn-ghost; }
+
+  /* Disabled prev/next arrows and the "…" separator, but NOT the current page. */
+  a:not([href]):not([aria-current]) { @apply btn-disabled; }
+
+  /* pagy 43 marks the current page with aria-current, not class="current". */
+  a[aria-current="page"] { @apply btn-primary pointer-events-none; }
+}

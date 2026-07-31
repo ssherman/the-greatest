@@ -1,22 +1,24 @@
 <!DOCTYPE html>
-<html data-theme="cmyk">
+<html lang="en" data-theme="cmyk">
   <head>
     <title><%= content_for?(:page_title) ? yield(:page_title) : "Greatest Books Ranked | The Greatest Books" %></title>
     <meta name="description" content="<%= content_for?(:meta_description) ? yield(:meta_description) : "Discover definitive rankings of the greatest books of all time. Aggregated from the best book lists ever published." %>">
+    <meta name="robots" content="<%= books_robots_content %>">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
 
     <%= stylesheet_link_tag "books", "data-turbo-track": "reload" %>
     <%= javascript_include_tag "application", "data-turbo-track": "reload" %>
   </head>
 
   <body>
-    <div class="navbar bg-base-200">
+    <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 btn btn-sm btn-primary">Skip to content</a>
+    <nav class="navbar bg-base-200" aria-label="Main">
       <div class="navbar-start">
         <div class="dropdown">
           <div tabindex="0" role="button" class="btn btn-ghost lg:hidden">
@@ -25,9 +27,7 @@
             </svg>
           </div>
           <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
-            <li><%= link_to "Books", "/" %></li>
-            <li><%= link_to "Authors", "/" %></li>
-            <li><%= link_to "Lists", "/" %></li>
+            <li><%= link_to "Books", books_root_path %></li>
           </ul>
         </div>
         <%= link_to "/", class: "btn btn-ghost text-xl" do %>
@@ -37,17 +37,15 @@
       </div>
       <div class="navbar-center hidden lg:flex">
         <ul class="menu menu-horizontal px-1">
-          <li><%= link_to "Books", "/" %></li>
-          <li><%= link_to "Authors", "/" %></li>
-          <li><%= link_to "Lists", "/" %></li>
+          <li><%= link_to "Books", books_root_path %></li>
         </ul>
       </div>
       <div class="navbar-end">
         <button class="btn btn-primary" onclick="login_modal.showModal()" id="navbar_login_button">Login</button>
       </div>
-    </div>
+    </nav>
 
-    <main class="container mx-auto px-4 py-8">
+    <main id="main" class="container mx-auto px-4 py-8">
       <%= yield %>
     </main>
 

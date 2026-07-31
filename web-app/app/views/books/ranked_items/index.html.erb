@@ -1,0 +1,41 @@
+<%
+  content_for :page_title, "The Greatest Books of All Time | The Greatest Books"
+  content_for :meta_description, "A definitive ranking of the greatest books of all time, aggregated from hundreds of published best-books lists."
+%>
+
+<div class="space-y-8">
+  <% if @show_hero %>
+    <div class="bg-base-200 border border-base-300 rounded-xl p-6 md:p-10">
+      <div class="max-w-3xl mx-auto">
+        <p class="text-base sm:text-lg leading-relaxed text-base-content/80">
+          What makes a book one of the greatest ever written? The Greatest Books aggregates hundreds of
+          published "best books" lists from critics, authors, and readers, then weighs each list by its
+          quality, credibility, and scope to produce a single consensus ranking.
+        </p>
+      </div>
+    </div>
+  <% end %>
+
+  <h1 class="text-3xl sm:text-4xl font-bold text-center text-balance">The Greatest Books of All Time</h1>
+
+  <% if @ranked_books.any? %>
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
+      <% @ranked_books.each_with_index do |ranked_item, index| %>
+        <%= render Books::CardComponent.new(ranked_item: ranked_item, index: index) %>
+      <% end %>
+    </div>
+
+    <div class="flex justify-center">
+      <%== @pagy.series_nav(slots: 5) %>
+    </div>
+    <p class="text-center text-sm text-base-content/70">
+      Page <%= number_with_delimiter(@pagy.page) %> of <%= number_with_delimiter(@pagy.last) %>
+    </p>
+  <% else %>
+    <div class="text-center py-16">
+      <div class="text-6xl mb-4">📚</div>
+      <h2 class="text-2xl font-bold mb-2">No books found</h2>
+      <p class="text-base-content/70">No books have been ranked in this configuration yet.</p>
+    </div>
+  <% end %>
+</div>

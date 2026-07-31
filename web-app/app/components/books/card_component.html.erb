@@ -1,0 +1,39 @@
+<div class="card card-sm bg-base-100 shadow-md hover:shadow-xl transition-shadow
+            has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-primary"
+     data-listable-type="Books::Book"
+     data-listable-id="<%= book.id %>">
+  <figure class="bg-base-200">
+    <% if cover %>
+      <%= image_tag rails_public_blob_url(cover.file),
+          alt: "",
+          loading: loading_strategy,
+          decoding: "async",
+          fetchpriority: fetch_priority,
+          class: "w-full aspect-[2/3] object-cover" %>
+    <% else %>
+      <div class="w-full aspect-[2/3] flex items-center justify-center" aria-hidden="true">
+        <span class="text-4xl opacity-40">📖</span>
+      </div>
+    <% end %>
+  </figure>
+
+  <div class="card-body">
+    <div class="flex items-start justify-between gap-2">
+      <div class="badge badge-primary font-bold">
+        <span class="sr-only">Rank </span>#<%= rank %>
+      </div>
+      <% if book.first_published_year %>
+        <span class="text-xs text-base-content/70"><%= book.first_published_year %></span>
+      <% end %>
+    </div>
+
+    <h2 class="card-title text-base">
+      <%= link_to book.title, book_path(book.slug),
+          class: "after:absolute after:inset-0 focus-visible:outline-none hover:text-primary" %>
+    </h2>
+
+    <% if author_names.present? %>
+      <p class="text-sm text-base-content/70"><%= author_names %></p>
+    <% end %>
+  </div>
+</div>

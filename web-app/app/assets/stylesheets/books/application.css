@@ -1,4 +1,5 @@
 @import "tailwindcss" source(none);
+@import "./paging.css";
 @source "../../../../public/*.html";
 @source "../../../../app/helpers/**/*.rb";
 @source "../../../../app/javascript/**/*.js";
@@ -9,10 +10,12 @@
   themes: cmyk --default;
 }
 
-html {
-  font-family: 'Lora', Georgia, 'Times New Roman', serif;
-}
+@layer base {
+  html {
+    font-family: 'Lora', Georgia, 'Times New Roman', serif;
+  }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: 'Playfair Display', Georgia, serif;
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Playfair Display', Georgia, serif;
+  }
 }
