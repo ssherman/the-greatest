@@ -81,8 +81,21 @@ class Admin::DescriptionsController < Admin::BaseController
 
   # rank is deliberately absent (C4): only set_preferred changes it, transactionally.
   # kind and locale are absent too (C5) and are forced in create.
+  #
+  # Source Name only means anything for :other, and the form hides that input rather
+  # than removing it -- so switching an existing :other row to Wikipedia still submits
+  # the old name, which `validates :source_name, absence: true` then rejects with a 422
+  # pointing at a field the admin cannot see. An explicitly submitted non-other source
+  # drops it. Doing this server-side rather than in the Stimulus toggle keeps the rule
+  # true without JS, and leaves the hidden input's value intact so toggling back to
+  # "Other" restores what was typed.
+  #
+  # Guarded on `source` being present: a partial update that omits it must not clear a
+  # source_name the record legitimately holds.
   def description_params
-    params.require(:description).permit(:content, :source, :source_name, :source_url, :license)
+    permitted = params.require(:description).permit(:content, :source, :source_name, :source_url, :license)
+    permitted[:source_name] = nil if permitted[:source].present? && permitted[:source] != "other"
+    permitted
   end
 
   def respond_with_list(describable, notice:)

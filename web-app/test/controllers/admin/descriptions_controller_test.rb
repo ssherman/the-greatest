@@ -154,6 +154,53 @@ class Admin::DescriptionsControllerTest < ActionDispatch::IntegrationTest
     assert_nil @description.source_name
   end
 
+  test "update drops a stale source_name when the source moves off :other" do
+    sign_in_as(@admin_user, stub_auth: true)
+    row = music_albums(:animals).descriptions.create!(
+      kind: :summary, locale: "en", source: :other,
+      source_name: "Google Books", content: "From Google."
+    )
+
+    patch admin_description_path(row), params: {
+      description: {content: "From Google.", source: "wikipedia", source_name: "Google Books"}
+    }
+
+    row.reload
+    assert_equal "wikipedia", row.source
+    assert_nil row.source_name
+  end
+
+  test "create drops a source_name submitted alongside a named source" do
+    sign_in_as(@admin_user, stub_auth: true)
+    album = music_albums(:animals)
+
+    assert_difference "Description.count", 1 do
+      post admin_album_descriptions_path(album), params: {
+        description: {content: "Typed then switched.", source: "wikipedia", source_name: "Google Books"}
+      }
+    end
+
+    row = Description.last
+    assert_equal "wikipedia", row.source
+    assert_nil row.source_name
+  end
+
+  test "update keeps source_name when the source stays :other" do
+    sign_in_as(@admin_user, stub_auth: true)
+    row = music_albums(:animals).descriptions.create!(
+      kind: :summary, locale: "en", source: :other,
+      source_name: "Google Books", content: "From Google."
+    )
+
+    patch admin_description_path(row), params: {
+      description: {content: "Edited.", source: "other", source_name: "Google Books"}
+    }
+
+    row.reload
+    assert_equal "other", row.source
+    assert_equal "Google Books", row.source_name
+  end
+
   test "update ignores a rank parameter" do
     sign_in_as(@admin_user, stub_auth: true)
     row = music_albums(:animals).descriptions.create!(

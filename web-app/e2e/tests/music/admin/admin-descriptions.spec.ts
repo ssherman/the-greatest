@@ -66,6 +66,29 @@ test.describe('Admin Descriptions Panel', () => {
     const cardA = cardFor(contentA);
     await expect(cardA).toHaveCount(1);
     await expect(cardA.getByText('Preferred', { exact: true })).toHaveCount(0);
+    await expect(cardA.getByText(sourceNameA, { exact: true })).toBeVisible();
+
+    // --- Edit A's source away from "Other" (regression, PR #184 review).
+    // The Source Name input is only hidden when Source stops being "Other", so the
+    // browser keeps submitting its old value; `validates :source_name, absence: true`
+    // then rejected every such edit with a 422 pointing at an invisible field. The
+    // controller now drops a submitted source_name for any non-other source.
+    //
+    // Openlibrary specifically: the badge renders source_name for :other and the
+    // humanized source otherwise, so this asserts the switch actually took. Music
+    // albums only ever get :ai_generated descriptions (DescriptionColumnBackfill), and
+    // nothing writes :openlibrary for them, so this cannot collide with an existing row
+    // on the natural key and 422 for an unrelated reason.
+    const cardAId = (await cardA.getAttribute('data-testid'))!.replace('description-card-', '');
+    const editDialog = page.locator(`dialog#edit_description_${cardAId}_modal`);
+
+    await cardA.getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(editDialog).toBeVisible();
+    await editDialog.getByLabel('Source *', { exact: true }).selectOption('openlibrary');
+    await editDialog.getByRole('button', { name: 'Save Changes', exact: true }).click();
+
+    await expect(cardA.getByText('Openlibrary', { exact: true })).toBeVisible();
+    await expect(cardA.getByText(sourceNameA, { exact: true })).toHaveCount(0);
 
     // --- Add a second description so we can prove the Preferred badge moves between
     // records rather than just appearing once ---
