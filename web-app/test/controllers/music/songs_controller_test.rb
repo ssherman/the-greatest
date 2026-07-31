@@ -36,5 +36,18 @@ module Music
       get song_path("non-existent-song")
       assert_response :not_found
     end
+
+    test "show renders the song's primary description" do
+      song = music_songs(:time)
+      description = song.descriptions.create!(
+        kind: :summary, locale: "en", source: :ai_generated,
+        content: "A meditation on the passage of time, written by Roger Waters."
+      )
+
+      get song_path(song)
+
+      assert_response :success
+      assert_includes response.body, description.content
+    end
   end
 end

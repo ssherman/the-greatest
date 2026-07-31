@@ -221,5 +221,28 @@ module Admin
       assert_equal Rails.application.routes.url_helpers.admin_books_ranking_configuration_path(rc),
         Admin::DomainRouting.ranking_configuration_config(rc)[:path]
     end
+
+    test "domain_for resolves a Games::Series to games" do
+      assert_equal :games, Admin::DomainRouting.domain_for(games_series(:resident_evil))
+      assert_equal :games, Admin::DomainRouting.domain_for(::Games::Series)
+    end
+
+    test "path_for resolves a Games::Series admin path" do
+      series = games_series(:resident_evil)
+      assert_equal Rails.application.routes.url_helpers.admin_games_series_path(series),
+        Admin::DomainRouting.path_for(series)
+    end
+
+    test "parent_from_params resolves a series_id under the games domain" do
+      series = games_series(:resident_evil)
+      resolved = Admin::DomainRouting.parent_from_params({series_id: series.id}, domain: :games)
+      assert_equal series, resolved
+    end
+
+    test "parent_from_params still resolves a series_id under the books domain after games is added" do
+      series = books_series(:asoiaf)
+      resolved = Admin::DomainRouting.parent_from_params({series_id: series.id}, domain: :books)
+      assert_equal series, resolved
+    end
   end
 end

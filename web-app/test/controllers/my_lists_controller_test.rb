@@ -1,6 +1,9 @@
 require "test_helper"
+require "active_record/testing/query_assertions"
 
 class MyListsControllerTest < ActionDispatch::IntegrationTest
+  include ActiveRecord::Assertions::QueryAssertions
+
   BOM = "\uFEFF"
 
   setup do
@@ -150,6 +153,23 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     # subsequent visit with no param renders the persisted mode
     get my_list_path(@albums_favorites)
     assert_equal "grid_view", @albums_favorites.reload.view_mode
+  end
+
+  test "show renders each album's primary description in default_view" do
+    sign_in_as(@user, stub_auth: true)
+    get my_list_path(@albums_favorites)
+    assert_response :success
+    assert_includes response.body, descriptions(:dark_side_ai).content
+  end
+
+  test "show preloads descriptions rather than querying per row in default_view" do
+    sign_in_as(@user, stub_auth: true)
+
+    assert_queries_match(/FROM "descriptions"/, count: 1) do
+      get my_list_path(@albums_favorites)
+    end
+
+    assert_response :success
   end
 
   test "all three view modes render for an albums list" do

@@ -33,9 +33,60 @@ module DataImporters
 
             assert result.success?
             assert_equal "Nintendo", @company.name
-            assert_equal "Japanese video game company", @company.description
+            row = @company.descriptions.detect { |d| d.source == "igdb" }
+            assert_not_nil row, "expected an igdb description to be built"
+            assert_equal "Japanese video game company", row.content
+            assert_equal "summary", row.kind
+            assert_equal "normal", row.rank
+            assert_nil @company.description
             assert_equal "JP", @company.country
             assert_equal 1889, @company.year_founded
+          end
+
+          test "re-import persists a changed description on an already-saved company" do
+            company = games_companies(:capcom)
+            company.descriptions.create!(
+              kind: :summary, locale: "en", source: :igdb, content: "Stale description."
+            )
+            company.reload
+
+            search_service = mock
+            search_service.expects(:find_with_details).with(8).returns(
+              success: true,
+              data: [{"name" => "Capcom", "description" => "Fresh description from IGDB."}]
+            )
+            ::Games::Igdb::Search::CompanySearch.stubs(:new).returns(search_service)
+
+            result = @provider.populate(company, query: ImportQuery.new(igdb_id: 8))
+            assert result.success?
+            company.save!
+
+            assert_equal "Fresh description from IGDB.",
+              company.descriptions.reload.find_by(source: :igdb).content
+          end
+
+          test "populate leaves the company saveable with a description attached" do
+            search_service = mock
+            search_service.stubs(:find_with_details).with(70).returns(
+              {success: true, data: [{"name" => "Nintendo", "description" => "A description."}]},
+              {success: true, data: [{"name" => "Nintendo", "description" => "An updated description."}]}
+            )
+            ::Games::Igdb::Search::CompanySearch.stubs(:new).returns(search_service)
+
+            @provider.populate(@company, query: ImportQuery.new(igdb_id: 70))
+
+            assert @company.valid?, @company.errors.full_messages.join(", ")
+            assert_difference "Description.count", 1 do
+              @company.save!
+            end
+
+            assert_no_difference "Description.count" do
+              @provider.populate(@company, query: ImportQuery.new(igdb_id: 70))
+              @company.save!
+            end
+
+            assert_equal "An updated description.",
+              @company.descriptions.reload.find_by(source: :igdb).content
           end
 
           test "populate creates IGDB identifier" do

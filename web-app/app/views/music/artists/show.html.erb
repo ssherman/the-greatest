@@ -67,10 +67,10 @@
           <%= @artist.name %>
         </h1>
 
-        <% if @artist.description.present? %>
+        <% if (description = @artist.primary_description) %>
           <div class="prose max-w-none">
             <p class="text-base-content/70">
-              <%= @artist.description %>
+              <%= description.content %>
             </p>
           </div>
         <% end %>

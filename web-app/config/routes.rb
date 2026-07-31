@@ -173,6 +173,7 @@ Rails.application.routes.draw do
         resources :song_artists, only: [:create], shallow: true
         resources :category_items, only: [:index, :create], controller: "/admin/category_items"
         resources :images, only: [:index, :create], controller: "/admin/images"
+        resources :descriptions, only: [:index, :create], controller: "/admin/descriptions"
         member do
           post :execute_action
         end
@@ -188,6 +189,7 @@ Rails.application.routes.draw do
         resources :album_artists, only: [:create], shallow: true
         resources :category_items, only: [:index, :create], controller: "/admin/category_items"
         resources :images, only: [:index, :create], controller: "/admin/images"
+        resources :descriptions, only: [:index, :create], controller: "/admin/descriptions"
         member do
           post :execute_action
         end
@@ -201,6 +203,7 @@ Rails.application.routes.draw do
 
       resources :songs do
         resources :song_artists, only: [:create], shallow: true
+        resources :descriptions, only: [:index, :create], controller: "/admin/descriptions"
         member do
           post :execute_action
         end
@@ -284,6 +287,7 @@ Rails.application.routes.draw do
           resources :credits, only: [:create]
         end
         resources :images, only: [:index, :create], controller: "/admin/images"
+        resources :descriptions, only: [:index, :create], controller: "/admin/descriptions"
         resources :book_authors, only: [:create]
         resources :book_relationships, only: [:create]
         resources :credits, only: [:create]
@@ -299,6 +303,7 @@ Rails.application.routes.draw do
       resources :author_relationships, only: [:update, :destroy]
       resources :authors do
         resources :images, only: [:index, :create], controller: "/admin/images"
+        resources :descriptions, only: [:index, :create], controller: "/admin/descriptions"
         resources :author_relationships, only: [:create]
         resources :category_items, only: [:index, :create], controller: "/admin/category_items"
         collection do
@@ -308,6 +313,7 @@ Rails.application.routes.draw do
 
       resources :series do
         resources :images, only: [:index, :create], controller: "/admin/images"
+        resources :descriptions, only: [:index, :create], controller: "/admin/descriptions"
         resources :series_books, only: [:create]
       end
       resources :series_books, only: [:update, :destroy] do
@@ -343,6 +349,7 @@ Rails.application.routes.draw do
         resources :game_platforms, only: [:create], shallow: true
         resources :category_items, only: [:index, :create], controller: "/admin/category_items"
         resources :images, only: [:index, :create], controller: "/admin/images"
+        resources :descriptions, only: [:index, :create], controller: "/admin/descriptions"
         collection do
           post :import_from_igdb
           get :igdb_search
@@ -355,6 +362,7 @@ Rails.application.routes.draw do
 
       resources :companies do
         resources :images, only: [:index, :create], controller: "/admin/images"
+        resources :descriptions, only: [:index, :create], controller: "/admin/descriptions"
         collection do
           get :search
         end
@@ -367,6 +375,7 @@ Rails.application.routes.draw do
       end
 
       resources :series do
+        resources :descriptions, only: [:index, :create], controller: "/admin/descriptions"
         collection do
           get :search
         end
@@ -473,6 +482,11 @@ Rails.application.routes.draw do
     resources :images, only: [:update, :destroy], controller: "images" do
       member do
         post :set_primary
+      end
+    end
+    resources :descriptions, only: [:update, :destroy], controller: "descriptions" do
+      member do
+        post :set_preferred
       end
     end
     resources :penalties

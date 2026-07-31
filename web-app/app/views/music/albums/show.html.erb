@@ -55,10 +55,10 @@
           <%= render UserLists::CardWidgetComponent.new(listable: @album) %>
         </div>
 
-        <% if @album.description.present? %>
+        <% if (description = @album.primary_description) %>
           <div class="prose max-w-none">
             <p class="text-base-content/70">
-              <%= @album.description %>
+              <%= description.content %>
             </p>
           </div>
         <% end %>

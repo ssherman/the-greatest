@@ -30,7 +30,6 @@
             <div><dt class="text-sm text-base-content/60">Sort Title</dt><dd><%= @book.sort_title.presence || "—" %></dd></div>
             <div><dt class="text-sm text-base-content/60">Original Language</dt><dd><%= @book.original_language&.name || "—" %></dd></div>
             <div class="sm:col-span-2"><dt class="text-sm text-base-content/60">Alternate Titles</dt><dd><%= @book.alternate_titles.present? ? @book.alternate_titles.join(", ") : "—" %></dd></div>
-            <div class="sm:col-span-2"><dt class="text-sm text-base-content/60">Description</dt><dd class="whitespace-pre-line"><%= @book.description.presence || "—" %></dd></div>
           </dl>
         </div>
       </div>
@@ -46,6 +45,15 @@
             <% end %>
           </div>
           <%= turbo_frame_tag "images_list", loading: :lazy, src: admin_books_book_images_path(@book) do %>
+            <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
+          <% end %>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
+          <h2 class="card-title text-base">Descriptions</h2>
+          <%= turbo_frame_tag "descriptions_list", loading: :lazy, src: admin_books_book_descriptions_path(@book) do %>
             <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
           <% end %>
         </div>

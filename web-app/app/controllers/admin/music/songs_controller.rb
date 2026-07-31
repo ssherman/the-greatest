@@ -169,7 +169,6 @@ class Admin::Music::SongsController < Admin::Music::BaseController
   def song_params
     params.require(:music_song).permit(
       :title,
-      :description,
       :notes,
       :duration_secs,
       :release_year,

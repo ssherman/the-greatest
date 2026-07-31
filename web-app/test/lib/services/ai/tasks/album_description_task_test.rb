@@ -54,18 +54,61 @@ module Services
             result = @task.send(:process_and_persist, provider_response)
 
             assert result.success?
-            @album.reload
-            assert_equal "The Dark Side of the Moon is Pink Floyd's groundbreaking concept album exploring themes of conflict and mental illness.", @album.description
+            row = @album.descriptions.reload.find_by(source: :ai_generated)
+            assert_equal "The Dark Side of the Moon is Pink Floyd's groundbreaking concept album exploring themes of conflict and mental illness.", row.content
+            assert_equal "summary", row.kind
+            assert_equal "en", row.locale
             assert_equal chat, result.ai_chat
           end
 
-          test "process_and_persist does not update when abstained" do
-            original_description = @album.description
+          test "process_and_persist does not write the description column" do
             provider_response = {
               parsed: {
-                description: nil,
+                description: "A new AI description.",
+                abstained: false,
+                abstain_reason: nil
+              }
+            }
+            original_column = @album.description
+
+            @task.send(:process_and_persist, provider_response)
+
+            assert_equal original_column, @album.reload.description
+          end
+
+          # Regression: the old parent.update!(description:) clobbered whatever was there.
+          test "process_and_persist leaves a preferred manual description untouched" do
+            album = music_albums(:animals)
+            manual = album.descriptions.create!(
+              kind: :summary, locale: "en", source: :manual,
+              content: "Hand-written by an editor.", rank: :preferred
+            )
+            task = AlbumDescriptionTask.new(parent: album)
+            provider_response = {
+              parsed: {
+                description: "AI text that must not win.",
+                abstained: false,
+                abstain_reason: nil
+              }
+            }
+
+            task.send(:process_and_persist, provider_response)
+
+            manual.reload
+            assert_equal "Hand-written by an editor.", manual.content
+            assert_equal "preferred", manual.rank
+            assert_equal "AI text that must not win.",
+              album.descriptions.reload.find_by(source: :ai_generated).content
+            assert_equal manual, album.primary_description
+          end
+
+          test "process_and_persist does not update when abstained" do
+            original_content = @album.descriptions.find_by(source: :ai_generated).content
+            provider_response = {
+              parsed: {
+                description: "Text the AI abstained on.",
                 abstained: true,
-                abstain_reason: "Not enough information about this album"
+                abstain_reason: "Not familiar with this album"
               }
             }
 
@@ -75,12 +118,11 @@ module Services
             result = @task.send(:process_and_persist, provider_response)
 
             assert result.success?
-            @album.reload
-            assert_equal original_description, @album.description
+            assert_equal original_content, @album.descriptions.reload.find_by(source: :ai_generated).content
           end
 
           test "process_and_persist does not update when description is blank" do
-            original_description = @album.description
+            original_content = @album.descriptions.find_by(source: :ai_generated).content
             provider_response = {
               parsed: {
                 description: "",
@@ -95,8 +137,7 @@ module Services
             result = @task.send(:process_and_persist, provider_response)
 
             assert result.success?
-            @album.reload
-            assert_equal original_description, @album.description
+            assert_equal original_content, @album.descriptions.reload.find_by(source: :ai_generated).content
           end
 
           test "ResponseSchema has correct structure" do

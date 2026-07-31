@@ -103,7 +103,7 @@ class Admin::Books::BooksController < Admin::Books::BaseController
 
   def book_params
     params.require(:books_book).permit(
-      :title, :subtitle, :sort_title, :description,
+      :title, :subtitle, :sort_title,
       :first_published_year, :book_kind, :original_language_id
     )
   end

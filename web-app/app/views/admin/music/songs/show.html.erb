@@ -88,13 +88,6 @@
               <p class="text-base font-mono text-sm"><%= @song.isrc.presence || "—" %></p>
             </div>
 
-            <% if @song.description.present? %>
-              <div class="col-span-2">
-                <p class="text-sm font-semibold text-base-content/70">Description</p>
-                <p class="text-base"><%= @song.description %></p>
-              </div>
-            <% end %>
-
             <% if @song.notes.present? %>
               <div class="col-span-2">
                 <p class="text-sm font-semibold text-base-content/70">Internal Notes</p>
@@ -309,6 +302,19 @@
             </div>
           <% else %>
             <p class="text-base-content/50">No identifiers found.</p>
+          <% end %>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">Descriptions</h2>
+
+          <%= turbo_frame_tag "descriptions_list", loading: :lazy,
+              src: admin_song_descriptions_path(@song) do %>
+            <div class="flex justify-center py-4">
+              <span class="loading loading-spinner loading-md"></span>
+            </div>
           <% end %>
         </div>
       </div>

@@ -22,7 +22,6 @@
         <div class="card-body">
           <h2 class="card-title">Basic Information</h2>
           <dl class="grid grid-cols-1 gap-4">
-            <div><dt class="text-sm text-base-content/60">Description</dt><dd class="whitespace-pre-line"><%= @series.description.presence || "—" %></dd></div>
           </dl>
         </div>
       </div>
@@ -38,6 +37,15 @@
             <% end %>
           </div>
           <%= turbo_frame_tag "images_list", loading: :lazy, src: admin_books_series_images_path(@series) do %>
+            <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
+          <% end %>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
+          <h2 class="card-title text-base">Descriptions</h2>
+          <%= turbo_frame_tag "descriptions_list", loading: :lazy, src: admin_books_series_descriptions_path(@series) do %>
             <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
           <% end %>
         </div>

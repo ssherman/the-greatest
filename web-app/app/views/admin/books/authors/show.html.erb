@@ -28,7 +28,6 @@
             <div><dt class="text-sm text-base-content/60">Birth Year</dt><dd><%= @author.birth_year || "—" %></dd></div>
             <div><dt class="text-sm text-base-content/60">Death Year</dt><dd><%= @author.death_year || "—" %></dd></div>
             <div class="sm:col-span-2"><dt class="text-sm text-base-content/60">Alternate Names</dt><dd><%= @author.alternate_names.present? ? @author.alternate_names.join(", ") : "—" %></dd></div>
-            <div class="sm:col-span-2"><dt class="text-sm text-base-content/60">Description</dt><dd class="whitespace-pre-line"><%= @author.description.presence || "—" %></dd></div>
           </dl>
         </div>
       </div>
@@ -44,6 +43,15 @@
             <% end %>
           </div>
           <%= turbo_frame_tag "images_list", loading: :lazy, src: admin_books_author_images_path(@author) do %>
+            <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
+          <% end %>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
+          <h2 class="card-title text-base">Descriptions</h2>
+          <%= turbo_frame_tag "descriptions_list", loading: :lazy, src: admin_books_author_descriptions_path(@author) do %>
             <div class="flex justify-center py-8"><span class="loading loading-spinner loading-lg"></span></div>
           <% end %>
         </div>

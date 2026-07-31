@@ -113,24 +113,6 @@
         </div>
 
         <div class="form-control md:col-span-2">
-          <%= f.label :description, class: "label" do %>
-            <span class="label-text font-semibold">Description</span>
-          <% end %>
-          <%= f.text_area :description,
-              class: "textarea textarea-bordered w-full #{@song.errors[:description].any? ? 'input-error' : ''}",
-              rows: 4,
-              placeholder: "Public description of the song" %>
-          <label class="label">
-            <span class="label-text-alt">Public-facing description</span>
-          </label>
-          <% if @song.errors[:description].any? %>
-            <label class="label">
-              <span class="label-text-alt text-error"><%= @song.errors[:description].first %></span>
-            </label>
-          <% end %>
-        </div>
-
-        <div class="form-control md:col-span-2">
           <%= f.label :notes, class: "label" do %>
             <span class="label-text font-semibold">Internal Notes</span>
           <% end %>

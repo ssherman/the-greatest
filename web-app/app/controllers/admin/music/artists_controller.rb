@@ -210,7 +210,7 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
 
   def artist_params
     params.require(:music_artist).permit(
-      :name, :description, :kind, :born_on, :year_died,
+      :name, :kind, :born_on, :year_died,
       :year_formed, :year_disbanded, :country
     )
   end

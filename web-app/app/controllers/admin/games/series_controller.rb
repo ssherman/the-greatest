@@ -64,7 +64,7 @@ class Admin::Games::SeriesController < Admin::Games::BaseController
   end
 
   def load_series_for_index
-    @series_collection = Games::Series.all
+    @series_collection = Games::Series.includes(:descriptions)
 
     if params[:q].present?
       sanitized = "%#{Games::Series.sanitize_sql_like(params[:q])}%"
@@ -87,6 +87,6 @@ class Admin::Games::SeriesController < Admin::Games::BaseController
   end
 
   def series_params
-    params.require(:games_series).permit(:name, :description)
+    params.require(:games_series).permit(:name)
   end
 end

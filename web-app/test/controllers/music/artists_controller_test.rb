@@ -26,14 +26,29 @@ module Music
     end
 
     test "should display artist metadata" do
-      get artist_path(music_artists(:pink_floyd))
+      artist = music_artists(:pink_floyd)
+      get artist_path(artist)
       assert_response :success
-      assert_select "p", /English progressive rock band/
+      assert_includes response.body, artist.country
+      assert_includes response.body, artist.year_formed.to_s
     end
 
     test "should return 404 for non-existent artist" do
       get artist_path("non-existent-artist")
       assert_response :not_found
+    end
+
+    test "show renders the artist's primary description" do
+      artist = music_artists(:pink_floyd)
+      description = artist.descriptions.create!(
+        kind: :summary, locale: "en", source: :ai_generated,
+        content: "An English rock band formed in London."
+      )
+
+      get artist_path(artist)
+
+      assert_response :success
+      assert_includes response.body, description.content
     end
   end
 end

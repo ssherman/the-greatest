@@ -33,13 +33,6 @@
             <label class="label"><span class="label-text-alt text-error"><%= @series.errors[:title].first %></span></label>
           <% end %>
         </div>
-
-        <div class="form-control">
-          <%= f.label :description, class: "label" do %>
-            <span class="label-text font-semibold">Description</span>
-          <% end %>
-          <%= f.text_area :description, class: "textarea textarea-bordered w-full h-32" %>
-        </div>
       </div>
     </div>
   </div>

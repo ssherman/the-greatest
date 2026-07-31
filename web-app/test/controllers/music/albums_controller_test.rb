@@ -35,5 +35,21 @@ module Music
       get album_path("non-existent-album")
       assert_response :not_found
     end
+
+    test "show renders the album's primary description" do
+      album = music_albums(:dark_side_of_the_moon)
+      get album_path(album)
+
+      assert_response :success
+      assert_includes response.body, descriptions(:dark_side_ai).content
+    end
+
+    test "show renders successfully for an album with no description" do
+      album = music_albums(:wish_you_were_here)
+      assert_empty album.descriptions
+
+      get album_path(album)
+      assert_response :success
+    end
   end
 end

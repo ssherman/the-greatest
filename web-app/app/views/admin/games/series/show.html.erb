@@ -51,15 +51,6 @@
               </label>
               <p class="text-lg"><%= @series.name %></p>
             </div>
-
-            <% if @series.description.present? %>
-              <div class="md:col-span-2">
-                <label class="label">
-                  <span class="label-text font-semibold">Description</span>
-                </label>
-                <p class="whitespace-pre-wrap"><%= @series.description %></p>
-              </div>
-            <% end %>
           </div>
         </div>
       </div>
@@ -118,6 +109,19 @@
               <div class="stat-value text-primary"><%= @series.games.count %></div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Descriptions -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">Descriptions</h2>
+          <%= turbo_frame_tag "descriptions_list", loading: :lazy,
+              src: admin_games_series_descriptions_path(@series) do %>
+            <div class="flex justify-center py-4">
+              <span class="loading loading-spinner loading-md"></span>
+            </div>
+          <% end %>
         </div>
       </div>
 

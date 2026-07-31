@@ -65,7 +65,7 @@ class Admin::Books::SeriesController < Admin::Books::BaseController
   end
 
   def series_params
-    params.require(:books_series).permit(:title, :description)
+    params.require(:books_series).permit(:title)
   end
 
   def set_series

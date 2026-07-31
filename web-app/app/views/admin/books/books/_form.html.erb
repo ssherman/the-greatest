@@ -126,20 +126,6 @@
             <span class="label-text-alt">Comma-separated</span>
           </label>
         </div>
-
-        <!-- Description -->
-        <div class="form-control md:col-span-2">
-          <%= f.label :description, class: "label" do %>
-            <span class="label-text font-semibold">Description</span>
-          <% end %>
-          <%= f.text_area :description,
-              class: "textarea textarea-bordered w-full h-32 #{@book.errors[:description].any? ? 'textarea-error' : ''}" %>
-          <% if @book.errors[:description].any? %>
-            <label class="label">
-              <span class="label-text-alt text-error"><%= @book.errors[:description].first %></span>
-            </label>
-          <% end %>
-        </div>
       </div>
     </div>
   </div>

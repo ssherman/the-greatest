@@ -34,9 +34,63 @@ module DataImporters
 
             assert result.success?
             assert_equal "The Legend of Zelda: Breath of the Wild", @game.title
-            assert_equal "An open-world adventure game", @game.description
+            row = @game.descriptions.detect { |d| d.source == "igdb" }
+            assert_not_nil row, "expected an igdb description to be built"
+            assert_equal "An open-world adventure game", row.content
+            assert_equal "summary", row.kind
+            assert_equal "normal", row.rank
+            assert_nil @game.description
             assert_equal 2017, @game.release_year
             assert_equal "main_game", @game.game_type
+          end
+
+          test "re-import persists a changed summary on an already-saved game" do
+            game = games_games(:tears_of_the_kingdom)
+            game.descriptions.create!(
+              kind: :summary, locale: "en", source: :igdb, content: "Stale summary."
+            )
+            game.reload
+
+            search_service = mock
+            search_service.expects(:find_with_details).with(119388).returns(
+              success: true,
+              data: [{"name" => "Tears of the Kingdom", "summary" => "Fresh summary from IGDB."}]
+            )
+            ::Games::Igdb::Search::GameSearch.stubs(:new).returns(search_service)
+
+            result = @provider.populate(game, query: ImportQuery.new(igdb_id: 119388))
+            assert result.success?
+            game.save!
+
+            assert_equal "Fresh summary from IGDB.",
+              game.descriptions.reload.find_by(source: :igdb).content
+          end
+
+          test "populate leaves the game saveable with a description attached" do
+            search_service = mock
+            search_service.stubs(:find_with_details).with(7346).returns(
+              {success: true, data: [{"name" => "Breath of the Wild 2", "summary" => "A summary."}]},
+              {success: true, data: [{"name" => "Breath of the Wild 2", "summary" => "An updated summary."}]}
+            )
+            ::Games::Igdb::Search::GameSearch.stubs(:new).returns(search_service)
+
+            @provider.populate(@game, query: ImportQuery.new(igdb_id: 7346))
+            assert_equal 1, @game.descriptions.size
+
+            assert @game.valid?, @game.errors.full_messages.join(", ")
+            assert_no_difference "Description.count" do
+              @game.save!
+            end
+            assert_equal "A summary.",
+              @game.descriptions.reload.find_by(source: :igdb).content
+
+            assert_no_difference "Description.count" do
+              @provider.populate(@game, query: ImportQuery.new(igdb_id: 7346))
+              @game.save!
+            end
+
+            assert_equal "An updated summary.",
+              @game.descriptions.reload.find_by(source: :igdb).content
           end
 
           test "populate creates IGDB identifier" do

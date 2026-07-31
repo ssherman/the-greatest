@@ -39,7 +39,7 @@ module DataImporters
           # Maps IGDB company data to model attributes
           def populate_company_data(company, company_data)
             company.name = company_data["name"] if company_data["name"].present?
-            company.description = company_data["description"] if company_data["description"].present?
+            company.assign_description(source: :igdb, content: company_data["description"]) if company_data["description"].present?
 
             # Convert IGDB numeric country code to ISO 2-letter
             if company_data["country"].present?

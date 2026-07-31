@@ -53,5 +53,21 @@ module Games
       assert_response :success
       assert_select "h2", /Zelda Series/
     end
+
+    test "show renders the game's primary description" do
+      game = games_games(:breath_of_the_wild)
+      get game_path(game)
+
+      assert_response :success
+      assert_includes response.body, descriptions(:botw_igdb).content
+    end
+
+    test "show renders successfully for a game with no description" do
+      game = games_games(:resident_evil_4)
+      assert_empty game.descriptions
+
+      get game_path(game)
+      assert_response :success
+    end
   end
 end

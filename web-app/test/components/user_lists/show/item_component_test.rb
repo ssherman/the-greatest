@@ -44,14 +44,17 @@ class UserLists::Show::ItemComponentTest < ViewComponent::TestCase
   end
 
   test "renders a list row with the description in default_view for an album" do
-    item = user_list_items(:regular_user_fav_album_1)
+    item = user_list_items(:regular_user_fav_album_2)
     album = item.listable
-    album.update!(description: "A landmark concept album about madness and time.")
+    description = album.descriptions.create!(
+      kind: :summary, locale: "en", source: :ai_generated,
+      content: "A landmark concept album about madness and time."
+    )
     render_inline(Component.new(item: item, view_mode: "default_view", position: 4))
 
     assert_no_selector "tr"
     assert_no_selector "div.card"
-    assert_text "A landmark concept album about madness and time."
+    assert_text description.content
     assert_text "4." # the position number in the heading
     assert_selector "[data-listable-id='#{album.id}']"
   end

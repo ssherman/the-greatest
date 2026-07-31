@@ -143,15 +143,6 @@
               <% end %>
             <% end %>
           </div>
-
-          <% if @artist.description.present? %>
-            <div class="mt-4">
-              <label class="label">
-                <span class="label-text font-semibold">Description</span>
-              </label>
-              <p class="text-base-content/80 whitespace-pre-wrap"><%= @artist.description %></p>
-            </div>
-          <% end %>
         </div>
       </div>
 
@@ -270,6 +261,19 @@
 
           <%= turbo_frame_tag "images_list", loading: :lazy,
               src: admin_artist_images_path(@artist) do %>
+            <div class="flex justify-center py-4">
+              <span class="loading loading-spinner loading-md"></span>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
+      <!-- Descriptions -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">Descriptions</h2>
+          <%= turbo_frame_tag "descriptions_list", loading: :lazy,
+              src: admin_artist_descriptions_path(@artist) do %>
             <div class="flex justify-center py-4">
               <span class="loading loading-spinner loading-md"></span>
             </div>

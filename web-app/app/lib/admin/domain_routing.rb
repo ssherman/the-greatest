@@ -6,39 +6,62 @@ module Admin
       "Music::Artist" => {
         domain: :music,
         path: ->(r) { URL_HELPERS.admin_artist_path(r) },
-        category_items_path: ->(r) { URL_HELPERS.admin_artist_category_items_path(r) }
+        category_items_path: ->(r) { URL_HELPERS.admin_artist_category_items_path(r) },
+        descriptions_path: ->(r) { URL_HELPERS.admin_artist_descriptions_path(r) }
       },
       "Music::Album" => {
         domain: :music,
         path: ->(r) { URL_HELPERS.admin_album_path(r) },
-        category_items_path: ->(r) { URL_HELPERS.admin_album_category_items_path(r) }
+        category_items_path: ->(r) { URL_HELPERS.admin_album_category_items_path(r) },
+        descriptions_path: ->(r) { URL_HELPERS.admin_album_descriptions_path(r) }
       },
-      "Music::Song" => {domain: :music, path: ->(r) { URL_HELPERS.admin_song_path(r) }, category_items_path: nil},
+      "Music::Song" => {
+        domain: :music,
+        path: ->(r) { URL_HELPERS.admin_song_path(r) },
+        category_items_path: nil,
+        descriptions_path: ->(r) { URL_HELPERS.admin_song_descriptions_path(r) }
+      },
       "Games::Game" => {
         domain: :games,
         path: ->(r) { URL_HELPERS.admin_games_game_path(r) },
-        category_items_path: ->(r) { URL_HELPERS.admin_games_game_category_items_path(r) }
+        category_items_path: ->(r) { URL_HELPERS.admin_games_game_category_items_path(r) },
+        descriptions_path: ->(r) { URL_HELPERS.admin_games_game_descriptions_path(r) }
       },
-      "Games::Company" => {domain: :games, path: ->(r) { URL_HELPERS.admin_games_company_path(r) }, category_items_path: nil},
+      "Games::Company" => {
+        domain: :games,
+        path: ->(r) { URL_HELPERS.admin_games_company_path(r) },
+        category_items_path: nil,
+        descriptions_path: ->(r) { URL_HELPERS.admin_games_company_descriptions_path(r) }
+      },
+      "Games::Series" => {
+        domain: :games,
+        path: ->(r) { URL_HELPERS.admin_games_series_path(r) },
+        category_items_path: nil,
+        descriptions_path: ->(r) { URL_HELPERS.admin_games_series_descriptions_path(r) }
+      },
       "Books::Book" => {
         domain: :books,
         path: ->(r) { URL_HELPERS.admin_books_book_path(r) },
-        category_items_path: ->(r) { URL_HELPERS.admin_books_book_category_items_path(r) }
+        category_items_path: ->(r) { URL_HELPERS.admin_books_book_category_items_path(r) },
+        descriptions_path: ->(r) { URL_HELPERS.admin_books_book_descriptions_path(r) }
       },
       "Books::Edition" => {
         domain: :books,
         path: ->(r) { URL_HELPERS.admin_books_edition_path(r) },
-        category_items_path: nil
+        category_items_path: nil,
+        descriptions_path: nil
       },
       "Books::Author" => {
         domain: :books,
         path: ->(r) { URL_HELPERS.admin_books_author_path(r) },
-        category_items_path: ->(r) { URL_HELPERS.admin_books_author_category_items_path(r) }
+        category_items_path: ->(r) { URL_HELPERS.admin_books_author_category_items_path(r) },
+        descriptions_path: ->(r) { URL_HELPERS.admin_books_author_descriptions_path(r) }
       },
       "Books::Series" => {
         domain: :books,
         path: ->(r) { URL_HELPERS.admin_books_series_path(r) },
-        category_items_path: nil
+        category_items_path: nil,
+        descriptions_path: ->(r) { URL_HELPERS.admin_books_series_descriptions_path(r) }
       }
     }.freeze
 
@@ -50,7 +73,8 @@ module Admin
       },
       games: {
         game_id: "Games::Game",
-        company_id: "Games::Company"
+        company_id: "Games::Company",
+        series_id: "Games::Series"
       },
       books: {
         book_id: "Books::Book",
@@ -155,6 +179,10 @@ module Admin
 
       def category_items_path_for(record)
         ENTITIES.dig(record.class.name, :category_items_path)&.call(record)
+      end
+
+      def descriptions_path_for(record)
+        ENTITIES.dig(record.class.name, :descriptions_path)&.call(record)
       end
 
       def list_config(list)
