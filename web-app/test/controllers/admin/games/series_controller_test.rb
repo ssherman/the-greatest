@@ -1,8 +1,11 @@
 require "test_helper"
+require "active_record/testing/query_assertions"
 
 module Admin
   module Games
     class SeriesControllerTest < ActionDispatch::IntegrationTest
+      include ActiveRecord::Assertions::QueryAssertions
+
       setup do
         @admin_user = users(:admin_user)
         @regular_user = users(:regular_user)
@@ -101,6 +104,33 @@ module Admin
 
         json_response = JSON.parse(response.body)
         assert json_response.any? { |r| r["text"].include?("Zelda") }
+      end
+
+      test "index renders each series' primary description" do
+        sign_in_as(@admin_user, stub_auth: true)
+        description = games_series(:resident_evil).descriptions.create!(
+          kind: :summary, locale: "en", source: :manual,
+          content: "A survival horror series about bioweapons and zombies."
+        )
+
+        get admin_games_series_index_path
+
+        assert_response :success
+        assert_includes response.body, description.content
+      end
+
+      test "index preloads descriptions rather than querying per row" do
+        sign_in_as(@admin_user, stub_auth: true)
+        games_series(:resident_evil).descriptions.create!(
+          kind: :summary, locale: "en", source: :manual,
+          content: "A survival horror series about bioweapons and zombies."
+        )
+
+        assert_queries_match(/FROM "descriptions"/, count: 1) do
+          get admin_games_series_index_path
+        end
+
+        assert_response :success
       end
     end
   end

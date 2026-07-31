@@ -26,9 +26,9 @@
                     class: "link link-hover",
                     data: { turbo_frame: "_top" } %>
               </div>
-              <% if series.description.present? %>
+              <% if (description = series.primary_description) %>
                 <div class="text-sm text-base-content/50 truncate max-w-xs">
-                  <%= truncate(series.description, length: 80) %>
+                  <%= truncate(description.content, length: 80) %>
                 </div>
               <% end %>
             </td>
