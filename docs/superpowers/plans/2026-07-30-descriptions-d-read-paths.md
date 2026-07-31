@@ -20,6 +20,7 @@
 - Lint with `bundle exec standardrb` (`--fix` autocorrects). **Never** `bin/rubocop`. **Never** run brakeman.
 - **The development database is not disposable.** The books data exists only in dev and takes hours to rebuild. Never run `db:drop`, `db:reset`, `db:schema:load`, `create_fixtures`, `data_migration:*`, or any bulk mutation. **This increment needs no migration and no data run.**
 - **This increment changes where text comes from, not how it looks.** Keep every view's existing markup, classes and surrounding copy byte-identical apart from the two lines being swapped. A diff that also restyles is out of scope.
+- **No N+1s.** Owner's instruction, 2026-07-30. `primary_description` reads an association, so any view rendering it **in a loop** needs `:descriptions` in its controller's `includes`. Two such sites exist and both are covered here: `music/albums/lists/show` (Task 2, paginates at 100) and the admin games series index (Task 3). Audited while planning — every other `.description` read in a loop belongs to `List`, `Category` or `RankingConfiguration`, which are authored config, stay on their columns, and are out of scope. If you find a third content-model site, preload it and say so.
 - **`Descriptions::AttributionComponent` is NOT part of this increment** (D-1). Do not create it.
 - **Do not touch the nine admin *show* pages** — (c2) already removed their legacy blocks and the descriptions panel renders there. Only the one admin *index-table* partial named below is in scope.
 - **Do not touch any books public view.** They do not exist; the books public UI is a separate parked initiative.
@@ -282,9 +283,19 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 Read the surrounding lines first and preserve them exactly.
 
-- [ ] **Step 2: Check whether the index action needs a preload**
+- [ ] **Step 2: Preload descriptions on the index**
 
-Read `app/controllers/admin/games/series_controller.rb`'s `index`. If it paginates a collection that this partial renders per row, add `:descriptions` to its `includes` the same way Task 2 did. If it loads a small unpaginated set, note that and skip — say which in your report, with the row count you based it on.
+Verified while planning: `load_series_for_index` (`app/controllers/admin/games/series_controller.rb:66-67`) starts from `Games::Series.all`, and this partial renders a description per row — so without a preload that is one query per series. Dev holds 15 rows, which is small, but the fix is free and N+1s are not to be left in place.
+
+Add `:descriptions` to that scope:
+
+```ruby
+    @series_collection = Games::Series.includes(:descriptions)
+```
+
+Keep the subsequent search/sort chaining exactly as it is — `includes` composes with them.
+
+Pin it with a query-count test in `test/controllers/admin/games/series_controller_test.rb`, structured to exercise the controller's own scope (see Task 2 Step 1's warning about assertions that re-query and therefore prove nothing).
 
 - [ ] **Step 3: Run the admin tests**
 
