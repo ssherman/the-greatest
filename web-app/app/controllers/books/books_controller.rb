@@ -19,7 +19,11 @@ class Books::BooksController < ApplicationController
       .includes(primary_image: {file_attachment: {blob: {variant_records: {image_attachment: :blob}}}})
       .find_by!(slug: params[:slug])
 
-    @ranked_item = @ranking_configuration&.ranked_items&.find_by(item: @book)
+    # Scoped to a non-null rank: rank is nullable, and an unranked RankedItem would
+    # otherwise mark the page indexable and reach `rank.ordinalize` in the view.
+    @ranked_item = if @ranking_configuration
+      @ranking_configuration.ranked_items.where.not(rank: nil).find_by(item: @book)
+    end
     @indexable = @ranked_item.present?
     @categories_by_type = @book.categories.active.group_by(&:category_type)
     @description = @book.primary_description

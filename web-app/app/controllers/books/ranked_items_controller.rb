@@ -22,6 +22,11 @@ class Books::RankedItemsController < RankedItemsController
       request: pagy_path_request,
       page_path: method(:ranked_books_page_path)
     )
+
+    # Pagy serves an empty 200 for any page past the last one, which would let a
+    # crawler mint unbounded thin pages like /page/999999. An empty page 1 is still
+    # legitimate (@pagy.last floors at 1), so only genuine overflow 404s.
+    raise ActiveRecord::RecordNotFound if @pagy.page > @pagy.last
   end
 
   private

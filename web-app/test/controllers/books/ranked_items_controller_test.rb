@@ -15,13 +15,19 @@ module Books
     end
 
     test "path-based pagination resolves the page" do
+      seed_ranked_books(100)
+
       get "/page/2"
+
       assert_response :success
       assert_equal 2, @controller.view_assigns["pagy"].page
     end
 
     test "query-string pagination still resolves the page" do
+      seed_ranked_books(100)
+
       get "/?page=2"
+
       assert_response :success
       assert_equal 2, @controller.view_assigns["pagy"].page
     end
@@ -44,7 +50,10 @@ module Books
     end
 
     test "renders an explicit ranking configuration with a page" do
+      seed_ranked_books(100)
+
       get "/rc/#{@rc.id}/page/2"
+
       assert_response :success
     end
 
@@ -58,31 +67,57 @@ module Books
       assert_response :not_found
     end
 
+    test "404s for a page past the last page" do
+      get "/page/999999"
+      assert_response :not_found
+    end
+
+    test "renders page one when the configuration has no ranked books" do
+      get "/rc/#{ranking_configurations(:books_inherited).id}"
+      assert_response :success
+    end
+
     test "marks the grid indexable" do
       get "/"
       assert @controller.view_assigns["indexable"]
     end
 
     test "pagination links are path-based, not query strings" do
-      99.times do |i|
-        filler = Books::Book.create!(title: "Filler Book #{i}")
-        RankedItem.create!(item: filler, ranking_configuration: @rc, rank: i + 3, score: 10)
-      end
+      seed_ranked_books(100)
 
       get "/"
+
       assert_select "nav.pagy a[href='/page/2']"
     end
 
     test "rc-scoped pagination links do not leak ranking_configuration_id into the query string" do
-      199.times do |i|
-        filler = Books::Book.create!(title: "Filler Book #{i}")
-        RankedItem.create!(item: filler, ranking_configuration: @rc, rank: i + 3, score: 10)
-      end
+      seed_ranked_books(200)
 
       get "/rc/#{@rc.id}/page/2"
 
       assert_select "nav.pagy a[href='/rc/#{@rc.id}/page/3']"
       assert_select "nav.pagy a[href*='ranking_configuration_id']", count: 0
+    end
+
+    private
+
+    # Bulk-inserts filler so tests can reach page 2+ against the controller's
+    # limit of 100. insert_all skips callbacks deliberately: creating these
+    # row-by-row also enqueues a SearchIndexRequest per book, which dominated
+    # the runtime of these tests.
+    def seed_ranked_books(count)
+      now = Time.current
+      rows = Array.new(count) do |i|
+        {title: "Filler Book #{i}", slug: "filler-book-#{i}", created_at: now, updated_at: now}
+      end
+      ids = Books::Book.insert_all(rows, returning: :id).rows.flatten
+
+      RankedItem.insert_all(
+        ids.each_with_index.map do |id, i|
+          {item_id: id, item_type: "Books::Book", ranking_configuration_id: @rc.id,
+           rank: i + 3, score: 10, created_at: now, updated_at: now}
+        end
+      )
     end
   end
 end

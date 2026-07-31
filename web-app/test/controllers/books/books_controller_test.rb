@@ -60,5 +60,15 @@ module Books
       assert_response :success
       refute_includes response.body, "onerror"
     end
+    test "treats a book with a null rank as unranked instead of raising" do
+      item = RankedItem.new(item: @book, ranking_configuration: @rc, rank: nil, score: 10)
+      item.save!(validate: false)
+
+      get "/book/#{@book.slug}"
+
+      assert_response :success
+      assert_nil @controller.view_assigns["ranked_item"]
+      refute @controller.view_assigns["indexable"]
+    end
   end
 end

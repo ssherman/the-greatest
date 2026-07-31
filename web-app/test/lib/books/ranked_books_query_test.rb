@@ -21,6 +21,16 @@ module Books
       assert_equal 2, results.count
     end
 
+    test "excludes ranked items with a null rank" do
+      rankless = RankedItem.new(item: books_books(:got), ranking_configuration: @rc, rank: nil, score: 5)
+      rankless.save!(validate: false)
+
+      results = Books::RankedBooksQuery.call(ranking_configuration: @rc)
+
+      refute_includes results.map(&:rank), nil
+      refute_includes results.map(&:item_id), books_books(:got).id
+    end
+
     test "excludes non-book ranked items" do
       RankedItem.new(item: music_albums(:dark_side_of_the_moon), ranking_configuration: @rc, rank: 3, score: 10).save!(validate: false)
 
