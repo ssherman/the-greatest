@@ -13,9 +13,10 @@ stale and are corrected below.
 
 ## Scope
 
-**In:** ranked grid at `/` and `/the-greatest-books`, `/book/:slug` detail pages, legacy `/books/:id`
-and `/items/:id` 301s, robots/indexability plumbing, `/lists` + `/lists/:id`, full user-list wiring,
-a books `paging.css`, and Playwright coverage for each increment.
+**In:** ranked grid at `/` with path-based pagination (`/page/2`), `/book/:slug` detail pages, legacy
+`/books/:id` and `/items/:id` 301s, robots/indexability plumbing, `/lists` + `/lists/:id`, full
+user-list wiring, a books `paging.css`, a shared `Pagy::PathBasedPaging` extension, and Playwright
+coverage for each increment.
 
 **Out (deferred, each its own increment):** year filters and the legacy
 `/the-greatest-books/{of,since,to,from}/:year` family; category pages and the
@@ -76,7 +77,8 @@ is slug-first too. **Anywhere in this feature that passes a param to `.find` is 
 | D2 | Site-wide `noindex` until cutover, gated by `ENV["BOOKS_PUBLIC_INDEXING"]` (default off) | `new.thegreatestbooks.org` serves the same content as the live legacy apex; anything indexable there competes with the site it replaces. The per-book logic still ships and is unit-tested, so it is correct the day the flag flips. |
 | D3 | No sitemap in this work | No sitemap infrastructure exists, and a host that should not be crawled does not need one. Revisit at cutover. |
 | D4 | Any URL carrying `/rc/:ranking_configuration_id` is `noindex, follow` | The canonical URL never carries `/rc/`. An alternate RC is the same 24,242 books reordered — near-duplicate content. Applies even when the id *is* the default primary. |
-| D5 | Ranked index path is `/the-greatest-books`, not `/books` | `/books/*` is a permanent 301 namespace holding ~156k indexed legacy URLs. Putting the index there would also make a future `/books/1952` ambiguous between "book id 1952" and "books from 1952". `/the-greatest-books` additionally lets the deferred year/category increments serve the legacy URL family natively, with no redirect. |
+| D5 | The ranked index is the **root path** `/`, paginated as `/page/2`…`/page/243`. `/the-greatest-books` 301s to `/` | Matches legacy exactly (`root to: "default#index"`, `get "/page/:page"`, `get "/the-greatest-books", to: redirect("/")`). The index is emphatically **not** at `/books` — that is a permanent 301 namespace holding ~156k indexed legacy URLs, and a future `/books/1952` would be ambiguous between "book id 1952" and "books from 1952". The deferred year/category increments keep their legacy paths (`/the-greatest-books/since/:year`), which stand alone and need no index there. |
+| D5a | Pagination is path-based, via a shared opt-in `Pagy::PathBasedPaging` extension | Owner requirement, and it preserves legacy's indexed `/page/N` URLs. `?page=N` keeps working as an input, so no 301s are needed. See "Path-based pagination" below. |
 | D6 | Book lookups are explicit: `find_by!(slug:)` for `/book/:slug`, `find_by!(id:)` for legacy redirects | friendly_id's slug-first `find` returns the wrong record for the 124 colliding slugs. |
 | D7 | Grid query is plain SQL behind a `Books::RankedBooksQuery` seam | See "Query engine" below. |
 | D8 | The grid query does **not** join `books_books` | The join exists in games only to support year filtering. Dropping it lets Postgres use `index_ranked_items_on_config_and_rank`: **33.0 ms → 5.3 ms** at the deepest offset. |
@@ -128,16 +130,35 @@ end
 get "items/:id", to: "books/legacy_books#show", constraints: {id: /\d+/}
 
 scope "(/rc/:ranking_configuration_id)" do
-  get "the-greatest-books", to: "books/ranked_items#index", as: :the_greatest_books
-  get "book/:slug",         to: "books/books#show",         as: :book
+  get "book/:slug", to: "books/books#show", as: :book
 end
 
+# Ranked index. Root is canonical; pagination is path-based (D5a).
+# Order matters: /page/1 must be declared before the generic /page/:page.
 root to: "books/ranked_items#index", as: :books_root
+get "page/1", to: redirect("/", status: 301)                # collapse the duplicate
+get "page/:page", to: "books/ranked_items#index", as: :books_page, constraints: {page: /\d+/}
+get "the-greatest-books", to: redirect("/", status: 301)    # legacy, matches its own redirect
+get "rc/:ranking_configuration_id", to: "books/ranked_items#index", as: :books_rc
+get "rc/:ranking_configuration_id/page/:page", to: "books/ranked_items#index", as: :books_rc_page,
+  constraints: {page: /\d+/}
 ```
 
-The `lists` and `lists/:id` routes are **not** added here — they land in increment 2 alongside their
-controller, in the same `scope "(/rc/:ranking_configuration_id)"` block. Increment 1's layout nav
-therefore cannot link to Lists yet; that nav entry is wired in increment 2.
+Resulting URL map:
+
+| URL | Serves | Indexable |
+|---|---|---|
+| `/` | ranked grid, page 1 | yes (at cutover) |
+| `/page/2` … `/page/243` | ranked grid, page N | yes (at cutover) |
+| `/page/1` | → 301 `/` | — |
+| `/the-greatest-books` | → 301 `/` | — |
+| `/rc/:id`, `/rc/:id/page/:page` | alternate RC | never (D4) |
+| `/book/:slug` | detail | when ranked (D1) |
+| `/books/:id`, `/rc/:x/books/:id`, `/items/:id` | → 301 `/book/:slug` | — |
+| `/lists`, `/lists/:id` | increment 2 | yes (at cutover) |
+
+The `lists` routes are **not** added here — they land in increment 2 alongside their controller.
+Increment 1's layout nav therefore cannot link to Lists yet; that entry is wired in increment 2.
 
 `Books::LegacyBooksController#show` — `Books::Book.find_by!(id: params[:id])`, then
 `redirect_to book_path(book.slug), status: :moved_permanently`.
@@ -158,6 +179,93 @@ end
 
 Controllers set `@indexable`: grid and lists `true`, book show `@ranked_item.present?`. `follow`
 throughout, so rc-scoped pages still pass link equity to canonical book pages.
+
+### Path-based pagination
+
+pagy 43.5.6 does not support `/page/N` out of the box, and **two independent defects** must be fixed —
+which is why previous attempts stalled. Both were verified experimentally against the installed gem.
+
+**Defect 1 — reading.** `Pagy::Request#get_params` is `request.GET.merge(request.POST).to_h`. Rails
+route params are never included, so a `/page/12` route resolves to page **1** no matter what URL
+generation does. Measured:
+
+```
+query string only (pagy's default view of params) -> resolve_page = 1
+route param included                              -> resolve_page = 12
+```
+
+**Defect 2 — writing.** `a_lambda` composes a *single* templated URL containing the sentinel
+`Pagy::PAGE_TOKEN` (the two-character string `"P "`), then `split`s it and interpolates each page
+number. A page-1 special case — `/` rather than `/page/1` — cannot be expressed in one template, and
+naive overrides destroy the token (`PAGE_TOKEN.to_i == 0`), emitting malformed HTML like
+`<a href="/"11 rel="prev">`.
+
+Both `compose_url` and `get_params` are marked "Overriding support" in the gem. The extension lives in
+`config/initializers/pagy.rb` as **shared, opt-in** infrastructure — not books-namespaced — activated
+only when a `:page_path` option is present, so every other domain is provably unaffected:
+
+```ruby
+module Pagy::PathBasedPaging
+  def compose_url(absolute, path, params, fragment)
+    builder = @options[:page_path]
+    return super unless builder
+
+    page  = params.delete(@options[:page_key] || :page)
+    query = Pagy::Linkable::QueryUtils.build_nested_query(params).sub(/\A(?=.)/, '?')
+    "#{@request.base_url if absolute}#{builder.call(page)}#{query}#{fragment}"
+  end
+
+  # pagy templates one URL with PAGE_TOKEN and string-splits it per page, which makes
+  # the page-1 special case inexpressible. Build each href for real instead; the
+  # templating is only a speed optimisation, irrelevant for a 7-anchor nav.
+  def a_lambda(anchor_string: @options[:anchor_string], **opts)
+    return super unless @options[:page_path]
+
+    lambda do |page, text = page_label(page), classes: nil, aria_label: nil|
+      rel = case page
+            when @previous then %( rel="prev")
+            when @next     then %( rel="next")
+            end
+      %(<a href="#{compose_page_url(page, **opts)}"#{
+        %( #{anchor_string}) if anchor_string}#{
+        %( class="#{classes}") if classes}#{rel}#{
+        %( aria-label="#{aria_label}") if aria_label}>#{text}</a>)
+    end
+  end
+end
+Pagy::Offset.prepend(Pagy::PathBasedPaging)
+```
+
+Defect 1 is fixed by passing route params through in the controller. `request.params` includes both
+route and query params; `controller`/`action` must be stripped so they never leak into a query string:
+
+```ruby
+def pagy_path_request
+  {base_url: request.base_url, path: request.path,
+   params: request.params.except("controller", "action").to_h}
+end
+```
+
+The books controllers then pass a builder using real route helpers — no string surgery:
+
+```ruby
+pagy(query, limit: 100, request: pagy_path_request,
+     page_path: ->(n) { n.to_i <= 1 ? books_root_path : books_page_path(n.to_i) })
+```
+
+**`?page=N` keeps working as an input**, so no redirects are needed for existing links. Verified:
+
+| Request | Resolved page | Generated "next" link |
+|---|---|---|
+| `/` | 1 | `/page/2` |
+| `/?page=7` | 7 | `/page/8` |
+| `/page/7` | 7 | `/page/8` |
+
+Generated links are always path-based. Route params win over query params in Rails, so `/page/7?page=9`
+is deterministic (page 7).
+
+**Admin keeps `?page=`.** All 19 admin controllers are auth-gated and `noindex`; path-based pagination
+there is churn with no benefit.
 
 ### Ranked grid
 
@@ -409,12 +517,17 @@ Controller tests assert behavior only — status codes, assigns, redirect target
 
 - **The collision guard:** `/books/1` and `/book/1` resolve to different books, and the 301 target is
   the id-book's slug. This is the regression test for D6.
+- **Pagination URLs:** `/page/2` resolves to page 2 (guards defect 1); the nav on page 2 links to `/`
+  and not `/page/1` (guards defect 2); `/?page=7` still resolves to page 7; `/page/1` and
+  `/the-greatest-books` 301 to `/`. Plus a `Pagy::PathBasedPaging` unit test asserting that a pagy
+  call **without** `:page_path` still emits `?page=N`, so the other domains cannot regress.
 - `books_robots_content` across all four combinations of `PublicIndexing.enabled?` × `@indexable`,
   plus the `/rc/:id` override.
 - `assert_queries_count` on the grid, pinning the `book_authors` / `primary_image` preloads.
 - `Books::RankedBooksQuery` unit test; `Books::CardComponent` component test.
-- Routing test: books host matches, `/the-greatest-books` and its rc-scoped form resolve, numeric
-  constraints hold.
+- Routing test: books host matches; `/`, `/page/:page`, `/rc/:id` and `/rc/:id/page/:page` resolve to
+  `books/ranked_items#index`; numeric constraints hold. Note `get "the-greatest-books"` is an exact
+  single-segment match, so it does not shadow the deferred `/the-greatest-books/since/:year` family.
 - Playwright per increment: grid + detail (1), lists (2), add-to-list flow (3).
 
 ## Verification gate
@@ -437,10 +550,16 @@ Every increment, before it is called done:
 
 ## Follow-ups (tracked, not in scope)
 
-1. **Fix pagination in the other three domains.** All are broken, differently: music targets dead
-   `.current`/`.gap` selectors *and* uses raw `bg-gray-*`/`text-gray-*` that ignore the DaisyUI theme;
-   games targets the dead selectors; movies has **no `paging.css` at all**. The books file above is
-   the correct template for all three.
+1. **Fix pagination in the other three domains** — owner wants this, sequenced as its own PR because
+   it touches three live sites. Two parts:
+   - *CSS.* All are broken, differently: music targets dead `.current`/`.gap` selectors *and* uses raw
+     `bg-gray-*`/`text-gray-*` that ignore the DaisyUI theme; games targets the dead selectors; movies
+     has **no `paging.css` at all**. The books file above is the correct template for all three.
+   - *Path-based URLs.* The `Pagy::PathBasedPaging` extension is already shared, so adoption is
+     per-surface: **12 public `pagy(` call sites** (`music/{albums,songs,artists}/{ranked_items,lists,
+     categories}`, `games/{ranked_items,lists,categories}`, `my_lists`), each needing a `/page/:page`
+     route variant plus a `page_path:` lambda. `?page=N` continues to work, so no 301s are required.
+     Admin's 19 call sites stay on `?page=`.
 2. **Resize one cover.** `The_Sound_and_the_Fury_281929_1st_ed_dust_jacket29.png` is 1613×2370 / 8.9 MB
    and is more than half of grid page 1 by itself. Median cover is 28.5 KB; page 2 totals 2.63 MB.
 3. **1-sentence AI descriptions**, which unlock both the grid card description slot and table view.
