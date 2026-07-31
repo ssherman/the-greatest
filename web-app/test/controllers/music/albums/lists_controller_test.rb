@@ -90,18 +90,11 @@ module Music
       test "show preloads descriptions rather than querying per row" do
         list = lists(:music_albums_list)
 
-        get "/albums/lists/#{list.id}"
-        assert_response :success
-
-        # Exercise the exact collection the controller's show action loaded
-        # (via @controller, which IntegrationTest points at the last request's
-        # controller instance) so this proves the real eager-loaded scope,
-        # not a hand-rolled query that would pass either way.
-        list_items = @controller.instance_variable_get(:@pagy_list_items)
-
-        assert_queries_count(0) do
-          list_items.first.listable.primary_description
+        assert_queries_match(/FROM "descriptions"/, count: 1) do
+          get "/albums/lists/#{list.id}"
         end
+
+        assert_response :success
       end
     end
   end
