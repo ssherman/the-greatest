@@ -42,8 +42,11 @@ Rails.application.configure do
       name: "The Greatest Books",
       color_scheme: "purple",
       layout: "books/application",
+      # NOT images.thegreatestbooks.org: that hostname belongs to the legacy site
+      # and is bound to its own R2 bucket (the-greatest-books), so this app's blob
+      # keys 404 there. Rebind it only once the legacy site is retired.
       images_cdn: {
-        production: "https://images.thegreatestbooks.org",
+        production: "https://images-new.thegreatestbooks.org",
         default: "https://images-dev.thegreatestbooks.org"
       }
     }
