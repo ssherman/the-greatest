@@ -1,28 +1,42 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Books homepage', () => {
-  test('homepage loads successfully', async ({ page }) => {
+test.describe('Books ranked grid', () => {
+  test('root loads successfully', async ({ page }) => {
     const response = await page.goto('/');
 
     expect(response?.status()).toBe(200);
   });
 
-  test('homepage has the books title', async ({ page }) => {
+  test('root renders the ranked grid heading', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page).toHaveTitle(/The Greatest Books/i);
+    await expect(page.getByRole('heading', { name: /Greatest Books/i, level: 1 })).toBeVisible();
   });
 
-  test('homepage renders the placeholder hero', async ({ page }) => {
-    await page.goto('/');
-
-    await expect(page.getByRole('heading', { name: 'The Greatest Books', level: 1 })).toBeVisible();
-  });
-
-  test('homepage uses the cmyk theme', async ({ page }) => {
+  test('root uses the cmyk theme and declares a language', async ({ page }) => {
     await page.goto('/');
 
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'cmyk');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  });
+
+  test('root is noindex until cutover', async ({ page }) => {
+    await page.goto('/');
+
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/);
+  });
+
+  test('pagination links are path-based', async ({ page }) => {
+    await page.goto('/');
+
+    await expect(page.locator('nav.pagy a[href="/page/2"]').first()).toBeVisible();
+  });
+
+  test('page two loads and links back to the root, not /page/1', async ({ page }) => {
+    await page.goto('/page/2');
+
+    await expect(page.getByText(/Page 2 of/)).toBeVisible();
+    await expect(page.locator('nav.pagy a[href="/page/1"]')).toHaveCount(0);
   });
 
   test('navbar exposes the login button', async ({ page }) => {
