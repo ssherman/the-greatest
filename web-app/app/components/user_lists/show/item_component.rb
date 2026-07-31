@@ -59,7 +59,7 @@ class UserLists::Show::ItemComponent < ViewComponent::Base
   end
 
   def description
-    listable.try(:description)
+    listable.try(:primary_description)&.content
   end
 
   def cover_image

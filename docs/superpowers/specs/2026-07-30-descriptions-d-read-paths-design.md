@@ -20,7 +20,15 @@ and writes both live in the `descriptions` table and the eleven columns become d
   `music/songs/show`.
 - The per-row blurb in `music/albums/lists/show`, plus the `:descriptions` preload that keeps it from
   becoming an N+1.
-- `admin/games/series/_table.html.erb` — the one admin site increment (c2) did not cover.
+- `admin/games/series/_table.html.erb` — the one admin site increment (c2) did not cover — and its
+  backing `Admin::Games::SeriesController#load_series_for_index` query, which gets the matching
+  `includes(:descriptions)`.
+- The per-row blurb in `UserLists::Show::ItemComponent`'s `default_view` (My Lists, card-capable
+  listables only: `Music::Album`, `Games::Game`), plus an `includes(:descriptions)` added to
+  `listable_display_includes` on `Music::Albums::UserList` and `Games::UserList` (and, for symmetry,
+  `Books::UserList` and `Movies::UserList`, even though neither is reachable through this component
+  today — books has no public UI yet and `Movies::Movie` is never card-capable) to keep the same
+  100-per-page pagination N+1-free.
 
 **Out:**
 
@@ -36,7 +44,7 @@ and writes both live in the `descriptions` table and the eleven columns become d
 | # | Decision | Rationale |
 |---|---|---|
 | D-1 | The CC BY-SA credit line defers to the books public UI | Measured 2026-07-30: **every** `cc_by_sa_4` row (18,597) and **every** `source_url` (27,569) belongs to `Books::Book` or `Books::Author`. Games and music descriptions are exclusively `ai_generated` (9,117), `igdb` (2,260) and `manual` (5), all with `license: nil` and `source_url: nil` — none carries a CC BY-SA credit obligation. A component keyed on `license == :cc_by_sa_4` + `source_url` would therefore render on zero pages in this increment, could not be verified against real rows, and would likely need reshaping to fit a book page design that does not exist yet. The attribution gap it closes is real but is entirely a **books** gap, and books have no public pages, so (d) cannot close it either way. |
-| D-2 | Only `music/albums/lists/show` gets an `includes(:descriptions)` | It renders a blurb per row and paginates at 100, so `primary_description` would fire 100 extra queries. The four entity show pages load a single record — one query either way, so preloading buys nothing. |
+| D-2 | Only the paginated per-row listings get an `includes(:descriptions)` — `music/albums/lists/show`, the admin games series index, and My Lists' `default_view` for albums/games — not the single-record show pages | Each of those renders a blurb per row and paginates (100 or 25 per page), so `primary_description` would fire one extra query per row. The four entity show pages load a single record — one query either way, so preloading buys nothing. |
 | D-3 | The rewire keeps each view's existing presence guard and markup | `primary_description` returns `nil` when nothing qualifies, so `if (description = @album.primary_description)` is a direct swap for `if @album.description.present?`. No layout, class or copy changes — this increment changes where text comes from, not how it looks. |
 
 ## The rewire

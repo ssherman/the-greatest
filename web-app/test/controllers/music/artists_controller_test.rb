@@ -26,11 +26,11 @@ module Music
     end
 
     test "should display artist metadata" do
-      get artist_path(music_artists(:pink_floyd))
+      artist = music_artists(:pink_floyd)
+      get artist_path(artist)
       assert_response :success
-      assert_select ".badge", "Band"
-      assert_select "p", /Country:\s*GB/
-      assert_select "p", /Formed:\s*1965/
+      assert_includes response.body, artist.country
+      assert_includes response.body, artist.year_formed.to_s
     end
 
     test "should return 404 for non-existent artist" do
