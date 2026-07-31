@@ -336,7 +336,19 @@ Rails.application.routes.draw do
       end
     end
 
-    root to: "books/default#index", as: :books_root
+    scope "(/rc/:ranking_configuration_id)" do
+      get "book/:slug", to: "books/books#show", as: :book
+    end
+
+    # Ranked index. Root is canonical; pagination is path-based.
+    # Order matters: /page/1 must precede the generic /page/:page.
+    root to: "books/ranked_items#index", as: :books_root
+    get "page/1", to: redirect("/", status: 301)
+    get "page/:page", to: "books/ranked_items#index", as: :books_page, constraints: {page: /\d+/}
+    get "the-greatest-books", to: redirect("/", status: 301)
+    get "rc/:ranking_configuration_id", to: "books/ranked_items#index", as: :books_rc
+    get "rc/:ranking_configuration_id/page/:page", to: "books/ranked_items#index",
+      as: :books_rc_page, constraints: {page: /\d+/}
   end
 
   constraints DomainConstraint.new(Rails.application.config.domains[:games]) do

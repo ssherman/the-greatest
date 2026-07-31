@@ -1,0 +1,76 @@
+require "test_helper"
+
+module Books
+  class RankedItemsControllerTest < ActionDispatch::IntegrationTest
+    setup do
+      host! "dev-new.thegreatestbooks.org"
+      @rc = ranking_configurations(:books_global)
+      RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: @rc, rank: 1, score: 100)
+      RankedItem.create!(item: books_books(:crime_and_punishment), ranking_configuration: @rc, rank: 2, score: 90)
+    end
+
+    test "root renders the ranked grid" do
+      get "/"
+      assert_response :success
+    end
+
+    test "path-based pagination resolves the page" do
+      get "/page/2"
+      assert_response :success
+      assert_equal 2, @controller.view_assigns["pagy"].page
+    end
+
+    test "query-string pagination still resolves the page" do
+      get "/?page=2"
+      assert_response :success
+      assert_equal 2, @controller.view_assigns["pagy"].page
+    end
+
+    test "page one redirects to the canonical root" do
+      get "/page/1"
+      assert_redirected_to "/"
+      assert_response :moved_permanently
+    end
+
+    test "the-greatest-books redirects to the canonical root" do
+      get "/the-greatest-books"
+      assert_redirected_to "/"
+      assert_response :moved_permanently
+    end
+
+    test "renders an explicit ranking configuration" do
+      get "/rc/#{@rc.id}"
+      assert_response :success
+    end
+
+    test "renders an explicit ranking configuration with a page" do
+      get "/rc/#{@rc.id}/page/2"
+      assert_response :success
+    end
+
+    test "404s for a missing ranking configuration" do
+      get "/rc/99999"
+      assert_response :not_found
+    end
+
+    test "404s for a ranking configuration of the wrong type" do
+      get "/rc/#{ranking_configurations(:games_global).id}"
+      assert_response :not_found
+    end
+
+    test "marks the grid indexable" do
+      get "/"
+      assert @controller.view_assigns["indexable"]
+    end
+
+    test "pagination links are path-based, not query strings" do
+      99.times do |i|
+        filler = Books::Book.create!(title: "Filler Book #{i}")
+        RankedItem.create!(item: filler, ranking_configuration: @rc, rank: i + 3, score: 10)
+      end
+
+      get "/"
+      assert_select "nav.pagy a[href='/page/2']"
+    end
+  end
+end
