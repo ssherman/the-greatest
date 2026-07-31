@@ -6,7 +6,7 @@ module Books
     def self.call(ranking_configuration:)
       RankedItem
         .where(ranking_configuration_id: ranking_configuration.id, item_type: "Books::Book")
-        .includes(item: [{book_authors: :author}, :primary_image])
+        .includes(item: [{book_authors: :author}, {primary_image: {file_attachment: :blob}}])
         .order(:rank)
     end
   end

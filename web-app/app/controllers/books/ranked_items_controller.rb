@@ -32,7 +32,7 @@ class Books::RankedItemsController < RankedItemsController
   def pagy_path_request
     {base_url: request.base_url,
      path: request.path,
-     params: request.params.except("controller", "action").to_h}
+     params: request.params.except("controller", "action", "ranking_configuration_id").to_h}
   end
 
   def ranked_books_page_path(page)

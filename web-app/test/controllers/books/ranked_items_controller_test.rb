@@ -72,5 +72,17 @@ module Books
       get "/"
       assert_select "nav.pagy a[href='/page/2']"
     end
+
+    test "rc-scoped pagination links do not leak ranking_configuration_id into the query string" do
+      199.times do |i|
+        filler = Books::Book.create!(title: "Filler Book #{i}")
+        RankedItem.create!(item: filler, ranking_configuration: @rc, rank: i + 3, score: 10)
+      end
+
+      get "/rc/#{@rc.id}/page/2"
+
+      assert_select "nav.pagy a[href='/rc/#{@rc.id}/page/3']"
+      assert_select "nav.pagy a[href*='ranking_configuration_id']", count: 0
+    end
   end
 end

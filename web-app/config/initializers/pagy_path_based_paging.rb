@@ -10,6 +10,19 @@ module Pagy::PathBasedPaging
     return super unless builder
 
     page = params.delete(@options[:page_key] || "page")
+    if page == Pagy::PAGE_TOKEN
+      # Pagy's templated helpers (urls_hash, series_nav_js, data_hash, limit_tag_js,
+      # input_nav_js, and the bootstrap/bulma navs) build one URL containing
+      # Pagy::PAGE_TOKEN and string-substitute the real page number in afterwards.
+      # With :page_path active, that template is built by calling the caller-supplied
+      # builder with PAGE_TOKEN itself; PAGE_TOKEN.to_i is 0, so the builder silently
+      # resolves to page 1's URL instead of a real template. Fail loudly instead: use
+      # a_lambda-based nav (series_nav, page_url) with :page_path, not these helpers.
+      raise Pagy::InternalError, "Pagy::PathBasedPaging does not support templated helpers " \
+        "(urls_hash, series_nav_js, data_hash, limit_tag_js, input_nav_js, bootstrap/bulma " \
+        "navs) when :page_path is set. Use series_nav or page_url instead."
+    end
+
     query = Pagy::Linkable::QueryUtils.build_nested_query(params).sub(/\A(?=.)/, "?")
     "#{@request.base_url if absolute}#{builder.call(page)}#{query}#{fragment}"
   end

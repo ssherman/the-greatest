@@ -53,4 +53,17 @@ class PagyPathBasedPagingTest < ActiveSupport::TestCase
   test "still resolves the page from a query parameter" do
     assert_equal 7, build_pagy(params: {"page" => "7"}, path: "/", page_path: PATH_BUILDER).page
   end
+
+  test "raises instead of silently corrupting a token-based helper when page_path is set" do
+    pagy = build_pagy(params: {"page" => "2"}, path: "/page/2", page_path: PATH_BUILDER)
+
+    error = assert_raises(Pagy::InternalError) { pagy.urls_hash }
+    assert_match(/page_path/, error.message)
+  end
+
+  test "page_url still works normally alongside the token-based guard" do
+    pagy = build_pagy(params: {"page" => "2"}, path: "/page/2", page_path: PATH_BUILDER)
+
+    assert_equal "/page/3", pagy.page_url(3)
+  end
 end

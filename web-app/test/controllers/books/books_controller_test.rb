@@ -45,5 +45,20 @@ module Books
       assert_response :success
       assert_equal numeric.id, @controller.view_assigns["book"].id
     end
+
+    test "sanitizes description content before rendering" do
+      Description.create!(
+        describable: @book,
+        kind: :summary,
+        locale: "en",
+        source: :manual,
+        content: "Nice book. <img src=x onerror=alert(1)>"
+      )
+
+      get "/book/#{@book.slug}"
+
+      assert_response :success
+      refute_includes response.body, "onerror"
+    end
   end
 end

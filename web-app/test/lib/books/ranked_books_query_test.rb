@@ -29,11 +29,18 @@ module Books
       assert_equal ["Books::Book"], item_types
     end
 
-    test "preloads authors and the primary image so views do not N+1" do
+    test "preloads authors and the primary image with its attachment so views do not N+1" do
+      image = Image.new(parent: @first.item, primary: true)
+      image.file.attach(io: StringIO.new("fake image data"), filename: "cover.jpg", content_type: "image/jpeg")
+      image.save!
+
       relation = Books::RankedBooksQuery.call(ranking_configuration: @rc)
 
-      assert_queries_count(5) do
-        relation.to_a.each { |ri| ri.item.book_authors.map { |ba| ba.author.name } }
+      assert_queries_count(7) do
+        relation.to_a.each do |ri|
+          ri.item.book_authors.map { |ba| ba.author.name }
+          ri.item.primary_image&.file&.attached?
+        end
       end
     end
   end
