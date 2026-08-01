@@ -999,7 +999,7 @@ and add this line directly after the `<meta name="description" …>` line:
 bin/rails test test/controllers/games test/helpers/games
 ```
 
-Expected: PASS. No existing games page changes behaviour — every one of them leaves `@indexable` unset and so renders `index, follow`.
+Expected: PASS. Canonical games URLs are unaffected — every one of them leaves `@indexable` unset and so renders `index, follow`. `/rc/N/*` games URLs (`lists`, `video-games`, `game/:slug`, `categories`, all scoped under `scope "(/rc/:ranking_configuration_id)"` in `config/routes.rb`) become `noindex, follow`, since `games_robots_content` treats a present `ranking_configuration_id` param as reason to noindex regardless of `@indexable`. This is deliberate: an alternate ranking configuration is the same games reordered, so de-duplicating it matches what books already does.
 
 - [ ] **Step 7: Lint and commit**
 
@@ -1078,5 +1078,5 @@ Increment 1 is done when all of these hold:
 - [ ] On dev, `List.active.count == List.active.where.not(activated_at: nil).count`, and no non-active list has an `activated_at`
 - [ ] `List.search_by_name` is unchanged and every admin search test still passes
 - [ ] `Lists::SimplePenaltySummaryComponent` and its test are untouched
-- [ ] Every existing games page still renders `index, follow`
+- [ ] Canonical games URLs still render `index, follow`; `/rc/N/*` games URLs deliberately render `noindex, follow`
 - [ ] Nothing has been pushed and no PR has been opened
