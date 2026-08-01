@@ -10,8 +10,9 @@ class Games::ListsController < PublicListsController
   end
 
   def show
-    @list = Games::List.find(params[:id])
+    @list = Games::List.where(status: :active).find_by!(id: params[:id])
     @ranked_list = @ranking_configuration.ranked_lists.find_by(list: @list)
+    @indexable = @ranked_list.present?
 
     list_items_query = @list.list_items.includes(
       listable: [
@@ -20,7 +21,8 @@ class Games::ListsController < PublicListsController
         {game_companies: :company},
         {primary_image: {file_attachment: {blob: {variant_records: {image_attachment: :blob}}}}}
       ]
-    ).order(Arel.sql("list_items.position ASC NULLS LAST"))
+    ).order(Arel.sql("list_items.position ASC NULLS LAST, list_items.id ASC"))
+
     @pagy, @pagy_list_items = pagy_path(list_items_query, limit: 100)
   end
 end
