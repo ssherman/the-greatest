@@ -217,6 +217,13 @@ module Books
       assert_nil @controller.view_assigns["query"]
     end
 
+    test "a 404 is not edge-cacheable" do
+      get "/lists/999999"
+
+      assert_response :not_found
+      assert_match(/no-store/, response.headers["Cache-Control"])
+    end
+
     private
 
     def seed_lists(count)

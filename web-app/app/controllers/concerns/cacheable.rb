@@ -29,7 +29,7 @@ module Cacheable
 
   # Explicitly prevent caching (for admin, auth, search)
   def prevent_caching
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+    response.cache_control.replace(no_store: true, private: true)
     response.headers["Pragma"] = "no-cache"
   end
 

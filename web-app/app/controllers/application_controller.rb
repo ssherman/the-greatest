@@ -4,6 +4,7 @@ class ApplicationController < ActionController::Base
 
   include ApplicationHelper
   include Pundit::Authorization
+  include Cacheable
 
   rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
   rescue_from Pundit::NotAuthorizedError, with: :user_not_authorized
@@ -70,6 +71,7 @@ class ApplicationController < ActionController::Base
   helper_method :current_domain, :domain_settings
 
   def render_not_found
+    prevent_caching
     render file: "#{Rails.root}/public/404.html", status: :not_found, layout: false
   end
 
