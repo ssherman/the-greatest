@@ -16,7 +16,7 @@ Spec: `docs/superpowers/specs/2026-08-01-lists-public-ui-design.md`. Branch `lis
 - **Lint is `bundle exec standardrb`**, never `bin/rubocop`. `--fix` autocorrects.
 - **Never run `bin/brakeman`.**
 - **Never run a destructive command against the development database.** Books data exists only in dev and takes hours to rebuild. `ActiveRecord::FixtureSet.create_fixtures` truncates every table it names.
-- **Snapshot dev before Task 1's migration:** `bin/snapshot-dev-db.sh --label pre-activated-at`.
+- **Snapshot dev before Task 1's migration.** The snapshot/refresh scripts live at the **project root** `bin/`, NOT `web-app/bin/` — they are the exception to the run-everything-from-`web-app/` rule.
 - **Use Rails generators** for the migration and both components — never hand-create files that a generator owns.
 - **No code comments** unless this plan shows one explicitly.
 - **Namespace media code**; `List`, `RankedList` and `Penalty` are shared and stay in the global namespace. Tests mirror the namespace.
@@ -45,12 +45,16 @@ The column and callback live on the shared `List`, so all four domains inherit t
 
 - [ ] **Step 1: Snapshot the development database**
 
+Run this from the **project root**, not `web-app/` — `snapshot-dev-db.sh` lives at `<repo-root>/bin/`, unlike `bin/rails`:
+
 ```bash
-cd web-app
+cd /home/shane/dev/the-greatest
 bin/snapshot-dev-db.sh --label pre-activated-at
 ```
 
-Expected: a snapshot file is written. This turns an hours-long rebuild into a one-minute restore if the migration goes wrong.
+Expected: a dump is written to `tmp/db-snapshots/dev-<timestamp>-pre-activated-at.dump`. This turns an hours-long rebuild into a one-minute restore if the migration goes wrong. Restore with `bin/snapshot-dev-db.sh --restore`.
+
+Every other command in this plan runs from `web-app/`.
 
 - [ ] **Step 2: Write the failing tests**
 
