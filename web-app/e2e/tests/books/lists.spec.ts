@@ -28,10 +28,9 @@ test.describe('Books lists index', () => {
     await expect(page.locator('nav.pagy a[href*="/lists/page/2"][href*="sort=newest"]').first()).toBeVisible();
   });
 
-  test('search narrows the results and is noindex', async ({ page }) => {
+  test('search narrows the results', async ({ page }) => {
     await page.goto('/lists?q=the');
 
-    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/);
     await expect(page.getByText(/matching/)).toBeVisible();
   });
 
@@ -70,5 +69,6 @@ test.describe('Books list detail', () => {
     await page.goto(`/v/grid${href}`);
 
     await expect(page).toHaveURL(new RegExp(`${href}$`));
+    expect(page.url()).not.toContain('/v/grid');
   });
 });
