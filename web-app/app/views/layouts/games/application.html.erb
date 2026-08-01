@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html data-theme="abyss">
+<html lang="en" data-theme="abyss">
   <head>
     <title><%= content_for?(:page_title) ? yield(:page_title) : "Greatest Video Games Ranked | The Greatest Games" %></title>
     <meta name="description" content="<%= content_for?(:meta_description) ? yield(:meta_description) : "Discover definitive rankings of the greatest video games of all time. Expert reviews, curated lists, and comprehensive game analysis." %>">
+    <meta name="robots" content="<%= games_robots_content %>">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
