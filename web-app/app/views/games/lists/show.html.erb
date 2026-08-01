@@ -42,11 +42,9 @@
     <%= render Lists::WeightBreakdownComponent.new(ranked_list: @ranked_list) %>
 
     <% if @list.description.present? %>
-      <div class="prose max-w-none mb-4">
-        <p class="text-base-content/80">
-          <%= @list.description %>
-        </p>
-      </div>
+      <p class="text-base-content/80 mb-4">
+        <%= @list.description %>
+      </p>
     <% end %>
 
     <% if @list.url.present? %>
