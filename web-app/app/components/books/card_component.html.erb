@@ -19,9 +19,11 @@
 
   <div class="card-body">
     <div class="flex items-start justify-between gap-2">
-      <div class="badge badge-primary font-bold">
-        <span class="sr-only">Rank </span>#<%= rank %>
-      </div>
+      <% if rank %>
+        <div class="badge badge-primary font-bold">
+          <span class="sr-only">Rank </span>#<%= rank %>
+        </div>
+      <% end %>
       <% if book.first_published_year %>
         <span class="text-xs text-base-content/70"><%= book.first_published_year %></span>
       <% end %>
