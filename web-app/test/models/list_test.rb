@@ -3,6 +3,7 @@
 # Table name: lists
 #
 #  id                    :bigint           not null, primary key
+#  activated_at          :datetime
 #  category_specific     :boolean
 #  creator_specific      :boolean
 #  description           :text
@@ -17,7 +18,7 @@
 #  simplified_content    :text
 #  source                :string
 #  source_country_origin :string
-#  status                :integer          default("unapproved"), not null
+#  status                :integer          default(0), not null
 #  type                  :string           not null
 #  url                   :string
 #  voter_count_estimated :boolean
@@ -33,6 +34,7 @@
 #
 # Indexes
 #
+#  index_lists_on_activated_at     (activated_at)
 #  index_lists_on_submitted_by_id  (submitted_by_id)
 #
 # Foreign Keys
@@ -231,5 +233,47 @@ class ListTest < ActiveSupport::TestCase
     manager2 = list.wizard_manager
 
     assert_same manager1, manager2
+  end
+
+  test "stamps activated_at when a list becomes active" do
+    list = lists(:basic_list)
+    assert_nil list.activated_at
+
+    list.update!(status: :active)
+
+    assert_not_nil list.reload.activated_at
+  end
+
+  test "does not stamp activated_at when a list changes to a non-active status" do
+    list = lists(:basic_list)
+
+    list.update!(status: :approved)
+
+    assert_nil list.reload.activated_at
+  end
+
+  test "does not restamp activated_at when saving an already-active list" do
+    list = lists(:basic_list)
+    list.update!(status: :active)
+    original = list.reload.activated_at
+
+    travel 1.hour do
+      list.update!(name: "Renamed List")
+    end
+
+    assert_equal original, list.reload.activated_at
+  end
+
+  test "restamps activated_at when a list is reactivated" do
+    list = lists(:basic_list)
+    list.update!(status: :active)
+    first = list.reload.activated_at
+    list.update!(status: :unapproved)
+
+    travel 1.hour do
+      list.update!(status: :active)
+    end
+
+    assert list.reload.activated_at > first
   end
 end

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_29_221159) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_01_143014) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -439,6 +439,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_29_221159) do
   end
 
   create_table "lists", force: :cascade do |t|
+    t.datetime "activated_at"
     t.boolean "category_specific"
     t.datetime "created_at", null: false
     t.boolean "creator_specific"
@@ -466,6 +467,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_29_221159) do
     t.jsonb "wizard_state", default: {}
     t.integer "year_published"
     t.boolean "yearly_award"
+    t.index ["activated_at"], name: "index_lists_on_activated_at"
     t.index ["submitted_by_id"], name: "index_lists_on_submitted_by_id"
   end
 
