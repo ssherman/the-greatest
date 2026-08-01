@@ -4,7 +4,7 @@
 #
 #  id               :bigint           not null, primary key
 #  domain           :integer          not null
-#  permission_level :integer          default("viewer"), not null
+#  permission_level :integer          default(0), not null
 #  created_at       :datetime         not null
 #  updated_at       :datetime         not null
 #  user_id          :bigint           not null

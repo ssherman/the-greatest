@@ -7,7 +7,7 @@
 #  birth_year      :integer
 #  death_year      :integer
 #  description     :text
-#  kind            :integer          default("person"), not null
+#  kind            :integer          default(0), not null
 #  name            :string           not null
 #  slug            :string           not null
 #  sort_name       :string

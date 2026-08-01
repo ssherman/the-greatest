@@ -1,3 +1,18 @@
+# == Schema Information
+#
+# Table name: legacy_id_maps
+#
+#  id         :bigint           not null, primary key
+#  model      :string           not null
+#  created_at :datetime         not null
+#  updated_at :datetime         not null
+#  legacy_id  :bigint           not null
+#  new_id     :bigint           not null
+#
+# Indexes
+#
+#  index_legacy_id_maps_on_model_and_legacy_id  (model,legacy_id) UNIQUE
+#
 class LegacyIdMap < ApplicationRecord
   validates :model, presence: true
   validates :legacy_id, presence: true, uniqueness: {scope: :model}

@@ -7,10 +7,10 @@
 #  id               :bigint           not null, primary key
 #  content          :text             not null
 #  describable_type :string           not null
-#  kind             :integer          default("summary"), not null
+#  kind             :integer          default(0), not null
 #  license          :integer
 #  locale           :string           default("en"), not null
-#  rank             :integer          default("normal"), not null
+#  rank             :integer          default(0), not null
 #  retrieved_at     :datetime
 #  source           :integer          not null
 #  source_name      :string

@@ -4,7 +4,7 @@
 #
 #  id             :bigint           not null, primary key
 #  description    :text
-#  game_type      :integer          default("main_game"), not null
+#  game_type      :integer          default(0), not null
 #  release_year   :integer
 #  slug           :string           not null
 #  title          :string           not null

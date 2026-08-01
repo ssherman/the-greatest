@@ -20,7 +20,7 @@
 #  original_signup_domain :string
 #  photo_url              :string
 #  provider_data          :text
-#  role                   :integer          default("user"), not null
+#  role                   :integer          default(0), not null
 #  sign_in_count          :integer
 #  created_at             :datetime         not null
 #  updated_at             :datetime         not null

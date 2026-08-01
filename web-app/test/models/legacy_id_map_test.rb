@@ -1,5 +1,20 @@
 require "test_helper"
 
+# == Schema Information
+#
+# Table name: legacy_id_maps
+#
+#  id         :bigint           not null, primary key
+#  model      :string           not null
+#  created_at :datetime         not null
+#  updated_at :datetime         not null
+#  legacy_id  :bigint           not null
+#  new_id     :bigint           not null
+#
+# Indexes
+#
+#  index_legacy_id_maps_on_model_and_legacy_id  (model,legacy_id) UNIQUE
+#
 class LegacyIdMapTest < ActiveSupport::TestCase
   test "record creates a mapping and returns new_id" do
     assert_equal 42, LegacyIdMap.record(model: "Language", legacy_id: 7, new_id: 42)

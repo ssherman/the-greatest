@@ -3,6 +3,7 @@
 # Table name: lists
 #
 #  id                    :bigint           not null, primary key
+#  activated_at          :datetime
 #  category_specific     :boolean
 #  creator_specific      :boolean
 #  description           :text
@@ -17,7 +18,7 @@
 #  simplified_content    :text
 #  source                :string
 #  source_country_origin :string
-#  status                :integer          default("unapproved"), not null
+#  status                :integer          default(0), not null
 #  type                  :string           not null
 #  url                   :string
 #  voter_count_estimated :boolean
@@ -33,6 +34,7 @@
 #
 # Indexes
 #
+#  index_lists_on_activated_at     (activated_at)
 #  index_lists_on_submitted_by_id  (submitted_by_id)
 #
 # Foreign Keys

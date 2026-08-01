@@ -9,7 +9,7 @@
 #  position    :integer
 #  public      :boolean          default(FALSE), not null
 #  type        :string           not null
-#  view_mode   :integer          default("default_view"), not null
+#  view_mode   :integer          default(0), not null
 #  created_at  :datetime         not null
 #  updated_at  :datetime         not null
 #  user_id     :bigint           not null

@@ -4,7 +4,7 @@
 #
 #  id                :bigint           not null, primary key
 #  alternative_names :string           default([]), is an Array
-#  category_type     :integer          default("genre")
+#  category_type     :integer          default(0)
 #  deleted           :boolean          default(FALSE)
 #  description       :text
 #  import_source     :integer
