@@ -365,7 +365,7 @@ The real JSONB shape, verified against dev:
 - [ ] **Step 1: Generate the component**
 
 ```bash
-bin/rails generate component Lists::WeightBreakdown ranked_list
+bin/rails generate view_component:component Lists::WeightBreakdown ranked_list
 ```
 
 This creates the `.rb`, the `.html.erb` and a test file. Delete the generated test file — the next step writes it from scratch:
@@ -665,7 +665,7 @@ The component does **not** build its own URL — the caller passes `path`. Games
 - [ ] **Step 1: Generate the component**
 
 ```bash
-bin/rails generate component Lists::Card ranked_list item_count path noun
+bin/rails generate view_component:component Lists::Card ranked_list item_count path noun
 rm -f test/components/lists/card_component_test.rb
 ```
 
