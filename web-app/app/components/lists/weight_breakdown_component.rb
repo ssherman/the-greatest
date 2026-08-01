@@ -39,6 +39,22 @@ class Lists::WeightBreakdownComponent < ViewComponent::Base
     pct(before - after)
   end
 
+  def capped_penalty
+    uncapped = details.dig("final_calculation", "total_penalty_percentage")
+    capped = details.dig("final_calculation", "capped_penalty_percentage")
+    return nil if uncapped.nil? || capped.nil? || uncapped == capped
+
+    pct(capped)
+  end
+
+  def floored_weight
+    before_floor = details.dig("final_calculation", "weight_after_penalty")
+    after_floor = details.dig("final_calculation", "weight_after_floor")
+    return nil if before_floor.nil? || after_floor.nil? || before_floor == after_floor
+
+    pct(after_floor)
+  end
+
   def pct(value)
     return nil if value.nil?
     number_with_precision(value, precision: 1, strip_insignificant_zeros: true)

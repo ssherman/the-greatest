@@ -37,6 +37,20 @@
               <dd class="whitespace-nowrap">+<%= quality_bonus %>%</dd>
             </div>
           <% end %>
+
+          <% if capped_penalty %>
+            <div class="flex justify-between gap-4">
+              <dt>Penalty capped at</dt>
+              <dd class="whitespace-nowrap">−<%= capped_penalty %>%</dd>
+            </div>
+          <% end %>
+
+          <% if floored_weight %>
+            <div class="flex justify-between gap-4">
+              <dt>Raised to the minimum weight</dt>
+              <dd class="whitespace-nowrap"><%= floored_weight %>%</dd>
+            </div>
+          <% end %>
         </dl>
       <% end %>
 

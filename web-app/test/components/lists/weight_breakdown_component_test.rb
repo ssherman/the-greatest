@@ -26,7 +26,29 @@ class Lists::WeightBreakdownComponentTest < ViewComponent::TestCase
       },
       "final_calculation" => {
         "final_weight" => quality_bonus_applied ? 43 : 15,
-        "total_penalty_percentage" => penalty_after
+        "total_penalty_percentage" => penalty_after,
+        "capped_penalty_percentage" => penalty_after,
+        "weight_after_penalty" => 100 - penalty_after,
+        "weight_after_floor" => 100 - penalty_after
+      }
+    }
+  end
+
+  def capped_details(minimum_weight: nil)
+    {
+      "penalties" => [
+        {"penalty_name" => "Voters: not critics or experts", "value" => 60},
+        {"penalty_name" => "List: only covers 1 specific city", "value" => 50}
+      ],
+      "base_values" => {"base_weight" => 100, "minimum_weight" => minimum_weight || -50},
+      "penalty_summary" => {"total_before_quality_bonus" => 110},
+      "quality_bonus" => {"applied" => false, "penalty_before" => 110, "penalty_after" => 110},
+      "final_calculation" => {
+        "total_penalty_percentage" => 110,
+        "capped_penalty_percentage" => 100,
+        "weight_after_penalty" => 0.0,
+        "weight_after_floor" => minimum_weight || 0.0,
+        "final_weight" => minimum_weight || 0
       }
     }
   end
@@ -109,6 +131,31 @@ class Lists::WeightBreakdownComponentTest < ViewComponent::TestCase
 
     penalty_names = page.all("dt").map(&:text) - ["Base weight", "Total penalty"]
     assert_equal ["Voters: not critics or experts", "List: only covers 1 language", "Voters: Unknown Names"], penalty_names
+  end
+
+  test "shows the penalty cap when penalties exceed the base weight" do
+    render_inline(Lists::WeightBreakdownComponent.new(ranked_list: ranked_list_with(capped_details)))
+
+    assert_text "Total penalty"
+    assert_text "−110%"
+    assert_text "Penalty capped at"
+    assert_text "−100%"
+  end
+
+  test "shows the minimum weight when the floor raises the result" do
+    render_inline(Lists::WeightBreakdownComponent.new(ranked_list: ranked_list_with(capped_details(minimum_weight: 1))))
+
+    assert_text "Penalty capped at"
+    assert_text "Raised to the minimum weight"
+    assert_text "Final weight"
+    assert_text "1%"
+  end
+
+  test "omits the cap and floor rows when neither adjustment applies" do
+    render_inline(Lists::WeightBreakdownComponent.new(ranked_list: ranked_list_with(full_details)))
+
+    assert_no_text "Penalty capped at"
+    assert_no_text "Raised to the minimum weight"
   end
 
   test "the fixture's penalty_summary and final_calculation stay internally consistent" do
