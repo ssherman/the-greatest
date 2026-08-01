@@ -371,6 +371,20 @@ Rails.application.routes.draw do
     end
     get "items/:id", to: "books/legacy_books#show", constraints: {id: /\d+/}
 
+    get "lists", to: "books/lists#index", as: :books_lists
+    get "lists/page/:page", to: "books/lists#index", as: :books_lists_page, constraints: {page: /\d+/}
+    get "lists/:id", to: "books/lists#show", as: :books_list, constraints: {id: /\d+/}
+    get "lists/:id/page/:page", to: "books/lists#show", as: :books_list_page,
+      constraints: {id: /\d+/, page: /\d+/}
+
+    get "rc/:ranking_configuration_id/lists", to: "books/lists#index", as: :books_rc_lists
+    get "rc/:ranking_configuration_id/lists/page/:page", to: "books/lists#index",
+      as: :books_rc_lists_page, constraints: {page: /\d+/}
+    get "rc/:ranking_configuration_id/lists/:id", to: "books/lists#show", as: :books_rc_list,
+      constraints: {id: /\d+/}
+    get "rc/:ranking_configuration_id/lists/:id/page/:page", to: "books/lists#show",
+      as: :books_rc_list_page, constraints: {id: /\d+/, page: /\d+/}
+
     # Ranked index. Root is canonical; pagination is path-based.
     # Order matters: /page/1 must precede the generic /page/:page.
     root to: "books/ranked_items#index", as: :books_root
