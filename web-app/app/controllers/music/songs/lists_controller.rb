@@ -1,6 +1,7 @@
 class Music::Songs::ListsController < ApplicationController
   include Pagy::Method
   include Cacheable
+  include PathBasedPagination
 
   layout "music/application"
 
@@ -21,7 +22,7 @@ class Music::Songs::ListsController < ApplicationController
       .includes(list: :list_items)
       .order(sort_order)
 
-    @pagy, @ranked_lists = pagy(ranked_lists_query, limit: 25)
+    @pagy, @ranked_lists = pagy(ranked_lists_query, limit: 25, **pagy_path_options)
   end
 
   def show
@@ -30,6 +31,6 @@ class Music::Songs::ListsController < ApplicationController
 
     # Paginate list items with eager loading
     list_items_query = @list.list_items.includes(listable: :artists).order(:position)
-    @pagy, @pagy_list_items = pagy(list_items_query, limit: 100)
+    @pagy, @pagy_list_items = pagy(list_items_query, limit: 100, **pagy_path_options)
   end
 end

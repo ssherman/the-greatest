@@ -81,6 +81,29 @@ module Music
         get "/rc/#{ranking_configurations(:music_songs_global).id}/songs/through/1980"
         assert_response :success
       end
+
+      test "path-based pagination resolves the page" do
+        get "/songs/page/2"
+
+        assert_response :success
+        assert_equal 2, @controller.view_assigns["pagy"].page
+      end
+
+      test "query-string pagination still resolves the page" do
+        get "/songs?page=2"
+
+        assert_response :success
+        assert_equal 2, @controller.view_assigns["pagy"].page
+      end
+
+      test "the year filter does not leak into the query string" do
+        get "/songs/since/1990"
+
+        url = @controller.view_assigns["pagy"].page_url(2)
+
+        assert_equal "/songs/since/1990/page/2", url
+        refute_includes url, "year="
+      end
     end
   end
 end

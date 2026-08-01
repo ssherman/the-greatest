@@ -1,6 +1,7 @@
 class Music::Artists::CategoriesController < ApplicationController
   include Pagy::Method
   include Cacheable
+  include PathBasedPagination
 
   layout "music/application"
 
@@ -15,7 +16,7 @@ class Music::Artists::CategoriesController < ApplicationController
     @category = Music::Category.active.friendly.find(params[:id])
 
     artists_query = build_ranked_artists_query
-    @pagy, @artists = pagy(artists_query, limit: 100)
+    @pagy, @artists = pagy(artists_query, limit: 100, **pagy_path_options)
   end
 
   private

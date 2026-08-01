@@ -1,6 +1,7 @@
 class Music::Albums::ListsController < ApplicationController
   include Pagy::Method
   include Cacheable
+  include PathBasedPagination
 
   layout "music/application"
 
@@ -21,7 +22,7 @@ class Music::Albums::ListsController < ApplicationController
       .includes(list: :list_items)
       .order(sort_order)
 
-    @pagy, @ranked_lists = pagy(ranked_lists_query, limit: 25)
+    @pagy, @ranked_lists = pagy(ranked_lists_query, limit: 25, **pagy_path_options)
   end
 
   def show
@@ -37,6 +38,6 @@ class Music::Albums::ListsController < ApplicationController
         {primary_image: {file_attachment: {blob: {variant_records: {image_attachment: :blob}}}}}
       ]
     ).order(:position)
-    @pagy, @pagy_list_items = pagy(list_items_query, limit: 100)
+    @pagy, @pagy_list_items = pagy(list_items_query, limit: 100, **pagy_path_options)
   end
 end

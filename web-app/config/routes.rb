@@ -16,6 +16,7 @@ Rails.application.routes.draw do
 
     # Artist rankings (outside rc scope - always uses default primary configs for both albums and songs)
     get "artists", to: "music/artists/ranked_items#index", as: :artists
+    get "artists/page/:page", to: "music/artists/ranked_items#index", as: :artists_page, constraints: {page: /\d+/}
 
     # Category pages (outside rc scope - always uses default primary configs for both artists and albums)
     get "categories/:id", to: "music/categories#show", as: :music_category
@@ -24,33 +25,53 @@ Rails.application.routes.draw do
     scope "(/rc/:ranking_configuration_id)" do
       # Album routes
       get "albums", to: "music/albums/ranked_items#index", as: :albums
+      get "albums/page/:page", to: "music/albums/ranked_items#index", as: :albums_page, constraints: {page: /\d+/}
       get "albums/lists", to: "music/albums/lists#index", as: :music_albums_lists
+      get "albums/lists/page/:page", to: "music/albums/lists#index", as: :music_albums_lists_page, constraints: {page: /\d+/}
       get "albums/lists/:id", to: "music/albums/lists#show", as: :music_album_list
+      get "albums/lists/:id/page/:page", to: "music/albums/lists#show", as: :music_album_list_page, constraints: {page: /\d+/}
       get "albums/categories/:id", to: "music/albums/categories#show", as: :music_album_category
+      get "albums/categories/:id/page/:page", to: "music/albums/categories#show", as: :music_album_category_page, constraints: {page: /\d+/}
       # Year-filtered albums (must come before :id to avoid treating "1990s" as a slug)
       get "albums/since/:year", to: "music/albums/ranked_items#index", as: :albums_since_year,
         constraints: {year: /\d{4}/}, defaults: {year_mode: "since"}
+      get "albums/since/:year/page/:page", to: "music/albums/ranked_items#index", as: :albums_since_year_page,
+        constraints: {year: /\d{4}/, page: /\d+/}, defaults: {year_mode: "since"}
       get "albums/through/:year", to: "music/albums/ranked_items#index", as: :albums_through_year,
         constraints: {year: /\d{4}/}, defaults: {year_mode: "through"}
+      get "albums/through/:year/page/:page", to: "music/albums/ranked_items#index", as: :albums_through_year_page,
+        constraints: {year: /\d{4}/, page: /\d+/}, defaults: {year_mode: "through"}
       get "albums/:year", to: "music/albums/ranked_items#index", as: :albums_by_year,
         constraints: {year: /\d{4}(s|-\d{4})?/}
+      get "albums/:year/page/:page", to: "music/albums/ranked_items#index", as: :albums_by_year_page,
+        constraints: {year: /\d{4}(s|-\d{4})?/, page: /\d+/}
       get "album/:slug", to: "music/albums#show", as: :album
 
       # Song routes
       get "songs", to: "music/songs/ranked_items#index", as: :songs
+      get "songs/page/:page", to: "music/songs/ranked_items#index", as: :songs_page, constraints: {page: /\d+/}
       get "songs/lists", to: "music/songs/lists#index", as: :music_songs_lists
+      get "songs/lists/page/:page", to: "music/songs/lists#index", as: :music_songs_lists_page, constraints: {page: /\d+/}
       get "songs/lists/:id", to: "music/songs/lists#show", as: :music_song_list
+      get "songs/lists/:id/page/:page", to: "music/songs/lists#show", as: :music_song_list_page, constraints: {page: /\d+/}
       # Year-filtered songs (must come before :id to avoid treating "1990s" as a slug)
       get "songs/since/:year", to: "music/songs/ranked_items#index", as: :songs_since_year,
         constraints: {year: /\d{4}/}, defaults: {year_mode: "since"}
+      get "songs/since/:year/page/:page", to: "music/songs/ranked_items#index", as: :songs_since_year_page,
+        constraints: {year: /\d{4}/, page: /\d+/}, defaults: {year_mode: "since"}
       get "songs/through/:year", to: "music/songs/ranked_items#index", as: :songs_through_year,
         constraints: {year: /\d{4}/}, defaults: {year_mode: "through"}
+      get "songs/through/:year/page/:page", to: "music/songs/ranked_items#index", as: :songs_through_year_page,
+        constraints: {year: /\d{4}/, page: /\d+/}, defaults: {year_mode: "through"}
       get "songs/:year", to: "music/songs/ranked_items#index", as: :songs_by_year,
         constraints: {year: /\d{4}(s|-\d{4})?/}
+      get "songs/:year/page/:page", to: "music/songs/ranked_items#index", as: :songs_by_year_page,
+        constraints: {year: /\d{4}(s|-\d{4})?/, page: /\d+/}
       get "song/:slug", to: "music/songs#show", as: :song
 
       # Artist routes
       get "artists/categories/:id", to: "music/artists/categories#show", as: :music_artist_category
+      get "artists/categories/:id/page/:page", to: "music/artists/categories#show", as: :music_artist_category_page, constraints: {page: /\d+/}
       get "artists/:id", to: "music/artists#show", as: :artist
     end
 

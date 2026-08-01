@@ -1,6 +1,7 @@
 class Music::Albums::RankedItemsController < Music::RankedItemsController
   include Pagy::Method
   include Cacheable
+  include PathBasedPagination
 
   layout "music/application"
 
@@ -26,6 +27,6 @@ class Music::Albums::RankedItemsController < Music::RankedItemsController
 
     albums_query = albums_query.order(:rank)
 
-    @pagy, @albums = pagy(albums_query, limit: 100)
+    @pagy, @albums = pagy(albums_query, limit: 100, **pagy_path_options)
   end
 end
