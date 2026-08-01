@@ -21,7 +21,7 @@
   <% if @ranked_books.any? %>
     <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
       <% @ranked_books.each_with_index do |ranked_item, index| %>
-        <%= render Books::CardComponent.new(ranked_item: ranked_item, index: index) %>
+        <%= render Books::CardComponent.new(book: ranked_item.item, rank: ranked_item.rank, index: index) %>
       <% end %>
     </div>
 

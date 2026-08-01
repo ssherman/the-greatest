@@ -1,22 +1,15 @@
 # frozen_string_literal: true
 
 class Books::CardComponent < ViewComponent::Base
-  def initialize(ranked_item:, index:)
-    @ranked_item = ranked_item
+  def initialize(book:, rank:, index:)
+    @book = book
+    @rank = rank
     @index = index
   end
 
   private
 
-  attr_reader :ranked_item, :index
-
-  def book
-    @book ||= ranked_item.item
-  end
-
-  def rank
-    ranked_item.rank
-  end
+  attr_reader :book, :rank, :index
 
   def author_names
     book.book_authors.map { |book_author| book_author.author.name }.join(", ")

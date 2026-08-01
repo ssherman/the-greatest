@@ -70,5 +70,17 @@ module Books
       assert_nil @controller.view_assigns["ranked_item"]
       refute @controller.view_assigns["indexable"]
     end
+
+    test "list names on the book page link to the list" do
+      book = books_books(:war_and_peace)
+      list = Books::List.create!(name: "Guardian 100", status: :active)
+      RankedList.create!(list: list, ranking_configuration: @rc, weight: 50)
+      ListItem.create!(list: list, listable: book, position: 1)
+
+      get "/book/#{book.slug}"
+
+      assert_response :success
+      assert_select "a[href=?]", "/lists/#{list.id}"
+    end
   end
 end

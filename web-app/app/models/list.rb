@@ -61,7 +61,7 @@ class List < ApplicationRecord
   validates :name, presence: true
   validates :type, presence: true
   validates :status, presence: true
-  validates :url, format: {with: URI::RFC2396_PARSER.make_regexp, allow_blank: true}
+  validates :url, format: {with: %r{\Ahttps?://}i, message: "must be an http or https url"}, allow_blank: true
   validates :num_years_covered, numericality: {greater_than: 0, only_integer: true}, allow_nil: true
   validate :items_json_format
 

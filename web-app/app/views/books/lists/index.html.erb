@@ -1,0 +1,63 @@
+<%
+  content_for :page_title, "The Greatest Books Lists | The Greatest Books"
+  content_for :meta_description, "Every published best-books list we aggregate to build the rankings, weighted by quality, credibility and scope."
+%>
+
+<div class="space-y-8">
+  <h1 class="text-3xl sm:text-4xl font-bold text-center text-balance">The Lists</h1>
+
+  <p class="max-w-3xl mx-auto text-center text-base-content/80">
+    These are the lists we aggregate to build the rankings. Each one carries a weight based on its
+    quality, credibility and scope — the higher the weight, the more it counts.
+  </p>
+
+  <div class="flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
+    <%= form_with url: books_lists_path, method: :get, class: "join" do |f| %>
+      <%= f.hidden_field :sort, value: @sort %>
+      <%= f.search_field :q, value: @query, placeholder: "Search lists",
+            "aria-label": "Search lists by name, source or url",
+            class: "input input-bordered join-item" %>
+      <%= f.submit "Search", class: "btn btn-primary join-item" %>
+    <% end %>
+
+    <div class="join" role="group" aria-label="Sort lists">
+      <%= link_to "Weight", books_lists_path(q: @query),
+            class: "btn join-item #{"btn-active" if @sort == "weight"}" %>
+      <%= link_to "Recently added", books_lists_path(sort: "newest", q: @query),
+            class: "btn join-item #{"btn-active" if @sort == "newest"}" %>
+    </div>
+  </div>
+
+  <% if @query %>
+    <p class="text-center text-base-content/70">
+      <%= pluralize(@pagy.count, "list") %> matching “<%= @query %>”.
+      <%= link_to "Clear", books_lists_path, class: "link" %>
+    </p>
+  <% end %>
+
+  <% if @ranked_lists.any? %>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <% @ranked_lists.each do |ranked_list| %>
+        <%= render Lists::CardComponent.new(
+              ranked_list: ranked_list,
+              item_count: @item_counts.fetch(ranked_list.list_id, 0),
+              path: books_list_path(ranked_list.list_id),
+              noun: "books"
+            ) %>
+      <% end %>
+    </div>
+
+    <div class="flex justify-center">
+      <%== @pagy.series_nav(slots: 5) %>
+    </div>
+    <p class="text-center text-sm text-base-content/70">
+      Page <%= number_with_delimiter(@pagy.page) %> of <%= number_with_delimiter(@pagy.last) %>
+    </p>
+  <% else %>
+    <div class="text-center py-16">
+      <div class="text-6xl mb-4">📚</div>
+      <h2 class="text-2xl font-bold mb-2">No lists found</h2>
+      <p class="text-base-content/70">Try a different search.</p>
+    </div>
+  <% end %>
+</div>

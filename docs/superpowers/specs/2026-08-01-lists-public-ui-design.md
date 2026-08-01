@@ -286,6 +286,17 @@ the legacy shapes and need no redirect. The `\d+` constraint on `:id` is what ke
 | `/lists/condensed`, `/lists/help`, `/lists/pending_lists`, `/lists/specialized_edit` | `/lists` |
 | `/v/:view_type/lists/…` | the same path without the `/v/:view_type` prefix |
 
+**Decision — legacy `/rc/:id/lists…` is left 404ing.** The legacy app nested lists under both
+`(/v/:view_type)` and `(/rc/:ranking_configuration_id)`, so `/rc/68/lists`, `/rc/68/lists/28`, and
+`/v/grid/rc/68/lists/28` were all real, indexed URLs. This increment does not redirect them, and
+they 404 today. That's deliberate, not an oversight: in the new app `/rc/:id/lists` already means
+something else — the live ranking-configuration preview added by this increment — so the legacy and
+new meanings collide and only one can be served at that path. Increment 1 could resolve the same
+shape of collision for `/rc/:id/books/:id` by matching and discarding the rc segment, because that
+path is otherwise unused; `/lists` doesn't have that luxury since `/rc/:id/lists` is live. We judged
+the traffic on these legacy `/rc/…/lists` URLs negligible; revisit with real 404 logs if that turns
+out to be wrong.
+
 `Books::List` does **not** use friendly_id, so `.find(params[:id])` is safe here. The numeric-slug
 footgun documented in the books public UI design is a `Books::Book` problem only.
 

@@ -79,12 +79,37 @@ class ListTest < ActiveSupport::TestCase
     list = lists(:basic_list)
     list.url = "not-a-url"
     assert_not list.valid?
-    assert_includes list.errors[:url], "is invalid"
+    assert_includes list.errors[:url], "must be an http or https url"
   end
 
   test "should accept blank URL" do
     list = lists(:basic_list)
     list.url = ""
+    assert list.valid?
+  end
+
+  test "rejects a javascript scheme url" do
+    list = lists(:basic_list)
+    list.url = "javascript:alert(1)"
+
+    assert_not list.valid?
+    assert_includes list.errors[:url], "must be an http or https url"
+  end
+
+  test "rejects a data scheme url" do
+    list = lists(:basic_list)
+    list.url = "data:text/html,<script>alert(1)</script>"
+
+    assert_not list.valid?
+  end
+
+  test "accepts http and https urls" do
+    list = lists(:basic_list)
+
+    list.url = "http://example.com/list"
+    assert list.valid?
+
+    list.url = "https://example.com/list"
     assert list.valid?
   end
 

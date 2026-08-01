@@ -371,6 +371,40 @@ Rails.application.routes.draw do
     end
     get "items/:id", to: "books/legacy_books#show", constraints: {id: /\d+/}
 
+    get "lists/sorted-by/created_at(/page/:page)", to: redirect("/lists?sort=newest", status: 301)
+    get "lists/sorted-by/:sort(/page/:page)", to: redirect("/lists", status: 301)
+    get "lists/search_results", to: redirect("/lists", status: 301)
+    get "lists/condensed", to: redirect("/lists", status: 301)
+    get "lists/help", to: redirect("/lists", status: 301)
+    get "lists/pending_lists", to: redirect("/lists", status: 301)
+    get "lists/specialized_edit", to: redirect("/lists", status: 301)
+    get "v/:view_type/lists", to: redirect("/lists", status: 301)
+    get "v/:view_type/lists/page/:page", to: redirect("/lists", status: 301), constraints: {page: /\d+/}
+    get "v/:view_type/lists/:id", to: redirect("/lists/%{id}", status: 301), constraints: {id: /\d+/}
+    get "v/:view_type/lists/:id/page/:page", to: redirect("/lists/%{id}", status: 301),
+      constraints: {id: /\d+/, page: /\d+/}
+
+    get "lists/page/1", to: redirect("/lists", status: 301)
+    get "lists/:id/page/1", to: redirect("/lists/%{id}", status: 301), constraints: {id: /\d+/}
+
+    get "lists", to: "books/lists#index", as: :books_lists
+    get "lists/page/:page", to: "books/lists#index", as: :books_lists_page, constraints: {page: /\d+/}
+    get "lists/:id", to: "books/lists#show", as: :books_list, constraints: {id: /\d+/}
+    get "lists/:id/page/:page", to: "books/lists#show", as: :books_list_page,
+      constraints: {id: /\d+/, page: /\d+/}
+
+    get "rc/:ranking_configuration_id/lists/page/1", to: redirect("/lists", status: 301)
+    get "rc/:ranking_configuration_id/lists/:id/page/1", to: redirect("/lists/%{id}", status: 301),
+      constraints: {id: /\d+/}
+
+    get "rc/:ranking_configuration_id/lists", to: "books/lists#index", as: :books_rc_lists
+    get "rc/:ranking_configuration_id/lists/page/:page", to: "books/lists#index",
+      as: :books_rc_lists_page, constraints: {page: /\d+/}
+    get "rc/:ranking_configuration_id/lists/:id", to: "books/lists#show", as: :books_rc_list,
+      constraints: {id: /\d+/}
+    get "rc/:ranking_configuration_id/lists/:id/page/:page", to: "books/lists#show",
+      as: :books_rc_list_page, constraints: {id: /\d+/, page: /\d+/}
+
     # Ranked index. Root is canonical; pagination is path-based.
     # Order matters: /page/1 must precede the generic /page/:page.
     root to: "books/ranked_items#index", as: :books_root
