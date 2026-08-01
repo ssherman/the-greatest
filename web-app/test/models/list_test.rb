@@ -276,4 +276,34 @@ class ListTest < ActiveSupport::TestCase
 
     assert list.reload.activated_at > first
   end
+
+  test "search_text matches on name case-insensitively" do
+    assert_includes List.search_text("basic"), lists(:basic_list)
+    assert_includes List.search_text("BASIC"), lists(:basic_list)
+  end
+
+  test "search_text matches on source" do
+    assert_includes List.search_text("Test Source"), lists(:basic_list)
+  end
+
+  test "search_text matches on url" do
+    assert_includes List.search_text("example.com"), lists(:basic_list)
+  end
+
+  test "search_text returns all lists when the query is blank" do
+    assert_equal List.count, List.search_text("").count
+    assert_equal List.count, List.search_text(nil).count
+    assert_equal List.count, List.search_text("   ").count
+  end
+
+  test "search_text escapes SQL LIKE wildcards" do
+    list = Music::Songs::List.create!(name: "Top_100 Songs", status: :unapproved)
+
+    results = List.search_text("_")
+
+    assert_includes results, list
+    assert_not_includes results, lists(:basic_list)
+  ensure
+    list&.destroy
+  end
 end

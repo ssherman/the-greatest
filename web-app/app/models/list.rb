@@ -75,6 +75,11 @@ class List < ApplicationRecord
     sanitized = "%" + sanitize_sql_like(query.to_s.strip) + "%"
     where("name ILIKE ? OR source ILIKE ?", sanitized, sanitized)
   }
+  scope :search_text, ->(query) {
+    return all if query.blank?
+    sanitized = "%" + sanitize_sql_like(query.to_s.strip) + "%"
+    where("name ILIKE :q OR source ILIKE :q OR url ILIKE :q", q: sanitized)
+  }
 
   # Public Methods
   def has_penalties?
