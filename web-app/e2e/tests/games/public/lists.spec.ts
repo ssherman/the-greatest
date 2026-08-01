@@ -10,16 +10,16 @@ test.describe('Games Lists', () => {
   test('lists index shows list cards', async ({ page }) => {
     await page.goto('/lists');
 
-    // Verify at least one list card is present (list cards are still a.card)
-    const listCards = page.locator('a.card');
+    // Verify at least one list card is present
+    const listCards = page.locator('.card h3 a');
     await expect(listCards.first()).toBeVisible();
   });
 
   test('clicking a list navigates to list show page', async ({ page }) => {
     await page.goto('/lists');
 
-    const firstListCard = page.locator('a.card').first();
-    const listName = await firstListCard.locator('.card-title').textContent();
+    const firstListCard = page.locator('.card h3 a').first();
+    const listName = await firstListCard.textContent();
     await firstListCard.click();
 
     // Show page should have an h1 matching the list name
@@ -30,7 +30,7 @@ test.describe('Games Lists', () => {
   test('list show page displays metadata badges', async ({ page }) => {
     await page.goto('/lists');
 
-    const firstListCard = page.locator('a.card').first();
+    const firstListCard = page.locator('.card h3 a').first();
     await firstListCard.click();
 
     // Wait for show page
@@ -43,7 +43,7 @@ test.describe('Games Lists', () => {
   test('list show page displays game cards in grid', async ({ page }) => {
     await page.goto('/lists');
 
-    const firstListCard = page.locator('a.card').first();
+    const firstListCard = page.locator('.card h3 a').first();
     await firstListCard.click();
     await expect(page).toHaveURL(/\/lists\/\d+/);
 
@@ -55,7 +55,7 @@ test.describe('Games Lists', () => {
   test('list show page game cards have rank badges', async ({ page }) => {
     await page.goto('/lists');
 
-    const firstListCard = page.locator('a.card').first();
+    const firstListCard = page.locator('.card h3 a').first();
     await firstListCard.click();
     await expect(page).toHaveURL(/\/lists\/\d+/);
 
@@ -67,7 +67,7 @@ test.describe('Games Lists', () => {
     await page.goto('/lists');
 
     // Navigate to the first list
-    const firstListCard = page.locator('a.card').first();
+    const firstListCard = page.locator('.card h3 a').first();
     await firstListCard.click();
     await expect(page).toHaveURL(/\/lists\/\d+/);
 
@@ -81,5 +81,39 @@ test.describe('Games Lists', () => {
     await firstGameLink.click();
     await expect(page).toHaveURL(/\/game\//);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  });
+
+  test('pagination links are path-based', async ({ page }) => {
+    await page.goto('/lists');
+
+    await expect(page.locator('nav.pagy').first()).toBeVisible();
+  });
+
+  test('the newest sort is reachable and keeps its state', async ({ page }) => {
+    await page.goto('/lists');
+
+    await page.getByRole('link', { name: 'Recently added' }).click();
+
+    await expect(page).toHaveURL(/sort=newest/);
+  });
+
+  test('search narrows the results', async ({ page }) => {
+    await page.goto('/lists?q=the');
+
+    await expect(page.getByText(/matching/)).toBeVisible();
+  });
+
+  test('page one redirects to the canonical path', async ({ page }) => {
+    await page.goto('/lists/page/1');
+
+    await expect(page).toHaveURL(/\/lists$/);
+  });
+
+  test('the list page shows the full weight breakdown', async ({ page }) => {
+    await page.goto('/lists');
+    await page.locator('.card h3 a').first().click();
+
+    await expect(page.getByRole('heading', { name: 'How good is this list?' })).toBeVisible();
+    await expect(page.getByText('Base weight')).toBeVisible();
   });
 });
