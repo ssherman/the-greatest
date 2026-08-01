@@ -72,5 +72,22 @@ module Games
       get "/lists/#{@list.id}?page=9999"
       assert_response :success
     end
+
+    test "list show pagination is path-based" do
+      list = lists(:games_list)
+
+      get "/lists/#{list.id}"
+
+      assert_equal "/lists/#{list.id}/page/2", @controller.view_assigns["pagy"].page_url(2)
+    end
+
+    test "list show resolves a path-based page" do
+      list = lists(:games_list)
+
+      get "/lists/#{list.id}/page/2"
+
+      assert_response :success
+      assert_equal 2, @controller.view_assigns["pagy"].page
+    end
   end
 end

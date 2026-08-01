@@ -36,5 +36,16 @@ module Games
       get "/categories/action"
       assert_response :not_found
     end
+
+    test "category show pagination is path-based and does not leak the id" do
+      category = categories(:games_action_genre)
+
+      get "/categories/#{category.id}"
+
+      url = @controller.view_assigns["pagy"].page_url(2)
+
+      assert_equal "/categories/#{category.id}/page/2", url
+      refute_includes url, "id="
+    end
   end
 end

@@ -460,19 +460,29 @@ Rails.application.routes.draw do
     scope "(/rc/:ranking_configuration_id)" do
       get "lists", to: "games/lists#index", as: :games_lists
       get "lists/:id", to: "games/lists#show", as: :games_list
+      get "lists/:id/page/:page", to: "games/lists#show", as: :games_list_page, constraints: {page: /\d+/}
       get "video-games", to: "games/ranked_items#index", as: :video_games
+      get "video-games/page/:page", to: "games/ranked_items#index", as: :video_games_page, constraints: {page: /\d+/}
       # Year-filtered games (must come before generic patterns)
       get "video-games/since/:year", to: "games/ranked_items#index", as: :video_games_since_year,
         constraints: {year: /\d{4}/}, defaults: {year_mode: "since"}
+      get "video-games/since/:year/page/:page", to: "games/ranked_items#index", as: :video_games_since_year_page,
+        constraints: {year: /\d{4}/, page: /\d+/}, defaults: {year_mode: "since"}
       get "video-games/through/:year", to: "games/ranked_items#index", as: :video_games_through_year,
         constraints: {year: /\d{4}/}, defaults: {year_mode: "through"}
+      get "video-games/through/:year/page/:page", to: "games/ranked_items#index", as: :video_games_through_year_page,
+        constraints: {year: /\d{4}/, page: /\d+/}, defaults: {year_mode: "through"}
       get "video-games/:year", to: "games/ranked_items#index", as: :video_games_by_year,
         constraints: {year: /\d{4}(s|-\d{4})?/}
+      get "video-games/:year/page/:page", to: "games/ranked_items#index", as: :video_games_by_year_page,
+        constraints: {year: /\d{4}(s|-\d{4})?/, page: /\d+/}
       get "game/:slug", to: "games/games#show", as: :game
       get "categories/:id", to: "games/categories#show", as: :games_category
+      get "categories/:id/page/:page", to: "games/categories#show", as: :games_category_page, constraints: {page: /\d+/}
     end
 
     root to: "games/ranked_items#index", as: :games_root
+    get "page/:page", to: "games/ranked_items#index", as: :games_root_page, constraints: {page: /\d+/}
   end
 
   # Admin routes (global - no domain constraint)

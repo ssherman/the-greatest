@@ -1,6 +1,7 @@
 class Games::RankedItemsController < RankedItemsController
   include Pagy::Method
   include Cacheable
+  include PathBasedPagination
 
   layout "games/application"
 
@@ -30,7 +31,7 @@ class Games::RankedItemsController < RankedItemsController
 
     games_query = games_query.order(:rank)
 
-    @pagy, @games = pagy(games_query, limit: 100)
+    @pagy, @games = pagy(games_query, limit: 100, **pagy_path_options)
   end
 
   private

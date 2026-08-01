@@ -123,5 +123,49 @@ module Games
       assert_response :success
       assert_match(/coming soon/i, response.body)
     end
+
+    test "path-based pagination resolves the page" do
+      get "/video-games/page/2"
+
+      assert_response :success
+      assert_equal 2, @controller.view_assigns["pagy"].page
+    end
+
+    test "query-string pagination still resolves the page" do
+      get "/video-games?page=2"
+
+      assert_response :success
+      assert_equal 2, @controller.view_assigns["pagy"].page
+    end
+
+    test "generated page urls are path-based" do
+      get "/video-games"
+
+      assert_equal "/video-games/page/2", @controller.view_assigns["pagy"].page_url(2)
+    end
+
+    test "page one links to the bare path, never /page/1" do
+      get "/video-games/page/2"
+
+      assert_equal "/video-games", @controller.view_assigns["pagy"].page_url(1)
+    end
+
+    test "year filter segments do not leak into the query string" do
+      get "/video-games/1990s"
+
+      url = @controller.view_assigns["pagy"].page_url(2)
+
+      assert_equal "/video-games/1990s/page/2", url
+      refute_includes url, "year="
+    end
+
+    test "ranking configuration scope is preserved in generated page urls" do
+      get "/rc/#{ranking_configurations(:games_global).id}/video-games"
+
+      url = @controller.view_assigns["pagy"].page_url(2)
+
+      assert_equal "/rc/#{ranking_configurations(:games_global).id}/video-games/page/2", url
+      refute_includes url, "ranking_configuration_id="
+    end
   end
 end
