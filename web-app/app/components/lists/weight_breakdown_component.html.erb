@@ -1,0 +1,49 @@
+<div class="card bg-base-200">
+  <div class="card-body">
+    <h2 class="card-title">How good is this list?</h2>
+
+    <% if ranked_list.nil? %>
+      <p class="text-base-content/70">This list is not used for any active rankings.</p>
+    <% elsif details.blank? %>
+      <p class="text-base-content/70">Weight calculation details not available.</p>
+    <% else %>
+      <p class="text-3xl font-bold">Weight <%= final_weight %>%</p>
+
+      <dl class="mt-4 space-y-1 text-sm">
+        <div class="flex justify-between gap-4">
+          <dt>Base weight</dt>
+          <dd class="whitespace-nowrap"><%= base_weight %>%</dd>
+        </div>
+      </dl>
+
+      <% if penalties.any? %>
+        <h3 class="font-semibold mt-4">What lowers this list's weight</h3>
+        <dl class="space-y-1 text-sm">
+          <% penalties.each do |penalty| %>
+            <div class="flex justify-between gap-4">
+              <dt><%= penalty["penalty_name"] %></dt>
+              <dd class="whitespace-nowrap">−<%= pct(penalty["value"]) %>%</dd>
+            </div>
+          <% end %>
+
+          <div class="flex justify-between gap-4 border-t border-base-300 pt-1 font-semibold">
+            <dt>Total penalty</dt>
+            <dd class="whitespace-nowrap">−<%= total_penalty %>%</dd>
+          </div>
+
+          <% if quality_bonus %>
+            <div class="flex justify-between gap-4 text-success">
+              <dt>High quality source bonus</dt>
+              <dd class="whitespace-nowrap">+<%= quality_bonus %>%</dd>
+            </div>
+          <% end %>
+        </dl>
+      <% end %>
+
+      <div class="flex justify-between gap-4 border-t border-base-300 mt-2 pt-2 font-bold">
+        <span>Final weight</span>
+        <span class="whitespace-nowrap"><%= final_weight %>%</span>
+      </div>
+    <% end %>
+  </div>
+</div>
