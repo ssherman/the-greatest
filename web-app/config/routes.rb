@@ -384,11 +384,18 @@ Rails.application.routes.draw do
     get "v/:view_type/lists/:id/page/:page", to: redirect("/lists/%{id}", status: 301),
       constraints: {id: /\d+/, page: /\d+/}
 
+    get "lists/page/1", to: redirect("/lists", status: 301)
+    get "lists/:id/page/1", to: redirect("/lists/%{id}", status: 301), constraints: {id: /\d+/}
+
     get "lists", to: "books/lists#index", as: :books_lists
     get "lists/page/:page", to: "books/lists#index", as: :books_lists_page, constraints: {page: /\d+/}
     get "lists/:id", to: "books/lists#show", as: :books_list, constraints: {id: /\d+/}
     get "lists/:id/page/:page", to: "books/lists#show", as: :books_list_page,
       constraints: {id: /\d+/, page: /\d+/}
+
+    get "rc/:ranking_configuration_id/lists/page/1", to: redirect("/lists", status: 301)
+    get "rc/:ranking_configuration_id/lists/:id/page/1", to: redirect("/lists/%{id}", status: 301),
+      constraints: {id: /\d+/}
 
     get "rc/:ranking_configuration_id/lists", to: "books/lists#index", as: :books_rc_lists
     get "rc/:ranking_configuration_id/lists/page/:page", to: "books/lists#index",

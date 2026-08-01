@@ -224,6 +224,24 @@ module Books
       assert_match(/no-store/, response.headers["Cache-Control"])
     end
 
+    test "page one of the index redirects to the canonical path" do
+      get "/lists/page/1"
+      assert_redirected_to "/lists"
+      assert_response :moved_permanently
+    end
+
+    test "page one of a list redirects to the canonical path" do
+      get "/lists/#{@list.id}/page/1"
+      assert_redirected_to "/lists/#{@list.id}"
+      assert_response :moved_permanently
+    end
+
+    test "page one of an rc-scoped index redirects to the canonical path" do
+      get "/rc/#{@rc.id}/lists/page/1"
+      assert_redirected_to "/lists"
+      assert_response :moved_permanently
+    end
+
     private
 
     def seed_lists(count)
