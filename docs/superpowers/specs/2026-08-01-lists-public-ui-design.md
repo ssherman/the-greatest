@@ -196,8 +196,11 @@ Values come from `base_values.base_weight`, the `penalties` array (`penalty_name
 `final_calculation.final_weight`. Weight is always rendered as a percentage.
 
 Renders "Weight calculation details not available" when the JSONB is absent, and "This list is not
-used for any active rankings" when there is no `ranked_list` at all. It does **not** replace
-`Lists::SimplePenaltySummaryComponent`, which stays where it is until nothing references it.
+used for any active rankings" when there is no `ranked_list` at all.
+
+`Lists::SimplePenaltySummaryComponent` is **not** deleted. Games drops it in increment 3, but
+`music/songs/lists/show` and `music/albums/lists/show` still render it and music is out of scope.
+Its test stays green.
 
 ### `Lists::RowComponent`
 
