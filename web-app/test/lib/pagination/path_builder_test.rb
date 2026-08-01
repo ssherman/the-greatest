@@ -61,10 +61,39 @@ module Pagination
       assert_equal "/lists/page/3", builder.base_path
     end
 
+    test "from_request moves a format suffix to the end when there is no page segment" do
+      builder = Pagination::PathBuilder.from_request(fake_request("/albums.html", format: "html"))
+
+      assert_equal "/albums", builder.base_path
+      assert_equal "/albums/page/2.html", builder.call(2)
+    end
+
+    test "from_request replaces the page segment and keeps the format suffix at the end" do
+      builder = Pagination::PathBuilder.from_request(fake_request("/albums/page/2.html", format: "html"))
+
+      assert_equal "/albums", builder.base_path
+      assert_equal "/albums/page/3.html", builder.call(3)
+    end
+
+    test "from_request drops the page segment but keeps the format suffix for page 1" do
+      builder = Pagination::PathBuilder.from_request(fake_request("/albums/page/2.html", format: "html"))
+
+      assert_equal "/albums.html", builder.call(1)
+    end
+
+    test "from_request with no format behaves exactly as before" do
+      builder = Pagination::PathBuilder.from_request(fake_request("/albums/page/2"))
+
+      assert_nil builder.instance_variable_get(:@format)
+      assert_equal "/albums", builder.base_path
+      assert_equal "/albums/page/3", builder.call(3)
+      assert_equal "/albums", builder.call(1)
+    end
+
     private
 
-    def fake_request(path)
-      Struct.new(:path).new(path)
+    def fake_request(path, format: nil)
+      Struct.new(:path, :path_parameters).new(path, {format: format}.compact)
     end
   end
 end

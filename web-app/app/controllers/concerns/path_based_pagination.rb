@@ -3,6 +3,12 @@ module PathBasedPagination
 
   private
 
+  # A paged URL must never render a fallback body: Cacheable would store one
+  # edge entry per bogus page number.
+  def reject_paged_request!
+    raise ActiveRecord::RecordNotFound if params[:page].to_i > 1
+  end
+
   # Wraps pagy with the path-based options and a bounds check. Pagy serves an
   # empty 200 for any page past the last one, which would let a crawler mint
   # unbounded thin pages that Cacheable then stores at the edge for six hours.

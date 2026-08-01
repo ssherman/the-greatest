@@ -118,6 +118,12 @@ module Music
         assert_equal "/albums/page/2", @controller.view_assigns["pagy"].page_url(2)
       end
 
+      test "generated page urls keep the format suffix at the end" do
+        get "/albums.html"
+
+        assert_equal "/albums/page/2.html", @controller.view_assigns["pagy"].page_url(2)
+      end
+
       test "the year filter does not leak into the query string" do
         get "/albums/since/1990"
 

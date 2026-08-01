@@ -26,6 +26,13 @@ module Music
         assert_response :success
       end
 
+      test "high page number 404s when no ranking configuration exists" do
+        Music::Artists::RankingConfiguration.stubs(:default_primary).returns(nil)
+
+        get "/artists/page/2"
+        assert_response :not_found
+      end
+
       test "path-based pagination resolves the page" do
         seed_ranked_artists(150)
 

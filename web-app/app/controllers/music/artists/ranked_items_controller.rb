@@ -11,6 +11,7 @@ class Music::Artists::RankedItemsController < ApplicationController
     @ranking_configuration = Music::Artists::RankingConfiguration.default_primary
 
     unless @ranking_configuration
+      reject_paged_request!
       @artists = []
       @pagy = nil
       return

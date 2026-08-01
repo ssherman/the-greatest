@@ -132,6 +132,19 @@ module Games
       assert_match(/coming soon/i, response.body)
     end
 
+    test "coming soon page 1 still renders when no ranking configuration exists" do
+      Games::RankingConfiguration.stubs(:default_primary).returns(nil)
+      get "/video-games"
+      assert_response :success
+      assert_match(/coming soon/i, response.body)
+    end
+
+    test "high page number 404s when no ranking configuration exists" do
+      Games::RankingConfiguration.stubs(:default_primary).returns(nil)
+      get "/video-games/page/2"
+      assert_response :not_found
+    end
+
     test "path-based pagination resolves the page" do
       seed_ranked_games(150)
 

@@ -15,7 +15,10 @@ class Games::RankedItemsController < RankedItemsController
   end
 
   def index
-    return render "games/ranked_items/coming_soon" unless @ranking_configuration
+    unless @ranking_configuration
+      reject_paged_request!
+      return render "games/ranked_items/coming_soon"
+    end
 
     @show_hero = !params[:year].present? && !params[:page].present? && !params[:ranking_configuration_id].present?
 
