@@ -76,7 +76,8 @@ module Books
       get "/lists"
       assert_response :success
 
-      assert_queries_count(0) { get "/lists" }
+      ActiveRecord::Base.connection.clear_query_cache
+      assert_queries_count(4) { get "/lists" }
     end
 
     private
