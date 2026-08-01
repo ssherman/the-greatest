@@ -1,0 +1,26 @@
+<div class="card relative bg-base-100 shadow-lg hover:shadow-xl transition-shadow
+            has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-primary">
+  <div class="card-body">
+    <div class="flex items-start justify-between gap-2">
+      <div class="badge badge-primary badge-sm">Weight <%= weight %>%</div>
+      <div class="badge badge-ghost badge-sm"><%= number_with_delimiter(item_count) %> <%= noun %></div>
+    </div>
+
+    <h3 class="card-title text-lg">
+      <%= link_to list.name, path,
+          class: "after:absolute after:inset-0 focus-visible:outline-none hover:text-primary" %>
+    </h3>
+
+    <% if source_line.present? %>
+      <p class="text-sm text-base-content/70"><%= source_line %></p>
+    <% end %>
+
+    <% if list.description.present? %>
+      <p class="text-sm text-base-content/80 line-clamp-2"><%= list.description %></p>
+    <% end %>
+
+    <% if added_ago %>
+      <p class="text-xs text-base-content/60"><%= added_ago %></p>
+    <% end %>
+  </div>
+</div>
