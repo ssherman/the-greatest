@@ -285,7 +285,64 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     refute_includes header, "Completed On"
   end
 
+  # --- pagination ---
+
+  test "list pagination is path-based" do
+    sign_in_as(@user, stub_auth: true)
+
+    get "/my/lists/#{@albums_favorites.id}"
+
+    assert_equal "/my/lists/#{@albums_favorites.id}/page/2", @controller.view_assigns["pagy"].page_url(2)
+  end
+
+  test "resolves a path-based page" do
+    seed_list_items(@albums_favorites, 100)
+    sign_in_as(@user, stub_auth: true)
+
+    get "/my/lists/#{@albums_favorites.id}/page/2"
+
+    assert_response :success
+    assert_equal 2, @controller.view_assigns["pagy"].page
+  end
+
+  test "query-string pagination still resolves the page" do
+    seed_list_items(@albums_favorites, 100)
+    sign_in_as(@user, stub_auth: true)
+
+    get "/my/lists/#{@albums_favorites.id}?page=2"
+
+    assert_response :success
+    assert_equal 2, @controller.view_assigns["pagy"].page
+  end
+
+  test "404s for a page past the last page" do
+    sign_in_as(@user, stub_auth: true)
+
+    get "/my/lists/#{@albums_favorites.id}/page/999999"
+
+    assert_response :not_found
+  end
+
   private
+
+  # Bulk-inserts filler albums + list items so pagination tests can reach page
+  # 2+ against the controller's limit of 100, mirroring the books ranked_items
+  # helper. insert_all skips callbacks deliberately (avoids search indexing).
+  def seed_list_items(list, count)
+    now = Time.current
+    rows = Array.new(count) do |i|
+      {title: "Filler Album #{i}", slug: "filler-album-#{list.id}-#{i}", created_at: now, updated_at: now}
+    end
+    ids = Music::Album.insert_all(rows, returning: :id).rows.flatten
+
+    start_position = list.user_list_items.maximum(:position).to_i + 1
+    UserListItem.insert_all(
+      ids.each_with_index.map do |id, i|
+        {user_list_id: list.id, listable_id: id, listable_type: "Music::Album",
+         position: start_position + i, created_at: now, updated_at: now}
+      end
+    )
+  end
 
   # Distinct listable ids in render order (rows/cards carry data-listable-id),
   # filtered to the items actually in this list.

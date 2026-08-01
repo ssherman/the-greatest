@@ -59,7 +59,7 @@
 
   <%# Only this frame reloads after an add (user-list-add-item controller calls %>
   <%# frame.reload), so the page doesn't flash and the success toast stays up. %>
-  <%= turbo_frame_tag "list_items" do %>
+  <%= turbo_frame_tag "list_items", data: {turbo_action: "advance"} do %>
     <p class="text-sm text-base-content/60 mb-4" data-testid="list-item-count">
       <%= pluralize(@pagy.count, "item") %>
     </p>

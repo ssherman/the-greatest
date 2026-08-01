@@ -1,6 +1,7 @@
 class Games::CategoriesController < ApplicationController
   include Pagy::Method
   include Cacheable
+  include PathBasedPagination
 
   layout "games/application"
 
@@ -15,7 +16,7 @@ class Games::CategoriesController < ApplicationController
     @category = Games::Category.active.friendly.find(params[:id])
 
     games_query = build_ranked_games_query
-    @pagy, @games = pagy(games_query, limit: 100)
+    @pagy, @games = pagy_path(games_query, limit: 100)
   end
 
   private

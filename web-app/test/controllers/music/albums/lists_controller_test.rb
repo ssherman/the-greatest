@@ -71,11 +71,27 @@ module Music
         assert_response :success
       end
 
-      test "should handle page parameter beyond last page gracefully" do
+      test "should return 404 for a page parameter beyond the last page" do
         list = lists(:music_albums_list)
-        # Pagy configured with overflow: :last_page returns last page instead of error
         get "/albums/lists/#{list.id}?page=9999"
-        assert_response :success
+        assert_response :not_found
+      end
+
+      test "pagination links are path-based" do
+        get "/albums/lists"
+
+        assert_equal "/albums/lists/page/2", @controller.view_assigns["pagy"].page_url(2)
+      end
+
+      test "list show pagination is path-based and does not leak the id" do
+        list = lists(:music_albums_list)
+
+        get "/albums/lists/#{list.id}"
+
+        url = @controller.view_assigns["pagy"].page_url(2)
+
+        assert_equal "/albums/lists/#{list.id}/page/2", url
+        refute_includes url, "id="
       end
 
       test "show renders each album's primary description" do

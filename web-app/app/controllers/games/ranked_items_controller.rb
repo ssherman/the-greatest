@@ -1,6 +1,7 @@
 class Games::RankedItemsController < RankedItemsController
   include Pagy::Method
   include Cacheable
+  include PathBasedPagination
 
   layout "games/application"
 
@@ -14,7 +15,10 @@ class Games::RankedItemsController < RankedItemsController
   end
 
   def index
-    return render "games/ranked_items/coming_soon" unless @ranking_configuration
+    unless @ranking_configuration
+      reject_paged_request!
+      return render "games/ranked_items/coming_soon"
+    end
 
     @show_hero = !params[:year].present? && !params[:page].present? && !params[:ranking_configuration_id].present?
 
@@ -30,7 +34,7 @@ class Games::RankedItemsController < RankedItemsController
 
     games_query = games_query.order(:rank)
 
-    @pagy, @games = pagy(games_query, limit: 100)
+    @pagy, @games = pagy_path(games_query, limit: 100)
   end
 
   private

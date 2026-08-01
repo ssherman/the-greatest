@@ -68,9 +68,48 @@ module Games
       assert_response :success
     end
 
-    test "should handle page parameter beyond last page gracefully" do
+    test "should return 404 for a page parameter beyond the last page" do
       get "/lists/#{@list.id}?page=9999"
+      assert_response :not_found
+    end
+
+    test "list show pagination is path-based" do
+      list = lists(:games_list)
+
+      get "/lists/#{list.id}"
+
+      assert_equal "/lists/#{list.id}/page/2", @controller.view_assigns["pagy"].page_url(2)
+    end
+
+    test "list show resolves a path-based page" do
+      list = lists(:games_list)
+      seed_list_items(list, 150)
+
+      get "/lists/#{list.id}/page/2"
+
       assert_response :success
+      assert_equal 2, @controller.view_assigns["pagy"].page
+    end
+
+    private
+
+    # Bulk-inserts filler games + list items so tests can reach page 2+
+    # against the controller's limit of 100. insert_all skips callbacks
+    # deliberately (avoids search indexing per row).
+    def seed_list_items(list, count)
+      now = Time.current
+      rows = Array.new(count) do |i|
+        {title: "Filler Game #{i}", slug: "filler-game-#{list.id}-#{i}", created_at: now, updated_at: now}
+      end
+      ids = Games::Game.insert_all(rows, returning: :id).rows.flatten
+
+      start_position = list.list_items.maximum(:position).to_i + 1
+      ListItem.insert_all(
+        ids.each_with_index.map do |id, i|
+          {list_id: list.id, listable_id: id, listable_type: "Games::Game",
+           position: start_position + i, created_at: now, updated_at: now}
+        end
+      )
     end
   end
 end

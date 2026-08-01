@@ -7,6 +7,7 @@ require "csv"
 class MyListsController < ApplicationController
   include Pagy::Method
   include Cacheable
+  include PathBasedPagination
 
   layout :resolve_layout
 
@@ -54,7 +55,7 @@ class MyListsController < ApplicationController
     collection = (@sort == "ranking") ? ranking_sorted(scope.to_a) : scope
 
     respond_to do |format|
-      format.html { @pagy, @items = pagy(collection, limit: 100) }
+      format.html { @pagy, @items = pagy_path(collection, limit: 100) }
       format.csv do
         items = collection.is_a?(Array) ? collection : collection.to_a
         send_data build_csv(items),
