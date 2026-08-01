@@ -9,6 +9,8 @@ class Lists::WeightBreakdownComponentTest < ViewComponent::TestCase
   end
 
   def full_details(quality_bonus_applied: false)
+    penalty_after = quality_bonus_applied ? 57 : 85
+
     {
       "penalties" => [
         {"penalty_name" => "Voters: not critics or experts", "value" => 60},
@@ -16,14 +18,15 @@ class Lists::WeightBreakdownComponentTest < ViewComponent::TestCase
         {"penalty_name" => "Voters: Unknown Names", "value" => 5.0}
       ],
       "base_values" => {"base_weight" => 100},
+      "penalty_summary" => {"total_before_quality_bonus" => 85},
       "quality_bonus" => {
         "applied" => quality_bonus_applied,
         "penalty_before" => 85,
-        "penalty_after" => quality_bonus_applied ? 57 : 85
+        "penalty_after" => penalty_after
       },
       "final_calculation" => {
         "final_weight" => quality_bonus_applied ? 43 : 15,
-        "total_penalty_percentage" => 85
+        "total_penalty_percentage" => penalty_after
       }
     }
   end
@@ -84,5 +87,29 @@ class Lists::WeightBreakdownComponentTest < ViewComponent::TestCase
 
     assert_no_text "What lowers this list's weight"
     assert_text "Final weight"
+  end
+
+  test "renders penalties ordered by value descending regardless of input order" do
+    details = full_details.merge("penalties" => [
+      {"penalty_name" => "Voters: Unknown Names", "value" => 5.0},
+      {"penalty_name" => "List: only covers 1 language", "value" => 20},
+      {"penalty_name" => "Voters: not critics or experts", "value" => 60}
+    ])
+
+    render_inline(Lists::WeightBreakdownComponent.new(ranked_list: ranked_list_with(details)))
+
+    penalty_names = page.all("dt").map(&:text) - ["Base weight", "Total penalty"]
+    assert_equal ["Voters: not critics or experts", "List: only covers 1 language", "Voters: Unknown Names"], penalty_names
+  end
+
+  test "the fixture's penalty_summary and final_calculation stay internally consistent" do
+    [false, true].each do |quality_bonus_applied|
+      details = full_details(quality_bonus_applied: quality_bonus_applied)
+
+      itemized_sum = details["penalties"].sum { |p| p["value"] }
+      assert_equal details.dig("penalty_summary", "total_before_quality_bonus"), itemized_sum
+
+      assert_equal details.dig("quality_bonus", "penalty_after"), details.dig("final_calculation", "total_penalty_percentage")
+    end
   end
 end

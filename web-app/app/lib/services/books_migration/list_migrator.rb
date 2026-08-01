@@ -54,6 +54,7 @@ module Services
           voter_names_unknown: attrs["voter_names_unknown"],
           raw_content: attrs["raw_html"],
           simplified_content: attrs["formatted_text"],
+          activated_at: (remap_status(attrs["status"]) == 3) ? attrs["updated_at"] : nil,
           created_at: attrs["created_at"],
           updated_at: attrs["updated_at"]
         }]

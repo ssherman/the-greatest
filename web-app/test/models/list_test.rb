@@ -264,6 +264,25 @@ class ListTest < ActiveSupport::TestCase
     assert_equal original, list.reload.activated_at
   end
 
+  test "stamps activated_at when a list is created with status active" do
+    list = Music::Songs::List.create!(name: "Freshly Active List", status: :active)
+
+    assert_not_nil list.activated_at
+  ensure
+    list&.destroy
+  end
+
+  test "does not stamp activated_at when a list is created at the default status" do
+    list = Music::Songs::List.new(name: "Freshly Unapproved List")
+    assert_not list.status_changed?
+
+    list.save!
+
+    assert_nil list.activated_at
+  ensure
+    list&.destroy
+  end
+
   test "restamps activated_at when a list is reactivated" do
     list = lists(:basic_list)
     list.update!(status: :active)

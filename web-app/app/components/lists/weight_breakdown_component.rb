@@ -14,7 +14,7 @@ class Lists::WeightBreakdownComponent < ViewComponent::Base
   end
 
   def penalties
-    details["penalties"] || []
+    (details["penalties"] || []).sort_by { |p| -p["value"].to_f }
   end
 
   def base_weight
@@ -26,7 +26,7 @@ class Lists::WeightBreakdownComponent < ViewComponent::Base
   end
 
   def total_penalty
-    pct(details.dig("final_calculation", "total_penalty_percentage"))
+    pct(details.dig("penalty_summary", "total_before_quality_bonus"))
   end
 
   def quality_bonus
