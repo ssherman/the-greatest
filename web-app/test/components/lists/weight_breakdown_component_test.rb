@@ -62,6 +62,15 @@ class Lists::WeightBreakdownComponentTest < ViewComponent::TestCase
     assert_text "+28%"
   end
 
+  test "renders the pre-bonus total when the quality bonus is applied" do
+    details = full_details(quality_bonus_applied: true)
+
+    render_inline(Lists::WeightBreakdownComponent.new(ranked_list: ranked_list_with(details)))
+
+    assert_text "Total penalty"
+    assert_text "−85%"
+  end
+
   test "omits the quality bonus when it was not applied" do
     render_inline(Lists::WeightBreakdownComponent.new(ranked_list: ranked_list_with(full_details)))
 
