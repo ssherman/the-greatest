@@ -143,7 +143,8 @@ route lines** in total (7 games + 15 music + 2 My Lists).
 `/songs/lists/page/:page` · `/songs/lists/:id/page/:page` · `/albums/categories/:id/page/:page` ·
 `/artists/categories/:id/page/:page`
 
-**My Lists (2):** index and show.
+**My Lists (2):** only `show` paginates — `index` does not — but it is reachable at two paths, so
+both `my/lists/:id/page/:page` and the legacy alias `user_lists/:id/page/:page` are needed.
 
 No ordering hazard: year routes are constrained to `\d{4}(s|-\d{4})?`, which `page` cannot match, so
 `/albums/page/2` cannot be captured by `/albums/:year`.
@@ -154,7 +155,7 @@ No ordering hazard: year routes are constrained to `\d{4}(s|-\d{4})?`, which `pa
 |---|---|
 | Games | `ranked_items#index`, `lists#show`, `categories#show` |
 | Music | `albums/ranked_items#index`, `songs/ranked_items#index`, `artists/ranked_items#index`, `albums/lists#index`, `albums/lists#show`, `songs/lists#index`, `songs/lists#show`, `albums/categories#show`, `artists/categories#show` |
-| Shared | `my_lists#index`, `my_lists#show` |
+| Shared | `my_lists#show` (`index` does not paginate) |
 | Books | `ranked_items#index` — migrated onto the concern, deleting its bespoke `pagy_path_request` and `ranked_books_page_path` |
 
 My Lists is auth-gated and never edge-cached; it is included for a single app-wide mechanism and
