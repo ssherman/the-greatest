@@ -14,7 +14,7 @@ class Books::ListsController < ApplicationController
 
   def index
     @sort = Books::ListsQuery::SORTS.include?(params[:sort].to_s) ? params[:sort].to_s : "weight"
-    @query = params[:q].presence
+    @query = params[:q].is_a?(String) ? params[:q].presence : nil
     @indexable = @query.blank?
 
     @pagy, @ranked_lists = pagy_path(

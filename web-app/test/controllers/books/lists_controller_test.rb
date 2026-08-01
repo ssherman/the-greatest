@@ -203,6 +203,20 @@ module Books
       assert_response :moved_permanently
     end
 
+    test "a nested q param does not blow up" do
+      get "/lists?q[a]=1"
+
+      assert_response :success
+      assert_nil @controller.view_assigns["query"]
+    end
+
+    test "an array q param does not blow up" do
+      get "/lists?q[]=a"
+
+      assert_response :success
+      assert_nil @controller.view_assigns["query"]
+    end
+
     private
 
     def seed_lists(count)
