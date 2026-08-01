@@ -105,10 +105,10 @@ better exists retroactively.
 |---|---|---|
 | D1 | Sort and search ride as **query params**; canonical is `/lists` | `PathBuilder` already carries query params through path-based pagination, so this is zero new plumbing. Legacy `/lists/sorted-by/*` 301s in. |
 | D2 | Show page orders `position ASC NULLS LAST, list_items.id ASC`; the card badge shows the book's **overall rank in the RC** | Legacy parity, including for the 389 position-less lists. Legacy renders "The 42nd Greatest Book of All Time" on list pages, not a per-list position. |
-| D3 | The index is a **one-column row layout**, 50 per page | 861 books lists have a real description; a card grid would clamp them to two lines. Rows scan well at 50 and the descriptions are indexable content. |
+| D3 | The index is the **2-column card grid games already uses**, 50 per page, extracted into a shared component | Games' design works and is already built. Accepted tradeoff: descriptions clamp to two lines, so the 861 books lists with a description show a preview rather than the full text on the index — the full description is on the show page. |
 | D4 | The show page renders the **full weight arithmetic** — base, each penalty, quality bonus, final weight | All of it reads from `calculated_weight_details`, so it costs zero extra queries, and it answers "why is this list weighted this way" directly. |
 | D5 | Add `lists.activated_at`, stamped on transition into `active`, backfilled from `updated_at` | Accurate from now on and immune to later edits. The backfill is exactly what sorting on `updated_at` would give today, so nothing regresses. |
-| D6 | Games gets **full parity**, including the row layout | All 19 games lists have a description and source. One set of shared components serves both domains. |
+| D6 | Games gets **full parity**, and its card design becomes the shared one both domains use | Games' index already looks right; the work there is the missing functionality, not a redesign. One set of shared components serves both. |
 | D7 | The penalty filter queries the **JSONB**, not `list_penalties` | Covers static and dynamic uniformly, is RC-scoped for free because it lives on `ranked_lists`, and can never disagree with the breakdown rendered beside it. The join would silently omit the four most-used penalties. |
 | D8 | Multi-select penalties are **OR** | Standard convention for multi-select within one facet. Adding a penalty broadens rather than collapsing to zero. |
 | D9 | `show` serves only `active` lists; everything else 404s | 266 unapproved and 5 rejected books rows are user submissions, not content. Legacy leaked them. |
@@ -118,7 +118,7 @@ better exists retroactively.
 
 | # | Contents |
 |---|---|
-| 1 | Shared foundation — `activated_at` + backfill, `List.search_text`, `Lists::WeightBreakdownComponent`, `Lists::RowComponent`, `games_robots_content` |
+| 1 | Shared foundation — `activated_at` + backfill, `List.search_text`, `Lists::WeightBreakdownComponent`, `Lists::CardComponent`, `games_robots_content` |
 | 2 | Books `/lists` and `/lists/:id`, legacy 301s, book-page list links, nav entry |
 | 3 | Games `/lists` and `/lists/:id` conversion |
 | 4 | Penalty filter modal on both domains |
@@ -202,11 +202,36 @@ used for any active rankings" when there is no `ranked_list` at all.
 `music/songs/lists/show` and `music/albums/lists/show` still render it and music is out of scope.
 Its test stays green.
 
-### `Lists::RowComponent`
+### `Lists::CardComponent`
 
-`initialize(ranked_list:, item_count:, path:, noun:)` where `noun` is `"books"` or `"games"`. Renders
-name (linked to `path`), source linked to `list.url` with `rel="noopener"`, year or "Yearly Award",
-item count, description, weight percentage, and "added X ago" from `activated_at`.
+The games list card, extracted from `games/lists/index.html.erb` into a shared component and used by
+both domains. `initialize(ranked_list:, item_count:, path:, noun:)` where `noun` is `"books"` or
+`"games"`.
+
+```
+┌────────────────────────────────┐
+│ Weight 100%          103 books │
+│                                │
+│ The Top 10: The Greatest       │
+│ Books of All Time              │
+│                                │
+│ The Top 10 (Book) · 2007       │
+│                                │
+│ J. Peder Zane asked 125        │
+│ writers to name their…         │
+│                                │
+│ added 2 years ago              │
+└────────────────────────────────┘
+```
+
+Grid stays games' `grid grid-cols-1 md:grid-cols-2 gap-4`. Two changes from the current games markup:
+
+- **"added X ago" from `activated_at`** in the card footer. Without it the `newest` sort orders on a
+  value the user cannot see.
+- **Stretched-link instead of a whole-card `link_to`.** Games wraps the entire card in an anchor, so
+  the link's accessible name becomes every word in the card — weight, count, name, source and the
+  whole description read as one link. The title carries the link and `after:absolute after:inset-0`
+  makes the card clickable, which is what `Books::CardComponent` already does.
 
 Descriptions are **escaped**, not `simple_format(sanitize: false)`. Books list descriptions are
 curator-authored rather than OpenLibrary-sourced, but increment 1 shipped a stored-XSS finding on
@@ -346,7 +371,7 @@ and the badge is omitted when nil — today that is zero books, but the componen
 that holding.
 
 `index.html.erb` opens at `<div class="space-y-8">` with no second container (books-public-UI B7),
-renders the search form, the two sort links, `Lists::RowComponent` per list, and `series_nav`.
+renders the search form, the two sort links, the `Lists::CardComponent` grid, and `series_nav`.
 `show.html.erb` renders the list header, `Lists::WeightBreakdownComponent`, then the same
 `grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6` ladder
 as the ranked index, with `series_nav` above and below.
@@ -373,6 +398,12 @@ get "lists/page/:page", to: "games/lists#index", as: :games_lists_page, constrai
 `Games::ListsQuery` mirrors `Books::ListsQuery` with `lists.type = "Games::List"` and
 `Games::Game`. `Games::ListsController` gains `PathBasedPagination`, `pagy_path` at 50 on the index
 in place of `.limit(50)`, the sort and search params, `apply_caching`, and `@indexable`.
+
+`index` swaps its inline card markup for the shared `Lists::CardComponent` extracted in increment 1 —
+visually the same design, now with the "added X ago" footer and the stretched-link fix — and gains
+the search form, sort links and pager above it. Item counts move to the grouped
+`ListItem.where(list_id: …).group(:list_id).count` query, replacing `includes(list: :list_items)` and
+`list.list_items.size`.
 
 `show` keeps `Games::CardComponent` and its existing grid but gains the `list_items.id ASC` tiebreak,
 swaps `Lists::SimplePenaltySummaryComponent` for `Lists::WeightBreakdownComponent`, and drops the
@@ -439,7 +470,7 @@ consistent, which is the reason to filter from it rather than from `list_penalti
 | Model | `activated_at` stamps on transition into active, restamps on re-activation, leaves non-active rows untouched; `search_text` matches name, source and url and escapes `%` and `_` |
 | Query objects | sort whitelist rejects junk, search, penalty OR filter, facet counts, active-only, type-scoped, stable tiebreak |
 | Controllers | status codes and params only — 404 for a non-active list, 404 past the last page, `@indexable` false under search or filter, no-store headers when filtered |
-| Components | breakdown with and without `calculated_weight_details`, with and without the quality bonus, with no `ranked_list`; row with and without description, url, year |
+| Components | breakdown with and without `calculated_weight_details`, with and without the quality bonus, with no `ranked_list`; card with and without description, url, year, `activated_at`, and for both `noun` values |
 | Query counts | `assert_queries_count` pins on both indexes and both show pages |
 | E2E | books lists index (sort, search, paginate, click through), books list show (grid, paginate, breakdown), the games equivalents, the penalty modal round-trip |
 
