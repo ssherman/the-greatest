@@ -24,6 +24,11 @@ module Games::DefaultHelper
     end
   end
 
+  def games_lists_path_with_rc(**options)
+    rc = params[:ranking_configuration_id].presence
+    rc ? games_lists_path(ranking_configuration_id: rc, **options) : games_lists_path(**options)
+  end
+
   def games_category_path_with_rc(category, ranking_configuration = nil)
     if ranking_configuration && !ranking_configuration.default_primary?
       games_category_path(category, ranking_configuration_id: ranking_configuration.id)
