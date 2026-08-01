@@ -91,6 +91,78 @@ module Games
       assert_equal 2, @controller.view_assigns["pagy"].page
     end
 
+    test "index accepts the newest sort" do
+      get "/lists?sort=newest"
+
+      assert_response :success
+      assert_equal "newest", @controller.view_assigns["sort"]
+    end
+
+    test "index falls back to weight for an unknown sort" do
+      get "/lists?sort=bogus"
+
+      assert_response :success
+      assert_equal "weight", @controller.view_assigns["sort"]
+    end
+
+    test "search suppresses indexing and edge caching" do
+      get "/lists?q=games"
+
+      assert_response :success
+      assert_not @controller.view_assigns["indexable"]
+      assert_match(/no-store/, response.headers["Cache-Control"])
+    end
+
+    test "index is indexable and cacheable by default" do
+      get "/lists"
+
+      assert @controller.view_assigns["indexable"]
+      assert_match(/public/, response.headers["Cache-Control"])
+    end
+
+    test "a nested q param does not blow up" do
+      get "/lists?q[a]=1"
+
+      assert_response :success
+      assert_nil @controller.view_assigns["query"]
+    end
+
+    test "index pagination is path-based" do
+      get "/lists"
+
+      assert_equal "/lists/page/2", @controller.view_assigns["pagy"].page_url(2)
+    end
+
+    test "index resolves a path-based page" do
+      seed_lists(60)
+
+      get "/lists/page/2"
+
+      assert_response :success
+      assert_equal 2, @controller.view_assigns["pagy"].page
+    end
+
+    test "index 404s past the last page" do
+      get "/lists/page/99"
+      assert_response :not_found
+    end
+
+    test "page one of the index redirects to the canonical path" do
+      get "/lists/page/1"
+      assert_redirected_to "/lists"
+      assert_response :moved_permanently
+    end
+
+    test "index issues a bounded number of queries regardless of list count" do
+      seed_lists(40)
+
+      get "/lists"
+      assert_response :success
+
+      ActiveRecord::Base.connection.clear_query_cache
+      assert_queries_count(4) { get "/lists" }
+    end
+
     private
 
     # Bulk-inserts filler games + list items so tests can reach page 2+
@@ -110,6 +182,13 @@ module Games
            position: start_position + i, created_at: now, updated_at: now}
         end
       )
+    end
+
+    def seed_lists(count)
+      count.times do |i|
+        list = Games::List.create!(name: "Filler List #{i}", status: :active)
+        RankedList.create!(list: list, ranking_configuration: @rc, weight: i)
+      end
     end
   end
 end

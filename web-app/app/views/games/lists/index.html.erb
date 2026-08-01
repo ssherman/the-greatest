@@ -1,57 +1,63 @@
-<% content_for :page_title, "Greatest Video Game Lists | The Greatest Games" %>
-<% content_for :meta_description, "Browse curated lists of the greatest video games. Discover expert rankings and authoritative game collections from trusted sources." %>
+<%
+  content_for :page_title, "Greatest Video Game Lists | The Greatest Games"
+  content_for :meta_description, "Every curated list we aggregate to build the game rankings, weighted by quality, credibility and scope."
+%>
 
-<div class="container mx-auto px-4 py-8">
-  <div class="mb-8">
-    <h1 class="text-4xl font-bold text-base-content mb-2">Greatest Video Game Lists</h1>
-    <p class="text-base-content/70">
-      Explore curated lists of the greatest video games from trusted sources
-    </p>
+<div class="space-y-8">
+  <h1 class="text-3xl sm:text-4xl font-bold text-center text-balance">Greatest Video Game Lists</h1>
+
+  <p class="max-w-3xl mx-auto text-center text-base-content/80">
+    These are the lists we aggregate to build the rankings. Each one carries a weight based on its
+    quality, credibility and scope — the higher the weight, the more it counts.
+  </p>
+
+  <div class="flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
+    <%= form_with url: games_lists_path_with_rc, method: :get, class: "join" do |f| %>
+      <%= f.hidden_field :sort, value: @sort %>
+      <%= f.search_field :q, value: @query, placeholder: "Search lists",
+            "aria-label": "Search lists by name, source or url",
+            class: "input input-bordered join-item" %>
+      <%= f.submit "Search", class: "btn btn-primary join-item" %>
+    <% end %>
+
+    <div class="join" role="group" aria-label="Sort lists">
+      <%= link_to "Weight", games_lists_path_with_rc(q: @query),
+            class: "btn join-item #{"btn-active" if @sort == "weight"}" %>
+      <%= link_to "Recently added", games_lists_path_with_rc(sort: "newest", q: @query),
+            class: "btn join-item #{"btn-active" if @sort == "newest"}" %>
+    </div>
   </div>
+
+  <% if @query %>
+    <p class="text-center text-base-content/70">
+      <%= pluralize(@pagy.count, "list") %> matching “<%= @query %>”.
+      <%= link_to "Clear", games_lists_path, class: "link" %>
+    </p>
+  <% end %>
 
   <% if @ranked_lists.any? %>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
       <% @ranked_lists.each do |ranked_list| %>
-        <% list = ranked_list.list %>
-        <%= link_to games_list_path(list, ranking_configuration_id: params[:ranking_configuration_id].presence),
-                class: "card bg-base-100 shadow-lg hover:shadow-xl transition-shadow",
-                data: { turbo_frame: "_top" } do %>
-          <div class="card-body">
-            <div class="flex items-start justify-between mb-2">
-              <div class="badge badge-primary badge-sm">
-                Weight: <%= ranked_list.weight %>
-              </div>
-              <div class="badge badge-ghost badge-sm">
-                <%= list.list_items.size %> games
-              </div>
-            </div>
-
-            <h3 class="card-title text-lg">
-              <%= list.name %>
-            </h3>
-
-            <% if list.source.present? %>
-              <p class="text-sm text-base-content/70">
-                Source: <%= list.source %>
-              </p>
-            <% end %>
-
-            <% if list.description.present? %>
-              <p class="text-sm text-base-content/80 line-clamp-2">
-                <%= list.description %>
-              </p>
-            <% end %>
-          </div>
-        <% end %>
+        <%= render Lists::CardComponent.new(
+              ranked_list: ranked_list,
+              item_count: @item_counts.fetch(ranked_list.list_id, 0),
+              path: games_list_path(ranked_list.list_id, ranking_configuration_id: params[:ranking_configuration_id].presence),
+              noun: "games"
+            ) %>
       <% end %>
     </div>
+
+    <div class="flex justify-center">
+      <%== @pagy.series_nav(slots: 5) %>
+    </div>
+    <p class="text-center text-sm text-base-content/70">
+      Page <%= number_with_delimiter(@pagy.page) %> of <%= number_with_delimiter(@pagy.last) %>
+    </p>
   <% else %>
     <div class="text-center py-16">
       <div class="text-6xl mb-4">🎮</div>
-      <h2 class="text-2xl font-bold text-base-content mb-2">No lists available</h2>
-      <p class="text-base-content/70">
-        Game lists will appear here once they've been ranked.
-      </p>
+      <h2 class="text-2xl font-bold mb-2">No lists found</h2>
+      <p class="text-base-content/70">Try a different search.</p>
     </div>
   <% end %>
 </div>
