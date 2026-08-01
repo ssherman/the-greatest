@@ -6,7 +6,7 @@
 #  born_on        :date
 #  country        :string(2)
 #  description    :text
-#  kind           :integer          default("person"), not null
+#  kind           :integer          default(0), not null
 #  name           :string           not null
 #  slug           :string           not null
 #  year_died      :integer

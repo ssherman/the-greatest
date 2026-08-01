@@ -6,7 +6,7 @@ require "test_helper"
 #
 #  id                   :bigint           not null, primary key
 #  alternate_titles     :string           default([]), not null, is an Array
-#  book_kind            :integer          default("standalone"), not null
+#  book_kind            :integer          default(0), not null
 #  description          :text
 #  first_published_year :integer
 #  slug                 :string           not null

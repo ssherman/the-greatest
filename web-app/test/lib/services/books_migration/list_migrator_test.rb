@@ -87,6 +87,22 @@ module Services
         assert_match(/993001/, result[:error])
       end
 
+      test "stamps activated_at from updated_at for an active legacy row" do
+        run_migrator([legacy_row("id" => 995001, "status" => 2)])
+
+        list = List.find(995001)
+        assert list.active?
+        assert_equal Time.utc(2016, 2, 3, 4, 5, 6), list.activated_at
+      end
+
+      test "leaves activated_at nil for a non-active legacy row" do
+        run_migrator([legacy_row("id" => 995002, "status" => 1)])
+
+        list = List.find(995002)
+        assert_not list.active?
+        assert_nil list.activated_at
+      end
+
       test "is idempotent on id" do
         run_migrator([legacy_row("id" => 994001)])
 

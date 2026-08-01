@@ -3,6 +3,7 @@
 # Table name: lists
 #
 #  id                    :bigint           not null, primary key
+#  activated_at          :datetime
 #  category_specific     :boolean
 #  creator_specific      :boolean
 #  description           :text
@@ -17,7 +18,7 @@
 #  simplified_content    :text
 #  source                :string
 #  source_country_origin :string
-#  status                :integer          default("unapproved"), not null
+#  status                :integer          default(0), not null
 #  type                  :string           not null
 #  url                   :string
 #  voter_count_estimated :boolean
@@ -33,6 +34,7 @@
 #
 # Indexes
 #
+#  index_lists_on_activated_at     (activated_at)
 #  index_lists_on_submitted_by_id  (submitted_by_id)
 #
 # Foreign Keys
@@ -231,5 +233,96 @@ class ListTest < ActiveSupport::TestCase
     manager2 = list.wizard_manager
 
     assert_same manager1, manager2
+  end
+
+  test "stamps activated_at when a list becomes active" do
+    list = lists(:basic_list)
+    assert_nil list.activated_at
+
+    list.update!(status: :active)
+
+    assert_not_nil list.reload.activated_at
+  end
+
+  test "does not stamp activated_at when a list changes to a non-active status" do
+    list = lists(:basic_list)
+
+    list.update!(status: :approved)
+
+    assert_nil list.reload.activated_at
+  end
+
+  test "does not restamp activated_at when saving an already-active list" do
+    list = lists(:basic_list)
+    list.update!(status: :active)
+    original = list.reload.activated_at
+
+    travel 1.hour do
+      list.update!(name: "Renamed List")
+    end
+
+    assert_equal original, list.reload.activated_at
+  end
+
+  test "stamps activated_at when a list is created with status active" do
+    list = Music::Songs::List.create!(name: "Freshly Active List", status: :active)
+
+    assert_not_nil list.activated_at
+  ensure
+    list&.destroy
+  end
+
+  test "does not stamp activated_at when a list is created at the default status" do
+    list = Music::Songs::List.new(name: "Freshly Unapproved List")
+    assert_not list.status_changed?
+
+    list.save!
+
+    assert_nil list.activated_at
+  ensure
+    list&.destroy
+  end
+
+  test "restamps activated_at when a list is reactivated" do
+    list = lists(:basic_list)
+    list.update!(status: :active)
+    first = list.reload.activated_at
+    list.update!(status: :unapproved)
+
+    travel 1.hour do
+      list.update!(status: :active)
+    end
+
+    assert list.reload.activated_at > first
+  end
+
+  test "search_text matches on name case-insensitively" do
+    assert_includes List.search_text("basic"), lists(:basic_list)
+    assert_includes List.search_text("BASIC"), lists(:basic_list)
+  end
+
+  test "search_text matches on source" do
+    assert_includes List.search_text("Test Source"), lists(:basic_list)
+  end
+
+  test "search_text matches on url" do
+    assert_includes List.search_text("example.com"), lists(:basic_list)
+  end
+
+  test "search_text returns all lists when the query is blank" do
+    assert_equal List.count, List.search_text("").count
+    assert_equal List.count, List.search_text(nil).count
+    assert_equal List.count, List.search_text("   ").count
+  end
+
+  test "search_text escapes SQL LIKE wildcards" do
+    list = Music::Songs::List.create!(name: "Top_100 Songs", status: :unapproved)
+
+    results = List.search_text("_")
+
+    assert_includes results, list
+    assert_not_includes results, lists(:basic_list)
+  ensure
+    list&.destroy
   end
 end

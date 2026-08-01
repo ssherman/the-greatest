@@ -49,4 +49,9 @@ module Games::DefaultHelper
       link_to list.name, path, **options
     end
   end
+
+  def games_robots_content
+    return "noindex, follow" if params[:ranking_configuration_id].present?
+    (@indexable == false) ? "noindex, follow" : "index, follow"
+  end
 end

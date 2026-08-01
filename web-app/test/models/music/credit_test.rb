@@ -5,7 +5,7 @@
 #  id              :bigint           not null, primary key
 #  creditable_type :string           not null
 #  position        :integer
-#  role            :integer          default("writer"), not null
+#  role            :integer          default(0), not null
 #  created_at      :datetime         not null
 #  updated_at      :datetime         not null
 #  artist_id       :bigint           not null

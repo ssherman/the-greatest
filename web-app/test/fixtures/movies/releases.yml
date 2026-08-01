@@ -8,7 +8,7 @@
 #  is_primary      :boolean          default(FALSE), not null
 #  metadata        :jsonb
 #  release_date    :date
-#  release_format  :integer          default("theatrical"), not null
+#  release_format  :integer          default(0), not null
 #  release_name    :string
 #  runtime_minutes :integer
 #  created_at      :datetime         not null
