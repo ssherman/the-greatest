@@ -25,6 +25,24 @@ class Books::ListsController < ApplicationController
     @item_counts = ListItem.where(list_id: @ranked_lists.map(&:list_id)).group(:list_id).count
   end
 
+  def show
+    @list = Books::List.where(status: :active).find_by!(id: params[:id])
+    @ranked_list = @ranking_configuration.ranked_lists.find_by(list: @list)
+    @indexable = @ranked_list.present?
+
+    @pagy, @list_items = pagy_path(
+      @list.list_items
+        .includes(listable: [{book_authors: :author}, {primary_image: {file_attachment: :blob}}])
+        .order(Arel.sql("list_items.position ASC NULLS LAST, list_items.id ASC")),
+      limit: 100
+    )
+
+    book_ids = @list_items.filter_map { |item| item.listable_id if item.listable_type == "Books::Book" }
+    @ranks = RankedItem.where(
+      ranking_configuration: @ranking_configuration, item_type: "Books::Book", item_id: book_ids
+    ).pluck(:item_id, :rank).to_h
+  end
+
   private
 
   def apply_caching

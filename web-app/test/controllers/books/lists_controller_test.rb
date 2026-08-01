@@ -80,6 +80,90 @@ module Books
       assert_queries_count(4) { get "/lists" }
     end
 
+    test "show renders an active list" do
+      get "/lists/#{@list.id}"
+      assert_response :success
+    end
+
+    test "show 404s for a non-active list" do
+      @list.update!(status: :unapproved)
+
+      get "/lists/#{@list.id}"
+
+      assert_response :not_found
+    end
+
+    test "show 404s for an unknown id" do
+      get "/lists/999999"
+      assert_response :not_found
+    end
+
+    test "show is indexable when the list is in the ranking configuration" do
+      get "/lists/#{@list.id}"
+
+      assert @controller.view_assigns["indexable"]
+    end
+
+    test "show is not indexable when the list is outside the ranking configuration" do
+      @ranked_list.destroy!
+
+      get "/lists/#{@list.id}"
+
+      assert_response :success
+      assert_not @controller.view_assigns["indexable"]
+    end
+
+    test "show paginates its items" do
+      seed_items(120)
+
+      get "/lists/#{@list.id}/page/2"
+
+      assert_response :success
+      assert_equal 2, @controller.view_assigns["pagy"].page
+    end
+
+    test "show 404s past the last item page" do
+      get "/lists/#{@list.id}/page/99"
+      assert_response :not_found
+    end
+
+    test "show loads ranks for the books on the page" do
+      book = books_books(:war_and_peace)
+      ListItem.create!(list: @list, listable: book, position: 1)
+      RankedItem.create!(item: book, ranking_configuration: @rc, rank: 7, score: 50)
+
+      get "/lists/#{@list.id}"
+
+      assert_equal 7, @controller.view_assigns["ranks"][book.id]
+    end
+
+    test "show survives a list item whose listable no longer exists" do
+      ListItem.create!(list: @list, listable_type: "Books::Book", listable_id: 999_999_999, position: 1)
+
+      get "/lists/#{@list.id}"
+
+      assert_response :success
+    end
+
+    test "show issues a bounded number of queries and preloads covers" do
+      book = books_books(:war_and_peace)
+      ListItem.create!(list: @list, listable: book, position: 1)
+      seed_items(20)
+
+      covered_books = [book] + Books::Book.where(title: (0...5).map { |i| "Item Book #{i}" }).to_a
+      covered_books.each do |covered_book|
+        image = Image.new(parent: covered_book, primary: true)
+        image.file.attach(io: StringIO.new("fake image data"), filename: "cover.jpg", content_type: "image/jpeg")
+        image.save!
+      end
+
+      get "/lists/#{@list.id}"
+      assert_response :success
+
+      ActiveRecord::Base.connection.clear_query_cache
+      assert_queries_count(12) { get "/lists/#{@list.id}" }
+    end
+
     private
 
     def seed_lists(count)
@@ -87,6 +171,18 @@ module Books
         list = Books::List.create!(name: "Filler #{i}", status: :active)
         RankedList.create!(list: list, ranking_configuration: @rc, weight: i)
       end
+    end
+
+    def seed_items(count)
+      now = Time.current
+      rows = Array.new(count) { |i| {title: "Item Book #{i}", slug: "item-book-#{i}", created_at: now, updated_at: now} }
+      ids = Books::Book.insert_all(rows, returning: :id).rows.flatten
+      ListItem.insert_all(
+        ids.each_with_index.map do |id, i|
+          {list_id: @list.id, listable_id: id, listable_type: "Books::Book",
+           position: i + 1, created_at: now, updated_at: now}
+        end
+      )
     end
   end
 end

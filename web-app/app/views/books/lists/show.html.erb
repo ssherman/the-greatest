@@ -1,0 +1,56 @@
+<%
+  content_for :page_title, truncate("#{@list.name}#{" from #{@list.source}" if @list.source.present?} | The Greatest Books", length: 70)
+  content_for :meta_description, truncate("All #{@pagy.count} books on “#{@list.name}”#{", from #{@list.source}" if @list.source.present?}. #{@list.description}", length: 160)
+%>
+
+<div class="space-y-8">
+  <div class="space-y-3">
+    <h1 class="text-3xl sm:text-4xl font-bold text-balance"><%= @list.name %></h1>
+
+    <div class="flex flex-wrap gap-2">
+      <% if @list.source.present? %>
+        <span class="badge badge-ghost badge-lg">Source: <%= @list.source %></span>
+      <% end %>
+      <% if @list.year_published.present? %>
+        <span class="badge badge-ghost badge-lg"><%= @list.yearly_award? ? "Yearly Award" : @list.year_published %></span>
+      <% end %>
+      <span class="badge badge-ghost badge-lg"><%= pluralize(@pagy.count, "book") %></span>
+      <% if @list.number_of_voters.present? %>
+        <span class="badge badge-ghost badge-lg"><%= number_with_delimiter(@list.number_of_voters) %> voters</span>
+      <% end %>
+    </div>
+
+    <% if @list.description.present? %>
+      <p class="max-w-3xl text-base-content/80"><%= @list.description %></p>
+    <% end %>
+
+    <% if @list.url.present? %>
+      <%= link_to "View the original list", @list.url, rel: "noopener nofollow",
+            target: "_blank", class: "btn btn-sm btn-primary" %>
+    <% end %>
+  </div>
+
+  <%= render Lists::WeightBreakdownComponent.new(ranked_list: @ranked_list) %>
+
+  <% if @list_items.any? %>
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
+      <% @list_items.each_with_index do |list_item, index| %>
+        <% book = list_item.listable %>
+        <% next unless book %>
+        <%= render Books::CardComponent.new(book: book, rank: @ranks[book.id], index: index) %>
+      <% end %>
+    </div>
+
+    <div class="flex justify-center">
+      <%== @pagy.series_nav(slots: 5) %>
+    </div>
+    <p class="text-center text-sm text-base-content/70">
+      Page <%= number_with_delimiter(@pagy.page) %> of <%= number_with_delimiter(@pagy.last) %>
+    </p>
+  <% else %>
+    <div class="text-center py-16">
+      <div class="text-6xl mb-4">📚</div>
+      <h2 class="text-2xl font-bold mb-2">No books on this list yet</h2>
+    </div>
+  <% end %>
+</div>
