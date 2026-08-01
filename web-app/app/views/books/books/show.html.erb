@@ -91,7 +91,7 @@
           <h2 class="card-title text-xl">Appears on <%= pluralize(@list_items.size, "list") %></h2>
           <ul class="space-y-1">
             <% @list_items.each do |list_item| %>
-              <li class="text-base-content/80"><%= list_item.list.name %></li>
+              <li><%= link_to list_item.list.name, books_list_path(list_item.list_id), class: "link link-hover" %></li>
             <% end %>
           </ul>
         </div>
