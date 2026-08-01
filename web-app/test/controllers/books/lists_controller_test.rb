@@ -164,6 +164,45 @@ module Books
       assert_queries_count(12) { get "/lists/#{@list.id}" }
     end
 
+    test "legacy sorted-by weight redirects to the canonical index" do
+      get "/lists/sorted-by/weight"
+      assert_redirected_to "/lists"
+      assert_response :moved_permanently
+    end
+
+    test "legacy sorted-by created_at redirects to the newest sort" do
+      get "/lists/sorted-by/created_at"
+      assert_redirected_to "/lists?sort=newest"
+      assert_response :moved_permanently
+    end
+
+    test "legacy paged sorted-by redirects to the canonical index" do
+      get "/lists/sorted-by/weight/page/3"
+      assert_redirected_to "/lists"
+      assert_response :moved_permanently
+    end
+
+    test "legacy collection pages redirect to the canonical index" do
+      ["/lists/search_results", "/lists/condensed", "/lists/help",
+        "/lists/pending_lists", "/lists/specialized_edit"].each do |path|
+        get path
+        assert_redirected_to "/lists"
+        assert_response :moved_permanently
+      end
+    end
+
+    test "legacy view-prefixed list detail redirects to the plain path" do
+      get "/v/grid/lists/#{@list.id}"
+      assert_redirected_to "/lists/#{@list.id}"
+      assert_response :moved_permanently
+    end
+
+    test "legacy view-prefixed index redirects to the canonical index" do
+      get "/v/table/lists"
+      assert_redirected_to "/lists"
+      assert_response :moved_permanently
+    end
+
     private
 
     def seed_lists(count)

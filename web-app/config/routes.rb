@@ -371,6 +371,19 @@ Rails.application.routes.draw do
     end
     get "items/:id", to: "books/legacy_books#show", constraints: {id: /\d+/}
 
+    get "lists/sorted-by/created_at(/page/:page)", to: redirect("/lists?sort=newest", status: 301)
+    get "lists/sorted-by/:sort(/page/:page)", to: redirect("/lists", status: 301)
+    get "lists/search_results", to: redirect("/lists", status: 301)
+    get "lists/condensed", to: redirect("/lists", status: 301)
+    get "lists/help", to: redirect("/lists", status: 301)
+    get "lists/pending_lists", to: redirect("/lists", status: 301)
+    get "lists/specialized_edit", to: redirect("/lists", status: 301)
+    get "v/:view_type/lists", to: redirect("/lists", status: 301)
+    get "v/:view_type/lists/page/:page", to: redirect("/lists", status: 301), constraints: {page: /\d+/}
+    get "v/:view_type/lists/:id", to: redirect("/lists/%{id}", status: 301), constraints: {id: /\d+/}
+    get "v/:view_type/lists/:id/page/:page", to: redirect("/lists/%{id}", status: 301),
+      constraints: {id: /\d+/, page: /\d+/}
+
     get "lists", to: "books/lists#index", as: :books_lists
     get "lists/page/:page", to: "books/lists#index", as: :books_lists_page, constraints: {page: /\d+/}
     get "lists/:id", to: "books/lists#show", as: :books_list, constraints: {id: /\d+/}
