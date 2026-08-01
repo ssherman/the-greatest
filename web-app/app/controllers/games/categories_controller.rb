@@ -16,7 +16,7 @@ class Games::CategoriesController < ApplicationController
     @category = Games::Category.active.friendly.find(params[:id])
 
     games_query = build_ranked_games_query
-    @pagy, @games = pagy(games_query, limit: 100, **pagy_path_options)
+    @pagy, @games = pagy_path(games_query, limit: 100)
   end
 
   private

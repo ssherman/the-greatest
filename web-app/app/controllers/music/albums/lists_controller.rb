@@ -22,7 +22,7 @@ class Music::Albums::ListsController < ApplicationController
       .includes(list: :list_items)
       .order(sort_order)
 
-    @pagy, @ranked_lists = pagy(ranked_lists_query, limit: 25, **pagy_path_options)
+    @pagy, @ranked_lists = pagy_path(ranked_lists_query, limit: 25)
   end
 
   def show
@@ -38,6 +38,6 @@ class Music::Albums::ListsController < ApplicationController
         {primary_image: {file_attachment: {blob: {variant_records: {image_attachment: :blob}}}}}
       ]
     ).order(:position)
-    @pagy, @pagy_list_items = pagy(list_items_query, limit: 100, **pagy_path_options)
+    @pagy, @pagy_list_items = pagy_path(list_items_query, limit: 100)
   end
 end

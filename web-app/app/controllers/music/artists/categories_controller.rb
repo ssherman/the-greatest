@@ -16,7 +16,7 @@ class Music::Artists::CategoriesController < ApplicationController
     @category = Music::Category.active.friendly.find(params[:id])
 
     artists_query = build_ranked_artists_query
-    @pagy, @artists = pagy(artists_query, limit: 100, **pagy_path_options)
+    @pagy, @artists = pagy_path(artists_query, limit: 100)
   end
 
   private

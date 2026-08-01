@@ -22,6 +22,6 @@ class Music::Artists::RankedItemsController < ApplicationController
       .where(item_type: "Music::Artist")
       .order(:rank)
 
-    @pagy, @artists = pagy(artists_query, limit: 100, **pagy_path_options)
+    @pagy, @artists = pagy_path(artists_query, limit: 100)
   end
 end

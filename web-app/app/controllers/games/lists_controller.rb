@@ -34,6 +34,6 @@ class Games::ListsController < ApplicationController
         {primary_image: {file_attachment: {blob: {variant_records: {image_attachment: :blob}}}}}
       ]
     ).order(Arel.sql("list_items.position ASC NULLS LAST"))
-    @pagy, @pagy_list_items = pagy(list_items_query, limit: 100, **pagy_path_options)
+    @pagy, @pagy_list_items = pagy_path(list_items_query, limit: 100)
   end
 end

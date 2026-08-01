@@ -31,7 +31,7 @@ class Games::RankedItemsController < RankedItemsController
 
     games_query = games_query.order(:rank)
 
-    @pagy, @games = pagy(games_query, limit: 100, **pagy_path_options)
+    @pagy, @games = pagy_path(games_query, limit: 100)
   end
 
   private

@@ -27,6 +27,6 @@ class Music::Albums::RankedItemsController < Music::RankedItemsController
 
     albums_query = albums_query.order(:rank)
 
-    @pagy, @albums = pagy(albums_query, limit: 100, **pagy_path_options)
+    @pagy, @albums = pagy_path(albums_query, limit: 100)
   end
 end

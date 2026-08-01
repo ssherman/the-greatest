@@ -17,15 +17,9 @@ class Books::RankedItemsController < RankedItemsController
     @indexable = true
     @show_hero = params[:page].blank? && params[:ranking_configuration_id].blank?
 
-    @pagy, @ranked_books = pagy(
+    @pagy, @ranked_books = pagy_path(
       Books::RankedBooksQuery.call(ranking_configuration: @ranking_configuration),
-      limit: 100,
-      **pagy_path_options
+      limit: 100
     )
-
-    # Pagy serves an empty 200 for any page past the last one, which would let a
-    # crawler mint unbounded thin pages like /page/999999. An empty page 1 is still
-    # legitimate (@pagy.last floors at 1), so only genuine overflow 404s.
-    raise ActiveRecord::RecordNotFound if @pagy.page > @pagy.last
   end
 end

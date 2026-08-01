@@ -77,6 +77,15 @@ module Music
         get "/albums/categories/#{category_without_items.slug}"
         assert_response :success
       end
+
+      test "show pagination is path-based and does not leak the id" do
+        get "/albums/categories/rock"
+
+        url = @controller.view_assigns["pagy"].page_url(2)
+
+        assert_equal "/albums/categories/rock/page/2", url
+        refute_includes url, "id="
+      end
     end
   end
 end
