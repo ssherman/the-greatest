@@ -265,7 +265,7 @@ disables the optimized URL helper and the positional argument binds to the rc se
 | `Books::AuthorsController` | `show` and `all_books`; `Cacheable` |
 | `Books::LegacyAuthorsController` | 301 from `/authors/:id` to `/author/:slug` |
 | `Books::RankedAuthorsQuery` | The single place the ranked-author relation is built |
-| `Books::AuthorAvatarComponent` | Renders the author image, or the initials monogram fallback |
+| `Books::AuthorAvatarComponent` | Show page only: the author image, or the initials monogram fallback |
 
 `Books::LegacyAuthorsController` must use `find_by!(id: params[:id])`, **never** `find`.
 `Books::Author` enables friendly_id `:finders`, which resolves slugs before primary keys —
@@ -273,8 +273,11 @@ the same landmine that produced the comment in `Books::LegacyBooksController`.
 
 ### Index page (`/authors`, 100 per page)
 
-Each row shows an avatar (`Books::AuthorAvatarComponent`), rank, author name, birth–death
-years, score, a truncated description, and the author's **top 5 ranked book covers**.
+Each row shows rank, author name, birth–death years, score, a truncated description, and
+the author's **top 5 ranked book covers**.
+
+**No author avatar on the index.** The author's own image appears only on the show page;
+index rows lead with the name. The book covers carry the visual weight here.
 
 **N+1 avoidance.** Rendering top books per author naively is one query per author, 100
 per page. Instead the controller issues a single additional query that fetches the
@@ -301,10 +304,13 @@ Two states are live in the data today and both must render correctly:
 
 ### `Books::AuthorAvatarComponent`
 
-**Zero `Books::Author` records have an `Image`.** The fallback is therefore the default
-state of every author page and all 100 rows of every index page, not a rare exception.
-The existing emoji placeholders on the book and artist show pages are the right pattern
-for a rare miss, but the same glyph repeated 100 times down a list reads as broken.
+Used on the **show page only** — the index has no author avatar.
+
+**Zero `Books::Author` records have an `Image`.** The fallback is therefore the state of
+every author page today, not a rare exception. The existing emoji placeholders on the
+book and artist show pages are the right pattern for an occasional miss, but here a
+single fixed glyph would be what every visitor sees on every author, making one author
+indistinguishable from the next.
 
 The component renders `primary_image` when attached and otherwise an **initials
 monogram**: the author's initials in a tinted box of the same dimensions, so swapping in
@@ -421,11 +427,12 @@ Each step leaves the app working and testable on its own.
    a console against real data before any UI exists.
 3. **Job and scheduling** — `Books::CalculateAuthorRankingsJob`, the `schedule.yml`
    entry, and the `CalculateRankingsJob` chain.
-4. **Index page** — `Books::AuthorAvatarComponent`, `Books::RankedAuthorsQuery`,
+4. **Index page** — `Books::RankedAuthorsQuery`,
    `Books::Authors::RankedItemsController`, the view, routes, nav entry, and the
    `assert_queries_count` pin.
-5. **Show and all-books pages** — `Books::AuthorsController`,
-   `Books::LegacyAuthorsController`, views, and the legacy 301 routes.
+5. **Show and all-books pages** — `Books::AuthorAvatarComponent`,
+   `Books::AuthorsController`, `Books::LegacyAuthorsController`, views, and the legacy
+   301 routes.
 6. **E2E** — Playwright specs for all three pages.
 
 ## Out of scope
