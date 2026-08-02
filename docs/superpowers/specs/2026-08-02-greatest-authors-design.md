@@ -172,8 +172,14 @@ editorial change and is deliberately not part of this work.
 
 1. **`books_authors.exclude_from_rankings`** — `boolean, null: false, default: false`.
    Replaces the hardcoded id check. A data migration sets it `true` where
-   `name = 'Unknown'` (exact match; exactly one record today). Exposed as a checkbox on
-   the existing books admin author form.
+   `name = 'Unknown'` (exact match). Seven rows match in dev; six have no ranked books
+   at all, so only `id=10452` — the 71-ranked-book row that sorts first — actually
+   changes the ranking. Exposed as a checkbox on the existing books admin author form.
+
+   Other placeholder names (`"Anonymous"`, `"Various"`, `"N/A"`) are deliberately left
+   unflagged: measured against the real formula they land between rank 7,730 and 12,308
+   with scores of 0.3–2.3, far below anything a visitor sees. The admin checkbox is there
+   if they ever need flagging.
 
 2. **`Books::Authors::RankingConfiguration < ::RankingConfiguration`** — a new STI
    subclass, no new table:
