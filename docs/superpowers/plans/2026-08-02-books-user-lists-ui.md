@@ -1423,6 +1423,15 @@ unrecognized host.
 
 In the "Scoping by Item Type" section, delete the parenthetical "(future books)" if present. Leave the "Class Hierarchy (STI)" block as-is — it already lists `Books::UserList` with the correct `list_type`s.
 
+- [ ] **Step 2b: Delete the stale `release_year` 500 warning**
+
+The books bullet in "What's Not Yet Implemented" claims a naive wiring "would 500 on the first
+'Download CSV' click" because `Books::Book` lacks `release_year`. That was true when written and
+stopped being true on **2026-07-22**, when commit `f0e9e75` added `Books::Book#release_year` as a
+delegator to `first_published_year`. The real pre-fix defect was a silently missing Authors column,
+not a crash. Step 3 deletes that whole bullet — make sure the claim does not survive anywhere else
+in the file, and do not repeat it in the replacement text.
+
 - [ ] **Step 3: Rewrite the books bullet in "What's Not Yet Implemented"**
 
 Delete the long "A books layout and books UI wiring" bullet entirely and replace the public-list bullet with:

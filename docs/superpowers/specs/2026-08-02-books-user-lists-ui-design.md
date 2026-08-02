@@ -139,10 +139,15 @@ client-side template.
   `["Position", "Title", "Authors", "Year"]`, using `book_authors.map { |ba| ba.author.name }` and
   `first_published_year`.
 
-**This is the documented 500.** `Books::Book` has no `release_year` column; every other listable
-does, which is why the `else` branch was safe until now. Without this branch the first "Download
-CSV" click on a books list raises `NoMethodError`. The `else` branch keeps `release_year` for
-games/movies, which both have it.
+**Correction, found during implementation.** `docs/features/user-lists.md` and the Phase 3 migration
+spec both warn that a naive wiring would **500** here, because `Books::Book` lacks `release_year`.
+That was true when written and stopped being true on 2026-07-22, when commit `f0e9e75` (books admin
+inc 6b) added `Books::Book#release_year` as a delegator to `first_published_year`.
+
+So the real pre-fix defect is quieter than advertised: the `else` branch returns a correct year but
+emits **no Authors column**, silently exporting books lists without their authors while music lists
+get Artists. The books branch is still required — but for parity, not to avoid a crash. The stale
+500 warning must be removed from `docs/features/user-lists.md` (see the docs task).
 
 ## F. `UserLists::Show::ItemComponent`
 
