@@ -436,6 +436,35 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
+  test "anonymous viewer gets 404 on a private list's csv" do
+    host! Rails.application.config.domains[:books]
+    get my_list_path(user_lists(:regular_user_books_favorites), format: :csv)
+    assert_response :not_found
+  end
+
+  test "non-owner gets 404 on a private list's csv" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(users(:admin_user), stub_auth: true)
+
+    get my_list_path(user_lists(:regular_user_books_favorites), format: :csv)
+    assert_response :not_found
+  end
+
+  test "anonymous viewer gets 404 on the legacy alias for a private list" do
+    host! Rails.application.config.domains[:books]
+    get user_list_path(user_lists(:regular_user_books_favorites))
+    assert_response :not_found
+  end
+
+  test "anonymous viewer can read a public list via the legacy alias" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    list.update!(public: true)
+
+    get user_list_path(list)
+    assert_response :success
+  end
+
   test "non-owner reading a public list gets no add box and no backlink" do
     host! Rails.application.config.domains[:books]
     list = user_lists(:regular_user_books_favorites)
