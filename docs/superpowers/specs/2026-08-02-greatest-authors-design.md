@@ -265,6 +265,7 @@ disables the optimized URL helper and the positional argument binds to the rc se
 | `Books::AuthorsController` | `show` and `all_books`; `Cacheable` |
 | `Books::LegacyAuthorsController` | 301 from `/authors/:id` to `/author/:slug` |
 | `Books::RankedAuthorsQuery` | The single place the ranked-author relation is built |
+| `Books::AuthorAvatarComponent` | Renders the author image, or the initials monogram fallback |
 
 `Books::LegacyAuthorsController` must use `find_by!(id: params[:id])`, **never** `find`.
 `Books::Author` enables friendly_id `:finders`, which resolves slugs before primary keys —
@@ -272,8 +273,8 @@ the same landmine that produced the comment in `Books::LegacyBooksController`.
 
 ### Index page (`/authors`, 100 per page)
 
-Each row shows rank, author name, birth–death years, score, a truncated description, and
-the author's **top 5 ranked book covers**.
+Each row shows an avatar (`Books::AuthorAvatarComponent`), rank, author name, birth–death
+years, score, a truncated description, and the author's **top 5 ranked book covers**.
 
 **N+1 avoidance.** Rendering top books per author naively is one query per author, 100
 per page. Instead the controller issues a single additional query that fetches the
@@ -294,10 +295,50 @@ a small bonus" — that behaviour is being removed, and the text would be false.
 
 Two states are live in the data today and both must render correctly:
 
-- **No image.** Zero `Books::Author` records have an `Image`. The header degrades to a
-  text-only block. Populating author images is separate future work.
+- **No image** — see below. This is not an edge case; it is every author.
 - **No rank.** The excluded `"Unknown"` author still resolves at `/author/unknown` and
   has no `RankedItem`. Rank and score are omitted and the page is not marked indexable.
+
+### `Books::AuthorAvatarComponent`
+
+**Zero `Books::Author` records have an `Image`.** The fallback is therefore the default
+state of every author page and all 100 rows of every index page, not a rare exception.
+The existing emoji placeholders on the book and artist show pages are the right pattern
+for a rare miss, but the same glyph repeated 100 times down a list reads as broken.
+
+The component renders `primary_image` when attached and otherwise an **initials
+monogram**: the author's initials in a tinted box of the same dimensions, so swapping in
+real images later causes no layout shift.
+
+Initials are derived from `name` at render time — no new column. Split on whitespace,
+keep the first alphanumeric character of the first and last token, uppercase; a
+single-token name yields one letter. Verified against the 3,000 top-ranked authors: zero
+names produce an empty result, and the output never exceeds two characters. Particles
+fall out for free because they sit mid-name.
+
+| Name | Initials |
+| --- | --- |
+| Pierre Choderlos de Laclos | PL |
+| Johann Wolfgang von Goethe | JG |
+| W. E. B. Du Bois | WB |
+| Gabriel García Márquez | GM |
+| Homer | H |
+
+229 of those 3,000 names are non-ASCII (Brontë, Döblin, Günter) and all resolve
+correctly, so the character class must be Unicode-aware (`[[:alnum:]]`), not `[A-Za-z]`.
+
+**Colour.** One neutral surface tone for every author — `bg-base-300` with muted
+`base-content` initials, both already steps on the books theme's brightness ladder. Do
+**not** hash the author name to a background hue, which is the usual monogram trick;
+contrast here comes from lightness, never from hue.
+
+The monogram is decorative — the author's name is always rendered beside it — so the box
+carries `aria-hidden="true"` and screen readers are not made to read "FD" before
+"Fyodor Dostoevsky".
+
+Lives at `app/components/books/author_avatar_component.{rb,html.erb}`, matching the flat
+namespaced style of the existing `Books::CardComponent`. Generate it with
+`bin/rails generate component`.
 
 ### All-books page (`/author/:slug/all-books`)
 
@@ -354,6 +395,10 @@ Minitest with fixtures and Mocha, mirroring the app namespace under `web-app/tes
   run which no longer qualify are deleted; and that a missing source RC produces a failed
   `Result` with no writes.
 - **`Books::CalculateAuthorRankingsJob`** — success path and the raise-on-failure path.
+- **`Books::AuthorAvatarComponent`** — the initials rule against the edge cases above
+  (single-token, particles, dotted initials, non-ASCII), that an attached image is
+  preferred over the monogram, and that the monogram is `aria-hidden`. This is a rule
+  with real edge cases, so it is tested directly rather than through a view.
 - **Controllers** — status codes, 301 targets for each legacy route, the 404 paths above,
   and `assert_queries_count` pins on the index preloads. No assertions on HTML, CSS, or
   copy.
@@ -376,7 +421,7 @@ Each step leaves the app working and testable on its own.
    a console against real data before any UI exists.
 3. **Job and scheduling** — `Books::CalculateAuthorRankingsJob`, the `schedule.yml`
    entry, and the `CalculateRankingsJob` chain.
-4. **Index page** — `Books::RankedAuthorsQuery`,
+4. **Index page** — `Books::AuthorAvatarComponent`, `Books::RankedAuthorsQuery`,
    `Books::Authors::RankedItemsController`, the view, routes, nav entry, and the
    `assert_queries_count` pin.
 5. **Show and all-books pages** — `Books::AuthorsController`,
@@ -389,7 +434,10 @@ Each step leaves the app working and testable on its own.
   possible later — the RC already has `ranked_lists` — but nothing here builds toward it.
 - **Per-RC author rankings.** One author RC derived from the primary books RC. Adding a
   pairing column later is a migration, not a rewrite.
-- **Author images.** None exist; backfilling them is separate work.
+- **Author images.** None exist. This work ships the initials-monogram fallback so the
+  pages look finished without them; sourcing and backfilling real author portraits is
+  separate work, and `Books::AuthorAvatarComponent` will pick them up with no view
+  changes when they land.
 - **Splitting credit between co-authors.** Each co-author receives full book credit.
 - **Nationality and category filtered author pages** (the old site's
   `/the-greatest/:category/books/written-by/:country/authors` family).
