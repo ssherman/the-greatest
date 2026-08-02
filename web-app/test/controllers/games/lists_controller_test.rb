@@ -199,6 +199,14 @@ module Games
       assert_queries_count(4) { get "/lists" }
     end
 
+    test "rc-scoped index keeps the rc segment in its own controls" do
+      get "/rc/#{@rc.id}/lists"
+
+      assert_response :success
+      assert_select "a[href=?]", "/rc/#{@rc.id}/lists/#{@list.id}"
+      assert_select "form[action=?]", "/rc/#{@rc.id}/lists"
+    end
+
     test "show issues a bounded number of queries and preloads covers" do
       game = games_games(:breath_of_the_wild)
       ListItem.create!(list: @list, listable: game, position: 1)
