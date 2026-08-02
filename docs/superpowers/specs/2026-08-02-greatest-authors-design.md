@@ -470,6 +470,32 @@ Each step leaves the app working and testable on its own.
 - The development database is not disposable. Snapshot with `bin/snapshot-dev-db.sh`
   before running any migration or backfill against it.
 
+## Known deferred items
+
+Reviewed and consciously left alone. Recorded so the next person doesn't rediscover them.
+
+- `ItemRankings::Books::Authors::Calculator` uses `roles[:author].to_i`; `roles.fetch` would fail
+  loud if the enum key were renamed. Value `0` still means author, so this is inert.
+- `app/models/books/authors.rb` sets `table_name_prefix "books_authors_"` for a prefix no table
+  uses. Verified inert — the STI subclass inherits `ranking_configurations`.
+- The ranking-configuration migration's `down` destroys every configuration of that type and
+  cascades ~15k `ranked_items` one record at a time. Rollback of a data-creating migration is
+  inherently destructive; acceptable.
+- `Books::Authors::RankingConfiguration` is absent from `Admin::DomainRouting::RANKING_CONFIGURATIONS`.
+  It degrades to an auth denial rather than a crash. **Consequence worth knowing:** an admin who
+  ticks `exclude_from_rankings` has no way to force a recalculation and must wait for the cron.
+- The chain in `CalculateRankingsJob` fires for any `Books::RankingConfiguration`, including
+  archived or secondary ones, triggering a full recalculation derived from `default_primary`.
+  Wasteful, not incorrect — the job is idempotent.
+- `TopBooksForAuthorsQuery` filters `rank IS NOT NULL` while the calculator filters `score > 0`, so
+  a ranked zero-score book can appear as a cover without contributing to its author's score.
+- The avatar's image branch (`alt` duplicating the `<h1>`, hardcoded `text-5xl`) is untested and
+  unreachable — no author has an image. Revisit when author portraits land.
+- `docs/features/rankings.md` enumerates calculator subclasses and was not updated for this feature.
+  It is already stale — `Music::Artists::Calculator` is missing too.
+- `config/schedule.yml` carries no explicit timezone, so `0 4 * * *` follows the Sidekiq process TZ
+  rather than UTC. The job is idempotent and the hour is arbitrary.
+
 ## Deploying this feature
 
 The migration only creates the `Books::Authors::RankingConfiguration` row — it inserts zero
