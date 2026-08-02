@@ -47,8 +47,9 @@ test.describe('Games Lists', () => {
     await firstListCard.click();
     await expect(page).toHaveURL(/\/lists\/\d+/);
 
-    // Should show game cards (from CardComponent, now div.card)
-    const gameCards = page.locator('div.card');
+    // Should show game cards (from CardComponent, scoped to the grid so the
+    // WeightBreakdownComponent's own div.card above it can't satisfy this)
+    const gameCards = page.locator('.grid div.card .card-title a');
     await expect(gameCards.first()).toBeVisible();
   });
 
@@ -98,9 +99,14 @@ test.describe('Games Lists', () => {
   });
 
   test('search narrows the results', async ({ page }) => {
-    await page.goto('/lists?q=the');
+    await page.goto('/lists');
+    const unfilteredCount = await page.locator('.card h3 a').count();
 
+    await page.goto('/lists?q=the');
     await expect(page.getByText(/matching/)).toBeVisible();
+    const filteredCount = await page.locator('.card h3 a').count();
+
+    expect(filteredCount).toBeLessThan(unfilteredCount);
   });
 
   test('page one redirects to the canonical path', async ({ page }) => {
