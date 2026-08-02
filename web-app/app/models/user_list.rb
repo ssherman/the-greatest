@@ -72,7 +72,7 @@ class UserList < ApplicationRecord
   end
 
   # Resolves the request domain (a Symbol app-wide; hence .to_s) to its live
-  # UserList subclasses. Returns [] for unknown/unsupported domains (e.g. books).
+  # UserList subclasses. Returns [] for unknown/unsupported domains (e.g. nope).
   def self.subclasses_for(domain)
     (DOMAIN_SUBCLASSES[domain.to_s] || []).map(&:constantize)
   end
