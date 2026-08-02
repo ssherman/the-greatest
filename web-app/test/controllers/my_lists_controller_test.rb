@@ -390,6 +390,27 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "2026-01-20", rows.second.last
   end
 
+  test "books grid view loads authors in one query regardless of item count" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+    list = user_lists(:regular_user_books_favorites)
+
+    author_queries = ->(sql_log) { sql_log.count { |sql| sql.include?("books_book_authors") } }
+
+    two_item_log = capture_sql { get my_list_path(list, view_mode: "grid_view") }
+    assert_response :success
+
+    list.user_list_items.create!(listable: books_books(:of_mice_and_men))
+    list.user_list_items.create!(listable: books_books(:cannery_row))
+    ActiveRecord::Base.connection.clear_query_cache
+
+    four_item_log = capture_sql { get my_list_path(list, view_mode: "grid_view") }
+    assert_response :success
+
+    assert_equal author_queries.call(two_item_log), author_queries.call(four_item_log),
+      "author queries scaled with item count — the book_authors preload is missing"
+  end
+
   private
 
   # Bulk-inserts filler albums + list items so pagination tests can reach page
@@ -409,6 +430,13 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
          position: start_position + i, created_at: now, updated_at: now}
       end
     )
+  end
+
+  def capture_sql
+    queries = []
+    callback = ->(_n, _s, _f, _i, payload) { queries << payload[:sql] unless payload[:name] == "SCHEMA" }
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { yield }
+    queries
   end
 
   # Distinct listable ids in render order (rows/cards carry data-listable-id),

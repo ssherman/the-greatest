@@ -5,9 +5,9 @@ class UserLists::Show::ItemComponent < ViewComponent::Base
   include Games::DefaultHelper
 
   # Listables that have a dedicated card component (rendered as a <div> in
-  # default/grid views). Everything else (songs, movies, future books) renders
-  # as a <tr> table row.
-  CARD_LISTABLES = %w[Music::Album Games::Game].freeze
+  # default/grid views). Everything else (songs, movies) renders as a <tr>
+  # table row.
+  CARD_LISTABLES = %w[Music::Album Games::Game Books::Book].freeze
 
   def initialize(item:, view_mode:, position:)
     @item = item
@@ -44,6 +44,7 @@ class UserLists::Show::ItemComponent < ViewComponent::Base
     case listable
     when Music::Album then Music::Albums::CardComponent.new(album: listable)
     when Games::Game then Games::CardComponent.new(game: listable)
+    when Books::Book then Books::CardComponent.new(book: listable)
     end
   end
 
@@ -54,6 +55,7 @@ class UserLists::Show::ItemComponent < ViewComponent::Base
     case listable
     when Music::Album then link_to_album(listable, nil, class: "hover:text-primary")
     when Games::Game then link_to_game(listable, nil, class: "hover:text-primary")
+    when Books::Book then link_to(listable.title, book_path(listable.slug), class: "hover:text-primary")
     else title
     end
   end
@@ -66,9 +68,12 @@ class UserLists::Show::ItemComponent < ViewComponent::Base
     listable.primary_image if listable.respond_to?(:primary_image)
   end
 
-  # Album covers are square; game box art is portrait.
   def cover_aspect_class
-    listable.is_a?(Games::Game) ? "aspect-[3/4]" : "aspect-square"
+    case listable
+    when Books::Book then "aspect-[2/3]"
+    when Games::Game then "aspect-[3/4]"
+    else "aspect-square"
+    end
   end
 
   def completed_on_badge?
@@ -88,7 +93,9 @@ class UserLists::Show::ItemComponent < ViewComponent::Base
   end
 
   def by_line
-    if listable.respond_to?(:artists)
+    if listable.is_a?(Books::Book)
+      listable.book_authors.map { |book_author| book_author.author.name }.join(", ")
+    elsif listable.respond_to?(:artists)
       listable.artists.map(&:name).join(", ")
     elsif listable.is_a?(Games::Game)
       listable.game_companies.select(&:developer?).map { |gc| gc.company.name }.join(", ")
@@ -102,6 +109,6 @@ class UserLists::Show::ItemComponent < ViewComponent::Base
   end
 
   def year
-    listable.try(:release_year)
+    listable.is_a?(Books::Book) ? listable.first_published_year : listable.try(:release_year)
   end
 end

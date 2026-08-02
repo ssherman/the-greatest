@@ -51,5 +51,12 @@ module Books
       assert_no_selector ".badge"
       assert_selector "a[href='/book/war-and-peace']", count: 1
     end
+
+    test "renders without a rank or index" do
+      render_inline(Books::CardComponent.new(book: @book))
+
+      assert_selector "a[href='/book/war-and-peace']", count: 1
+      assert_no_selector ".badge"
+    end
   end
 end

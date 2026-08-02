@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Books::CardComponent < ViewComponent::Base
-  def initialize(book:, rank:, index:)
+  def initialize(book:, rank: nil, index: 0)
     @book = book
     @rank = rank
     @index = index
