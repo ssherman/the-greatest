@@ -58,5 +58,13 @@ module Books
       assert_selector "a[href='/book/war-and-peace']", count: 1
       assert_no_selector ".badge"
     end
+
+    test "renders the add-to-list widget above the stretched link overlay" do
+      render_inline(Books::CardComponent.new(book: @book, rank: 1, index: 0))
+
+      assert_selector ".relative.z-10 [data-controller='user-list-widget']"
+      assert_selector "[data-user-list-widget-listable-type-value='Books::Book']"
+      assert_selector "[data-user-list-widget-listable-id-value='#{@book.id}']"
+    end
   end
 end

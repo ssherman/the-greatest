@@ -37,5 +37,11 @@
     <% if author_names.present? %>
       <p class="text-sm text-base-content/70"><%= author_names %></p>
     <% end %>
+
+    <%# relative z-10 keeps this above the title's after:absolute stretched-link
+        overlay, which would otherwise swallow the click. %>
+    <div class="card-actions justify-end mt-2 relative z-10">
+      <%= render UserLists::CardWidgetComponent.new(listable: book) %>
+    </div>
   </div>
 </div>
