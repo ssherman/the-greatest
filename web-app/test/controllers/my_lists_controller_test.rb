@@ -555,6 +555,7 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_no_match(/list-owner/, response.body)
     assert_no_match(Regexp.new(Regexp.escape(list.user.email)), response.body)
+    assert_no_match(Regexp.new(Regexp.escape(list.user.name)), response.body)
   end
 
   test "the owner does not see attribution on their own list" do
@@ -562,6 +563,7 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     sign_in_as(@user, stub_auth: true)
 
     get my_list_path(user_lists(:regular_user_books_favorites))
+    assert_response :success
     assert_no_match(/list-owner/, response.body)
   end
 
