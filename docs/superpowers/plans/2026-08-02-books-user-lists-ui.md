@@ -184,6 +184,32 @@ git commit -m "Register Books::UserList in the domain and default-list constants
 
 **Why:** `User#create_default_user_lists` is an `after_create` callback, so Task 1 only affects *new* signups. Existing music/games users would see an empty books dashboard with no way to get defaults (UI list creation only produces `custom` lists). This also repairs the ~145 legacy books users the migration deliberately left short.
 
+- [ ] **Step 0: Vendor the `book-open` icon (hard prerequisite)**
+
+The moment this task creates a books `reading` list, `UserLists::Dashboard::ListCardComponent` renders it and calls `helpers.icon("book-open", library: "lucide")`. That icon is not vendored, so the books dashboard raises. `ApplicationController#detect_current_domain` returns `:books` for **unrecognized** hosts, so this breaks the pre-existing "unknown host" controller test too — not only books-host requests. The icon must land in this task, before the service is wired up. (Task 3 lists these same three edits and will find them already done.)
+
+1. Download the single `book-open` SVG from <https://lucide.dev/icons/book-open> and save it as `app/assets/svg/icons/lucide/outline/book-open.svg`. Match a sibling's shape exactly — compare against `app/assets/svg/icons/lucide/outline/bookmark.svg`. Do **not** run `bin/rails generate rails_icons:sync`; the curation policy in `app/assets/svg/icons/README.md` forbids syncing the full ~1,700-icon library.
+
+2. Add it to the client-side template in `app/views/shared/_user_list_icon_template.html.erb` (the modal clones icons from here by `data-icon` name):
+
+```erb
+  <% %w[heart headphones bookmark check trophy gamepad-2 eye plus book-open].each do |name| %>
+```
+
+3. Add this row to the table in `app/assets/svg/icons/README.md`, immediately after the `bookmark` row:
+
+```markdown
+| `book-open` | `Books::UserList.list_type_icons[:reading]` |
+```
+
+4. Verify it resolves:
+
+```bash
+bin/rails runner 'puts ApplicationController.helpers.icon("book-open", library: "lucide", class: "size-4")'
+```
+
+Expected: an `<svg>` string. An exception means the file is in the wrong directory or malformed.
+
 - [ ] **Step 1: Write the failing test**
 
 Create `test/lib/services/user_lists/ensure_defaults_test.rb`:
@@ -472,39 +498,16 @@ git commit -m "Backfill missing default user lists on first visit to a domain"
 
 **Why the icon:** `Books::UserList.list_type_icons[:reading]` is `book-open`, which is neither vendored nor in the client-side template the modal clones from.
 
-- [ ] **Step 1: Vendor the icon**
+- [ ] **Steps 1-4: Icon — already done in Task 2 Step 0**
 
-Download the single `book-open` SVG from <https://lucide.dev/icons/book-open> and save it as `app/assets/svg/icons/lucide/outline/book-open.svg`. Match the shape of a sibling file exactly:
-
-```bash
-cat app/assets/svg/icons/lucide/outline/bookmark.svg
-```
-
-Do **not** run `bin/rails generate rails_icons:sync` — the curation policy in `app/assets/svg/icons/README.md` forbids syncing the full ~1,700-icon library.
-
-- [ ] **Step 2: Add it to the client-side template**
-
-In `app/views/shared/_user_list_icon_template.html.erb`, change the icon list to include `book-open`:
-
-```erb
-  <% %w[heart headphones bookmark check trophy gamepad-2 eye plus book-open].each do |name| %>
-```
-
-- [ ] **Step 3: Document it**
-
-In `app/assets/svg/icons/README.md`, add this row to the table, keeping alphabetical order (immediately after the `bookmark` row):
-
-```markdown
-| `book-open` | `Books::UserList.list_type_icons[:reading]` |
-```
-
-- [ ] **Step 4: Verify the icon renders**
+Task 2 had to vendor `book-open` to render the books dashboard at all, so these are done. Verify and move on:
 
 ```bash
-bin/rails runner 'include ActionView::Helpers; puts ApplicationController.helpers.icon("book-open", library: "lucide", class: "size-4")'
+ls app/assets/svg/icons/lucide/outline/book-open.svg
+grep -c book-open app/views/shared/_user_list_icon_template.html.erb app/assets/svg/icons/README.md
 ```
 
-Expected: an `<svg>` string. A `nil` or an exception means the file is in the wrong directory or malformed.
+Expected: the file exists and both greps return 1. If anything is missing, do it now — see Task 2 Step 0 for the exact content.
 
 - [ ] **Step 5: Add the Stimulus hook to `<body>`**
 
@@ -596,10 +599,16 @@ Append to `test/controllers/my_lists_controller_test.rb`:
   end
 ```
 
-Also rename the stale test at line ~75 — it says books has no layout, which is no longer true:
+The existing test at line ~75, "unknown host falls back to the music layout (books has no layout yet)", now asserts the wrong thing. `ApplicationController#detect_current_domain` returns `:books` for unrecognized hosts, so once Step 8 adds the `when :books` branch, an unknown host renders the **books** layout, not music. `MyListsController` was the only controller still treating unknown hosts as music; this makes it consistent with the rest of the app. Replace that test with:
 
 ```ruby
-  test "unknown host falls back to the music layout" do
+  test "unknown host renders the books layout (detect_current_domain defaults to :books)" do
+    host! "unknown.example.com"
+    sign_in_as(@user, stub_auth: true)
+    get my_lists_path
+    assert_response :success
+    assert_includes response.body, 'data-theme="books"'
+  end
 ```
 
 These tests need no books fixtures: Task 2's `EnsureDefaults` creates the four default lists on the first dashboard hit.
