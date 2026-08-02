@@ -16,7 +16,7 @@ module Admin
       assert_nil games[:favicon_dir]
 
       books = Admin::DomainNav.chrome_for(:books)
-      assert_equal "cmyk", books[:theme]
+      assert_equal "books", books[:theme]
       assert_equal "books", books[:stylesheet]
       assert_equal "The Greatest Books", books[:title]
       assert_nil books[:favicon_dir]

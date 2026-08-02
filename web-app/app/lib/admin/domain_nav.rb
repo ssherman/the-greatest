@@ -66,7 +66,7 @@ module Admin
         ]
       },
       books: {
-        theme: "cmyk",
+        theme: "books",
         stylesheet: "books",
         favicon_dir: nil,
         title: "The Greatest Books",

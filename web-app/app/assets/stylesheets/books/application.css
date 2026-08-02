@@ -7,7 +7,49 @@
 @source "../../../../app/components/**/*";
 
 @plugin "daisyui" {
-  themes: cmyk --default;
+  themes: false;
+}
+
+@plugin "daisyui/theme" {
+  name: "books";
+  default: true;
+  color-scheme: light;
+
+  /* surfaces */
+  --color-base-100: oklch(100% 0 0);
+  --color-base-200: oklch(97.7% 0.009 85);
+  --color-base-300: oklch(93.5% 0.013 83);
+  --color-base-content: oklch(20% 0 0);
+
+  /* brand */
+  --color-primary: oklch(42% 0.10 250);
+  --color-primary-content: oklch(98% 0 0);
+  --color-secondary: oklch(38% 0.09 30);
+  --color-secondary-content: oklch(97% 0.01 30);
+  --color-accent: oklch(80% 0.12 88);
+  --color-accent-content: oklch(24% 0.05 88);
+  --color-neutral: oklch(21.778% 0 0);
+  --color-neutral-content: oklch(84.355% 0 0);
+
+  /* semantic — spaced on lightness for red-green CVD */
+  --color-info: oklch(64% 0.11 245);
+  --color-info-content: oklch(18% 0.03 245);
+  --color-success: oklch(52% 0.15 310);
+  --color-success-content: oklch(98% 0 0);
+  --color-warning: oklch(68% 0.15 62);
+  --color-warning-content: oklch(22% 0.05 62);
+  --color-error: oklch(55% 0.20 28);
+  --color-error-content: oklch(98% 0 0);
+
+  /* geometry — carried over from cmyk unchanged */
+  --radius-selector: 1rem;
+  --radius-field: 0.5rem;
+  --radius-box: 1rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
 }
 
 @layer base {
