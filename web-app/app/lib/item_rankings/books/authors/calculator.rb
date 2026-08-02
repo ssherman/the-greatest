@@ -16,6 +16,15 @@ module ItemRankings
           end
 
           ranking_data = author_scores(source)
+
+          if ranking_data.empty?
+            return Result.new(
+              success?: false,
+              data: nil,
+              errors: ["No qualifying authors to rank; refusing to overwrite the existing ranking"]
+            )
+          end
+
           update_ranked_items(ranking_data)
 
           Result.new(success?: true, data: ranking_data, errors: [])
@@ -42,9 +51,9 @@ module ItemRankings
             score = ScoreFormula.call(
               book_count: row["book_count"],
               total_score: row["total_score"]
-            )
+            ).round(2)
             {id: row["author_id"], total_score: score} if score > 0
-          }.sort_by { |author| -author[:total_score] }
+          }.sort_by { |author| [-author[:total_score], author[:id]] }
         end
 
         def aggregation_sql(source_id)

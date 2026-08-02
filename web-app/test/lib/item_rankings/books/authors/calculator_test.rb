@@ -96,6 +96,28 @@ module ItemRankings
           assert_nil @config.ranked_items.find_by(item: @tolstoy)
         end
 
+        test "drops authors whose rounded score is zero" do
+          credit(books_books(:war_and_peace), @tolstoy)
+          rank_book(books_books(:war_and_peace), 0.01)
+
+          @calculator.call
+
+          assert_nil @config.ranked_items.find_by(item: @tolstoy)
+        end
+
+        test "breaks score ties by author id ascending" do
+          credit(books_books(:war_and_peace), @tolstoy)
+          credit(books_books(:got), @king)
+          rank_book(books_books(:war_and_peace), 100)
+          rank_book(books_books(:got), 100)
+
+          @calculator.call
+
+          items = @config.ranked_items.order(:rank)
+          expected_order = [@tolstoy, @king].sort_by(&:id).map(&:id)
+          assert_equal expected_order, items.pluck(:item_id)
+        end
+
         test "deletes ranked items that no longer qualify" do
           credit(books_books(:war_and_peace), @tolstoy)
           rank_book(books_books(:war_and_peace), 100)
@@ -109,6 +131,21 @@ module ItemRankings
 
           assert_nil @config.ranked_items.find_by(item: @tolstoy)
           assert @config.ranked_items.find_by(item: @king)
+        end
+
+        test "fails without deleting when there are no qualifying ranked books" do
+          credit(books_books(:war_and_peace), @tolstoy)
+          rank_book(books_books(:war_and_peace), 100)
+          @calculator.call
+          assert @config.ranked_items.find_by(item: @tolstoy)
+
+          @source.ranked_items.reload.destroy_all
+
+          result = @calculator.call
+
+          assert_not result.success?
+          assert_not_empty result.errors
+          assert @config.ranked_items.find_by(item: @tolstoy), "expected the prior ranking to survive an empty recalculation"
         end
 
         test "is idempotent" do
