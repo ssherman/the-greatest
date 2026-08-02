@@ -302,7 +302,10 @@ feature; anonymous clicks already open the login modal.
 
 ## N. Attribution
 
-Only **22 of 88** public-list owners have a `display_name`. Show `by <display_name>` when present;
+Only **12 of 88** public-list owners have a usable `display_name`. (An earlier draft said 22 — that
+was the count of non-`NULL` values, but 10 of those are empty strings. The view gates on `.present?`,
+so 12 is the figure that matters, and it makes the case for omitting attribution stronger, not
+weaker.) Show `by <display_name>` when present;
 show nothing when absent, rather than inventing "Anonymous". Never render `email` or `name`.
 
 ## O. Indexing and caching
