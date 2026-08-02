@@ -40,7 +40,7 @@ measured at **34ms** on dev data.
 | Authors with `death_year` | 11,990 |
 | Authors with an `Image` | **0** |
 | Most books for one author | 243 (9 authors >100, 307 >25, p95 = 6) |
-| Full aggregation, one query | 34ms |
+| Full aggregation, one query | 34ms (full job, incl. upsert: ~1.2s) |
 
 ## What the old formula did, and what is wrong with it
 
@@ -487,5 +487,7 @@ the start:
 Books::CalculateAuthorRankingsJob.new.perform
 ```
 
-This takes about 34ms of query time and is idempotent — the job recomputes from scratch and
-upserts, so running it again (by hand or via the next cron tick) is always safe.
+Measured on dev's 14,944 authors this takes about **1.2 seconds** wall clock — the aggregation
+query itself is ~34ms, and the rest is the Ruby mapping plus the upsert. It is idempotent: the job
+recomputes from scratch and upserts, so running it again (by hand or via the next cron tick) is
+always safe.
