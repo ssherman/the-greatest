@@ -45,8 +45,9 @@ The callback only fires on signup, so `Services::UserLists::EnsureDefaults` fill
 users created before a subclass joined `DEFAULT_SUBCLASSES`. `MyListsController#index` and
 `UserListStateController#show` both pass it the lists they already loaded; it diffs against the
 domain's `default_list_types`, creates only what's missing, and costs zero queries and zero writes
-when the set is complete. It also repairs the ~145 legacy books users the migration deliberately
-left short (`D-verbatim-defaults`).
+when the set is complete. It also repairs the ~145 missing default lists (19 `read` + 36 `reading`
++ 59 `want_to_read` + 31 `favorites`, some users missing more than one) that the migration
+deliberately left short (`D-verbatim-defaults`).
 
 Because fixture loading bypasses ActiveRecord callbacks, fixture users do NOT receive default lists automatically. Tests that rely on the callback must build users via `User.create!`.
 
@@ -183,7 +184,7 @@ caught it (only an E2E spec did). Check both maps whenever a domain is added.
 
 ### Icons
 
-This spec adopts the [`rails_icons`](https://github.com/Rails-Designer/rails_icons) gem with the [Lucide](https://lucide.dev/) library project-wide. Server-side: `helpers.icon "heart", library: "lucide", class: "size-4"` (use `helpers.icon` inside ViewComponents). Client-side: each domain layout includes a hidden `<template id="user-list-icons">` (rendered by `app/views/shared/_user_list_icon_template.html.erb`) holding the union of icons used by every `list_type_icons` map (`heart`, `headphones`, `bookmark`, `check`, `trophy`, `gamepad-2`, `eye`, `plus`). The widget Stimulus controller clones nodes from this template by `data-icon` name, keeping the JS bundle small and reusing the exact same SVG output everywhere.
+This spec adopts the [`rails_icons`](https://github.com/Rails-Designer/rails_icons) gem with the [Lucide](https://lucide.dev/) library project-wide. Server-side: `helpers.icon "heart", library: "lucide", class: "size-4"` (use `helpers.icon` inside ViewComponents). Client-side: each domain layout includes a hidden `<template id="user-list-icons">` (rendered by `app/views/shared/_user_list_icon_template.html.erb`) holding the union of icons used by every `list_type_icons` map (`heart`, `headphones`, `bookmark`, `check`, `trophy`, `gamepad-2`, `eye`, `plus`, `book-open`). The widget Stimulus controller clones nodes from this template by `data-icon` name, keeping the JS bundle small and reusing the exact same SVG output everywhere.
 
 Per-subclass icon mapping lives in `self.list_type_icons` on each STI subclass. `:custom` is never in the icon map — custom lists collapse into a `+N` pill on the card.
 
@@ -237,8 +238,8 @@ Lists the current user's lists for `Current.domain` (music shows **both** album 
 
 Loads the list via `current_user.user_lists.where(type: UserList.subclasses_for(Current.domain).map(&:name)).find` — scoped to **both** the owner and the current domain's STI subclasses. A list belonging to another domain (e.g. a games list opened on the music host) 404s rather than rendering in the wrong layout; non-owner and cross-domain both hide existence via 404. It then renders the list's items in the persisted `view_mode`:
 
-- **`default_view`** ("List") — a compact, full-width row per item: number + title-by-author heading, a small cover thumbnail, the item's **description**, a year/completed line, and the Add-to-list widget. Only for listables with covers/descriptions (albums, games).
-- **`grid_view`** — the existing domain card (`Music::Albums::CardComponent`, `Games::CardComponent`) in a responsive grid.
+- **`default_view`** ("List") — a compact, full-width row per item: number + title-by-author heading, a small cover thumbnail, the item's **description**, a year/completed line, and the Add-to-list widget. Only for listables with covers/descriptions (albums, games, books).
+- **`grid_view`** — the existing domain card (`Music::Albums::CardComponent`, `Games::CardComponent`, `Books::CardComponent`) in a responsive grid.
 - **`table_view`** — a single generic DaisyUI `<table>` row shared across listables.
 
 `UserLists::Show::ItemComponent` unwraps `item.listable` and dispatches: card-capable listables render the list row (default) or the domain card (grid); songs render the rich `Music::Songs::ListItemComponent` row inside a table; anything else renders the generic table row. Its `self.table_layout?(listable_class:, view_mode:)` class method tells the show view which wrapper (`<table>` vs stacked `<div>` vs grid) to render — lists are homogeneous, so it's computed once.
@@ -253,11 +254,11 @@ Switching `?view_mode=` persists the choice on the list (`update!`). Items eager
 
 ### `completed_on` (read-only in Phase A)
 
-Each STI subclass declares which `list_type`s support a completion date via `self.completed_on_list_types` (albums `[:listened]`, games `[:played, :beaten]`, movies `[:watched]`, songs `[]`), mirroring the `list_type_icons` pattern. `completed_on_enabled?` gates display. In Phase A the date renders read-only in the generic table row and the CSV `Completed On` column; the inline editor is Phase B.
+Each STI subclass declares which `list_type`s support a completion date via `self.completed_on_list_types` (albums `[:listened]`, games `[:played, :beaten]`, movies `[:watched]`, songs `[]`, books `[:read]`), mirroring the `list_type_icons` pattern. `completed_on_enabled?` gates display. In Phase A the date renders read-only in the generic table row and the CSV `Completed On` column; the inline editor is Phase B.
 
 ### CSV export
 
-`show.csv` streams a UTF-8 CSV with a BOM prefix (Excel-friendly) via `send_data`, filename `"#{list.name.parameterize}-#{Date.current.iso8601}.csv"`. Columns vary per listable (albums/songs: Position, Title, Artists, Year; games/movies: Position, Title, Year), with a `Completed On` column only when `completed_on_enabled?`. The CSV is unpaginated and follows the current sort.
+`show.csv` streams a UTF-8 CSV with a BOM prefix (Excel-friendly) via `send_data`, filename `"#{list.name.parameterize}-#{Date.current.iso8601}.csv"`. Columns vary per listable (albums/songs: Position, Title, Artists, Year; books: Position, Title, Authors, Year, via `Books::Book#first_published_year`; games/movies: Position, Title, Year), with a `Completed On` column only when `completed_on_enabled?`. The CSV is unpaginated and follows the current sort.
 
 ### "My Lists" nav link
 
