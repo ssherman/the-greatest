@@ -13,10 +13,10 @@ test.describe('Books ranked grid', () => {
     await expect(page.getByRole('heading', { name: /Greatest Books/i, level: 1 })).toBeVisible();
   });
 
-  test('root uses the cmyk theme and declares a language', async ({ page }) => {
+  test('root uses the books theme and declares a language', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'cmyk');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'books');
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   });
 

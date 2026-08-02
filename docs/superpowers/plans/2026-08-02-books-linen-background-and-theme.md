@@ -32,6 +32,7 @@ Replaces the borrowed `cmyk` theme with an owned `books` theme carrying the full
 - Modify: `web-app/app/views/layouts/books/application.html.erb:2`
 - Modify: `web-app/app/lib/admin/domain_nav.rb:69`
 - Test: `web-app/test/lib/admin/domain_nav_test.rb:19`
+- Test: `web-app/e2e/tests/books/homepage.spec.ts:16-21` — asserts `data-theme` is `cmyk`; rename the test and flip the expected value to `books`. **Two** tests pin the theme name, not one. When searching for others, exclude `app/assets/builds/` — the minified CSS contains thousands of matches and will bury the real hits in truncated grep output.
 
 **Interfaces:**
 - Consumes: nothing — this is the first task.
@@ -294,7 +295,7 @@ Only `bg-base-200` → `bg-base-300`. Every other class on the line stays.
 cd web-app && grep -rn "bg-base-200" app/views/books/ app/views/layouts/books/ app/components/books/
 ```
 
-Expected: **no matches**. Every former `bg-base-200` has become either `bg-base-100` (panels) or `bg-base-300` (chrome and recessed slots), and the only remaining `base-200` in books is the page itself on `<body>`.
+Expected: **exactly one match** — `app/views/layouts/books/application.html.erb:19`, the `<body class="bg-base-200">` added in Step 1. That one is the page itself and is correct. Every other former `bg-base-200` should now be either `bg-base-100` (panels) or `bg-base-300` (chrome and recessed slots). Any second match means a surface was missed.
 
 - [ ] **Step 8: Build the CSS**
 
