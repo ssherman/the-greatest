@@ -15,18 +15,31 @@ module Books
       get "/author/#{@author.slug}"
 
       assert_response :success
+      assert @controller.view_assigns["indexable"]
     end
 
     test "renders an author with no ranked item" do
-      @author_config.ranked_items.destroy_all
+      # Not @author_config.ranked_items.destroy_all: setup's earlier destroy_all
+      # already loaded (and cached) that association as empty, and the RankedItem
+      # created right after it was created directly on the class, bypassing the
+      # association -- so a second call through the stale cached association
+      # would silently destroy nothing.
+      RankedItem.where(ranking_configuration: @author_config).destroy_all
 
       get "/author/#{@author.slug}"
 
       assert_response :success
+      assert_not @controller.view_assigns["indexable"]
     end
 
     test "404s for an unknown slug" do
       get "/author/not-a-real-author"
+
+      assert_response :not_found
+    end
+
+    test "does not fall back to a primary key lookup" do
+      get "/author/#{@author.id}"
 
       assert_response :not_found
     end
@@ -42,6 +55,7 @@ module Books
       get "/author/#{@author.slug}/all-books"
 
       assert_response :success
+      assert_not @controller.view_assigns["indexable"]
     end
 
     test "sets a public cache-control header on all-books" do
@@ -54,6 +68,15 @@ module Books
       get "/author/#{@author.slug}/all-books/page/99"
 
       assert_response :not_found
+    end
+
+    test "renders the all-books page for an author with no books" do
+      author = books_authors(:king)
+
+      get "/author/#{author.slug}/all-books"
+
+      assert_response :success
+      assert_empty @controller.view_assigns["books"]
     end
 
     test "renders show scoped to an explicit ranking configuration" do

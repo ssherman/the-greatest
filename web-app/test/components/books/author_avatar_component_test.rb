@@ -34,6 +34,17 @@ module Books
       assert_equal "AD", initials_for("Alfred Döblin")
     end
 
+    # These names have a non-ASCII letter as the very FIRST character of the
+    # token, not just somewhere inside it. [A-Za-z] would skip past it and
+    # match the first ASCII letter it finds instead, which the cases above
+    # can't detect because every token there already starts with an ASCII
+    # letter.
+    test "uses the first character of the token even when it opens with a non-ASCII letter" do
+      assert_equal "ÉZ", initials_for("Émile Zola")
+      assert_equal "PÉ", initials_for("Paul Éluard")
+      assert_equal "ÖH", initials_for("Ödön von Horváth")
+    end
+
     test "never exceeds two characters" do
       assert_equal 2, initials_for("Jalal al-Din Muhammad Rumi").length
     end

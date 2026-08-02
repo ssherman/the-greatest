@@ -33,5 +33,17 @@ module Books
 
       assert_response :not_found
     end
+
+    # The regression guard for the friendly_id slug-before-id collision (mirrors
+    # legacy_books_controller_test.rb's collider test): a numeric id lookup must
+    # never fall back to matching some other author's slug.
+    test "does not fall back to a slug lookup" do
+      Books::Author.create!(name: "Collider Author", slug: @author.id.to_s)
+
+      get "/authors/#{@author.id}"
+
+      assert_redirected_to "/author/#{@author.slug}"
+      assert_response :moved_permanently
+    end
   end
 end

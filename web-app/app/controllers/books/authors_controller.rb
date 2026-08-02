@@ -22,7 +22,6 @@ class Books::AuthorsController < ApplicationController
 
   def all_books
     @indexable = false
-    @ranked_item = author_ranked_item
     @pagy, @books = pagy_path(all_books_relation, limit: 50)
   end
 
