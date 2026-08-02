@@ -44,7 +44,7 @@ class UserLists::Show::ItemComponent < ViewComponent::Base
     case listable
     when Music::Album then Music::Albums::CardComponent.new(album: listable)
     when Games::Game then Games::CardComponent.new(game: listable)
-    when Books::Book then Books::CardComponent.new(book: listable)
+    when Books::Book then Books::CardComponent.new(book: listable, index: position - 1)
     end
   end
 

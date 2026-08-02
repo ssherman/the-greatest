@@ -60,7 +60,8 @@ Reordering is implemented via `UserList#reorder_items!(ordered_listable_ids)`, w
 
 ### Uniqueness Constraints
 - **One copy of a given item per list** — DB-level `UNIQUE(user_list_id, listable_type, listable_id)` plus a model-level `validates :listable_id, uniqueness:`.
-- **One default list per (user, type)** — enforced at the model level only (`one_default_per_type_per_user`). There is no DB partial unique index: default lists are only ever created through the idempotent signup callback, so the model-level check is sufficient and keeps the schema simple.
+- **One default list per (user, type)** — enforced at the model level only (`one_default_per_type_per_user`), with no DB partial unique index. A plain `UNIQUE(user_id, type, list_type)` is not usable here because `custom` lists legitimately repeat, and each STI subclass assigns `custom` a different integer, so excluding them would mean hardcoding per-subclass enum values in SQL and migrating every time a domain is added.
+  Since `Services::UserLists::EnsureDefaults` creates defaults on ordinary page views — not just at signup — the model validation alone cannot stop two concurrent first-visit requests from both inserting. It therefore takes a row lock on the owning user (`user.with_lock`) and re-derives what is missing inside that lock. The lock is only reached on the backfill path; once a user's set is complete the service returns before locking.
 
 ### Public vs Private
 Each `UserList` has a `public` boolean (default false). Individual list visibility is per-list. Public-list queries use the `public_lists` scope, backed by a `WHERE public = true` partial index.

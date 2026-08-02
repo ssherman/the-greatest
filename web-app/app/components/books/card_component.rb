@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
 class Books::CardComponent < ViewComponent::Base
-  def initialize(book:, rank: nil, index: 0)
+  EAGER_IMAGE_COUNT = 6
+
+  def initialize(book:, rank: nil, index: nil)
     @book = book
     @rank = rank
     @index = index
@@ -19,11 +21,18 @@ class Books::CardComponent < ViewComponent::Base
     @cover ||= book.primary_image if book.primary_image&.file&.attached?
   end
 
+  # A caller that omits index gets lazy/auto rather than eager/high. Defaulting
+  # an unknown position to "above the fold" makes every card in a 100-item grid
+  # fetch its cover eagerly at high priority.
+  def above_fold?
+    index.present? && index < EAGER_IMAGE_COUNT
+  end
+
   def loading_strategy
-    (index < 6) ? "eager" : "lazy"
+    above_fold? ? "eager" : "lazy"
   end
 
   def fetch_priority
-    (index < 6) ? "high" : "auto"
+    above_fold? ? "high" : "auto"
   end
 end

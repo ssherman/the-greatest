@@ -98,6 +98,46 @@ module Services
         # The three it could not create are dropped; the one that already exists is re-read.
         assert_equal [winner.id], result.map(&:id)
       end
+
+      test "locks the owning user before backfilling" do
+        @user.expects(:with_lock).once.yields
+
+        result = EnsureDefaults.call(user: @user, domain: :books, existing: [])
+
+        assert_equal 4, result.size
+      end
+
+      test "returns the post-lock read when the caller's existing array is stale" do
+        # Caller loaded [] before a concurrent request committed all four.
+        EnsureDefaults.call(user: @user, domain: :books, existing: [])
+
+        result = EnsureDefaults.call(user: @user, domain: :books, existing: [])
+
+        assert_equal 4, result.size
+        assert_equal books_lists.map(&:id).sort, result.map(&:id).sort
+      end
+
+      test "takes no lock when the set is already complete" do
+        EnsureDefaults.call(user: @user, domain: :books, existing: [])
+        existing = books_lists
+
+        @user.expects(:with_lock).never
+
+        EnsureDefaults.call(user: @user, domain: :books, existing: existing)
+      end
+
+      test "creates nothing extra when another request backfilled first" do
+        # The caller's `existing` is stale — it was loaded before a concurrent
+        # request committed the same four defaults. The re-read inside the lock
+        # must notice and create nothing.
+        EnsureDefaults.call(user: @user, domain: :books, existing: [])
+        assert_equal 4, books_lists.size
+
+        assert_no_difference "UserList.count" do
+          EnsureDefaults.call(user: @user, domain: :books, existing: [])
+        end
+        assert_equal 4, books_lists.size
+      end
     end
   end
 end

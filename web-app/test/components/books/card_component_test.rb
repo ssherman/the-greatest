@@ -45,6 +45,13 @@ module Books
       assert_equal "lazy", Books::CardComponent.new(book: @book, rank: 42, index: 6).send(:loading_strategy)
     end
 
+    test "a caller that omits index gets lazy loading, not eager" do
+      component = Books::CardComponent.new(book: @book)
+
+      assert_equal "lazy", component.send(:loading_strategy)
+      assert_equal "auto", component.send(:fetch_priority)
+    end
+
     test "omits the rank badge when the book has no rank" do
       render_inline(Books::CardComponent.new(book: @book, rank: nil, index: 0))
 

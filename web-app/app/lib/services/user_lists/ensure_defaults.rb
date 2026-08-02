@@ -24,16 +24,33 @@ module Services
       end
 
       def call
-        missing = missing_pairs
-        return @existing if missing.empty?
+        return @existing if missing_pairs(@existing).empty?
 
-        @existing + missing.filter_map { |klass, list_type| create(klass, list_type) }
+        # one_default_per_type_per_user has no backing DB index, so it cannot stop
+        # two concurrent first-visit requests from each seeing no row and both
+        # inserting. Serialize on the owning user and re-derive inside the lock.
+        # Only the backfill path pays for this: once the set is complete the guard
+        # above returns before any lock is taken.
+        fresh = nil
+        created = []
+        @user.with_lock do
+          fresh = ::UserList.where(user_id: @user.id, type: subclass_names).to_a
+          created = missing_pairs(fresh).filter_map { |klass, list_type| create(klass, list_type) }
+        end
+
+        # Return the post-lock read, not the caller's array: if `existing` was
+        # loaded before a concurrent request committed, it is already stale.
+        fresh + created
       end
 
       private
 
-      def missing_pairs
-        present = @existing.map { |list| [list.class.name, list.list_type.to_s] }
+      def subclass_names
+        ::UserList.subclasses_for(@domain).map(&:name)
+      end
+
+      def missing_pairs(existing)
+        present = existing.map { |list| [list.class.name, list.list_type.to_s] }
         ::UserList.subclasses_for(@domain).flat_map do |klass|
           klass.default_list_types.filter_map do |list_type|
             [klass, list_type] unless present.include?([klass.name, list_type.to_s])
@@ -41,9 +58,8 @@ module Services
         end
       end
 
-      # one_default_per_type_per_user is a model-level validation with no backing
-      # DB index, so two concurrent requests can both pass it. Lose the race
-      # quietly and re-read rather than 500ing the page.
+      # Belt-and-braces inside the lock: if a row somehow exists anyway, reuse it
+      # rather than 500ing the page.
       def create(klass, list_type)
         klass.find_or_create_by!(user: @user, list_type: list_type) do |list|
           list.name = klass.default_list_name_for(list_type)
