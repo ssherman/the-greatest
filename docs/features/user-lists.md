@@ -236,7 +236,7 @@ Lists the current user's lists for `Current.domain` (music shows **both** album 
 
 ### Show (`show`)
 
-Loads the list via `current_user.user_lists.where(type: UserList.subclasses_for(Current.domain).map(&:name)).find` — scoped to **both** the owner and the current domain's STI subclasses. A list belonging to another domain (e.g. a games list opened on the music host) 404s rather than rendering in the wrong layout; non-owner and cross-domain both hide existence via 404. It then renders the list's items in the persisted `view_mode`:
+Loads the list via `UserList.where(type: UserList.subclasses_for(Current.domain).map(&:name)).visible_to(current_user).find` — scoped to the current domain's STI subclasses, with visibility (owner or public) delegated to `visible_to` (see "Public list viewing (direct link)" below). A list belonging to another domain (e.g. a games list opened on the music host) 404s rather than rendering in the wrong layout; a private list belonging to someone else 404s the same way, hiding existence either way. It then renders the list's items in the persisted `view_mode`:
 
 - **`default_view`** ("List") — a compact, full-width row per item: number + title-by-author heading, a small cover thumbnail, the item's **description**, a year/completed line, and the Add-to-list widget. Only for listables with covers/descriptions (albums, games, books).
 - **`grid_view`** — the existing domain card (`Music::Albums::CardComponent`, `Games::CardComponent`, `Books::CardComponent`) in a responsive grid.
@@ -268,6 +268,27 @@ Each domain layout (music, games) ships a hidden `<li id="navbar_my_lists" class
 
 The ViewComponents live under `UserLists::*` (plural namespace) because `UserList` is itself a class — making it a module would conflict with the model. Stimulus controllers and Rails controllers keep the singular `user_list_*` naming.
 
+### Public list viewing (direct link)
+
+`MyListsController#show` is viewer-aware. `UserList.visible_to(current_user)` returns the viewer's
+own lists plus anyone's public lists; anything else falls out of the scope and 404s, which hides
+existence. (Pundit's `NotAuthorizedError` rescue redirects with a flash, so the check cannot live in
+the policy alone — `UserListPolicy#show?` mirrors the rule as defense in depth.) `require_signed_in!`
+applies to `index` only.
+
+Owner-gated on `@owner`: the add-item box, the "My Lists" backlink, and `view_mode` persistence — a
+non-owner's `?view_mode=` changes only their own render. Sorting, pagination, CSV, and the per-item
+Add-to-list widget are available to everyone.
+
+Non-owners see "A list by <display_name>" when the owner has one, and nothing when they don't (only
+12 of 88 public-list owners do, as of this writing). `email` and `name` are never rendered. Pages set `@indexable = false`
+(`noindex, follow` via the books layout) and keep `prevent_caching` — the HTML is owner-aware, so
+edge-caching it would serve one viewer's toolbar to another.
+
+Legacy `GET /user_lists`, `/user_lists/new`, and `/user_lists/:id/edit` 301 to the read pages.
+
+Still unbuilt: a public-list **discovery** index and "consumed" badges.
+
 ### Stimulus Property Naming Hazard
 
 The framework's `Controller` base class uses `this.context` internally for scope/targets resolution — every target getter ends up at `this.context.scope.targets`. Custom controllers must NOT assign `this.context = ...` (a 02a near-miss). Use any other property name (`this.openContext` here).
@@ -276,7 +297,8 @@ The framework's `Controller` base class uses `this.context` internally for scope
 - Write/management UI — create, edit, drag-and-drop reorder, remove items, delete list, `completed_on` editing — Phase B (`user-lists-02f`).
 - Adding an item from within a list page (autocomplete) — `user-lists-02e`.
 - Public-list **discovery** (a browsable index of public lists) and "consumed" badge upgrades —
-  the remainder of `user-lists-02d`.
+  the remainder of `user-lists-02d`. Direct-link viewing of a public list shipped with the books
+  UI work; see `docs/superpowers/specs/2026-08-02-books-user-lists-ui-design.md`.
 - Dynamic community lists aggregated from user favorites — `user-lists-03`.
 
 ## Related Documentation
