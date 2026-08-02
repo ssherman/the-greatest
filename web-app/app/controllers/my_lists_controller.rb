@@ -20,7 +20,11 @@ class MyListsController < ApplicationController
   # single grouped query. Always renders (defaults are auto-created at signup).
   def index
     types = UserList.subclasses_for(Current.domain).map(&:name)
-    lists = current_user.user_lists.where(type: types).to_a
+    lists = Services::UserLists::EnsureDefaults.call(
+      user: current_user,
+      domain: Current.domain,
+      existing: current_user.user_lists.where(type: types).to_a
+    )
 
     @item_counts = UserListItem.where(user_list_id: lists.map(&:id))
       .group(:user_list_id).count

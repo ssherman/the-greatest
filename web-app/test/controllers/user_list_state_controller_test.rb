@@ -112,4 +112,17 @@ class UserListStateControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal @user.id.to_s, cookies[:tg_uid]
   end
+
+  test "state endpoint backfills missing default lists for the current domain" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+
+    assert_difference -> { @user.user_lists.where(type: "Books::UserList").count }, 4 do
+      get user_list_state_path, as: :json
+    end
+
+    body = JSON.parse(response.body)
+    assert_equal "books", body["domain"]
+    assert_equal ["Books::UserList"], body["lists"].map { |l| l["type"] }.uniq
+  end
 end

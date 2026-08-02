@@ -323,6 +323,16 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
+  test "dashboard backfills missing default lists for the current domain" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+
+    assert_difference -> { @user.user_lists.where(type: "Books::UserList").count }, 4 do
+      get my_lists_path
+    end
+    assert_response :success
+  end
+
   private
 
   # Bulk-inserts filler albums + list items so pagination tests can reach page

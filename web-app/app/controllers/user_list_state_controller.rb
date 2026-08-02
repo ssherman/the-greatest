@@ -13,7 +13,11 @@ class UserListStateController < ApplicationController
     domain = Current.domain
     subclass_names = UserList.subclasses_for(domain).map(&:name)
 
-    lists = current_user.user_lists.where(type: subclass_names).order(:id).to_a
+    lists = Services::UserLists::EnsureDefaults.call(
+      user: current_user,
+      domain: domain,
+      existing: current_user.user_lists.where(type: subclass_names).order(:id).to_a
+    ).sort_by(&:id)
 
     items = if lists.any?
       UserListItem.where(user_list_id: lists.map(&:id))
