@@ -390,7 +390,7 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "2026-01-20", rows.second.last
   end
 
-  test "books grid view loads authors in one query regardless of item count" do
+  test "books grid view author loading does not scale with item count" do
     host! Rails.application.config.domains[:books]
     sign_in_as(@user, stub_auth: true)
     list = user_lists(:regular_user_books_favorites)
@@ -408,7 +408,7 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
 
     assert_equal author_queries.call(two_item_log), author_queries.call(four_item_log),
-      "author queries scaled with item count — the book_authors preload is missing"
+      "author queries scaled with item count — listable_display_includes is no longer preloading authors"
   end
 
   private
