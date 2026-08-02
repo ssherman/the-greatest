@@ -7,8 +7,8 @@
 ## Context
 
 The app runs Ruby 3.4.7. We want 4.0.6. The complication is that another agent is
-actively working in `~/dev/the-greatest` on branch `lists-public-ui-inc3`, and the
-Ruby version is pinned in three places — two inside the repo and one **outside** it:
+working concurrently in the same repo, and the Ruby version is pinned in three places —
+two inside the repo and one **outside** it:
 
 | Location | Value | Scope |
 |---|---|---|
@@ -152,14 +152,21 @@ The real exposure is in the toolchain:
 
 Gate: `bin/rails test` and `bundle exec standardrb`, both green.
 
-Because the test database is shared with the other agent:
+Because the test database is shared with the other agent — and note that **putting them
+in a worktree too does not change this**. Worktrees isolate files, gems, and toolchain;
+they do not isolate Postgres. Every worktree resolves `database.yml` to the same
+`the_greatest_test`, so the collision risk scales with the number of concurrent
+worktrees, not away from it. If this becomes routine, the env-override on the `test`
+primary (mirroring the existing `LEGACY_BOOKS_TEST_DATABASE`) is the fix.
 
-- **Skip `db:test:prepare`.** `git diff main...lists-public-ui-inc3 -- web-app/db/` is
-  empty, so the existing test schema is already correct for this branch. Skipping it
-  removes the destructive step and leaves only the suite run as a collision window.
-  Verified as of `fca796f` on their branch — **re-run that diff before relying on it**,
-  since they are still committing. If they land a migration, the shared test schema can
-  drift and this assumption dies.
+- **Skip `db:test:prepare` unless a migration says otherwise.** This branch adds no
+  migrations, so the existing test schema is already correct for it, and skipping the
+  step removes the only destructive operation — leaving the suite run as the sole
+  collision window. This is now a **run-time check, not a pre-verified fact**: the other
+  agent's next branch is unknown, so before running the suite confirm
+  `git diff main...HEAD -- web-app/db/` is empty on this branch and that no newer
+  migration has landed on `main`. If the shared test schema has drifted, stop and
+  coordinate rather than running `db:test:prepare` underneath someone else.
 - Guard before running: `pgrep -af "rails test"` to check whether the other agent is
   mid-suite.
 - Re-run once before believing any red result — a shared-database collision and a real
@@ -174,8 +181,10 @@ never changes.
 
 ## Follow-ups (owner)
 
-- Flip `~/dev/mise.toml` to `ruby = "4.0.6"` after merge, once the other agent's branch
-  is finished. It is the shared file, so the timing is a coordination decision.
+- Flip `~/dev/mise.toml` to `ruby = "4.0.6"` after merge. Until then it correctly holds
+  every *other* worktree on 3.4.7, which is what they want — so its being shared is a
+  feature during the upgrade and a one-line switch afterwards, flipping every worktree
+  at once. Delete the worktree-local `mise.toml` at that point; it becomes redundant.
 - Build the Docker image on 4.0.6 and verify the deploy path before shipping to
   production — the non-goal called out above.
 - `git worktree remove ~/dev/the-greatest-ruby4` after merge.
