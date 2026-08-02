@@ -46,6 +46,8 @@ class RankedItem < ApplicationRecord
     case ranking_configuration.type
     when "Books::RankingConfiguration"
       errors.add(:item, "must be a Books::Book") unless item.is_a?(Books::Book)
+    when "Books::Authors::RankingConfiguration"
+      errors.add(:item, "must be a Books::Author") unless item.is_a?(Books::Author)
     when "Movies::RankingConfiguration"
       errors.add(:item, "must be a Movies::Movie") unless item.is_a?(Movies::Movie)
     when "Games::RankingConfiguration"

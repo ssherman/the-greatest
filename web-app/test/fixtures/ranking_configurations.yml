@@ -228,3 +228,18 @@ music_songs_secondary:
   max_list_dates_penalty_age: 25
   max_list_dates_penalty_percentage: 60
   inherit_penalties: true
+
+books_authors_global:
+  type: Books::Authors::RankingConfiguration
+  name: "Global Books Authors Ranking"
+  description: "The main ranking configuration for book authors"
+  global: true
+  primary: true
+  archived: false
+  published_at: 2026-08-02 00:00:00
+  algorithm_version: 1
+  exponent: 3.0
+  bonus_pool_percentage: 3.0
+  min_list_weight: 1
+  apply_list_dates_penalty: false
+  inherit_penalties: false
