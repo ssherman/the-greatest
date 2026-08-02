@@ -162,10 +162,13 @@ cd web-app && yarn build:css:books
 Expected: build succeeds with no errors.
 
 ```bash
-cd web-app && grep -o 'data-theme="[a-z]*"' app/assets/builds/books.css | sort | uniq -c
+cd web-app && grep -o 'data-theme=[^]]*' app/assets/builds/books.css | sort | uniq -c
+cd web-app && grep -c 'cmyk' app/assets/builds/books.css
 ```
 
-Expected: exactly one distinct value, `data-theme="books"`. If `data-theme="cmyk"` still appears, the `themes: false` change did not take.
+Expected: exactly `1 data-theme=books` from the first command, and `0` from the second.
+
+Note the grep pattern has no quotes around `books`. The minifier strips attribute-value quotes, so the emitted selector is `[data-theme=books]`, not `[data-theme="books"]` — matching on the quoted form gives a false negative even when the build is correct.
 
 ```bash
 cd web-app && grep -c '97.7%' app/assets/builds/books.css
