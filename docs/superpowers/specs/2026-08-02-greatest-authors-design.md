@@ -187,8 +187,10 @@ editorial change and is deliberately not part of this work.
    existing table takes down the entire suite — this cost a debugging cycle during the
    `Books::UserList` work.
 
-   A single global primary row is created in `db/seeds.rb` alongside the other ranking
-   configurations, so a fresh setup has one without manual admin work.
+   A single global primary row is created by a data migration. `db/seeds.rb` seeds only
+   global penalties — no ranking configuration is seeded there for any domain — and the
+   job hard-fails without this row, so it must exist in every environment including
+   production.
 
 3. **`RankingConfiguration#calculator_service`** — add
    `when "Books::Authors::RankingConfiguration"` returning
