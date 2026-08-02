@@ -1,0 +1,81 @@
+<%
+  content_for :page_title, "The Greatest Authors of All Time | The Greatest Books"
+  content_for :meta_description, "A ranking of the greatest authors of all time, derived from the ranked books of every author across hundreds of published book lists."
+%>
+
+<div class="space-y-8">
+  <div class="bg-base-100 border border-base-300 rounded-xl p-6 md:p-10">
+    <div class="max-w-3xl mx-auto space-y-3">
+      <p class="text-base sm:text-lg leading-relaxed text-base-content/80">
+        Authors are not ranked from lists of authors. Each author's score is built from their
+        own books: we add up the scores of every book of theirs that appears in our ranking.
+      </p>
+      <p class="text-base-content/70">
+        Writing more than one great book counts for a great deal, so an author's total is scaled
+        by how many of their books are ranked, levelling off at six. An author with a single
+        ranked book still places, just below those with a body of work behind them.
+      </p>
+    </div>
+  </div>
+
+  <h1 class="text-3xl sm:text-4xl font-bold text-center text-balance">The Greatest Authors of All Time</h1>
+
+  <% if @ranked_authors.any? %>
+    <ol class="space-y-6">
+      <% @ranked_authors.each do |ranked_item| %>
+        <% author = ranked_item.item %>
+        <li class="border-b border-base-300 pb-6">
+          <div class="flex items-baseline gap-3 flex-wrap">
+            <span class="text-2xl font-bold text-base-content/50"><%= ranked_item.rank %></span>
+            <h2 class="text-xl font-semibold">
+              <%= link_to author.name, author_path(author.slug), class: "link link-hover" %>
+            </h2>
+            <% if author.birth_year %>
+              <span class="text-sm text-base-content/60">
+                <%= author.birth_year %><%= "–#{author.death_year}" if author.death_year %>
+              </span>
+            <% end %>
+            <span class="badge badge-ghost ml-auto">
+              <span class="sr-only">Score </span><%= number_with_delimiter(ranked_item.score.to_i) %>
+            </span>
+          </div>
+
+          <% if (description = author.primary_description) %>
+            <p class="mt-2 text-base-content/80 line-clamp-3"><%= description.content %></p>
+          <% end %>
+
+          <% if (books = @top_books[author.id]).present? %>
+            <div class="mt-3 flex gap-2 flex-wrap">
+              <% books.each do |book| %>
+                <%= link_to book_path(book.slug), class: "block w-16 shrink-0" do %>
+                  <% if book.primary_image&.file&.attached? %>
+                    <%= image_tag rails_public_blob_url(book.primary_image.file),
+                        alt: book.title, loading: "lazy", decoding: "async",
+                        class: "w-16 h-auto rounded shadow-sm" %>
+                  <% else %>
+                    <div class="w-16 aspect-[2/3] bg-base-300 rounded flex items-center justify-center" aria-hidden="true">
+                      <span class="text-xl opacity-40">📖</span>
+                    </div>
+                  <% end %>
+                <% end %>
+              <% end %>
+            </div>
+          <% end %>
+        </li>
+      <% end %>
+    </ol>
+
+    <div class="flex justify-center">
+      <%== @pagy.series_nav(slots: 5) %>
+    </div>
+    <p class="text-center text-sm text-base-content/70">
+      Page <%= number_with_delimiter(@pagy.page) %> of <%= number_with_delimiter(@pagy.last) %>
+    </p>
+  <% else %>
+    <div class="text-center py-16">
+      <div class="text-6xl mb-4">✍️</div>
+      <h2 class="text-2xl font-bold mb-2">No authors ranked yet</h2>
+      <p class="text-base-content/70">Author rankings are calculated daily from ranked books.</p>
+    </div>
+  <% end %>
+</div>
