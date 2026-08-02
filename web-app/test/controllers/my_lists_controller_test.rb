@@ -533,6 +533,38 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to "/"
   end
 
+  test "a public list read by a non-owner shows the owner's display name" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    list.update!(public: true)
+    list.user.update!(display_name: "Ada Lovelace")
+    sign_in_as(users(:admin_user), stub_auth: true)
+
+    get my_list_path(list)
+    assert_match(/Ada Lovelace/, response.body)
+  end
+
+  test "attribution is omitted when the owner has no display name" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    list.update!(public: true)
+    list.user.update_column(:display_name, nil)
+    sign_in_as(users(:admin_user), stub_auth: true)
+
+    get my_list_path(list)
+    assert_response :success
+    assert_no_match(/list-owner/, response.body)
+    assert_no_match(Regexp.new(Regexp.escape(list.user.email)), response.body)
+  end
+
+  test "the owner does not see attribution on their own list" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+
+    get my_list_path(user_lists(:regular_user_books_favorites))
+    assert_no_match(/list-owner/, response.body)
+  end
+
   private
 
   # Bulk-inserts filler albums + list items so pagination tests can reach page

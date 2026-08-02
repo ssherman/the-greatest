@@ -22,6 +22,11 @@
         <% end %>
       <% end %>
       <h1 class="text-3xl font-bold"><%= @list.name %></h1>
+      <% if !@owner && @list.user.display_name.present? %>
+        <p class="text-sm text-base-content/60" data-testid="list-owner">
+          A list by <%= @list.user.display_name %>
+        </p>
+      <% end %>
     </div>
 
     <div class="flex flex-wrap items-center gap-x-6 gap-y-3" data-testid="list-toolbar">
