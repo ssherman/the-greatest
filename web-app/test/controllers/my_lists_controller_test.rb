@@ -72,12 +72,12 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, 'data-theme="light"' # music layout marker
   end
 
-  test "unknown host falls back to the music layout (books has no layout yet)" do
+  test "unknown host renders the books layout (detect_current_domain defaults to :books)" do
     host! "unknown.example.com"
     sign_in_as(@user, stub_auth: true)
     get my_lists_path
     assert_response :success
-    assert_includes response.body, 'data-theme="light"'
+    assert_includes response.body, 'data-theme="books"'
   end
 
   test "dashboard responses are never cached" do
@@ -125,7 +125,7 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-  test "legacy /user_lists/:id alias resolves to the same owner-only show" do
+  test "legacy /user_lists/:id alias renders the list for its owner" do
     sign_in_as(@user, stub_auth: true)
     get user_list_path(@albums_favorites)
     assert_response :success
@@ -139,9 +139,9 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
-  test "anonymous show redirects to /" do
+  test "anonymous show 404s on a private list" do
     get my_list_path(@albums_favorites)
-    assert_redirected_to "/"
+    assert_response :not_found
   end
 
   test "switching view_mode persists it on the list and re-renders" do
@@ -323,6 +323,281 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
+  test "dashboard backfills missing default lists for the current domain" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+
+    assert_difference -> { @user.user_lists.where(type: "Books::UserList").count }, 2 do
+      get my_lists_path
+    end
+    assert_response :success
+  end
+
+  # --- books domain ---
+
+  test "dashboard selects the books layout on the books domain" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+    get my_lists_path
+    assert_response :success
+    assert_includes response.body, 'data-theme="books"'
+  end
+
+  test "books layout carries the user-list state controller and modal" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+    get my_lists_path
+    assert_response :success
+
+    assert_includes response.body, 'data-controller="user-list-state"'
+    assert_includes response.body, 'id="navbar_my_lists"'
+    assert_includes response.body, 'id="user_list_modal"'
+    assert_includes response.body, 'id="user-list-icons"'
+  end
+
+  test "show renders a books list on the books domain" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+    get my_list_path(user_lists(:regular_user_books_favorites))
+    assert_response :success
+  end
+
+  test "a books list 404s on the music domain" do
+    sign_in_as(@user, stub_auth: true)
+    get my_list_path(user_lists(:regular_user_books_favorites))
+    assert_response :not_found
+  end
+
+  test "books CSV uses an Authors column and first_published_year" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+    get my_list_path(user_lists(:regular_user_books_favorites), format: :csv)
+    assert_response :success
+
+    rows = CSV.parse(response.body.delete_prefix(BOM))
+    assert_equal ["Position", "Title", "Authors", "Year"], rows.first
+    assert_equal ["1", "War and Peace", "Leo Tolstoy", "1869"], rows.second
+  end
+
+  test "books CSV adds a Completed On column on a read list" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+    get my_list_path(user_lists(:regular_user_books_read), format: :csv)
+    assert_response :success
+
+    rows = CSV.parse(response.body.delete_prefix(BOM))
+    assert_equal ["Position", "Title", "Authors", "Year", "Completed On"], rows.first
+    assert_equal "2026-01-20", rows.second.last
+  end
+
+  test "books grid view author loading does not scale with item count" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+    list = user_lists(:regular_user_books_favorites)
+
+    author_queries = ->(sql_log) { sql_log.count { |sql| sql.include?("books_book_authors") } }
+
+    two_item_log = capture_sql { get my_list_path(list, view_mode: "grid_view") }
+    assert_response :success
+
+    list.user_list_items.create!(listable: books_books(:of_mice_and_men))
+    list.user_list_items.create!(listable: books_books(:cannery_row))
+    ActiveRecord::Base.connection.clear_query_cache
+
+    four_item_log = capture_sql { get my_list_path(list, view_mode: "grid_view") }
+    assert_response :success
+
+    assert_equal author_queries.call(two_item_log), author_queries.call(four_item_log),
+      "author queries scaled with item count — listable_display_includes is no longer preloading authors"
+  end
+
+  # --- public viewing ---
+
+  test "anonymous viewer can read a public list" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    list.update!(public: true)
+
+    get my_list_path(list)
+    assert_response :success
+  end
+
+  test "anonymous viewer gets 404 on a private list" do
+    host! Rails.application.config.domains[:books]
+    get my_list_path(user_lists(:regular_user_books_favorites))
+    assert_response :not_found
+  end
+
+  test "non-owner gets 404 on someone else's private list" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(users(:admin_user), stub_auth: true)
+
+    get my_list_path(user_lists(:regular_user_books_favorites))
+    assert_response :not_found
+  end
+
+  test "anonymous viewer gets 404 on a private list's csv" do
+    host! Rails.application.config.domains[:books]
+    get my_list_path(user_lists(:regular_user_books_favorites), format: :csv)
+    assert_response :not_found
+  end
+
+  test "non-owner gets 404 on a private list's csv" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(users(:admin_user), stub_auth: true)
+
+    get my_list_path(user_lists(:regular_user_books_favorites), format: :csv)
+    assert_response :not_found
+  end
+
+  test "anonymous viewer gets 404 on the legacy alias for a private list" do
+    host! Rails.application.config.domains[:books]
+    get user_list_path(user_lists(:regular_user_books_favorites))
+    assert_response :not_found
+  end
+
+  test "anonymous viewer can read a public list via the legacy alias" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    list.update!(public: true)
+
+    get user_list_path(list)
+    assert_response :success
+  end
+
+  test "non-owner reading a public list gets no add box and no backlink" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    list.update!(public: true)
+    sign_in_as(users(:admin_user), stub_auth: true)
+
+    get my_list_path(list)
+    assert_response :success
+    assert_no_match(/data-testid="add-item-search"/, response.body)
+    assert_no_match(/data-testid="back-to-lists"/, response.body)
+  end
+
+  test "owner still gets the add box and backlink" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+
+    get my_list_path(user_lists(:regular_user_books_favorites))
+    assert_response :success
+    assert_match(/data-testid="add-item-search"/, response.body)
+    assert_match(/data-testid="back-to-lists"/, response.body)
+  end
+
+  test "a non-owner's view_mode param does not persist to the list" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    list.update!(public: true, view_mode: :default_view)
+    sign_in_as(users(:admin_user), stub_auth: true)
+
+    get my_list_path(list, view_mode: "grid_view")
+    assert_response :success
+    assert_equal "default_view", list.reload.view_mode
+  end
+
+  test "an owner's view_mode param does persist" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    list.update!(view_mode: :default_view)
+    sign_in_as(@user, stub_auth: true)
+
+    get my_list_path(list, view_mode: "grid_view")
+    assert_equal "grid_view", list.reload.view_mode
+  end
+
+  test "CSV download works for a public list read by a non-owner" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    list.update!(public: true)
+    sign_in_as(users(:admin_user), stub_auth: true)
+
+    get my_list_path(list, format: :csv)
+    assert_response :success
+  end
+
+  test "public list pages are never cached" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    list.update!(public: true)
+
+    get my_list_path(list)
+    assert_match(/no-store/, response.headers["Cache-Control"])
+  end
+
+  test "the dashboard still requires sign-in" do
+    host! Rails.application.config.domains[:books]
+    get my_lists_path
+    assert_redirected_to "/"
+  end
+
+  test "a public list read by a non-owner shows the owner's display name" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    list.update!(public: true)
+    list.user.update!(display_name: "Ada Lovelace")
+    sign_in_as(users(:admin_user), stub_auth: true)
+
+    get my_list_path(list)
+    assert_match(/Ada Lovelace/, response.body)
+  end
+
+  test "attribution is omitted when the owner has no display name" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    list.update!(public: true)
+    list.user.update_column(:display_name, nil)
+    sign_in_as(users(:admin_user), stub_auth: true)
+
+    get my_list_path(list)
+    assert_response :success
+    assert_no_match(/list-owner/, response.body)
+    assert_no_match(Regexp.new(Regexp.escape(list.user.email)), response.body)
+    assert_no_match(Regexp.new(Regexp.escape(list.user.name)), response.body)
+  end
+
+  test "the owner does not see attribution on their own list" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+
+    get my_list_path(user_lists(:regular_user_books_favorites))
+    assert_response :success
+    assert_no_match(/list-owner/, response.body)
+  end
+
+  # --- legacy /user_lists redirects ---
+
+  test "legacy /user_lists index 301s to /my/lists" do
+    host! Rails.application.config.domains[:books]
+    get "/user_lists"
+    assert_response :moved_permanently
+    assert_redirected_to "/my/lists"
+  end
+
+  test "legacy /user_lists/new 301s to /my/lists and is not read as an id" do
+    host! Rails.application.config.domains[:books]
+    get "/user_lists/new"
+    assert_response :moved_permanently
+    assert_redirected_to "/my/lists"
+  end
+
+  test "legacy /user_lists/:id/edit 301s to the read page" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    get "/user_lists/#{list.id}/edit"
+    assert_response :moved_permanently
+    assert_redirected_to "/my/lists/#{list.id}"
+  end
+
+  test "the /user_lists/:id alias still resolves to the show action" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+    get "/user_lists/#{user_lists(:regular_user_books_favorites).id}"
+    assert_response :success
+  end
+
   private
 
   # Bulk-inserts filler albums + list items so pagination tests can reach page
@@ -342,6 +617,13 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
          position: start_position + i, created_at: now, updated_at: now}
       end
     )
+  end
+
+  def capture_sql
+    queries = []
+    callback = ->(_n, _s, _f, _i, payload) { queries << payload[:sql] unless payload[:name] == "SCHEMA" }
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { yield }
+    queries
   end
 
   # Distinct listable ids in render order (rows/cards carry data-listable-id),

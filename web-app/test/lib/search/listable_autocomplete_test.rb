@@ -10,6 +10,10 @@ module Search
       assert Search::ListableAutocomplete.searchable?("Games::Game")
     end
 
+    test "searchable? is true for books" do
+      assert Search::ListableAutocomplete.searchable?("Books::Book")
+    end
+
     test "searchable? is false for unsupported, blank, or nil types" do
       refute Search::ListableAutocomplete.searchable?("Movies::Movie")
       refute Search::ListableAutocomplete.searchable?("")
@@ -54,6 +58,29 @@ module Search
     test "search passes the limit through to the service as :size" do
       ::Search::Music::Search::SongAutocomplete.expects(:call).with("money", size: 10).returns([])
       Search::ListableAutocomplete.search(listable_type: "Music::Song", query: "money")
+    end
+
+    test "search labels books with their authors" do
+      book = books_books(:war_and_peace)
+      ::Search::Books::Search::BookAutocomplete.stubs(:call).returns([
+        {id: book.id.to_s, score: 7.0, source: {}}
+      ])
+
+      results = Search::ListableAutocomplete.search(listable_type: "Books::Book", query: "war")
+
+      assert_equal [book.id], results.map { |r| r[:value] }
+      assert_equal "War and Peace — Leo Tolstoy", results.first[:text]
+    end
+
+    test "search falls back to the bare title for a book with no authors" do
+      book = books_books(:crime_and_punishment)
+      ::Search::Books::Search::BookAutocomplete.stubs(:call).returns([
+        {id: book.id.to_s, score: 7.0, source: {}}
+      ])
+
+      results = Search::ListableAutocomplete.search(listable_type: "Books::Book", query: "crime")
+
+      assert_equal book.title, results.first[:text]
     end
   end
 end

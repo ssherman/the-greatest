@@ -45,11 +45,33 @@ module Books
       assert_equal "lazy", Books::CardComponent.new(book: @book, rank: 42, index: 6).send(:loading_strategy)
     end
 
+    test "a caller that omits index gets lazy loading, not eager" do
+      component = Books::CardComponent.new(book: @book)
+
+      assert_equal "lazy", component.send(:loading_strategy)
+      assert_equal "auto", component.send(:fetch_priority)
+    end
+
     test "omits the rank badge when the book has no rank" do
       render_inline(Books::CardComponent.new(book: @book, rank: nil, index: 0))
 
       assert_no_selector ".badge"
       assert_selector "a[href='/book/war-and-peace']", count: 1
+    end
+
+    test "renders without a rank or index" do
+      render_inline(Books::CardComponent.new(book: @book))
+
+      assert_selector "a[href='/book/war-and-peace']", count: 1
+      assert_no_selector ".badge"
+    end
+
+    test "renders the add-to-list widget above the stretched link overlay" do
+      render_inline(Books::CardComponent.new(book: @book, rank: 1, index: 0))
+
+      assert_selector ".relative.z-10 [data-controller='user-list-widget']"
+      assert_selector "[data-user-list-widget-listable-type-value='Books::Book']"
+      assert_selector "[data-user-list-widget-listable-id-value='#{@book.id}']"
     end
   end
 end

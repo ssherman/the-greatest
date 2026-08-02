@@ -45,6 +45,9 @@
           <% end %>
         </p>
       <% end %>
+      <div class="mt-4">
+        <%= render UserLists::CardWidgetComponent.new(listable: @book) %>
+      </div>
     </div>
 
     <% if @description %>

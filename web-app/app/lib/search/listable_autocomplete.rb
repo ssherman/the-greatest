@@ -28,6 +28,11 @@ module Search
         service: ::Search::Games::Search::GameAutocomplete,
         model: ::Games::Game,
         includes: []
+      },
+      "Books::Book" => {
+        service: ::Search::Books::Search::BookAutocomplete,
+        model: ::Books::Book,
+        includes: [{book_authors: :author}]
       }
     }.freeze
 
@@ -62,6 +67,9 @@ module Search
         artists.present? ? "#{record.title} — #{artists}" : record.title
       when "Games::Game"
         record.release_year.present? ? "#{record.title} (#{record.release_year})" : record.title
+      when "Books::Book"
+        authors = record.book_authors.map { |book_author| book_author.author.name }.join(", ")
+        authors.present? ? "#{record.title} — #{authors}" : record.title
       else
         record.title
       end

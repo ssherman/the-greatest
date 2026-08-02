@@ -230,7 +230,8 @@ export default class extends Controller {
       "Music::Albums::UserList": "Music::Album",
       "Music::Songs::UserList": "Music::Song",
       "Games::UserList": "Games::Game",
-      "Movies::UserList": "Movies::Movie"
+      "Movies::UserList": "Movies::Movie",
+      "Books::UserList": "Books::Book"
     }
     return map[listType] === listableType
   }
@@ -240,7 +241,8 @@ export default class extends Controller {
       "Music::Album": "Music::Albums::UserList",
       "Music::Song": "Music::Songs::UserList",
       "Games::Game": "Games::UserList",
-      "Movies::Movie": "Movies::UserList"
+      "Movies::Movie": "Movies::UserList",
+      "Books::Book": "Books::UserList"
     }
     return map[listableType]
   }

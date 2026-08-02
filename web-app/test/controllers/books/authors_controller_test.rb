@@ -71,7 +71,9 @@ module Books
     end
 
     test "renders the all-books page for an author with no books" do
-      author = books_authors(:king)
+      author = books_authors(:garnett)
+      assert_empty author.books,
+        "fixture drift: #{author.name} was chosen because they have no books_book_authors rows"
 
       get "/author/#{author.slug}/all-books"
 

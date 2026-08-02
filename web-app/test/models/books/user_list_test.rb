@@ -55,7 +55,7 @@ module Books
     test "completed_on is enabled only for the read list" do
       assert_equal [:read], Books::UserList.completed_on_list_types
 
-      user = users(:regular_user)
+      user = users(:editor_user)
       read_list = Books::UserList.create!(user: user, name: "Books I've Read", list_type: :read)
       reading_list = Books::UserList.create!(user: user, name: "Books I'm Reading", list_type: :reading)
 
@@ -73,7 +73,7 @@ module Books
     end
 
     test "only accepts Books::Book as a listable" do
-      user = users(:regular_user)
+      user = users(:editor_user)
       list = Books::UserList.create!(user: user, name: "My Favorite Books", list_type: :favorites)
       item = UserListItem.new(user_list: list, listable: music_albums(:dark_side_of_the_moon))
 
@@ -81,9 +81,9 @@ module Books
       assert_includes item.errors[:listable_type], "Music::Album is not compatible with Books::UserList"
     end
 
-    test "is deliberately excluded from DEFAULT_SUBCLASSES and DOMAIN_SUBCLASSES" do
-      assert_not_includes UserList::DEFAULT_SUBCLASSES, "Books::UserList"
-      assert_equal [], UserList.subclasses_for(:books)
+    test "is registered in DEFAULT_SUBCLASSES and DOMAIN_SUBCLASSES" do
+      assert_includes UserList::DEFAULT_SUBCLASSES, "Books::UserList"
+      assert_equal [Books::UserList], UserList.subclasses_for(:books)
     end
   end
 end

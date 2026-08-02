@@ -15,6 +15,7 @@ Only icons actually referenced in the codebase live here. Currently:
 | Icon | Used by |
 |------|---------|
 | `bookmark` | `UserList::list_type_icons` (want_to_listen / want_to_watch / want_to_play) |
+| `book-open` | `Books::UserList.list_type_icons[:reading]` |
 | `check` | `Games::UserList.list_type_icons[:played]` |
 | `eye` | `Movies::UserList.list_type_icons[:watched]` |
 | `gamepad-2` | `Games::UserList.list_type_icons[:currently_playing]` |
