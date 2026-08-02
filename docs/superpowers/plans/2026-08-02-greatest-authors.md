@@ -949,6 +949,10 @@ require "test_helper"
 module Books
   module Authors
     class RankedItemsControllerTest < ActionDispatch::IntegrationTest
+      # Set to the count observed on the first run -- see the note below this
+      # test file in the plan for how to determine it.
+      EXPECTED_INDEX_QUERIES = 0
+
       setup do
         host! "dev-new.thegreatestbooks.org"
         @config = ranking_configurations(:books_authors_global)
@@ -992,6 +996,12 @@ module Books
         assert_match(/public/, response.headers["Cache-Control"])
       end
 
+      test "index issues a fixed number of queries" do
+        seed_ranked_authors(10)
+
+        assert_queries_count(EXPECTED_INDEX_QUERIES) { get "/authors" }
+      end
+
       test "query count does not grow with the number of authors" do
         seed_ranked_authors(10)
         small = count_queries { get "/authors" }
@@ -1031,7 +1041,9 @@ module Books
 end
 ```
 
-The growth assertion replaces the spec's `assert_queries_count(N)` pin. It tests the property that matters — that the count is independent of row count — and will not break when an unrelated change shifts the constant.
+**Two guards on purpose.** `assert_queries_count` matches the pins in `test/controllers/books/lists_controller_test.rb:80` and catches a silent extra constant-cost query. The growth assertion catches a true N+1, which an exact pin alone would miss if the seed count happened to match.
+
+`EXPECTED_INDEX_QUERIES` starts at `0` so the test fails loudly on the first run. Run it once, read the actual count from the failure message (`Expected: 0, Actual: N`), and set the constant to that N. Then delete the placeholder comment above it. Do **not** leave it at 0, and do **not** guess the value — it must come from an observed run.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
