@@ -30,18 +30,18 @@ class UserList < ApplicationRecord
     Music::Songs::UserList
     Games::UserList
     Movies::UserList
+    Books::UserList
   ].freeze
 
   # Maps a request domain to the UserList STI subclasses that live on it. Music
-  # has two listables (albums + songs); games/movies have one each. Shared by
+  # has two listables (albums + songs); the rest have one each. Shared by
   # MyListsController, UserListStateController, and UserListsController so the
-  # domain→subclass mapping can never drift between them. Books::UserList exists
-  # (it's just not wired here) — it's deliberately excluded pending UI work; see
-  # docs/features/user-lists.md ("What's Not Yet Implemented").
+  # domain→subclass mapping can never drift between them.
   DOMAIN_SUBCLASSES = {
     "music" => %w[Music::Albums::UserList Music::Songs::UserList],
     "games" => %w[Games::UserList],
-    "movies" => %w[Movies::UserList]
+    "movies" => %w[Movies::UserList],
+    "books" => %w[Books::UserList]
   }.freeze
 
   # Associations

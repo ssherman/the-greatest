@@ -81,9 +81,9 @@ module Books
       assert_includes item.errors[:listable_type], "Music::Album is not compatible with Books::UserList"
     end
 
-    test "is deliberately excluded from DEFAULT_SUBCLASSES and DOMAIN_SUBCLASSES" do
-      assert_not_includes UserList::DEFAULT_SUBCLASSES, "Books::UserList"
-      assert_equal [], UserList.subclasses_for(:books)
+    test "is registered in DEFAULT_SUBCLASSES and DOMAIN_SUBCLASSES" do
+      assert_includes UserList::DEFAULT_SUBCLASSES, "Books::UserList"
+      assert_equal [Books::UserList], UserList.subclasses_for(:books)
     end
   end
 end

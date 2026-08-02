@@ -81,4 +81,18 @@ class UserListsControllerTest < ActionDispatch::IntegrationTest
       as: :json
     assert_includes response.headers["Cache-Control"].to_s, "no-store"
   end
+
+  test "creates a custom books list" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+
+    post user_lists_path,
+      params: {user_list: {type: "Books::UserList", name: "Summer Reading"}},
+      as: :json
+
+    assert_response :created
+    body = JSON.parse(response.body)
+    assert_equal "Books::UserList", body.dig("user_list", "type")
+    assert_equal "custom", body.dig("user_list", "list_type")
+  end
 end

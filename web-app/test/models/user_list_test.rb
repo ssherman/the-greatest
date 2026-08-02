@@ -92,12 +92,17 @@ class UserListTest < ActiveSupport::TestCase
     assert_raises(NotImplementedError) { UserList.default_list_name_for(:favorites) }
   end
 
-  test "default_subclasses returns 4 subclasses" do
-    assert_equal 4, UserList.default_subclasses.size
+  test "default_subclasses returns 5 subclasses" do
+    assert_equal 5, UserList.default_subclasses.size
     assert_includes UserList.default_subclasses, Music::Albums::UserList
     assert_includes UserList.default_subclasses, Music::Songs::UserList
     assert_includes UserList.default_subclasses, Games::UserList
     assert_includes UserList.default_subclasses, Movies::UserList
+    assert_includes UserList.default_subclasses, Books::UserList
+  end
+
+  test "subclasses_for resolves the books domain" do
+    assert_equal [Books::UserList], UserList.subclasses_for(:books)
   end
 
   test "public_lists scope" do
@@ -208,7 +213,6 @@ class UserListTest < ActiveSupport::TestCase
 
   test "subclasses_for accepts a string and returns [] for unknown domains" do
     assert_equal [Games::UserList], UserList.subclasses_for("games")
-    assert_equal [], UserList.subclasses_for(:books)
     assert_equal [], UserList.subclasses_for(:nope)
   end
 
