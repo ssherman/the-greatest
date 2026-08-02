@@ -175,11 +175,19 @@ helper would wrap a single `link_to` for one caller. `Books::CardComponent` alre
 
 ## G. N+1: the `book_authors` preload
 
-`Books::UserList.listable_display_includes` currently preloads `:authors`, but
-`Books::CardComponent#author_names` reads `book_authors` — a *different* association. Rendering a
-100-item books list in grid view would fire 100 queries.
+**Correction, found during implementation.** This section originally claimed a live N+1: that
+`listable_display_includes` preloads `:authors` while `Books::CardComponent#author_names` reads
+`book_authors`, so a 100-item grid would fire 100 queries. **That is wrong.** Verified empirically:
+`Books::Book.includes(:authors)` leaves `book_authors.loaded? == true`, because Rails' `has_many
+:through` preloader loads the join rows to build the target association. Ten books cost **one**
+`books_book_authors` query, not ten.
 
-**Fix:** change the preload to `[{book_authors: :author}, :categories, :primary_image, :descriptions]`
+The preload change below is still worth making — it makes the declared preload match the association
+the view code actually reads, instead of depending on a Rails implementation detail that could change
+— but it is a robustness change, not a bug fix, and the accompanying test proves less than a true
+N+1 regression test would.
+
+**Change:** the preload becomes `[{book_authors: :author}, :categories, :primary_image, :descriptions]`
 and have `ItemComponent#by_line` read `book_authors` too, so the card and the row read the same
 preloaded association. `Books::Book` declares
 `has_many :book_authors, -> { order(:position) }`, so ordering is preserved and `authors` (a
