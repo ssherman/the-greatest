@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: web-app
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          working-directory: web-app
+          bundler-cache: true
+
+      - name: Lint code for consistent style
+        run: bundle exec standardrb --format github
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 6543:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+      opensearch:
+        image: opensearchproject/opensearch:3
+        env:
+          discovery.type: single-node
+          plugins.security.disabled: "true"
+          OPENSEARCH_INITIAL_ADMIN_PASSWORD: Ci_OpenSearch_2026!
+          OPENSEARCH_JAVA_OPTS: -Xms1g -Xmx1g
+        ports:
+          - 9200:9200
+
+    steps:
+      - name: Install system packages
+        working-directory: .
+        run: sudo apt-get update -qq && sudo apt-get install --no-install-recommends -y libpq-dev libvips
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          working-directory: web-app
+          bundler-cache: true
+
+      - name: Wait for OpenSearch
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:9200/_cluster/health > /dev/null; then
+              echo "OpenSearch is up:"
+              curl -s http://localhost:9200
+              exit 0
+            fi
+            echo "waiting for OpenSearch ($i/60)"
+            sleep 2
+          done
+          echo "OpenSearch did not become ready within 120s"
+          exit 1
+
+      - name: Run tests
+        env:
+          RAILS_ENV: test
+          POSTGRES_PASSWORD: postgres
+          OPENSEARCH_URL: http://localhost:9200
+          TWITCH_API_CLIENT_ID: ci_test_client_id
+          TWITCH_API_CLIENT_SECRET: ci_test_client_secret
+          AMAZON_PRODUCT_API_ACCESS_KEY: ci_test_access_key
+          AMAZON_PRODUCT_API_SECRET_KEY: ci_test_secret_key
+          AMAZON_PRODUCT_API_PARTNER_KEY: ci_test_partner_key
+        run: bin/rails db:test:prepare test

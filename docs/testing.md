@@ -222,10 +222,28 @@ Examples of what should be tested:
 - Stub all third-party services
 
 ### CI Requirements
-- 100% test coverage enforced
-- All tests must pass before merge
-- No skipped tests without documented reason
-- Coverage reports generated on each run
+
+CI is `.github/workflows/ci.yml` at the **repository root** (a `.github/` directory
+nested under `web-app/` is never read by GitHub). It runs on every pull request and
+is also called by `build-web-image.yml`, so a red suite blocks both the merge and
+the production deploy.
+
+Two jobs run in parallel:
+
+- `lint` — `bundle exec standardrb --format github`
+- `test` — `bin/rails db:test:prepare test`, against Postgres and OpenSearch service containers
+
+What CI does **not** do:
+
+- No system tests (`bin/rails test:system`) — the one system test targets a hostname
+  that only resolves on the dev machine.
+- No Playwright E2E — the suite needs Caddy, real certs, a live Firebase login, and
+  dev-only book data.
+- No brakeman, and no coverage enforcement or reporting.
+
+Note that CI is stricter than a local run: `config.eager_load = ENV["CI"].present?`
+and GitHub sets `CI=true`, so CI eager-loads the whole application. Reproduce a
+CI-only failure locally with `CI=true bin/rails test`.
 
 ## E2E Testing (Playwright)
 

@@ -20,13 +20,13 @@ bin/dev                       # start dev (foreman: web + sidekiq + JS/CSS watch
 bin/setup                     # install deps, prepare db, boot
 bin/rails test                # unit/integration (Minitest)
 bin/rails test test/models/music/   # scope to a namespace/dir
-bin/rails db:test:prepare test test:system   # what CI runs (system tests included)
+bin/rails db:test:prepare test   # what CI runs (no system tests)
 bundle exec standardrb        # lint (Ruby Standard style, see .standard.yml); `--fix` autocorrects. NOT bin/rubocop (omakase — conflicting style)
 yarn test:e2e                 # Playwright E2E (needs local dev server + e2e/.env)
 yarn build:all                # JS (Rollup) + per-domain CSS (Tailwind)
 ```
 
-Before claiming work is done, run `bin/rails test` (plus `test:system` for UI changes) and `bundle exec standardrb`, and add a Playwright E2E test for any new user-facing page/flow. The owner does **not** use brakeman — do not run it.
+Before claiming work is done, run `bin/rails test` (plus `test:system` for UI changes) and `bundle exec standardrb`, and add a Playwright E2E test for any new user-facing page/flow. The owner does **not** use brakeman — do not run it. CI runs `bin/rails test` and `standardrb` on every PR and blocks the merge if either fails; it also gates the image build, so a red suite on `main` means no deploy. CI does **not** run system tests or E2E — those stay local.
 
 ## Where code actually lives
 
