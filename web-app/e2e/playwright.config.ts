@@ -50,7 +50,7 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         baseURL: 'https://dev-new.thegreatestbooks.org',
       },
-      testMatch: /books\/(?!admin\/).*/,
+      testMatch: /books\/(?!admin\/)(?!account\/).*/,
     },
     {
       name: 'books-admin',
@@ -60,6 +60,16 @@ export default defineConfig({
         storageState: booksAuthFile,
       },
       testMatch: /books\/admin\/.*/,
+      dependencies: ['books-setup'],
+    },
+    {
+      name: 'books-account',
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: 'https://dev-new.thegreatestbooks.org',
+        storageState: booksAuthFile,
+      },
+      testMatch: /books\/account\/.*/,
       dependencies: ['books-setup'],
     },
   ],
