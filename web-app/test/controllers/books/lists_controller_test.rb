@@ -127,14 +127,27 @@ module Books
       assert_response :not_found
     end
 
-    test "show loads ranks for the books on the page" do
+    test "show ranks a book by its position on the list, not its global rank" do
       book = books_books(:war_and_peace)
-      ListItem.create!(list: @list, listable: book, position: 1)
+      ListItem.create!(list: @list, listable: book, position: 3)
       RankedItem.create!(item: book, ranking_configuration: @rc, rank: 7, score: 50)
 
       get "/lists/#{@list.id}"
 
-      assert_equal 7, @controller.view_assigns["ranks"][book.id]
+      card = css_select("[data-listable-id='#{book.id}']").first
+      assert_match(/Rank\s*#3/, card.text)
+      assert_no_match(/Rank\s*#7/, card.text)
+    end
+
+    test "show omits the rank when the list item has no position" do
+      book = books_books(:war_and_peace)
+      ListItem.create!(list: @list, listable: book, position: nil)
+      RankedItem.create!(item: book, ranking_configuration: @rc, rank: 7, score: 50)
+
+      get "/lists/#{@list.id}"
+
+      card = css_select("[data-listable-id='#{book.id}']").first
+      assert_no_match(/Rank\s*#/, card.text)
     end
 
     test "show survives a list item whose listable no longer exists" do
