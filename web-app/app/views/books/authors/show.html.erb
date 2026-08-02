@@ -3,51 +3,58 @@
   content_for :meta_description, "The greatest books written by #{@author.name}, ranked from hundreds of published best-books lists."
 %>
 
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-  <div class="lg:col-span-1">
-    <div class="card bg-base-100 shadow-xl sticky top-8">
-      <figure class="p-4 lg:p-6">
-        <%= render Books::AuthorAvatarComponent.new(author: @author, size_classes: "w-full max-w-[240px] mx-auto aspect-square") %>
-      </figure>
-      <div class="card-body pt-0 gap-2">
-        <% if @ranked_item %>
-          <div class="badge badge-primary">Ranked #<%= @ranked_item.rank %> of The Greatest Authors</div>
-          <div class="badge badge-ghost">
-            <span class="sr-only">Score </span><%= number_with_delimiter(@ranked_item.score.round(1)) %>
+<div class="space-y-8">
+  <div class="card bg-base-100 shadow-md">
+    <div class="card-body">
+      <div class="flex flex-col sm:flex-row gap-6">
+        <div class="w-40 sm:w-48 shrink-0 mx-auto sm:mx-0">
+          <%= render Books::AuthorAvatarComponent.new(author: @author, size_classes: "w-full aspect-square") %>
+        </div>
+
+        <div class="min-w-0 space-y-4">
+          <div class="space-y-2">
+            <h1 class="text-3xl sm:text-4xl font-bold text-balance"><%= @author.name %></h1>
+
+            <div class="flex items-center gap-2 flex-wrap">
+              <% if @ranked_item %>
+                <span class="badge badge-primary">Ranked #<%= @ranked_item.rank %> of The Greatest Authors</span>
+                <span class="badge badge-ghost">
+                  <span class="sr-only">Score </span><%= number_with_delimiter(@ranked_item.score.round(1)) %>
+                </span>
+              <% end %>
+              <% if @author.birth_year %>
+                <span class="text-sm text-base-content/70">
+                  <%= @author.birth_year %><%= "–#{@author.death_year}" if @author.death_year %>
+                </span>
+              <% end %>
+            </div>
           </div>
-        <% end %>
-        <% if @author.birth_year %>
-          <div class="text-sm text-base-content/70">
-            <%= @author.birth_year %><%= "–#{@author.death_year}" if @author.death_year %>
-          </div>
-        <% end %>
+
+          <% if @description %>
+            <div>
+              <div class="text-base-content/80 leading-relaxed space-y-4">
+                <%= simple_format(@description.content, {}, wrapper_tag: "p") %>
+              </div>
+              <% if @description.license_cc_by_sa_4? || @description.license_cc0? %>
+                <p class="text-xs text-base-content/70 mt-3">
+                  Source:
+                  <% source_label = @description.source_name.presence || @description.source.titleize %>
+                  <% if @description.source_url.present? %>
+                    <%= link_to source_label, @description.source_url, class: "link", rel: "noopener nofollow", target: "_blank" %>
+                  <% else %>
+                    <%= source_label %>
+                  <% end %>
+                  · <%= @description.license_cc_by_sa_4? ? "CC BY-SA 4.0" : "CC0" %>
+                </p>
+              <% end %>
+            </div>
+          <% end %>
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="lg:col-span-2 space-y-6">
-    <h1 class="text-3xl sm:text-4xl font-bold text-balance"><%= @author.name %></h1>
-
-    <% if @description %>
-      <div>
-        <div class="text-base-content/80 leading-relaxed space-y-4">
-          <%= simple_format(@description.content, {}, wrapper_tag: "p") %>
-        </div>
-        <% if @description.license_cc_by_sa_4? || @description.license_cc0? %>
-          <p class="text-xs text-base-content/70 mt-3">
-            Source:
-            <% source_label = @description.source_name.presence || @description.source.titleize %>
-            <% if @description.source_url.present? %>
-              <%= link_to source_label, @description.source_url, class: "link", rel: "noopener nofollow", target: "_blank" %>
-            <% else %>
-              <%= source_label %>
-            <% end %>
-            · <%= @description.license_cc_by_sa_4? ? "CC BY-SA 4.0" : "CC0" %>
-          </p>
-        <% end %>
-      </div>
-    <% end %>
-
+  <div class="space-y-4">
     <div class="flex items-center justify-between gap-4 flex-wrap">
       <h2 class="text-2xl font-bold">Ranked books</h2>
       <%= link_to "All books", author_all_books_path(@author.slug), class: "btn btn-sm btn-outline" %>
@@ -59,19 +66,11 @@
     </p>
 
     <% if @ranked_books.any? %>
-      <ol class="space-y-3">
-        <% @ranked_books.each do |book| %>
-          <li class="flex items-baseline gap-3">
-            <span class="text-base-content/50 font-semibold tabular-nums">
-              <span class="sr-only">Rank </span><%= book.ranked_position %>
-            </span>
-            <%= link_to book.title, book_path(book.slug), class: "link link-hover" %>
-            <% if book.first_published_year %>
-              <span class="text-sm text-base-content/60"><%= book.first_published_year %></span>
-            <% end %>
-          </li>
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
+        <% @ranked_books.each_with_index do |book, index| %>
+          <%= render Books::CardComponent.new(book: book, rank: book.ranked_position, index: index) %>
         <% end %>
-      </ol>
+      </div>
     <% else %>
       <p class="text-base-content/70">None of this author's books are ranked yet.</p>
     <% end %>

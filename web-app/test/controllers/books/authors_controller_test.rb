@@ -85,6 +85,51 @@ module Books
       assert_response :success
     end
 
+    # The show page renders a Books::CardComponent per ranked book, and each card
+    # reads primary_image and book_authors. Without the preloads on the ranked_books
+    # relation that is 2-3 queries per book, up to 71 for one author.
+    test "show query count does not grow with the number of ranked books" do
+      seed_ranked_books_for_author(3)
+      small = count_queries { get "/author/#{@author.slug}" }
+
+      seed_ranked_books_for_author(12)
+      large = count_queries { get "/author/#{@author.slug}" }
+
+      assert_equal small, large,
+        "query count grew from #{small} to #{large} as ranked books were added -- N+1 on the author show page"
+    end
+
+    private
+
+    def seed_ranked_books_for_author(count)
+      start = @books_config.ranked_items.where(item_type: "Books::Book").count
+
+      count.times do |i|
+        book = Books::Book.create!(title: "Seeded Book #{start + i}")
+        Books::BookAuthor.create!(book: book, author: @author, role: :author)
+        RankedItem.create!(
+          item: book,
+          ranking_configuration: @books_config,
+          rank: start + i + 1,
+          score: 10
+        )
+        next unless i.zero?
+
+        image = Image.new(parent: book, primary: true)
+        image.file.attach(io: StringIO.new("fake image data"), filename: "cover.jpg", content_type: "image/jpeg")
+        image.save!
+      end
+    end
+
+    def count_queries(&block)
+      count = 0
+      counter = lambda do |_name, _start, _finish, _id, payload|
+        count += 1 unless %w[CACHE SCHEMA TRANSACTION].include?(payload[:name])
+      end
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record", &block)
+      count
+    end
+
     # Brief's fixtures only rank the author, never one of their books, so the
     # ranked-books join/preload/alias branch would otherwise go untested (the
     # same gap Task 5 shipped). This test ranks the author's book directly.
