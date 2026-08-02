@@ -42,8 +42,11 @@ other's tables. **Decision: coordinate rather than isolate** (see Verification).
 - System tests (`bin/rails test:system`) and Playwright E2E are not run.
 - The Docker image is **not** built and the deploy path is **not** exercised. The
   `Dockerfile` ARG is bumped for consistency, but production correctness on 4.0.6 is
-  unverified by this work. This is the known gap.
-- `~/dev/mise.toml` is not modified. Flipping it is a post-merge action for the owner.
+  unverified by this work. This is the known gap — and because merging this branch
+  auto-deploys to production with no human gate in between (see "Pre-merge gate" below),
+  closing that gap belongs **before** merge, not after.
+- `~/dev/mise.toml` is not modified by this worktree's own work — see "Merge-time
+  actions" below for when and why it must move.
 - No opportunistic gem updates. Only versions that actively block 4.0.6 move.
 
 ## Approach
@@ -143,7 +146,7 @@ The real exposure is in the toolchain:
    most bumps will land.**
 2. **`standard` / `rubocop` `TargetRubyVersion`** — both read `.ruby-version`. A version
    that doesn't recognise Ruby 4.0 errors out before linting anything. Likely a bump.
-3. **Bundler 4** — Ruby 4.0 ships Bundler 4.0.3; the lock currently says
+3. **Bundler 4** — Ruby 4.0 ships Bundler 4.0.16; the lock currently says
    `BUNDLED WITH 2.6.2`. That line will change and Bundler 4 has its own behaviour deltas.
 4. **stdlib `openssl 4.0.0`** — bites anything pinning an older openssl.
 5. **`Set#inspect` / `Proc#parameters` output formats changed** — only matters if a test
@@ -182,12 +185,75 @@ Ruby 3.4.7 and its gems are untouched throughout. Reverting is
 `git worktree remove ~/dev/the-greatest-ruby4` and deleting the branch; the main repo
 never changes.
 
+## Pre-merge gate (required — read before merging to `main`)
+
+This repo has **no automated test or lint CI**. The only workflows GitHub Actions
+actually discovers (root-level `.github/workflows/`) are:
+
+- `.github/workflows/build-web-image.yml` — triggers `on: push: branches: [main]`
+  (lines 3-6), builds the image, tags it `latest`, and pushes to `ghcr.io` (lines 38-41),
+  then on success fires a `repository_dispatch` with `image-built-event` (lines 78-84).
+- `.github/workflows/deploy-production.yml` — listens for that event (lines 5-6, 46-48),
+  SSHes into production, and runs `docker compose pull` + `docker compose up -d` against
+  `ghcr.io/ssherman/the-greatest:latest`.
+
+Chained together: **merging `ruby-4-0-6` into `main` builds the Ruby 4.0.6 image and
+ships it to production automatically, with no human approval step in between.**
+`web-app/.github/workflows/ci.yml` looks like it would catch a regression first, but it
+never runs — GitHub only reads workflows under the repository **root's**
+`.github/workflows/`, and this file is nested one directory too deep, inside `web-app/`.
+It would also need editing before it could run here regardless, since it invokes
+`bin/brakeman`, a tool this project does not use. So there is no automated gate between
+merge and production; the only gate is whatever a human verifies before merging.
+
+**Therefore: build the Docker image on 4.0.6 and confirm it boots before merging** — the
+non-goal this spec deliberately deferred belongs here, not after. Context that narrows
+what is actually unknown, so this isn't a shot in the dark:
+
+- `docker.io/library/ruby:4.0.6-slim` exists, so the base image resolves.
+- `Gemfile.lock` has no `RUBY VERSION` stanza to go stale.
+- `PLATFORMS` still lists `x86_64-linux` and `aarch64-linux`, so `BUNDLE_DEPLOYMENT="1"`
+  (`Dockerfile:24`) will not trip on a missing platform entry.
+- The local (non-Docker) `bundle install` in this worktree resolved the same
+  precompiled `x86_64-linux` artifacts the Docker build would use.
+
+What is genuinely unexercised is whatever happens when the app **boots** under
+`RAILS_ENV=production` inside the image — specifically `bundle exec bootsnap precompile`
+(`Dockerfile:49` and `:59`) and `SECRET_KEY_BASE_DUMMY=1 ./bin/rails assets:precompile`
+(`Dockerfile:62`). Neither has run on 4.0.6 as of this writing, and nothing in this plan
+builds the image or runs those steps — the lockfile/test/lint work elsewhere in this doc
+does not substitute for it.
+
+## Merge-time actions (owner)
+
+`~/dev/mise.toml` must flip to `ruby = "4.0.6"` **at merge time**, not as an unhurried
+afterwards. The moment `main` carries this `Gemfile.lock`, every worktree still
+resolving Ruby 3.4.7 is affected, regardless of whether `mise.toml` has been flipped yet:
+
+- Ruby 3.4.7's shared `GEM_HOME` has `ostruct-0.6.1` installed; this lockfile pins
+  `ostruct (0.6.3)`. `bundle check` fails in any 3.4.7 worktree, which makes
+  `bundle install` mandatory there before `bin/rails` will boot at all.
+- `web-app/bin/bundle` derives its version requirement from `BUNDLED WITH` (`4.0.16` →
+  `~> 4.0`). Ruby 3.4.7 only has Bundler 2.6.2 and 2.6.9 available, and that binstub does
+  not auto-install a matching Bundler — it warns and `exit 42`
+  (`web-app/bin/bundle:88-95`). This is narrower than it sounds: nothing in the repo
+  actually invokes `bin/bundle` — `bin/setup:16` and `Procfile.dev` both call bare
+  `bundle` — so it only bites someone who types `bin/bundle` explicitly.
+
+Practical steps, in order:
+
+1. At merge, flip `~/dev/mise.toml`'s `ruby` value to `4.0.6`. This is what actually
+   moves every other worktree onto the new Ruby — it is not optional and not a
+   convenience to get to later.
+2. Any worktree that intentionally stays on 3.4.7 needs `bundle install` run once,
+   deliberately, before its `bin/rails` will boot again.
+3. **Caution:** the first `bundle install` run under Bundler 2.6.x (i.e. from a 3.4.7
+   worktree, after the mise flip) may rewrite `BUNDLED WITH` back down to `2.6.x` in
+   that worktree's checkout of `Gemfile.lock`. If it does, that rewrite must **not** be
+   committed — it would silently downgrade the Bundler pin for everyone else.
+4. Delete the worktree-local `mise.toml` once `~/dev/mise.toml` carries `4.0.6` — it is
+   then redundant.
+
 ## Follow-ups (owner)
 
-- Flip `~/dev/mise.toml` to `ruby = "4.0.6"` after merge. Until then it correctly holds
-  every *other* worktree on 3.4.7, which is what they want — so its being shared is a
-  feature during the upgrade and a one-line switch afterwards, flipping every worktree
-  at once. Delete the worktree-local `mise.toml` at that point; it becomes redundant.
-- Build the Docker image on 4.0.6 and verify the deploy path before shipping to
-  production — the non-goal called out above.
 - `git worktree remove ~/dev/the-greatest-ruby4` after merge.
