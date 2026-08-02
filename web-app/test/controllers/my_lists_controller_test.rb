@@ -139,9 +139,9 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
-  test "anonymous show redirects to /" do
+  test "anonymous show 404s on a private list" do
     get my_list_path(@albums_favorites)
-    assert_redirected_to "/"
+    assert_response :not_found
   end
 
   test "switching view_mode persists it on the list and re-renders" do
@@ -409,6 +409,99 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
 
     assert_equal author_queries.call(two_item_log), author_queries.call(four_item_log),
       "author queries scaled with item count — listable_display_includes is no longer preloading authors"
+  end
+
+  # --- public viewing ---
+
+  test "anonymous viewer can read a public list" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    list.update!(public: true)
+
+    get my_list_path(list)
+    assert_response :success
+  end
+
+  test "anonymous viewer gets 404 on a private list" do
+    host! Rails.application.config.domains[:books]
+    get my_list_path(user_lists(:regular_user_books_favorites))
+    assert_response :not_found
+  end
+
+  test "non-owner gets 404 on someone else's private list" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(users(:admin_user), stub_auth: true)
+
+    get my_list_path(user_lists(:regular_user_books_favorites))
+    assert_response :not_found
+  end
+
+  test "non-owner reading a public list gets no add box and no backlink" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    list.update!(public: true)
+    sign_in_as(users(:admin_user), stub_auth: true)
+
+    get my_list_path(list)
+    assert_response :success
+    assert_no_match(/data-testid="add-item-search"/, response.body)
+    assert_no_match(/data-testid="back-to-lists"/, response.body)
+  end
+
+  test "owner still gets the add box and backlink" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+
+    get my_list_path(user_lists(:regular_user_books_favorites))
+    assert_response :success
+    assert_match(/data-testid="add-item-search"/, response.body)
+    assert_match(/data-testid="back-to-lists"/, response.body)
+  end
+
+  test "a non-owner's view_mode param does not persist to the list" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    list.update!(public: true, view_mode: :default_view)
+    sign_in_as(users(:admin_user), stub_auth: true)
+
+    get my_list_path(list, view_mode: "grid_view")
+    assert_response :success
+    assert_equal "default_view", list.reload.view_mode
+  end
+
+  test "an owner's view_mode param does persist" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    list.update!(view_mode: :default_view)
+    sign_in_as(@user, stub_auth: true)
+
+    get my_list_path(list, view_mode: "grid_view")
+    assert_equal "grid_view", list.reload.view_mode
+  end
+
+  test "CSV download works for a public list read by a non-owner" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    list.update!(public: true)
+    sign_in_as(users(:admin_user), stub_auth: true)
+
+    get my_list_path(list, format: :csv)
+    assert_response :success
+  end
+
+  test "public list pages are never cached" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    list.update!(public: true)
+
+    get my_list_path(list)
+    assert_match(/no-store/, response.headers["Cache-Control"])
+  end
+
+  test "the dashboard still requires sign-in" do
+    host! Rails.application.config.domains[:books]
+    get my_lists_path
+    assert_redirected_to "/"
   end
 
   private

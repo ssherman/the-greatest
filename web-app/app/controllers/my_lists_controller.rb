@@ -11,7 +11,9 @@ class MyListsController < ApplicationController
 
   layout :resolve_layout
 
-  before_action :require_signed_in!
+  # show is reachable anonymously for public lists; visibility is enforced by the
+  # visible_to scope below, which 404s rather than redirecting.
+  before_action :require_signed_in!, only: [:index]
   before_action :prevent_caching
 
   # GET /my/lists
@@ -41,19 +43,26 @@ class MyListsController < ApplicationController
   # (?sort=ranking, unranked last, degrades to position when no config). CSV is
   # unpaginated and follows the current sort.
   def show
-    # Scope to the current domain's subclasses so a list from another domain
+    # Scoped to the current domain's subclasses so a list from another domain
     # (e.g. a games list opened on the music host) 404s rather than rendering in
-    # the wrong layout. Non-domain/non-owner both hide existence via 404.
+    # the wrong layout. visible_to keeps private non-owner reads at 404 too —
+    # Pundit's rescue would redirect, leaking existence.
     types = UserList.subclasses_for(Current.domain).map(&:name)
-    @list = current_user.user_lists.where(type: types).find(params[:id])
+    @list = UserList.where(type: types).visible_to(current_user).find(params[:id])
     authorize @list, :show?, policy_class: UserListPolicy
+    @owner = @list.user_id == current_user&.id
+    @indexable = false
 
     @ranking_config = @list.class.ranking_configuration_class&.default_primary
     @ranking_available = @ranking_config.present?
     @sort = (params[:sort] == "ranking" && @ranking_available) ? "ranking" : "position"
 
     persist_view_mode
-    @view_mode = @list.view_mode
+    @view_mode = if @owner
+      @list.view_mode
+    else
+      params[:view_mode].presence_in(UserList.view_modes.keys) || @list.view_mode
+    end
 
     scope = @list.user_list_items.ordered.includes(listable: @list.class.listable_display_includes)
     collection = (@sort == "ranking") ? ranking_sorted(scope.to_a) : scope
@@ -81,8 +90,10 @@ class MyListsController < ApplicationController
     end
   end
 
-  # Persist the view_mode when the owner switches it via the query param.
+  # Persist the view_mode when the owner switches it via the query param. A
+  # non-owner's param changes only their own render (see #show).
   def persist_view_mode
+    return unless @owner
     requested = params[:view_mode]
     return if requested.blank? || !UserList.view_modes.key?(requested)
     @list.update!(view_mode: requested) unless @list.view_mode == requested
