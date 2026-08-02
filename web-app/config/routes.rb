@@ -515,7 +515,10 @@ Rails.application.routes.draw do
 
     # All games routes with optional ranking configuration parameter
     scope "(/rc/:ranking_configuration_id)" do
+      get "lists/page/1", to: redirect("/lists", status: 301)
+      get "lists/:id/page/1", to: redirect("/lists/%{id}", status: 301), constraints: {id: /\d+/}
       get "lists", to: "games/lists#index", as: :games_lists
+      get "lists/page/:page", to: "games/lists#index", as: :games_lists_page, constraints: {page: /\d+/}
       get "lists/:id", to: "games/lists#show", as: :games_list
       get "lists/:id/page/:page", to: "games/lists#show", as: :games_list_page, constraints: {page: /\d+/}
       get "video-games", to: "games/ranked_items#index", as: :video_games

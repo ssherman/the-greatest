@@ -12,7 +12,7 @@
   </p>
 
   <div class="flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
-    <%= form_with url: books_lists_path, method: :get, class: "join" do |f| %>
+    <%= form_with url: books_lists_path_with_rc, method: :get, class: "join" do |f| %>
       <%= f.hidden_field :sort, value: @sort %>
       <%= f.search_field :q, value: @query, placeholder: "Search lists",
             "aria-label": "Search lists by name, source or url",
@@ -21,9 +21,9 @@
     <% end %>
 
     <div class="join" role="group" aria-label="Sort lists">
-      <%= link_to "Weight", books_lists_path(q: @query),
+      <%= link_to "Weight", books_lists_path_with_rc(q: @query),
             class: "btn join-item #{"btn-active" if @sort == "weight"}" %>
-      <%= link_to "Recently added", books_lists_path(sort: "newest", q: @query),
+      <%= link_to "Recently added", books_lists_path_with_rc(sort: "newest", q: @query),
             class: "btn join-item #{"btn-active" if @sort == "newest"}" %>
     </div>
   </div>
@@ -41,7 +41,7 @@
         <%= render Lists::CardComponent.new(
               ranked_list: ranked_list,
               item_count: @item_counts.fetch(ranked_list.list_id, 0),
-              path: books_list_path(ranked_list.list_id),
+              path: books_list_path_with_rc(ranked_list.list_id),
               noun: "books"
             ) %>
       <% end %>

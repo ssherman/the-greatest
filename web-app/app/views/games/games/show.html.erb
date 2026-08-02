@@ -60,11 +60,9 @@
         </div>
 
         <% if (description = @game.primary_description) %>
-          <div class="prose max-w-none">
-            <p class="text-base-content/70">
-              <%= description.content %>
-            </p>
-          </div>
+          <p class="max-w-3xl text-base-content/80">
+            <%= description.content %>
+          </p>
         <% end %>
       </div>
 
@@ -134,12 +132,13 @@
         </div>
       <% end %>
 
-      <% if @game.lists.any? %>
+      <% if @list_items.any? %>
         <div class="card bg-base-100 shadow-md">
           <div class="card-body">
             <h2 class="card-title text-xl mb-4">Appears On These Lists</h2>
             <div class="space-y-3">
-              <% @game.lists.each do |list| %>
+              <% @list_items.each do |list_item| %>
+                <% list = list_item.list %>
                 <%= link_to games_list_path(list), class: "block p-3 bg-base-200 rounded-lg hover:bg-base-300 transition-colors", data: { turbo_frame: "_top" } do %>
                   <h3 class="font-semibold text-base-content">
                     <%= list.name %>

@@ -1,7 +1,7 @@
-module Books
+module Games
   class ListsQuery < ::ListsQuery
     def self.list_type
-      "Books::List"
+      "Games::List"
     end
   end
 end

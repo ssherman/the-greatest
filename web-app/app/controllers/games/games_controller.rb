@@ -12,7 +12,7 @@ class Games::GamesController < ApplicationController
 
   def show
     @game = Games::Game
-      .includes(:categories, :platforms, :series, :lists, :child_games, {game_companies: :company})
+      .includes(:categories, :platforms, :series, :child_games, {game_companies: :company})
       .includes(primary_image: {file_attachment: {blob: {variant_records: {image_attachment: :blob}}}})
       .friendly
       .find(params[:slug])
@@ -24,5 +24,12 @@ class Games::GamesController < ApplicationController
     @related_games = @game.series ? @game.series.games.where.not(id: @game.id).to_a : []
 
     @ranked_item = @ranking_configuration&.ranked_items&.find_by(item: @game)
+
+    @list_items = @game.list_items
+      .joins(:list)
+      .where(list_id: @ranking_configuration.ranked_lists.select(:list_id))
+      .where(lists: {status: :active})
+      .includes(:list)
+      .order(Arel.sql("list_items.position ASC NULLS LAST"), "lists.name")
   end
 end

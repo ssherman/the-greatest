@@ -242,6 +242,14 @@ module Books
       assert_response :moved_permanently
     end
 
+    test "rc-scoped index keeps the rc segment in its own controls" do
+      get "/rc/#{@rc.id}/lists"
+
+      assert_response :success
+      assert_select "a[href=?]", "/rc/#{@rc.id}/lists/#{@list.id}"
+      assert_select "form[action=?]", "/rc/#{@rc.id}/lists"
+    end
+
     private
 
     def seed_lists(count)

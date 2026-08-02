@@ -9,7 +9,7 @@
   content_for :meta_description, truncate(description, length: 160)
 %>
 
-<div class="container mx-auto px-4 py-8">
+<div class="space-y-8">
   <div class="mb-8">
     <h1 class="text-4xl font-bold text-base-content mb-4">
       <%= @list.name %>
@@ -39,27 +39,12 @@
       <% end %>
     </div>
 
-    <% if @ranked_list %>
-      <div class="card bg-base-200 shadow-xl mb-6">
-        <div class="card-body">
-          <h2 class="card-title">
-            Weight: <%= @ranked_list.weight %>%
-          </h2>
-          <p class="text-sm text-base-content/70 mt-1">
-            How much this list influences our overall rankings. Higher weight means more reliable data.
-          </p>
-
-          <%= render Lists::SimplePenaltySummaryComponent.new(ranked_list: @ranked_list) %>
-        </div>
-      </div>
-    <% end %>
+    <%= render Lists::WeightBreakdownComponent.new(ranked_list: @ranked_list) %>
 
     <% if @list.description.present? %>
-      <div class="prose max-w-none mb-4">
-        <p class="text-base-content/80">
-          <%= @list.description %>
-        </p>
-      </div>
+      <p class="text-base-content/80 mb-4">
+        <%= @list.description %>
+      </p>
     <% end %>
 
     <% if @list.url.present? %>
@@ -76,25 +61,23 @@
   </div>
 
   <% if total_items > 0 %>
-    <%= turbo_frame_tag "list_items", data: {turbo_action: "advance"} do %>
-      <% if @pagy.pages > 1 %>
-        <div class="flex justify-center mb-6">
-          <%== @pagy.series_nav %>
-        </div>
-      <% end %>
-
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        <% @pagy_list_items.each do |list_item| %>
-          <% next unless list_item.item %>
-          <%= render Games::CardComponent.new(list_item: list_item, ranking_configuration: @ranking_configuration) %>
-        <% end %>
+    <% if @pagy.pages > 1 %>
+      <div class="flex justify-center mb-6">
+        <%== @pagy.series_nav %>
       </div>
+    <% end %>
 
-      <% if @pagy.pages > 1 %>
-        <div class="flex justify-center mt-6">
-          <%== @pagy.series_nav %>
-        </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      <% @pagy_list_items.each do |list_item| %>
+        <% next unless list_item.item %>
+        <%= render Games::CardComponent.new(list_item: list_item, ranking_configuration: @ranking_configuration) %>
       <% end %>
+    </div>
+
+    <% if @pagy.pages > 1 %>
+      <div class="flex justify-center mt-6">
+        <%== @pagy.series_nav %>
+      </div>
     <% end %>
   <% else %>
     <div class="text-center py-16">
