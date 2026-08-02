@@ -42,10 +42,18 @@ class Books::AuthorsController < ApplicationController
     config.ranked_items.where.not(rank: nil).find_by(item: @author)
   end
 
+  # Books the author actually wrote. Books::BookAuthor also carries :editor, and
+  # both the ranking aggregation and the index's top-books query already exclude
+  # it -- without the same predicate here an author's profile would list edited
+  # works as their own while their score ignored them.
+  def authored_books
+    @author.books.where(books_book_authors: {role: Books::BookAuthor.roles[:author]})
+  end
+
   def ranked_books
     return Books::Book.none if @ranking_configuration.nil?
 
-    @author.books
+    authored_books
       .joins(
         "JOIN ranked_items ON ranked_items.item_id = books_books.id " \
         "AND ranked_items.item_type = 'Books::Book' " \
@@ -61,7 +69,7 @@ class Books::AuthorsController < ApplicationController
   # survive the join and simply carry a nil ranked_position, which suppresses the
   # rank badge on their card.
   def all_books_relation
-    base = @author.books.preload({book_authors: :author}, {primary_image: {file_attachment: :blob}})
+    base = authored_books.preload({book_authors: :author}, {primary_image: {file_attachment: :blob}})
 
     if @ranking_configuration.nil?
       return base

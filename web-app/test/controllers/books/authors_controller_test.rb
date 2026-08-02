@@ -119,6 +119,46 @@ module Books
       assert_equal ranked.id, books.first.id, "ranked books should sort ahead of unranked ones"
     end
 
+    test "excludes books the author only edited from both profile pages" do
+      edited = Books::Book.create!(title: "An Edited Anthology")
+      Books::BookAuthor.create!(book: edited, author: @author, role: :editor)
+      RankedItem.create!(item: edited, ranking_configuration: @books_config, rank: 3, score: 80)
+
+      get "/author/#{@author.slug}"
+      assert_response :success
+      assert_not_includes @controller.view_assigns["ranked_books"].map(&:id), edited.id,
+        "an edited book appeared in the author's ranked books"
+
+      get "/author/#{@author.slug}/all-books"
+      assert_response :success
+      assert_not_includes @controller.view_assigns["books"].map(&:id), edited.id,
+        "an edited book appeared in the author's full bibliography"
+    end
+
+    test "author links keep the explicit ranking configuration" do
+      get "/rc/#{@books_config.id}/author/#{@author.slug}"
+
+      assert_response :success
+      assert_select "a", text: "All books" do |links|
+        assert_equal "/rc/#{@books_config.id}/author/#{@author.slug}/all-books", links.first["href"]
+      end
+
+      get "/rc/#{@books_config.id}/author/#{@author.slug}/all-books"
+
+      assert_response :success
+      assert_select "a", text: "Ranked books" do |links|
+        assert_equal "/rc/#{@books_config.id}/author/#{@author.slug}", links.first["href"]
+      end
+    end
+
+    test "author links omit the ranking configuration when it is implicit" do
+      get "/author/#{@author.slug}"
+
+      assert_select "a", text: "All books" do |links|
+        assert_equal "/author/#{@author.slug}/all-books", links.first["href"]
+      end
+    end
+
     test "all-books query count does not grow with the number of books" do
       seed_ranked_books_for_author(3)
       small = count_queries { get "/author/#{@author.slug}/all-books" }

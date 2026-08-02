@@ -9,7 +9,9 @@
   <div class="space-y-4">
     <div class="flex items-center justify-between gap-4 flex-wrap">
       <h2 class="text-2xl font-bold">All books</h2>
-      <%= link_to "Ranked books", author_path(@author.slug), class: "btn btn-sm btn-outline" %>
+      <%= link_to "Ranked books",
+          author_path(ranking_configuration_id: params[:ranking_configuration_id], slug: @author.slug),
+          class: "btn btn-sm btn-outline" %>
     </div>
 
     <p class="text-sm text-base-content/70">
