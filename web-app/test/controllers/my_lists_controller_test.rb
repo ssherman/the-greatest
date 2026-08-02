@@ -72,12 +72,12 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, 'data-theme="light"' # music layout marker
   end
 
-  test "unknown host falls back to the music layout (books has no layout yet)" do
+  test "unknown host renders the books layout (detect_current_domain defaults to :books)" do
     host! "unknown.example.com"
     sign_in_as(@user, stub_auth: true)
     get my_lists_path
     assert_response :success
-    assert_includes response.body, 'data-theme="light"'
+    assert_includes response.body, 'data-theme="books"'
   end
 
   test "dashboard responses are never cached" do
@@ -331,6 +331,28 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
       get my_lists_path
     end
     assert_response :success
+  end
+
+  # --- books domain ---
+
+  test "dashboard selects the books layout on the books domain" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+    get my_lists_path
+    assert_response :success
+    assert_includes response.body, 'data-theme="books"'
+  end
+
+  test "books layout carries the user-list state controller and modal" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+    get my_lists_path
+    assert_response :success
+
+    assert_includes response.body, 'data-controller="user-list-state"'
+    assert_includes response.body, 'id="navbar_my_lists"'
+    assert_includes response.body, 'id="user_list_modal"'
+    assert_includes response.body, 'id="user-list-icons"'
   end
 
   private
