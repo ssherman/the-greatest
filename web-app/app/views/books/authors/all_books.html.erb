@@ -1,0 +1,29 @@
+<%
+  content_for :page_title, "All books by #{@author.name} | The Greatest Books"
+%>
+
+<div class="space-y-6">
+  <div>
+    <h1 class="text-3xl font-bold">All books by <%= @author.name %></h1>
+    <%= link_to "Back to #{@author.name}", author_path(@author.slug), class: "link link-hover text-sm" %>
+  </div>
+
+  <% if @books.any? %>
+    <ul class="space-y-3">
+      <% @books.each do |book| %>
+        <li class="flex items-baseline gap-3">
+          <%= link_to book.title, book_path(book.slug), class: "link link-hover" %>
+          <% if book.first_published_year %>
+            <span class="text-sm text-base-content/60"><%= book.first_published_year %></span>
+          <% end %>
+        </li>
+      <% end %>
+    </ul>
+
+    <div class="flex justify-center">
+      <%== @pagy.series_nav(slots: 5) %>
+    </div>
+  <% else %>
+    <p class="text-base-content/70">No books recorded for this author.</p>
+  <% end %>
+</div>

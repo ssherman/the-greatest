@@ -1,1 +1,58 @@
-<h1 class="text-3xl font-bold"><%= @author.name %></h1>
+<%
+  content_for :page_title, "The Greatest Books by #{@author.name} | The Greatest Books"
+  content_for :meta_description, "The greatest books written by #{@author.name}, ranked from hundreds of published best-books lists."
+%>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+  <div class="lg:col-span-1">
+    <div class="card bg-base-100 shadow-xl sticky top-8">
+      <figure class="p-4 lg:p-6">
+        <%= render Books::AuthorAvatarComponent.new(author: @author, size_classes: "w-full max-w-[240px] mx-auto aspect-square") %>
+      </figure>
+      <div class="card-body pt-0 gap-2">
+        <% if @ranked_item %>
+          <div class="badge badge-primary">Ranked #<%= @ranked_item.rank %> of The Greatest Authors</div>
+        <% end %>
+        <% if @author.birth_year %>
+          <div class="text-sm text-base-content/70">
+            <%= @author.birth_year %><%= "–#{@author.death_year}" if @author.death_year %>
+          </div>
+        <% end %>
+      </div>
+    </div>
+  </div>
+
+  <div class="lg:col-span-2 space-y-6">
+    <h1 class="text-3xl sm:text-4xl font-bold text-balance"><%= @author.name %></h1>
+
+    <% if @description %>
+      <p class="text-base-content/80 leading-relaxed"><%= @description.content %></p>
+    <% end %>
+
+    <div class="flex items-center justify-between gap-4 flex-wrap">
+      <h2 class="text-2xl font-bold">Ranked books</h2>
+      <%= link_to "All books", author_all_books_path(@author.slug), class: "btn btn-sm btn-outline" %>
+    </div>
+
+    <p class="text-sm text-base-content/70">
+      These are only the books that appear on the lists aggregated by this site. It is not a
+      complete bibliography.
+    </p>
+
+    <% if @ranked_books.any? %>
+      <ol class="space-y-3">
+        <% @ranked_books.each do |book| %>
+          <li class="flex items-baseline gap-3">
+            <span class="text-base-content/50 font-semibold tabular-nums"><%= book.ranked_position %></span>
+            <%= link_to book.title, book_path(book.slug), class: "link link-hover" %>
+            <% if book.first_published_year %>
+              <span class="text-sm text-base-content/60"><%= book.first_published_year %></span>
+            <% end %>
+          </li>
+        <% end %>
+      </ol>
+    <% else %>
+      <p class="text-base-content/70">None of this author's books are ranked yet.</p>
+    <% end %>
+  </div>
+</div>
