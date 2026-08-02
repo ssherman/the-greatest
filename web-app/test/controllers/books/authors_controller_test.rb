@@ -99,6 +99,35 @@ module Books
         "query count grew from #{small} to #{large} as ranked books were added -- N+1 on the author show page"
     end
 
+    test "all-books keeps unranked books and carries rank only for ranked ones" do
+      ranked = books_books(:war_and_peace)
+      RankedItem.create!(item: ranked, ranking_configuration: @books_config, rank: 7, score: 50)
+      unranked = Books::Book.create!(title: "An Unranked Title")
+      Books::BookAuthor.create!(book: unranked, author: @author, role: :author)
+
+      get "/author/#{@author.slug}/all-books"
+
+      assert_response :success
+      books = @controller.view_assigns["books"]
+      by_id = books.index_by(&:id)
+
+      assert_includes by_id.keys, unranked.id, "the LEFT JOIN dropped an unranked book"
+      assert_equal 7, by_id[ranked.id].ranked_position
+      assert_nil by_id[unranked.id].ranked_position
+      assert_equal ranked.id, books.first.id, "ranked books should sort ahead of unranked ones"
+    end
+
+    test "all-books query count does not grow with the number of books" do
+      seed_ranked_books_for_author(3)
+      small = count_queries { get "/author/#{@author.slug}/all-books" }
+
+      seed_ranked_books_for_author(12)
+      large = count_queries { get "/author/#{@author.slug}/all-books" }
+
+      assert_equal small, large,
+        "query count grew from #{small} to #{large} as books were added -- N+1 on the all-books page"
+    end
+
     private
 
     def seed_ranked_books_for_author(count)

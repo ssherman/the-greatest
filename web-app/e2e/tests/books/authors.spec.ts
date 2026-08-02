@@ -29,14 +29,18 @@ test.describe('Greatest authors', () => {
 
   test('the all books toggle navigates and back-links', async ({ page }) => {
     await page.goto('/authors');
-    await page.locator('ol > li h2 a').first().click();
+    const authorLink = page.locator('ol > li h2 a').first();
+    const name = (await authorLink.textContent())?.trim() ?? '';
+    await authorLink.click();
 
     await page.getByRole('link', { name: 'All books' }).click();
     await expect(page).toHaveURL(/\/author\/[^/]+\/all-books$/);
-    await expect(page.getByRole('heading', { level: 1, name: /^All books by/ })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'All books' })).toBeVisible();
 
-    await page.getByRole('link', { name: /^Back to / }).click();
+    await page.getByRole('link', { name: 'Ranked books' }).click();
     await expect(page).toHaveURL(/\/author\/[^/]+$/);
+    await expect(page.getByRole('heading', { level: 2, name: 'Ranked books' })).toBeVisible();
   });
 
   test('index pagination works', async ({ page }) => {

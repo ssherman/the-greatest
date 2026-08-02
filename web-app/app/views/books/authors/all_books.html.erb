@@ -2,28 +2,36 @@
   content_for :page_title, "All books by #{@author.name} | The Greatest Books"
 %>
 
-<div class="space-y-6">
-  <div>
-    <h1 class="text-3xl font-bold">All books by <%= @author.name %></h1>
-    <%= link_to "Back to #{@author.name}", author_path(@author.slug), class: "link link-hover text-sm" %>
-  </div>
+<div class="space-y-8">
+  <%= render "books/authors/profile_header",
+      author: @author, ranked_item: @ranked_item, description: @description %>
 
-  <% if @books.any? %>
-    <ul class="space-y-3">
-      <% @books.each do |book| %>
-        <li class="flex items-baseline gap-3">
-          <%= link_to book.title, book_path(book.slug), class: "link link-hover" %>
-          <% if book.first_published_year %>
-            <span class="text-sm text-base-content/60"><%= book.first_published_year %></span>
-          <% end %>
-        </li>
-      <% end %>
-    </ul>
-
-    <div class="flex justify-center">
-      <%== @pagy.series_nav(slots: 5) %>
+  <div class="space-y-4">
+    <div class="flex items-center justify-between gap-4 flex-wrap">
+      <h2 class="text-2xl font-bold">All books</h2>
+      <%= link_to "Ranked books", author_path(@author.slug), class: "btn btn-sm btn-outline" %>
     </div>
-  <% else %>
-    <p class="text-base-content/70">No books recorded for this author.</p>
-  <% end %>
+
+    <p class="text-sm text-base-content/70">
+      Every book by this author recorded on the site, including those that do not appear on any
+      of the lists we aggregate.
+    </p>
+
+    <% if @books.any? %>
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
+        <% @books.each_with_index do |book, index| %>
+          <%= render Books::CardComponent.new(book: book, rank: book.ranked_position, index: index) %>
+        <% end %>
+      </div>
+
+      <div class="flex justify-center">
+        <%== @pagy.series_nav(slots: 5) %>
+      </div>
+      <p class="text-center text-sm text-base-content/70">
+        Page <%= number_with_delimiter(@pagy.page) %> of <%= number_with_delimiter(@pagy.last) %>
+      </p>
+    <% else %>
+      <p class="text-base-content/70">No books recorded for this author.</p>
+    <% end %>
+  </div>
 </div>

@@ -22,6 +22,8 @@ class Books::AuthorsController < ApplicationController
 
   def all_books
     @indexable = false
+    @ranked_item = author_ranked_item
+    @description = @author.primary_description
     @pagy, @books = pagy_path(all_books_relation, limit: 50)
   end
 
@@ -55,8 +57,25 @@ class Books::AuthorsController < ApplicationController
       .order(Arel.sql("ranked_items.rank ASC"))
   end
 
+  # LEFT JOIN, not JOIN: this is the full bibliography, so unranked books must
+  # survive the join and simply carry a nil ranked_position, which suppresses the
+  # rank badge on their card.
   def all_books_relation
-    @author.books
-      .order(Arel.sql("books_books.first_published_year ASC NULLS LAST"), :title)
+    base = @author.books.preload({book_authors: :author}, {primary_image: {file_attachment: :blob}})
+
+    if @ranking_configuration.nil?
+      return base
+          .select("books_books.*, NULL::integer AS ranked_position")
+          .order(Arel.sql("books_books.first_published_year ASC NULLS LAST"), :title)
+    end
+
+    base
+      .select("books_books.*, ranked_items.rank AS ranked_position")
+      .joins(
+        "LEFT OUTER JOIN ranked_items ON ranked_items.item_id = books_books.id " \
+        "AND ranked_items.item_type = 'Books::Book' " \
+        "AND ranked_items.ranking_configuration_id = #{@ranking_configuration.id.to_i}"
+      )
+      .order(Arel.sql("ranked_items.rank ASC NULLS LAST, books_books.first_published_year ASC NULLS LAST"), :title)
   end
 end
