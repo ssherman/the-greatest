@@ -105,11 +105,17 @@ export default class extends Controller {
     if (!this.hasLabelTarget) return
     if (lists.length === 0) {
       this.labelTarget.textContent = "Add to list"
-      this.buttonTarget.classList.remove("btn-primary")
+      this.buttonTarget.classList.remove("btn-primary", "btn-soft")
       this.buttonTarget.classList.add("btn-ghost")
     } else {
       this.labelTarget.textContent = lists.length === 1 ? "On 1 list" : `On ${lists.length} lists`
-      this.buttonTarget.classList.add("btn-primary")
+      // btn-soft, not a solid btn-primary: a filled primary is far too loud for a
+      // secondary action on a card, and it collides with other primary-filled
+      // elements (the books rank badge; abyss's near-white yellow-green). Soft
+      // derives an 8% tint of each theme's own primary, so it stays legible on
+      // both the light books theme and the dark games one. The state change is
+      // also carried by the label text and the icon strip, never by color alone.
+      this.buttonTarget.classList.add("btn-primary", "btn-soft")
       this.buttonTarget.classList.remove("btn-ghost")
     }
   }
