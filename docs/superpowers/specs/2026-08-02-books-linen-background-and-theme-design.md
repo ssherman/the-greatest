@@ -191,7 +191,7 @@ The existing `@layer base` block setting Lora and Playfair Display is unchanged.
 |---|---|
 | `web-app/app/assets/stylesheets/books/application.css` | Replace `themes: cmyk --default` with the `books` theme block above |
 | `web-app/app/views/layouts/books/application.html.erb:2` | `data-theme="cmyk"` → `data-theme="books"` |
-| `web-app/app/views/layouts/books/application.html.erb:20` | `<body>` → `<body class="bg-base-200">` |
+| `web-app/app/views/layouts/books/application.html.erb:19` | `<body>` → `<body class="bg-base-200">` |
 | `web-app/app/views/layouts/books/application.html.erb:21` | navbar `bg-base-200` → `bg-base-300` |
 | `web-app/app/views/layouts/books/application.html.erb:54` | footer `bg-base-200` → `bg-base-300` |
 | `web-app/app/views/books/ranked_items/index.html.erb:8` | hero panel `bg-base-200` → `bg-base-100` (it is a panel; panels are white). The existing `border border-base-300 rounded-xl p-6 md:p-10` classes are retained unchanged |
