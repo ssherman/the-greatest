@@ -69,5 +69,23 @@ module Games
       get game_path(game)
       assert_response :success
     end
+
+    test "show excludes lists that are not active from list_items" do
+      game = games_games(:breath_of_the_wild)
+      rc = ranking_configurations(:games_global)
+      active_list = Games::List.create!(name: "Active List", status: :active)
+      unapproved_list = Games::List.create!(name: "Unapproved List", status: :unapproved)
+      RankedList.create!(list: active_list, ranking_configuration: rc, weight: 10)
+      RankedList.create!(list: unapproved_list, ranking_configuration: rc, weight: 10)
+      ListItem.create!(list: active_list, listable: game, position: 1)
+      ListItem.create!(list: unapproved_list, listable: game, position: 1)
+
+      get game_path(game)
+
+      assert_response :success
+      list_ids = @controller.view_assigns["list_items"].map(&:list_id)
+      assert_includes list_ids, active_list.id
+      assert_not_includes list_ids, unapproved_list.id
+    end
   end
 end
