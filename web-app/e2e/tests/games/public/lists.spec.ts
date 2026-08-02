@@ -83,10 +83,10 @@ test.describe('Games Lists', () => {
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   });
 
-  test('pagination links are path-based', async ({ page }) => {
+  test('pagination nav renders', async ({ page }) => {
     await page.goto('/lists');
 
-    await expect(page.locator('nav.pagy').first()).toBeVisible();
+    await expect(page.locator('nav.pagy')).toBeVisible();
   });
 
   test('the newest sort is reachable and keeps its state', async ({ page }) => {
