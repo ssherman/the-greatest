@@ -551,11 +551,38 @@ In the same file, immediately before `<!-- Login Modal -->`:
     <%= render "shared/user_list_icon_template" %>
 ```
 
-- [ ] **Step 8: Write a test that the layout carries the plumbing**
+- [ ] **Step 8: Select the books layout**
+
+Nothing renders this layout yet — `MyListsController#resolve_layout` has no books branch. Add it now so this task's test can pass. In `app/controllers/my_lists_controller.rb`, replace the whole comment block above `resolve_layout` and the method itself with:
+
+```ruby
+  def resolve_layout
+    case Current.domain
+    when :games then "games/application"
+    when :movies then "movies/application"
+    when :books then "books/application"
+    else "music/application"
+    end
+  end
+```
+
+The deleted comment described books falling through the `DOMAIN_SUBCLASSES` guard, which Task 1 removed.
+
+- [ ] **Step 9: Write the failing test**
 
 Append to `test/controllers/my_lists_controller_test.rb`:
 
 ```ruby
+  # --- books domain ---
+
+  test "dashboard selects the books layout on the books domain" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+    get my_lists_path
+    assert_response :success
+    assert_includes response.body, 'data-theme="books"'
+  end
+
   test "books layout carries the user-list state controller and modal" do
     host! Rails.application.config.domains[:books]
     sign_in_as(@user, stub_auth: true)
@@ -569,33 +596,42 @@ Append to `test/controllers/my_lists_controller_test.rb`:
   end
 ```
 
-This test fails until Task 4 selects the books layout. Mark it skipped for now so the suite stays green:
+Also rename the stale test at line ~75 — it says books has no layout, which is no longer true:
 
 ```ruby
-  test "books layout carries the user-list state controller and modal" do
-    skip "enabled in Task 4 once resolve_layout selects the books layout"
+  test "unknown host falls back to the music layout" do
 ```
 
-- [ ] **Step 9: Run the suite and commit**
+These tests need no books fixtures: Task 2's `EnsureDefaults` creates the four default lists on the first dashboard hit.
+
+- [ ] **Step 10: Run the tests**
+
+```bash
+bin/rails test test/controllers/my_lists_controller_test.rb
+```
+
+Expected: PASS. If they were run before Step 8, they would have failed on `data-theme="light"`.
+
+- [ ] **Step 11: Run the full suite, lint, commit**
 
 ```bash
 bin/rails test
 bundle exec standardrb
-git add app/views/layouts/books/application.html.erb app/views/shared/_user_list_icon_template.html.erb app/assets/svg/icons/ test/controllers/my_lists_controller_test.rb
+git add app/views/layouts/books/application.html.erb app/views/shared/_user_list_icon_template.html.erb app/assets/svg/icons/ app/controllers/my_lists_controller.rb test/controllers/my_lists_controller_test.rb
 git commit -m "Add user-list plumbing and the book-open icon to the books layout"
 ```
 
 ---
 
-### Task 4: MyListsController books layout and CSV
+### Task 4: Books CSV export
 
 **Files:**
-- Modify: `app/controllers/my_lists_controller.rb` (`resolve_layout`, `csv_headers`, `csv_row`, add `author_names`)
+- Modify: `app/controllers/my_lists_controller.rb` (`csv_headers`, `csv_row`, add `author_names`)
 - Test: `test/controllers/my_lists_controller_test.rb`
 - Modify: `test/fixtures/user_lists.yml`, `test/fixtures/user_list_items.yml`, `test/fixtures/books/book_authors.yml`
 
 **Interfaces:**
-- Consumes: Task 1's `subclasses_for(:books)`, Task 3's books layout.
+- Consumes: Task 1's `subclasses_for(:books)`, Task 3's books layout and `resolve_layout` branch.
 - Produces: fixtures `user_lists(:regular_user_books_favorites)`, `user_lists(:regular_user_books_read)`, and `user_list_items(:regular_user_books_item_1..3)`. Tasks 5, 7, 10, and 11 all reference these.
 
 **Why:** `Books::Book` has no `release_year` column — every other listable does, which is why `csv_row`'s `else` branch was safe until now. Without a books branch the first "Download CSV" click on a books list raises `NoMethodError`.
@@ -663,16 +699,6 @@ Do **not** create `test/fixtures/books/user_lists.yml` — an STI-subclass fixtu
 In `test/controllers/my_lists_controller_test.rb`, remove the `skip` line added in Task 3 Step 8, then append:
 
 ```ruby
-  # --- books domain ---
-
-  test "dashboard selects the books layout on the books domain" do
-    host! Rails.application.config.domains[:books]
-    sign_in_as(@user, stub_auth: true)
-    get my_lists_path
-    assert_response :success
-    assert_includes response.body, 'data-theme="books"'
-  end
-
   test "show renders a books list on the books domain" do
     host! Rails.application.config.domains[:books]
     sign_in_as(@user, stub_auth: true)
@@ -709,38 +735,15 @@ In `test/controllers/my_lists_controller_test.rb`, remove the `skip` line added 
   end
 ```
 
-Also rename the stale test at line ~75 — it says books has no layout, which is no longer true:
-
-```ruby
-  test "unknown host falls back to the music layout" do
-```
-
 - [ ] **Step 3: Run them to verify they fail**
 
 ```bash
 bin/rails test test/controllers/my_lists_controller_test.rb
 ```
 
-Expected: FAIL — layout assertion finds `data-theme="light"`, and the CSV tests raise `NoMethodError: undefined method 'release_year' for an instance of Books::Book`.
+Expected: the two CSV tests FAIL with `NoMethodError: undefined method 'release_year' for an instance of Books::Book`. The show/404 tests pass already.
 
-- [ ] **Step 4: Add the books layout branch**
-
-In `app/controllers/my_lists_controller.rb`, replace the whole comment block above `resolve_layout` and the method itself with:
-
-```ruby
-  def resolve_layout
-    case Current.domain
-    when :games then "games/application"
-    when :movies then "movies/application"
-    when :books then "books/application"
-    else "music/application"
-    end
-  end
-```
-
-The deleted comment described books falling through the `DOMAIN_SUBCLASSES` guard, which Task 1 removed.
-
-- [ ] **Step 5: Add the books CSV branches**
+- [ ] **Step 4: Add the books CSV branches**
 
 In the same file, replace `csv_headers` and `csv_row`, and add `author_names` next to `artist_names`:
 
@@ -778,21 +781,21 @@ In the same file, replace `csv_headers` and `csv_row`, and add `author_names` ne
   end
 ```
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [ ] **Step 5: Run the tests to verify they pass**
 
 ```bash
 bin/rails test test/controllers/my_lists_controller_test.rb
 ```
 
-Expected: PASS, including the Task 3 layout-plumbing test that was skipped.
+Expected: PASS.
 
-- [ ] **Step 7: Run the full suite, lint, commit**
+- [ ] **Step 6: Run the full suite, lint, commit**
 
 ```bash
 bin/rails test
 bundle exec standardrb
 git add app/controllers/my_lists_controller.rb test/
-git commit -m "Render books lists in the books layout and fix the books CSV export"
+git commit -m "Fix the books CSV export to use authors and first_published_year"
 ```
 
 ---
@@ -802,11 +805,12 @@ git commit -m "Render books lists in the books layout and fix the books CSV expo
 **Files:**
 - Modify: `app/components/user_lists/show/item_component.rb`
 - Modify: `app/models/books/user_list.rb` (`listable_display_includes`)
-- Test: `test/components/user_lists/show/item_component_test.rb`, `test/controllers/my_lists_controller_test.rb`
+- Modify: `app/components/books/card_component.rb:5` (the initializer)
+- Test: `test/components/user_lists/show/item_component_test.rb`, `test/components/books/card_component_test.rb`, `test/controllers/my_lists_controller_test.rb`
 
 **Interfaces:**
 - Consumes: Task 4's fixtures.
-- Produces: `UserLists::Show::ItemComponent.card_capable?("Books::Book") # => true`, so `my_lists/show.html.erb` shows the view switcher and picks a non-table wrapper for books. Task 6's `Books::CardComponent` signature change is required for `grid_view` to render.
+- Produces: `UserLists::Show::ItemComponent.card_capable?("Books::Book") # => true`, so `my_lists/show.html.erb` shows the view switcher and picks a non-table wrapper for books. Also `Books::CardComponent.new(book:)` with no `rank:`/`index:` — Task 6 renders the widget into that same component.
 
 **Two things happen here.** Books join `CARD_LISTABLES` (they have covers, descriptions, an author byline and a year — exactly the shape `default_view` was built for), and the preload is corrected: `listable_display_includes` currently loads `:authors`, but both `Books::CardComponent#author_names` and the new `by_line` read `book_authors` — a *different* association. Left alone, a 100-item books list in grid view fires 100 queries.
 
@@ -849,6 +853,17 @@ Append to `test/components/user_lists/show/item_component_test.rb`:
     assert_selector "tr td", text: "Leo Tolstoy"
     assert_selector "tr td", text: "1869"
   end
+```
+
+Append to `test/components/books/card_component_test.rb` (inside `module Books; class CardComponentTest`) — the grid view renders this card with no rank to pass:
+
+```ruby
+    test "renders without a rank or index" do
+      render_inline(Books::CardComponent.new(book: @book))
+
+      assert_selector "a[href='/book/war-and-peace']", count: 1
+      assert_no_selector ".badge"
+    end
 ```
 
 Append to `test/controllers/my_lists_controller_test.rb`:
@@ -894,12 +909,22 @@ This mirrors the notification-subscription idiom already used by the "dashboard 
 - [ ] **Step 2: Run them to verify they fail**
 
 ```bash
-bin/rails test test/components/user_lists/show/item_component_test.rb test/controllers/my_lists_controller_test.rb
+bin/rails test test/components/user_lists/show/item_component_test.rb test/components/books/card_component_test.rb test/controllers/my_lists_controller_test.rb
 ```
 
-Expected: FAIL — `card_capable?("Books::Book")` is false, grid view renders a `<tr>`, by-line is empty, year is nil.
+Expected: FAIL — `card_capable?("Books::Book")` is false, grid view renders a `<tr>`, by-line is empty, year is nil, and `Books::CardComponent.new(book:)` raises `ArgumentError: missing keywords: :rank, :index`.
 
-- [ ] **Step 3: Fix the preload**
+- [ ] **Step 3: Give the card initializer defaults**
+
+In `app/components/books/card_component.rb`, replace line 5:
+
+```ruby
+  def initialize(book:, rank: nil, index: 0)
+```
+
+The two existing call sites (`app/views/books/ranked_items/index.html.erb`, `app/views/books/lists/show.html.erb`) pass both and are unchanged.
+
+- [ ] **Step 4: Fix the preload**
 
 In `app/models/books/user_list.rb`, replace `listable_display_includes`:
 
@@ -911,7 +936,7 @@ In `app/models/books/user_list.rb`, replace `listable_display_includes`:
 
 `Books::Book` declares `has_many :book_authors, -> { order(:position) }`, so ordering is preserved and matches `Books::CardComponent#author_names`.
 
-- [ ] **Step 4: Add the books branches to the item component**
+- [ ] **Step 5: Add the books branches to the item component**
 
 In `app/components/user_lists/show/item_component.rb`, make these five edits.
 
@@ -983,31 +1008,35 @@ Add `Books::Book` to the constant and update its comment:
   end
 ```
 
-- [ ] **Step 5: Run the tests**
+- [ ] **Step 6: Run the tests**
 
 ```bash
-bin/rails test test/components/user_lists/show/item_component_test.rb test/controllers/my_lists_controller_test.rb
+bin/rails test test/components/user_lists/show/item_component_test.rb test/components/books/card_component_test.rb test/controllers/my_lists_controller_test.rb
 ```
 
-Expected: the `default_view` and `table_view` tests PASS. The `grid_view` test still FAILS with `ArgumentError: missing keywords: :rank, :index` — Task 6 fixes it. Leave it failing and go to Task 6; do not commit a red suite.
+Expected: PASS.
 
-- [ ] **Step 6: Do not commit yet**
+- [ ] **Step 7: Run the full suite, lint, commit**
 
-This task and Task 6 share one green point. Proceed directly to Task 6 and commit both together.
+```bash
+bin/rails test
+bundle exec standardrb
+git add app/components/user_lists/show/item_component.rb app/components/books/card_component.rb app/models/books/user_list.rb test/
+git commit -m "Render books lists in list, grid, and table views"
+```
 
 ---
 
-### Task 6: Books card widget and signature
+### Task 6: Add-to-list widget on books surfaces
 
 **Files:**
-- Modify: `app/components/books/card_component.rb:5` (the initializer)
 - Modify: `app/components/books/card_component.html.erb`
 - Modify: `app/views/books/books/show.html.erb`
 - Test: `test/components/books/card_component_test.rb`
 
 **Interfaces:**
-- Consumes: Task 3's icon template and modal (the widget renders `helpers.icon "plus"` and dispatches to `#user_list_modal`); Task 5's `listable_card` call.
-- Produces: `Books::CardComponent.new(book:)` renders with no `rank:`/`index:`; every books card and `/book/:slug` carries a `UserLists::CardWidgetComponent`.
+- Consumes: Task 3's icon template and modal (the widget renders `helpers.icon "plus"` and dispatches to `#user_list_modal`); Task 5's card-initializer defaults.
+- Produces: every books card and `/book/:slug` carries a `UserLists::CardWidgetComponent`. The Task 8 E2E spec exercises it.
 
 **Landmine — read before writing the template.** `Books::CardComponent`'s title link carries `after:absolute after:inset-0` (a stretched link) inside a `position: relative` DaisyUI card. That `::after` overlay is a positioned element with no `z-index`, so it paints above any later *non*-positioned sibling. Dropping the widget in unwrapped makes the button **silently unclickable**. It must be wrapped in `relative z-10`. Music and games cards have no stretched link, so copying their markup will not surface this, and no unit test can catch it — the Task 8 E2E spec is the real guard.
 
@@ -1016,13 +1045,6 @@ This task and Task 6 share one green point. Proceed directly to Task 6 and commi
 Append to `test/components/books/card_component_test.rb` (inside `module Books; class CardComponentTest`):
 
 ```ruby
-    test "renders without a rank or index" do
-      render_inline(Books::CardComponent.new(book: @book))
-
-      assert_selector "a[href='/book/war-and-peace']", count: 1
-      assert_no_selector ".badge"
-    end
-
     test "renders the add-to-list widget above the stretched link overlay" do
       render_inline(Books::CardComponent.new(book: @book, rank: 1, index: 0))
 
@@ -1032,25 +1054,15 @@ Append to `test/components/books/card_component_test.rb` (inside `module Books; 
     end
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [ ] **Step 2: Run it to verify it fails**
 
 ```bash
 bin/rails test test/components/books/card_component_test.rb
 ```
 
-Expected: FAIL — `ArgumentError: missing keywords: :rank, :index`, and no widget selector.
+Expected: FAIL — no widget selector.
 
-- [ ] **Step 3: Give the initializer defaults**
-
-In `app/components/books/card_component.rb`, replace line 5:
-
-```ruby
-  def initialize(book:, rank: nil, index: 0)
-```
-
-The two existing call sites (`app/views/books/ranked_items/index.html.erb`, `app/views/books/lists/show.html.erb`) pass both and are unchanged.
-
-- [ ] **Step 4: Add the widget to the card**
+- [ ] **Step 3: Add the widget to the card**
 
 In `app/components/books/card_component.html.erb`, immediately after the `author_names` block and before the closing `</div>` of `card-body`:
 
@@ -1062,7 +1074,7 @@ In `app/components/books/card_component.html.erb`, immediately after the `author
     </div>
 ```
 
-- [ ] **Step 5: Add the widget to the book show page**
+- [ ] **Step 4: Add the widget to the book show page**
 
 In `app/views/books/books/show.html.erb`, immediately after the `<% if @ranked_item %> … <% end %>` block that closes the title `<div>`, and still inside that `<div>`:
 
@@ -1072,21 +1084,21 @@ In `app/views/books/books/show.html.erb`, immediately after the `<% if @ranked_i
       </div>
 ```
 
-- [ ] **Step 6: Run the tests from Tasks 5 and 6**
+- [ ] **Step 5: Run the tests**
 
 ```bash
-bin/rails test test/components/books/card_component_test.rb test/components/user_lists/show/item_component_test.rb test/controllers/my_lists_controller_test.rb
+bin/rails test test/components/books/card_component_test.rb
 ```
 
-Expected: PASS, including Task 5's `grid_view` test.
+Expected: PASS.
 
-- [ ] **Step 7: Run the full suite, lint, commit both tasks**
+- [ ] **Step 6: Run the full suite, lint, commit**
 
 ```bash
 bin/rails test
 bundle exec standardrb
-git add app/components/ app/models/books/user_list.rb app/views/books/books/show.html.erb test/
-git commit -m "Render books in list/grid views and add the add-to-list widget to books cards"
+git add app/components/books/card_component.html.erb app/views/books/books/show.html.erb test/components/books/card_component_test.rb
+git commit -m "Add the add-to-list widget to books cards and the book show page"
 ```
 
 ---
