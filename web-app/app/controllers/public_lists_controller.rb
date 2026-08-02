@@ -10,8 +10,12 @@ class PublicListsController < ApplicationController
     raise NotImplementedError, "#{name} must define .lists_query_class"
   end
 
+  def self.ranking_configuration_class
+    raise NotImplementedError, "#{name} must define .ranking_configuration_class"
+  end
+
   def index
-    @sort = ListsQuery.normalize_sort(params[:sort])
+    @sort = self.class.lists_query_class.normalize_sort(params[:sort])
     @query = params[:q].is_a?(String) ? params[:q].presence : nil
     @indexable = @query.blank?
 
