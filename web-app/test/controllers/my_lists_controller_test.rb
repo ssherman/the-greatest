@@ -125,7 +125,7 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-  test "legacy /user_lists/:id alias resolves to the same owner-only show" do
+  test "legacy /user_lists/:id alias renders the list for its owner" do
     sign_in_as(@user, stub_auth: true)
     get user_list_path(@albums_favorites)
     assert_response :success

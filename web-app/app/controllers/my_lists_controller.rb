@@ -2,7 +2,9 @@ require "csv"
 
 # Read-only "My Lists" surface (user-lists Phase A). Global routes resolve
 # Current.domain to the relevant UserList STI subclasses and pick the per-domain
-# layout dynamically. All actions are owner-only and never cached. Write actions
+# layout dynamically. index is owner-only (requires sign-in); show serves the
+# owner or any viewer, including anonymous, when the list is public (404s
+# otherwise via UserList.visible_to). Never cached. Write actions
 # (create/edit/reorder/remove/delete) are Phase B (user-lists-02f).
 class MyListsController < ApplicationController
   include Pagy::Method
@@ -38,10 +40,11 @@ class MyListsController < ApplicationController
   end
 
   # GET /my/lists/:id(.csv)
-  # Owner-only read view. Renders items in the persisted view_mode, ordered by
-  # position (default) or by the listable's primary ranking configuration
-  # (?sort=ranking, unranked last, degrades to position when no config). CSV is
-  # unpaginated and follows the current sort.
+  # Read view for the owner, or any viewer (including anonymous) when the list
+  # is public; UserList.visible_to 404s everything else. Renders items in the
+  # persisted view_mode, ordered by position (default) or by the listable's
+  # primary ranking configuration (?sort=ranking, unranked last, degrades to
+  # position when no config). CSV is unpaginated and follows the current sort.
   def show
     # Scoped to the current domain's subclasses so a list from another domain
     # (e.g. a games list opened on the music host) 404s rather than rendering in

@@ -8,8 +8,12 @@
 # typeahead; the paired user-list-add-item Stimulus controller posts the selection
 # to the 02a items#create endpoint, then reloads the page.
 #
-# The show action is owner-only, so rendering this for every show-page viewer is
-# correct today. If public list viewing lands (02d), gate on ownership.
+# This component has no ownership check of its own — it renders for whatever
+# list its caller passes in, regardless of viewer. The show page is now
+# viewer-aware (owner OR any viewer on a public list), so the caller must gate
+# rendering. The current caller, app/views/my_lists/show.html.erb, wraps it in
+# `<% if @owner %>`; do not reuse this component elsewhere without an
+# equivalent guard.
 class UserLists::Show::AddItemComponent < ViewComponent::Base
   def initialize(list:)
     @list = list
