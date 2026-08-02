@@ -40,11 +40,12 @@ other's tables. **Decision: coordinate rather than isolate** (see Verification).
 ## Non-goals
 
 - System tests (`bin/rails test:system`) and Playwright E2E are not run.
-- The Docker image is **not** built and the deploy path is **not** exercised. The
-  `Dockerfile` ARG is bumped for consistency, but production correctness on 4.0.6 is
-  unverified by this work. This is the known gap — and because merging this branch
-  auto-deploys to production with no human gate in between (see "Pre-merge gate" below),
-  closing that gap belongs **before** merge, not after.
+- ~~The Docker image is not built and the deploy path is not exercised.~~ **Closed
+  2026-08-02** — this was originally a non-goal, but because merging auto-deploys to
+  production with no human gate (see "Pre-merge gate" below), it was promoted to a
+  pre-merge requirement and satisfied. The image builds on `ruby:4.0.6-slim` and the
+  whole app eager-loads under `RAILS_ENV=production`. Details in "Pre-merge gate".
+  Still **not** exercised: an actual deploy, and the app serving real traffic.
 - `~/dev/mise.toml` is not modified by this worktree's own work — see "Merge-time
   actions" below for when and why it must move.
 - No opportunistic gem updates. Only versions that actively block 4.0.6 move.
@@ -66,8 +67,9 @@ ruby = "4.0.6"
 ```
 
 mise resolves nearest-config-first, so this file wins inside the worktree and is
-invisible outside it. It is added to `.git/info/exclude` and deleted before the branch
-is finished, so it never reaches a commit.
+invisible outside it. It is added to `.git/info/exclude`, so it can never reach a
+commit. **Keep it until after merge** — deleting it strands the worktree back on Ruby
+3.4.7. Its removal is a post-merge step (see "Merge-time actions").
 
 Note that `info/exclude` lives in the shared common git dir, so that one entry is
 visible to the main repo too. It is inert there — `~/dev/the-greatest` has no
@@ -217,12 +219,33 @@ what is actually unknown, so this isn't a shot in the dark:
 - The local (non-Docker) `bundle install` in this worktree resolved the same
   precompiled `x86_64-linux` artifacts the Docker build would use.
 
-What is genuinely unexercised is whatever happens when the app **boots** under
-`RAILS_ENV=production` inside the image — specifically `bundle exec bootsnap precompile`
-(`Dockerfile:49` and `:59`) and `SECRET_KEY_BASE_DUMMY=1 ./bin/rails assets:precompile`
-(`Dockerfile:62`). Neither has run on 4.0.6 as of this writing, and nothing in this plan
-builds the image or runs those steps — the lockfile/test/lint work elsewhere in this doc
-does not substitute for it.
+### Status: satisfied 2026-08-02
+
+The image was built and boot-checked. Results:
+
+```
+docker build -t tg-ruby4-verify:local .        # exit 0, 1.15GB
+```
+
+- Base resolved to `docker.io/library/ruby:4.0.6-slim`.
+- `bundle install` succeeded under `BUNDLE_DEPLOYMENT="1"` / `BUNDLE_WITHOUT="development"`.
+- Both previously-unexercised steps ran clean: `bundle exec bootsnap precompile --gemfile`
+  and `bundle exec bootsnap precompile app/ lib/` (`Dockerfile:49`, `:59`), and
+  `SECRET_KEY_BASE_DUMMY=1 ./bin/rails assets:precompile` (`Dockerfile:62`).
+- In-image versions confirmed: `ruby 4.0.6`, Bundler `4.0.16`, `RAILS_ENV=production`,
+  assets present under `public/assets`.
+- **Every class in the app eager-loaded under `RAILS_ENV=production`**:
+  `./bin/rails zeitwerk:check` → `All is good!`
+
+One thing to know if you repeat this: a bare `docker run` of `zeitwerk:check` fails with
+`ArgumentError: missing required option :name` plus an AWS instance-profile credential
+error. That is **not** a Ruby 4.0 problem — `config.active_storage.service = :cloudflare`
+(`config/environments/production.rb:25`) resolves `bucket: <%= ENV['STORAGE_BUCKET'] %>`
+to `nil` in a bare container. Pass dummy `STORAGE_ENDPOINT` / `STORAGE_ACCESS_KEY_ID` /
+`STORAGE_SECRET_ACCESS_KEY` / `STORAGE_BUCKET` values and it eager-loads cleanly.
+
+**Still unverified:** an actual deploy, and the app serving real traffic on 4.0.6. The
+build and boot path are proven; runtime behaviour under load is not.
 
 ## Merge-time actions (owner)
 
