@@ -243,3 +243,17 @@ books_authors_global:
   min_list_weight: 1
   apply_list_dates_penalty: false
   inherit_penalties: false
+
+books_authors_secondary:
+  type: Books::Authors::RankingConfiguration
+  name: "Secondary Books Authors Ranking"
+  description: "A non-primary ranking configuration for book authors"
+  global: true
+  primary: false
+  archived: false
+  algorithm_version: 1
+  exponent: 3.0
+  bonus_pool_percentage: 3.0
+  min_list_weight: 1
+  apply_list_dates_penalty: false
+  inherit_penalties: false

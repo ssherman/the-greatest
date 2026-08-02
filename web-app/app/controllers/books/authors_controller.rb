@@ -51,13 +51,11 @@ class Books::AuthorsController < ApplicationController
       )
       .where.not(ranked_items: {rank: nil})
       .select("books_books.*, ranked_items.rank AS ranked_position")
-      .preload(primary_image: {file_attachment: :blob})
       .order(Arel.sql("ranked_items.rank ASC"))
   end
 
   def all_books_relation
     @author.books
-      .preload(primary_image: {file_attachment: :blob})
       .order(Arel.sql("books_books.first_published_year ASC NULLS LAST"), :title)
   end
 end

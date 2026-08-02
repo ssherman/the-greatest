@@ -469,3 +469,23 @@ Each step leaves the app working and testable on its own.
 - CI eager-loads with `CI=true` and has no `.env`, so it is stricter than a local run.
 - The development database is not disposable. Snapshot with `bin/snapshot-dev-db.sh`
   before running any migration or backfill against it.
+
+## Deploying this feature
+
+The migration only creates the `Books::Authors::RankingConfiguration` row — it inserts zero
+`RankedItem`s. The first scheduled fill is the 04:00 UTC cron
+(`Books::CalculateAuthorRankingsJob`), which can be up to 24 hours after deploy. Until it runs,
+`/authors` renders "No authors ranked yet" as a 200 that is still edge-cached for 6 hours
+(`Cacheable#cache_for_index_page` runs unconditionally), but `@indexable` is false whenever there
+are no ranked authors, so `books_robots_content` emits `noindex` and search engines will not
+index the empty page while it waits to be filled. Every author's own ranked badge is absent too.
+
+Immediately after this deploy ships, run the job once by hand so the section is populated from
+the start:
+
+```ruby
+Books::CalculateAuthorRankingsJob.new.perform
+```
+
+This takes about 34ms of query time and is idempotent — the job recomputes from scratch and
+upserts, so running it again (by hand or via the next cron tick) is always safe.

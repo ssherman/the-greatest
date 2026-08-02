@@ -38,12 +38,14 @@
               </span>
             <% end %>
             <span class="badge badge-ghost ml-auto">
-              <span class="sr-only">Score </span><%= number_with_delimiter(ranked_item.score.to_i) %>
+              <span class="sr-only">Score </span><%= number_with_delimiter(ranked_item.score.round(1)) %>
             </span>
           </div>
 
           <% if (description = author.primary_description) %>
-            <p class="mt-2 text-base-content/80 line-clamp-3"><%= description.content %></p>
+            <div class="mt-2 text-base-content/80 line-clamp-3">
+              <%= simple_format(description.content, {}, wrapper_tag: "p") %>
+            </div>
           <% end %>
 
           <% if (books = @top_books[author.id]).present? %>

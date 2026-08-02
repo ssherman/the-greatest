@@ -47,6 +47,23 @@ module Books
         get "/authors"
 
         assert_response :success
+        assert_not @controller.view_assigns["indexable"]
+      end
+
+      test "is not indexable when there are no ranked authors" do
+        RankedItem.where(ranking_configuration: @config).destroy_all
+
+        get "/authors"
+
+        assert_response :success
+        assert_not @controller.view_assigns["indexable"]
+      end
+
+      test "is indexable when there are ranked authors" do
+        get "/authors"
+
+        assert_response :success
+        assert @controller.view_assigns["indexable"]
       end
 
       test "high page number 404s when no ranking configuration exists" do

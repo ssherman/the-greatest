@@ -367,7 +367,7 @@ Rails.application.routes.draw do
       get "author/:slug", to: "books/authors#show", as: :author
       get "author/:slug/all-books", to: "books/authors#all_books", as: :author_all_books
       get "author/:slug/all-books/page/:page", to: "books/authors#all_books",
-        as: :author_all_books_page, constraints: {page: /\d+/}
+        constraints: {page: /\d+/}
     end
 
     # Legacy 301s. /books/:id is the legacy CANONICAL book url (~156k indexed);

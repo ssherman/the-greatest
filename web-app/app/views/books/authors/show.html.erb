@@ -12,6 +12,9 @@
       <div class="card-body pt-0 gap-2">
         <% if @ranked_item %>
           <div class="badge badge-primary">Ranked #<%= @ranked_item.rank %> of The Greatest Authors</div>
+          <div class="badge badge-ghost">
+            <span class="sr-only">Score </span><%= number_with_delimiter(@ranked_item.score.round(1)) %>
+          </div>
         <% end %>
         <% if @author.birth_year %>
           <div class="text-sm text-base-content/70">
@@ -26,7 +29,23 @@
     <h1 class="text-3xl sm:text-4xl font-bold text-balance"><%= @author.name %></h1>
 
     <% if @description %>
-      <p class="text-base-content/80 leading-relaxed"><%= @description.content %></p>
+      <div>
+        <div class="text-base-content/80 leading-relaxed space-y-4">
+          <%= simple_format(@description.content, {}, wrapper_tag: "p") %>
+        </div>
+        <% if @description.license_cc_by_sa_4? || @description.license_cc0? %>
+          <p class="text-xs text-base-content/70 mt-3">
+            Source:
+            <% source_label = @description.source_name.presence || @description.source.titleize %>
+            <% if @description.source_url.present? %>
+              <%= link_to source_label, @description.source_url, class: "link", rel: "noopener nofollow", target: "_blank" %>
+            <% else %>
+              <%= source_label %>
+            <% end %>
+            · <%= @description.license_cc_by_sa_4? ? "CC BY-SA 4.0" : "CC0" %>
+          </p>
+        <% end %>
+      </div>
     <% end %>
 
     <div class="flex items-center justify-between gap-4 flex-wrap">
