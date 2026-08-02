@@ -41,4 +41,24 @@ class CalculateRankingsJobTest < ActiveSupport::TestCase
 
     assert_includes error.message, "Couldn't find RankingConfiguration"
   end
+
+  test "enqueues the author ranking job after a books configuration succeeds" do
+    config = ranking_configurations(:books_global)
+    RankingConfiguration.any_instance
+      .expects(:calculate_rankings)
+      .returns(ItemRankings::Calculator::Result.new(success?: true, data: [], errors: []))
+    Books::CalculateAuthorRankingsJob.expects(:perform_async).once
+
+    CalculateRankingsJob.new.perform(config.id)
+  end
+
+  test "does not enqueue the author ranking job for an author configuration" do
+    config = ranking_configurations(:books_authors_global)
+    RankingConfiguration.any_instance
+      .expects(:calculate_rankings)
+      .returns(ItemRankings::Calculator::Result.new(success?: true, data: [], errors: []))
+    Books::CalculateAuthorRankingsJob.expects(:perform_async).never
+
+    CalculateRankingsJob.new.perform(config.id)
+  end
 end

@@ -1,0 +1,33 @@
+<%
+  content_for :page_title, "The Greatest Books by #{@author.name} | The Greatest Books"
+  content_for :meta_description, "The greatest books written by #{@author.name}, ranked from hundreds of published best-books lists."
+%>
+
+<div class="space-y-8">
+  <%= render "books/authors/profile_header",
+      author: @author, ranked_item: @ranked_item, description: @description %>
+
+  <div class="space-y-4">
+    <div class="flex items-center justify-between gap-4 flex-wrap">
+      <h2 class="text-2xl font-bold">Ranked books</h2>
+      <%= link_to "All books",
+          author_all_books_path(ranking_configuration_id: params[:ranking_configuration_id], slug: @author.slug),
+          class: "btn btn-sm btn-outline" %>
+    </div>
+
+    <p class="text-sm text-base-content/70">
+      These are only the books that appear on the lists aggregated by this site. It is not a
+      complete bibliography.
+    </p>
+
+    <% if @ranked_books.any? %>
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
+        <% @ranked_books.each_with_index do |book, index| %>
+          <%= render Books::CardComponent.new(book: book, rank: book.ranked_position, index: index) %>
+        <% end %>
+      </div>
+    <% else %>
+      <p class="text-base-content/70">None of this author's books are ranked yet.</p>
+    <% end %>
+  </div>
+</div>

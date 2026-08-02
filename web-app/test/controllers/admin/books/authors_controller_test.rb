@@ -197,6 +197,16 @@ module Admin
         assert @author.reload.name.present?
       end
 
+      test "update sets exclude_from_rankings" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        patch admin_books_author_path(@author), params: {
+          books_author: {exclude_from_rankings: "1"}
+        }
+
+        assert @author.reload.exclude_from_rankings
+      end
+
       test "destroy deletes the author" do
         author = ::Books::Author.create!(name: "Disposable Author", kind: "person")
         sign_in_as(@admin_user, stub_auth: true)

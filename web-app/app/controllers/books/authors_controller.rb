@@ -1,0 +1,89 @@
+class Books::AuthorsController < ApplicationController
+  include Pagy::Method
+  include Cacheable
+  include PathBasedPagination
+
+  layout "books/application"
+
+  before_action :load_ranking_configuration
+  before_action :load_author
+  before_action :cache_for_show_page
+
+  def self.ranking_configuration_class
+    Books::RankingConfiguration
+  end
+
+  def show
+    @ranked_item = author_ranked_item
+    @indexable = @ranked_item.present?
+    @description = @author.primary_description
+    @ranked_books = ranked_books.to_a
+  end
+
+  def all_books
+    @indexable = false
+    @ranked_item = author_ranked_item
+    @description = @author.primary_description
+    @pagy, @books = pagy_path(all_books_relation, limit: 50)
+  end
+
+  private
+
+  # find_by!(slug:), never friendly.find: Books::Author uses friendly_id with
+  # :finders, which resolves slugs before primary keys.
+  def load_author
+    @author = Books::Author.find_by!(slug: params[:slug])
+  end
+
+  def author_ranked_item
+    config = Books::Authors::RankingConfiguration.default_primary
+    return nil if config.nil?
+
+    config.ranked_items.where.not(rank: nil).find_by(item: @author)
+  end
+
+  # Books the author actually wrote. Books::BookAuthor also carries :editor, and
+  # both the ranking aggregation and the index's top-books query already exclude
+  # it -- without the same predicate here an author's profile would list edited
+  # works as their own while their score ignored them.
+  def authored_books
+    @author.books.where(books_book_authors: {role: Books::BookAuthor.roles[:author]})
+  end
+
+  def ranked_books
+    return Books::Book.none if @ranking_configuration.nil?
+
+    authored_books
+      .joins(
+        "JOIN ranked_items ON ranked_items.item_id = books_books.id " \
+        "AND ranked_items.item_type = 'Books::Book' " \
+        "AND ranked_items.ranking_configuration_id = #{@ranking_configuration.id.to_i}"
+      )
+      .where.not(ranked_items: {rank: nil})
+      .select("books_books.*, ranked_items.rank AS ranked_position")
+      .preload({book_authors: :author}, {primary_image: {file_attachment: :blob}})
+      .order(Arel.sql("ranked_items.rank ASC"))
+  end
+
+  # LEFT JOIN, not JOIN: this is the full bibliography, so unranked books must
+  # survive the join and simply carry a nil ranked_position, which suppresses the
+  # rank badge on their card.
+  def all_books_relation
+    base = authored_books.preload({book_authors: :author}, {primary_image: {file_attachment: :blob}})
+
+    if @ranking_configuration.nil?
+      return base
+          .select("books_books.*, NULL::integer AS ranked_position")
+          .order(Arel.sql("books_books.first_published_year ASC NULLS LAST"), :title)
+    end
+
+    base
+      .select("books_books.*, ranked_items.rank AS ranked_position")
+      .joins(
+        "LEFT OUTER JOIN ranked_items ON ranked_items.item_id = books_books.id " \
+        "AND ranked_items.item_type = 'Books::Book' " \
+        "AND ranked_items.ranking_configuration_id = #{@ranking_configuration.id.to_i}"
+      )
+      .order(Arel.sql("ranked_items.rank ASC NULLS LAST, books_books.first_published_year ASC NULLS LAST"), :title)
+  end
+end

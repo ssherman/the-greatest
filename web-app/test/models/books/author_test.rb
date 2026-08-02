@@ -4,17 +4,18 @@ require "test_helper"
 #
 # Table name: books_authors
 #
-#  id              :bigint           not null, primary key
-#  alternate_names :string           default([]), not null, is an Array
-#  birth_year      :integer
-#  death_year      :integer
-#  description     :text
-#  kind            :integer          default(0), not null
-#  name            :string           not null
-#  slug            :string           not null
-#  sort_name       :string
-#  created_at      :datetime         not null
-#  updated_at      :datetime         not null
+#  id                    :bigint           not null, primary key
+#  alternate_names       :string           default([]), not null, is an Array
+#  birth_year            :integer
+#  death_year            :integer
+#  description           :text
+#  exclude_from_rankings :boolean          default(FALSE), not null
+#  kind                  :integer          default(0), not null
+#  name                  :string           not null
+#  slug                  :string           not null
+#  sort_name             :string
+#  created_at            :datetime         not null
+#  updated_at            :datetime         not null
 #
 # Indexes
 #
@@ -94,6 +95,16 @@ module Books
       assert_no_difference -> { SearchIndexRequest.where(parent_type: "Books::Book", parent_id: book.id, action: SearchIndexRequest.actions[:index_item]).count } do
         author.update!(birth_year: 1829)
       end
+    end
+
+    test "exclude_from_rankings defaults to false" do
+      author = Books::Author.new(name: "Test Author")
+
+      assert_not author.exclude_from_rankings
+    end
+
+    test "exclude_from_rankings can be set" do
+      assert books_authors(:excluded_placeholder).exclude_from_rankings
     end
   end
 end

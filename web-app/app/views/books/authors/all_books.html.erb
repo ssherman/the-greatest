@@ -1,0 +1,39 @@
+<%
+  content_for :page_title, "All books by #{@author.name} | The Greatest Books"
+%>
+
+<div class="space-y-8">
+  <%= render "books/authors/profile_header",
+      author: @author, ranked_item: @ranked_item, description: @description %>
+
+  <div class="space-y-4">
+    <div class="flex items-center justify-between gap-4 flex-wrap">
+      <h2 class="text-2xl font-bold">All books</h2>
+      <%= link_to "Ranked books",
+          author_path(ranking_configuration_id: params[:ranking_configuration_id], slug: @author.slug),
+          class: "btn btn-sm btn-outline" %>
+    </div>
+
+    <p class="text-sm text-base-content/70">
+      Every book by this author recorded on the site, including those that do not appear on any
+      of the lists we aggregate.
+    </p>
+
+    <% if @books.any? %>
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
+        <% @books.each_with_index do |book, index| %>
+          <%= render Books::CardComponent.new(book: book, rank: book.ranked_position, index: index) %>
+        <% end %>
+      </div>
+
+      <div class="flex justify-center">
+        <%== @pagy.series_nav(slots: 5) %>
+      </div>
+      <p class="text-center text-sm text-base-content/70">
+        Page <%= number_with_delimiter(@pagy.page) %> of <%= number_with_delimiter(@pagy.last) %>
+      </p>
+    <% else %>
+      <p class="text-base-content/70">No books recorded for this author.</p>
+    <% end %>
+  </div>
+</div>

@@ -138,6 +138,8 @@ class RankingConfiguration < ApplicationRecord
     @calculator_service ||= case type
     when "Books::RankingConfiguration"
       ItemRankings::Books::Calculator.new(self)
+    when "Books::Authors::RankingConfiguration"
+      ItemRankings::Books::Authors::Calculator.new(self)
     when "Movies::RankingConfiguration"
       ItemRankings::Movies::Calculator.new(self)
     when "Games::RankingConfiguration"

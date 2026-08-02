@@ -3,3 +3,8 @@ search_indexing:
   class: Search::IndexerJob
   cron: "*/30 * * * * *"  # Every 30 seconds
   description: "Process search indexing queue"
+
+books_author_rankings:
+  class: Books::CalculateAuthorRankingsJob
+  cron: "0 4 * * *"
+  description: "Recalculate The Greatest Authors from ranked books"

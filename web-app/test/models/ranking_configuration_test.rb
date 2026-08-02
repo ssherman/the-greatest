@@ -335,6 +335,14 @@ class RankingConfigurationTest < ActiveSupport::TestCase
     assert_equal config, calculator.ranking_configuration
   end
 
+  test "calculator_service returns correct calculator for book authors" do
+    config = ranking_configurations(:books_authors_global)
+    calculator = config.calculator_service
+
+    assert_instance_of ItemRankings::Books::Authors::Calculator, calculator
+    assert_equal config, calculator.ranking_configuration
+  end
+
   test "calculator_service returns correct calculator for movies" do
     config = ranking_configurations(:movies_global)
     calculator = config.calculator_service

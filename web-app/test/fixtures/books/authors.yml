@@ -2,17 +2,18 @@
 #
 # Table name: books_authors
 #
-#  id              :bigint           not null, primary key
-#  alternate_names :string           default([]), not null, is an Array
-#  birth_year      :integer
-#  death_year      :integer
-#  description     :text
-#  kind            :integer          default(0), not null
-#  name            :string           not null
-#  slug            :string           not null
-#  sort_name       :string
-#  created_at      :datetime         not null
-#  updated_at      :datetime         not null
+#  id                    :bigint           not null, primary key
+#  alternate_names       :string           default([]), not null, is an Array
+#  birth_year            :integer
+#  death_year            :integer
+#  description           :text
+#  exclude_from_rankings :boolean          default(FALSE), not null
+#  kind                  :integer          default(0), not null
+#  name                  :string           not null
+#  slug                  :string           not null
+#  sort_name             :string
+#  created_at            :datetime         not null
+#  updated_at            :datetime         not null
 #
 # Indexes
 #
@@ -43,3 +44,9 @@ garnett:
   name: Constance Garnett
   slug: constance-garnett
   kind: 0
+
+excluded_placeholder:
+  name: Unknown
+  slug: unknown
+  kind: 0
+  exclude_from_rankings: true

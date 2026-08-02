@@ -372,6 +372,13 @@ Rails.application.routes.draw do
       get "book/:slug", to: "books/books#show", as: :book
     end
 
+    scope "(/rc/:ranking_configuration_id)" do
+      get "author/:slug", to: "books/authors#show", as: :author
+      get "author/:slug/all-books", to: "books/authors#all_books", as: :author_all_books
+      get "author/:slug/all-books/page/:page", to: "books/authors#all_books",
+        constraints: {page: /\d+/}
+    end
+
     # Legacy 301s. /books/:id is the legacy CANONICAL book url (~156k indexed);
     # /items/:id is its older alias. Legacy rc ids are meaningless here, so the
     # rc segment is matched and discarded.
@@ -395,6 +402,15 @@ Rails.application.routes.draw do
 
     get "lists/page/1", to: redirect("/lists", status: 301)
     get "lists/:id/page/1", to: redirect("/lists/%{id}", status: 301), constraints: {id: /\d+/}
+
+    get "authors/page/1", to: redirect("/authors", status: 301)
+    get "authors", to: "books/authors/ranked_items#index", as: :books_authors
+    get "authors/page/:page", to: "books/authors/ranked_items#index",
+      as: :books_authors_page, constraints: {page: /\d+/}
+
+    get "authors/view/:view(/page/:page)", to: redirect("/authors", status: 301)
+    get "authors/:id/all_books", to: "books/legacy_authors#show", constraints: {id: /\d+/}
+    get "authors/:id", to: "books/legacy_authors#show", constraints: {id: /\d+/}
 
     get "lists", to: "books/lists#index", as: :books_lists
     get "lists/page/:page", to: "books/lists#index", as: :books_lists_page, constraints: {page: /\d+/}
