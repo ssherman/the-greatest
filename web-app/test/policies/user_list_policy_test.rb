@@ -17,11 +17,11 @@ class UserListPolicyTest < ActiveSupport::TestCase
     refute UserListPolicy.new(nil, @list).show?
   end
 
-  test "show? is owner-only even for public lists (public viewing is 02d)" do
+  test "show? allows a non-owner to view a public list" do
     public_list = user_lists(:regular_user_custom_albums)
     assert public_list.public?
     assert UserListPolicy.new(@user, public_list).show?
-    refute UserListPolicy.new(users(:admin_user), public_list).show?
+    assert UserListPolicy.new(users(:admin_user), public_list).show?
   end
 
   test "Scope resolves to only the user's own lists" do
@@ -33,5 +33,25 @@ class UserListPolicyTest < ActiveSupport::TestCase
 
   test "Scope returns nothing for an anonymous user" do
     assert_empty UserListPolicy::Scope.new(nil, UserList).resolve
+  end
+
+  test "show? allows the owner" do
+    list = user_lists(:regular_user_books_favorites)
+    assert UserListPolicy.new(list.user, list).show?
+  end
+
+  test "show? allows anyone to view a public list" do
+    list = user_lists(:regular_user_books_favorites)
+    list.update!(public: true)
+
+    assert UserListPolicy.new(users(:admin_user), list).show?
+    assert UserListPolicy.new(nil, list).show?
+  end
+
+  test "show? denies a non-owner and an anonymous viewer on a private list" do
+    list = user_lists(:regular_user_books_favorites)
+
+    refute UserListPolicy.new(users(:admin_user), list).show?
+    refute UserListPolicy.new(nil, list).show?
   end
 end

@@ -66,6 +66,12 @@ class UserList < ApplicationRecord
   scope :public_lists, -> { where(public: true) }
   scope :owned_by, ->(user) { where(user: user) }
 
+  # Lists a viewer may read: their own, plus anyone's public lists. Kept as a
+  # query rather than a policy check because Pundit's NotAuthorizedError rescue
+  # redirects, which would leak that a private list exists; falling out of this
+  # scope 404s instead.
+  scope :visible_to, ->(user) { user ? public_lists.or(owned_by(user)) : public_lists }
+
   # Class methods
   def self.default_subclasses
     DEFAULT_SUBCLASSES.map(&:constantize)

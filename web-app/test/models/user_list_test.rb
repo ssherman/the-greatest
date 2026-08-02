@@ -241,4 +241,38 @@ class UserListTest < ActiveSupport::TestCase
     assert_equal Movies::RankingConfiguration, Movies::UserList.ranking_configuration_class
     assert_nil UserList.ranking_configuration_class
   end
+
+  # setup already binds @user = users(:regular_user),
+  # @list = user_lists(:regular_user_music_albums_favorites) (private),
+  # @custom_list = user_lists(:regular_user_custom_albums) (public: true).
+
+  test "visible_to returns public lists plus the viewer's own private ones" do
+    visible = UserList.visible_to(@user)
+
+    assert_includes visible, @custom_list
+    assert_includes visible, @list
+  end
+
+  test "visible_to returns only public lists for an anonymous viewer" do
+    visible = UserList.visible_to(nil)
+
+    assert_includes visible, @custom_list
+    assert_not_includes visible, @list
+  end
+
+  test "visible_to excludes another user's private list but keeps their public one" do
+    stranger = users(:admin_user)
+    visible = UserList.visible_to(stranger)
+
+    assert_not_includes visible, @list
+    assert_includes visible, @custom_list
+    assert_includes visible, user_lists(:admin_user_games_favorites)
+  end
+
+  test "visible_to composes with a type filter" do
+    visible = UserList.where(type: "Music::Albums::UserList").visible_to(@user)
+
+    assert_includes visible, @custom_list
+    assert_not_includes visible, user_lists(:regular_user_games_favorites)
+  end
 end
