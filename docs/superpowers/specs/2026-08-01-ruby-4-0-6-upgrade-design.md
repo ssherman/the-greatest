@@ -126,7 +126,10 @@ they create no git noise.
 5. `bin/rails test` (see coordination guard below).
 6. `bundle exec standardrb`.
 7. Fix fallout, re-run both to green.
-8. Delete the local `mise.toml`; commit on `ruby-4-0-6`.
+8. Commit on `ruby-4-0-6`. **Keep** the local `mise.toml` — it is in `info/exclude` and
+   cannot be committed accidentally, and deleting it now would strand the worktree back
+   on 3.4.7. Its removal belongs to the post-merge follow-up, once `~/dev/mise.toml`
+   carries 4.0.6.
 
 ## Risk register
 
