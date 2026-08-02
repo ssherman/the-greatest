@@ -567,6 +567,37 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_no_match(/list-owner/, response.body)
   end
 
+  # --- legacy /user_lists redirects ---
+
+  test "legacy /user_lists index 301s to /my/lists" do
+    host! Rails.application.config.domains[:books]
+    get "/user_lists"
+    assert_response :moved_permanently
+    assert_redirected_to "/my/lists"
+  end
+
+  test "legacy /user_lists/new 301s to /my/lists and is not read as an id" do
+    host! Rails.application.config.domains[:books]
+    get "/user_lists/new"
+    assert_response :moved_permanently
+    assert_redirected_to "/my/lists"
+  end
+
+  test "legacy /user_lists/:id/edit 301s to the read page" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_favorites)
+    get "/user_lists/#{list.id}/edit"
+    assert_response :moved_permanently
+    assert_redirected_to "/my/lists/#{list.id}"
+  end
+
+  test "the /user_lists/:id alias still resolves to the show action" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+    get "/user_lists/#{user_lists(:regular_user_books_favorites).id}"
+    assert_response :success
+  end
+
   private
 
   # Bulk-inserts filler albums + list items so pagination tests can reach page

@@ -283,6 +283,12 @@ Rails.application.routes.draw do
   # user list at /user_lists/:id. Point it at the same owner-only show action so
   # those URLs keep working once books migrates onto this app. (The POST create
   # and nested item routes below are distinct verbs/paths and don't conflict.)
+  # The legacy site's index/new/edit have no equivalent here — the write surface
+  # is Phase B (user-lists-02f) — so they land on the read pages. `new` must be
+  # declared before `:id` or the wildcard swallows it.
+  get "user_lists", to: redirect("/my/lists", status: 301)
+  get "user_lists/new", to: redirect("/my/lists", status: 301)
+  get "user_lists/:id/edit", to: redirect("/my/lists/%{id}", status: 301), constraints: {id: /\d+/}
   get "user_lists/:id", to: "my_lists#show", as: :user_list
   get "user_lists/:id/page/:page", to: "my_lists#show", as: :user_list_page, constraints: {page: /\d+/}
 
