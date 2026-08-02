@@ -28,3 +28,15 @@ war_and_peace_tolstoy:
   position: 1
   role: 0
   credited_as: Lev Tolstoy
+
+got_king:
+  book: got
+  author: king
+  position: 1
+  role: 0
+
+clash_king:
+  book: clash
+  author: king
+  position: 1
+  role: 0

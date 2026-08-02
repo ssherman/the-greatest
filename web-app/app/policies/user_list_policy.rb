@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-# UserList authorization for end-user (owner-only) actions.
+# UserList authorization for end-user actions.
 # Domain-role logic does not apply — these are personal lists.
-# update?/destroy? are added in Phase B (user-lists-02f); public-list viewing is 02d.
+# update?/destroy? are added in Phase B (user-lists-02f).
 # STI subclasses must authorize with `policy_class: UserListPolicy` so Pundit
 # doesn't resolve to e.g. Music::Albums::UserListPolicy (which doesn't exist).
 class UserListPolicy < ApplicationPolicy
@@ -10,9 +10,10 @@ class UserListPolicy < ApplicationPolicy
     user.present?
   end
 
-  # Phase A is owner-only. Viewing other users' public lists is 02d.
+  # Owners always; everyone else only when the list is public (02d direct-link
+  # viewing). Scope stays owner-only — it models "my lists", not "lists I may view".
   def show?
-    owner?
+    owner? || record.public?
   end
 
   def owner?

@@ -79,3 +79,17 @@ admin_user_games_favorites:
   name: Favorite Games
   list_type: 0 # favorites
   public: false
+
+regular_user_books_favorites:
+  user: regular_user
+  type: Books::UserList
+  name: My Favorite Books
+  list_type: 0 # favorites
+  public: false
+
+regular_user_books_read:
+  user: regular_user
+  type: Books::UserList
+  name: Books I've Read
+  list_type: 1 # read
+  public: false

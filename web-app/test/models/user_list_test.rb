@@ -92,12 +92,17 @@ class UserListTest < ActiveSupport::TestCase
     assert_raises(NotImplementedError) { UserList.default_list_name_for(:favorites) }
   end
 
-  test "default_subclasses returns 4 subclasses" do
-    assert_equal 4, UserList.default_subclasses.size
+  test "default_subclasses returns 5 subclasses" do
+    assert_equal 5, UserList.default_subclasses.size
     assert_includes UserList.default_subclasses, Music::Albums::UserList
     assert_includes UserList.default_subclasses, Music::Songs::UserList
     assert_includes UserList.default_subclasses, Games::UserList
     assert_includes UserList.default_subclasses, Movies::UserList
+    assert_includes UserList.default_subclasses, Books::UserList
+  end
+
+  test "subclasses_for resolves the books domain" do
+    assert_equal [Books::UserList], UserList.subclasses_for(:books)
   end
 
   test "public_lists scope" do
@@ -208,7 +213,6 @@ class UserListTest < ActiveSupport::TestCase
 
   test "subclasses_for accepts a string and returns [] for unknown domains" do
     assert_equal [Games::UserList], UserList.subclasses_for("games")
-    assert_equal [], UserList.subclasses_for(:books)
     assert_equal [], UserList.subclasses_for(:nope)
   end
 
@@ -236,5 +240,39 @@ class UserListTest < ActiveSupport::TestCase
     assert_equal Games::RankingConfiguration, Games::UserList.ranking_configuration_class
     assert_equal Movies::RankingConfiguration, Movies::UserList.ranking_configuration_class
     assert_nil UserList.ranking_configuration_class
+  end
+
+  # setup already binds @user = users(:regular_user),
+  # @list = user_lists(:regular_user_music_albums_favorites) (private),
+  # @custom_list = user_lists(:regular_user_custom_albums) (public: true).
+
+  test "visible_to returns public lists plus the viewer's own private ones" do
+    visible = UserList.visible_to(@user)
+
+    assert_includes visible, @custom_list
+    assert_includes visible, @list
+  end
+
+  test "visible_to returns only public lists for an anonymous viewer" do
+    visible = UserList.visible_to(nil)
+
+    assert_includes visible, @custom_list
+    assert_not_includes visible, @list
+  end
+
+  test "visible_to excludes another user's private list but keeps their public one" do
+    stranger = users(:admin_user)
+    visible = UserList.visible_to(stranger)
+
+    assert_not_includes visible, @list
+    assert_includes visible, @custom_list
+    assert_includes visible, user_lists(:admin_user_games_favorites)
+  end
+
+  test "visible_to composes with a type filter" do
+    visible = UserList.where(type: "Music::Albums::UserList").visible_to(@user)
+
+    assert_includes visible, @custom_list
+    assert_not_includes visible, user_lists(:regular_user_games_favorites)
   end
 end

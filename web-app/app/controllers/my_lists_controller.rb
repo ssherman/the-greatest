@@ -2,7 +2,9 @@ require "csv"
 
 # Read-only "My Lists" surface (user-lists Phase A). Global routes resolve
 # Current.domain to the relevant UserList STI subclasses and pick the per-domain
-# layout dynamically. All actions are owner-only and never cached. Write actions
+# layout dynamically. index is owner-only (requires sign-in); show serves the
+# owner or any viewer, including anonymous, when the list is public (404s
+# otherwise via UserList.visible_to). Never cached. Write actions
 # (create/edit/reorder/remove/delete) are Phase B (user-lists-02f).
 class MyListsController < ApplicationController
   include Pagy::Method
@@ -11,7 +13,9 @@ class MyListsController < ApplicationController
 
   layout :resolve_layout
 
-  before_action :require_signed_in!
+  # show is reachable anonymously for public lists; visibility is enforced by the
+  # visible_to scope below, which 404s rather than redirecting.
+  before_action :require_signed_in!, only: [:index]
   before_action :prevent_caching
 
   # GET /my/lists
@@ -20,7 +24,11 @@ class MyListsController < ApplicationController
   # single grouped query. Always renders (defaults are auto-created at signup).
   def index
     types = UserList.subclasses_for(Current.domain).map(&:name)
-    lists = current_user.user_lists.where(type: types).to_a
+    lists = Services::UserLists::EnsureDefaults.call(
+      user: current_user,
+      domain: Current.domain,
+      existing: current_user.user_lists.where(type: types).to_a
+    )
 
     @item_counts = UserListItem.where(user_list_id: lists.map(&:id))
       .group(:user_list_id).count
@@ -32,24 +40,32 @@ class MyListsController < ApplicationController
   end
 
   # GET /my/lists/:id(.csv)
-  # Owner-only read view. Renders items in the persisted view_mode, ordered by
-  # position (default) or by the listable's primary ranking configuration
-  # (?sort=ranking, unranked last, degrades to position when no config). CSV is
-  # unpaginated and follows the current sort.
+  # Read view for the owner, or any viewer (including anonymous) when the list
+  # is public; UserList.visible_to 404s everything else. Renders items in the
+  # persisted view_mode, ordered by position (default) or by the listable's
+  # primary ranking configuration (?sort=ranking, unranked last, degrades to
+  # position when no config). CSV is unpaginated and follows the current sort.
   def show
-    # Scope to the current domain's subclasses so a list from another domain
+    # Scoped to the current domain's subclasses so a list from another domain
     # (e.g. a games list opened on the music host) 404s rather than rendering in
-    # the wrong layout. Non-domain/non-owner both hide existence via 404.
+    # the wrong layout. visible_to keeps private non-owner reads at 404 too —
+    # Pundit's rescue would redirect, leaking existence.
     types = UserList.subclasses_for(Current.domain).map(&:name)
-    @list = current_user.user_lists.where(type: types).find(params[:id])
+    @list = UserList.where(type: types).visible_to(current_user).find(params[:id])
     authorize @list, :show?, policy_class: UserListPolicy
+    @owner = @list.user_id == current_user&.id
+    @indexable = false
 
     @ranking_config = @list.class.ranking_configuration_class&.default_primary
     @ranking_available = @ranking_config.present?
     @sort = (params[:sort] == "ranking" && @ranking_available) ? "ranking" : "position"
 
     persist_view_mode
-    @view_mode = @list.view_mode
+    @view_mode = if @owner
+      @list.view_mode
+    else
+      params[:view_mode].presence_in(UserList.view_modes.keys) || @list.view_mode
+    end
 
     scope = @list.user_list_items.ordered.includes(listable: @list.class.listable_display_includes)
     collection = (@sort == "ranking") ? ranking_sorted(scope.to_a) : scope
@@ -68,22 +84,19 @@ class MyListsController < ApplicationController
 
   private
 
-  # resolve_layout runs for every action, but books never gets past the
-  # UserList::DOMAIN_SUBCLASSES guard (no "books" key): subclasses_for(:books)
-  # is [], so index renders an empty dashboard here and show/csv 404 on
-  # RecordNotFound before csv_row runs. Adding "books" to that hash would
-  # surface csv_row's listable.release_year call, which Books::Book lacks (it
-  # has first_published_year), on top of this music-skinned layout.
   def resolve_layout
     case Current.domain
     when :games then "games/application"
     when :movies then "movies/application"
+    when :books then "books/application"
     else "music/application"
     end
   end
 
-  # Persist the view_mode when the owner switches it via the query param.
+  # Persist the view_mode when the owner switches it via the query param. A
+  # non-owner's param changes only their own render (see #show).
   def persist_view_mode
+    return unless @owner
     requested = params[:view_mode]
     return if requested.blank? || !UserList.view_modes.key?(requested)
     @list.update!(view_mode: requested) unless @list.view_mode == requested
@@ -113,6 +126,7 @@ class MyListsController < ApplicationController
     headers =
       case listable_name
       when "Music::Album", "Music::Song" then ["Position", "Title", "Artists", "Year"]
+      when "Books::Book" then ["Position", "Title", "Authors", "Year"]
       else ["Position", "Title", "Year"]
       end
     show_completed ? headers + ["Completed On"] : headers
@@ -124,6 +138,8 @@ class MyListsController < ApplicationController
       case listable_name
       when "Music::Album", "Music::Song"
         [item.position, listable.title, artist_names(listable), listable.release_year]
+      when "Books::Book"
+        [item.position, listable.title, author_names(listable), listable.first_published_year]
       else
         [item.position, listable.title, listable.release_year]
       end
@@ -132,6 +148,10 @@ class MyListsController < ApplicationController
 
   def artist_names(listable)
     listable.artists.map(&:name).join(", ")
+  end
+
+  def author_names(listable)
+    listable.book_authors.map { |book_author| book_author.author.name }.join(", ")
   end
 
   def csv_filename

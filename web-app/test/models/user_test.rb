@@ -164,9 +164,9 @@ class UserTest < ActiveSupport::TestCase
 
   # Default user lists
 
-  test "creates 12 default user lists on create" do
+  test "creates 16 default user lists on create" do
     user = User.create!(email: "defaults@example.com", display_name: "Defaults")
-    assert_equal 12, user.user_lists.count
+    assert_equal 16, user.user_lists.count
   end
 
   test "default list counts per subclass" do
@@ -175,6 +175,7 @@ class UserTest < ActiveSupport::TestCase
     assert_equal 1, user.user_lists.where(type: "Music::Songs::UserList").count
     assert_equal 5, user.user_lists.where(type: "Games::UserList").count
     assert_equal 3, user.user_lists.where(type: "Movies::UserList").count
+    assert_equal 4, user.user_lists.where(type: "Books::UserList").count
   end
 
   test "default list names follow subclass convention" do
@@ -193,7 +194,7 @@ class UserTest < ActiveSupport::TestCase
 
   test "destroying user destroys user_lists" do
     user = User.create!(email: "bye@example.com", display_name: "Bye")
-    assert_difference "UserList.count", -12 do
+    assert_difference "UserList.count", -16 do
       user.destroy
     end
   end

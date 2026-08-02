@@ -1,7 +1,7 @@
 # User Lists
 
 ## Overview
-User Lists are personal, ordered collections that logged-in users use to organize items they care about across the four media domains (music albums, music songs, games, movies). Each user automatically receives a predefined set of default lists (e.g. "Favorite Albums", "Games I've Played") on signup and can create an unlimited number of additional custom lists.
+User Lists are personal, ordered collections that logged-in users use to organize items they care about across the four media domains (music albums, music songs, games, movies, books). Each user automatically receives a predefined set of default lists (e.g. "Favorite Albums", "Games I've Played") on signup and can create an unlimited number of additional custom lists.
 
 This feature corresponds to the `user-lists-01` spec (data model and core backend), the `user-lists-02a` spec (Add-to-List widget), and `user-lists-02` Phase A (the read-only `/my/lists` dashboard and per-list show page). Write/management actions (create, edit, drag-and-drop reorder, remove items, delete list, `completed_on` editing) are Phase B (`user-lists-02f`); public discovery of other users' lists is `user-lists-02d`.
 
@@ -31,7 +31,7 @@ Each subclass declares its own `enum :list_type` with a subclass-specific set of
 - **Custom lists** are the only list type users can create through the API. They're for freeform grouping.
 
 ### Default-List Bootstrap
-On `User.create`, an `after_create :create_default_user_lists` callback iterates over `UserList::DEFAULT_SUBCLASSES` and calls `find_or_create_by!` for every subclass's `default_list_types`. The result is **12 default lists** per new user:
+On `User.create`, an `after_create :create_default_user_lists` callback iterates over `UserList::DEFAULT_SUBCLASSES` and calls `find_or_create_by!` for every subclass's `default_list_types`. The result is **16 default lists** per new user:
 
 | Subclass                   | Count | Types |
 |----------------------------|-------|-------|
@@ -39,6 +39,15 @@ On `User.create`, an `after_create :create_default_user_lists` callback iterates
 | `Music::Songs::UserList`   | 1     | favorites |
 | `Games::UserList`          | 5     | favorites, played, beaten, want_to_play, currently_playing |
 | `Movies::UserList`         | 3     | favorites, watched, want_to_watch |
+| `Books::UserList`          | 4     | favorites, read, reading, want_to_read |
+
+The callback only fires on signup, so `Services::UserLists::EnsureDefaults` fills the gap for
+users created before a subclass joined `DEFAULT_SUBCLASSES`. `MyListsController#index` and
+`UserListStateController#show` both pass it the lists they already loaded; it diffs against the
+domain's `default_list_types`, creates only what's missing, and costs zero queries and zero writes
+when the set is complete. It also repairs the ~145 missing default lists (19 `read` + 36 `reading`
++ 59 `want_to_read` + 31 `favorites`, some users missing more than one) that the migration
+deliberately left short (`D-verbatim-defaults`).
 
 Because fixture loading bypasses ActiveRecord callbacks, fixture users do NOT receive default lists automatically. Tests that rely on the callback must build users via `User.create!`.
 
@@ -51,7 +60,8 @@ Reordering is implemented via `UserList#reorder_items!(ordered_listable_ids)`, w
 
 ### Uniqueness Constraints
 - **One copy of a given item per list** — DB-level `UNIQUE(user_list_id, listable_type, listable_id)` plus a model-level `validates :listable_id, uniqueness:`.
-- **One default list per (user, type)** — enforced at the model level only (`one_default_per_type_per_user`). There is no DB partial unique index: default lists are only ever created through the idempotent signup callback, so the model-level check is sufficient and keeps the schema simple.
+- **One default list per (user, type)** — enforced at the model level only (`one_default_per_type_per_user`), with no DB partial unique index. A plain `UNIQUE(user_id, type, list_type)` is not usable here because `custom` lists legitimately repeat, and each STI subclass assigns `custom` a different integer, so excluding them would mean hardcoding per-subclass enum values in SQL and migrating every time a domain is added.
+  Since `Services::UserLists::EnsureDefaults` creates defaults on ordinary page views — not just at signup — the model validation alone cannot stop two concurrent first-visit requests from both inserting. It therefore takes a row lock on the owning user (`user.with_lock`) and re-derives what is missing inside that lock. The lock is only reached on the backfill path; once a user's set is complete the service returns before locking.
 
 ### Public vs Private
 Each `UserList` has a `public` boolean (default false). Individual list visibility is per-list. Public-list queries use the `public_lists` scope, backed by a `WHERE public = true` partial index.
@@ -66,16 +76,18 @@ Each `UserList` has a `public` boolean (default false). Individual list visibili
 | `app/models/music/songs/user_list.rb` | Music songs subclass |
 | `app/models/games/user_list.rb` | Games subclass |
 | `app/models/movies/user_list.rb` | Movies subclass |
+| `app/models/books/user_list.rb` | Books subclass |
 | `app/models/user_list_item.rb` | Polymorphic join with position callbacks + type-compatibility validation |
 | `app/models/user.rb` | `has_many :user_lists`, `after_create :create_default_user_lists`, `default_user_list_for` |
-| `app/models/music/album.rb`, `music/song.rb`, `games/game.rb`, `movies/movie.rb` | Each declares `has_many :user_list_items, as: :listable` |
+| `app/lib/services/user_lists/ensure_defaults.rb` | Lazily backfills missing default lists for pre-existing users (see Default-List Bootstrap above) |
+| `app/models/music/album.rb`, `music/song.rb`, `games/game.rb`, `movies/movie.rb`, `books/book.rb` | Each declares `has_many :user_list_items, as: :listable` |
 
 ## Usage Examples
 
 ```ruby
 # Every user gets defaults automatically on signup
 user = User.create!(email: "new@example.com")
-user.user_lists.count                         # => 12
+user.user_lists.count                         # => 16
 user.default_user_list_for(Games::UserList, :favorites)
 # => #<Games::UserList name: "Favorite Games" ...>
 
@@ -164,9 +176,16 @@ All four endpoints emit `Cache-Control: no-store, no-cache, must-revalidate, pri
 
 The state controller stores under `tg:user_list_state:<domain>` (per-domain bucket). Quota errors degrade to in-memory only.
 
+**Landmine:** `user_list_modal_controller.js` carries two hand-maintained per-domain maps,
+`_matchesListable` and `_listClassFor`, that translate a listable's class name into modal-rendering
+logic. Adding a new domain to `UserList::DOMAIN_SUBCLASSES` does **not** automatically teach the
+modal about it — both maps need a new entry too. When books was wired in, they were left out; the
+add-to-list modal silently rendered "No lists yet" for every books item, and nothing server-side
+caught it (only an E2E spec did). Check both maps whenever a domain is added.
+
 ### Icons
 
-This spec adopts the [`rails_icons`](https://github.com/Rails-Designer/rails_icons) gem with the [Lucide](https://lucide.dev/) library project-wide. Server-side: `helpers.icon "heart", library: "lucide", class: "size-4"` (use `helpers.icon` inside ViewComponents). Client-side: each domain layout includes a hidden `<template id="user-list-icons">` (rendered by `app/views/shared/_user_list_icon_template.html.erb`) holding the union of icons used by every `list_type_icons` map (`heart`, `headphones`, `bookmark`, `check`, `trophy`, `gamepad-2`, `eye`, `plus`). The widget Stimulus controller clones nodes from this template by `data-icon` name, keeping the JS bundle small and reusing the exact same SVG output everywhere.
+This spec adopts the [`rails_icons`](https://github.com/Rails-Designer/rails_icons) gem with the [Lucide](https://lucide.dev/) library project-wide. Server-side: `helpers.icon "heart", library: "lucide", class: "size-4"` (use `helpers.icon` inside ViewComponents). Client-side: each domain layout includes a hidden `<template id="user-list-icons">` (rendered by `app/views/shared/_user_list_icon_template.html.erb`) holding the union of icons used by every `list_type_icons` map (`heart`, `headphones`, `bookmark`, `check`, `trophy`, `gamepad-2`, `eye`, `plus`, `book-open`). The widget Stimulus controller clones nodes from this template by `data-icon` name, keeping the JS bundle small and reusing the exact same SVG output everywhere.
 
 Per-subclass icon mapping lives in `self.list_type_icons` on each STI subclass. `:custom` is never in the icon map — custom lists collapse into a `+N` pill on the card.
 
@@ -184,9 +203,9 @@ A signed-in, per-domain surface for browsing your own lists: a `/my/lists` dashb
 | GET | `/my/lists/:id(.csv)` | `my_lists#show` | owner |
 | GET | `/user_lists/:id` | `my_lists#show` (compat alias) | owner |
 
-The `/user_lists/:id` route is a **compatibility alias** (`user_list_path`) for the same owner-only show action. The legacy Greatest Books site (and earlier Greatest sites) link to user lists at `/user_lists/:id`; this alias keeps those URLs working once books migrates onto this app. It's a distinct verb/path from the 02a `POST /user_lists` create and the nested `…/items` mutation routes, so there's no conflict. The canonical path remains `/my/lists/:id`; the show page renders its internal links with `my_list_path`.
+The `/user_lists/:id` route is a **compatibility alias** (`user_list_path`) for the same show action (owner, or any viewer when the list is public, per `UserList.visible_to`). The legacy Greatest Books site (and earlier Greatest sites) link to user lists at `/user_lists/:id`; this alias keeps those URLs working once books migrates onto this app. It's a distinct verb/path from the 02a `POST /user_lists` create and the nested `…/items` mutation routes, so there's no conflict. The canonical path remains `/my/lists/:id`; the show page renders its internal links with `my_list_path`.
 
-It resolves `Current.domain` to the relevant STI subclasses via the shared `UserList.subclasses_for(domain)` and selects the per-domain layout dynamically (`layout :resolve_layout`). Unknown hosts (`Current.domain == :books`, no layout yet) fall back to `music/application`. Every action calls `prevent_caching`; because the pages are uncached and rendered for the signed-in user, the standard `<meta name="csrf-token">` flow works here (unlike the cached-page widget).
+It resolves `Current.domain` to the relevant STI subclasses via the shared `UserList.subclasses_for(domain)` and selects the per-domain layout dynamically (`layout :resolve_layout`). Music, games, movies, and books each resolve to their own layout; an unrecognized host falls back to `music/application`. Every action calls `prevent_caching`; because the pages are uncached and rendered for the signed-in user, the standard `<meta name="csrf-token">` flow works here (unlike the cached-page widget).
 
 ### Reserved ID Ranges (Books Migration)
 
@@ -210,7 +229,7 @@ See `docs/specs/completed/books-migration-01-id-range-reservation.md` for the fu
 
 ### Shared domain→subclass resolver
 
-`UserList::DOMAIN_SUBCLASSES` + `UserList.subclasses_for(domain)` are the single source of truth for the domain→subclass mapping. `MyListsController`, `UserListStateController`, and `UserListsController` (`ALLOWED_TYPES`) all derive from it so the mapping can't drift. `Current.domain` is a Symbol app-wide, so the resolver does a `.to_s` lookup.
+`UserList::DOMAIN_SUBCLASSES` + `UserList.subclasses_for(domain)` are the single source of truth for the domain→subclass mapping. `MyListsController`, `UserListStateController`, and `UserListsController` (`ALLOWED_TYPES`) all derive from it so the mapping can't drift. `Current.domain` is a Symbol app-wide, so the resolver does a `.to_s` lookup. `UserList::DOMAIN_SUBCLASSES` covers all four domains; `subclasses_for` returns `[]` only for an unrecognized host.
 
 ### Dashboard (`index`)
 
@@ -218,10 +237,10 @@ Lists the current user's lists for `Current.domain` (music shows **both** album 
 
 ### Show (`show`)
 
-Loads the list via `current_user.user_lists.where(type: UserList.subclasses_for(Current.domain).map(&:name)).find` — scoped to **both** the owner and the current domain's STI subclasses. A list belonging to another domain (e.g. a games list opened on the music host) 404s rather than rendering in the wrong layout; non-owner and cross-domain both hide existence via 404. It then renders the list's items in the persisted `view_mode`:
+Loads the list via `UserList.where(type: UserList.subclasses_for(Current.domain).map(&:name)).visible_to(current_user).find` — scoped to the current domain's STI subclasses, with visibility (owner or public) delegated to `visible_to` (see "Public list viewing (direct link)" below). A list belonging to another domain (e.g. a games list opened on the music host) 404s rather than rendering in the wrong layout; a private list belonging to someone else 404s the same way, hiding existence either way. It then renders the list's items in the persisted `view_mode`:
 
-- **`default_view`** ("List") — a compact, full-width row per item: number + title-by-author heading, a small cover thumbnail, the item's **description**, a year/completed line, and the Add-to-list widget. Only for listables with covers/descriptions (albums, games).
-- **`grid_view`** — the existing domain card (`Music::Albums::CardComponent`, `Games::CardComponent`) in a responsive grid.
+- **`default_view`** ("List") — a compact, full-width row per item: number + title-by-author heading, a small cover thumbnail, the item's **description**, a year/completed line, and the Add-to-list widget. Only for listables with covers/descriptions (albums, games, books).
+- **`grid_view`** — the existing domain card (`Music::Albums::CardComponent`, `Games::CardComponent`, `Books::CardComponent`) in a responsive grid.
 - **`table_view`** — a single generic DaisyUI `<table>` row shared across listables.
 
 `UserLists::Show::ItemComponent` unwraps `item.listable` and dispatches: card-capable listables render the list row (default) or the domain card (grid); songs render the rich `Music::Songs::ListItemComponent` row inside a table; anything else renders the generic table row. Its `self.table_layout?(listable_class:, view_mode:)` class method tells the show view which wrapper (`<table>` vs stacked `<div>` vs grid) to render — lists are homogeneous, so it's computed once.
@@ -236,11 +255,11 @@ Switching `?view_mode=` persists the choice on the list (`update!`). Items eager
 
 ### `completed_on` (read-only in Phase A)
 
-Each STI subclass declares which `list_type`s support a completion date via `self.completed_on_list_types` (albums `[:listened]`, games `[:played, :beaten]`, movies `[:watched]`, songs `[]`), mirroring the `list_type_icons` pattern. `completed_on_enabled?` gates display. In Phase A the date renders read-only in the generic table row and the CSV `Completed On` column; the inline editor is Phase B.
+Each STI subclass declares which `list_type`s support a completion date via `self.completed_on_list_types` (albums `[:listened]`, games `[:played, :beaten]`, movies `[:watched]`, songs `[]`, books `[:read]`), mirroring the `list_type_icons` pattern. `completed_on_enabled?` gates display. In Phase A the date renders read-only in the generic table row and the CSV `Completed On` column; the inline editor is Phase B.
 
 ### CSV export
 
-`show.csv` streams a UTF-8 CSV with a BOM prefix (Excel-friendly) via `send_data`, filename `"#{list.name.parameterize}-#{Date.current.iso8601}.csv"`. Columns vary per listable (albums/songs: Position, Title, Artists, Year; games/movies: Position, Title, Year), with a `Completed On` column only when `completed_on_enabled?`. The CSV is unpaginated and follows the current sort.
+`show.csv` streams a UTF-8 CSV with a BOM prefix (Excel-friendly) via `send_data`, filename `"#{list.name.parameterize}-#{Date.current.iso8601}.csv"`. Columns vary per listable (albums/songs: Position, Title, Artists, Year; books: Position, Title, Authors, Year, via `Books::Book#first_published_year`; games/movies: Position, Title, Year), with a `Completed On` column only when `completed_on_enabled?`. The CSV is unpaginated and follows the current sort.
 
 ### "My Lists" nav link
 
@@ -250,6 +269,27 @@ Each domain layout (music, games) ships a hidden `<li id="navbar_my_lists" class
 
 The ViewComponents live under `UserLists::*` (plural namespace) because `UserList` is itself a class — making it a module would conflict with the model. Stimulus controllers and Rails controllers keep the singular `user_list_*` naming.
 
+### Public list viewing (direct link)
+
+`MyListsController#show` is viewer-aware. `UserList.visible_to(current_user)` returns the viewer's
+own lists plus anyone's public lists; anything else falls out of the scope and 404s, which hides
+existence. (Pundit's `NotAuthorizedError` rescue redirects with a flash, so the check cannot live in
+the policy alone — `UserListPolicy#show?` mirrors the rule as defense in depth.) `require_signed_in!`
+applies to `index` only.
+
+Owner-gated on `@owner`: the add-item box, the "My Lists" backlink, and `view_mode` persistence — a
+non-owner's `?view_mode=` changes only their own render. Sorting, pagination, CSV, and the per-item
+Add-to-list widget are available to everyone.
+
+Non-owners see "A list by <display_name>" when the owner has one, and nothing when they don't (only
+12 of 88 public-list owners do, as of this writing). `email` and `name` are never rendered. Pages set `@indexable = false`
+(`noindex, follow` via the books layout) and keep `prevent_caching` — the HTML is owner-aware, so
+edge-caching it would serve one viewer's toolbar to another.
+
+Legacy `GET /user_lists`, `/user_lists/new`, and `/user_lists/:id/edit` 301 to the read pages.
+
+Still unbuilt: a public-list **discovery** index and "consumed" badges.
+
 ### Stimulus Property Naming Hazard
 
 The framework's `Controller` base class uses `this.context` internally for scope/targets resolution — every target getter ends up at `this.context.scope.targets`. Custom controllers must NOT assign `this.context = ...` (a 02a near-miss). Use any other property name (`this.openContext` here).
@@ -257,9 +297,10 @@ The framework's `Controller` base class uses `this.context` internally for scope
 ## What's Not Yet Implemented
 - Write/management UI — create, edit, drag-and-drop reorder, remove items, delete list, `completed_on` editing — Phase B (`user-lists-02f`).
 - Adding an item from within a list page (autocomplete) — `user-lists-02e`.
-- Public-list discovery, viewing other users' public lists, "consumed" badge upgrades — `user-lists-02d`.
+- Public-list **discovery** (a browsable index of public lists) and "consumed" badge upgrades —
+  the remainder of `user-lists-02d`. Direct-link viewing of a public list shipped with the books
+  UI work; see `docs/superpowers/specs/2026-08-02-books-user-lists-ui-design.md`.
 - Dynamic community lists aggregated from user favorites — `user-lists-03`.
-- A books layout and books UI wiring. `Books::UserList` exists (Phase 3 of the books data migration) but is deliberately **data-only**: it is absent from both `DEFAULT_SUBCLASSES` (so new signups still get **12** default lists, not 16) and `DOMAIN_SUBCLASSES` (so `/my_lists` does not serve the books domain). The books domain has no public routes, no book show page, and no `Search::ListableAutocomplete` config yet. Wiring books in is **not** a two-constant change — besides adding `Books::UserList` to `DEFAULT_SUBCLASSES`/`DOMAIN_SUBCLASSES`, it needs: a `:books` case in `MyListsController#resolve_layout` (currently falls through to the music layout); a `Search::ListableAutocomplete` config for `Books::Book`; and a books layout. It also needs `MyListsController#csv_headers`/`#csv_row` to use `Books::Book#first_published_year` instead of `#release_year` — `Books::Book` has no `release_year` column (every other listable does, which is why this was never caught), so shipping the naive two-constant change would 500 on the first "Download CSV" click on a books list.
 
 ## Related Documentation
 - `docs/specs/completed/user-lists-01-data-model.md` — data-model spec
@@ -267,3 +308,4 @@ The framework's `Controller` base class uses `this.context` internally for scope
 - `docs/specs/completed/user-lists-02-ui-and-cached-page-integration.md` — My Lists read surface (Phase A, this implementation)
 - `docs/specs/user-lists-02f-list-management-and-editing.md` — write surface (Phase B)
 - `docs/features/domain-scoped-authorization.md` — admin/editor role model (admin bypass is relevant here)
+- `docs/superpowers/specs/2026-08-02-books-user-lists-ui-design.md` — books UI wiring + public viewing

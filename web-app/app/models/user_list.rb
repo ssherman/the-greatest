@@ -30,18 +30,18 @@ class UserList < ApplicationRecord
     Music::Songs::UserList
     Games::UserList
     Movies::UserList
+    Books::UserList
   ].freeze
 
   # Maps a request domain to the UserList STI subclasses that live on it. Music
-  # has two listables (albums + songs); games/movies have one each. Shared by
+  # has two listables (albums + songs); the rest have one each. Shared by
   # MyListsController, UserListStateController, and UserListsController so the
-  # domain→subclass mapping can never drift between them. Books::UserList exists
-  # (it's just not wired here) — it's deliberately excluded pending UI work; see
-  # docs/features/user-lists.md ("What's Not Yet Implemented").
+  # domain→subclass mapping can never drift between them.
   DOMAIN_SUBCLASSES = {
     "music" => %w[Music::Albums::UserList Music::Songs::UserList],
     "games" => %w[Games::UserList],
-    "movies" => %w[Movies::UserList]
+    "movies" => %w[Movies::UserList],
+    "books" => %w[Books::UserList]
   }.freeze
 
   # Associations
@@ -66,13 +66,19 @@ class UserList < ApplicationRecord
   scope :public_lists, -> { where(public: true) }
   scope :owned_by, ->(user) { where(user: user) }
 
+  # Lists a viewer may read: their own, plus anyone's public lists. Kept as a
+  # query rather than a policy check because Pundit's NotAuthorizedError rescue
+  # redirects, which would leak that a private list exists; falling out of this
+  # scope 404s instead.
+  scope :visible_to, ->(user) { user ? public_lists.or(owned_by(user)) : public_lists }
+
   # Class methods
   def self.default_subclasses
     DEFAULT_SUBCLASSES.map(&:constantize)
   end
 
   # Resolves the request domain (a Symbol app-wide; hence .to_s) to its live
-  # UserList subclasses. Returns [] for unknown/unsupported domains (e.g. books).
+  # UserList subclasses. Returns [] for unknown/unsupported domains (e.g. nope).
   def self.subclasses_for(domain)
     (DOMAIN_SUBCLASSES[domain.to_s] || []).map(&:constantize)
   end

@@ -34,4 +34,13 @@ class UserLists::Show::AddItemComponentTest < ViewComponent::TestCase
 
     assert_selector "[data-autocomplete-url-value*='Music%3A%3AAlbum']"
   end
+
+  test "renders the typeahead for a books list" do
+    list = user_lists(:regular_user_books_favorites)
+    render_inline(Component.new(list: list))
+
+    assert_selector "[data-testid='add-item-search']"
+    assert_selector "[data-autocomplete-url-value*='Books%3A%3ABook']"
+    assert_selector "input[placeholder='Search for a book to add…']"
+  end
 end

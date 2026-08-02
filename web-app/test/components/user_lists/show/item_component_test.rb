@@ -58,4 +58,51 @@ class UserLists::Show::ItemComponentTest < ViewComponent::TestCase
     assert_text "4." # the position number in the heading
     assert_selector "[data-listable-id='#{album.id}']"
   end
+
+  test "table_layout? is false for books outside table_view" do
+    refute Component.table_layout?(listable_class: "Books::Book", view_mode: "default_view")
+    refute Component.table_layout?(listable_class: "Books::Book", view_mode: "grid_view")
+  end
+
+  test "card_capable? is true for books" do
+    assert Component.card_capable?("Books::Book")
+  end
+
+  test "renders a book card in grid_view" do
+    item = user_list_items(:regular_user_books_item_1)
+    render_inline(Component.new(item: item, view_mode: "grid_view", position: 1))
+
+    assert_no_selector "tr"
+    assert_selector "div.card[data-listable-id='#{item.listable_id}']"
+  end
+
+  test "grid_view passes the item's position through as a cover-loading index" do
+    item = user_list_items(:regular_user_books_item_1)
+
+    # Position 7 is past the eager cutoff, so the cover must lazy-load. Without a
+    # real index every card in a 100-item grid would fetch eagerly at high priority.
+    render_inline(Component.new(item: item, view_mode: "grid_view", position: 7))
+    assert_no_selector "img[loading='eager']"
+
+    render_inline(Component.new(item: item, view_mode: "grid_view", position: 1))
+    assert_no_selector "img[loading='eager'][fetchpriority='auto']"
+  end
+
+  test "renders the book title, author by-line and publication year in default_view" do
+    item = user_list_items(:regular_user_books_item_1)
+    render_inline(Component.new(item: item, view_mode: "default_view", position: 1))
+
+    assert_selector "a[href='/book/war-and-peace']", text: "War and Peace"
+    assert_text "Leo Tolstoy"
+    assert_text "1869"
+  end
+
+  test "renders a book table row in table_view with authors and year" do
+    item = user_list_items(:regular_user_books_item_1)
+    render_inline(Component.new(item: item, view_mode: "table_view", position: 1))
+
+    assert_selector "tr td", text: "War and Peace"
+    assert_selector "tr td", text: "Leo Tolstoy"
+    assert_selector "tr td", text: "1869"
+  end
 end
