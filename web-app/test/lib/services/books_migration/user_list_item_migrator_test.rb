@@ -4,7 +4,7 @@ module Services
   module BooksMigration
     class UserListItemMigratorTest < ActiveSupport::TestCase
       setup do
-        @user = users(:regular_user)
+        @user = users(:editor_user)
         @list = Books::UserList.create!(user: @user, name: "Books I've Read", list_type: :read)
         @book = Books::Book.create!(title: "Item Book")
       end

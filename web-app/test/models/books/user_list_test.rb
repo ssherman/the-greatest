@@ -55,7 +55,7 @@ module Books
     test "completed_on is enabled only for the read list" do
       assert_equal [:read], Books::UserList.completed_on_list_types
 
-      user = users(:regular_user)
+      user = users(:editor_user)
       read_list = Books::UserList.create!(user: user, name: "Books I've Read", list_type: :read)
       reading_list = Books::UserList.create!(user: user, name: "Books I'm Reading", list_type: :reading)
 
@@ -73,7 +73,7 @@ module Books
     end
 
     test "only accepts Books::Book as a listable" do
-      user = users(:regular_user)
+      user = users(:editor_user)
       list = Books::UserList.create!(user: user, name: "My Favorite Books", list_type: :favorites)
       item = UserListItem.new(user_list: list, listable: music_albums(:dark_side_of_the_moon))
 

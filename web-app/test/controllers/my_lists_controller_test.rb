@@ -327,7 +327,7 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     host! Rails.application.config.domains[:books]
     sign_in_as(@user, stub_auth: true)
 
-    assert_difference -> { @user.user_lists.where(type: "Books::UserList").count }, 4 do
+    assert_difference -> { @user.user_lists.where(type: "Books::UserList").count }, 2 do
       get my_lists_path
     end
     assert_response :success
@@ -353,6 +353,41 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, 'id="navbar_my_lists"'
     assert_includes response.body, 'id="user_list_modal"'
     assert_includes response.body, 'id="user-list-icons"'
+  end
+
+  test "show renders a books list on the books domain" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+    get my_list_path(user_lists(:regular_user_books_favorites))
+    assert_response :success
+  end
+
+  test "a books list 404s on the music domain" do
+    sign_in_as(@user, stub_auth: true)
+    get my_list_path(user_lists(:regular_user_books_favorites))
+    assert_response :not_found
+  end
+
+  test "books CSV uses an Authors column and first_published_year" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+    get my_list_path(user_lists(:regular_user_books_favorites), format: :csv)
+    assert_response :success
+
+    rows = CSV.parse(response.body.delete_prefix(BOM))
+    assert_equal ["Position", "Title", "Authors", "Year"], rows.first
+    assert_equal ["1", "War and Peace", "Leo Tolstoy", "1869"], rows.second
+  end
+
+  test "books CSV adds a Completed On column on a read list" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+    get my_list_path(user_lists(:regular_user_books_read), format: :csv)
+    assert_response :success
+
+    rows = CSV.parse(response.body.delete_prefix(BOM))
+    assert_equal ["Position", "Title", "Authors", "Year", "Completed On"], rows.first
+    assert_equal "2026-01-20", rows.second.last
   end
 
   private

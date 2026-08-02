@@ -117,7 +117,7 @@ class UserListStateControllerTest < ActionDispatch::IntegrationTest
     host! Rails.application.config.domains[:books]
     sign_in_as(@user, stub_auth: true)
 
-    assert_difference -> { @user.user_lists.where(type: "Books::UserList").count }, 4 do
+    assert_difference -> { @user.user_lists.where(type: "Books::UserList").count }, 2 do
       get user_list_state_path, as: :json
     end
 

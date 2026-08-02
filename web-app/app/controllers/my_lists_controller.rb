@@ -112,6 +112,7 @@ class MyListsController < ApplicationController
     headers =
       case listable_name
       when "Music::Album", "Music::Song" then ["Position", "Title", "Artists", "Year"]
+      when "Books::Book" then ["Position", "Title", "Authors", "Year"]
       else ["Position", "Title", "Year"]
       end
     show_completed ? headers + ["Completed On"] : headers
@@ -123,6 +124,8 @@ class MyListsController < ApplicationController
       case listable_name
       when "Music::Album", "Music::Song"
         [item.position, listable.title, artist_names(listable), listable.release_year]
+      when "Books::Book"
+        [item.position, listable.title, author_names(listable), listable.first_published_year]
       else
         [item.position, listable.title, listable.release_year]
       end
@@ -131,6 +134,10 @@ class MyListsController < ApplicationController
 
   def artist_names(listable)
     listable.artists.map(&:name).join(", ")
+  end
+
+  def author_names(listable)
+    listable.book_authors.map { |book_author| book_author.author.name }.join(", ")
   end
 
   def csv_filename

@@ -68,3 +68,19 @@ regular_user_fav_movie_1:
   user_list: regular_user_movies_favorites
   listable: godfather (Movies::Movie)
   position: 1
+
+regular_user_books_item_1:
+  user_list: regular_user_books_favorites
+  listable: war_and_peace (Books::Book)
+  position: 1
+
+regular_user_books_item_2:
+  user_list: regular_user_books_favorites
+  listable: got (Books::Book)
+  position: 2
+
+regular_user_books_item_3:
+  user_list: regular_user_books_read
+  listable: clash (Books::Book)
+  position: 1
+  completed_on: 2026-01-20
