@@ -88,4 +88,9 @@ jobs:
           RAILS_ENV: test
           POSTGRES_PASSWORD: postgres
           OPENSEARCH_URL: http://localhost:9200
+          TWITCH_API_CLIENT_ID: ci_test_client_id
+          TWITCH_API_CLIENT_SECRET: ci_test_client_secret
+          AMAZON_PRODUCT_API_ACCESS_KEY: ci_test_access_key
+          AMAZON_PRODUCT_API_SECRET_KEY: ci_test_secret_key
+          AMAZON_PRODUCT_API_PARTNER_KEY: ci_test_partner_key
         run: bin/rails db:test:prepare test
