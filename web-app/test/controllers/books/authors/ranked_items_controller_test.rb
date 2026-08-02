@@ -3,7 +3,7 @@ require "test_helper"
 module Books
   module Authors
     class RankedItemsControllerTest < ActionDispatch::IntegrationTest
-      EXPECTED_INDEX_QUERIES = 7
+      EXPECTED_INDEX_QUERIES = 11
 
       setup do
         host! "dev-new.thegreatestbooks.org"
@@ -41,6 +41,22 @@ module Books
         assert_response :not_found
       end
 
+      test "handles a missing ranking configuration gracefully" do
+        Books::Authors::RankingConfiguration.stubs(:default_primary).returns(nil)
+
+        get "/authors"
+
+        assert_response :success
+      end
+
+      test "high page number 404s when no ranking configuration exists" do
+        Books::Authors::RankingConfiguration.stubs(:default_primary).returns(nil)
+
+        get "/authors/page/2"
+
+        assert_response :not_found
+      end
+
       test "sets a public cache-control header" do
         get "/authors"
 
@@ -69,6 +85,9 @@ module Books
 
       def seed_ranked_authors(count)
         start = @config.ranked_items.maximum(:rank).to_i
+        books_rc = Books::RankingConfiguration.default_primary
+        book_start = books_rc.ranked_items.maximum(:rank).to_i
+
         count.times do |i|
           author = Books::Author.create!(name: "Seeded Author #{start + i}")
           RankedItem.create!(
@@ -77,6 +96,21 @@ module Books
             rank: start + i + 1,
             score: 10
           )
+
+          book = Books::Book.create!(title: "Seeded Book #{start + i}")
+          Books::BookAuthor.create!(book: book, author: author, role: :author)
+          RankedItem.create!(
+            item: book,
+            ranking_configuration: books_rc,
+            rank: book_start + i + 1,
+            score: 10
+          )
+
+          next unless i.zero?
+
+          image = Image.new(parent: book, primary: true)
+          image.file.attach(io: StringIO.new("fake image data"), filename: "cover.jpg", content_type: "image/jpeg")
+          image.save!
         end
       end
 

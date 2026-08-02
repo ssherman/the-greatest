@@ -21,12 +21,14 @@
   <h1 class="text-3xl sm:text-4xl font-bold text-center text-balance">The Greatest Authors of All Time</h1>
 
   <% if @ranked_authors.any? %>
-    <ol class="space-y-6">
+    <ol class="space-y-6" start="<%= @pagy.from %>">
       <% @ranked_authors.each do |ranked_item| %>
         <% author = ranked_item.item %>
         <li class="border-b border-base-300 pb-6">
           <div class="flex items-baseline gap-3 flex-wrap">
-            <span class="text-2xl font-bold text-base-content/50"><%= ranked_item.rank %></span>
+            <span class="text-2xl font-bold text-base-content/50">
+              <span class="sr-only">Rank </span><%= ranked_item.rank %>
+            </span>
             <h2 class="text-xl font-semibold">
               <%= link_to author.name, author_path(author.slug), class: "link link-hover" %>
             </h2>
@@ -56,6 +58,7 @@
                     <div class="w-16 aspect-[2/3] bg-base-300 rounded flex items-center justify-center" aria-hidden="true">
                       <span class="text-xl opacity-40">📖</span>
                     </div>
+                    <span class="sr-only"><%= book.title %></span>
                   <% end %>
                 <% end %>
               <% end %>

@@ -17,6 +17,7 @@ module Books
             AND ba.author_id IN (:author_ids)
         ) ranked
         WHERE position <= :limit
+        ORDER BY author_id, position
       SQL
 
       rows = ActiveRecord::Base.connection.select_all(
