@@ -20,10 +20,5 @@ class Books::ListsController < PublicListsController
         .order(Arel.sql("list_items.position ASC NULLS LAST, list_items.id ASC")),
       limit: 100
     )
-
-    book_ids = @list_items.filter_map { |item| item.listable_id if item.listable_type == "Books::Book" }
-    @ranks = RankedItem.where(
-      ranking_configuration: @ranking_configuration, item_type: "Books::Book", item_id: book_ids
-    ).pluck(:item_id, :rank).to_h
   end
 end

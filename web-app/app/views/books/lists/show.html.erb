@@ -37,7 +37,7 @@
       <% @list_items.each_with_index do |list_item, index| %>
         <% book = list_item.listable %>
         <% next unless book %>
-        <%= render Books::CardComponent.new(book: book, rank: @ranks[book.id], index: index) %>
+        <%= render Books::CardComponent.new(book: book, rank: list_item.position, index: index) %>
       <% end %>
     </div>
 
