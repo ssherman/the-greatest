@@ -91,7 +91,7 @@ class Admin::Books::AuthorsController < Admin::Books::BaseController
   end
 
   def author_params
-    params.require(:books_author).permit(:name, :sort_name, :kind, :birth_year, :death_year)
+    params.require(:books_author).permit(:name, :sort_name, :kind, :birth_year, :death_year, :exclude_from_rankings)
   end
 
   def assign_author_attributes(record)

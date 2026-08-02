@@ -66,6 +66,16 @@
         </div>
 
         <div class="form-control md:col-span-2">
+          <%= f.label :exclude_from_rankings, class: "label cursor-pointer justify-start gap-3" do %>
+            <%= f.check_box :exclude_from_rankings, class: "checkbox checkbox-primary" %>
+            <span class="label-text font-semibold">Exclude from author rankings</span>
+          <% end %>
+          <label class="label">
+            <span class="label-text-alt">For placeholder records such as "Unknown" that should never appear in The Greatest Authors.</span>
+          </label>
+        </div>
+
+        <div class="form-control md:col-span-2">
           <%= f.label :alternate_names, class: "label" do %>
             <span class="label-text font-semibold">Alternate Names</span>
           <% end %>
