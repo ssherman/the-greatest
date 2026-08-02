@@ -200,11 +200,46 @@ The existing `@layer base` block setting Lora and Playfair Display is unchanged.
 | `web-app/app/lib/admin/domain_nav.rb:69` | `theme: "cmyk"` → `theme: "books"` |
 | `web-app/test/lib/admin/domain_nav_test.rb:19` | `assert_equal "cmyk"` → `assert_equal "books"` |
 
-### The admin needs no view changes
+### The admin chrome needs no view changes, but its content surfaces do
 
 `layouts/admin.html.erb:27` is already `bg-base-200`, `admin/shared/_navbar` and `_sidebar` are already
-`bg-base-100`, and the rules are already `border-base-300`. The admin picks up the new surfaces purely from
-the tokens.
+`bg-base-100`, and the rules are already `border-base-300`. The admin *chrome* picks up the new surfaces
+purely from the tokens.
+
+**The admin content surfaces do not, and an earlier version of this spec wrongly claimed the admin needed
+no changes at all.** daisyUI ships `.stats` and `.table` with **no `background-color` of their own**, so
+they render the page colour through. This is not caused by the linen change — it is pre-existing. Compare
+the base ramps:
+
+| Theme | base-100 | base-200 (page) | gap |
+|---|---|---|---|
+| `light` (music/games admin) | 100% | 98% | 2% |
+| `cmyk` (books admin, before) | 100% | 95% | 5% |
+| `books` (after) | 100% | 97.7% | 2.3% |
+
+Books admin stat cards were grey-on-grey at 95% before this work, exactly as invisible as linen-on-linen
+now. Music and games escape it only because `light` puts base-200 within 2% of white, so a transparent
+element reads as near-white by accident.
+
+The fix is a rule in `books/application.css` rather than view edits:
+
+```css
+@layer components {
+  .stats,
+  .table {
+    background-color: var(--color-base-100);
+  }
+}
+```
+
+Chosen over editing views because two of the affected components — `admin/lists/show_component` and
+`admin/categories/show_component` — are **shared** with music and games, so per-view edits would change
+those domains too. The rule cannot leak: each domain compiles its own stylesheet, and the public books
+site uses neither `.stats` nor `.table`. `@layer components` (not unlayered) so utility classes still
+override it. Verified in the built CSS as the only rule setting a background on either selector.
+
+Side effect, accepted: `table-zebra` alternates rows at `base-200`, which was previously identical to the
+page and therefore invisible in every domain. Against a white table it now renders as real striping.
 
 ## Verification
 

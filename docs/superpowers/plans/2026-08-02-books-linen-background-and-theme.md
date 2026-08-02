@@ -362,6 +362,63 @@ and the two empty cover slots take the recessed warm step."
 
 ---
 
+---
+
+### Task 3: Give admin content surfaces a background
+
+Added after manual review of the books admin found stat cards and tables rendering linen-on-linen.
+
+**Files:**
+- Modify: `web-app/app/assets/stylesheets/books/application.css` — add a `@layer components` block before `@layer base`
+- Test: none — same reasoning as Task 2
+
+**Interfaces:**
+- Consumes: the `base-100` token from Task 1.
+- Produces: nothing. Final task.
+
+- [ ] **Step 1: Add the rule**
+
+Insert immediately before the existing `@layer base` block:
+
+```css
+@layer components {
+  .stats,
+  .table {
+    background-color: var(--color-base-100);
+  }
+}
+```
+
+daisyUI ships `.stats` and `.table` with no `background-color`, so they render the page through. This is **pre-existing, not caused by the linen change** — under `cmyk` those surfaces were grey-on-grey at 95%. Music and games escape it only because `light` puts base-200 within 2% of white.
+
+Use `@layer components`, not unlayered CSS, so utility classes like `bg-base-200` still override it.
+
+Do **not** fix this by editing views: `admin/lists/show_component` and `admin/categories/show_component` are shared with music and games, so per-view edits would change those domains too.
+
+- [ ] **Step 2: Rebuild and verify it is the only background rule for those selectors**
+
+```bash
+cd web-app && yarn build:css:books
+cd web-app && grep -o '[^{}]*\.stats[^{}]*{[^}]*background[^}]*}' app/assets/builds/books.css
+```
+
+Expected: exactly one rule, `.stats,.table{background-color:var(--color-base-100)}`. If daisyUI also sets a background on either selector, layer order becomes load-bearing and needs rechecking.
+
+- [ ] **Step 3: Verify and commit**
+
+```bash
+cd web-app && bin/rails test && bundle exec standardrb && yarn test:e2e e2e/tests/books/
+```
+
+Expected: 5240 runs / 0 failures; no lint offenses; 67 books E2E passed.
+
+```bash
+git add web-app/app/assets/stylesheets/books/application.css docs/
+git commit -m "Give books admin stat cards and tables a white surface"
+```
+
+---
+
 ## Notes for the implementer
 
 **Why there is no test for the surface changes.** This codebase's convention is that controller and integration tests assert behavior — status codes, params, absence of errors — and never HTML, CSS, or copy. The stated rule is: if a designer could change it freely, don't test it. Background colors are exactly that. Adding `assert_select ".bg-base-200"` would violate the convention and lock the design in place. Verification here is the build, the existing suite as a regression net, and human eyes.

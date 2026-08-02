@@ -52,6 +52,13 @@
   --noise: 0;
 }
 
+@layer components {
+  .stats,
+  .table {
+    background-color: var(--color-base-100);
+  }
+}
+
 @layer base {
   html {
     font-family: 'Lora', Georgia, 'Times New Roman', serif;
