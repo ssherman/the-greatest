@@ -70,6 +70,14 @@ Note that `info/exclude` lives in the shared common git dir, so that one entry i
 visible to the main repo too. It is inert there — `~/dev/the-greatest` has no
 `mise.toml` to ignore — but it is the one piece of shared state this plan writes to.
 
+**A global mise setting is not a substitute for this file.** Because `~/dev/mise.toml`
+pins `3.4.7` and sits nearer than `~/.config/mise/config.toml`, it overrides the global
+config for everything under `~/dev`, the worktree included. Setting Ruby 4.0.6 globally
+leaves the worktree resolving 3.4.7 — verified directly, `mise current ruby` returned
+`3.4.7` inside the worktree while 4.0.6 was installed. The only ways to win are a
+nearer config (this plan) or editing `~/dev/mise.toml` (rejected — it breaks the other
+agent).
+
 Branch is cut from `main`, not `lists-public-ui-inc3` — the upgrade is independent of
 the lists work.
 
@@ -107,9 +115,11 @@ they create no git noise.
 
 1. Create the worktree; write the local `mise.toml`; add it to `.git/info/exclude`;
    symlink `.env` and `config/master.key`.
-2. `mise install ruby@4.0.6`. **Assert `ruby -v` reports 4.0.6 from inside the worktree
-   before proceeding.** The failure mode to guard against is silently bundling under
-   3.4.7 and believing the result.
+2. `mise install ruby@4.0.6` — already installed as of 2026-08-01, so this is a no-op;
+   no compile needed. **Assert `ruby -v` reports 4.0.6 from inside the worktree before
+   proceeding.** The failure mode to guard against is silently bundling under 3.4.7 and
+   believing the result. This guard is not theoretical: with 4.0.6 installed but no
+   worktree-local config, the worktree measurably still resolved 3.4.7.
 3. Bump `.ruby-version` and the `Dockerfile` ARG.
 4. `bundle install`. Triage blockers one at a time: bump each to the *minimum* version
    that works, record every bump for the final report.
