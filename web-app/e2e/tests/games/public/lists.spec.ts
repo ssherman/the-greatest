@@ -86,7 +86,7 @@ test.describe('Games Lists', () => {
   test('pagination nav renders', async ({ page }) => {
     await page.goto('/lists');
 
-    await expect(page.locator('nav.pagy')).toBeVisible();
+    await expect(page.locator('nav.pagy').first()).toBeVisible();
   });
 
   test('the newest sort is reachable and keeps its state', async ({ page }) => {
