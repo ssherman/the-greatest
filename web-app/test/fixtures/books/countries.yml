@@ -1,0 +1,42 @@
+# == Schema Information
+#
+# Table name: books_countries
+#
+#  id          :bigint           not null, primary key
+#  book_count  :integer          default(0), not null
+#  description :text
+#  labels      :string           default([]), not null, is an Array
+#  name        :string           not null
+#  slug        :string           not null
+#  created_at  :datetime         not null
+#  updated_at  :datetime         not null
+#
+# Indexes
+#
+#  index_books_countries_on_book_count  (book_count)
+#  index_books_countries_on_labels      (labels) USING gin
+#  index_books_countries_on_slug        (slug) UNIQUE
+#
+french:
+  name: French
+  slug: french
+  labels: [western]
+  book_count: 2
+
+japanese:
+  name: Japanese
+  slug: japanese
+  labels: [asian]
+  book_count: 1
+
+unknown:
+  name: Unknown
+  slug: unknown
+  labels: []
+  book_count: 0
+
+algerian:
+  name: Algerian
+  slug: algerian
+  labels: []
+  book_count: 0

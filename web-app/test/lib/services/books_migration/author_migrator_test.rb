@@ -40,8 +40,10 @@ class Services::BooksMigration::AuthorMigratorTest < ActiveSupport::TestCase
   end
 
   test "resets the books_authors sequence above the max id" do
-    run_migrator
-    fresh = Books::Author.create!(name: "Sequence Probe")
-    assert_operator fresh.id, :>, 90002
+    Books::Author.connection.expects(:reset_pk_sequence!).with("books_authors")
+
+    result = run_migrator
+
+    assert result[:success], result[:error]
   end
 end

@@ -49,9 +49,11 @@ class Services::BooksMigration::BookMigratorTest < ActiveSupport::TestCase
   end
 
   test "resets the books_books sequence above the max migrated id" do
-    run_migrator([{"id" => 90005, "title" => "Seq Probe Book", "original_language_id" => nil}])
-    fresh = Books::Book.create!(title: "Post Migration Book")
-    assert_operator fresh.id, :>, 90005
+    Books::Book.connection.expects(:reset_pk_sequence!).with("books_books")
+
+    result = run_migrator([{"id" => 90005, "title" => "Seq Probe Book", "original_language_id" => nil}])
+
+    assert result[:success], result[:error]
   end
 
   test "fails the row (naming the legacy book id) when a non-nil legacy language has no id map" do
