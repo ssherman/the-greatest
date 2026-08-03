@@ -46,3 +46,6 @@ terraform.rc
 # Local DB dumps pulled from S3 by bin/refresh-dev-db.sh
 postgres_*_backup_*.sql.gz
 tmp/db-snapshots/
+
+# Harness-managed git worktrees
+.claude/worktrees/
