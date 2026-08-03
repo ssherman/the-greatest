@@ -13,11 +13,18 @@ module Services
     # finalize recomputes books_countries.book_count, which upsert_all bypasses
     # (counter_cache is a callback); it runs OUTSIDE without_search_indexing, so it
     # must stay raw SQL.
-    # Deduped in-memory on [book_id, country_id] because legacy book_countries has
-    # only single-column indexes (no unique index on the pair) and legacy's
-    # BookCountry model has no uniqueness validation, so duplicate links are
-    # structurally possible and upsert_all cannot touch a conflict key twice in
-    # one statement. Idempotent on the target unique index.
+    # Deduped in-memory on [book_id, country_id]. NOT because of a PG abort: this
+    # join has no updatable columns beyond the conflict key, so upsert_all emits
+    # ON CONFLICT ... DO NOTHING here, which tolerates duplicate keys within one
+    # statement (unlike ListPenaltyMigrator's DO UPDATE, whose "cannot affect row
+    # a second time" rationale does not transfer to this migrator). The guard
+    # exists because legacy book_countries has no unique index on the pair, so
+    # duplicate legacy rows are structurally possible; without the guard, @count
+    # would tally rows sent to upsert_all while PG silently drops the duplicates,
+    # so the reported count would exceed Books::BookCountry.count and break the
+    # cutover sum-invariant check. It is also forward-defensive: if
+    # books_book_countries ever gains an updatable column, the upsert becomes a
+    # real DO UPDATE and the batch-abort hazard becomes live.
     class BookCountryMigrator < BulkUpsertMigrator
       private
 

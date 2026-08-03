@@ -49,7 +49,7 @@ class Services::BooksMigration::BookCountryMigratorTest < ActiveSupport::TestCas
     end
   end
 
-  test "dedups repeated (book_id, country_id) pairs within a single run" do
+  test "collapses two legacy rows with the same (book_id, country_id) into one join row" do
     country = make_country(9109, name: "Colombian")
     book = Books::Book.create!(title: "Duplicate Legacy Rows Book")
     rows = [
@@ -63,6 +63,7 @@ class Services::BooksMigration::BookCountryMigratorTest < ActiveSupport::TestCas
     end
 
     assert result[:success], result[:error]
+    assert_equal 1, result[:data][:count]
     assert_equal 1, Books::BookCountry.where(book_id: book.id, country_id: country.id).count
   end
 
