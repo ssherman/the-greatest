@@ -68,6 +68,20 @@ class UserLists::Show::ItemComponentTest < ViewComponent::TestCase
     assert Component.card_capable?("Books::Book")
   end
 
+  test "grid_container_class gives books the dense books grid" do
+    assert_equal Books::CardComponent::GRID_CONTAINER_CLASS,
+      Component.grid_container_class("Books::Book")
+    assert_equal Books::CardComponent::GRID_CONTAINER_CLASS,
+      Component.grid_container_class(Books::Book)
+  end
+
+  test "grid_container_class gives every other listable the shared four-column grid" do
+    assert_equal Component::DEFAULT_GRID_CONTAINER_CLASS,
+      Component.grid_container_class("Music::Album")
+    assert_equal Component::DEFAULT_GRID_CONTAINER_CLASS,
+      Component.grid_container_class("Games::Game")
+  end
+
   test "renders a book card in grid_view" do
     item = user_list_items(:regular_user_books_item_1)
     render_inline(Component.new(item: item, view_mode: "grid_view", position: 1))

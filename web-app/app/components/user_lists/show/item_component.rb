@@ -9,6 +9,9 @@ class UserLists::Show::ItemComponent < ViewComponent::Base
   # table row.
   CARD_LISTABLES = %w[Music::Album Games::Game Books::Book].freeze
 
+  DEFAULT_GRID_CONTAINER_CLASS =
+    "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+
   def initialize(item:, view_mode:, position:)
     @item = item
     @view_mode = view_mode.to_s
@@ -25,6 +28,18 @@ class UserLists::Show::ItemComponent < ViewComponent::Base
   # view calls this once (lists are homogeneous) to pick the wrapper.
   def self.table_layout?(listable_class:, view_mode:)
     view_mode.to_s == "table_view" || !card_capable?(listable_class)
+  end
+
+  # Books covers are 2:3 and tile far denser than square album art, so books get
+  # their own grid shape — the same one the homepage and /lists/:id use. Every
+  # other listable keeps the four-column grid, which already matches the music
+  # and games ranked grids. Called once per page: lists are homogeneous.
+  def self.grid_container_class(listable_class)
+    if listable_class.to_s == "Books::Book"
+      Books::CardComponent::GRID_CONTAINER_CLASS
+    else
+      DEFAULT_GRID_CONTAINER_CLASS
+    end
   end
 
   private
