@@ -3,6 +3,11 @@
 class Books::CardComponent < ViewComponent::Base
   EAGER_IMAGE_COUNT = 6
 
+  # The grid this card is designed for. Every books grid references it, so My
+  # Lists cannot drift away from the homepage the way it did before.
+  GRID_CONTAINER_CLASS = "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 " \
+    "lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6"
+
   def initialize(book:, rank: nil, index: nil)
     @book = book
     @rank = rank
