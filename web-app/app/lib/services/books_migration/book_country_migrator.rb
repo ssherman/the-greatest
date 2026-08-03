@@ -13,6 +13,11 @@ module Services
     # finalize recomputes books_countries.book_count, which upsert_all bypasses
     # (counter_cache is a callback); it runs OUTSIDE without_search_indexing, so it
     # must stay raw SQL.
+    # Deduped in-memory on [book_id, country_id] because legacy book_countries has
+    # only single-column indexes (no unique index on the pair) and legacy's
+    # BookCountry model has no uniqueness validation, so duplicate links are
+    # structurally possible and upsert_all cannot touch a conflict key twice in
+    # one statement. Idempotent on the target unique index.
     class BookCountryMigrator < BulkUpsertMigrator
       private
 
@@ -34,6 +39,7 @@ module Services
 
       def preload_context
         @country_ids = Books::Country.pluck(:id).to_set
+        @seen = Set.new
       end
 
       def build_rows(attrs)
@@ -41,7 +47,13 @@ module Services
         unless @country_ids.include?(country_id)
           raise "no migrated Books::Country for legacy book_countries.country_id=#{country_id} (run the countries migrator first)"
         end
-        [{book_id: attrs["book_id"], country_id: country_id}]
+
+        book_id = attrs["book_id"]
+        key = [book_id, country_id]
+        return [] if @seen.include?(key)
+        @seen << key
+
+        [{book_id: book_id, country_id: country_id}]
       end
 
       def finalize

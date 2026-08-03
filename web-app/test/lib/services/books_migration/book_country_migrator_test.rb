@@ -49,6 +49,23 @@ class Services::BooksMigration::BookCountryMigratorTest < ActiveSupport::TestCas
     end
   end
 
+  test "dedups repeated (book_id, country_id) pairs within a single run" do
+    country = make_country(9109, name: "Colombian")
+    book = Books::Book.create!(title: "Duplicate Legacy Rows Book")
+    rows = [
+      {"id" => 10, "book_id" => book.id, "country_id" => country.id},
+      {"id" => 11, "book_id" => book.id, "country_id" => country.id}
+    ]
+
+    result = nil
+    assert_difference -> { Books::BookCountry.count }, 1 do
+      result = run_migrator(rows)
+    end
+
+    assert result[:success], result[:error]
+    assert_equal 1, Books::BookCountry.where(book_id: book.id, country_id: country.id).count
+  end
+
   test "fails loud on a country id that was never migrated" do
     book = Books::Book.create!(title: "Dangling Country Book")
 
