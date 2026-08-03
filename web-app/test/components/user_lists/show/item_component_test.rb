@@ -90,16 +90,42 @@ class UserLists::Show::ItemComponentTest < ViewComponent::TestCase
     assert_selector "div.card[data-listable-id='#{item.listable_id}']"
   end
 
-  test "grid_view passes the item's position through as a cover-loading index" do
-    item = user_list_items(:regular_user_books_item_1)
+  # No books fixture ships an attached cover, and without one the card renders a
+  # placeholder with no <img> to assert against.
+  def attach_cover(book)
+    image = Image.new(parent: book, primary: true)
+    image.file.attach(io: StringIO.new("fake image data"), filename: "cover.jpg", content_type: "image/jpeg")
+    image.save!
+    book.reload
+  end
 
-    # Position 7 is past the eager cutoff, so the cover must lazy-load. Without a
-    # real index every card in a 100-item grid would fetch eagerly at high priority.
-    render_inline(Component.new(item: item, view_mode: "grid_view", position: 7))
-    assert_no_selector "img[loading='eager']"
+  test "grid_view eager-loads covers by page index, not by list position" do
+    item = user_list_items(:regular_user_books_item_1)
+    attach_cover(item.listable)
+
+    # A ranking-sorted page can put list position 40 first. The cover must still
+    # load eagerly, because what matters is where the card sits on the page.
+    render_inline(Component.new(item: item, view_mode: "grid_view", position: 40, index: 0))
+    assert_selector "img[loading='eager']"
+
+    render_inline(Component.new(item: item, view_mode: "grid_view", position: 1, index: 40))
+    assert_selector "img[loading='lazy']"
+  end
+
+  test "grid_view falls back to lazy covers when no index is given" do
+    item = user_list_items(:regular_user_books_item_1)
+    attach_cover(item.listable)
 
     render_inline(Component.new(item: item, view_mode: "grid_view", position: 1))
-    assert_no_selector "img[loading='eager'][fetchpriority='auto']"
+
+    assert_selector "img[loading='lazy']"
+  end
+
+  test "a book grid card carries the item's list position as its rank badge" do
+    item = user_list_items(:regular_user_books_item_1)
+    render_inline(Component.new(item: item, view_mode: "grid_view", position: 12, index: 11))
+
+    assert_selector "div.card .badge", text: "#12"
   end
 
   test "renders the book title, author by-line and publication year in list_view" do

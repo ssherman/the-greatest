@@ -12,10 +12,11 @@ class UserLists::Show::ItemComponent < ViewComponent::Base
   DEFAULT_GRID_CONTAINER_CLASS =
     "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
 
-  def initialize(item:, view_mode:, position:)
+  def initialize(item:, view_mode:, position:, index: nil)
     @item = item
     @view_mode = view_mode.to_s
     @position = position
+    @index = index
   end
 
   def self.card_capable?(listable_class)
@@ -44,7 +45,7 @@ class UserLists::Show::ItemComponent < ViewComponent::Base
 
   private
 
-  attr_reader :item, :view_mode, :position
+  attr_reader :item, :view_mode, :position, :index
 
   def listable
     item.listable
@@ -59,7 +60,7 @@ class UserLists::Show::ItemComponent < ViewComponent::Base
     case listable
     when Music::Album then Music::Albums::CardComponent.new(album: listable)
     when Games::Game then Games::CardComponent.new(game: listable)
-    when Books::Book then Books::CardComponent.new(book: listable, index: position - 1)
+    when Books::Book then Books::CardComponent.new(book: listable, rank: position, index: index)
     end
   end
 
