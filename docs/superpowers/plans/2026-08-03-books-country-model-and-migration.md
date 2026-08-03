@@ -934,3 +934,21 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ## Production note
 
 This increment has a deployment consequence the later ones do not. Production has no books data yet, so **the deploy does not carry these rows** — `data_migration:countries` and `data_migration:book_countries` must be run against production's legacy database at books cutover, like every other books migrator. The schema migrations ship with the deploy; the data does not.
+
+## Production cutover pre-flight
+
+Lessons from the final review of this branch, to read before running these two migrators (or `data_migration:all`) against production's legacy database.
+
+- **`data_migration:all` does not stop on failure.** Every rake task in the chain is `pp Migrator.call`, and `Migrator#call` swallows exceptions into `{success: false, error: ..., data: {...}}` rather than raising. A failed `countries` run prints that hash to the console and the chain marches straight on into `book_countries` and every migrator after it. This is pre-existing across all 20 migrators, not specific to countries. At cutover you must **read every printed hash**, not just watch the process exit code — a green exit with a `success: false` hash buried in the scrollback is easy to miss.
+- **A failed `book_countries` run leaves `book_count` stale.** `finalize` (the raw-SQL recompute of `books_countries.book_count`) only runs after the streaming block completes; if the block raises partway through, `finalize` is skipped, while whatever batches had already flushed stay committed (each `upsert_all` batch is its own statement, not wrapped in one giant transaction). Recovery is simply to re-run `bin/rails data_migration:book_countries` — the migrator is idempotent and `finalize` runs on every successful call. But do not read `book_count` as meaningful after a failed run; it reflects whatever partial state the interrupted run left behind.
+- **Verify with invariants, not this plan's absolute numbers.** Production's legacy database is roughly 30k books larger than dev's, so dev's exact counts (253 countries, 126,007 links, etc.) will not match production and are not the bar to clear. Beyond the existing `Books::Country.sum(:book_count) == Books::BookCountry.count` invariant, also check fidelity against the legacy source directly (note the `DISTINCT` — a plain `COUNT(*)` would false-alarm if legacy has duplicate `(book_id, country_id)` pairs, which it structurally permits):
+  ```sql
+  SELECT COUNT(DISTINCT (book_id, country_id)) FROM book_countries;
+  ```
+  This must equal `Books::BookCountry.count` in the new database.
+- **Pre-flight query for legacy NULL slugs.** `CountryMigrator` pins the slug unconditionally from legacy `countries.slug`, but `books_countries.slug` is `NOT NULL` while legacy `countries.slug` is nullable. A legacy row with a NULL slug (or NULL name, which FriendlyId needs to derive one) would abort `data_migration:countries` on that row. Check before running:
+  ```sql
+  SELECT id, name FROM countries WHERE slug IS NULL OR name IS NULL;
+  ```
+  Dev has zero such rows. The failure, if it happens, is loud and names the legacy id, so it is recoverable either way — but checking first is cheaper than debugging it mid-cutover.
+- **Do not use legacy `countries.book_count` to predict anything.** It is a denormalized counter_cache that has already drifted stale for 6 countries in dev (British stored 17,190 vs actual 17,231, plus 4 rows with a NULL stored value). `BookCountryMigrator#finalize`'s recompute over the actual migrated join rows is the source of truth, not the legacy column.
