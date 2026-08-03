@@ -169,6 +169,10 @@ class UserListTest < ActiveSupport::TestCase
     assert_equal 0, @list.reload.view_mode_before_type_cast
   end
 
+  test "VIEW_MODE_LABELS covers exactly the enum's members" do
+    assert_equal UserList.view_modes.keys.sort, UserList::VIEW_MODE_LABELS.keys.sort
+  end
+
   test "items association returns the underlying listables" do
     assert_includes @list.items, music_albums(:dark_side_of_the_moon)
   end

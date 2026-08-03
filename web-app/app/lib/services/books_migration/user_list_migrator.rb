@@ -10,8 +10,9 @@ module Services
     #
     # list_type is symbol-remapped: legacy is [read, reading, want_to_read, favorite, custom]
     # but every new-app subclass puts a plural `favorites` at 0. view_mode's legacy default
-    # member is NULL, not 0; it means "user never picked one",
-    # so it maps to the new site default (grid_view), not to the integer 0 slot. `public` is nullable in legacy but NOT NULL here.
+    # member is NULL, not 0; it means "user never picked one", so it maps to the new site
+    # default (grid_view), not to the integer 0 slot. `public` is nullable in legacy but
+    # NOT NULL here.
     # greatest_books_list / best_ranked / date_read are dropped — dead legacy flags with no
     # new-schema home. Bulk upsert_all bypasses the UserList callbacks and validations.
     # Idempotent on id.

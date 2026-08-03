@@ -12,6 +12,9 @@ class UserLists::Show::ItemComponent < ViewComponent::Base
   DEFAULT_GRID_CONTAINER_CLASS =
     "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
 
+  # position is the item's stored slot in the list (drives the "#N" badge);
+  # index is its zero-based place on the rendered page (drives cover
+  # eager-loading). They move independently once a list spans more than one page.
   def initialize(item:, view_mode:, position:, index: nil)
     @item = item
     @view_mode = view_mode.to_s
