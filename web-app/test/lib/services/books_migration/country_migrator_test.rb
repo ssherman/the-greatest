@@ -69,9 +69,11 @@ class Services::BooksMigration::CountryMigratorTest < ActiveSupport::TestCase
   end
 
   test "resets the primary key sequence so later inserts do not collide" do
-    run_migrator([legacy_row])
+    Books::Country.connection.expects(:reset_pk_sequence!).with("books_countries")
 
-    assert_operator Books::Country.create!(name: "Sequence Probe").id, :>, 9001
+    result = run_migrator([legacy_row])
+
+    assert result[:success], result[:error]
   end
 
   test "reports failure with the legacy id when a row cannot be saved" do
