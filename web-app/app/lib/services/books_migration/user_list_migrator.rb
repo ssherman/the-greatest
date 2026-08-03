@@ -10,13 +10,14 @@ module Services
     #
     # list_type is symbol-remapped: legacy is [read, reading, want_to_read, favorite, custom]
     # but every new-app subclass puts a plural `favorites` at 0. view_mode's legacy default
-    # member is NULL, not 0. `public` is nullable in legacy but NOT NULL here.
+    # member is NULL, not 0; it means "user never picked one",
+    # so it maps to the new site default (grid_view), not to the integer 0 slot. `public` is nullable in legacy but NOT NULL here.
     # greatest_books_list / best_ranked / date_read are dropped — dead legacy flags with no
     # new-schema home. Bulk upsert_all bypasses the UserList callbacks and validations.
     # Idempotent on id.
     class UserListMigrator < BulkUpsertMigrator
       LIST_TYPE_MAP = {3 => 0, 0 => 1, 1 => 2, 2 => 3, 4 => 4}.freeze
-      VIEW_MODE_MAP = {nil => 0, 1 => 1, 2 => 2}.freeze
+      VIEW_MODE_MAP = {nil => 2, 1 => 1, 2 => 2}.freeze
 
       private
 
