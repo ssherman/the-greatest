@@ -58,9 +58,7 @@ module Books
     end
 
     test "sorted_by_name orders alphabetically" do
-      names = Books::Country.sorted_by_name.pluck(:name)
-
-      assert_equal names.sort, names
+      assert_equal ["Algerian", "French", "Japanese", "Unknown"], Books::Country.sorted_by_name.pluck(:name)
     end
   end
 end

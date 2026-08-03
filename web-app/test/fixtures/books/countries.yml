@@ -34,3 +34,9 @@ unknown:
   slug: unknown
   labels: []
   book_count: 0
+
+algerian:
+  name: Algerian
+  slug: algerian
+  labels: []
+  book_count: 0
