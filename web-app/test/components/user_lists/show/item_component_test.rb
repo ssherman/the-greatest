@@ -6,7 +6,7 @@ class UserLists::Show::ItemComponentTest < ViewComponent::TestCase
   Component = UserLists::Show::ItemComponent
 
   test "table_layout? is false for card-capable listables outside table_view" do
-    refute Component.table_layout?(listable_class: "Music::Album", view_mode: "default_view")
+    refute Component.table_layout?(listable_class: "Music::Album", view_mode: "list_view")
     refute Component.table_layout?(listable_class: "Games::Game", view_mode: "grid_view")
   end
 
@@ -16,7 +16,7 @@ class UserLists::Show::ItemComponentTest < ViewComponent::TestCase
   end
 
   test "table_layout? is true for cardless listables in any view_mode" do
-    assert Component.table_layout?(listable_class: "Music::Song", view_mode: "default_view")
+    assert Component.table_layout?(listable_class: "Music::Song", view_mode: "list_view")
     assert Component.table_layout?(listable_class: "Movies::Movie", view_mode: "grid_view")
   end
 
@@ -43,14 +43,14 @@ class UserLists::Show::ItemComponentTest < ViewComponent::TestCase
     assert_selector "div.card[data-listable-id='#{item.listable_id}']"
   end
 
-  test "renders a list row with the description in default_view for an album" do
+  test "renders a list row with the description in list_view for an album" do
     item = user_list_items(:regular_user_fav_album_2)
     album = item.listable
     description = album.descriptions.create!(
       kind: :summary, locale: "en", source: :ai_generated,
       content: "A landmark concept album about madness and time."
     )
-    render_inline(Component.new(item: item, view_mode: "default_view", position: 4))
+    render_inline(Component.new(item: item, view_mode: "list_view", position: 4))
 
     assert_no_selector "tr"
     assert_no_selector "div.card"
@@ -60,12 +60,26 @@ class UserLists::Show::ItemComponentTest < ViewComponent::TestCase
   end
 
   test "table_layout? is false for books outside table_view" do
-    refute Component.table_layout?(listable_class: "Books::Book", view_mode: "default_view")
+    refute Component.table_layout?(listable_class: "Books::Book", view_mode: "list_view")
     refute Component.table_layout?(listable_class: "Books::Book", view_mode: "grid_view")
   end
 
   test "card_capable? is true for books" do
     assert Component.card_capable?("Books::Book")
+  end
+
+  test "grid_container_class gives books the dense books grid" do
+    assert_equal Books::CardComponent::GRID_CONTAINER_CLASS,
+      Component.grid_container_class("Books::Book")
+    assert_equal Books::CardComponent::GRID_CONTAINER_CLASS,
+      Component.grid_container_class(Books::Book)
+  end
+
+  test "grid_container_class gives every other listable the shared four-column grid" do
+    assert_equal Component::DEFAULT_GRID_CONTAINER_CLASS,
+      Component.grid_container_class("Music::Album")
+    assert_equal Component::DEFAULT_GRID_CONTAINER_CLASS,
+      Component.grid_container_class("Games::Game")
   end
 
   test "renders a book card in grid_view" do
@@ -76,21 +90,47 @@ class UserLists::Show::ItemComponentTest < ViewComponent::TestCase
     assert_selector "div.card[data-listable-id='#{item.listable_id}']"
   end
 
-  test "grid_view passes the item's position through as a cover-loading index" do
-    item = user_list_items(:regular_user_books_item_1)
-
-    # Position 7 is past the eager cutoff, so the cover must lazy-load. Without a
-    # real index every card in a 100-item grid would fetch eagerly at high priority.
-    render_inline(Component.new(item: item, view_mode: "grid_view", position: 7))
-    assert_no_selector "img[loading='eager']"
-
-    render_inline(Component.new(item: item, view_mode: "grid_view", position: 1))
-    assert_no_selector "img[loading='eager'][fetchpriority='auto']"
+  # No books fixture ships an attached cover, and without one the card renders a
+  # placeholder with no <img> to assert against.
+  def attach_cover(book)
+    image = Image.new(parent: book, primary: true)
+    image.file.attach(io: StringIO.new("fake image data"), filename: "cover.jpg", content_type: "image/jpeg")
+    image.save!
+    book.reload
   end
 
-  test "renders the book title, author by-line and publication year in default_view" do
+  test "grid_view eager-loads covers by page index, not by list position" do
     item = user_list_items(:regular_user_books_item_1)
-    render_inline(Component.new(item: item, view_mode: "default_view", position: 1))
+    attach_cover(item.listable)
+
+    # A ranking-sorted page can put list position 40 first. The cover must still
+    # load eagerly, because what matters is where the card sits on the page.
+    render_inline(Component.new(item: item, view_mode: "grid_view", position: 40, index: 0))
+    assert_selector "img[loading='eager']"
+
+    render_inline(Component.new(item: item, view_mode: "grid_view", position: 1, index: 40))
+    assert_selector "img[loading='lazy']"
+  end
+
+  test "grid_view falls back to lazy covers when no index is given" do
+    item = user_list_items(:regular_user_books_item_1)
+    attach_cover(item.listable)
+
+    render_inline(Component.new(item: item, view_mode: "grid_view", position: 1))
+
+    assert_selector "img[loading='lazy']"
+  end
+
+  test "a book grid card carries the item's list position as its rank badge" do
+    item = user_list_items(:regular_user_books_item_1)
+    render_inline(Component.new(item: item, view_mode: "grid_view", position: 12, index: 11))
+
+    assert_selector "div.card .badge", text: "#12"
+  end
+
+  test "renders the book title, author by-line and publication year in list_view" do
+    item = user_list_items(:regular_user_books_item_1)
+    render_inline(Component.new(item: item, view_mode: "list_view", position: 1))
 
     assert_selector "a[href='/book/war-and-peace']", text: "War and Peace"
     assert_text "Leo Tolstoy"

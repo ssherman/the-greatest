@@ -30,9 +30,10 @@ test.describe('Books My Lists', () => {
 
     const toolbar = page.getByTestId('list-toolbar');
     await expect(toolbar.getByRole('link', { name: 'Grid' })).toBeVisible();
-    await toolbar.getByRole('link', { name: 'Grid' }).click();
+    await expect(toolbar.getByRole('link', { name: 'Table' })).toBeVisible();
+    await toolbar.getByRole('link', { name: 'List' }).click();
 
-    await expect(page).toHaveURL(/view_mode=grid_view/);
+    await expect(page).toHaveURL(/view_mode=list_view/);
   });
 
   test('a list page offers a CSV download', async ({ page }) => {

@@ -9,7 +9,7 @@
 #  position    :integer
 #  public      :boolean          default(FALSE), not null
 #  type        :string           not null
-#  view_mode   :integer          default(0), not null
+#  view_mode   :integer          default(2), not null
 #  created_at  :datetime         not null
 #  updated_at  :datetime         not null
 #  user_id     :bigint           not null
@@ -51,7 +51,15 @@ class UserList < ApplicationRecord
   has_many :user_list_items, -> { order(:position) }, dependent: :destroy, inverse_of: :user_list
 
   # Enums
-  enum :view_mode, {default_view: 0, table_view: 1, grid_view: 2}, default: :default_view
+  enum :view_mode, {list_view: 0, table_view: 1, grid_view: 2}, default: :grid_view
+
+  # Switcher order and copy. Declared here rather than in the view so the
+  # default view mode can read first without reordering the enum's integers.
+  VIEW_MODE_LABELS = {
+    "grid_view" => "Grid",
+    "list_view" => "List",
+    "table_view" => "Table"
+  }.freeze
 
   # Validations
   validates :name, presence: true

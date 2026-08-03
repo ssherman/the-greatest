@@ -44,7 +44,7 @@ module Services
         assert_equal "Books I've Read", list.name
         assert_equal "desc", list.description
         assert list.read?
-        assert list.default_view?
+        assert list.grid_view?
         assert_not list.public?
         assert_nil list.position
         assert_equal Time.utc(2015, 1, 2, 3, 4, 5), list.created_at
@@ -76,7 +76,7 @@ module Services
         assert_match(/list_type/, result[:error])
       end
 
-      test "remaps view_mode, treating NULL as the default member" do
+      test "remaps view_mode, treating legacy NULL as the site default" do
         result = run_migrator([
           legacy_row("id" => 300020, "list_type" => 0, "view_mode" => nil),
           legacy_row("id" => 300021, "list_type" => 1, "view_mode" => 1),
@@ -84,7 +84,7 @@ module Services
         ])
 
         assert result[:success], result[:error]
-        assert_equal "default_view", ::UserList.find(300020).view_mode
+        assert_equal "grid_view", ::UserList.find(300020).view_mode
         assert_equal "table_view", ::UserList.find(300021).view_mode
         assert_equal "grid_view", ::UserList.find(300022).view_mode
       end

@@ -165,7 +165,7 @@ Fail loud, never silently skip:
 ## Testing
 
 **Unit** (`test/lib/services/books_migration/`, mirroring the existing migrator tests — `legacy_each` stubbed, legacy connection never opened):
-- `user_list_migrator_test.rb` — `type` is `Books::UserList`; `LIST_TYPE_MAP` for all five values + fail-loud raise on an unmapped one; `VIEW_MODE_MAP` incl. NULL→`default_view` + fail-loud; `public` NULL→false; the three dead columns are absent from the built row; legacy id and timestamps preserved; idempotent re-run.
+- `user_list_migrator_test.rb` — `type` is `Books::UserList`; `LIST_TYPE_MAP` for all five values + fail-loud raise on an unmapped one; `VIEW_MODE_MAP` incl. NULL→`grid_view` + fail-loud; `public` NULL→false; the three dead columns are absent from the built row; legacy id and timestamps preserved; idempotent re-run.
 - `user_list_item_migrator_test.rb` — `listable_type`/`listable_id`; `completed_on ← read_date`; NULL position → sentinel; the `finalize` renumber produces contiguous 1..N and breaks duplicate ties by id; raise naming the legacy id when a `book_id` has no migrated book; timestamps preserved.
 - `test/models/books/user_list_test.rb` — enum, `default_list_types`, `listable_class`, `default_list_name_for`, `completed_on_list_types`, `ranking_configuration_class`; and that `Books::UserList` is **absent** from `DEFAULT_SUBCLASSES`/`DOMAIN_SUBCLASSES` (D-data-only is load-bearing — adding it silently would create books lists for every new signup).
 
@@ -176,7 +176,7 @@ Fail loud, never silently skip:
 | `user_lists` where `type = 'Books::UserList'` | **282,922** |
 | by `list_type` | favorites **69,428** / read **69,440** / reading **69,423** / want_to_read **69,400** / custom **5,231** |
 | `public = true` | **115** |
-| `view_mode` | default_view **282,244** / table_view **422** / grid_view **256** |
+| `view_mode` | list_view **0** / table_view **422** / grid_view **282,500** (folds the NULL **282,244** into grid_view) |
 | `user_list_items` on Books lists | **3,096,597**, all `listable_type = 'Books::Book'` |
 | `completed_on` non-null | **79,721**, all on `read` lists |
 | positions | `MIN = 1`; **0** sentinel rows remain; **0** duplicate `(user_list_id, position)` pairs |
