@@ -9,7 +9,7 @@
 #  position    :integer
 #  public      :boolean          default(FALSE), not null
 #  type        :string           not null
-#  view_mode   :integer          default(0), not null
+#  view_mode   :integer          default(2), not null
 #  created_at  :datetime         not null
 #  updated_at  :datetime         not null
 #  user_id     :bigint           not null
@@ -153,14 +153,20 @@ class UserListTest < ActiveSupport::TestCase
     assert @list.grid_view?
   end
 
-  test "view_mode defaults to list_view on new records" do
+  test "view_mode defaults to grid_view on new records" do
     list = Music::Albums::UserList.new(user: @user, name: "Fresh", list_type: :custom)
-    assert list.list_view?
+    assert list.grid_view?
   end
 
-  test "view_mode defaults to list_view after save" do
+  test "view_mode defaults to grid_view after save" do
     list = Music::Albums::UserList.create!(user: users(:editor_user), name: "Persisted", list_type: :favorites)
-    assert list.reload.list_view?
+    assert list.reload.grid_view?
+  end
+
+  test "list_view is still reachable and maps to zero" do
+    @list.update!(view_mode: :list_view)
+    assert @list.reload.list_view?
+    assert_equal 0, @list.reload.view_mode_before_type_cast
   end
 
   test "items association returns the underlying listables" do

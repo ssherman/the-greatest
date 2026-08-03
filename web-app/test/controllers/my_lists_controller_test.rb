@@ -146,18 +146,18 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
 
   test "switching view_mode persists it on the list and re-renders" do
     sign_in_as(@user, stub_auth: true)
-    get my_list_path(@albums_favorites, view_mode: "grid_view")
+    get my_list_path(@albums_favorites, view_mode: "list_view")
     assert_response :success
-    assert_equal "grid_view", @albums_favorites.reload.view_mode
+    assert_equal "list_view", @albums_favorites.reload.view_mode
 
     # subsequent visit with no param renders the persisted mode
     get my_list_path(@albums_favorites)
-    assert_equal "grid_view", @albums_favorites.reload.view_mode
+    assert_equal "list_view", @albums_favorites.reload.view_mode
   end
 
   test "show renders each album's primary description in list_view" do
     sign_in_as(@user, stub_auth: true)
-    get my_list_path(@albums_favorites)
+    get my_list_path(@albums_favorites, view_mode: "list_view")
     assert_response :success
     assert_includes response.body, descriptions(:dark_side_ai).content
   end
@@ -166,10 +166,19 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     sign_in_as(@user, stub_auth: true)
 
     assert_queries_match(/FROM "descriptions"/, count: 1) do
-      get my_list_path(@albums_favorites)
+      get my_list_path(@albums_favorites, view_mode: "list_view")
     end
 
     assert_response :success
+  end
+
+  test "a list that has never had a view mode set lands on grid" do
+    sign_in_as(@user, stub_auth: true)
+    assert_equal "grid_view", @albums_favorites.view_mode
+
+    get my_list_path(@albums_favorites)
+    assert_response :success
+    assert_equal "grid_view", @albums_favorites.reload.view_mode
   end
 
   test "all three view modes render for an albums list" do
