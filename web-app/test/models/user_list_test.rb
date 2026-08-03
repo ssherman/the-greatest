@@ -153,14 +153,14 @@ class UserListTest < ActiveSupport::TestCase
     assert @list.grid_view?
   end
 
-  test "view_mode defaults to default_view on new records" do
+  test "view_mode defaults to list_view on new records" do
     list = Music::Albums::UserList.new(user: @user, name: "Fresh", list_type: :custom)
-    assert list.default_view?
+    assert list.list_view?
   end
 
-  test "view_mode defaults to default_view after save" do
+  test "view_mode defaults to list_view after save" do
     list = Music::Albums::UserList.create!(user: users(:editor_user), name: "Persisted", list_type: :favorites)
-    assert list.reload.default_view?
+    assert list.reload.list_view?
   end
 
   test "items association returns the underlying listables" do

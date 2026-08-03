@@ -1,6 +1,5 @@
 <%
   content_for :page_title, "#{@list.name} - My Lists"
-  view_mode_labels = {"default_view" => "List", "table_view" => "Table", "grid_view" => "Grid"}
   table_layout = UserLists::Show::ItemComponent.table_layout?(
     listable_class: @list.class.listable_class, view_mode: @view_mode
   )
@@ -46,8 +45,8 @@
         <div class="flex items-center gap-2">
           <span class="text-xs font-semibold uppercase tracking-wide text-base-content/50">View</span>
           <div class="join">
-            <% UserList.view_modes.keys.each do |mode| %>
-              <%= link_to view_mode_labels[mode],
+            <% UserList::VIEW_MODE_LABELS.each do |mode, label| %>
+              <%= link_to label,
                     my_list_path(@list, view_mode: mode, sort: ranking_sort),
                     class: "join-item btn btn-sm #{(@view_mode == mode) ? "btn-primary" : "btn-outline"}" %>
             <% end %>

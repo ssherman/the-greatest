@@ -133,7 +133,7 @@ Pass `policy_class:` explicitly. Controllers load via `current_user.user_lists.f
 ### ViewComponents
 
 - **`UserLists::Edit::ItemRowComponent`** (new) — one draggable row on the edit page: position badge, drag handle (`data-sortable-handle`), title/subtitle, "Move to top/bottom" menu, remove button; carries `data-listable-id`. Args: `item:`, `index:`.
-- **`UserLists::Show::ItemComponent`** (extend Phase A) — add the inline `completed_on` editor (an `<input type="date">` wired to `user-list-item-date`) in `default_view` and `table_view` when `completed_on_enabled?`. `grid_view` keeps the read-only badge from Phase A.
+- **`UserLists::Show::ItemComponent`** (extend Phase A) — add the inline `completed_on` editor (an `<input type="date">` wired to `user-list-item-date`) in `list_view` and `table_view` when `completed_on_enabled?`. `grid_view` keeps the read-only badge from Phase A.
 
 ### Stimulus Controllers (JavaScript)
 
