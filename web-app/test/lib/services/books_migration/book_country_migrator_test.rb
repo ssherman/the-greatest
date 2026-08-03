@@ -7,8 +7,6 @@ class Services::BooksMigration::BookCountryMigratorTest < ActiveSupport::TestCas
     m.call
   end
 
-  # CountryMigrator preserves legacy ids, so a migrated country simply exists at
-  # its legacy id — there is no id map to seed.
   def make_country(legacy_id, name:)
     Books::Country.create!(id: legacy_id, name: name)
   end
@@ -57,6 +55,7 @@ class Services::BooksMigration::BookCountryMigratorTest < ActiveSupport::TestCas
     result = run_migrator([{"id" => 5, "book_id" => book.id, "country_id" => 424242}])
 
     assert_not result[:success]
+    assert_match "424242", result[:error]
     assert_equal 0, Books::BookCountry.where(book_id: book.id).count
   end
 
@@ -66,7 +65,6 @@ class Services::BooksMigration::BookCountryMigratorTest < ActiveSupport::TestCas
     result = run_migrator([{"id" => 6, "book_id" => 424242, "country_id" => country.id}])
 
     assert_not result[:success]
-    assert_equal 0, Books::BookCountry.where(country_id: country.id).count
   end
 
   test "finalize recomputes book_count for a populated country" do

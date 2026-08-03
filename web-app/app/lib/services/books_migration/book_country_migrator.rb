@@ -2,18 +2,17 @@ module Services
   module BooksMigration
     # Bulk join migrator: legacy book_countries -> books_book_countries. Both sides
     # already preserve their ids (books via BookMigrator, countries via
-    # CountryMigrator), so there is no remapping at all and build_rows is a straight
-    # field copy — the simplest migrator in the suite. A book_id or country_id with
-    # no migrated row fails loud through the DB foreign key rather than dropping
-    # silently to a success-looking low count, matching ExternalLinkMigrator.
+    # CountryMigrator), so there is no LegacyIdMap to consult for either side.
+    # country_id is checked in Ruby against the full set of current
+    # books_countries ids, preloaded once in preload_context: an unmigrated
+    # country_id raises before any DB write, naming the legacy id, so a
+    # 126,007-row production run fails with a precise message instead of a
+    # generic PG constraint error. book_id is passed straight through unchecked
+    # (mirrors CategoryItemMigrator's treatment of its own item_id), so an
+    # unmigrated book_id still fails loud through the DB foreign key on flush.
     # finalize recomputes books_countries.book_count, which upsert_all bypasses
     # (counter_cache is a callback); it runs OUTSIDE without_search_indexing, so it
-    # must stay raw SQL. flush is overridden to wrap the inherited upsert_all in a
-    # transaction: BulkUpsertMigrator#flush otherwise calls it bare, which is fine in
-    # production (each flush is already one atomic statement) but a real FK violation
-    # here poisons Rails' ambient test transaction and breaks any DB assertion later in
-    # the same test — this is the first BulkUpsertMigrator subclass whose fail-loud path
-    # is a genuine DB constraint rather than a Ruby-level raise, so the first to hit it.
+    # must stay raw SQL.
     class BookCountryMigrator < BulkUpsertMigrator
       private
 
@@ -33,12 +32,16 @@ module Services
         :index_books_book_countries_on_book_id_and_country_id
       end
 
-      def build_rows(attrs)
-        [{book_id: attrs["book_id"], country_id: attrs["country_id"]}]
+      def preload_context
+        @country_ids = Books::Country.pluck(:id).to_set
       end
 
-      def flush(rows)
-        target_model.transaction { super }
+      def build_rows(attrs)
+        country_id = attrs["country_id"]
+        unless @country_ids.include?(country_id)
+          raise "no migrated Books::Country for legacy book_countries.country_id=#{country_id} (run the countries migrator first)"
+        end
+        [{book_id: attrs["book_id"], country_id: country_id}]
       end
 
       def finalize
