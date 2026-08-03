@@ -23,6 +23,9 @@ module Books
 
     friendly_id :name, use: [:slugged, :finders]
 
+    has_many :book_countries, class_name: "Books::BookCountry", dependent: :destroy
+    has_many :books, through: :book_countries, class_name: "Books::Book"
+
     validates :name, presence: true
 
     scope :with_label, ->(label) { where("labels @> ARRAY[?]::varchar[]", label) }

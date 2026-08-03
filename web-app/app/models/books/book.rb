@@ -60,6 +60,8 @@ class Books::Book < ApplicationRecord
   has_many :external_links, as: :parent, dependent: :destroy
   has_many :category_items, as: :item, dependent: :destroy, inverse_of: :item
   has_many :categories, through: :category_items, class_name: "Books::Category"
+  has_many :book_countries, class_name: "Books::BookCountry", dependent: :destroy
+  has_many :countries, through: :book_countries, class_name: "Books::Country"
   has_many :list_items, as: :listable, dependent: :destroy
   has_many :lists, through: :list_items
   has_many :user_list_items, as: :listable, dependent: :destroy

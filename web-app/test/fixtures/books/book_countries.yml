@@ -1,0 +1,32 @@
+# == Schema Information
+#
+# Table name: books_book_countries
+#
+#  id         :bigint           not null, primary key
+#  created_at :datetime         not null
+#  updated_at :datetime         not null
+#  book_id    :bigint           not null
+#  country_id :bigint           not null
+#
+# Indexes
+#
+#  index_books_book_countries_on_book_id                 (book_id)
+#  index_books_book_countries_on_book_id_and_country_id  (book_id,country_id) UNIQUE
+#  index_books_book_countries_on_country_id              (country_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (book_id => books_books.id)
+#  fk_rails_...  (country_id => books_countries.id)
+#
+war_and_peace_french:
+  book: war_and_peace
+  country: french
+
+got_french:
+  book: got
+  country: french
+
+of_mice_and_men_japanese:
+  book: of_mice_and_men
+  country: japanese

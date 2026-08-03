@@ -21,13 +21,13 @@ french:
   name: French
   slug: french
   labels: [western]
-  book_count: 0
+  book_count: 2
 
 japanese:
   name: Japanese
   slug: japanese
   labels: [asian]
-  book_count: 0
+  book_count: 1
 
 unknown:
   name: Unknown

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_03_193205) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_03_193932) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -100,6 +100,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_03_193205) do
     t.index ["author_id"], name: "index_books_book_authors_on_author_id"
     t.index ["book_id", "author_id"], name: "index_books_book_authors_on_book_id_and_author_id", unique: true
     t.index ["book_id"], name: "index_books_book_authors_on_book_id"
+  end
+
+  create_table "books_book_countries", force: :cascade do |t|
+    t.bigint "book_id", null: false
+    t.bigint "country_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["book_id", "country_id"], name: "index_books_book_countries_on_book_id_and_country_id", unique: true
+    t.index ["book_id"], name: "index_books_book_countries_on_book_id"
+    t.index ["country_id"], name: "index_books_book_countries_on_country_id"
   end
 
   create_table "books_book_relationships", force: :cascade do |t|
@@ -845,6 +855,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_03_193205) do
   add_foreign_key "books_author_relationships", "books_authors", column: "to_author_id"
   add_foreign_key "books_book_authors", "books_authors", column: "author_id"
   add_foreign_key "books_book_authors", "books_books", column: "book_id"
+  add_foreign_key "books_book_countries", "books_books", column: "book_id"
+  add_foreign_key "books_book_countries", "books_countries", column: "country_id"
   add_foreign_key "books_book_relationships", "books_books", column: "book_id"
   add_foreign_key "books_book_relationships", "books_books", column: "related_book_id"
   add_foreign_key "books_books", "books_editions", column: "default_edition_id", on_delete: :nullify
