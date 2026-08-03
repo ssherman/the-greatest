@@ -19,7 +19,7 @@
 - **Comments:** the project rule is no code comments — *except* that every file in `app/lib/services/books_migration/` carries a class-level header comment recording remaps and landmines. Match that established local pattern for the two new migrators; write no inline comments elsewhere.
 - **Testing:** Minitest + Mocha + fixtures. 100% coverage of public methods; never test private methods. **No test legacy database exists or is required** — `LegacyBooks::Record` skips `connects_to` in test, so every migrator test stubs `legacy_each` with Mocha and never opens a legacy connection.
 - **The development database is not disposable.** Books data exists only in dev and takes hours to rebuild. A `PreToolUse` hook hard-blocks destructive commands. Never run `ActiveRecord::FixtureSet.create_fixtures` (it TRUNCATES every table it names) — read fixture YAML directly instead.
-- **Exact legacy volumes** (verified against the legacy DB on 2026-08-03): **253** countries, **126,007** `book_countries` rows, 126,003 books with exactly one country and 4 with two. Largest countries: American 42,289, Unknown 34,124, British 17,190, Japanese 3,960, French 3,620.
+- **Exact legacy volumes** (verified against the legacy DB on 2026-08-03): **253** countries, **126,007** `book_countries` rows, 126,003 books with exactly one country and 4 with two. Largest countries: American 42,289, Unknown 34,124, British 17,231, Japanese 3,960, French 3,620 (the recomputed `book_count`, not the legacy `countries.book_count` counter_cache column, which has drifted stale for 6 countries — see Task 5 Step 7).
 - `unknown` is migrated (fidelity — `/written-by/unknown/authors` may be indexed) but must be excluded from any filter UI via the `filterable` scope.
 - **Gate before "done":** `bundle exec standardrb` and `bin/rails test` must both pass. The owner does **not** use brakeman — never run it. No new user-facing page in this increment → **no** Playwright E2E.
 - Every git commit message ends with the trailer: `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`
@@ -867,8 +867,10 @@ Expected: both `data_migration:countries` and `data_migration:book_countries` ar
 
 - [ ] **Step 4: Snapshot the development database**
 
+`bin/snapshot-dev-db.sh` lives at the **repository root**, not in `web-app/bin/`. Run it from there:
+
 ```bash
-bin/snapshot-dev-db.sh --label pre-countries
+cd /home/shane/dev/the-greatest && bin/snapshot-dev-db.sh --label pre-countries
 ```
 
 The books data exists **only** in dev and takes hours to rebuild. This turns any mistake in Step 5 into a ~1 minute restore (`bin/snapshot-dev-db.sh --restore`). Do not skip it.
@@ -894,13 +896,17 @@ puts "multi-country: #{Books::BookCountry.group(:book_id).having("count(*) > 1")
 puts "top 5: #{Books::Country.order(book_count: :desc).limit(5).pluck(:name, :book_count).inspect}"
 puts "french slug:   #{Books::Country.find_by(slug: "french")&.name.inspect} (expect \"French\")"
 puts "labels:        #{Books::Country.with_label("western").count} western"
+puts "sum invariant: #{Books::Country.sum(:book_count)} == #{Books::BookCountry.count} ? #{Books::Country.sum(:book_count) == Books::BookCountry.count}"
 '
 ```
 
 Expected exactly:
 - countries 253, links 126,007, books linked 126,003, multi-country 4
-- top 5 = `[["American", 42289], ["Unknown", 34124], ["British", 17190], ["Japanese", 3960], ["French", 3620]]`
+- top 5 = `[["American", 42289], ["Unknown", 34124], ["British", 17231], ["Japanese", 3960], ["French", 3620]]`
 - french slug resolves to `"French"`
+- sum invariant: `Books::Country.sum(:book_count)` equals `Books::BookCountry.count` (126,007)
+
+These `book_count` values are `BookCountryMigrator#finalize`'s recompute over the actual migrated rows, which is the source of truth. The legacy `countries.book_count` column is a denormalized counter_cache that has drifted for 6 countries (British stored=17,190 vs actual=17,231, plus Russian, Nigerian, Argentinian, Irish, Indian, and 4 with a NULL stored value) — do not use it to predict expected numbers. The sum invariant is the number to lean on in production, where absolute counts will differ from dev's.
 
 - [ ] **Step 8: Verify idempotency by re-running both**
 
