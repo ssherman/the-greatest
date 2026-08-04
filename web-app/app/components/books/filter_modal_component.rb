@@ -22,7 +22,7 @@ module Books
         country_slugs: countries.map(&:slug),
         year_start: year_start,
         year_end: year_end,
-        ranking_configuration_id: ranking_configuration&.id
+        ranking_configuration_id: (ranking_configuration&.primary? ? nil : ranking_configuration&.id)
       )
     end
   end
