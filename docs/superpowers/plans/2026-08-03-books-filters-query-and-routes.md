@@ -493,6 +493,17 @@ books_novels_genre:
   deleted: false
   parent:
 
+books_classics_genre:
+  type: "Books::Category"
+  name: "Classics"
+  slug: "classics"
+  description: "Classics"
+  category_type: 0  # genre
+  alternative_names: []
+  item_count: 0
+  deleted: false
+  parent:
+
 books_politics_subject:
   type: "Books::Category"
   name: "Politics"
@@ -532,24 +543,31 @@ books_deleted_genre:
 Append to `test/fixtures/category_items.yml`:
 
 ```yaml
-war_and_peace_fiction:
-  category: books_fiction_genre
-  item: war_and_peace (Books::Book)
-
 war_and_peace_novels:
   category: books_novels_genre
   item: war_and_peace (Books::Book)
 
-crime_and_punishment_fiction:
-  category: books_fiction_genre
-  item: crime_and_punishment (Books::Book)
+war_and_peace_classics:
+  category: books_classics_genre
+  item: war_and_peace (Books::Book)
 
 got_novels:
   category: books_novels_genre
   item: got (Books::Book)
+
+clash_classics:
+  category: books_classics_genre
+  item: clash (Books::Book)
 ```
 
 `item` is polymorphic, so it takes the `label (Class)` form. Do **not** set `item_type` by hand.
+
+**These pairs are chosen to avoid two real collisions with pre-existing tests — do not "simplify" them back to `books_fiction_genre` or add any category_item on `crime_and_punishment`:**
+
+- `test/controllers/admin/category_items_controller_test.rb:262-266` builds `war_and_peace` + `books_fiction_genre` itself in `setup`. A fixture for that exact pair makes its `CategoryItem.create!` raise `RecordNotUnique` in 4 tests.
+- `test/models/books/book_test.rb:148` asserts destroying `crime_and_punishment` produces exactly **1** `SearchIndexRequest`. Any category_item on that book cascade-destroys and queues a second, breaking the count.
+
+`books_fiction_genre` still exists and is still used for slug-resolution tests; it just gets no new `category_items`.
 
 - [ ] **Step 3: Write the failing test**
 
@@ -760,7 +778,7 @@ Append inside `module Books; class RankedBooksQueryTest` in `test/lib/books/rank
     test "ANDs multiple categories" do
       both = Books::RankedBooksQuery.call(
         ranking_configuration: @rc,
-        categories: [categories(:books_novels_genre), categories(:books_fiction_genre)]
+        categories: [categories(:books_novels_genre), categories(:books_classics_genre)]
       )
 
       assert_equal [@first], both.to_a
@@ -934,8 +952,8 @@ module Books
     test "genre facet counts ranked books per genre" do
       counts = facets.genres.to_h { |row| [row[:record].slug, row[:count]] }
 
-      assert_equal 2, counts["fiction"]
       assert_equal 2, counts["novels"]
+      assert_equal 1, counts["classics"]
     end
 
     test "genre facet excludes non-genre category types" do
@@ -949,7 +967,7 @@ module Books
       counts = facets(categories: [categories(:books_novels_genre)])
         .genres.to_h { |row| [row[:record].slug, row[:count]] }
 
-      assert_equal 1, counts["fiction"]
+      assert_equal 1, counts["classics"]
     end
 
     test "genre facet excludes already-selected categories" do
