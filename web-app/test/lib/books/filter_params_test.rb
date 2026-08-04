@@ -83,6 +83,36 @@ module Books
       end
     end
 
+    test "raises on a year magnitude beyond a 4-byte integer" do
+      assert_raises ActiveRecord::RecordNotFound do
+        resolve(published_start: "99999999999999999999")
+      end
+    end
+
+    test "raises at the exact 4-byte integer boundary" do
+      assert_raises ActiveRecord::RecordNotFound do
+        resolve(published_start: "2147483648")
+      end
+    end
+
+    test "normalizes a zero-padded year" do
+      result = resolve(published_start: "0001900")
+
+      assert_equal "1900", result.year_start
+    end
+
+    test "normalizes negative zero to zero" do
+      result = resolve(published_start: "-0")
+
+      assert_equal "0", result.year_start
+    end
+
+    test "normalizes a zero-padded negative year" do
+      result = resolve(published_start: "-000800")
+
+      assert_equal "-800", result.year_start
+    end
+
     test "ignores blank slug segments from a trailing comma" do
       result = resolve(category_id: "fiction,")
 

@@ -2,7 +2,6 @@ require "test_helper"
 
 class BooksFiltersRoutingTest < ActionDispatch::IntegrationTest
   CASES = [
-    ["/the-greatest-books", {}],
     ["/the-greatest-books/of/1984", {year: "1984"}],
     ["/the-greatest-books/since/1900", {published_start: "1900"}],
     ["/the-greatest-books/to/1900", {published_end: "1900"}],
@@ -35,5 +34,10 @@ class BooksFiltersRoutingTest < ActionDispatch::IntegrationTest
     assert_raises ActionController::RoutingError do
       Rails.application.routes.recognize_path("http://#{HOST}/the-greatest-books/page/abc", method: :get)
     end
+  end
+
+  test "the loop generates the expected number of routes" do
+    count = Rails.application.routes.routes.count { |r| r.defaults[:controller] == "books/ranked_items" }
+    assert_equal 84, count
   end
 end

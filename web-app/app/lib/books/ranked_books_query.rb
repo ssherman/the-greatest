@@ -14,9 +14,10 @@ module Books
         )
       end
 
-      if Array(countries).any?
+      country_list = Array(countries)
+      if country_list.any?
         relation = relation.where(
-          item_id: Books::BookCountry.where(country_id: Array(countries).map(&:id)).select(:book_id)
+          item_id: Books::BookCountry.where(country_id: country_list.map(&:id)).select(:book_id)
         )
       end
 

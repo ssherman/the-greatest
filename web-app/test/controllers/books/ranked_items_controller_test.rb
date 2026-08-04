@@ -141,6 +141,12 @@ module Books
       assert_response :not_found
     end
 
+    test "an out-of-range year is a 404, not a 500" do
+      get "/the-greatest-books/since/2147483648"
+
+      assert_response :not_found
+    end
+
     test "emits a canonical link at the sorted-slug form" do
       get "/the-greatest/novels,fiction/books"
 
@@ -154,6 +160,15 @@ module Books
       get "/the-greatest/novels/books"
 
       assert_select "meta[name=robots][content='index, follow']"
+    end
+
+    test "a filtered page with zero results is not indexable" do
+      Books::PublicIndexing.stubs(:enabled?).returns(true)
+
+      get "/the-greatest-books/written-by/algerian/authors"
+
+      assert_response :success
+      assert_select "meta[name=robots][content='noindex, follow']"
     end
 
     test "a ranking-configuration page is not indexable" do

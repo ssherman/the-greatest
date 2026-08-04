@@ -20,7 +20,6 @@ class Books::RankedItemsController < RankedItemsController
     @countries = filters.countries
     @filtered = @categories.any? || @countries.any? || filters.year_start.present? || filters.year_end.present?
 
-    @indexable = true
     @show_hero = !@filtered && params[:page].blank? && params[:ranking_configuration_id].blank?
 
     @page_title = Books::FilterTitle.call(
@@ -48,5 +47,7 @@ class Books::RankedItemsController < RankedItemsController
       ),
       limit: 100
     )
+
+    @indexable = !@filtered || @ranked_books.any?
   end
 end

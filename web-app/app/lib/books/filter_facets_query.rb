@@ -42,7 +42,7 @@ module Books
         .where(categories: {deleted: false, category_type: Category.category_types[:genre], type: "Books::Category"})
         .where.not(category_id: @categories.map(&:id))
         .group(:category_id)
-        .order(count_all: :desc)
+        .order(count_all: :desc, category_id: :asc)
         .limit(@limit)
         .count
 
@@ -55,7 +55,7 @@ module Books
         .where.not(country_id: @countries.map(&:id))
         .where(country_id: Books::Country.filterable.select(:id))
         .group(:country_id)
-        .order(count_all: :desc)
+        .order(count_all: :desc, country_id: :asc)
         .limit(@limit)
         .count
 

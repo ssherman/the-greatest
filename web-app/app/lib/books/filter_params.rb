@@ -1,6 +1,7 @@
 module Books
   class FilterParams
     YEAR_FORMAT = /\A-?\d+\z/
+    YEAR_RANGE = (-4000..(Date.current.year + 5))
 
     Result = Struct.new(:categories, :countries, :year_start, :year_end, keyword_init: true)
 
@@ -41,7 +42,10 @@ module Books
       value = raw.to_s
       raise ActiveRecord::RecordNotFound unless value.match?(YEAR_FORMAT)
 
-      value
+      year = value.to_i
+      raise ActiveRecord::RecordNotFound unless YEAR_RANGE.cover?(year)
+
+      year.to_s
     end
   end
 end
