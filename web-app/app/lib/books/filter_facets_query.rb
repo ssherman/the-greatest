@@ -5,7 +5,12 @@ module Books
   # facet drops the country filter and reports alternatives. Each axis omits
   # what is already selected. Mirrors the legacy site's behaviour.
   class FilterFacetsQuery
-    DEFAULT_LIMIT = 36
+    # High enough to return every genre and country that has any ranked book
+    # (166 and 179 respectively against current data, out of 196 and 253 that
+    # exist at all), so the modal's search filters the whole set rather than a
+    # top-N slice. Dropping the cap entirely costs the same ~4ms; it stays as a
+    # bound in case the taxonomy grows.
+    DEFAULT_LIMIT = 500
 
     Result = Struct.new(:genres, :countries, keyword_init: true)
 

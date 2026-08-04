@@ -85,10 +85,27 @@ test.describe('Books filters', () => {
     await page.locator('input[name="category_slugs[]"]').first().waitFor();
 
     const before = await page.locator('label[data-filter-label]:visible').count();
-    await page.getByPlaceholder('Filter genres').fill('zzzzz-no-such-genre');
+    await page.getByPlaceholder('Filter genres and countries').fill('zzzzz-no-such-genre');
     const after = await page.locator('label[data-filter-label]:visible').count();
 
     expect(after).toBeLessThan(before);
+  });
+
+  test('search reaches genres and countries outside the most-common ones', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Filters' }).click();
+    await page.locator('input[name="category_slugs[]"]').first().waitFor();
+
+    const search = page.getByPlaceholder('Filter genres and countries');
+
+    await search.fill('sur');
+    await expect(page.locator('label[data-filter-label="surreal"]')).toBeVisible();
+
+    await search.fill('ab');
+    await expect(page.locator('label[data-filter-label="absurdist"]')).toBeVisible();
+
+    await search.fill('peruv');
+    await expect(page.locator('label[data-filter-label="peruvian"]')).toBeVisible();
   });
 
   test('an unknown genre slug is a 404', async ({ page }) => {

@@ -7,16 +7,17 @@
   <% end %>
 
   <div class="space-y-6">
+    <div class="form-control">
+      <input type="search"
+             placeholder="Filter genres and countries"
+             class="input input-bordered w-full"
+             data-books--filter-search-target="query"
+             data-action="input->books--filter-search#filter">
+    </div>
+
     <section>
       <h4 class="font-semibold text-sm uppercase tracking-wide text-base-content/70 mb-2">Genres</h4>
-      <div class="form-control">
-        <input type="search"
-               placeholder="Filter genres"
-               class="input input-bordered w-full"
-               data-books--filter-search-target="query"
-               data-action="input->books--filter-search#filter">
-      </div>
-      <div class="flex flex-col gap-1 max-h-56 overflow-y-auto pr-1 mt-2">
+      <div class="flex flex-col gap-1 max-h-56 overflow-y-auto pr-1">
         <% genre_options.each do |option| %>
           <label class="label cursor-pointer justify-start gap-2"
                  data-books--filter-search-target="option"
@@ -35,7 +36,9 @@
       <h4 class="font-semibold text-sm uppercase tracking-wide text-base-content/70 mb-2">Countries</h4>
       <div class="flex flex-col gap-1 max-h-56 overflow-y-auto pr-1">
         <% country_options.each do |option| %>
-          <label class="label cursor-pointer justify-start gap-2">
+          <label class="label cursor-pointer justify-start gap-2"
+                 data-books--filter-search-target="option"
+                 data-filter-label="<%= option[:record].name.downcase %>">
             <%= check_box_tag "country_slugs[]", option[:record].slug, option[:checked], id: nil, class: "checkbox checkbox-sm" %>
             <span class="label-text"><%= option[:record].name %></span>
             <% if option[:count] %>
