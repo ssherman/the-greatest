@@ -58,6 +58,12 @@
     background-color: var(--color-base-100);
   }
 
+  /* Keeps the lazy turbo-frame at a zero rect while closed so
+     IntersectionObserver (which ignores visibility/opacity) doesn't fire
+     early — DaisyUI's `.modal { display:grid }` beats `dialog:not([open])`. */
+  dialog.modal:not([open]) turbo-frame#books_filter_options {
+    display: none;
+  }
 }
 
 @layer base {

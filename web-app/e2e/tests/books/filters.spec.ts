@@ -1,6 +1,24 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Books filters', () => {
+  test('the facets frame is not requested until the modal opens', async ({ page }) => {
+    const filterOptionsRequests: string[] = [];
+    page.on('request', (request) => {
+      if (request.url().includes('/filters/options')) {
+        filterOptionsRequests.push(request.url());
+      }
+    });
+
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    expect(filterOptionsRequests).toHaveLength(0);
+
+    await page.getByRole('button', { name: 'Filters' }).click();
+
+    await expect.poll(() => filterOptionsRequests.length).toBe(1);
+  });
+
   test('the filter modal opens and lists genres', async ({ page }) => {
     await page.goto('/');
 
