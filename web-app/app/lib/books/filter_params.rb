@@ -36,8 +36,9 @@ module Books
     end
 
     def validated_year(raw)
-      value = raw.presence
-      return nil if value.nil?
+      return nil if raw.blank?
+
+      value = raw.to_s
       raise ActiveRecord::RecordNotFound unless value.match?(YEAR_FORMAT)
 
       value

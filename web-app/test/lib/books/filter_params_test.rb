@@ -88,5 +88,47 @@ module Books
 
       assert_equal [categories(:books_fiction_genre)], result.categories
     end
+
+    test "deduplicates a repeated category slug" do
+      result = resolve(category_id: "fiction,fiction")
+
+      assert_equal [categories(:books_fiction_genre)], result.categories
+    end
+
+    test "raises on a slug belonging to another domain's category" do
+      assert_raises ActiveRecord::RecordNotFound do
+        resolve(category_id: "rock")
+      end
+    end
+
+    test "raises on a category slug with the wrong casing" do
+      assert_raises ActiveRecord::RecordNotFound do
+        resolve(category_id: "FICTION")
+      end
+    end
+
+    test "raises when published_start arrives array-shaped" do
+      assert_raises ActiveRecord::RecordNotFound do
+        resolve(published_start: ["1900"])
+      end
+    end
+
+    test "raises when published_start arrives hash-shaped" do
+      assert_raises ActiveRecord::RecordNotFound do
+        resolve(published_start: {"a" => "b"})
+      end
+    end
+
+    test "raises when year arrives array-shaped" do
+      assert_raises ActiveRecord::RecordNotFound do
+        resolve(year: ["1984"])
+      end
+    end
+
+    test "raises when year arrives hash-shaped" do
+      assert_raises ActiveRecord::RecordNotFound do
+        resolve(year: {"a" => "b"})
+      end
+    end
   end
 end
