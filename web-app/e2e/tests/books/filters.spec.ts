@@ -28,13 +28,16 @@ test.describe('Books filters', () => {
     await expect(page.getByRole('heading', { level: 1 })).toContainText(/Novels/i);
   });
 
-  test('a chip removes its filter and returns to the root', async ({ page }) => {
-    await page.goto('/the-greatest/novels/books');
+  test('a chip removes only its own filter, keeping the other', async ({ page }) => {
+    await page.goto('/the-greatest/novels/books/written-by/french/authors');
 
-    await page.getByTestId('filter-chip').getByRole('link').click();
+    await expect(page.getByTestId('filter-chip')).toHaveCount(2);
 
-    await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByTestId('filter-chip')).toHaveCount(0);
+    await page.getByTestId('filter-chip').filter({ hasText: 'French' }).getByRole('link').click();
+
+    await expect(page).toHaveURL('/the-greatest/novels/books');
+    await expect(page.getByTestId('filter-chip')).toHaveCount(1);
+    await expect(page.getByTestId('filter-chip')).toHaveText(/Novels/);
   });
 
   test('genre search filters the visible options', async ({ page }) => {
