@@ -86,5 +86,30 @@ module Books
 
       assert_match "no-store", response.headers["Cache-Control"].to_s
     end
+
+    test "options renders the facet frame" do
+      RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: @rc, rank: 1, score: 100)
+
+      get "/filters/options"
+
+      assert_response :success
+      assert_select "turbo-frame#books_filter_options"
+      assert_select "form[action='/filters']"
+    end
+
+    test "options reflects the current selection as checked" do
+      RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: @rc, rank: 1, score: 100)
+
+      get "/filters/options", params: {category_slugs: ["novels"]}
+
+      assert_response :success
+      assert_select "input[name='category_slugs[]'][value=novels][checked]"
+    end
+
+    test "options 404s on an unknown slug" do
+      get "/filters/options", params: {category_slugs: ["no-such-genre"]}
+
+      assert_response :not_found
+    end
   end
 end

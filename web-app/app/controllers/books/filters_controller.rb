@@ -18,6 +18,22 @@ class Books::FiltersController < ApplicationController
     ), status: :see_other
   end
 
+  def options
+    filters = resolved_filters
+
+    @categories = filters.categories
+    @countries = filters.countries
+    @year_start = filters.year_start
+    @year_end = filters.year_end
+    @facets = Books::FilterFacetsQuery.call(
+      ranking_configuration: @ranking_configuration || Books::RankingConfiguration.default_primary,
+      categories: @categories,
+      countries: @countries,
+      year_start: @year_start,
+      year_end: @year_end
+    )
+  end
+
   private
 
   def resolved_filters
