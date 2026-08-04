@@ -63,6 +63,22 @@ test.describe('Books filters', () => {
     await expect(page.getByTestId('filter-chip')).toHaveCount(0);
   });
 
+  test('cancelling discards staged selections', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Filters' }).click();
+
+    const first = page.locator('input[name="category_slugs[]"]').first();
+    await first.waitFor();
+    const slug = await first.getAttribute('value');
+    await first.check();
+
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.locator('dialog#books_filter_modal')).not.toBeVisible();
+
+    await page.getByRole('button', { name: 'Filters' }).click();
+    await expect(page.locator(`input[name="category_slugs[]"][value="${slug}"]`)).not.toBeChecked();
+  });
+
   test('genre search filters the visible options', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Filters' }).click();

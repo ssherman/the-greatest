@@ -1,4 +1,8 @@
-<dialog id="<%= modal_id %>" class="modal">
+<%# Closing keeps the already-loaded frame in the DOM, so staged-but-unapplied
+    input would survive into the next open. reset() restores each control to the
+    server-rendered value, which is exactly the currently-applied filter set. %>
+<dialog id="<%= modal_id %>" class="modal"
+        onclose="this.querySelector('#books_filter_options form')?.reset()">
   <div class="modal-box max-w-xl" data-controller="books--filter-search">
     <h3 class="font-bold text-lg mb-4">Filters</h3>
 
