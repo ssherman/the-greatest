@@ -95,6 +95,7 @@ module Books
       assert_response :success
       assert_select "turbo-frame#books_filter_options"
       assert_select "form[action='/filters']"
+      assert_match "no-store", response.headers["Cache-Control"].to_s
     end
 
     test "options reflects the current selection as checked" do
