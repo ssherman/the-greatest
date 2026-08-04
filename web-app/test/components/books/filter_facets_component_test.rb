@@ -37,6 +37,18 @@ module Books
       assert_selector "form[action='/filters'][method='get'][data-turbo-frame='_top']"
     end
 
+    test "renders exactly one form" do
+      render_component
+
+      assert_selector "form", count: 1
+    end
+
+    test "the Cancel control does not submit the form" do
+      render_component
+
+      assert_selector "button[type=button]", text: "Cancel"
+    end
+
     test "renders a checkbox per faceted genre" do
       render_component
 

@@ -60,7 +60,7 @@
 
   <div class="modal-action">
     <%= link_to "Clear", clear_path, class: "btn btn-ghost", data: {turbo_frame: "_top"} %>
-    <form method="dialog"><button class="btn">Cancel</button></form>
+    <button type="button" class="btn" onclick="this.closest('dialog')?.close()">Cancel</button>
     <%= submit_tag "Apply", class: "btn btn-primary", data: {disable_with: false} %>
   </div>
 <% end %>
