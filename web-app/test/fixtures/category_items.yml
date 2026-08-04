@@ -39,6 +39,22 @@ wish_you_were_here_rock_category:
   category: music_rock_genre
   item: wish_you_were_here (Music::Album)
 
+war_and_peace_novels:
+  category: books_novels_genre
+  item: war_and_peace (Books::Book)
+
+war_and_peace_classics:
+  category: books_classics_genre
+  item: war_and_peace (Books::Book)
+
+got_novels:
+  category: books_novels_genre
+  item: got (Books::Book)
+
+clash_classics:
+  category: books_classics_genre
+  item: clash (Books::Book)
+
 # Games categorizations
 totk_action_category:
   category: games_action_genre
