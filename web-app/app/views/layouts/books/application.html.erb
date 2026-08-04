@@ -4,6 +4,9 @@
     <title><%= content_for?(:page_title) ? yield(:page_title) : "Greatest Books Ranked | The Greatest Books" %></title>
     <meta name="description" content="<%= content_for?(:meta_description) ? yield(:meta_description) : "Discover definitive rankings of the greatest books of all time. Aggregated from the best book lists ever published." %>">
     <meta name="robots" content="<%= books_robots_content %>">
+    <% if content_for?(:canonical_url) %>
+      <link rel="canonical" href="<%= yield(:canonical_url) %>">
+    <% end %>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>

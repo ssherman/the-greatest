@@ -1,10 +1,11 @@
 <%
-  content_for :page_title, "The Greatest Books of All Time | The Greatest Books"
-  content_for :meta_description, "A definitive ranking of the greatest books of all time, aggregated from hundreds of published best-books lists."
+  content_for :page_title, "#{@page_title} | The Greatest Books"
+  content_for :meta_description, "#{@page_title}. Aggregated from hundreds of published best-books lists from critics, authors, and readers."
+  content_for :canonical_url, request.base_url + @canonical_path if @canonical_path
 %>
 
 <div class="space-y-8">
-  <h1 class="text-3xl sm:text-4xl font-bold text-center text-balance">The Greatest Books of All Time</h1>
+  <h1 class="text-3xl sm:text-4xl font-bold text-center text-balance"><%= @page_title %></h1>
 
   <% if @show_hero %>
     <div class="bg-base-100 border border-base-300 rounded-xl p-6 md:p-10">

@@ -99,6 +99,113 @@ module Books
       assert_select "nav.pagy a[href*='ranking_configuration_id']", count: 0
     end
 
+    test "a category filter renders" do
+      get "/the-greatest/novels/books"
+
+      assert_response :success
+    end
+
+    test "a country filter renders" do
+      get "/the-greatest-books/written-by/french/authors"
+
+      assert_response :success
+    end
+
+    test "a combined filter renders" do
+      get "/the-greatest/novels/books/written-by/french/authors/from/1800/to/1900"
+
+      assert_response :success
+    end
+
+    test "an unknown category slug is a 404" do
+      get "/the-greatest/no-such-genre/books"
+
+      assert_response :not_found
+    end
+
+    test "an unknown country slug is a 404" do
+      get "/the-greatest-books/written-by/atlantean/authors"
+
+      assert_response :not_found
+    end
+
+    test "a soft-deleted category slug is a 404" do
+      get "/the-greatest/retired-genre/books"
+
+      assert_response :not_found
+    end
+
+    test "a non-integer year is a 404" do
+      get "/the-greatest-books/since/not-a-year"
+
+      assert_response :not_found
+    end
+
+    test "an out-of-range year is a 404, not a 500" do
+      get "/the-greatest-books/since/2147483648"
+
+      assert_response :not_found
+    end
+
+    test "emits a canonical link at the sorted-slug form" do
+      get "/the-greatest/novels,fiction/books"
+
+      assert_response :success
+      assert_select "link[rel=canonical][href$='/the-greatest/fiction,novels/books']"
+    end
+
+    test "a filtered page is indexable" do
+      Books::PublicIndexing.stubs(:enabled?).returns(true)
+
+      get "/the-greatest/novels/books"
+
+      assert_select "meta[name=robots][content='index, follow']"
+    end
+
+    test "a filtered page with zero results is not indexable" do
+      Books::PublicIndexing.stubs(:enabled?).returns(true)
+
+      get "/the-greatest-books/written-by/algerian/authors"
+
+      assert_response :success
+      assert_select "meta[name=robots][content='noindex, follow']"
+    end
+
+    test "a ranking-configuration page is not indexable" do
+      Books::PublicIndexing.stubs(:enabled?).returns(true)
+
+      get "/rc/#{@rc.id}/the-greatest/novels/books"
+
+      assert_response :success
+      assert_select "meta[name=robots][content='noindex, follow']"
+    end
+
+    test "a ranking-configuration page emits no canonical link" do
+      get "/rc/#{@rc.id}/the-greatest/novels/books"
+
+      assert_response :success
+      assert_select "link[rel=canonical]", false
+    end
+
+    test "an alternate ranking-configuration page emits no canonical link" do
+      alternate = ranking_configurations(:books_inherited)
+
+      get "/rc/#{alternate.id}/the-greatest/novels/books"
+
+      assert_response :success
+      assert_select "link[rel=canonical]", false
+    end
+
+    test "pagination past the last page is a 404" do
+      get "/the-greatest/novels/books/page/99"
+
+      assert_response :not_found
+    end
+
+    test "a filtered page does not N+1 on authors or covers" do
+      assert_queries_count(9) { get "/the-greatest/novels/books" }
+    end
+
     private
 
     # Bulk-inserts filler so tests can reach page 2+ against the controller's

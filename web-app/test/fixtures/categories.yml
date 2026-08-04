@@ -107,6 +107,61 @@ books_fiction_genre:
   deleted: false
   parent: 
 
+books_novels_genre:
+  type: "Books::Category"
+  name: "Novels"
+  slug: "novels"
+  description: "Novels"
+  category_type: 0  # genre
+  alternative_names: []
+  item_count: 0
+  deleted: false
+  parent:
+
+books_classics_genre:
+  type: "Books::Category"
+  name: "Classics"
+  slug: "classics"
+  description: "Classics"
+  category_type: 0  # genre
+  alternative_names: []
+  item_count: 0
+  deleted: false
+  parent:
+
+books_politics_subject:
+  type: "Books::Category"
+  name: "Politics"
+  slug: "politics"
+  description: "Books about politics"
+  category_type: 2  # subject
+  alternative_names: []
+  item_count: 0
+  deleted: false
+  parent:
+
+books_france_location:
+  type: "Books::Category"
+  name: "France"
+  slug: "france"
+  description: "Books set in France"
+  category_type: 1  # location
+  alternative_names: []
+  item_count: 0
+  deleted: false
+  parent:
+
+books_deleted_genre:
+  type: "Books::Category"
+  name: "Retired Genre"
+  slug: "retired-genre"
+  description: "Soft-deleted, must never resolve"
+  category_type: 0  # genre
+  alternative_names: []
+  item_count: 0
+  deleted: true
+  parent:
+
 # Games Categories (for future use)
 games_action_genre:
   type: "Games::Category"

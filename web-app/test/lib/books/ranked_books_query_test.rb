@@ -53,5 +53,79 @@ module Books
         end
       end
     end
+
+    test "filters to books carrying a single category" do
+      results = Books::RankedBooksQuery.call(
+        ranking_configuration: @rc,
+        categories: [categories(:books_novels_genre)]
+      )
+
+      assert_equal [@first], results.to_a
+    end
+
+    test "ANDs multiple categories" do
+      both = Books::RankedBooksQuery.call(
+        ranking_configuration: @rc,
+        categories: [categories(:books_novels_genre), categories(:books_classics_genre)]
+      )
+
+      assert_equal [@first], both.to_a
+
+      neither = Books::RankedBooksQuery.call(
+        ranking_configuration: @rc,
+        categories: [categories(:books_novels_genre), categories(:books_politics_subject)]
+      )
+
+      assert_empty neither.to_a
+    end
+
+    test "ORs multiple countries" do
+      Books::BookCountry.create!(book: books_books(:crime_and_punishment), country: books_countries(:japanese))
+
+      results = Books::RankedBooksQuery.call(
+        ranking_configuration: @rc,
+        countries: [books_countries(:french), books_countries(:japanese)]
+      )
+
+      assert_equal [@first, @second], results.to_a
+    end
+
+    test "filters to a single country" do
+      results = Books::RankedBooksQuery.call(ranking_configuration: @rc, countries: [books_countries(:french)])
+
+      assert_equal [@first], results.to_a
+    end
+
+    test "bounds the year range inclusively" do
+      books_books(:war_and_peace).update!(first_published_year: 1869)
+      books_books(:crime_and_punishment).update!(first_published_year: 1866)
+
+      assert_equal [@first, @second], Books::RankedBooksQuery.call(ranking_configuration: @rc, year_start: "1866", year_end: "1869").to_a
+      assert_equal [@first], Books::RankedBooksQuery.call(ranking_configuration: @rc, year_start: "1867").to_a
+      assert_equal [@second], Books::RankedBooksQuery.call(ranking_configuration: @rc, year_end: "1868").to_a
+    end
+
+    test "excludes books with no published year when a year filter is active" do
+      books_books(:war_and_peace).update!(first_published_year: 1869)
+      books_books(:crime_and_punishment).update!(first_published_year: nil)
+
+      results = Books::RankedBooksQuery.call(ranking_configuration: @rc, year_start: "1800", year_end: "1900")
+
+      assert_equal [@first], results.to_a
+    end
+
+    test "combines category, country and year" do
+      books_books(:war_and_peace).update!(first_published_year: 1869)
+
+      results = Books::RankedBooksQuery.call(
+        ranking_configuration: @rc,
+        categories: [categories(:books_novels_genre)],
+        countries: [books_countries(:french)],
+        year_start: "1800",
+        year_end: "1900"
+      )
+
+      assert_equal [@first], results.to_a
+    end
   end
 end

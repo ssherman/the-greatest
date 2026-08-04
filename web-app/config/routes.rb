@@ -439,6 +439,35 @@ Rails.application.routes.draw do
     get "rc/:ranking_configuration_id", to: "books/ranked_items#index", as: :books_rc
     get "rc/:ranking_configuration_id/page/:page", to: "books/ranked_items#index",
       as: :books_rc_page, constraints: {page: /\d+/}
+
+    # Legacy filter grammar, ported verbatim so no filter URL needs a redirect.
+    # 4 bases x 5 date forms x page x rc prefix = 80 routes, all unnamed --
+    # Books::FilterPath builds these paths, so no url helper is needed, and the
+    # rc prefix is spelled out rather than wrapped in a scope (a constraints:
+    # inside scope "(/rc/...)" binds the positional arg to the rc segment).
+    filter_bases = [
+      "the-greatest-books",
+      "the-greatest-books/written-by/:country_id/authors",
+      "the-greatest/:category_id/books",
+      "the-greatest/:category_id/books/written-by/:country_id/authors"
+    ]
+    filter_dates = [
+      "",
+      "/of/:year",
+      "/since/:published_start",
+      "/to/:published_end",
+      "/from/:published_start/to/:published_end"
+    ]
+
+    ["", "rc/:ranking_configuration_id/"].each do |rc_prefix|
+      filter_bases.each do |base|
+        filter_dates.each do |date|
+          get "#{rc_prefix}#{base}#{date}", to: "books/ranked_items#index"
+          get "#{rc_prefix}#{base}#{date}/page/:page", to: "books/ranked_items#index",
+            constraints: {page: /\d+/}
+        end
+      end
+    end
   end
 
   constraints DomainConstraint.new(Rails.application.config.domains[:games]) do
