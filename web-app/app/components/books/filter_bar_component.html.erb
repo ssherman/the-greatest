@@ -1,0 +1,14 @@
+<div class="flex flex-wrap items-center justify-center gap-2">
+  <button type="button" class="btn btn-primary btn-sm" onclick="<%= modal_id %>.showModal()">
+    Filters
+  </button>
+
+  <% chips.each do |chip| %>
+    <span class="badge badge-lg gap-1" data-testid="filter-chip">
+      <%= chip[:label] %>
+      <%= link_to chip[:path], class: "font-bold", aria: {label: "Remove #{chip[:label]} filter"} do %>
+        &times;
+      <% end %>
+    </span>
+  <% end %>
+</div>

@@ -18,15 +18,17 @@ class Books::RankedItemsController < RankedItemsController
 
     @categories = filters.categories
     @countries = filters.countries
-    @filtered = @categories.any? || @countries.any? || filters.year_start.present? || filters.year_end.present?
+    @year_start = filters.year_start
+    @year_end = filters.year_end
+    @filtered = @categories.any? || @countries.any? || @year_start.present? || @year_end.present?
 
     @show_hero = !@filtered && params[:page].blank? && params[:ranking_configuration_id].blank?
 
     @page_title = Books::FilterTitle.call(
       categories: @categories,
       countries: @countries,
-      year_start: filters.year_start,
-      year_end: filters.year_end
+      year_start: @year_start,
+      year_end: @year_end
     )
     # An /rc/ URL is noindex per the books public-UI spec's D4, so it gets no
     # canonical at all: emitting one that carries /rc/ would break D4, and one
@@ -36,8 +38,8 @@ class Books::RankedItemsController < RankedItemsController
       @canonical_path = Books::FilterPath.call(
         categories: @categories,
         countries: @countries,
-        year_start: filters.year_start,
-        year_end: filters.year_end,
+        year_start: @year_start,
+        year_end: @year_end,
         page: params[:page]
       )
     end
@@ -47,8 +49,8 @@ class Books::RankedItemsController < RankedItemsController
         ranking_configuration: @ranking_configuration,
         categories: @categories,
         countries: @countries,
-        year_start: filters.year_start,
-        year_end: filters.year_end
+        year_start: @year_start,
+        year_end: @year_end
       ),
       limit: 100
     )

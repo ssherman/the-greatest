@@ -1,0 +1,18 @@
+<%# Closing keeps the already-loaded frame in the DOM, so staged-but-unapplied
+    input would survive into the next open. reset() restores each control to the
+    server-rendered value, which is exactly the currently-applied filter set. %>
+<dialog id="<%= modal_id %>" class="modal"
+        onclose="this.querySelector('#books_filter_options form')?.reset()">
+  <div class="modal-box max-w-xl" data-controller="books--filter-search">
+    <h3 class="font-bold text-lg mb-4">Filters</h3>
+
+    <%= helpers.turbo_frame_tag "books_filter_options", src: options_path, loading: :lazy do %>
+      <div class="flex justify-center py-8">
+        <span class="loading loading-spinner loading-md"></span>
+      </div>
+    <% end %>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button aria-label="Close">close</button>
+  </form>
+</dialog>

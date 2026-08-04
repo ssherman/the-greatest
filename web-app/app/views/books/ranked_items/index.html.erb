@@ -19,6 +19,14 @@
     </div>
   <% end %>
 
+  <%= render Books::FilterBarComponent.new(
+        categories: @categories,
+        countries: @countries,
+        year_start: @year_start,
+        year_end: @year_end,
+        ranking_configuration: @ranking_configuration
+      ) %>
+
   <% if @ranked_books.any? %>
     <div class="<%= Books::CardComponent::GRID_CONTAINER_CLASS %>">
       <% @ranked_books.each_with_index do |ranked_item, index| %>
@@ -40,3 +48,11 @@
     </div>
   <% end %>
 </div>
+
+<%= render Books::FilterModalComponent.new(
+      categories: @categories,
+      countries: @countries,
+      year_start: @year_start,
+      year_end: @year_end,
+      ranking_configuration: @ranking_configuration
+    ) %>
