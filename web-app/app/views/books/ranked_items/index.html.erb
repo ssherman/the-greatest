@@ -7,14 +7,6 @@
 <div class="space-y-8">
   <h1 class="text-3xl sm:text-4xl font-bold text-center text-balance"><%= @page_title %></h1>
 
-  <%= render Books::FilterBarComponent.new(
-        categories: @categories,
-        countries: @countries,
-        year_start: @year_start,
-        year_end: @year_end,
-        ranking_configuration: @ranking_configuration
-      ) %>
-
   <% if @show_hero %>
     <div class="bg-base-100 border border-base-300 rounded-xl p-6 md:p-10">
       <div class="max-w-3xl mx-auto">
@@ -26,6 +18,14 @@
       </div>
     </div>
   <% end %>
+
+  <%= render Books::FilterBarComponent.new(
+        categories: @categories,
+        countries: @countries,
+        year_start: @year_start,
+        year_end: @year_end,
+        ranking_configuration: @ranking_configuration
+      ) %>
 
   <% if @ranked_books.any? %>
     <div class="<%= Books::CardComponent::GRID_CONTAINER_CLASS %>">
