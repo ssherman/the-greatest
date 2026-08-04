@@ -206,6 +206,30 @@ module Books
       assert_queries_count(9) { get "/the-greatest/novels/books" }
     end
 
+    test "the index renders the filter bar and modal" do
+      get "/"
+
+      assert_response :success
+      assert_select "button[onclick='books_filter_modal.showModal()']"
+      assert_select "dialog#books_filter_modal"
+    end
+
+    test "a filtered index renders a chip per active filter" do
+      get "/the-greatest/novels/books"
+
+      assert_response :success
+      assert_select "[data-testid=filter-chip]", 1
+    end
+
+    test "the modal frame is lazy and carries the current filter state" do
+      get "/the-greatest/novels/books"
+
+      assert_select "turbo-frame#books_filter_options[loading=lazy]" do |frame|
+        assert_match "category_slugs", frame.first["src"]
+        assert_match "novels", frame.first["src"]
+      end
+    end
+
     private
 
     # Bulk-inserts filler so tests can reach page 2+ against the controller's
