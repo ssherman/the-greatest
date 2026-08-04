@@ -1,7 +1,7 @@
 <%
   content_for :page_title, "#{@page_title} | The Greatest Books"
   content_for :meta_description, "#{@page_title}. Aggregated from hundreds of published best-books lists from critics, authors, and readers."
-  content_for :canonical_url, request.base_url + @canonical_path
+  content_for :canonical_url, request.base_url + @canonical_path if @canonical_path
 %>
 
 <div class="space-y-8">

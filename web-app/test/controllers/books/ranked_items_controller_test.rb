@@ -180,6 +180,22 @@ module Books
       assert_select "meta[name=robots][content='noindex, follow']"
     end
 
+    test "a ranking-configuration page emits no canonical link" do
+      get "/rc/#{@rc.id}/the-greatest/novels/books"
+
+      assert_response :success
+      assert_select "link[rel=canonical]", false
+    end
+
+    test "an alternate ranking-configuration page emits no canonical link" do
+      alternate = ranking_configurations(:books_inherited)
+
+      get "/rc/#{alternate.id}/the-greatest/novels/books"
+
+      assert_response :success
+      assert_select "link[rel=canonical]", false
+    end
+
     test "pagination past the last page is a 404" do
       get "/the-greatest/novels/books/page/99"
 

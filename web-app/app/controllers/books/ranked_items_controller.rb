@@ -28,14 +28,19 @@ class Books::RankedItemsController < RankedItemsController
       year_start: filters.year_start,
       year_end: filters.year_end
     )
-    @canonical_path = Books::FilterPath.call(
-      categories: @categories,
-      countries: @countries,
-      year_start: filters.year_start,
-      year_end: filters.year_end,
-      page: params[:page],
-      ranking_configuration: @ranking_configuration
-    )
+    # An /rc/ URL is noindex per the books public-UI spec's D4, so it gets no
+    # canonical at all: emitting one that carries /rc/ would break D4, and one
+    # pointing away would pair noindex with a canonical whose noindex can
+    # propagate to the real page.
+    if params[:ranking_configuration_id].blank?
+      @canonical_path = Books::FilterPath.call(
+        categories: @categories,
+        countries: @countries,
+        year_start: filters.year_start,
+        year_end: filters.year_end,
+        page: params[:page]
+      )
+    end
 
     @pagy, @ranked_books = pagy_path(
       Books::RankedBooksQuery.call(
