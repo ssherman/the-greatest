@@ -14,11 +14,38 @@ class Books::RankedItemsController < RankedItemsController
   end
 
   def index
+    filters = Books::FilterParams.call(params)
+
+    @categories = filters.categories
+    @countries = filters.countries
+    @filtered = @categories.any? || @countries.any? || filters.year_start.present? || filters.year_end.present?
+
     @indexable = true
-    @show_hero = params[:page].blank? && params[:ranking_configuration_id].blank?
+    @show_hero = !@filtered && params[:page].blank? && params[:ranking_configuration_id].blank?
+
+    @page_title = Books::FilterTitle.call(
+      categories: @categories,
+      countries: @countries,
+      year_start: filters.year_start,
+      year_end: filters.year_end
+    )
+    @canonical_path = Books::FilterPath.call(
+      categories: @categories,
+      countries: @countries,
+      year_start: filters.year_start,
+      year_end: filters.year_end,
+      page: params[:page],
+      ranking_configuration: @ranking_configuration
+    )
 
     @pagy, @ranked_books = pagy_path(
-      Books::RankedBooksQuery.call(ranking_configuration: @ranking_configuration),
+      Books::RankedBooksQuery.call(
+        ranking_configuration: @ranking_configuration,
+        categories: @categories,
+        countries: @countries,
+        year_start: filters.year_start,
+        year_end: filters.year_end
+      ),
       limit: 100
     )
   end
