@@ -327,11 +327,13 @@ module Books
     end
 
     test "escapes LIKE wildcards in the query" do
-      assert_empty Books::CountrySearchQuery.call("%zzz")
+      assert_empty Books::CountrySearchQuery.call("%", limit: 100)
     end
   end
 end
 ```
+
+**The wildcard test must use a bare `"%"`, not `"%zzz"`.** `sanitize_sql_like("%")` yields `\%`, so the pattern becomes `%\%%`, which matches only names containing a literal percent sign — none — and the assertion passes. Without escaping the pattern is `%%%`, which matches every country and the assertion fails. `"%zzz"` would pass either way, since no fixture name contains `zzz`, so it asserts nothing.
 
 **The query letter is load-bearing here too.** `"n"` matches `French` (2), `Japanese` (1), `Algerian` (0) **and** `Unknown` (0) — so the same query proves descending order, a deterministic `limit: 1` winner, and that `filterable` drops `Unknown` even when it matches. `"a"` looks equivalent but `French` contains no `a`, which would make `limit: 1` yield `Japanese` instead.
 
