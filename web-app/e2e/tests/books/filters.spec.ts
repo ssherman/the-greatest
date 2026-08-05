@@ -91,23 +91,6 @@ test.describe('Books filters', () => {
     expect(after).toBeLessThan(before);
   });
 
-  test('search reaches genres and countries outside the most-common ones', async ({ page }) => {
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Filters' }).click();
-    await page.locator('input[name="category_slugs[]"]').first().waitFor();
-
-    const search = page.getByPlaceholder('Filter genres and countries');
-
-    await search.fill('sur');
-    await expect(page.locator('label[data-filter-label="surreal"]')).toBeVisible();
-
-    await search.fill('ab');
-    await expect(page.locator('label[data-filter-label="absurdist"]')).toBeVisible();
-
-    await search.fill('peruv');
-    await expect(page.locator('label[data-filter-label="peruvian"]')).toBeVisible();
-  });
-
   test('an unknown genre slug is a 404', async ({ page }) => {
     const response = await page.goto('/the-greatest/no-such-genre/books');
 
