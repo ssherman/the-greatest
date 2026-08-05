@@ -399,10 +399,14 @@ Each is its own PR. Gate before each: `bin/rails test` + `bundle exec standardrb
 
 Increment 1 is not purely internal, despite touching no view. Two effects ship with it:
 a URL carrying more than 6 categories or 10 countries starts returning 404, and the
-existing modal shrinks from 345 rows to 48 because it reads `DEFAULT_LIMIT`. Both are
-intended way-points toward increment 2, but the existing E2E spec asserts against the old
-modal and will need its option-count expectations relaxed in increment 1 rather than
-increment 2.
+existing modal shrinks from 345 rows to 48 because it reads `DEFAULT_LIMIT`.
+
+The second breaks one existing E2E test. `e2e/tests/books/filters.spec.ts` →
+*"search reaches genres and countries outside the most-common ones"* asserts that
+`surreal`, `absurdist`, and `peruvian` are in the DOM, which is only true while the limit
+is 500. It is deleted in increment 1 rather than relaxed: it asserts a capability
+increment 1 deliberately removes, and increment 2 restores that capability server-side
+with a different mechanism and a different assertion.
 
 ---
 
