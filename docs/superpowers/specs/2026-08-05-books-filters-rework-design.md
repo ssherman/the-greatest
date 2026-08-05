@@ -278,6 +278,14 @@ and the same failure mode, so there is one error path rather than two.
 The modal disables further checkboxes on that axis once the cap is reached and explains
 why, matching legacy's copy.
 
+⚠️ **Accepted interim regression.** The cap ships in increment 1; the checkbox disabling
+that keeps users away from it ships in increment 2. Between the two, a user who checks a
+7th category in the modal and hits Apply gets a bare 404 where they previously got
+results. The exposure is narrow — seven ANDed categories return close to nothing anyway —
+and it closes when increment 2 lands. Accepted rather than deferring the caps, because
+the caps are what bounds query cost: each category is one more SQL subquery. If
+increments 1 and 2 will land far apart, revisit this.
+
 ---
 
 ## 9. Crawl and index policy
