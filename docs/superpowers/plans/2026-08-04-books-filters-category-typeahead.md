@@ -1,5 +1,8 @@
 # Books Filters — Category Typeahead Implementation Plan
 
+**Superseded by `docs/superpowers/specs/2026-08-05-books-filters-rework-design.md`. Only
+this plan's `CategorySearchQuery` task survived, salvaged into that design's increment 1.**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make the filter modal's search reach every category — subjects and locations as well as genres — and let you select them.

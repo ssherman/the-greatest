@@ -34,5 +34,6 @@ module Books
     }
     scope :sorted_by_name, -> { order(:name) }
     scope :filterable, -> { where.not(slug: "unknown") }
+    scope :search_by_name, ->(name) { where("name ILIKE ?", "%" + sanitize_sql_like(name) + "%") }
   end
 end

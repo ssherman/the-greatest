@@ -112,5 +112,21 @@ module Books
 
       assert_response :not_found
     end
+
+    test "options returns the full genre facet, not the increment-2 pane size" do
+      book = books_books(:war_and_peace)
+      RankedItem.create!(item: book, ranking_configuration: @rc, rank: 1, score: 100)
+
+      (Books::FilterFacetsQuery::DEFAULT_LIMIT + 2).times do |n|
+        category = Books::Category.create!(name: "Generated Genre #{n}", category_type: :genre)
+        CategoryItem.create!(category: category, item: book)
+      end
+
+      get "/filters/options"
+
+      assert_response :success
+      facets = @controller.view_assigns["facets"]
+      assert_operator facets.genres.size, :>, Books::FilterFacetsQuery::DEFAULT_LIMIT
+    end
   end
 end

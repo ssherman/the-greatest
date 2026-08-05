@@ -46,7 +46,7 @@ module Books
     end
 
     test "escapes LIKE wildcards in the query" do
-      assert_empty Books::CategorySearchQuery.call("%zzz")
+      assert_empty Books::CategorySearchQuery.call("%", limit: 100)
     end
   end
 end

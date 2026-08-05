@@ -168,9 +168,8 @@ module Books
         Books::Category.create!(name: "Generated Genre #{n}", category_type: :genre).slug
       }
 
-      assert_nothing_raised do
-        Books::FilterParams.call(ActionController::Parameters.new(category_id: slugs.first(6).join(",")))
-      end
+      result = Books::FilterParams.call(ActionController::Parameters.new(category_id: slugs.first(6).join(",")))
+      assert_equal 6, result.categories.size
 
       assert_raises ActiveRecord::RecordNotFound do
         Books::FilterParams.call(ActionController::Parameters.new(category_id: slugs.join(",")))
@@ -184,9 +183,8 @@ module Books
         Books::Country.create!(name: "Generated Country #{n}").slug
       }
 
-      assert_nothing_raised do
-        Books::FilterParams.call(ActionController::Parameters.new(country_id: slugs.first(10).join(",")))
-      end
+      result = Books::FilterParams.call(ActionController::Parameters.new(country_id: slugs.first(10).join(",")))
+      assert_equal 10, result.countries.size
 
       assert_raises ActiveRecord::RecordNotFound do
         Books::FilterParams.call(ActionController::Parameters.new(country_id: slugs.join(",")))

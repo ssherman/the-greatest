@@ -28,12 +28,18 @@ class Books::FiltersController < ApplicationController
     ranking_configuration = @ranking_configuration || Books::RankingConfiguration.default_primary
     raise ActiveRecord::RecordNotFound if ranking_configuration.nil?
 
+    # Pinned to the pre-rework limit: this action renders the current filter
+    # modal, whose search box filters client-side over already-rendered
+    # options rather than querying the server, so it needs the full set
+    # (166 genres + 179 countries in dev), not the increment-2 pane size of
+    # 24. Both this action and this pin are deleted in increment 2.
     @facets = Books::FilterFacetsQuery.call(
       ranking_configuration: ranking_configuration,
       categories: @categories,
       countries: @countries,
       year_start: @year_start,
-      year_end: @year_end
+      year_end: @year_end,
+      limit: 500
     )
   end
 

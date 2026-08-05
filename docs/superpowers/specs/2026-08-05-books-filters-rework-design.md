@@ -207,6 +207,17 @@ The Published pane is two number inputs and renders inline — no endpoint.
 - **`Books::FilterParams`** — gains the caps (§8). Otherwise untouched.
 - **`Books::FilterPath`**, **`Books::FilterTitle`**, **`Books::RankedBooksQuery`** —
   untouched. Their existing tests are the regression guard.
+- **Search results carry no count.** The facet queries count ranked books in the current
+  ranking configuration matching the current filters; `item_count` / `book_count` are
+  global counter columns. Measured on dev they diverge sharply — Fiction reads 15,875 as a
+  facet but 65,073 as `item_count`; American reads 8,714 vs 42,289 — so showing both in
+  the same pane would display two different numbers for one row. Legacy resolves this by
+  omitting counts from autocomplete results entirely. Increment 2's search rows therefore
+  render no count; only the browsed facet rows do.
+- **No trigram index on `categories.name`.** The `ILIKE '%…%'` search cannot use the
+  existing btree, so it sequentially scans ~76,000 rows at a measured 26–40 ms. That is
+  acceptable behind the 250 ms debounce. `pg_trgm` GIN is the lever if it degrades at
+  production scale.
 
 ### Components
 
@@ -362,6 +373,9 @@ footer, that tail loses its only entry point. Increment 3 is load-bearing.
 - The crawl-class predicate — class 1 / 2 / 3 assignment across the grammar, table-driven.
 - `Books::FilterPath`, `Books::FilterTitle`, `Books::RankedBooksQuery` — **existing tests
   must pass untouched.**
+- The `name: :asc` tie-break in both search queries is currently unexercised — no category
+  or country fixture shares a count value — and should be covered by increment 2's pane
+  tests, where deterministic row ordering matters for rendered output.
 
 **Component** — structural contracts only: input `name`/`value`/`checked`, row counts,
 type badges present, `data-*` hooks. Never class names, layout, or copy.

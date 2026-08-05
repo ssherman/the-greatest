@@ -16,7 +16,7 @@ module Books
 
       Books::Country
         .filterable
-        .where("name ILIKE ?", "%#{Books::Country.sanitize_sql_like(@query)}%")
+        .search_by_name(@query)
         .order(book_count: :desc, name: :asc)
         .limit(@limit)
         .to_a
