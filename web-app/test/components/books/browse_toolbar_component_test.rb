@@ -1,12 +1,33 @@
-# frozen_string_literal: true
-
 require "test_helper"
 
-class Books::BrowseToolbarComponentTest < ViewComponent::TestCase
-  def test_component_renders_something_useful
-    # assert_equal(
-    #   %(<span>Hello, components!</span>),
-    #   render_inline(Books::BrowseToolbarComponent.new(message: "Hello, components!")).css("span").to_html
-    # )
+module Books
+  class BrowseToolbarComponentTest < ViewComponent::TestCase
+    test "the default type and sort omit both params from every active link" do
+      render_inline(Books::BrowseToolbarComponent.new(
+        base_path: "/genres",
+        type: Books::BrowseQuery::TYPES.first,
+        sort: Books::BrowseQuery::SORTS.first,
+        show_types: true
+      ))
+
+      assert_selector "a[href='/genres']", count: 2
+    end
+
+    test "a non-active link composes both axes into the query string" do
+      render_inline(Books::BrowseToolbarComponent.new(
+        base_path: "/genres", type: "subject", sort: "name", show_types: true
+      ))
+
+      assert_selector "a[href='/genres?filter=location&sort=name']"
+      assert_selector "a[href='/genres?filter=subject']"
+    end
+
+    test "show_types false omits the type group entirely" do
+      render_inline(Books::BrowseToolbarComponent.new(
+        base_path: "/genres", type: "genre", sort: "book_count", show_types: false
+      ))
+
+      assert_selector "[aria-label='Category type']", count: 0
+    end
   end
 end
