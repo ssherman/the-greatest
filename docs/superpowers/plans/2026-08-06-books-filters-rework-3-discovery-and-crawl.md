@@ -436,9 +436,11 @@ module Books
     end
 
     test "genres is indexable" do
+      Books::PublicIndexing.stubs(:enabled?).returns(true)
+
       get "/genres"
 
-      assert_select "meta[name=robots][content=?]", /\Aindex/
+      assert_select "meta[name=robots][content^=index]"
     end
 
     test "genres accepts a type filter" do
@@ -757,10 +759,12 @@ Append to `test/controllers/books/browse_controller_test.rb`:
     end
 
     test "countries is edge cacheable and indexable" do
+      Books::PublicIndexing.stubs(:enabled?).returns(true)
+
       get "/countries"
 
       assert_match "public", response.headers["Cache-Control"].to_s
-      assert_select "meta[name=robots][content=?]", /\Aindex/
+      assert_select "meta[name=robots][content^=index]"
     end
 
     test "countries accepts a sort" do
