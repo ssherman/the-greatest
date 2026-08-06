@@ -105,7 +105,7 @@
   rails generate model Music::Artist name:string slug:string:uniq
   rails generate sidekiq:job music/calculate_artist_ranking
   rails generate stimulus music/player
-  rails generate component Admin::SearchComponent url placeholder
+  rails generate view_component:component Admin::SearchComponent url placeholder
   rails generate avo:resource Music::Artist
 
   # ❌ Incorrect - NEVER manually create files

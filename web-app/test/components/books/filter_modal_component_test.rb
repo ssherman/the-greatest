@@ -105,5 +105,48 @@ module Books
 
       assert_selector "[data-books--filter-target='summary'][data-axis='category']", text: "Novels"
     end
+
+    test "applied categories render checked in the modal itself, not inside the pane frame" do
+      render_modal(categories: [categories(:books_novels_genre)])
+
+      assert_selector "[data-books--filter-target='selected'][data-axis='category'] input[value='novels'][checked]"
+      assert_no_selector "turbo-frame#books_filter_pane_category input"
+    end
+
+    test "applied countries render checked in the modal itself, not inside the pane frame" do
+      render_modal(countries: [books_countries(:french)])
+
+      assert_selector "[data-books--filter-target='selected'][data-axis='country'] input[value='french'][checked]"
+      assert_no_selector "turbo-frame#books_filter_pane_country input"
+    end
+
+    test "the selected container renders nothing when no filter is applied on that axis" do
+      render_modal
+
+      assert_selector "[data-books--filter-target='selected'][data-axis='category']"
+      assert_no_selector "[data-books--filter-target='selected'][data-axis='category'] input"
+    end
+
+    test "the dialog has an accessible name pointing at the root heading" do
+      render_modal
+
+      assert_selector "dialog[aria-labelledby='books_filter_modal_heading_root']"
+      assert_selector "h3#books_filter_modal_heading_root", text: "Filters"
+    end
+
+    test "each pane carries its own heading for the dialog's accessible name to target" do
+      render_modal
+
+      assert_selector "#books_filter_modal_heading_category"
+      assert_selector "#books_filter_modal_heading_country"
+      assert_selector "#books_filter_modal_heading_year"
+    end
+
+    test "search inputs carry an aria-label independent of the placeholder" do
+      render_modal
+
+      assert_selector "input[data-axis='category'][aria-label]"
+      assert_selector "input[data-axis='country'][aria-label]"
+    end
   end
 end

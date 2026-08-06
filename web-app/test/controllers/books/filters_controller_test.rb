@@ -108,13 +108,13 @@ module Books
       assert_select "turbo-frame#books_filter_results_country"
     end
 
-    test "the pane reflects the current selection as checked" do
+    test "the pane excludes an already-applied category from the browse list" do
       RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: @rc, rank: 1, score: 100)
 
       get "/filters/categories", params: {category_slugs: ["novels"]}
 
       assert_response :success
-      assert_select "input[name='category_slugs[]'][value=novels][checked]"
+      assert_select "input[name='category_slugs[]'][value=novels]", false
     end
 
     test "searching returns only the results frame" do

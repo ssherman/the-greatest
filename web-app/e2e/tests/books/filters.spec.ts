@@ -22,6 +22,75 @@ test.describe('Books filters', () => {
     await expect.poll(() => paneRequests.length).toBe(1);
   });
 
+  test('the level-1 summary reflects applied filters without opening any pane', async ({ page }) => {
+    await page.goto('/the-greatest/novels/books/written-by/french/authors');
+    await openModal(page);
+
+    await expect(page.locator("[data-books--filter-target='summary'][data-axis='category']")).toHaveText('Novels');
+    await expect(page.locator("[data-books--filter-target='summary'][data-axis='country']")).toHaveText('French');
+  });
+
+  test('applying without opening any pane preserves the current filters', async ({ page }) => {
+    await page.goto('/the-greatest/novels/books/written-by/french/authors');
+    await openModal(page);
+
+    // Asserting the URL is unchanged would pass trivially on the very first
+    // poll, before the redirect round trip even starts -- exactly the vacuous
+    // pattern this branch's review is about. The GET to /filters 303s, and
+    // Turbo's fetch-driven follow of that redirect doesn't complete (and the
+    // address bar doesn't update) until the network settles, so waiting for
+    // that forces the assertion to observe the real outcome.
+    await page.getByRole('button', { name: 'Apply' }).click();
+    await page.waitForLoadState('networkidle');
+
+    await expect(page).toHaveURL('/the-greatest/novels/books/written-by/french/authors');
+    await expect(page.getByTestId('filter-chip')).toHaveCount(2);
+  });
+
+  test('applying after opening only one pane still preserves the other axis', async ({ page }) => {
+    await page.goto('/the-greatest/novels/books/written-by/french/authors');
+    await openModal(page);
+
+    await page.getByRole('button', { name: /Category/ }).click();
+    await page.locator("input[name='category_slugs[]']").first().waitFor();
+    await page.getByRole('button', { name: /^‹/ }).click();
+
+    await page.getByRole('button', { name: 'Apply' }).click();
+    await page.waitForLoadState('networkidle');
+
+    await expect(page).toHaveURL('/the-greatest/novels/books/written-by/french/authors');
+    await expect(page.getByTestId('filter-chip')).toHaveCount(2);
+  });
+
+  test('cancelling discards staged selections', async ({ page }) => {
+    await page.goto('/');
+    await openModal(page);
+    await page.getByRole('button', { name: /Category/ }).click();
+
+    // A badge (rendered only for category_type subject/location, never genre)
+    // is the structural signal that a row can't be in the browse facet list --
+    // FilterFacetsQuery.genres only ever returns genre-type rows -- so this
+    // guarantees the hoist path (no twin to adopt into) rather than relying on
+    // search-result order.
+    const search = page.getByPlaceholder('Search genres, subjects, settings');
+    await search.fill('novels');
+    const hit = page.locator("turbo-frame#books_filter_results_category label:has(.badge)").first().locator('input');
+    await hit.waitFor();
+    const slug = await hit.getAttribute('value');
+    await hit.check();
+    await expect(page.locator(`input[name='category_slugs[]'][value='${slug}']`)).toBeChecked();
+
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.locator('dialog#books_filter_modal')).toBeHidden();
+
+    await openModal(page);
+    await page.getByRole('button', { name: /Category/ }).click();
+
+    // A naive form.reset() would leave the hoisted row parked -- unchecked but
+    // still present -- in the selected container. It must be gone entirely.
+    await expect(page.locator(`input[name='category_slugs[]'][value='${slug}']`)).toHaveCount(0);
+  });
+
   test('level 1 shows three axes and drills into one', async ({ page }) => {
     await page.goto('/');
     await openModal(page);
@@ -72,8 +141,15 @@ test.describe('Books filters', () => {
     await openModal(page);
 
     await page.getByRole('button', { name: /Category/ }).click();
-    await page.getByPlaceholder('Search genres, subjects, settings').fill('fren');
+    const search = page.getByPlaceholder('Search genres, subjects, settings');
 
+    await search.fill('novel');
+    await expect(page.locator("turbo-frame#books_filter_results_category input").first()).toBeVisible();
+
+    // "peruvian" matches only the Peruvian country, never a category name --
+    // verified against the dev dataset -- so this proves scoping rather than
+    // merely proving the debounce fired.
+    await search.fill('peruvian');
     await expect(page.locator("turbo-frame#books_filter_results_category input")).toHaveCount(0);
   });
 

@@ -54,12 +54,10 @@ class Books::FiltersController < ApplicationController
     else
       Books::FilterFacetsQuery.countries(**facet_args(filters, rc))
     end
-    selected = (axis == :category) ? filters.categories : filters.countries
 
     render Books::FilterPaneComponent.new(
       axis: axis,
       facet_rows: facet_rows,
-      selected: selected,
       results_src: pane_path(axis)
     ), layout: false
   end

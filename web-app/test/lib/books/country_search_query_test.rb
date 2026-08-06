@@ -27,6 +27,12 @@ module Books
       assert_equal counts.sort.reverse, counts
     end
 
+    test "breaks a book_count tie by name ascending" do
+      results = Books::CountrySearchQuery.call("n", limit: 100)
+
+      assert_equal %w[french algerian japanese], results.map(&:slug)
+    end
+
     test "applies the limit after ordering" do
       results = Books::CountrySearchQuery.call("n", limit: 1)
 

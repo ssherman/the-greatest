@@ -9,8 +9,16 @@ export default class extends Controller {
 
   connect() {
     this.timers = {}
+    this.currentLevel = "root"
+    this.dialog = this.element.closest("dialog")
+    this.discardBound = this.discard.bind(this)
+    this.dialog?.addEventListener("close", this.discardBound)
     this.show("root")
     this.refresh()
+  }
+
+  disconnect() {
+    this.dialog?.removeEventListener("close", this.discardBound)
   }
 
   open(event) {
@@ -22,15 +30,42 @@ export default class extends Controller {
   }
 
   cancel() {
-    this.element.closest("dialog")?.close()
+    this.dialog?.close()
   }
 
   show(level) {
+    const previousLevel = this.currentLevel
+    this.currentLevel = level
     this.levelTargets.forEach((el) => el.classList.toggle("hidden", el.dataset.level !== level))
-    if (level === "root") return
+    this.dialog?.setAttribute("aria-labelledby", `books_filter_modal_heading_${level}`)
+
+    if (level === "root") {
+      this.focusRootButton(previousLevel)
+      return
+    }
 
     const pane = this.paneTargets.find((el) => el.dataset.axis === level)
     if (pane && !pane.src && pane.dataset.paneSrc) pane.src = pane.dataset.paneSrc
+
+    this.focusEnteringLevel(level)
+  }
+
+  // Moving between panes hides the level the user was just looking at via
+  // display:none, which drops document.activeElement to <body>. Sending focus
+  // into the entering level keeps a keyboard user's place and gives a
+  // screen-reader user a signal the dialog's contents changed.
+  focusRootButton(level) {
+    this.element.querySelector(`[data-action~="books--filter#open"][data-level-target="${level}"]`)?.focus()
+  }
+
+  focusEnteringLevel(level) {
+    const query = this.queryTargets.find((el) => el.dataset.axis === level)
+    if (query) {
+      query.focus()
+      return
+    }
+
+    this.levelTargets.find((el) => el.dataset.level === level)?.querySelector("input")?.focus()
   }
 
   search(event) {
@@ -93,6 +128,7 @@ export default class extends Controller {
       } else {
         requestAnimationFrame(() => {
           if (!input.checked) return
+          label.dataset.staged = "true"
           this.selectedFor(input.dataset.axis)?.appendChild(label)
           this.refresh()
         })
@@ -114,6 +150,32 @@ export default class extends Controller {
     return this.selectedTargets.find((el) => el.dataset.axis === axis)
   }
 
+  // A pane's cap notice arrives with its frame, well after connect() has
+  // already run refresh() once. Without this, checking up to the cap inside a
+  // pane that just loaded leaves the browse rows enabled past the limit until
+  // some unrelated event happens to call refresh() again.
+  capNoticeTargetConnected() {
+    this.refresh()
+  }
+
+  // Cancel, Escape, and backdrop-click all end up here via the dialog's native
+  // "close" event, so staged state is discarded identically no matter how the
+  // dialog closed. form.reset() alone is not enough: a checked search hit that
+  // got hoisted into the selected container is a DOM move, not just a value
+  // change, so reset() would leave it sitting there unchecked instead of gone.
+  discard() {
+    this.selectedTargets.forEach((container) => {
+      container.querySelectorAll("[data-staged]").forEach((label) => label.remove())
+    })
+
+    this.element.querySelector("form")?.reset()
+    this.queryTargets.forEach((input) => { input.value = "" })
+    this.resultsTargets.forEach((frame) => { frame.innerHTML = "" })
+
+    this.refresh()
+    this.show("root")
+  }
+
   refresh() {
     this.applyAxis("category", this.maxCategoriesValue)
     this.applyAxis("country", this.maxCountriesValue)
@@ -121,9 +183,10 @@ export default class extends Controller {
   }
 
   applyAxis(axis, max) {
-    const inputs = Array.from(this.element.querySelectorAll(`input[data-axis="${axis}"]`))
-    // An unopened pane has no inputs yet. Bailing keeps the server-rendered
-    // summary, which is correct; recomputing from zero inputs would blank it.
+    const inputs = Array.from(this.element.querySelectorAll(`input[type="checkbox"][data-axis="${axis}"]`))
+    // An unopened pane has no browse/results checkboxes yet, but applied
+    // selections are hoisted into the modal itself and are always present, so
+    // this only stays empty when nothing is applied and nothing is staged.
     if (inputs.length === 0) return
 
     const checked = inputs.filter((el) => el.checked)

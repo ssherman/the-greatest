@@ -2,13 +2,9 @@
   <%= helpers.turbo_frame_tag results_frame_id,
         data: {"books--filter-target": "results", axis: axis, results_src: results_src} %>
 
-  <div class="flex flex-col gap-1" data-books--filter-target="selected" data-axis="<%= axis %>">
-    <%= render Books::FilterOptionRowsComponent.new(axis: axis, rows: selected, checked: true, show_counts: false) %>
-  </div>
-
   <div class="flex flex-col gap-1" data-books--filter-target="browse" data-axis="<%= axis %>">
     <%= render Books::FilterOptionRowsComponent.new(axis: axis, rows: facet_rows) %>
   </div>
 
-  <p class="text-sm text-warning hidden" data-books--filter-target="capNotice" data-axis="<%= axis %>"></p>
+  <p class="text-sm text-warning hidden" role="status" aria-live="polite" data-books--filter-target="capNotice" data-axis="<%= axis %>"></p>
 <% end %>

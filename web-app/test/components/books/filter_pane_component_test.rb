@@ -3,7 +3,7 @@ require "test_helper"
 module Books
   class FilterPaneComponentTest < ViewComponent::TestCase
     def render_pane(**options)
-      defaults = {axis: :category, facet_rows: [], selected: [], results_src: "/filters/categories"}
+      defaults = {axis: :category, facet_rows: [], results_src: "/filters/categories"}
       render_inline(Books::FilterPaneComponent.new(**defaults.merge(options)))
     end
 
@@ -22,12 +22,6 @@ module Books
       assert_no_selector "turbo-frame#books_filter_results_category input"
     end
 
-    test "renders selected records checked in the selected container" do
-      render_pane(selected: [categories(:books_novels_genre)])
-
-      assert_selector "[data-books--filter-target='selected'] input[value='novels'][checked]"
-    end
-
     test "renders facet rows unchecked with counts in the browse container" do
       render_pane(facet_rows: [{record: categories(:books_fiction_genre), count: 4321}])
 
@@ -40,9 +34,14 @@ module Books
       render_pane(axis: :category)
 
       assert_selector "[data-books--filter-target='results'][data-axis='category']"
-      assert_selector "[data-books--filter-target='selected'][data-axis='category']"
       assert_selector "[data-books--filter-target='browse'][data-axis='category']"
       assert_selector "[data-books--filter-target='capNotice'][data-axis='category']"
+    end
+
+    test "does not render a selected container -- that lives in the modal now" do
+      render_pane(axis: :category)
+
+      assert_no_selector "[data-books--filter-target='selected']"
     end
 
     test "the cap notice starts hidden and empty" do
@@ -53,9 +52,15 @@ module Books
     end
 
     test "uses the country input name on the country axis" do
-      render_pane(axis: :country, selected: [books_countries(:french)], results_src: "/filters/countries")
+      render_pane(axis: :country, facet_rows: [{record: books_countries(:french), count: 2}], results_src: "/filters/countries")
 
-      assert_selector "input[name='country_slugs[]'][value='french'][checked]"
+      assert_selector "input[name='country_slugs[]'][value='french']"
+    end
+
+    test "the cap notice is a live region" do
+      render_pane
+
+      assert_selector "[data-books--filter-target='capNotice'][role='status'][aria-live='polite']"
     end
   end
 end

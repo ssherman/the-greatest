@@ -1,4 +1,4 @@
-<dialog id="<%= modal_id %>" class="modal modal-bottom sm:modal-middle">
+<dialog id="<%= modal_id %>" class="modal modal-bottom sm:modal-middle" aria-labelledby="books_filter_modal_heading_root">
   <div class="modal-box max-w-xl"
        data-controller="books--filter"
        data-books--filter-max-categories-value="<%= max_categories %>"
@@ -10,7 +10,7 @@
       <% end %>
 
       <div data-books--filter-target="level" data-level="root">
-        <h3 class="font-bold text-lg mb-4">Filters</h3>
+        <h3 id="books_filter_modal_heading_root" class="font-bold text-lg mb-4">Filters</h3>
         <ul class="menu w-full p-0">
           <% AXES.each do |row| %>
             <li>
@@ -35,6 +35,7 @@
 
       <% ["category", "country"].each do |axis| %>
         <div class="hidden" data-books--filter-target="level" data-level="<%= axis %>">
+          <h3 id="books_filter_modal_heading_<%= axis %>" class="sr-only"><%= AXES.find { |row| row[:axis] == axis }[:label] %></h3>
           <button type="button" class="btn btn-ghost btn-sm mb-3" data-action="books--filter#back">
             &lsaquo; <%= AXES.find { |row| row[:axis] == axis }[:label] %>
           </button>
@@ -42,11 +43,16 @@
           <div class="form-control mb-3">
             <input type="search" class="input input-bordered w-full"
                    placeholder="<%= (axis == "category") ? "Search genres, subjects, settings" : "Search origins" %>"
+                   aria-label="<%= (axis == "category") ? "Search genres, subjects, settings" : "Search origins" %>"
                    data-books--filter-target="query" data-axis="<%= axis %>"
                    data-action="input->books--filter#search keydown->books--filter#suppressEnter">
           </div>
 
           <div class="max-h-72 overflow-y-auto pr-1">
+            <div class="flex flex-col gap-1" data-books--filter-target="selected" data-axis="<%= axis %>">
+              <%= render Books::FilterOptionRowsComponent.new(axis: axis, rows: applied_for(axis), checked: true, show_counts: false) %>
+            </div>
+
             <%= helpers.turbo_frame_tag "books_filter_pane_#{axis}",
                   data: {"books--filter-target": "pane", axis: axis, pane_src: pane_src(axis)} do %>
               <div class="flex justify-center py-8">
@@ -58,6 +64,7 @@
       <% end %>
 
       <div class="hidden" data-books--filter-target="level" data-level="year">
+        <h3 id="books_filter_modal_heading_year" class="sr-only">Published</h3>
         <button type="button" class="btn btn-ghost btn-sm mb-3" data-action="books--filter#back">
           &lsaquo; Published
         </button>

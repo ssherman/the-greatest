@@ -34,6 +34,10 @@ module Books
       ranking_configuration&.primary? ? nil : ranking_configuration&.id
     end
 
+    def applied_for(axis)
+      (axis == "category") ? categories : countries
+    end
+
     def pane_src(axis)
       path = (axis == "category") ? helpers.books_filters_categories_path : helpers.books_filters_countries_path
 

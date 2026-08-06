@@ -1,15 +1,14 @@
 module Books
   class FilterPaneComponent < ViewComponent::Base
-    def initialize(axis:, facet_rows: [], selected: [], results_src: nil)
+    def initialize(axis:, facet_rows: [], results_src: nil)
       @axis = axis.to_s
       @facet_rows = Array(facet_rows)
-      @selected = Array(selected)
       @results_src = results_src
     end
 
     private
 
-    attr_reader :axis, :facet_rows, :selected, :results_src
+    attr_reader :axis, :facet_rows, :results_src
 
     def pane_frame_id
       "books_filter_pane_#{axis}"
