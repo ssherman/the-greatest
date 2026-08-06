@@ -221,12 +221,12 @@ module Books
       assert_select "[data-testid=filter-chip]", 1
     end
 
-    test "the modal frame is lazy and carries the current filter state" do
+    test "the modal category pane carries the current filter state as a deferred source" do
       get "/the-greatest/novels/books"
 
-      assert_select "turbo-frame#books_filter_options[loading=lazy]" do |frame|
-        assert_match "category_slugs", frame.first["src"]
-        assert_match "novels", frame.first["src"]
+      assert_select "turbo-frame#books_filter_pane_category[data-pane-src]" do |frame|
+        assert_match "category_slugs", frame.first["data-pane-src"]
+        assert_match "novels", frame.first["data-pane-src"]
       end
     end
 

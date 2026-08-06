@@ -1,14 +1,84 @@
-<%# Closing keeps the already-loaded frame in the DOM, so staged-but-unapplied
-    input would survive into the next open. reset() restores each control to the
-    server-rendered value, which is exactly the currently-applied filter set. %>
-<dialog id="<%= modal_id %>" class="modal"
-        onclose="this.querySelector('#books_filter_options form')?.reset()">
-  <div class="modal-box max-w-xl" data-controller="books--filter-search">
-    <h3 class="font-bold text-lg mb-4">Filters</h3>
+<dialog id="<%= modal_id %>" class="modal modal-bottom sm:modal-middle">
+  <div class="modal-box max-w-xl"
+       data-controller="books--filter"
+       data-books--filter-max-categories-value="<%= max_categories %>"
+       data-books--filter-max-countries-value="<%= max_countries %>">
 
-    <%= helpers.turbo_frame_tag "books_filter_options", src: options_path, loading: :lazy do %>
-      <div class="flex justify-center py-8">
-        <span class="loading loading-spinner loading-md"></span>
+    <%= form_with url: helpers.books_filters_path, method: :get, data: {turbo_frame: "_top"} do %>
+      <% if rc_param %>
+        <%= hidden_field_tag :ranking_configuration_id, rc_param %>
+      <% end %>
+
+      <div data-books--filter-target="level" data-level="root">
+        <h3 class="font-bold text-lg mb-4">Filters</h3>
+        <ul class="menu w-full p-0">
+          <% AXES.each do |row| %>
+            <li>
+              <button type="button" class="flex justify-between items-center w-full"
+                      data-action="books--filter#open" data-level-target="<%= row[:axis] %>">
+                <span class="flex flex-col items-start">
+                  <span class="font-semibold"><%= row[:label] %></span>
+                  <% if row[:hint] %>
+                    <span class="text-xs text-base-content/60"><%= row[:hint] %></span>
+                  <% end %>
+                </span>
+                <span class="flex items-center gap-2">
+                  <span class="text-sm text-base-content/70 truncate max-w-[10rem]"
+                        data-books--filter-target="summary" data-axis="<%= row[:axis] %>"><%= summary_for(row[:axis]) %></span>
+                  <span aria-hidden="true">&rsaquo;</span>
+                </span>
+              </button>
+            </li>
+          <% end %>
+        </ul>
+      </div>
+
+      <% ["category", "country"].each do |axis| %>
+        <div class="hidden" data-books--filter-target="level" data-level="<%= axis %>">
+          <button type="button" class="btn btn-ghost btn-sm mb-3" data-action="books--filter#back">
+            &lsaquo; <%= AXES.find { |row| row[:axis] == axis }[:label] %>
+          </button>
+
+          <div class="form-control mb-3">
+            <input type="search" class="input input-bordered w-full"
+                   placeholder="<%= (axis == "category") ? "Search genres, subjects, settings" : "Search origins" %>"
+                   data-books--filter-target="query" data-axis="<%= axis %>"
+                   data-action="input->books--filter#search">
+          </div>
+
+          <div class="max-h-72 overflow-y-auto pr-1">
+            <%= helpers.turbo_frame_tag "books_filter_pane_#{axis}",
+                  data: {"books--filter-target": "pane", axis: axis, pane_src: pane_src(axis)} do %>
+              <div class="flex justify-center py-8">
+                <span class="loading loading-spinner loading-md"></span>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+
+      <div class="hidden" data-books--filter-target="level" data-level="year">
+        <button type="button" class="btn btn-ghost btn-sm mb-3" data-action="books--filter#back">
+          &lsaquo; Published
+        </button>
+        <div class="grid grid-cols-2 gap-4">
+          <div class="form-control">
+            <label class="label" for="year_start"><span class="label-text">From year</span></label>
+            <%= number_field_tag :year_start, year_start, class: "input input-bordered w-full", placeholder: "Any",
+                  data: {"books--filter-target": "year", axis: "year", action: "input->books--filter#refresh"} %>
+          </div>
+          <div class="form-control">
+            <label class="label" for="year_end"><span class="label-text">To year</span></label>
+            <%= number_field_tag :year_end, year_end, class: "input input-bordered w-full", placeholder: "Any",
+                  data: {"books--filter-target": "year", axis: "year", action: "input->books--filter#refresh"} %>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-action">
+        <%= link_to "Clear", clear_path, class: "btn btn-ghost", data: {turbo_frame: "_top"} %>
+        <button type="button" class="btn" data-action="books--filter#cancel">Cancel</button>
+        <%= submit_tag "Apply", class: "btn btn-primary", data: {disable_with: false} %>
       </div>
     <% end %>
   </div>
