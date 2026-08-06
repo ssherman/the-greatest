@@ -387,7 +387,11 @@ Renders, in this order inside `<turbo-frame id="books_filter_pane_<axis>">`:
 
 - [ ] **Step 1: Generate the component**
 
-Run: `bin/rails generate component Books::FilterPane`
+Run: `bin/rails generate view_component:component Books::FilterPane`
+
+Not `generate component` — view_component 4.12 registers the generator under the
+`view_component:` namespace, and the bare form does not exist. Several older docs in this
+repo (including `docs/dev-core-values.md`) still say `generate component`; they are stale.
 
 - [ ] **Step 2: Write the failing test**
 
