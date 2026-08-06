@@ -224,8 +224,10 @@ The Published pane is two number inputs and renders inline — no endpoint.
 - `Books::FilterBarComponent` — **unchanged.** Button plus crawlable chip-removal links.
 - `Books::FilterModalComponent` — **rewritten.** Dialog shell, the form, level 1, three
   pane shells.
-- `Books::CategoryPaneComponent`, `Books::CountryPaneComponent`,
-  `Books::YearPaneComponent` — new.
+- `Books::FilterPaneComponent` — new, one component parameterised by `axis:` rather than one
+  per axis. The category and country panes differ only in which query feeds them and whether
+  rows carry a type badge, and the badge is the row component's job. The Published pane is
+  two number inputs with no fetch, so it renders inline in the modal.
 - `Books::FilterOptionRowsComponent` — new. The shared checkbox-row renderer, used by both
   the panes and the search responses, so a row is defined once and the hoist mechanism has
   one shape to move.
