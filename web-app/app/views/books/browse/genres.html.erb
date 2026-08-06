@@ -17,7 +17,7 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       <% @records.each do |record| %>
         <%= render Books::BrowseCardComponent.new(
-              record: record, count: record.item_count, path: "/the-greatest/#{record.slug}/books"
+              record: record, count: record.ranked_count, path: "/the-greatest/#{record.slug}/books"
             ) %>
       <% end %>
     </div>

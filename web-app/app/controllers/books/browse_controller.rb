@@ -6,6 +6,7 @@ class Books::BrowseController < ApplicationController
   layout "books/application"
 
   before_action :cache_for_index_page
+  before_action :find_ranking_configuration
 
   TITLES = {
     "genre" => "Book Genres",
@@ -18,17 +19,39 @@ class Books::BrowseController < ApplicationController
     @sort = Books::BrowseQuery.normalized_sort(params[:sort])
     @indexable = true
     @page_title = TITLES.fetch(@type)
-    @canonical_path = (@type == Books::BrowseQuery::TYPES.first) ? books_genres_path : books_genres_path(filter: @type)
+    filter = (@type == Books::BrowseQuery::TYPES.first) ? {} : {filter: @type}
+    @canonical_path = paged? ? books_genres_page_path(page: page_number, **filter) : books_genres_path(**filter)
 
-    @pagy, @records = pagy_path(Books::BrowseQuery.categories(type: @type, sort: @sort), limit: 120)
+    @pagy, @records = pagy_path(
+      Books::BrowseQuery.categories(ranking_configuration: @ranking_configuration, type: @type, sort: @sort),
+      limit: 120
+    )
   end
 
   def countries
     @sort = Books::BrowseQuery.normalized_sort(params[:sort])
     @indexable = true
     @page_title = "Book Origins"
-    @canonical_path = books_countries_path
+    @canonical_path = paged? ? books_countries_page_path(page: page_number) : books_countries_path
 
-    @pagy, @records = pagy_path(Books::BrowseQuery.countries(sort: @sort), limit: 120)
+    @pagy, @records = pagy_path(
+      Books::BrowseQuery.countries(ranking_configuration: @ranking_configuration, sort: @sort),
+      limit: 120
+    )
+  end
+
+  private
+
+  def find_ranking_configuration
+    @ranking_configuration = Books::RankingConfiguration.default_primary
+    raise ActiveRecord::RecordNotFound if @ranking_configuration.nil?
+  end
+
+  def page_number
+    params[:page].to_i
+  end
+
+  def paged?
+    page_number > 1
   end
 end

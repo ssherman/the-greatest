@@ -83,6 +83,11 @@ test.describe('Books filters', () => {
     await page.getByRole('button', { name: 'Cancel' }).click();
     await expect(page.locator('dialog#books_filter_modal')).toBeHidden();
 
+    // discard() ends with show("root"), which used to focus a button inside the
+    // dialog that just closed -- DaisyUI keeps it focusable through its fade-out,
+    // so that overrode the browser's restoration and stranded the user at <body>.
+    await expect(page.getByRole('button', { name: 'Filters' })).toBeFocused();
+
     await openModal(page);
     await page.getByRole('button', { name: /Category/ }).click();
 

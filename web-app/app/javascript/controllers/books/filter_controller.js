@@ -54,7 +54,14 @@ export default class extends Controller {
   // display:none, which drops document.activeElement to <body>. Sending focus
   // into the entering level keeps a keyboard user's place and gives a
   // screen-reader user a signal the dialog's contents changed.
+  //
+  // discard() runs on the dialog's "close" event and ends with show("root").
+  // DaisyUI keeps the dialog focusable through its ~300ms fade-out, so focusing
+  // a button inside it here would override the browser's restoration of focus
+  // to the Filters trigger and strand a keyboard user at <body>.
   focusRootButton(level) {
+    if (!this.dialog?.open) return
+
     this.element.querySelector(`[data-action~="books--filter#open"][data-level-target="${level}"]`)?.focus()
   }
 

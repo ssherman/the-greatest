@@ -51,7 +51,7 @@ books_robots_content                 # already renders <meta name="robots">; rea
 2. **`?sort=book_count|name`**, defaulting to `book_count`. Sort is a view preference over identical content, so **the canonical omits it**; the type param is genuinely different content, so the canonical keeps it.
 3. **Pagination uses the existing `/page/:n` path form**, not `?page=`, matching every other books index.
 4. **Cards link to single-facet filter URLs only** — `/the-greatest/:slug/books` and `/the-greatest-books/written-by/:slug/authors`. That is class 1 in §9, the only class this increment creates a frontier for.
-5. **Rows with `item_count`/`book_count` of zero are excluded.** They render as links to pages with no results, which is the thin-content shape the crawl policy exists to avoid.
+5. **Browse pages are ranking-configuration-scoped, and both the gate and the displayed count are the *ranked* count.** ~~Rows with `item_count`/`book_count` of zero are excluded.~~ That was the wrong model. `categories.item_count` and `books_countries.book_count` are **catalog** counter caches over every book in the database, but the destination `/the-greatest/:slug/books` renders only books **ranked in the primary configuration**. Gating on the catalog counts left 38,535 of 50,633 category cards (76%) pointing at the "No books found" empty state — the same thin-content crawl sink this increment exists to remove, just moved from the sidebar to `/genres` — and made a card disagree with the filter modal about the same facet (Fiction: card 65,073, modal 15,875). So `BrowseQuery` joins an aggregate of `category_items`/`books_book_countries` restricted to the configuration's ranked books, excludes any row with no ranked books, and orders and displays by that ranked count.
 
 ## File Structure
 
@@ -231,7 +231,9 @@ EOF
   ```
   Returns an unpaginated **relation** so the controller can hand it to `pagy_path`. Tasks 3 and 4 call these.
 
-Rules: active only; `item_count`/`book_count` greater than zero; `unknown` excluded from countries via `filterable`; unknown `type` or `sort` values fall back to the defaults rather than raising, since they arrive from user-editable query strings and a 404 on `?sort=nonsense` would be hostile. `sort: "book_count"` orders `<count> DESC, name ASC`; `sort: "name"` orders `name ASC`.
+Rules: active only; **at least one book ranked in the given ranking configuration** (not `item_count`/`book_count` greater than zero — see decision 5); `unknown` excluded from countries via `filterable`; unknown `type` or `sort` values fall back to the defaults rather than raising, since they arrive from user-editable query strings and a 404 on `?sort=nonsense` would be hostile. `sort: "book_count"` orders `ranked_count DESC, name ASC`; `sort: "name"` orders `name ASC`.
+
+Both methods take a required `ranking_configuration:` keyword and expose `ranked_count` on each returned row. The count is computed in a joined aggregate subquery rather than a `.group()` on the outer relation, because pagy needs `count`/`offset`/`limit` and a grouped relation breaks `count`. The controllers pass `Books::RankingConfiguration.default_primary` and 404 when it is nil, matching `Books::FiltersController`.
 
 Note the public API says `book_count` for both axes even though the category column is `item_count` — the param name is legacy's and is shared by both pages; map it internally.
 

@@ -254,6 +254,12 @@ pages, so replacing it is a dependency, not a follow-up.
 Both are page-cached, so they cost nothing per request. Both are linked from the books
 footer so they are not orphaned.
 
+**Both pages are scoped to the primary ranking configuration and show ranked counts, not
+catalog counts.** A card's destination renders only ranked books, so gating and counting on
+`categories.item_count` / `books_countries.book_count` — counter caches over the whole
+catalog — would point 76% of cards at an empty page and make a card disagree with the filter
+modal's pane about the same facet. A facet with no ranked books gets no card at all.
+
 **Legacy's `/genres` renders every active category unpaginated** — 36,852 rows for
 subjects — which is part of why it is slow. The new pages are bounded: ordered by
 `item_count desc` and paginated with pagy at the same page size the ranked index uses, so

@@ -129,14 +129,21 @@ module Books
     end
 
     test "the comma in a path marks exactly the non-indexable set" do
+      # robots.txt disallows on the comma, so the comma has to track indexable?
+      # exactly -- including under an /rc/ prefix, which the rules only reach
+      # because they lead with /*.
+      alternate = Books::RankingConfiguration.new(id: 52, primary: false)
       pairs = [
-        [[categories(:books_novels_genre)], []],
-        [[categories(:books_novels_genre), categories(:books_fiction_genre)], []],
-        [[], [books_countries(:french), books_countries(:japanese)]]
+        [[categories(:books_novels_genre)], [], nil],
+        [[categories(:books_novels_genre), categories(:books_fiction_genre)], [], nil],
+        [[], [books_countries(:french), books_countries(:japanese)], nil],
+        [[categories(:books_novels_genre)], [], alternate],
+        [[categories(:books_novels_genre), categories(:books_fiction_genre)], [], alternate],
+        [[], [books_countries(:french), books_countries(:japanese)], alternate]
       ]
 
-      pairs.each do |cats, countries|
-        path = Books::FilterPath.call(categories: cats, countries: countries)
+      pairs.each do |cats, countries, rc|
+        path = Books::FilterPath.call(categories: cats, countries: countries, ranking_configuration: rc)
         assert_equal !path.include?(","), Books::FilterPath.indexable?(categories: cats, countries: countries)
       end
     end
