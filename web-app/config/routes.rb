@@ -440,10 +440,11 @@ Rails.application.routes.draw do
     get "rc/:ranking_configuration_id/page/:page", to: "books/ranked_items#index",
       as: :books_rc_page, constraints: {page: /\d+/}
 
-    # The modal posts here; #show 303s to the canonical filter path so the URL
-    # grammar lives only in Books::FilterPath. Neither is ever linked publicly.
+    # #show is the modal's Apply endpoint: it 303s to the canonical filter path
+    # so the URL grammar lives only in Books::FilterPath. #categories and
+    # #countries each render one drill-down pane. None of these are ever
+    # linked publicly.
     get "filters", to: "books/filters#show", as: :books_filters
-    get "filters/options", to: "books/filters#options", as: :books_filters_options
     get "filters/categories", to: "books/filters#categories", as: :books_filters_categories
     get "filters/countries", to: "books/filters#countries", as: :books_filters_countries
 

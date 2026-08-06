@@ -87,48 +87,6 @@ module Books
       assert_match "no-store", response.headers["Cache-Control"].to_s
     end
 
-    test "options renders the facet frame" do
-      RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: @rc, rank: 1, score: 100)
-
-      get "/filters/options"
-
-      assert_response :success
-      assert_select "turbo-frame#books_filter_options"
-      assert_select "form[action='/filters']"
-      assert_match "no-store", response.headers["Cache-Control"].to_s
-    end
-
-    test "options reflects the current selection as checked" do
-      RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: @rc, rank: 1, score: 100)
-
-      get "/filters/options", params: {category_slugs: ["novels"]}
-
-      assert_response :success
-      assert_select "input[name='category_slugs[]'][value=novels][checked]"
-    end
-
-    test "options 404s on an unknown slug" do
-      get "/filters/options", params: {category_slugs: ["no-such-genre"]}
-
-      assert_response :not_found
-    end
-
-    test "options returns the full genre facet, not the increment-2 pane size" do
-      book = books_books(:war_and_peace)
-      RankedItem.create!(item: book, ranking_configuration: @rc, rank: 1, score: 100)
-
-      (Books::FilterFacetsQuery::DEFAULT_LIMIT + 2).times do |n|
-        category = Books::Category.create!(name: "Generated Genre #{n}", category_type: :genre)
-        CategoryItem.create!(category: category, item: book)
-      end
-
-      get "/filters/options"
-
-      assert_response :success
-      facets = @controller.view_assigns["facets"]
-      assert_operator facets.genres.size, :>, Books::FilterFacetsQuery::DEFAULT_LIMIT
-    end
-
     test "the category pane renders its frame with facet rows" do
       RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: @rc, rank: 1, score: 100)
 
@@ -193,6 +151,12 @@ module Books
 
     test "the pane 404s on an unknown slug" do
       get "/filters/categories", params: {category_slugs: ["no-such-genre"]}
+
+      assert_response :not_found
+    end
+
+    test "the superseded options endpoint is gone" do
+      get "/filters/options"
 
       assert_response :not_found
     end
