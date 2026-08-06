@@ -97,5 +97,48 @@ module Books
 
       assert_equal "/rc/52", Books::FilterPath.call(ranking_configuration: rc)
     end
+
+    test "a single facet is indexable" do
+      assert Books::FilterPath.indexable?(categories: [categories(:books_novels_genre)], countries: [])
+      assert Books::FilterPath.indexable?(categories: [], countries: [books_countries(:french)])
+    end
+
+    test "no filters at all is indexable" do
+      assert Books::FilterPath.indexable?(categories: [], countries: [])
+    end
+
+    test "one category plus one country stays indexable" do
+      assert Books::FilterPath.indexable?(
+        categories: [categories(:books_novels_genre)],
+        countries: [books_countries(:french)]
+      )
+    end
+
+    test "two categories are not indexable" do
+      assert_not Books::FilterPath.indexable?(
+        categories: [categories(:books_novels_genre), categories(:books_fiction_genre)],
+        countries: []
+      )
+    end
+
+    test "two countries are not indexable" do
+      assert_not Books::FilterPath.indexable?(
+        categories: [],
+        countries: [books_countries(:french), books_countries(:japanese)]
+      )
+    end
+
+    test "the comma in a path marks exactly the non-indexable set" do
+      pairs = [
+        [[categories(:books_novels_genre)], []],
+        [[categories(:books_novels_genre), categories(:books_fiction_genre)], []],
+        [[], [books_countries(:french), books_countries(:japanese)]]
+      ]
+
+      pairs.each do |cats, countries|
+        path = Books::FilterPath.call(categories: cats, countries: countries)
+        assert_equal !path.include?(","), Books::FilterPath.indexable?(categories: cats, countries: countries)
+      end
+    end
   end
 end

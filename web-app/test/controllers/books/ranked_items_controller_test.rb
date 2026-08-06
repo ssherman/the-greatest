@@ -230,6 +230,24 @@ module Books
       end
     end
 
+    test "a multi-category filter URL is noindex" do
+      Books::PublicIndexing.stubs(:enabled?).returns(true)
+
+      get "/the-greatest/fiction,novels/books"
+
+      assert_response :success
+      assert_select "meta[name=robots][content*=noindex]"
+    end
+
+    test "a single-category filter URL is indexable" do
+      Books::PublicIndexing.stubs(:enabled?).returns(true)
+
+      get "/the-greatest/novels/books"
+
+      assert_response :success
+      assert_select "meta[name=robots][content^=index]"
+    end
+
     private
 
     # Bulk-inserts filler so tests can reach page 2+ against the controller's

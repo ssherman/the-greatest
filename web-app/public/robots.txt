@@ -3,3 +3,8 @@
 User-agent: *
 Disallow: /my/lists
 Disallow: /user_lists
+
+# Filter URLs combining two or more categories or countries. FilterPath emits a
+# comma only for a multi-valued segment, so the comma is exactly that boundary.
+Disallow: /the-greatest/*,*
+Disallow: /*written-by/*,*
