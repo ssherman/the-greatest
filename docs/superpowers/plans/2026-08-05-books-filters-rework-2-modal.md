@@ -1392,16 +1392,48 @@ EOF
 
 ---
 
-### Task 7: E2E and the gate
+### Task 7: Suppress Enter in the search box, then E2E and the gate
 
 **Files:**
+- Modify: `app/javascript/controllers/books/filter_controller.js`
+- Modify: `app/components/books/filter_modal_component.html.erb`
 - Rewrite: `e2e/tests/books/filters.spec.ts`
 
 **Interfaces:**
 - Consumes: everything above.
 - Produces: proof the drill-down works in a browser — in particular the hoist, which no Ruby test can reach.
 
-- [ ] **Step 1: Rewrite the spec**
+#### The Enter bug
+
+The pane search inputs sit inside the `<form>` that submits to `/filters`. A single text input in a form means **Enter submits it** — so typing a search and pressing Enter applies whatever is currently staged and navigates away, mid-search.
+
+This is not an edge case on the device this rework exists for: a mobile virtual keyboard's **Search / Go key is Enter**, so it is the *expected* way to finish typing a query on a phone.
+
+- [ ] **Step 1: Add the suppression**
+
+In `app/javascript/controllers/books/filter_controller.js`, add one action method (place it directly after `search`):
+
+```javascript
+  // The search inputs live inside the form that submits to /filters, so Enter
+  // would apply the staged filters mid-search. On a phone the keyboard's
+  // Search key IS Enter, so this is the common path, not an edge case.
+  suppressEnter(event) {
+    if (event.key === "Enter") event.preventDefault()
+  }
+```
+
+In `app/components/books/filter_modal_component.html.erb`, extend the search input's `data-action` to bind it — the value becomes two space-separated action descriptors:
+
+```erb
+                   data-action="input->books--filter#search keydown->books--filter#suppressEnter">
+```
+
+- [ ] **Step 2: Verify the build**
+
+Run: `yarn build:all`
+Expected: succeeds.
+
+- [ ] **Step 3: Rewrite the spec**
 
 Replace `e2e/tests/books/filters.spec.ts` entirely:
 
@@ -1529,6 +1561,20 @@ test.describe('Books filters', () => {
     await expect(page).toHaveURL('/');
   });
 
+  test('pressing Enter in the search box does not apply the filters', async ({ page }) => {
+    await page.goto('/');
+    await openModal(page);
+    await page.getByRole('button', { name: /Category/ }).click();
+
+    const search = page.getByPlaceholder('Search genres, subjects, settings');
+    await search.fill('novel');
+    await search.press('Enter');
+
+    await page.waitForTimeout(500);
+    await expect(page).toHaveURL('/');
+    await expect(page.locator('dialog#books_filter_modal')).toBeVisible();
+  });
+
   test('chips remove one filter at a time down to the root', async ({ page }) => {
     await page.goto('/the-greatest/novels/books/written-by/french/authors');
 
@@ -1572,7 +1618,7 @@ Before trusting any result, confirm port 3000 is **this worktree's** server. Cad
 - [ ] **Step 3: Run the spec**
 
 Run: `yarn test:e2e e2e/tests/books/filters.spec.ts`
-Expected: all 10 pass.
+Expected: all 11 pass.
 
 If a genre named `novels` or a country named `french` is missing from the dev database, the "applying across two axes" test fails on a missing checkbox — check the data before assuming a code defect. If every admin spec times out on the public homepage, the e2e user lost its role in a reseed: `bin/rails e2e:admin`.
 
@@ -1608,7 +1654,7 @@ EOF
 
 - [ ] `bin/rails test` → 0 failures, 0 errors
 - [ ] `bundle exec standardrb` → no offenses
-- [ ] `yarn test:e2e e2e/tests/books/filters.spec.ts` → 10/10
+- [ ] `yarn test:e2e e2e/tests/books/filters.spec.ts` → 11/11
 - [ ] `/filters/options` no longer routes; `FilterFacetsComponent` and `books--filter-search` no longer exist
 - [ ] The modal opens to three rows, drills into an axis, searches that axis only, and a checked search hit survives the next search
 - [ ] `app/lib/books/` is untouched by this increment — increment 1 owns the query layer
