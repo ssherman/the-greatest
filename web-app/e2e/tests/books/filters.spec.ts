@@ -57,13 +57,13 @@ test.describe('Books filters', () => {
     await openModal(page);
 
     await page.getByRole('button', { name: /Category/ }).click();
-    await page.locator("input[name='category_slugs[]'][value='novels']").check();
+    await page.locator("input[name='category_slugs[]'][value='fiction']").check();
     await page.getByRole('button', { name: /^‹/ }).click();
     await page.getByRole('button', { name: /Origin/ }).click();
     await page.locator("input[name='country_slugs[]'][value='french']").check();
     await page.getByRole('button', { name: 'Apply' }).click();
 
-    await expect(page).toHaveURL('/the-greatest/novels/books/written-by/french/authors');
+    await expect(page).toHaveURL('/the-greatest/fiction/books/written-by/french/authors');
     await expect(page.getByTestId('filter-chip')).toHaveCount(2);
   });
 
@@ -101,7 +101,7 @@ test.describe('Books filters', () => {
     await page.getByRole('button', { name: /Category/ }).click();
 
     const search = page.getByPlaceholder('Search genres, subjects, settings');
-    await search.fill('politic');
+    await search.fill('novels');
     const hit = page.locator("turbo-frame#books_filter_results_category input").first();
     await hit.waitFor();
     const slug = await hit.getAttribute('value');

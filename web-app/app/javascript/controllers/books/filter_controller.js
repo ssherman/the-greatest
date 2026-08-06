@@ -60,6 +60,13 @@ export default class extends Controller {
   // A search hit and a browsed row can name the same value. Checking the search
   // hit adopts the existing row when there is one, and otherwise moves the label
   // out of the results frame -- which the next search would otherwise discard.
+  // Both the adopt (remove) and move (appendChild) mutations are deferred to a
+  // requestAnimationFrame: mutating the node that dispatched the very "change"
+  // event we're handling, before the browser has finished dispatching it, is
+  // fragile regardless of who's driving the page. On the adopt path, focus
+  // moves to the twin before the search row is removed -- removing a focused
+  // element sends focus to <body>, which for a keyboard or screen-reader user
+  // drops them back to the top of the page mid-interaction.
   toggle(event) {
     const input = event.target
     const label = input.closest("label")
@@ -69,10 +76,18 @@ export default class extends Controller {
       const twin = this.findTwin(input, results)
       if (twin) {
         twin.checked = true
-        label.remove()
+        requestAnimationFrame(() => {
+          twin.focus()
+          label.remove()
+          this.refresh()
+        })
       } else {
-        this.selectedFor(input.dataset.axis)?.appendChild(label)
+        requestAnimationFrame(() => {
+          this.selectedFor(input.dataset.axis)?.appendChild(label)
+          this.refresh()
+        })
       }
+      return
     }
 
     this.refresh()
