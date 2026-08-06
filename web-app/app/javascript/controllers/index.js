@@ -13,6 +13,9 @@ application.register("authentication", AuthenticationController)
 import AutocompleteController from "./autocomplete_controller"
 application.register("autocomplete", AutocompleteController)
 
+import Books__FilterController from "./books/filter_controller"
+application.register("books--filter", Books__FilterController)
+
 import Books__FilterSearchController from "./books/filter_search_controller"
 application.register("books--filter-search", Books__FilterSearchController)
 
