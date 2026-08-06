@@ -64,6 +64,11 @@
     </main>
 
     <footer class="footer footer-center p-10 bg-base-300 text-base-content">
+      <nav class="grid grid-flow-col gap-4">
+        <%= link_to "Genres", books_genres_path, class: "link link-hover" %>
+        <%= link_to "Origins", books_countries_path, class: "link link-hover" %>
+        <%= link_to "Lists", books_lists_path, class: "link link-hover" %>
+      </nav>
       <aside>
         <p>Copyright © 2026 - All rights reserved by <%= domain_name %></p>
       </aside>

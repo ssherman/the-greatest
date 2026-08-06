@@ -17,5 +17,13 @@ module Books
     def results_frame_id
       "books_filter_results_#{axis}"
     end
+
+    def browse_path
+      (axis == "category") ? helpers.books_genres_path : helpers.books_countries_path
+    end
+
+    def browse_label
+      (axis == "category") ? "Browse all genres" : "Browse all origins"
+    end
   end
 end

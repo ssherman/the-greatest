@@ -8,5 +8,8 @@
     <%= render Books::FilterOptionRowsComponent.new(axis: axis, rows: facet_rows) %>
   </div>
 
+  <%= link_to browse_label, browse_path, class: "link link-primary text-sm mt-2",
+        data: {turbo_frame: "_top"} %>
+
   <p class="text-sm text-warning hidden" role="status" aria-live="polite" data-books--filter-target="capNotice" data-axis="<%= axis %>"></p>
 <% end %>

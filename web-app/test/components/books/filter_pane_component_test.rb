@@ -62,5 +62,13 @@ module Books
 
       assert_selector "[data-books--filter-target='capNotice'][role='status'][aria-live='polite']"
     end
+
+    test "links out to the matching browse page" do
+      render_pane(axis: :category)
+      assert_selector "a[href='/genres']"
+
+      render_pane(axis: :country, results_src: "/filters/countries")
+      assert_selector "a[href='/countries']"
+    end
   end
 end
