@@ -1,5 +1,7 @@
 <%= helpers.turbo_frame_tag pane_frame_id, data: {"books--filter-target": "pane", axis: axis} do %>
-  <%= helpers.turbo_frame_tag results_frame_id,
+  <%# turbo-frame has no default display, so its inline-flex .label children would
+      flow sideways and wrap into columns without this. %>
+  <%= helpers.turbo_frame_tag results_frame_id, class: "flex flex-col gap-1",
         data: {"books--filter-target": "results", axis: axis, results_src: results_src} %>
 
   <div class="flex flex-col gap-1" data-books--filter-target="browse" data-axis="<%= axis %>">

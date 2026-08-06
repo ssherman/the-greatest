@@ -153,6 +153,23 @@ test.describe('Books filters', () => {
     await expect(page.locator("turbo-frame#books_filter_results_category input")).toHaveCount(0);
   });
 
+  test('search results stack one per row rather than flowing into columns', async ({ page }) => {
+    await page.goto('/');
+    await openModal(page);
+
+    await page.getByRole('button', { name: /Category/ }).click();
+    await page.getByPlaceholder('Search genres, subjects, settings').fill('new york');
+
+    const rows = page.locator("turbo-frame#books_filter_results_category label");
+    await expect(rows.first()).toBeVisible();
+    expect(await rows.count()).toBeGreaterThan(1);
+
+    // DaisyUI's .label is inline-flex and turbo-frame has no default display, so
+    // without a flex-col on the frame these wrap into unreadable columns.
+    const tops = await rows.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().top));
+    expect(new Set(tops).size).toBe(tops.length);
+  });
+
   test('a checked search result survives the next search', async ({ page }) => {
     await page.goto('/');
     await openModal(page);
