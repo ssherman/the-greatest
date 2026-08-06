@@ -66,7 +66,12 @@ export default class extends Controller {
   // fragile regardless of who's driving the page. On the adopt path, focus
   // moves to the twin before the search row is removed -- removing a focused
   // element sends focus to <body>, which for a keyboard or screen-reader user
-  // drops them back to the top of the page mid-interaction.
+  // drops them back to the top of the page mid-interaction. twin.checked is
+  // set synchronously, so a check immediately followed by an uncheck (both
+  // landing before the next frame) would otherwise leave the twin checked
+  // against the user's final intent -- each deferred callback re-reads
+  // input.checked and bails if it no longer matches, undoing twin.checked too
+  // on the adopt path since that's the side effect nothing else would revert.
   toggle(event) {
     const input = event.target
     const label = input.closest("label")
@@ -77,12 +82,17 @@ export default class extends Controller {
       if (twin) {
         twin.checked = true
         requestAnimationFrame(() => {
+          if (!input.checked) {
+            twin.checked = false
+            return
+          }
           twin.focus()
           label.remove()
           this.refresh()
         })
       } else {
         requestAnimationFrame(() => {
+          if (!input.checked) return
           this.selectedFor(input.dataset.axis)?.appendChild(label)
           this.refresh()
         })

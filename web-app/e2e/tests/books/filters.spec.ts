@@ -100,11 +100,19 @@ test.describe('Books filters', () => {
     await openModal(page);
     await page.getByRole('button', { name: /Category/ }).click();
 
+    // A badge (rendered only for category_type subject/location, never genre)
+    // is the structural signal that a row can't be in the browse facet list --
+    // FilterFacetsQuery.genres only ever returns genre-type rows. Picking a
+    // badged row, rather than relying on search-result order, guarantees this
+    // test exercises the move path regardless of how facet ranking shifts.
     const search = page.getByPlaceholder('Search genres, subjects, settings');
     await search.fill('novels');
-    const hit = page.locator("turbo-frame#books_filter_results_category input").first();
+    const hit = page.locator("turbo-frame#books_filter_results_category label:has(.badge)").first().locator('input');
     await hit.waitFor();
     const slug = await hit.getAttribute('value');
+
+    await expect(page.locator(`[data-books--filter-target='browse'][data-axis='category'] input[value='${slug}']`)).toHaveCount(0);
+
     await hit.check();
     await page.getByRole('button', { name: 'Apply' }).click();
 
@@ -114,6 +122,7 @@ test.describe('Books filters', () => {
     await page.getByRole('button', { name: /Category/ }).click();
     const staged = page.locator(`input[name='category_slugs[]'][value='${slug}']`);
     await staged.waitFor();
+    await expect(staged).toBeVisible();
     await expect(staged).toBeChecked();
     await staged.uncheck();
     await page.getByRole('button', { name: 'Apply' }).click();
