@@ -444,6 +444,8 @@ Rails.application.routes.draw do
     # grammar lives only in Books::FilterPath. Neither is ever linked publicly.
     get "filters", to: "books/filters#show", as: :books_filters
     get "filters/options", to: "books/filters#options", as: :books_filters_options
+    get "filters/categories", to: "books/filters#categories", as: :books_filters_categories
+    get "filters/countries", to: "books/filters#countries", as: :books_filters_countries
 
     # Legacy filter grammar, ported verbatim so no filter URL needs a redirect.
     # 4 bases x 5 date forms x page x rc prefix = 80 routes, all unnamed --

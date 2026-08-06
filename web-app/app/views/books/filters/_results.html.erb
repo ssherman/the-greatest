@@ -1,0 +1,4 @@
+<%= turbo_frame_tag "books_filter_results_#{axis}",
+      data: {"books--filter-target": "results", axis: axis, results_src: results_src} do %>
+  <%= render Books::FilterOptionRowsComponent.new(axis: axis, rows: rows, show_counts: false) %>
+<% end %>
