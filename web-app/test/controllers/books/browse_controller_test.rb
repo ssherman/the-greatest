@@ -65,5 +65,45 @@ module Books
         get "/genres"
       end
     end
+
+    test "countries renders and links to single-facet filter URLs" do
+      get "/countries"
+
+      assert_response :success
+      assert_select "a[href='/the-greatest-books/written-by/french/authors']"
+    end
+
+    test "countries excludes the unknown bucket" do
+      # book_count is a counter_cache target (Books::BookCountry belongs_to :country,
+      # counter_cache: :book_count), so ActiveRecord silently drops it from a normal
+      # update!/save -- update_column bypasses that and writes it directly.
+      books_countries(:unknown).update_column(:book_count, 5)
+
+      get "/countries"
+
+      assert_select "a[href*='written-by/unknown']", false
+    end
+
+    test "countries is edge cacheable and indexable" do
+      Books::PublicIndexing.stubs(:enabled?).returns(true)
+
+      get "/countries"
+
+      assert_match "public", response.headers["Cache-Control"].to_s
+      assert_select "meta[name=robots][content^=index]"
+    end
+
+    test "countries accepts a sort" do
+      get "/countries", params: {sort: "name"}
+
+      assert_response :success
+      assert_select "link[rel=canonical][href$='/countries']"
+    end
+
+    test "a countries page past the last is a 404" do
+      get "/countries/page/9999"
+
+      assert_response :not_found
+    end
   end
 end

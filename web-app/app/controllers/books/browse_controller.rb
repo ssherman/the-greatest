@@ -22,4 +22,13 @@ class Books::BrowseController < ApplicationController
 
     @pagy, @records = pagy_path(Books::BrowseQuery.categories(type: @type, sort: @sort), limit: 120)
   end
+
+  def countries
+    @sort = Books::BrowseQuery.normalized_sort(params[:sort])
+    @indexable = true
+    @page_title = "Book Origins"
+    @canonical_path = books_countries_path
+
+    @pagy, @records = pagy_path(Books::BrowseQuery.countries(sort: @sort), limit: 120)
+  end
 end

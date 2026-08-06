@@ -451,6 +451,9 @@ Rails.application.routes.draw do
     get "genres", to: "books/browse#genres", as: :books_genres
     get "genres/page/:page", to: "books/browse#genres", as: :books_genres_page, constraints: {page: /\d+/}
 
+    get "countries", to: "books/browse#countries", as: :books_countries
+    get "countries/page/:page", to: "books/browse#countries", as: :books_countries_page, constraints: {page: /\d+/}
+
     # Legacy filter grammar, ported verbatim so no filter URL needs a redirect.
     # 4 bases x 5 date forms x page x rc prefix = 80 routes, all unnamed --
     # Books::FilterPath builds these paths, so no url helper is needed, and the
