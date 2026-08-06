@@ -41,6 +41,13 @@ export default class extends Controller {
     this.timers[axis] = setTimeout(() => this.runSearch(axis, query), DEBOUNCE_MS)
   }
 
+  // The search inputs live inside the form that submits to /filters, so Enter
+  // would apply the staged filters mid-search. On a phone the keyboard's
+  // Search key IS Enter, so this is the common path, not an edge case.
+  suppressEnter(event) {
+    if (event.key === "Enter") event.preventDefault()
+  }
+
   runSearch(axis, query) {
     const frame = this.resultsTargets.find((el) => el.dataset.axis === axis)
     if (!frame) return

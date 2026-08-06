@@ -43,7 +43,7 @@
             <input type="search" class="input input-bordered w-full"
                    placeholder="<%= (axis == "category") ? "Search genres, subjects, settings" : "Search origins" %>"
                    data-books--filter-target="query" data-axis="<%= axis %>"
-                   data-action="input->books--filter#search">
+                   data-action="input->books--filter#search keydown->books--filter#suppressEnter">
           </div>
 
           <div class="max-h-72 overflow-y-auto pr-1">
