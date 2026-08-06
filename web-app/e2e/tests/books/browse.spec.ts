@@ -38,6 +38,11 @@ test.describe('Books browse pages', () => {
 
     await page.getByRole('contentinfo').getByRole('link', { name: 'Genres' }).click();
     await expect(page).toHaveURL('/genres');
+
+    await page.goto('/');
+
+    await page.getByRole('contentinfo').getByRole('link', { name: 'Origins' }).click();
+    await expect(page).toHaveURL('/countries');
   });
 
   test('the filter pane links out to the browse page', async ({ page }) => {
