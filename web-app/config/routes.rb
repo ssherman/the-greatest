@@ -463,7 +463,6 @@ Rails.application.routes.draw do
     browse_filter = /(?:genre|location|subject)/
 
     get "genres", to: "books/browse#genres", as: :books_genres
-    get "genres/page/1", to: redirect("/genres", status: 301)
     get "genres/page/:page", to: "books/browse#genres", as: :books_genres_page,
       constraints: {page: /\d+/}
     get "genres/sorted-by/:sort", to: "books/browse#genres",
@@ -485,7 +484,6 @@ Rails.application.routes.draw do
     get "genres/:id", to: "books/legacy_categories#show"
 
     get "countries", to: "books/browse#countries", as: :books_countries
-    get "countries/page/1", to: redirect("/countries", status: 301)
     get "countries/page/:page", to: "books/browse#countries", as: :books_countries_page,
       constraints: {page: /\d+/}
     get "countries/sorted-by/:sort", to: "books/browse#countries",

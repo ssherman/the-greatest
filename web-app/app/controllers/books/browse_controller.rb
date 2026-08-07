@@ -5,7 +5,7 @@ class Books::BrowseController < ApplicationController
 
   layout "books/application"
 
-  before_action :collapse_query_form
+  before_action :redirect_to_canonical_form
   before_action :cache_for_index_page
   before_action :find_ranking_configuration
 
@@ -50,18 +50,30 @@ class Books::BrowseController < ApplicationController
 
   private
 
-  # PR #204 published /genres?filter=location before the legacy path grammar was
-  # routed. Collapsing it leaves one canonical shape and stops a crawler minting
-  # query-string variants of a page this branch makes more crawlable.
+  # Two non-canonical shapes fold into the path form here.
   #
-  # request.query_parameters, NOT params: on a routed path such as
-  # /genres/filtered-by/location the same values arrive as PATH parameters, and
-  # reading params would redirect every routed request to itself forever.
+  # The query form: PR #204 published /genres?filter=location before the legacy
+  # path grammar was routed. Collapsing it leaves one canonical shape and stops a
+  # crawler minting query-string variants of a page this branch makes more
+  # crawlable.
+  #
+  # Page one: BrowsePath never emits /page/1, so every .../page/1 URL is a
+  # crawler-constructed duplicate of its own base. Every other paginated family
+  # normalizes this with a literal `page/1` redirect route, but browse has EIGHT
+  # paginated shapes to their one, so one guard here beats eight route entries --
+  # and it cannot be forgotten when a shape is added.
+  #
+  # request.query_parameters, NOT params, for the query half: on a routed path
+  # such as /genres/filtered-by/location the same values arrive as PATH
+  # parameters, and reading params would redirect every routed request to itself
+  # forever. Page one is the deliberate exception -- it is read from params
+  # precisely because it arrives as a path segment, and BrowsePath drops it, so
+  # the target always differs from the request.
   #
   # Declared above cache_for_index_page so a 301 is not decorated with 6-hour
   # public edge-cache headers.
-  def collapse_query_form
-    return if request.query_parameters.slice(*QUERY_FORM_KEYS).empty?
+  def redirect_to_canonical_form
+    return if request.query_parameters.slice(*QUERY_FORM_KEYS).empty? && page_number != 1
 
     redirect_to Books::BrowsePath.call(
       axis: action_name.to_sym,

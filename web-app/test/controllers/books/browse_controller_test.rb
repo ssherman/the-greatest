@@ -274,6 +274,44 @@ module Books
       assert_redirected_to "/countries"
     end
 
+    # BrowsePath never emits /page/1, so a .../page/1 URL on ANY of the eight
+    # paginated shapes is a crawler-constructed duplicate of its own base. The
+    # bare two above were once literal redirect routes; these six were not, and
+    # served 200 with a canonical pointing elsewhere until the guard covered
+    # every shape at once.
+    {
+      "/genres/sorted-by/name/page/1" => "/genres/sorted-by/name",
+      "/genres/filtered-by/subject/page/1" => "/genres/filtered-by/subject",
+      "/genres/filtered-by/location/page/1" => "/genres/filtered-by/location",
+      "/genres/filtered-by/subject/sorted-by/name/page/1" => "/genres/filtered-by/subject/sorted-by/name",
+      "/countries/sorted-by/name/page/1" => "/countries/sorted-by/name"
+    }.each do |path, target|
+      test "page 1 of #{path} redirects to its own base" do
+        get path
+
+        assert_response :moved_permanently
+        assert_redirected_to target
+      end
+    end
+
+    # The redirect strips only the page, never the facets -- a sorted URL keeps
+    # its sort. Only the CANONICAL drops the sort; the URL identity does not.
+    test "page 1 of a faceted path keeps its facets and lands on a 200" do
+      get "/genres/filtered-by/subject/sorted-by/name/page/1"
+      follow_redirect!
+
+      assert_response :success
+      assert_equal "/genres/filtered-by/subject/sorted-by/name", request.path
+    end
+
+    test "page 2 is untouched by the page-one guard" do
+      120.times { |i| rank_category_book("Bulk Guard #{i}", :subject, i + 100) }
+
+      get "/genres/filtered-by/subject/page/2"
+
+      assert_response :success
+    end
+
     private
 
     def ranked_book(name, rank)
