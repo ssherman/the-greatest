@@ -102,6 +102,32 @@ test.describe('Cloudflare challenge hand-off', () => {
     await expect(page).toHaveURL('/the-greatest/novels/books');
   });
 
+  test('a challenged hover prefetch does not navigate the visitor', async ({ page }) => {
+    await page.goto('/the-greatest/novels/books');
+
+    const link = page.locator('main a[href^="/book/"]').first();
+    await link.waitFor();
+    const href = await link.getAttribute('href');
+    const target = new URL(href!, page.url()).href;
+
+    let hits = 0;
+    await page.route(target, (route) => {
+      hits += 1;
+      return route.fulfill({
+        status: 403,
+        contentType: 'text/html',
+        headers: { 'cf-mitigated': 'challenge' },
+        body: CHALLENGE_BODY,
+      });
+    });
+
+    await link.hover();
+    await expect.poll(() => hits).toBeGreaterThan(0);
+
+    await expect(page.getByTestId('stub-challenge')).toHaveCount(0);
+    await expect(page).toHaveURL('/the-greatest/novels/books');
+  });
+
   test('the same URL does not hand off twice inside the guard window', async ({ page }) => {
     await page.goto('/the-greatest/novels/books');
     const target = new URL('/the-greatest/classics/books', page.url()).href;

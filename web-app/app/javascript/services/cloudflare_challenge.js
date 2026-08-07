@@ -1,6 +1,8 @@
 const originalFetch = window.fetch.bind(window)
 
 const SAFE_METHODS = ["GET", "HEAD"]
+const HANDOFF_KEY = "cf-challenge-handoff"
+const HANDOFF_WINDOW_MS = 30000
 
 function methodOf(input, init) {
   const method = init?.method ?? (input instanceof Request ? input.method : null)
@@ -13,6 +15,14 @@ function headersOf(input, init) {
   return raw instanceof Headers ? raw : new Headers(raw)
 }
 
+// Turbo's prefetch delegate silently discards a failed response, which is
+// already the right outcome for a request the visitor never asked to make
+// by clicking; navigating on a mere 100ms hover would be a worse surprise
+// than the reload the wrapper would otherwise pick.
+function isPrefetch(input, init) {
+  return headersOf(input, init).get("X-Sec-Purpose") === "prefetch"
+}
+
 function isDocumentNavigation(input, init) {
   if (!SAFE_METHODS.includes(methodOf(input, init))) return false
 
@@ -22,13 +32,10 @@ function isDocumentNavigation(input, init) {
   return (headers.get("Accept") ?? "").includes("text/html")
 }
 
-const HANDOFF_KEY = "cf-challenge-handoff"
-const HANDOFF_WINDOW_MS = 30000
-
 function recentlyHandedOff(url) {
   try {
     const last = JSON.parse(sessionStorage.getItem(HANDOFF_KEY))
-    return last?.url === url && Date.now() - last.at < HANDOFF_WINDOW_MS
+    return last?.url === url && Math.abs(Date.now() - last.at) < HANDOFF_WINDOW_MS
   } catch {
     return false
   }
@@ -39,9 +46,7 @@ function recentlyHandedOff(url) {
 function recordHandOff(url) {
   try {
     sessionStorage.setItem(HANDOFF_KEY, JSON.stringify({url, at: Date.now()}))
-  } catch {
-    return
-  }
+  } catch {}
 }
 
 function handOffToNavigation(url, input, init) {
@@ -49,7 +54,7 @@ function handOffToNavigation(url, input, init) {
 
   recordHandOff(url)
 
-  if (isDocumentNavigation(input, init)) {
+  if (isDocumentNavigation(input, init) && new URL(url).origin === window.location.origin) {
     window.location.assign(url)
   } else {
     window.location.reload()
@@ -61,6 +66,7 @@ function handOffToNavigation(url, input, init) {
 window.fetch = async (input, init) => {
   const response = await originalFetch(input, init)
   if (response.headers.get("cf-mitigated") !== "challenge") return response
+  if (isPrefetch(input, init)) return response
 
   if (handOffToNavigation(response.url, input, init)) {
     return new Promise(() => {})
