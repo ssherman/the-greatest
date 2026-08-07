@@ -138,14 +138,30 @@ and defaults to `GET`. It compares case-insensitively.
 
 `handOffToNavigation(url, method)` returns whether it took over:
 
-- **GET or HEAD** → `window.location.assign(url)`. Cloudflare renders the interstitial for a real
-  navigation and, once solved, serves the URL the visitor actually asked for. For the reported bug
+- **A document navigation** → `window.location.assign(url)`. Cloudflare renders the interstitial for a
+  real navigation and, once solved, serves the URL the visitor actually asked for. For the reported bug
   that means Apply lands on `/the-greatest/fantasy,science-fiction/books` after verification, so the
   flow completes rather than restarting.
-- **Any other method** → `window.location.reload()`. A POST endpoint cannot be replayed as a GET
-  navigation, so clearance is obtained on the page the visitor is already on and they retry. Unsaved
-  form input is lost; this is an accepted cost, given challenges are rare and the alternative
-  (a notification UI the public books site does not have) is more machinery than the case warrants.
+- **Anything else** → `window.location.reload()`. Clearance is obtained on the page the visitor is
+  already on, and they retry. Unsaved form input is lost; this is an accepted cost, given challenges
+  are rare and the alternative (a notification UI the public books site does not have) is more
+  machinery than the case warrants.
+
+A request counts as a document navigation when **all three** hold: the method is GET or HEAD, the
+request carries no `Turbo-Frame` header, and its `Accept` header includes `text/html`.
+
+All three conditions are load-bearing, and the naive "GET → assign" rule breaks on the last two:
+
+- **Frame loads.** The modal's lazy `books_filter_options` frame is a GET. Navigating to its URL would
+  dump the visitor on a bare `/filters/options` page — `FiltersController#options` renders with
+  `layout "books/application"`, so it is a plausible-looking dead end instead of the book grid.
+  Reloading keeps them on the grid with clearance. `FrameController#prepareRequest` sets
+  `Turbo-Frame: <frame id>` (`:6517`), and a frame explicitly declines to intercept a `_top` target
+  (`:6800`) — so our filters form, which targets `_top`, sends no such header and still gets `assign`.
+  Verified in the installed Turbo.
+- **JSON fetches.** The hand-rolled autocomplete and `/auth/check_provider` calls are GETs too.
+  Navigating to those would render raw JSON. They do not ask for `text/html`; a fetch with no `Accept`
+  at all defaults to `*/*`, which also fails the check, so both reload correctly.
 
 Returning a never-settling promise is deliberate. Turbo's `FetchRequest#perform` awaits it, so
 `turbo:before-fetch-response` never fires and Turbo never gets the chance to discard a 403 or render
@@ -192,11 +208,14 @@ applied one, which is exactly the motion that surfaced the bug:
 4. **Applying a second genre keeps the first.** Go to `/the-greatest/novels/books`, open the modal,
    check a second genre, Apply, and assert the URL is the sorted two-slug path with two chips.
 
-Extended `test/controllers/books/ranked_items_controller_test.rb`:
+Extended `test/components/books/filter_facets_component_test.rb`:
 
-5. **A two-genre path renders both chips.** `Books::FilterFacetsComponent#preserved_categories` and
-   `#genre_options` can each emit a field for the same slug, and today only `FilterParams`' `.uniq`
-   prevents a duplicate reaching the path builder. Pin it.
+5. **A selected genre renders exactly one input.** `#genre_options` concatenates the selected genres
+   onto `facets.genres`, so it would render a genre twice — once checked, once not — if the facet ever
+   stopped excluding what is already selected. `FilterFacetsQuery` does exclude it today
+   (`filter_facets_query.rb:48` for genres, `:60` for countries), so this is a regression guard rather
+   than a fix, and it belongs in the component test rather than a controller test: per CLAUDE.md,
+   controller tests assert status codes and params, never markup.
 
 `bin/rails test` and `bundle exec standardrb` must pass. `yarn build:all` must be run, since the JS
 bundle is committed to `app/assets/builds/`.
