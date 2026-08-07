@@ -9,6 +9,7 @@ export default class extends Controller {
 
   connect() {
     this.timers = {}
+    this.pendingSearches = {}
     this.currentLevel = "root"
     this.dialog = this.element.closest("dialog")
     this.discardBound = this.discard.bind(this)
@@ -90,9 +91,20 @@ export default class extends Controller {
     if (event.key === "Enter") event.preventDefault()
   }
 
+  // The search input is server-rendered and usable the instant the modal
+  // opens, but its axis's results frame doesn't exist in the DOM until the
+  // pane's own turbo-frame finishes loading. A query typed inside that window
+  // (trivially reachable on a slow connection, since the debounce is only
+  // 250ms) would otherwise be silently dropped -- the input keeps the typed
+  // text but nothing ever runs it. Queueing it here and flushing from
+  // frameLoaded() once the frame lands means it still runs instead of
+  // vanishing.
   runSearch(axis, query) {
     const frame = this.resultsTargets.find((el) => el.dataset.axis === axis)
-    if (!frame) return
+    if (!frame) {
+      this.pendingSearches[axis] = query
+      return
+    }
 
     const base = frame.dataset.resultsSrc
     const separator = base.includes("?") ? "&" : "?"
@@ -165,12 +177,42 @@ export default class extends Controller {
     this.refresh()
   }
 
+  // turbo:frame-load bubbles (and is composed), and both the pane frame
+  // itself and the results frame nested inside it fire it, so the single
+  // listener on the pane frame (see the component template) catches a
+  // first-time pane load AND every search response. refresh() has to run on
+  // both: capNoticeTargetConnected() only fires once, when the pane's own
+  // frame first loads, but a search swaps in fresh, unchecked checkboxes
+  // inside the results frame that nothing else ever re-disables at the cap --
+  // skipped here, a user could check past maxCategories/maxCountries and get
+  // a bare 404 from Books::FilterParams on Apply. Reading
+  // event.target.dataset.axis rather than a fixed axis lets one handler serve
+  // both panes. The pending-search dequeue in runSearch() already deletes the
+  // queue entry before assigning frame.src, so replaying it here from the
+  // frame-load it itself triggers cannot loop.
+  frameLoaded(event) {
+    this.refresh()
+
+    const axis = event.target.dataset.axis
+    const query = this.pendingSearches[axis]
+    if (query === undefined) return
+
+    delete this.pendingSearches[axis]
+    this.runSearch(axis, query)
+  }
+
   // Cancel, Escape, and backdrop-click all end up here via the dialog's native
   // "close" event, so staged state is discarded identically no matter how the
   // dialog closed. form.reset() alone is not enough: a checked search hit that
   // got hoisted into the selected container is a DOM move, not just a value
   // change, so reset() would leave it sitting there unchecked instead of gone.
   discard() {
+    // A query queued while its pane was still loading must not outlive the
+    // dialog it was typed into -- otherwise the frame arriving after Cancel
+    // would still fire the search once it loads, after everything else has
+    // already been discarded.
+    this.pendingSearches = {}
+
     this.selectedTargets.forEach((container) => {
       container.querySelectorAll("[data-staged]").forEach((label) => label.remove())
     })

@@ -266,4 +266,56 @@ test.describe('Books filters', () => {
 
     expect(response?.status()).toBe(404);
   });
+
+  test('a search typed before its pane finishes loading still runs once the pane arrives', async ({ page }) => {
+    // Delay only the pane's own (non-search) load. The search input is
+    // server-rendered and usable the instant the modal opens, well before the
+    // results frame it depends on exists -- typing inside that window is the
+    // defect under test. Letting the follow-up search request through
+    // immediately keeps the assertion's timing budget tight.
+    await page.route('**/filters/categories*', async (route) => {
+      const url = new URL(route.request().url());
+      if (!url.searchParams.has('q')) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+      await route.continue();
+    });
+
+    await page.goto('/');
+    await openModal(page);
+    await page.getByRole('button', { name: /Category/ }).click();
+
+    const search = page.getByPlaceholder('Search genres, subjects, settings');
+    await search.fill('novel');
+
+    await expect(page.locator("turbo-frame#books_filter_results_category input").first()).toBeVisible({ timeout: 8000 });
+  });
+
+  test('selection caps are reapplied to newly rendered search results', async ({ page }) => {
+    await page.goto('/');
+    await openModal(page);
+    await page.getByRole('button', { name: /Category/ }).click();
+
+    const browseBoxes = page.locator(
+      "[data-books--filter-target='browse'][data-axis='category'] input[type='checkbox']"
+    );
+    await browseBoxes.first().waitFor();
+    for (let i = 0; i < 6; i++) {
+      await browseBoxes.nth(i).check();
+    }
+
+    // "new york" is a location-type category -- FilterFacetsQuery.genres only
+    // ever returns genre-type rows -- so it cannot be among the 6 checked
+    // above. Any disabled state on its results can only come from the cap
+    // being reapplied to the search response itself.
+    await page.getByPlaceholder('Search genres, subjects, settings').fill('new york');
+
+    const resultsInputs = page.locator("turbo-frame#books_filter_results_category input");
+    await expect(resultsInputs.first()).toBeVisible();
+    const disabledStates = await resultsInputs.evaluateAll((els) =>
+      els.map((el) => (el as HTMLInputElement).disabled)
+    );
+    expect(disabledStates.length).toBeGreaterThan(0);
+    expect(disabledStates.every(Boolean)).toBe(true);
+  });
 });

@@ -53,8 +53,12 @@
               <%= render Books::FilterOptionRowsComponent.new(axis: axis, rows: applied_for(axis), checked: true, show_counts: false) %>
             </div>
 
+            <%# turbo:frame-load bubbles, so this one listener also catches the
+                nested results frame's own loads (see frameLoaded() in the
+                controller) -- both a first pane load and every search need it. %>
             <%= helpers.turbo_frame_tag "books_filter_pane_#{axis}",
-                  data: {"books--filter-target": "pane", axis: axis, pane_src: pane_src(axis)} do %>
+                  data: {"books--filter-target": "pane", axis: axis, pane_src: pane_src(axis),
+                         action: "turbo:frame-load->books--filter#frameLoaded"} do %>
               <div class="flex justify-center py-8">
                 <span class="loading loading-spinner loading-md"></span>
               </div>
