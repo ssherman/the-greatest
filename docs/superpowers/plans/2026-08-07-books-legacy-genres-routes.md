@@ -19,7 +19,7 @@
 - Namespace all books code under `Books::`. Tests mirror the namespace (`module Books; class FooTest`).
 - Services and query objects live in `app/lib/books/`, NOT `app/services/`.
 - Use Rails generators for new controllers so the matching test file is created.
-- Legal `sort` values are exactly `book_count` (default) and `name`. Legal `filter` values are exactly `genre` (default), `location`, `subject`. These come from `Books::BrowseQuery::SORTS` and `::TYPES` — read them from those constants, never re-spell them in application code.
+- Legal `sort` values are exactly `book_count` (default) and `name`. Legal `filter` values are exactly `genre` (default), `location`, `subject`. These come from `Books::BrowseQuery::SORTS` and `::TYPES` — read them from those constants, never re-spell them in application code. **The one deliberate exception is `config/routes.rb`**, which spells the vocabulary out as literal regexps: routes are drawn before eager loading, and referencing an autoloaded constant there pins it across reloads. Task 2's route constraints are therefore the single place the values are duplicated, and Task 2's routing test is what pins the two copies together.
 - **Route segment constraints must not contain regexp anchors** (`\A`, `\z`, `^`, `$`) — Rails anchors segment constraints itself and raises `ArgumentError` on an anchored one.
 - **`assert_recognizes` ignores `host!`** — always pass a full `http://#{HOST}/path` or negative cases pass vacuously.
 - `HOST` in routing tests is `Rails.application.config.domains[:books]`.
@@ -319,6 +319,32 @@ class BooksBrowseRoutingTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # config/routes.rb spells the vocabulary out as literal regexps because routes
+  # are drawn before eager loading and referencing an autoloaded constant there
+  # pins it across reloads. This is what keeps that copy honest: adding a value to
+  # BrowseQuery without widening the route constraint would otherwise silently
+  # produce a filter the app offers but cannot serve.
+  test "every BrowseQuery type and sort is actually routable" do
+    Books::BrowseQuery::TYPES.each do |type|
+      assert_recognizes(
+        {controller: "books/browse", action: "genres", filter: type},
+        {path: "http://#{HOST}/genres/filtered-by/#{type}", method: :get}
+      )
+    end
+
+    Books::BrowseQuery::SORTS.each do |sort|
+      assert_recognizes(
+        {controller: "books/browse", action: "genres", sort: sort},
+        {path: "http://#{HOST}/genres/sorted-by/#{sort}", method: :get}
+      )
+
+      assert_recognizes(
+        {controller: "books/browse", action: "countries", sort: sort},
+        {path: "http://#{HOST}/countries/sorted-by/#{sort}", method: :get}
+      )
+    end
+  end
+
   test "the bare browse helpers still generate the unparameterised paths" do
     assert_equal "/genres", Rails.application.routes.url_helpers.books_genres_path
     assert_equal "/genres/page/2", Rails.application.routes.url_helpers.books_genres_page_path(page: 2)
@@ -397,7 +423,7 @@ Note there is deliberately **no** `countries/:id` route — legacy `resources :c
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `bin/rails test test/routing/books_browse_routing_test.rb`
-Expected: PASS, 20 runs, 0 failures.
+Expected: PASS, 21 runs, 0 failures.
 
 - [ ] **Step 5: Confirm nothing else regressed**
 
@@ -1123,7 +1149,7 @@ Expected: PASS, 0 failures.
 - [ ] **Step 5: Run the whole suite**
 
 Run: `bin/rails db:test:prepare test`
-Expected: 0 failures, 0 errors. Record the runs count — it should be the previous total plus roughly 51 (10 from Task 1, 20 from Task 2, 10 from Task 3, 2 net from Task 4, 9 from Task 5).
+Expected: 0 failures, 0 errors. Record the runs count — it should be the previous total plus roughly 52 (10 from Task 1, 21 from Task 2, 10 from Task 3, 2 net from Task 4, 9 from Task 5).
 
 - [ ] **Step 6: Lint**
 
@@ -1173,7 +1199,7 @@ EOF
 
 ## Done when
 
-- `bin/rails test` is green with roughly 51 more runs than before.
+- `bin/rails test` is green with roughly 52 more runs than before.
 - `bundle exec standardrb` reports no offenses.
 - `yarn test:e2e e2e/tests/books/browse.spec.ts` is 5/5.
 - The Task 5 Step 7 curl table matches expectations exactly.
