@@ -232,6 +232,25 @@ Extended `test/components/books/filter_facets_component_test.rb`:
    than a fix, and it belongs in the component test rather than a controller test: per CLAUDE.md,
    controller tests assert status codes and params, never markup.
 
+### Both regression guards were dropped when the filters rework landed
+
+PR #206 merged the books filters rework onto `main` while this branch was in flight, replacing the
+single-pane checkbox modal with a two-level drill-down. It **deleted** `Books::FilterFacetsComponent`
+and its test, and rewrote `filters.spec.ts` — so items 4 and 5 above no longer had anything to test
+against. Both were removed in the merge:
+
+- Item 4's coverage gap is now closed upstream, against the new UI, by `applying across two axes
+  navigates to the canonical URL` and `applying without opening any pane preserves the current
+  filters`.
+- Item 5's component no longer exists. The facet query it guarded has been reorganised into
+  `Books::FilterPaneComponent` / `Books::FilterOptionRowsComponent`.
+
+Everything in the "Problem" section above still holds, including the diagnosis: the Apply button is
+still `form_with url: books_filters_path, method: :get, data: {turbo_frame: "_top"}`, now at
+`app/components/books/filter_modal_component.html.erb:7`. The rework changed the modal's shape, not
+the mechanism that made a challenged Apply die silently. The module and its own tests were unaffected;
+only the one challenge test that drove the old modal was rewritten to drill into the Category pane.
+
 `bin/rails test` and `bundle exec standardrb` must pass. `yarn build:all` must be run before any
 Playwright run — the JS bundle in `app/assets/builds/` is gitignored (`.gitignore:36`), not committed,
 so nothing but a rebuilt bundle exercises this module locally. It still reaches production because

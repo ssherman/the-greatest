@@ -62,12 +62,12 @@ test.describe('Cloudflare challenge hand-off', () => {
 
   test('a challenged frame load reloads the current page instead of navigating to the frame URL', async ({ page }) => {
     await page.goto('/the-greatest/novels/books');
-    const target = new URL('/filters/options', page.url()).href;
+    const target = new URL('/filters/categories', page.url()).href;
     await stubChallenge(page, target);
 
     await expectReload(page, () =>
       page.evaluate((url) => {
-        fetch(url, { headers: { Accept: 'text/html', 'Turbo-Frame': 'books_filter_options' } });
+        fetch(url, { headers: { Accept: 'text/html', 'Turbo-Frame': 'books_filter_pane_category' } });
       }, target),
     );
 
@@ -76,7 +76,7 @@ test.describe('Cloudflare challenge hand-off', () => {
 
   test('a challenged JSON fetch reloads the current page', async ({ page }) => {
     await page.goto('/the-greatest/novels/books');
-    const target = new URL('/filters/options', page.url()).href;
+    const target = new URL('/filters/categories', page.url()).href;
     await stubChallenge(page, target);
 
     await expectReload(page, () =>
