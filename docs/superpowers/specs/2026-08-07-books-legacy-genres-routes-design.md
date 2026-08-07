@@ -280,10 +280,20 @@ increment makes more crawlable.
 
 Unchanged in principle from the rework spec, restated in path terms:
 
-- Canonical keeps `filter` and `page`, and **drops `sort`**. A sort variant is the same result
-  set reordered — duplicate content by definition — so `/genres/sorted-by/name` canonicals to
-  `/genres`. `Books::BrowseController` already does this; `BrowsePath` only changes the shape.
-- All browse responses stay `@indexable = true`.
+- Canonical keeps `filter` and `page`, and **drops `sort`**. `Books::BrowseController` already
+  does this; `BrowsePath` only changes the shape.
+- **Sorted variants are `noindex, follow`; the default sort stays indexable.** The original
+  rationale for canonicalising them instead — "a sort variant is the same result set reordered,
+  duplicate content by definition" — is true of legacy, whose `CategoriesController#index`
+  renders the whole list unpaginated. It is **false here**, because this app paginates at 120:
+  `location` is 41 pages and `subject` is 59. `/genres/filtered-by/location/sorted-by/name`
+  and its canonical `/genres/filtered-by/location` share **zero rows**. A canonical between
+  pages with disjoint content is one Google routinely discards, which would leave ~104 thin
+  hubs indexed — each one toolbar-linked from every page and self-linked by its own pagination,
+  since `Pagination::PathBuilder` derives the page base from `request.path`. `noindex, follow`
+  is the standard faceted-navigation treatment: humans keep the toggle, equity still flows
+  through the links, and legacy's inbound links to `/genres/sorted-by/name` still pass value on.
+  Implemented as `@indexable = (@sort == Books::BrowseQuery::SORTS.first)` in both actions.
 - The canonical set is bounded: 3 filter values plus `/countries`, times their page counts. No
   new `robots.txt` entries are needed, and D4's constraints are what keep the set bounded.
 - `/genres/:id` 301s into `/the-greatest/:slug/books`, which is crawl class 1 (single facet,
