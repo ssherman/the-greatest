@@ -60,5 +60,17 @@ module Books
     test "sorted_by_name orders alphabetically" do
       assert_equal ["Algerian", "French", "Japanese", "Unknown"], Books::Country.sorted_by_name.pluck(:name)
     end
+
+    test "search_by_name matches on a name substring" do
+      assert_includes Books::Country.search_by_name("Fren"), books_countries(:french)
+    end
+
+    test "search_by_name matches regardless of case" do
+      assert_includes Books::Country.search_by_name("FREN"), books_countries(:french)
+    end
+
+    test "search_by_name escapes a literal percent instead of treating it as a wildcard" do
+      assert_empty Books::Country.search_by_name("%")
+    end
   end
 end

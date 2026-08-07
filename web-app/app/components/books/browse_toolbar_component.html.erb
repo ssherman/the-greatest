@@ -1,0 +1,19 @@
+<div class="flex flex-wrap items-center gap-4">
+  <% if show_types %>
+    <div class="join" role="group" aria-label="Category type">
+      <% type_links.each do |link| %>
+        <%= link_to link[:label], link[:path],
+              class: "btn btn-sm join-item #{"btn-active" if link[:active]}",
+              aria: {current: (link[:active] ? "true" : nil)} %>
+      <% end %>
+    </div>
+  <% end %>
+
+  <div class="join" role="group" aria-label="Sort by">
+    <% sort_links.each do |link| %>
+      <%= link_to link[:label], link[:path],
+            class: "btn btn-sm join-item #{"btn-active" if link[:active]}",
+            aria: {current: (link[:active] ? "true" : nil)} %>
+    <% end %>
+  </div>
+</div>

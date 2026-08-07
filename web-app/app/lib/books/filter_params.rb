@@ -2,6 +2,8 @@ module Books
   class FilterParams
     YEAR_FORMAT = /\A-?\d+\z/
     YEAR_RANGE = (-4000..(Date.current.year + 5))
+    MAX_CATEGORIES = 6
+    MAX_COUNTRIES = 10
 
     Result = Struct.new(:categories, :countries, :year_start, :year_end, keyword_init: true)
 
@@ -17,8 +19,8 @@ module Books
       year = validated_year(@params[:year])
 
       Result.new(
-        categories: resolve(Books::Category.active, @params[:category_id]),
-        countries: resolve(Books::Country.all, @params[:country_id]),
+        categories: resolve(Books::Category.active, @params[:category_id], MAX_CATEGORIES),
+        countries: resolve(Books::Country.all, @params[:country_id], MAX_COUNTRIES),
         year_start: year || validated_year(@params[:published_start]),
         year_end: year || validated_year(@params[:published_end])
       )
@@ -26,9 +28,10 @@ module Books
 
     private
 
-    def resolve(scope, raw)
+    def resolve(scope, raw, max)
       slugs = raw.to_s.split(",").map(&:strip).reject(&:blank?).uniq
       return [] if slugs.empty?
+      raise ActiveRecord::RecordNotFound if slugs.size > max
 
       records = scope.where(slug: slugs).sort_by(&:slug)
       raise ActiveRecord::RecordNotFound if records.size != slugs.size

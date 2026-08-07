@@ -1,0 +1,30 @@
+<%
+  content_for :page_title, "#{@page_title} | The Greatest Books"
+  content_for :meta_description, "Browse books by national origin and see how many books each covers."
+  content_for :canonical_url, request.base_url + @canonical_path if @canonical_path
+%>
+
+<div class="space-y-8">
+  <h1 class="text-3xl sm:text-4xl font-bold text-center text-balance"><%= @page_title %></h1>
+
+  <div class="flex justify-center">
+    <%= render Books::BrowseToolbarComponent.new(base_path: books_countries_path, sort: @sort) %>
+  </div>
+
+  <% if @records.any? %>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <% @records.each do |record| %>
+        <%= render Books::BrowseCardComponent.new(
+              record: record, count: record.ranked_count,
+              path: "/the-greatest-books/written-by/#{record.slug}/authors"
+            ) %>
+      <% end %>
+    </div>
+
+    <div class="flex justify-center">
+      <%== @pagy.series_nav(slots: 5) %>
+    </div>
+  <% else %>
+    <p class="text-center text-base-content/70 py-16">Nothing to browse here yet.</p>
+  <% end %>
+</div>

@@ -55,6 +55,7 @@ class Books::RankedItemsController < RankedItemsController
       limit: 100
     )
 
-    @indexable = !@filtered || @ranked_books.any?
+    @indexable = Books::FilterPath.indexable?(categories: @categories, countries: @countries) &&
+      (!@filtered || @ranked_books.any?)
   end
 end

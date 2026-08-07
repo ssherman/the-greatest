@@ -4,6 +4,10 @@ module Books
       new(**options).call
     end
 
+    def self.indexable?(categories: [], countries: [])
+      Array(categories).size <= 1 && Array(countries).size <= 1
+    end
+
     def initialize(categories: [], countries: [], year_start: nil, year_end: nil, page: nil, ranking_configuration: nil)
       @categories = categories || []
       @countries = countries || []

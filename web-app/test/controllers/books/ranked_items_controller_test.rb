@@ -221,13 +221,31 @@ module Books
       assert_select "[data-testid=filter-chip]", 1
     end
 
-    test "the modal frame is lazy and carries the current filter state" do
+    test "the modal category pane carries the current filter state as a deferred source" do
       get "/the-greatest/novels/books"
 
-      assert_select "turbo-frame#books_filter_options[loading=lazy]" do |frame|
-        assert_match "category_slugs", frame.first["src"]
-        assert_match "novels", frame.first["src"]
+      assert_select "turbo-frame#books_filter_pane_category[data-pane-src]" do |frame|
+        assert_match "category_slugs", frame.first["data-pane-src"]
+        assert_match "novels", frame.first["data-pane-src"]
       end
+    end
+
+    test "a multi-category filter URL is noindex" do
+      Books::PublicIndexing.stubs(:enabled?).returns(true)
+
+      get "/the-greatest/fiction,novels/books"
+
+      assert_response :success
+      assert_select "meta[name=robots][content*=noindex]"
+    end
+
+    test "a single-category filter URL is indexable" do
+      Books::PublicIndexing.stubs(:enabled?).returns(true)
+
+      get "/the-greatest/novels/books"
+
+      assert_response :success
+      assert_select "meta[name=robots][content^=index]"
     end
 
     private

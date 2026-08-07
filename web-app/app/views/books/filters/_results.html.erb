@@ -1,0 +1,8 @@
+<%= turbo_frame_tag "books_filter_results_#{axis}", class: "flex flex-col gap-1",
+      data: {"books--filter-target": "results", axis: axis, results_src: results_src} do %>
+  <% if rows.any? %>
+    <div class="flex flex-col gap-1 pb-2 mb-2 border-b border-base-300">
+      <%= render Books::FilterOptionRowsComponent.new(axis: axis, rows: rows, show_counts: false) %>
+    </div>
+  <% end %>
+<% end %>
