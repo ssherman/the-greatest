@@ -253,35 +253,15 @@ class BooksBrowseRoutingTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "routes a category slug to the legacy show redirect" do
-    assert_recognizes(
-      {controller: "books/legacy_categories", action: "show", id: "fiction"},
-      {path: "http://#{HOST}/genres/fiction", method: :get}
-    )
-  end
-
-  # There is a real, active location category named "Page" (slug "page"), so the
-  # bare path must resolve it while the paginated path stays pagination.
-  test "the paginated genres path wins over the catch-all show route" do
+  # `/genres/:id` targets books/legacy_categories#show, which Task 3 creates.
+  # assert_recognizes resolves the controller CLASS (ActionDispatch calls
+  # req.controller_class), so asserting that route here would fail with
+  # "references missing controller" until Task 3 lands. Those three cases are
+  # Task 3 integration tests instead, where they assert the redirect target too.
+  test "the paginated genres path is pagination, not the catch-all show route" do
     assert_recognizes(
       {controller: "books/browse", action: "genres", page: "2"},
       {path: "http://#{HOST}/genres/page/2", method: :get}
-    )
-
-    assert_recognizes(
-      {controller: "books/legacy_categories", action: "show", id: "page"},
-      {path: "http://#{HOST}/genres/page", method: :get}
-    )
-  end
-
-  # There is a real, active subject category named "Search" (slug "search").
-  # Legacy shadowed it with a JSON typeahead endpoint purely because collection
-  # routes are declared before the member route; nothing points a JSON client at
-  # this app, so it resolves as the category it is.
-  test "the legacy search path resolves the category named Search" do
-    assert_recognizes(
-      {controller: "books/legacy_categories", action: "show", id: "search"},
-      {path: "http://#{HOST}/genres/search", method: :get}
     )
   end
 
@@ -423,7 +403,7 @@ Note there is deliberately **no** `countries/:id` route — legacy `resources :c
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `bin/rails test test/routing/books_browse_routing_test.rb`
-Expected: PASS, 21 runs, 0 failures.
+Expected: PASS, 19 runs, 0 failures.
 
 - [ ] **Step 5: Confirm nothing else regressed**
 
@@ -573,6 +553,52 @@ module Books
       assert_response :not_found
     end
 
+    # These three prove route ordering end to end. They live here rather than in
+    # test/routing/books_browse_routing_test.rb because assert_recognizes
+    # resolves the controller CLASS, so they cannot run until this controller
+    # exists -- and asserting the redirect target proves more than recognition.
+
+    # Production has real, active categories named "Page" (location) and
+    # "Search" (subject); dev confirms both. They are created here rather than
+    # added to test/fixtures/categories.yml because only these two tests need
+    # them. FriendlyId derives the slug from the name, so no explicit slug: is
+    # passed -- Category#should_generate_new_friendly_id? would overwrite it.
+    test "the bare page path resolves the category named Page" do
+      category = Books::Category.create!(name: "Page", category_type: :location)
+      assert_equal "page", category.slug
+
+      get "/genres/page"
+
+      assert_response :moved_permanently
+      assert_redirected_to "/the-greatest/page/books"
+    end
+
+    # A "Page" category exists, so /genres/page/2 could plausibly reach either
+    # controller. Assert which one actually handled it -- both would 404 here
+    # (no ranked categories fill a second page), so status alone proves nothing.
+    test "the paginated path is still pagination, not this controller" do
+      Books::Category.create!(name: "Page", category_type: :location)
+
+      get "/genres/page/2"
+
+      assert_equal "books/browse", @controller.controller_path
+      assert_equal "genres", @controller.action_name
+    end
+
+    # Legacy shadowed its real "Search" category with a JSON typeahead endpoint,
+    # purely because collection routes are declared before the member route.
+    # Nothing points a JSON client at this app, so it resolves as the category
+    # it is.
+    test "the legacy search path resolves the category named Search" do
+      category = Books::Category.create!(name: "Search", category_type: :subject)
+      assert_equal "search", category.slug
+
+      get "/genres/search"
+
+      assert_response :moved_permanently
+      assert_redirected_to "/the-greatest/search/books"
+    end
+
     # Books::Category is STI-scoped. A music category must never resolve here.
     test "404s a category belonging to another domain" do
       music = categories(:music_rock_genre)
@@ -640,7 +666,7 @@ end
 - [ ] **Step 5: Run the test to verify it passes**
 
 Run: `bin/rails test test/controllers/books/legacy_categories_controller_test.rb`
-Expected: PASS, 10 runs, 0 failures.
+Expected: PASS, 13 runs, 0 failures.
 
 - [ ] **Step 6: Lint and commit**
 
@@ -1149,7 +1175,7 @@ Expected: PASS, 0 failures.
 - [ ] **Step 5: Run the whole suite**
 
 Run: `bin/rails db:test:prepare test`
-Expected: 0 failures, 0 errors. Record the runs count — it should be the previous total plus roughly 52 (10 from Task 1, 21 from Task 2, 10 from Task 3, 2 net from Task 4, 9 from Task 5).
+Expected: 0 failures, 0 errors. Record the runs count — it should be the previous total plus roughly 52 (10 from Task 1, 19 from Task 2, 13 from Task 3, 2 net from Task 4, 9 from Task 5).
 
 - [ ] **Step 6: Lint**
 
