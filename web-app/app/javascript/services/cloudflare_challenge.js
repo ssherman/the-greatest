@@ -22,7 +22,33 @@ function isDocumentNavigation(input, init) {
   return (headers.get("Accept") ?? "").includes("text/html")
 }
 
+const HANDOFF_KEY = "cf-challenge-handoff"
+const HANDOFF_WINDOW_MS = 30000
+
+function recentlyHandedOff(url) {
+  try {
+    const last = JSON.parse(sessionStorage.getItem(HANDOFF_KEY))
+    return last?.url === url && Date.now() - last.at < HANDOFF_WINDOW_MS
+  } catch {
+    return false
+  }
+}
+
+// sessionStorage throws in some privacy modes; a storage failure must never
+// block the hand-off itself, so it degrades to losing only loop protection.
+function recordHandOff(url) {
+  try {
+    sessionStorage.setItem(HANDOFF_KEY, JSON.stringify({url, at: Date.now()}))
+  } catch {
+    return
+  }
+}
+
 function handOffToNavigation(url, input, init) {
+  if (recentlyHandedOff(url)) return false
+
+  recordHandOff(url)
+
   if (isDocumentNavigation(input, init)) {
     window.location.assign(url)
   } else {

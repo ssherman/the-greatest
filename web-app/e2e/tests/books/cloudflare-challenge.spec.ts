@@ -101,4 +101,26 @@ test.describe('Cloudflare challenge hand-off', () => {
 
     await expect(page).toHaveURL('/the-greatest/novels/books');
   });
+
+  test('the same URL does not hand off twice inside the guard window', async ({ page }) => {
+    await page.goto('/the-greatest/novels/books');
+    const target = new URL('/the-greatest/classics/books', page.url()).href;
+    await stubChallenge(page, target);
+
+    await page.evaluate(
+      ([key, url]) => {
+        sessionStorage.setItem(key, JSON.stringify({ url, at: Date.now() }));
+      },
+      ['cf-challenge-handoff', target],
+    );
+
+    const status = await page.evaluate(async (url) => {
+      const response = await fetch(url, { headers: { Accept: 'text/html' } });
+      return response.status;
+    }, target);
+
+    expect(status).toBe(403);
+    await expect(page.getByTestId('stub-challenge')).toHaveCount(0);
+    await expect(page).toHaveURL('/the-greatest/novels/books');
+  });
 });
