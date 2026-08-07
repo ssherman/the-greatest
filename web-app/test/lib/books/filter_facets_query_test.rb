@@ -77,5 +77,60 @@ module Books
 
       assert_equal counts.sort.reverse, counts
     end
+
+    test "DEFAULT_LIMIT is small enough for a phone-sized pane" do
+      assert_equal 24, Books::FilterFacetsQuery::DEFAULT_LIMIT
+    end
+
+    test "genres can be queried on their own" do
+      rows = Books::FilterFacetsQuery.genres(ranking_configuration: @rc)
+      counts = rows.to_h { |row| [row[:record].slug, row[:count]] }
+
+      assert_equal 2, counts["novels"]
+      assert_equal 1, counts["classics"]
+    end
+
+    test "countries can be queried on their own" do
+      rows = Books::FilterFacetsQuery.countries(ranking_configuration: @rc)
+      counts = rows.to_h { |row| [row[:record].slug, row[:count]] }
+
+      assert_equal 2, counts["french"]
+    end
+
+    test "the per-axis methods match what call returns" do
+      result = facets
+
+      assert_equal result.genres, Books::FilterFacetsQuery.genres(ranking_configuration: @rc)
+      assert_equal result.countries, Books::FilterFacetsQuery.countries(ranking_configuration: @rc)
+    end
+
+    test "the per-axis genre method keeps the category filter applied" do
+      rows = Books::FilterFacetsQuery.genres(
+        ranking_configuration: @rc,
+        categories: [categories(:books_novels_genre)]
+      )
+      slugs = rows.map { |row| row[:record].slug }
+
+      assert_includes slugs, "classics"
+      assert_not_includes slugs, "novels"
+    end
+
+    test "the per-axis country method drops its own filter" do
+      Books::BookCountry.create!(book: books_books(:crime_and_punishment), country: books_countries(:japanese))
+
+      rows = Books::FilterFacetsQuery.countries(
+        ranking_configuration: @rc,
+        countries: [books_countries(:french)]
+      )
+      slugs = rows.map { |row| row[:record].slug }
+
+      assert_includes slugs, "japanese"
+      assert_not_includes slugs, "french"
+    end
+
+    test "the per-axis methods respect the limit" do
+      assert_operator Books::FilterFacetsQuery.genres(ranking_configuration: @rc, limit: 1).size, :<=, 1
+      assert_operator Books::FilterFacetsQuery.countries(ranking_configuration: @rc, limit: 1).size, :<=, 1
+    end
   end
 end

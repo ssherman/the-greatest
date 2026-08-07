@@ -5,16 +5,26 @@ module Books
   # facet drops the country filter and reports alternatives. Each axis omits
   # what is already selected. Mirrors the legacy site's behaviour.
   class FilterFacetsQuery
-    # High enough to return every genre and country that has any ranked book
-    # (166 and 179 respectively against current data, out of 196 and 253 that
-    # exist at all), so the modal's search filters the whole set rather than a
-    # top-N slice. Dropping the cap entirely costs the same ~4ms; it stays as a
-    # bound in case the taxonomy grows.
-    DEFAULT_LIMIT = 500
+    # One pane's worth. The modal searches the server rather than filtering a
+    # pre-rendered list, so this bounds what a pane shows, not what is reachable.
+    DEFAULT_LIMIT = 24
 
     Result = Struct.new(:genres, :countries, keyword_init: true)
 
     def self.call(ranking_configuration:, categories: [], countries: [], year_start: nil, year_end: nil, limit: DEFAULT_LIMIT)
+      query = build(ranking_configuration, categories, countries, year_start, year_end, limit)
+      Result.new(genres: query.genre_facet, countries: query.country_facet)
+    end
+
+    def self.genres(ranking_configuration:, categories: [], countries: [], year_start: nil, year_end: nil, limit: DEFAULT_LIMIT)
+      build(ranking_configuration, categories, countries, year_start, year_end, limit).genre_facet
+    end
+
+    def self.countries(ranking_configuration:, categories: [], countries: [], year_start: nil, year_end: nil, limit: DEFAULT_LIMIT)
+      build(ranking_configuration, categories, countries, year_start, year_end, limit).country_facet
+    end
+
+    def self.build(ranking_configuration, categories, countries, year_start, year_end, limit)
       new(
         ranking_configuration: ranking_configuration,
         categories: Array(categories),
@@ -22,8 +32,9 @@ module Books
         year_start: year_start,
         year_end: year_end,
         limit: limit
-      ).call
+      )
     end
+    private_class_method :build
 
     def initialize(ranking_configuration:, categories:, countries:, year_start:, year_end:, limit:)
       @ranking_configuration = ranking_configuration
@@ -33,12 +44,6 @@ module Books
       @year_end = year_end
       @limit = limit
     end
-
-    def call
-      Result.new(genres: genre_facet, countries: country_facet)
-    end
-
-    private
 
     def genre_facet
       counts = CategoryItem
@@ -66,6 +71,8 @@ module Books
 
       rows_for(Books::Country.where(id: counts.keys), counts)
     end
+
+    private
 
     # RankedBooksQuery returns a relation carrying includes(...) and order(:rank)
     # for rendering. Both are wrong inside a subquery -- eager-load joins change

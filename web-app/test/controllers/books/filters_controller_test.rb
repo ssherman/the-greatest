@@ -87,28 +87,76 @@ module Books
       assert_match "no-store", response.headers["Cache-Control"].to_s
     end
 
-    test "options renders the facet frame" do
+    test "the category pane renders its frame with facet rows" do
       RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: @rc, rank: 1, score: 100)
 
-      get "/filters/options"
+      get "/filters/categories"
 
       assert_response :success
-      assert_select "turbo-frame#books_filter_options"
-      assert_select "form[action='/filters']"
+      assert_select "turbo-frame#books_filter_pane_category"
+      assert_select "turbo-frame#books_filter_results_category"
       assert_match "no-store", response.headers["Cache-Control"].to_s
     end
 
-    test "options reflects the current selection as checked" do
+    test "the country pane renders its own frame" do
       RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: @rc, rank: 1, score: 100)
 
-      get "/filters/options", params: {category_slugs: ["novels"]}
+      get "/filters/countries"
 
       assert_response :success
-      assert_select "input[name='category_slugs[]'][value=novels][checked]"
+      assert_select "turbo-frame#books_filter_pane_country"
+      assert_select "turbo-frame#books_filter_results_country"
     end
 
-    test "options 404s on an unknown slug" do
-      get "/filters/options", params: {category_slugs: ["no-such-genre"]}
+    test "the pane excludes an already-applied category from the browse list" do
+      RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: @rc, rank: 1, score: 100)
+
+      get "/filters/categories", params: {category_slugs: ["novels"]}
+
+      assert_response :success
+      assert_select "input[name='category_slugs[]'][value=novels]", false
+    end
+
+    test "searching returns only the results frame" do
+      get "/filters/categories", params: {q: "fict"}
+
+      assert_response :success
+      assert_select "turbo-frame#books_filter_results_category"
+      assert_select "turbo-frame#books_filter_pane_category", false
+      assert_select "input[name='category_slugs[]'][value=fiction]"
+    end
+
+    test "search reaches subjects and locations, not only genres" do
+      get "/filters/categories", params: {q: "politics"}
+
+      assert_response :success
+      assert_select "input[name='category_slugs[]'][value=politics]"
+    end
+
+    test "country search returns the country results frame" do
+      get "/filters/countries", params: {q: "fren"}
+
+      assert_response :success
+      assert_select "turbo-frame#books_filter_results_country"
+      assert_select "input[name='country_slugs[]'][value=french]"
+    end
+
+    test "a blank search returns an empty results frame" do
+      get "/filters/categories", params: {q: ""}
+
+      assert_response :success
+      assert_select "turbo-frame#books_filter_results_category"
+      assert_select "input[name='category_slugs[]']", false
+    end
+
+    test "the pane 404s on an unknown slug" do
+      get "/filters/categories", params: {category_slugs: ["no-such-genre"]}
+
+      assert_response :not_found
+    end
+
+    test "the superseded options endpoint is gone" do
+      get "/filters/options"
 
       assert_response :not_found
     end

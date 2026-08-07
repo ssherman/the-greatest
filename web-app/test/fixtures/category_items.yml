@@ -15,7 +15,6 @@
 #
 #  index_category_items_on_category_id                            (category_id)
 #  index_category_items_on_category_id_and_item_type_and_item_id  (category_id,item_type,item_id) UNIQUE
-#  index_category_items_on_item                                   (item_type,item_id)
 #  index_category_items_on_item_type_and_item_id                  (item_type,item_id)
 #
 # Foreign Keys

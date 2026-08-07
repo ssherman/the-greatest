@@ -97,5 +97,55 @@ module Books
 
       assert_equal "/rc/52", Books::FilterPath.call(ranking_configuration: rc)
     end
+
+    test "a single facet is indexable" do
+      assert Books::FilterPath.indexable?(categories: [categories(:books_novels_genre)], countries: [])
+      assert Books::FilterPath.indexable?(categories: [], countries: [books_countries(:french)])
+    end
+
+    test "no filters at all is indexable" do
+      assert Books::FilterPath.indexable?(categories: [], countries: [])
+    end
+
+    test "one category plus one country stays indexable" do
+      assert Books::FilterPath.indexable?(
+        categories: [categories(:books_novels_genre)],
+        countries: [books_countries(:french)]
+      )
+    end
+
+    test "two categories are not indexable" do
+      assert_not Books::FilterPath.indexable?(
+        categories: [categories(:books_novels_genre), categories(:books_fiction_genre)],
+        countries: []
+      )
+    end
+
+    test "two countries are not indexable" do
+      assert_not Books::FilterPath.indexable?(
+        categories: [],
+        countries: [books_countries(:french), books_countries(:japanese)]
+      )
+    end
+
+    test "the comma in a path marks exactly the non-indexable set" do
+      # robots.txt disallows on the comma, so the comma has to track indexable?
+      # exactly -- including under an /rc/ prefix, which the rules only reach
+      # because they lead with /*.
+      alternate = Books::RankingConfiguration.new(id: 52, primary: false)
+      pairs = [
+        [[categories(:books_novels_genre)], [], nil],
+        [[categories(:books_novels_genre), categories(:books_fiction_genre)], [], nil],
+        [[], [books_countries(:french), books_countries(:japanese)], nil],
+        [[categories(:books_novels_genre)], [], alternate],
+        [[categories(:books_novels_genre), categories(:books_fiction_genre)], [], alternate],
+        [[], [books_countries(:french), books_countries(:japanese)], alternate]
+      ]
+
+      pairs.each do |cats, countries, rc|
+        path = Books::FilterPath.call(categories: cats, countries: countries, ranking_configuration: rc)
+        assert_equal !path.include?(","), Books::FilterPath.indexable?(categories: cats, countries: countries)
+      end
+    end
   end
 end

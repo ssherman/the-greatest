@@ -440,10 +440,56 @@ Rails.application.routes.draw do
     get "rc/:ranking_configuration_id/page/:page", to: "books/ranked_items#index",
       as: :books_rc_page, constraints: {page: /\d+/}
 
-    # The modal posts here; #show 303s to the canonical filter path so the URL
-    # grammar lives only in Books::FilterPath. Neither is ever linked publicly.
+    # #show is the modal's Apply endpoint: it 303s to the canonical filter path
+    # so the URL grammar lives only in Books::FilterPath. #categories and
+    # #countries each render one drill-down pane. None of these are ever
+    # linked publicly.
     get "filters", to: "books/filters#show", as: :books_filters
-    get "filters/options", to: "books/filters#options", as: :books_filters_options
+    get "filters/categories", to: "books/filters#categories", as: :books_filters_categories
+    get "filters/countries", to: "books/filters#countries", as: :books_filters_countries
+
+    # Legacy browse grammar, ported verbatim so no /genres or /countries URL needs
+    # a redirect: BrowseController already reads params[:filter] and params[:sort],
+    # and route segments populate params exactly as query parameters do. Only the
+    # bare forms are named -- Books::BrowsePath builds every parameterised path,
+    # mirroring Books::FilterPath.
+    #
+    # The sort and filter constraints are LOAD-BEARING, not cosmetic:
+    # BrowseQuery.normalized_* falls back to the default for any input, so an
+    # unconstrained segment would turn /genres/sorted-by/<anything> into an
+    # unbounded space of indexable soft-duplicates. Anchors (\A, \z, ^, $) raise
+    # ArgumentError in a segment constraint -- Rails anchors them itself.
+    browse_sort = /(?:book_count|name)/
+    browse_filter = /(?:genre|location|subject)/
+
+    get "genres", to: "books/browse#genres", as: :books_genres
+    get "genres/page/:page", to: "books/browse#genres", as: :books_genres_page,
+      constraints: {page: /\d+/}
+    get "genres/sorted-by/:sort", to: "books/browse#genres",
+      constraints: {sort: browse_sort}
+    get "genres/sorted-by/:sort/page/:page", to: "books/browse#genres",
+      constraints: {sort: browse_sort, page: /\d+/}
+    get "genres/filtered-by/:filter", to: "books/browse#genres",
+      constraints: {filter: browse_filter}
+    get "genres/filtered-by/:filter/page/:page", to: "books/browse#genres",
+      constraints: {filter: browse_filter, page: /\d+/}
+    get "genres/filtered-by/:filter/sorted-by/:sort", to: "books/browse#genres",
+      constraints: {filter: browse_filter, sort: browse_sort}
+    get "genres/filtered-by/:filter/sorted-by/:sort/page/:page", to: "books/browse#genres",
+      constraints: {filter: browse_filter, sort: browse_sort, page: /\d+/}
+
+    # MUST stay last of the /genres routes: it matches any single segment, so every
+    # path above has to be declared first to win. /genres/page resolves the real
+    # location category named "Page"; /genres/page/2 stays pagination.
+    get "genres/:id", to: "books/legacy_categories#show"
+
+    get "countries", to: "books/browse#countries", as: :books_countries
+    get "countries/page/:page", to: "books/browse#countries", as: :books_countries_page,
+      constraints: {page: /\d+/}
+    get "countries/sorted-by/:sort", to: "books/browse#countries",
+      constraints: {sort: browse_sort}
+    get "countries/sorted-by/:sort/page/:page", to: "books/browse#countries",
+      constraints: {sort: browse_sort, page: /\d+/}
 
     # Legacy filter grammar, ported verbatim so no filter URL needs a redirect.
     # 4 bases x 5 date forms x page x rc prefix = 80 routes, all unnamed --

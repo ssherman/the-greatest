@@ -1,0 +1,6 @@
+<%= link_to path, class: "card bg-base-100 border border-base-300 hover:border-primary transition-colors" do %>
+  <div class="card-body p-4">
+    <h2 class="card-title text-base"><%= record.name %></h2>
+    <p class="text-sm text-base-content/70"><%= pluralize(number_with_delimiter(count), "book") %></p>
+  </div>
+<% end %>

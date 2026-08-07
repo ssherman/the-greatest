@@ -25,24 +25,24 @@ async function stubChallenge(
 
 test.describe('Cloudflare challenge hand-off', () => {
   test('a challenged filter navigation takes the whole page to the challenged URL', async ({ page }) => {
-    await page.goto('/the-greatest/novels/books');
+    await page.goto('/');
     await page.getByRole('button', { name: 'Filters' }).click();
+    await expect(page.locator('dialog#books_filter_modal')).toBeVisible();
 
-    const others = page.locator('input[name="category_slugs[]"]:not([value="novels"])');
-    await others.first().waitFor();
-    const second = await others.first().getAttribute('value');
+    await page.getByRole('button', { name: /Category/ }).click();
+    const genre = page.locator("input[name='category_slugs[]'][value='fiction']");
+    await genre.waitFor();
+    await genre.check();
 
     await stubChallenge(page, (url) => url.pathname === '/filters');
 
-    await others.first().check();
     await page.getByRole('button', { name: 'Apply' }).click();
 
     await expect(page.getByTestId('stub-challenge')).toBeVisible();
 
     const landed = decodeURIComponent(page.url());
     expect(landed).toContain('/filters?');
-    expect(landed).toContain('category_slugs[]=novels');
-    expect(landed).toContain(`category_slugs[]=${second}`);
+    expect(landed).toContain('category_slugs[]=fiction');
   });
 
   async function expectReload(

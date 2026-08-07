@@ -160,5 +160,43 @@ module Books
         resolve(year: {"a" => "b"})
       end
     end
+
+    test "caps categories at MAX_CATEGORIES" do
+      assert_equal 6, Books::FilterParams::MAX_CATEGORIES
+
+      slugs = (1..7).map { |n|
+        Books::Category.create!(name: "Generated Genre #{n}", category_type: :genre).slug
+      }
+
+      result = Books::FilterParams.call(ActionController::Parameters.new(category_id: slugs.first(6).join(",")))
+      assert_equal 6, result.categories.size
+
+      assert_raises ActiveRecord::RecordNotFound do
+        Books::FilterParams.call(ActionController::Parameters.new(category_id: slugs.join(",")))
+      end
+    end
+
+    test "caps countries at MAX_COUNTRIES" do
+      assert_equal 10, Books::FilterParams::MAX_COUNTRIES
+
+      slugs = (1..11).map { |n|
+        Books::Country.create!(name: "Generated Country #{n}").slug
+      }
+
+      result = Books::FilterParams.call(ActionController::Parameters.new(country_id: slugs.first(10).join(",")))
+      assert_equal 10, result.countries.size
+
+      assert_raises ActiveRecord::RecordNotFound do
+        Books::FilterParams.call(ActionController::Parameters.new(country_id: slugs.join(",")))
+      end
+    end
+
+    test "the cap counts unique slugs, not repeats" do
+      repeated = (["fiction"] * 20).join(",")
+
+      assert_nothing_raised do
+        Books::FilterParams.call(ActionController::Parameters.new(category_id: repeated))
+      end
+    end
   end
 end

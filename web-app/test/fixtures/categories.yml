@@ -103,7 +103,7 @@ books_fiction_genre:
   category_type: 0  # genre
   import_source: 1  # open_library
   alternative_names: []
-  item_count: 0
+  item_count: 500
   deleted: false
   parent: 
 
@@ -114,7 +114,7 @@ books_novels_genre:
   description: "Novels"
   category_type: 0  # genre
   alternative_names: []
-  item_count: 0
+  item_count: 300
   deleted: false
   parent:
 
@@ -125,7 +125,7 @@ books_classics_genre:
   description: "Classics"
   category_type: 0  # genre
   alternative_names: []
-  item_count: 0
+  item_count: 100
   deleted: false
   parent:
 
@@ -136,7 +136,7 @@ books_politics_subject:
   description: "Books about politics"
   category_type: 2  # subject
   alternative_names: []
-  item_count: 0
+  item_count: 200
   deleted: false
   parent:
 
@@ -147,7 +147,7 @@ books_france_location:
   description: "Books set in France"
   category_type: 1  # location
   alternative_names: []
-  item_count: 0
+  item_count: 50
   deleted: false
   parent:
 
@@ -158,7 +158,7 @@ books_deleted_genre:
   description: "Soft-deleted, must never resolve"
   category_type: 0  # genre
   alternative_names: []
-  item_count: 0
+  item_count: 9999
   deleted: true
   parent:
 
