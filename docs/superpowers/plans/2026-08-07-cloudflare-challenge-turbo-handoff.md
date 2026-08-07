@@ -193,8 +193,11 @@ import { test, expect } from '@playwright/test';
 const CHALLENGE_BODY =
   '<html><body><h1 data-testid="stub-challenge">Just a moment...</h1></body></html>';
 
-async function stubChallenge(page: import('@playwright/test').Page, urlPattern: string) {
-  await page.route(urlPattern, (route) =>
+async function stubChallenge(
+  page: import('@playwright/test').Page,
+  matcher: Parameters<import('@playwright/test').Page['route']>[0],
+) {
+  await page.route(matcher, (route) =>
     route.fulfill({
       status: 403,
       contentType: 'text/html',
@@ -212,20 +215,29 @@ test.describe('Cloudflare challenge hand-off', () => {
     const others = page.locator('input[name="category_slugs[]"]:not([value="novels"])');
     await others.first().waitFor();
     const second = await others.first().getAttribute('value');
-    const expectedPath = `/the-greatest/${['novels', second!].sort().join(',')}/books`;
 
-    await stubChallenge(page, `**${expectedPath}`);
+    await stubChallenge(page, (url) => url.pathname === '/filters');
 
     await others.first().check();
     await page.getByRole('button', { name: 'Apply' }).click();
 
     await expect(page.getByTestId('stub-challenge')).toBeVisible();
-    await expect(page).toHaveURL(expectedPath);
+
+    const landed = decodeURIComponent(page.url());
+    expect(landed).toContain('/filters?');
+    expect(landed).toContain('category_slugs[]=novels');
+    expect(landed).toContain(`category_slugs[]=${second}`);
   });
 });
 ```
 
-The route is registered *after* `page.goto` and scoped to the one exact path, so neither the initial page load nor Turbo's hover prefetching can collide with it. The form GETs `/filters?...`, Rails 303s to the comma path, `fetch` follows the redirect, and the stub answers there — so `response.url` is the comma path, which is what the hand-off must navigate to. Stubbing the navigation as well as the fetch mirrors reality: Cloudflare challenges both, and the visitor sees the interstitial.
+**Stub the first hop, not the redirect target.** The form GETs `/filters?...`, which Rails 303s to the comma path. Playwright's `page.route` does **not** fire for the redirected leg of a page-context `fetch()` — verified directly: the redirect target is visible as a request with `redirectedFrom=true`, but the route handler is invoked zero times and the real response comes through. So the stub must answer `/filters` itself.
+
+This is also the more faithful reproduction. Probing production earlier, Cloudflare challenged the `/filters` request itself and `response.url` was the `/filters?...` URL — exactly what this test now exercises.
+
+Matching uses a predicate on `url.pathname` rather than a glob, because Playwright's glob syntax gives `?` its own meaning and a `**/filters?**` pattern is ambiguous. The route is registered *after* `page.goto` so the initial page load cannot collide with it.
+
+The final three assertions are the point: the browser must have left the modal for a real navigation (`/filters?`), and that URL must carry **both** genre slugs — which is what disproves the original "the second genre gets dropped" reading of the bug. Stubbing the navigation as well as the fetch mirrors reality, since Cloudflare would challenge both, and the visitor sees the interstitial.
 
 - [ ] **Step 2: Run it to verify it fails**
 
