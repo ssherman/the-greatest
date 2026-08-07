@@ -107,18 +107,6 @@ module Books
       assert_redirected_to "/the-greatest/page/books"
     end
 
-    # A "Page" category exists, so /genres/page/2 could plausibly reach either
-    # controller. Assert which one actually handled it -- both would 404 here
-    # (no ranked categories fill a second page), so status alone proves nothing.
-    test "the paginated path is still pagination, not this controller" do
-      Books::Category.create!(name: "Page", category_type: :location)
-
-      get "/genres/page/2"
-
-      assert_equal "books/browse", @controller.controller_path
-      assert_equal "genres", @controller.action_name
-    end
-
     # Legacy shadowed its real "Search" category with a JSON typeahead endpoint,
     # purely because collection routes are declared before the member route.
     # Nothing points a JSON client at this app, so it resolves as the category

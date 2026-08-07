@@ -32,6 +32,30 @@ module Books
       assert_select "meta[name=robots][content^=index]"
     end
 
+    test "a sorted genres variant is noindex" do
+      Books::PublicIndexing.stubs(:enabled?).returns(true)
+
+      get "/genres/sorted-by/name"
+
+      assert_select "meta[name=robots][content^=noindex]"
+    end
+
+    test "a sorted countries variant is noindex" do
+      Books::PublicIndexing.stubs(:enabled?).returns(true)
+
+      get "/countries/sorted-by/name"
+
+      assert_select "meta[name=robots][content^=noindex]"
+    end
+
+    test "a non-default filter with the default sort is still indexable" do
+      Books::PublicIndexing.stubs(:enabled?).returns(true)
+
+      get "/genres/filtered-by/subject"
+
+      assert_select "meta[name=robots][content^=index]"
+    end
+
     test "genres accepts a type filter" do
       get "/genres/filtered-by/subject"
 
@@ -39,7 +63,7 @@ module Books
       assert_select "a[href='/the-greatest/politics/books']"
     end
 
-    test "genres accepts a sort and its canonical omits it" do
+    test "the canonical omits a sort even though the request accepts it" do
       get "/genres/sorted-by/name"
 
       assert_response :success
@@ -146,7 +170,7 @@ module Books
       assert_select "meta[name=robots][content^=index]"
     end
 
-    test "countries accepts a sort" do
+    test "the countries canonical omits a sort even though the request accepts it" do
       get "/countries/sorted-by/name"
 
       assert_response :success
@@ -228,6 +252,26 @@ module Books
       get "/genres", params: {utm_source: "newsletter"}
 
       assert_response :success
+    end
+
+    test "a page passed as an array does not raise" do
+      get "/genres", params: {page: ["1"]}
+
+      assert_response :moved_permanently
+    end
+
+    test "genres page 1 redirects to the bare path" do
+      get "/genres/page/1"
+
+      assert_response :moved_permanently
+      assert_redirected_to "/genres"
+    end
+
+    test "countries page 1 redirects to the bare path" do
+      get "/countries/page/1"
+
+      assert_response :moved_permanently
+      assert_redirected_to "/countries"
     end
 
     private

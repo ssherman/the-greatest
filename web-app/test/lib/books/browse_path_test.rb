@@ -34,6 +34,12 @@ module Books
       assert_equal "/genres", Books::BrowsePath.call(axis: :genres, page: "")
     end
 
+    # params[:page] can arrive as an Array (?page[]=1), which does not respond to
+    # to_i. It does not raise, and normalizes to the bare path.
+    test "an array page does not raise and produces the bare path" do
+      assert_equal "/genres", Books::BrowsePath.call(axis: :genres, page: ["1"])
+    end
+
     # A path segment is unconstrained input from a URL. Normalizing here means an
     # unknown value can never reach a generated path, so it cannot mint a
     # soft-duplicate URL for a crawler to follow.

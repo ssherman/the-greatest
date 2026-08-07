@@ -3,6 +3,11 @@ require "test_helper"
 class BooksBrowseRoutingTest < ActionDispatch::IntegrationTest
   HOST = Rails.application.config.domains[:books]
 
+  # `/genres/:id` targets books/legacy_categories#show, which Task 3 creates.
+  # assert_recognizes resolves the controller CLASS (ActionDispatch calls
+  # req.controller_class), so asserting that route here would fail with
+  # "references missing controller" until Task 3 lands. Those three cases are
+  # Task 3 integration tests instead, where they assert the redirect target too.
   BROWSE_CASES = [
     ["/genres", "genres", {}],
     ["/genres/page/2", "genres", {page: "2"}],
@@ -26,18 +31,6 @@ class BooksBrowseRoutingTest < ActionDispatch::IntegrationTest
         {path: "http://#{HOST}#{path}", method: :get}
       )
     end
-  end
-
-  # `/genres/:id` targets books/legacy_categories#show, which Task 3 creates.
-  # assert_recognizes resolves the controller CLASS (ActionDispatch calls
-  # req.controller_class), so asserting that route here would fail with
-  # "references missing controller" until Task 3 lands. Those three cases are
-  # Task 3 integration tests instead, where they assert the redirect target too.
-  test "the paginated genres path is pagination, not the catch-all show route" do
-    assert_recognizes(
-      {controller: "books/browse", action: "genres", page: "2"},
-      {path: "http://#{HOST}/genres/page/2", method: :get}
-    )
   end
 
   # BrowseQuery.normalized_* silently falls back to the default for ANY input, so

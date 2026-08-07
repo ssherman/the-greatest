@@ -15,7 +15,7 @@ module Books
       @base = BASES.fetch(@axis)
       @type = Books::BrowseQuery.normalized_type(type)
       @sort = Books::BrowseQuery.normalized_sort(sort)
-      @page = page.to_i
+      @page = page.to_s.to_i
     end
 
     def call
