@@ -210,7 +210,10 @@ export default class extends Controller {
     // A query queued while its pane was still loading must not outlive the
     // dialog it was typed into -- otherwise the frame arriving after Cancel
     // would still fire the search once it loads, after everything else has
-    // already been discarded.
+    // already been discarded. Clearing the queue alone is not enough: a
+    // debounce timer that has not fired yet would re-populate it afterwards.
+    Object.values(this.timers).forEach((timer) => clearTimeout(timer))
+    this.timers = {}
     this.pendingSearches = {}
 
     this.selectedTargets.forEach((container) => {
