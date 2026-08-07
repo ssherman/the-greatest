@@ -8,7 +8,7 @@
   <h1 class="text-3xl sm:text-4xl font-bold text-center text-balance"><%= @page_title %></h1>
 
   <div class="flex justify-center">
-    <%= render Books::BrowseToolbarComponent.new(base_path: books_countries_path, sort: @sort) %>
+    <%= render Books::BrowseToolbarComponent.new(axis: :countries, sort: @sort) %>
   </div>
 
   <% if @records.any? %>
