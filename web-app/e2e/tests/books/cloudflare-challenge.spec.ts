@@ -1,5 +1,11 @@
 import { test, expect } from '@playwright/test';
 
+declare global {
+  interface Window {
+    __notReloaded?: boolean;
+  }
+}
+
 const CHALLENGE_BODY =
   '<html><body><h1 data-testid="stub-challenge">Just a moment...</h1></body></html>';
 
@@ -37,5 +43,62 @@ test.describe('Cloudflare challenge hand-off', () => {
     expect(landed).toContain('/filters?');
     expect(landed).toContain('category_slugs[]=novels');
     expect(landed).toContain(`category_slugs[]=${second}`);
+  });
+
+  async function expectReload(
+    page: import('@playwright/test').Page,
+    trigger: () => Promise<unknown>,
+  ) {
+    await page.evaluate(() => {
+      window.__notReloaded = true;
+    });
+
+    const load = page.waitForEvent('load');
+    await trigger();
+    await load;
+
+    expect(await page.evaluate(() => window.__notReloaded ?? null)).toBeNull();
+  }
+
+  test('a challenged frame load reloads the current page instead of navigating to the frame URL', async ({ page }) => {
+    await page.goto('/the-greatest/novels/books');
+    const target = new URL('/filters/options', page.url()).href;
+    await stubChallenge(page, target);
+
+    await expectReload(page, () =>
+      page.evaluate((url) => {
+        fetch(url, { headers: { Accept: 'text/html', 'Turbo-Frame': 'books_filter_options' } });
+      }, target),
+    );
+
+    await expect(page).toHaveURL('/the-greatest/novels/books');
+  });
+
+  test('a challenged JSON fetch reloads the current page', async ({ page }) => {
+    await page.goto('/the-greatest/novels/books');
+    const target = new URL('/filters/options', page.url()).href;
+    await stubChallenge(page, target);
+
+    await expectReload(page, () =>
+      page.evaluate((url) => {
+        fetch(url, { headers: { Accept: 'application/json' } });
+      }, target),
+    );
+
+    await expect(page).toHaveURL('/the-greatest/novels/books');
+  });
+
+  test('a challenged POST reloads the current page instead of navigating to the endpoint', async ({ page }) => {
+    await page.goto('/the-greatest/novels/books');
+    const target = new URL('/user_lists', page.url()).href;
+    await stubChallenge(page, target);
+
+    await expectReload(page, () =>
+      page.evaluate((url) => {
+        fetch(url, { method: 'POST', headers: { Accept: 'text/html' } });
+      }, target),
+    );
+
+    await expect(page).toHaveURL('/the-greatest/novels/books');
   });
 });
