@@ -40,6 +40,22 @@ test.describe('Books filters', () => {
     await expect(page.getByTestId('filter-chip')).toHaveCount(1);
   });
 
+  test('applying a second genre keeps the first', async ({ page }) => {
+    await page.goto('/the-greatest/novels/books');
+    await page.getByRole('button', { name: 'Filters' }).click();
+
+    const others = page.locator('input[name="category_slugs[]"]:not([value="novels"])');
+    await others.first().waitFor();
+    const second = await others.first().getAttribute('value');
+
+    await others.first().check();
+    await page.getByRole('button', { name: 'Apply' }).click();
+
+    const expected = ['novels', second!].sort().join(',');
+    await expect(page).toHaveURL(`/the-greatest/${expected}/books`);
+    await expect(page.getByTestId('filter-chip')).toHaveCount(2);
+  });
+
   test('the heading reflects the active filter', async ({ page }) => {
     await page.goto('/the-greatest/novels/books');
 
