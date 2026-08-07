@@ -112,7 +112,7 @@ Rejected alternatives:
 No changes to application Ruby, and no Cloudflare configuration changes — the country and
 service-provider challenge rules stay as they are. `Books::FilterPath`, `Books::FilterParams`, the 80
 filter routes, and `Books::FilterFacetsComponent` are untouched; they were never wrong. The fix is one
-new JS module. Everything else in this spec is test coverage, including one new Ruby controller test.
+new JS module. Everything else in this spec is test coverage, including one new Ruby component test.
 
 ### The module
 
@@ -126,17 +126,19 @@ window.fetch = async (input, init) => {
   const response = await originalFetch(input, init)
   if (response.headers.get("cf-mitigated") !== "challenge") return response
 
-  if (handOffToNavigation(response.url, methodOf(input, init))) {
+  if (handOffToNavigation(response.url, input, init)) {
     return new Promise(() => {})   // the document is being replaced
   }
   return response
 }
 ```
 
-`methodOf(input, init)` reads `init?.method` first, then `input.method` when `input` is a `Request`,
-and defaults to `GET`. It compares case-insensitively.
+`handOffToNavigation` takes `input` and `init` — not just the method — because the three-condition
+document-navigation rule below needs headers (`Turbo-Frame`, `Accept`), which a method alone cannot
+supply. `methodOf(input, init)` reads `init?.method` first, then `input.method` when `input` is a
+`Request`, and defaults to `GET`. It compares case-insensitively.
 
-`handOffToNavigation(url, method)` returns whether it took over:
+`handOffToNavigation(url, input, init)` returns whether it took over:
 
 - **A document navigation** → `window.location.assign(url)`. Cloudflare renders the interstitial for a
   real navigation and, once solved, serves the URL the visitor actually asked for. For the reported bug
@@ -146,6 +148,13 @@ and defaults to `GET`. It compares case-insensitively.
   already on, and they retry. Unsaved form input is lost; this is an accepted cost, given challenges
   are rare and the alternative (a notification UI the public books site does not have) is more
   machinery than the case warrants.
+- **A prefetch** → ignored, not handed off. Turbo 8 prefetches a hovered link's GET automatically
+  (`turbo-prefetch` is not opted out anywhere in this app), sent with `X-Sec-Purpose: prefetch`. It is
+  speculative rather than visitor-initiated — the visitor merely hovered — so a challenged prefetch must
+  never move or reload the page; that would be a worse surprise than the silent discard it gets today.
+  The wrapper checks this before calling `handOffToNavigation` at all, so a prefetch does not consume a
+  loop-guard slot either. Turbo's prefetch delegate has empty success/failure handlers, so letting the
+  403 through is discarded harmlessly — the same (correct) behaviour a prefetch gets without this module.
 
 A request counts as a document navigation when **all three** hold: the method is GET or HEAD, the
 request carries no `Turbo-Frame` header, and its `Accept` header includes `text/html`.
@@ -163,11 +172,17 @@ All three conditions are load-bearing, and the naive "GET → assign" rule break
   Navigating to those would render raw JSON. They do not ask for `text/html`; a fetch with no `Accept`
   at all defaults to `*/*`, which also fails the check, so both reload correctly.
 
+A related judgement call the design accepts rather than solves: a challenged *background* GET — for
+example `user_list_state_controller.js`'s `refresh`, which fires automatically on `connect()` — still
+reloads the page even though the visitor did nothing to trigger it. That surprise is accepted because
+the loop guard bounds it to one reload per URL per 30 seconds.
+
 Returning a never-settling promise is deliberate. Turbo's `FetchRequest#perform` awaits it, so
 `turbo:before-fetch-response` never fires and Turbo never gets the chance to discard a 403 or render
-challenge HTML under a mismatched CSP nonce. Turbo's progress bar stays up while the browser
-navigates, which reads correctly as loading. `requestFinished` is skipped, which is harmless because
-the document is being replaced.
+challenge HTML into the current document. Turbo's progress bar stays up while the browser navigates,
+which reads correctly as loading. `requestFinished` is skipped, which is harmless because the document
+is being replaced. (This app has no CSP — `config/initializers/content_security_policy.rb` is entirely
+commented out — so a nonce mismatch is not among the reasons; the other reasons stand on their own.)
 
 ### Loop guard
 
@@ -217,8 +232,11 @@ Extended `test/components/books/filter_facets_component_test.rb`:
    than a fix, and it belongs in the component test rather than a controller test: per CLAUDE.md,
    controller tests assert status codes and params, never markup.
 
-`bin/rails test` and `bundle exec standardrb` must pass. `yarn build:all` must be run, since the JS
-bundle is committed to `app/assets/builds/`.
+`bin/rails test` and `bundle exec standardrb` must pass. `yarn build:all` must be run before any
+Playwright run — the JS bundle in `app/assets/builds/` is gitignored (`.gitignore:36`), not committed,
+so nothing but a rebuilt bundle exercises this module locally. It still reaches production because
+`jsbundling-rails` hooks the build into `assets:precompile`, which the Dockerfile runs at image build
+time.
 
 ## Out of scope
 
