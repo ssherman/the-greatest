@@ -159,6 +159,77 @@ module Books
       assert_response :not_found
     end
 
+    test "the query string form redirects permanently to the path form" do
+      get "/genres", params: {filter: "subject"}
+
+      assert_response :moved_permanently
+      assert_redirected_to "/genres/filtered-by/subject"
+    end
+
+    test "both query axes collapse into one path" do
+      get "/genres", params: {filter: "location", sort: "name"}
+
+      assert_response :moved_permanently
+      assert_redirected_to "/genres/filtered-by/location/sorted-by/name"
+    end
+
+    test "a query sort on countries collapses too" do
+      get "/countries", params: {sort: "name"}
+
+      assert_response :moved_permanently
+      assert_redirected_to "/countries/sorted-by/name"
+    end
+
+    test "a query page collapses to a path page" do
+      get "/genres", params: {page: "2"}
+
+      assert_response :moved_permanently
+      assert_redirected_to "/genres/page/2"
+    end
+
+    # A path page plus a query sort has to keep the page, which arrives as a
+    # PATH parameter rather than a query one.
+    test "a query sort on an already-paged path keeps the page" do
+      get "/genres/page/2", params: {sort: "name"}
+
+      assert_response :moved_permanently
+      assert_redirected_to "/genres/sorted-by/name/page/2"
+    end
+
+    # Junk normalizes away rather than 301ing to another junk URL.
+    test "an unknown query value collapses to the bare path" do
+      get "/genres", params: {filter: "nonsense", sort: "nonsense"}
+
+      assert_response :moved_permanently
+      assert_redirected_to "/genres"
+    end
+
+    test "a default query value collapses to the bare path without looping" do
+      get "/genres", params: {filter: "genre", sort: "book_count"}
+
+      assert_response :moved_permanently
+      assert_redirected_to "/genres"
+
+      get "/genres"
+
+      assert_response :success
+    end
+
+    # The guard must read request.query_parameters, NOT params -- on a routed
+    # path the values arrive as path parameters, and reading params would make
+    # every one of these redirect to itself forever.
+    test "a routed path with the same values does not redirect" do
+      get "/genres/filtered-by/subject/sorted-by/name"
+
+      assert_response :success
+    end
+
+    test "an unrelated query parameter does not trigger a redirect" do
+      get "/genres", params: {utm_source: "newsletter"}
+
+      assert_response :success
+    end
+
     private
 
     def ranked_book(name, rank)
