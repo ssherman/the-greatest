@@ -29,7 +29,7 @@ test.describe('Books browse pages', () => {
 
     await page.getByRole('link', { name: 'Subjects' }).click();
 
-    await expect(page).toHaveURL(/filter=subject/);
+    await expect(page).toHaveURL('/genres/filtered-by/subject');
     expect(await page.locator("a[href^='/the-greatest/']").first().getAttribute('href')).not.toBe(before);
   });
 

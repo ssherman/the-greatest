@@ -33,23 +33,23 @@ module Books
     end
 
     test "genres accepts a type filter" do
-      get "/genres", params: {filter: "subject"}
+      get "/genres/filtered-by/subject"
 
       assert_response :success
       assert_select "a[href='/the-greatest/politics/books']"
     end
 
     test "genres accepts a sort and its canonical omits it" do
-      get "/genres", params: {sort: "name"}
+      get "/genres/sorted-by/name"
 
       assert_response :success
       assert_select "link[rel=canonical][href$='/genres']"
     end
 
     test "the canonical keeps the type because it is different content" do
-      get "/genres", params: {filter: "subject"}
+      get "/genres/filtered-by/subject"
 
-      assert_select "link[rel=canonical][href$='/genres?filter=subject']"
+      assert_select "link[rel=canonical][href$='/genres/filtered-by/subject']"
     end
 
     test "a genres page past the first canonicalizes to itself, not to page 1" do
@@ -64,10 +64,10 @@ module Books
     test "a paged genres canonical keeps the type filter" do
       120.times { |i| rank_category_book("Bulk Subject #{i}", :subject, i + 100) }
 
-      get "/genres/page/2", params: {filter: "subject"}
+      get "/genres/filtered-by/subject/page/2"
 
       assert_response :success
-      assert_select "link[rel=canonical][href$='/genres/page/2?filter=subject']"
+      assert_select "link[rel=canonical][href$='/genres/filtered-by/subject/page/2']"
     end
 
     test "a countries page past the first canonicalizes to itself" do
@@ -79,10 +79,12 @@ module Books
       assert_select "link[rel=canonical][href$='/countries/page/2']"
     end
 
-    test "a bogus sort falls back rather than erroring" do
-      get "/genres", params: {sort: "nonsense"}
+    # The route constraint is what keeps /genres/sorted-by/<anything> from being
+    # an unbounded space of indexable soft-duplicates of /genres.
+    test "a bogus sort in the path is a 404, not a soft duplicate" do
+      get "/genres/sorted-by/nonsense"
 
-      assert_response :success
+      assert_response :not_found
     end
 
     test "a page past the last is a 404" do
@@ -145,7 +147,7 @@ module Books
     end
 
     test "countries accepts a sort" do
-      get "/countries", params: {sort: "name"}
+      get "/countries/sorted-by/name"
 
       assert_response :success
       assert_select "link[rel=canonical][href$='/countries']"

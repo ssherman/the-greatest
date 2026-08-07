@@ -19,8 +19,9 @@ class Books::BrowseController < ApplicationController
     @sort = Books::BrowseQuery.normalized_sort(params[:sort])
     @indexable = true
     @page_title = TITLES.fetch(@type)
-    filter = (@type == Books::BrowseQuery::TYPES.first) ? {} : {filter: @type}
-    @canonical_path = paged? ? books_genres_page_path(page: page_number, **filter) : books_genres_path(**filter)
+    # The sort is deliberately dropped: a sort variant is the same result set
+    # reordered, so it canonicalizes to the unsorted path.
+    @canonical_path = Books::BrowsePath.call(axis: :genres, type: @type, page: page_number)
 
     @pagy, @records = pagy_path(
       Books::BrowseQuery.categories(ranking_configuration: @ranking_configuration, type: @type, sort: @sort),
@@ -32,7 +33,7 @@ class Books::BrowseController < ApplicationController
     @sort = Books::BrowseQuery.normalized_sort(params[:sort])
     @indexable = true
     @page_title = "Book Origins"
-    @canonical_path = paged? ? books_countries_page_path(page: page_number) : books_countries_path
+    @canonical_path = Books::BrowsePath.call(axis: :countries, page: page_number)
 
     @pagy, @records = pagy_path(
       Books::BrowseQuery.countries(ranking_configuration: @ranking_configuration, sort: @sort),
@@ -49,9 +50,5 @@ class Books::BrowseController < ApplicationController
 
   def page_number
     params[:page].to_i
-  end
-
-  def paged?
-    page_number > 1
   end
 end

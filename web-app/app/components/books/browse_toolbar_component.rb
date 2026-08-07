@@ -3,8 +3,8 @@ module Books
     TYPE_LABELS = {"genre" => "Genres", "location" => "Settings", "subject" => "Subjects"}.freeze
     SORT_LABELS = {"book_count" => "Most books", "name" => "Name"}.freeze
 
-    def initialize(base_path:, sort:, type: nil, show_types: false)
-      @base_path = base_path
+    def initialize(axis:, sort:, type: nil, show_types: false)
+      @axis = axis
       @sort = sort
       @type = type
       @show_types = show_types
@@ -12,7 +12,7 @@ module Books
 
     private
 
-    attr_reader :base_path, :sort, :type, :show_types
+    attr_reader :axis, :sort, :type, :show_types
 
     def type_links
       TYPE_LABELS.map do |value, label|
@@ -26,14 +26,10 @@ module Books
       end
     end
 
-    # Both axes ride in every link so the toggles compose, and the defaults are
-    # omitted so the default view has exactly one URL rather than three.
+    # Both axes ride in every link so the toggles compose. BrowsePath omits the
+    # defaults, so the default view has exactly one URL rather than three.
     def path_for(type:, sort:)
-      query = {}
-      query[:filter] = type if type.present? && type != Books::BrowseQuery::TYPES.first
-      query[:sort] = sort if sort.present? && sort != Books::BrowseQuery::SORTS.first
-
-      query.any? ? "#{base_path}?#{query.to_query}" : base_path
+      Books::BrowsePath.call(axis: axis, type: type, sort: sort)
     end
   end
 end

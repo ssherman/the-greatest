@@ -9,7 +9,7 @@
 
   <div class="flex justify-center">
     <%= render Books::BrowseToolbarComponent.new(
-          base_path: books_genres_path, type: @type, sort: @sort, show_types: true
+          axis: :genres, type: @type, sort: @sort, show_types: true
         ) %>
   </div>
 
