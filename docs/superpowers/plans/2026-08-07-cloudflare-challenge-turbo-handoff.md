@@ -181,7 +181,7 @@ The core fix. A challenged Turbo Drive form submission must take the whole page 
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: a side-effect-only module — no exports. Importing it replaces `window.fetch`. Task 4 and Task 5 extend the same three functions defined here: `methodOf(input, init)`, `headersOf(input, init)`, and `handOffToNavigation(url, input, init)`.
+- Produces: a side-effect-only module — no exports. Importing it replaces `window.fetch`. It defines `handOffToNavigation(url)`, which Task 4 widens to `handOffToNavigation(url, input, init)` and Task 5 adds an early return to. Nothing outside the module ever calls it.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -242,18 +242,7 @@ Create `app/javascript/services/cloudflare_challenge.js`:
 ```js
 const originalFetch = window.fetch.bind(window)
 
-function methodOf(input, init) {
-  const method = init?.method ?? (input instanceof Request ? input.method : null)
-  return (method ?? "GET").toUpperCase()
-}
-
-function headersOf(input, init) {
-  const raw = init?.headers ?? (input instanceof Request ? input.headers : null)
-  if (!raw) return new Headers()
-  return raw instanceof Headers ? raw : new Headers(raw)
-}
-
-function handOffToNavigation(url, input, init) {
+function handOffToNavigation(url) {
   window.location.assign(url)
   return true
 }
@@ -262,7 +251,7 @@ window.fetch = async (input, init) => {
   const response = await originalFetch(input, init)
   if (response.headers.get("cf-mitigated") !== "challenge") return response
 
-  if (handOffToNavigation(response.url, input, init)) {
+  if (handOffToNavigation(response.url)) {
     return new Promise(() => {})
   }
 
@@ -270,7 +259,7 @@ window.fetch = async (input, init) => {
 }
 ```
 
-`methodOf` and `headersOf` are unused this task and wired up in Task 4, and `handOffToNavigation` accepts `input`/`init` it does not yet read. Define all three with their final signatures now so Task 4 only changes one function body.
+Write exactly this and nothing more. Do not add helpers, parameters, or branches for behaviour that later tasks introduce — unused code now is a defect, and Task 4 widens the signature when it has a caller that needs it.
 
 Returning a never-settling promise is deliberate: Turbo's `FetchRequest#perform` awaits it, so `turbo:before-fetch-response` never fires and Turbo never gets the chance to discard the 403 or render challenge HTML under a mismatched CSP nonce. Its progress bar stays up while the browser navigates, which reads correctly as loading.
 
@@ -339,8 +328,8 @@ The discriminator, verified against the installed Turbo: `FrameController#prepar
 - Modify: `e2e/tests/books/cloudflare-challenge.spec.ts`
 
 **Interfaces:**
-- Consumes: `methodOf(input, init)` and `headersOf(input, init)` from Task 3.
-- Produces: `isDocumentNavigation(input, init)` returning a boolean. Task 5 does not use it.
+- Consumes: `handOffToNavigation(url)` from Task 3, whose signature this task widens to `handOffToNavigation(url, input, init)`. Update its one call site in the `window.fetch` wrapper to pass `input` and `init` through.
+- Produces: `methodOf(input, init)`, `headersOf(input, init)`, and `isDocumentNavigation(input, init)`. Task 5 uses none of them.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -432,10 +421,21 @@ Expected: the three new tests FAIL, and Task 3's test still passes. Task 3's imp
 
 - [ ] **Step 3: Add the method and header dispatch**
 
-In `app/javascript/services/cloudflare_challenge.js`, replace `handOffToNavigation` with:
+In `app/javascript/services/cloudflare_challenge.js`, add the two accessors and the predicate, replace `handOffToNavigation`, and update its call site in the `window.fetch` wrapper to `handOffToNavigation(response.url, input, init)`:
 
 ```js
 const SAFE_METHODS = ["GET", "HEAD"]
+
+function methodOf(input, init) {
+  const method = init?.method ?? (input instanceof Request ? input.method : null)
+  return (method ?? "GET").toUpperCase()
+}
+
+function headersOf(input, init) {
+  const raw = init?.headers ?? (input instanceof Request ? input.headers : null)
+  if (!raw) return new Headers()
+  return raw instanceof Headers ? raw : new Headers(raw)
+}
 
 function isDocumentNavigation(input, init) {
   if (!SAFE_METHODS.includes(methodOf(input, init))) return false
