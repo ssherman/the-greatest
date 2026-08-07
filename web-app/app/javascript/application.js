@@ -1,5 +1,6 @@
 // Entry point for the build script in your package.json
 import "@hotwired/turbo-rails"
+import "./services/cloudflare_challenge"
 import "./controllers"
 
 // Import authentication services for all domains
