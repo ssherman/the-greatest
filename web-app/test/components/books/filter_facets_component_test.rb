@@ -67,6 +67,12 @@ module Books
       assert_selector "input[name='category_slugs[]'][value=novels][checked]"
     end
 
+    test "a selected genre renders exactly one input" do
+      render_component(categories: [categories(:books_novels_genre)])
+
+      assert_selector "input[name='category_slugs[]'][value=novels]", count: 1, visible: :all
+    end
+
     test "a selected country renders checked so it can be unchecked" do
       render_component(countries: [books_countries(:french)])
 
