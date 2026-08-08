@@ -122,6 +122,31 @@ module Search
         response
       end
 
+      # Partial document update: patches only the given fields, leaving the rest of each
+      # document intact. Used when derived values change without the record changing --
+      # a full reindex would rewrite every field to alter two.
+      def self.bulk_update(updates)
+        return if updates.empty?
+
+        actions = updates.map do |item_id, fields|
+          {update: {_index: index_name, _id: item_id, data: {doc: fields}}}
+        end
+
+        response = client.bulk(body: actions, refresh: true)
+
+        if response["errors"]
+          response["items"].each do |item|
+            if item["update"]["error"]
+              Rails.logger.error "Failed to update item ID #{item["update"]["_id"]}: #{item["update"]["error"]}"
+            end
+          end
+        else
+          Rails.logger.info "Successfully updated #{updates.size} items in '#{index_name}'"
+        end
+
+        response
+      end
+
       def self.index_item(item)
         response = client.index(
           index: index_name,
