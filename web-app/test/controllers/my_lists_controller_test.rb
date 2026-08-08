@@ -689,4 +689,21 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
       )
     end
   end
+
+  test "pagination stays inside the list_items frame" do
+    seed_list_items(@albums_favorites, 100)
+    sign_in_as(@user, stub_auth: true)
+
+    get my_list_path(@albums_favorites)
+
+    assert_response :success
+    assert_select %(turbo-frame#list_items a[data-turbo-frame="list_items"]), minimum: 1
+  end
+
+  test "no link on a paginated list is trapped in the list_items frame" do
+    seed_list_items(@albums_favorites, 100)
+    sign_in_as(@user, stub_auth: true)
+
+    assert_no_frame_trapped_links my_list_path(@albums_favorites)
+  end
 end
