@@ -1,0 +1,24 @@
+# STI fixtures live in this one root-level file; a books/saved_searches.yml would
+# collide with it and take down the suite.
+books_public:
+  type: Books::SavedSearch
+  user: regular_user
+  name: "Great Russian Novels"
+  description: "Long fiction, Russian origin"
+  criteria: { "genre_match_mode": "any", "included_language_ids": [12] }
+  public: true
+  last_executed_at: <%= 2.days.ago.to_fs(:db) %>
+  result_count: 42
+
+books_private:
+  type: Books::SavedSearch
+  user: regular_user
+  criteria: { "genre_match_mode": "any" }
+  public: false
+
+books_other_user:
+  type: Books::SavedSearch
+  user: admin_user
+  name: "Someone else's search"
+  criteria: { "genre_match_mode": "any" }
+  public: false
