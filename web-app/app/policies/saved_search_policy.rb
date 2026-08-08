@@ -35,6 +35,6 @@ class SavedSearchPolicy < ApplicationPolicy
   end
 
   def owner?
-    record.user_id == user&.id
+    user.present? && record.user_id == user.id
   end
 end

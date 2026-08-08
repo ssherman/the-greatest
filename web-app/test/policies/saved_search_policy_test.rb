@@ -54,4 +54,10 @@ class SavedSearchPolicyTest < ActiveSupport::TestCase
     assert_equal SavedSearchPolicy.new(@other, @private_search).update?,
       SavedSearchPolicy.new(@other, @private_search).edit?
   end
+
+  test "an anonymous viewer is not the owner of an unpersisted search" do
+    refute SavedSearchPolicy.new(nil, SavedSearch.new).update?
+    refute SavedSearchPolicy.new(nil, SavedSearch.new).destroy?
+    refute SavedSearchPolicy.new(nil, SavedSearch.new).show?
+  end
 end
