@@ -607,6 +607,70 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  # --- Turbo frame integrity ---
+  #
+  # Every link inside the list_items frame has to break out of it: the book,
+  # album, game and song show pages have no list_items frame, so a link scoped
+  # to the frame renders "Content missing". See CLAUDE.md, "Turbo Frames trap
+  # links".
+
+  test "no link in an albums list is trapped in the list_items frame" do
+    sign_in_as(@user, stub_auth: true)
+
+    %w[list_view table_view grid_view].each do |mode|
+      assert_no_frame_trapped_links my_list_path(@albums_favorites, view_mode: mode)
+    end
+  end
+
+  test "no link in a songs list is trapped in the list_items frame" do
+    sign_in_as(@user, stub_auth: true)
+
+    %w[list_view table_view grid_view].each do |mode|
+      assert_no_frame_trapped_links my_list_path(
+        user_lists(:regular_user_music_songs_favorites), view_mode: mode
+      )
+    end
+  end
+
+  test "no link in a books list is trapped in the list_items frame" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+
+    %w[list_view table_view grid_view].each do |mode|
+      assert_no_frame_trapped_links my_list_path(
+        user_lists(:regular_user_books_favorites), view_mode: mode
+      )
+    end
+  end
+
+  test "no link in a games list is trapped in the list_items frame" do
+    host! Rails.application.config.domains[:games]
+    sign_in_as(@user, stub_auth: true)
+
+    %w[list_view table_view grid_view].each do |mode|
+      assert_no_frame_trapped_links my_list_path(
+        user_lists(:regular_user_games_favorites), view_mode: mode
+      )
+    end
+  end
+
+  test "pagination stays inside the list_items frame" do
+    seed_list_items(@albums_favorites, 100)
+    sign_in_as(@user, stub_auth: true)
+
+    get my_list_path(@albums_favorites)
+
+    assert_response :success
+    assert_select %(turbo-frame#list_items a[data-turbo-frame="list_items"]), minimum: 1
+  end
+
+  test "no link on a paginated list is trapped in the list_items frame" do
+    seed_list_items(@albums_favorites, 100)
+    sign_in_as(@user, stub_auth: true)
+
+    assert_no_frame_trapped_links my_list_path(@albums_favorites)
+  end
+
   private
 
   # Bulk-inserts filler albums + list items so pagination tests can reach page
