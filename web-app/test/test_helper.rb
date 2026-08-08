@@ -4,6 +4,7 @@ require "rails/test_help"
 require "mocha/minitest"
 require "sidekiq/testing"
 require "webmock/minitest"
+require_relative "support/turbo_frame_links"
 
 # Configure Sidekiq to run jobs inline during tests
 Sidekiq::Testing.inline!
