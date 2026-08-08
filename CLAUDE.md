@@ -78,7 +78,6 @@ which takes **hours**.
   `listable: dark_side (Music::Album)` — never set `_type` manually.
 - **DataImporters:** for identifiers always `find_or_initialize_by`, never `build` (avoids dupes on
   provider re-runs). See `docs/features/data_importers.md`.
-- **No code comments** unless asked; write self-documenting code and follow existing patterns.
 
 ## Testing (Minitest + fixtures + Mocha)
 
