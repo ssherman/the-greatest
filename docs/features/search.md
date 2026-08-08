@@ -198,6 +198,7 @@ All domain index classes inherit from `Search::Base::Index`. Key methods:
 | `delete_index` | Logs but doesn't raise on NotFound |
 | `bulk_index(items)` | Builds action array from `item.as_indexed_json`, calls bulk API with `refresh: true` |
 | `bulk_unindex(item_ids)` | Bulk delete by ID |
+| `bulk_update(updates)` | Partial document update — `{item_id => {field: value}}`. Patches only the named fields via the bulk API's `update` action instead of reindexing the whole document |
 | `index_item(item)` | Single-document upsert |
 | `reindex_all` | Drops index, recreates, streams all records via `find_in_batches(batch_size: 1000)` |
 
