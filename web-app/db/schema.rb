@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_07_013341) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_08_151613) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -126,16 +126,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_07_013341) do
   create_table "books_books", force: :cascade do |t|
     t.string "alternate_titles", default: [], null: false, array: true
     t.integer "book_kind", default: 0, null: false
+    t.integer "book_length"
     t.datetime "created_at", null: false
     t.bigint "default_edition_id"
     t.text "description"
     t.integer "first_published_year"
     t.bigint "original_language_id"
+    t.string "page_range"
     t.string "slug", null: false
     t.string "sort_title"
     t.string "subtitle"
     t.string "title", null: false
     t.datetime "updated_at", null: false
+    t.integer "word_count"
     t.index ["alternate_titles"], name: "index_books_books_on_alternate_titles", using: :gin
     t.index ["book_kind"], name: "index_books_books_on_book_kind"
     t.index ["default_edition_id"], name: "index_books_books_on_default_edition_id"
