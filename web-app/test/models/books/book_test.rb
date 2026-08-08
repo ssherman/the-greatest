@@ -7,12 +7,15 @@ require "test_helper"
 #  id                   :bigint           not null, primary key
 #  alternate_titles     :string           default([]), not null, is an Array
 #  book_kind            :integer          default(0), not null
+#  book_length          :integer
 #  description          :text
 #  first_published_year :integer
+#  page_range           :string
 #  slug                 :string           not null
 #  sort_title           :string
 #  subtitle             :string
 #  title                :string           not null
+#  word_count           :integer
 #  created_at           :datetime         not null
 #  updated_at           :datetime         not null
 #  default_edition_id   :bigint
@@ -156,6 +159,46 @@ module Books
       assert_equal book.id, request.parent_id
       assert_equal "Books::Book", request.parent_type
       assert request.unindex_item?
+    end
+
+    test "book_length enum maps the six legacy bands to 0..5" do
+      assert_equal({
+        "very_short" => 0, "short" => 1, "medium" => 2,
+        "moderate" => 3, "long" => 4, "very_long" => 5
+      }, Books::Book.book_lengths)
+    end
+
+    test "derives book_length from page_range on create" do
+      book = Books::Book.create!(title: "Derived From Pages", page_range: "200-400")
+
+      assert_equal "medium", book.book_length
+    end
+
+    test "derives book_length from word_count when page_range is absent" do
+      book = Books::Book.create!(title: "Derived From Words", word_count: 82_500)
+
+      assert_equal "medium", book.book_length
+    end
+
+    test "does not overwrite an explicitly set book_length" do
+      book = Books::Book.create!(title: "Explicit Length", page_range: "200-400", book_length: :very_long)
+
+      assert_equal "very_long", book.book_length
+    end
+
+    test "leaves book_length nil when neither source is present" do
+      book = Books::Book.create!(title: "No Length Source")
+
+      assert_nil book.book_length
+    end
+
+    test "re-derives book_length when page_range changes and length is blank" do
+      book = Books::Book.create!(title: "Late Page Range")
+      assert_nil book.book_length
+
+      book.update!(page_range: "600-700")
+
+      assert_equal "long", book.book_length
     end
   end
 end

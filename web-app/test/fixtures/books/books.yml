@@ -7,12 +7,15 @@
 #  id                   :bigint           not null, primary key
 #  alternate_titles     :string           default([]), not null, is an Array
 #  book_kind            :integer          default(0), not null
+#  book_length          :integer
 #  description          :text
 #  first_published_year :integer
+#  page_range           :string
 #  slug                 :string           not null
 #  sort_title           :string
 #  subtitle             :string
 #  title                :string           not null
+#  word_count           :integer
 #  created_at           :datetime         not null
 #  updated_at           :datetime         not null
 #  default_edition_id   :bigint

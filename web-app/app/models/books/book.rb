@@ -5,12 +5,15 @@
 #  id                   :bigint           not null, primary key
 #  alternate_titles     :string           default([]), not null, is an Array
 #  book_kind            :integer          default(0), not null
+#  book_length          :integer
 #  description          :text
 #  first_published_year :integer
+#  page_range           :string
 #  slug                 :string           not null
 #  sort_title           :string
 #  subtitle             :string
 #  title                :string           not null
+#  word_count           :integer
 #  created_at           :datetime         not null
 #  updated_at           :datetime         not null
 #  default_edition_id   :bigint
@@ -45,6 +48,7 @@ class Books::Book < ApplicationRecord
   friendly_id :slug_candidates, use: [:slugged, :finders]
 
   enum :book_kind, {standalone: 0, collection: 1}
+  enum :book_length, {very_short: 0, short: 1, medium: 2, moderate: 3, long: 4, very_long: 5}
 
   belongs_to :original_language, class_name: "Language", optional: true
   belongs_to :default_edition, class_name: "Books::Edition", optional: true
@@ -76,6 +80,7 @@ class Books::Book < ApplicationRecord
   validates :title, presence: true
 
   before_validation :normalize_title
+  before_validation :derive_book_length, if: -> { book_length.blank? }
 
   scope :selectable, -> { where(book_kind: :standalone) }
 
@@ -99,6 +104,10 @@ class Books::Book < ApplicationRecord
 
   def normalize_title
     self.title = Services::Text::QuoteNormalizer.call(title) if title.present?
+  end
+
+  def derive_book_length
+    self.book_length = Books::BookLength.call(page_range: page_range, word_count: word_count)
   end
 
   def slug_candidates
