@@ -8,7 +8,10 @@ class CalculateRankingsJob
 
     if result.success?
       Rails.logger.info "Successfully calculated rankings for configuration #{ranking_configuration_id}"
-      Books::CalculateAuthorRankingsJob.perform_async if ranking_configuration.type == "Books::RankingConfiguration"
+      if ranking_configuration.type == "Books::RankingConfiguration"
+        Books::CalculateAuthorRankingsJob.perform_async
+        Books::ReindexRankedFieldsJob.perform_async if ranking_configuration.default_primary?
+      end
     else
       Rails.logger.error "Failed to calculate rankings for configuration #{ranking_configuration_id}: #{result.errors}"
       raise "Ranking calculation failed: #{result.errors.join(", ")}"

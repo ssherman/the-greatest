@@ -8,7 +8,7 @@ module Search
       end
 
       def self.model_includes
-        [:authors]
+        [:authors, :categories, :countries, :list_items, :primary_ranked_item]
       end
 
       def self.index_definition
@@ -94,6 +94,24 @@ module Search
               },
               book_kind: {
                 type: "keyword"
+              },
+              first_published_year: {
+                type: "integer"
+              },
+              original_language_id: {
+                type: "keyword"
+              },
+              country_ids: {
+                type: "keyword"
+              },
+              book_length: {
+                type: "integer"
+              },
+              ranked: {
+                type: "boolean"
+              },
+              ranked_position: {
+                type: "integer"
               }
             }
           }

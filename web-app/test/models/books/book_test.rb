@@ -218,5 +218,81 @@ module Books
 
       assert_nil book.reload.book_length
     end
+
+    test "as_indexed_json includes the saved-search filter fields" do
+      book = books_books(:war_and_peace)
+      json = book.as_indexed_json
+
+      assert_equal book.first_published_year, json[:first_published_year]
+      assert_equal book.original_language_id, json[:original_language_id]
+      assert_kind_of Array, json[:country_ids]
+      assert_includes [true, false], json[:ranked]
+    end
+
+    test "as_indexed_json category_ids excludes deleted and null-deleted categories, matching the active scope" do
+      book = books_books(:war_and_peace)
+      deleted_category = categories(:books_deleted_genre)
+      CategoryItem.create!(category: deleted_category, item: book)
+      null_deleted_category = ::Books::Category.create!(name: "Null Deleted Category")
+      null_deleted_category.update_column(:deleted, nil)
+      CategoryItem.create!(category: null_deleted_category, item: book)
+
+      json = book.reload.as_indexed_json
+
+      assert_equal book.categories.active.pluck(:id).sort, json[:category_ids].sort
+      assert_not_includes json[:category_ids], deleted_category.id
+      assert_not_includes json[:category_ids], null_deleted_category.id
+    end
+
+    test "as_indexed_json issues no queries beyond the model_includes preload" do
+      books = Books::Book.where(id: books_books(:war_and_peace).id)
+        .includes(Search::Books::BookIndex.model_includes)
+        .to_a
+
+      assert_queries_count(0) { books.first.as_indexed_json }
+    end
+
+    test "as_indexed_json emits book_length as its integer enum value, not the string key" do
+      book = books_books(:war_and_peace)
+      book.update!(book_length: :long)
+
+      assert_equal 4, book.as_indexed_json[:book_length]
+    end
+
+    test "as_indexed_json emits a nil book_length rather than raising" do
+      book = Books::Book.create!(title: "No Length At All")
+
+      assert_nil book.as_indexed_json[:book_length]
+    end
+
+    test "as_indexed_json reports ranked_position from the primary ranking configuration" do
+      book = books_books(:war_and_peace)
+      RankedItem.create!(
+        item: book,
+        ranking_configuration: ranking_configurations(:books_global),
+        rank: 7,
+        score: 90.0
+      )
+
+      assert_equal 7, book.reload.as_indexed_json[:ranked_position]
+    end
+
+    test "as_indexed_json reports a nil ranked_position for an unranked book" do
+      book = Books::Book.create!(title: "Never Ranked")
+
+      assert_nil book.as_indexed_json[:ranked_position]
+    end
+
+    test "as_indexed_json ignores a rank from a non-primary ranking configuration" do
+      book = books_books(:war_and_peace)
+      RankedItem.create!(
+        item: book,
+        ranking_configuration: ranking_configurations(:books_user),
+        rank: 3,
+        score: 80.0
+      )
+
+      assert_nil book.reload.as_indexed_json[:ranked_position]
+    end
   end
 end
