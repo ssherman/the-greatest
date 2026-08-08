@@ -75,11 +75,19 @@ dropped into the list in the future cannot reintroduce the bug.
 
 ## Regression guard
 
-Add `assert_no_frame_trapped_links(path)` to the `ActionDispatch::IntegrationTest`
-reopening in `test/test_helper.rb`, alongside `sign_in_as`.
+Split in two so the analysis is testable on its own:
 
-Behaviour: GET `path`, parse the body, and for every `<a href>` walk up to its nearest
-enclosing `<turbo-frame>`. The anchor's effective Turbo target is:
+1. `test/support/turbo_frame_links.rb` — `TurboFrameLinks.trapped_candidates(html, host:)`,
+   a pure, HTTP-free function returning the anchors whose click would stay inside a frame.
+2. `assert_no_frame_trapped_links(path)` on the `ActionDispatch::IntegrationTest` reopening
+   in `test/test_helper.rb`, alongside `sign_in_as` — the thin layer that supplies requests.
+
+The split matters: once the page is fixed the assertion finds zero links to follow
+anywhere in the suite, so without unit tests against known-bad HTML a broken analyser would
+pass silently everywhere.
+
+Behaviour: for every `<a href>`, walk up to its nearest enclosing `<turbo-frame>`. The
+anchor's effective Turbo target is:
 
 ```
 a["data-turbo-frame"] || frame["target"] || frame["id"]
@@ -89,8 +97,12 @@ If that value is not `_top`, GET the href (following redirects) and fail unless 
 destination is 2xx **and** contains `<turbo-frame id="<effective>">`.
 
 Skipped anchors: those with no enclosing frame, `data-turbo="false"`, fragment-only /
-`mailto:` / `tel:` hrefs, absolute URLs on a different host, and non-HTML formats
-(e.g. `.csv`). Hrefs are deduped by path, so a 25-item list costs a handful of extra GETs.
+`mailto:` / `tel:` / `javascript:` hrefs, and absolute URLs on a different host. Candidates
+are deduped, so a 25-item list costs a handful of extra GETs.
+
+Note there is deliberately **no** skip for non-HTML extensions such as `.csv`. A frame-scoped
+link to a CSV is just as broken as one to a book page, and skipping it would hide a real
+defect; the CSV download link on this page escapes via `data-turbo="false"` already.
 
 Limits, stated deliberately:
 
@@ -142,12 +154,14 @@ Add under **Frontend**:
 ## Files touched
 
 1. `web-app/app/views/my_lists/show.html.erb`
-2. `web-app/test/test_helper.rb`
-3. `web-app/test/controllers/my_lists_controller_test.rb`
-4. `web-app/test/controllers/music/albums/lists_controller_test.rb`
-5. `web-app/test/controllers/music/songs/lists_controller_test.rb`
-6. `web-app/e2e/tests/books/account/my-lists.spec.ts`
-7. `CLAUDE.md`
+2. `web-app/test/support/turbo_frame_links.rb` (new)
+3. `web-app/test/support/turbo_frame_links_test.rb` (new)
+4. `web-app/test/test_helper.rb`
+5. `web-app/test/controllers/my_lists_controller_test.rb`
+6. `web-app/test/controllers/music/albums/lists_controller_test.rb`
+7. `web-app/test/controllers/music/songs/lists_controller_test.rb`
+8. `web-app/e2e/tests/books/account/my-lists.spec.ts`
+9. `CLAUDE.md`
 
 ## Verification
 
