@@ -90,6 +90,12 @@ module Music
         assert_equal "/songs/lists/#{list.id}/page/2", url
         refute_includes url, "id="
       end
+
+      test "no link on a list page is trapped in the list_items frame" do
+        list = lists(:music_songs_list)
+
+        assert_no_frame_trapped_links "/songs/lists/#{list.id}"
+      end
     end
   end
 end

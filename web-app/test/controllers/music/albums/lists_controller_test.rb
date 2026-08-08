@@ -112,6 +112,12 @@ module Music
 
         assert_response :success
       end
+
+      test "no link on a list page is trapped in the list_items frame" do
+        list = lists(:music_albums_list)
+
+        assert_no_frame_trapped_links "/albums/lists/#{list.id}"
+      end
     end
   end
 end

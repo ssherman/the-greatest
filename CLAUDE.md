@@ -96,6 +96,12 @@ Server-first + progressive enhancement: Turbo Frames, minimal Stimulus controlle
 DaisyUI 5 on Tailwind CSS 4. JS bundled by Rollup into per-domain IIFE bundles; CSS built per domain.
 No Rails asset pipeline — builds are served from `public/`.
 
+**Turbo Frames trap links.** Every `<a>` inside a `turbo_frame_tag` navigates *that frame*, so a
+link to another page renders "Content missing". Put `target: "_top"` on any frame whose contents
+link off-page, and opt pagination back in with
+`@pagy.series_nav(anchor_string: 'data-turbo-frame="<frame_id>"')`. The
+`assert_no_frame_trapped_links` integration assertion guards this.
+
 ## Deeper docs
 
 - `docs/dev-core-values.md` — full development principles
