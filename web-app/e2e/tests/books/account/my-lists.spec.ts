@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 
+const publicListId = process.env.PLAYWRIGHT_PUBLIC_BOOKS_LIST_ID!;
+
 test.describe('Books My Lists', () => {
   test('the My Lists nav link is revealed when signed in', async ({ page }) => {
     await page.goto('/');
@@ -47,4 +49,23 @@ test.describe('Books My Lists', () => {
     expect(response.status()).toBe(200);
     expect(response.headers()['content-type']).toContain('text/csv');
   });
+});
+
+test.describe('Books My Lists item links', () => {
+  // The list lives inside a #list_items Turbo Frame. Without target="_top" the
+  // click is scoped to that frame, the book page has no such frame, and Turbo
+  // writes "Content missing" instead of navigating.
+  for (const [label, viewMode] of [['grid', 'grid_view'], ['list', 'list_view']] as const) {
+    test(`a book title in ${label} view navigates to the book page`, async ({ page }) => {
+      await page.goto(`/my/lists/${publicListId}?view_mode=${viewMode}`);
+
+      const link = page.locator('#list_items a[href^="/book/"]').first();
+      const title = (await link.innerText()).trim();
+      await link.click();
+
+      await expect(page).toHaveURL(/\/book\//);
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(title);
+      await expect(page.getByText('Content missing')).toHaveCount(0);
+    });
+  }
 });
