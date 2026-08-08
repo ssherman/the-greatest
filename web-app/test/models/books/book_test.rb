@@ -218,5 +218,58 @@ module Books
 
       assert_nil book.reload.book_length
     end
+
+    test "as_indexed_json includes the saved-search filter fields" do
+      book = books_books(:war_and_peace)
+      json = book.as_indexed_json
+
+      assert_equal book.first_published_year, json[:first_published_year]
+      assert_equal book.original_language_id, json[:original_language_id]
+      assert_kind_of Array, json[:country_ids]
+      assert_includes [true, false], json[:ranked]
+    end
+
+    test "as_indexed_json emits book_length as its integer enum value, not the string key" do
+      book = books_books(:war_and_peace)
+      book.update!(book_length: :long)
+
+      assert_equal 4, book.as_indexed_json[:book_length]
+    end
+
+    test "as_indexed_json emits a nil book_length rather than raising" do
+      book = Books::Book.create!(title: "No Length At All")
+
+      assert_nil book.as_indexed_json[:book_length]
+    end
+
+    test "as_indexed_json reports ranked_position from the primary ranking configuration" do
+      book = books_books(:war_and_peace)
+      RankedItem.create!(
+        item: book,
+        ranking_configuration: ranking_configurations(:books_global),
+        rank: 7,
+        score: 90.0
+      )
+
+      assert_equal 7, book.reload.as_indexed_json[:ranked_position]
+    end
+
+    test "as_indexed_json reports a nil ranked_position for an unranked book" do
+      book = Books::Book.create!(title: "Never Ranked")
+
+      assert_nil book.as_indexed_json[:ranked_position]
+    end
+
+    test "as_indexed_json ignores a rank from a non-primary ranking configuration" do
+      book = books_books(:war_and_peace)
+      RankedItem.create!(
+        item: book,
+        ranking_configuration: ranking_configurations(:books_user),
+        rank: 3,
+        score: 80.0
+      )
+
+      assert_nil book.reload.as_indexed_json[:ranked_position]
+    end
   end
 end

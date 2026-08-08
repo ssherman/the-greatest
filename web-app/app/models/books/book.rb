@@ -77,6 +77,12 @@ class Books::Book < ApplicationRecord
   has_many :user_list_items, as: :listable, dependent: :destroy
   has_many :user_lists, through: :user_list_items
   has_many :ranked_items, as: :item, dependent: :destroy
+  # Scoped so bulk indexing preloads one row per book instead of every configuration's
+  # rank. The lambda runs once per preload, not once per record, so a 1,000-book batch
+  # costs one extra query and the value is always read live -- no cache to go stale.
+  has_one :primary_ranked_item,
+    -> { where(ranking_configuration_id: Books::RankingConfiguration.default_primary&.id) },
+    as: :item, class_name: "RankedItem"
   has_many :series_books, class_name: "Books::SeriesBook", dependent: :destroy
   has_many :series, through: :series_books, class_name: "Books::Series"
   has_many :book_relationships, class_name: "Books::BookRelationship", dependent: :destroy
@@ -103,7 +109,13 @@ class Books::Book < ApplicationRecord
       author_names: authors.map(&:name),
       author_ids: authors.map(&:id),
       category_ids: categories.active.pluck(:id),
-      book_kind: book_kind
+      book_kind: book_kind,
+      first_published_year: first_published_year,
+      original_language_id: original_language_id,
+      country_ids: countries.map(&:id),
+      book_length: self.class.book_lengths[book_length],
+      ranked: list_items.any?,
+      ranked_position: primary_ranked_item&.rank
     }
   end
 

@@ -61,6 +61,25 @@ module Search
         assert_includes result["author_names"], "Leo Tolstoy"
       end
 
+      test "index_definition maps the six saved-search filter fields" do
+        properties = ::Search::Books::BookIndex.index_definition[:mappings][:properties]
+
+        assert_equal "integer", properties[:first_published_year][:type]
+        assert_equal "keyword", properties[:original_language_id][:type]
+        assert_equal "keyword", properties[:country_ids][:type]
+        assert_equal "integer", properties[:book_length][:type]
+        assert_equal "boolean", properties[:ranked][:type]
+        assert_equal "integer", properties[:ranked_position][:type]
+      end
+
+      test "model_includes preloads every association as_indexed_json touches" do
+        includes = ::Search::Books::BookIndex.model_includes
+
+        [:authors, :categories, :countries, :list_items, :original_language, :primary_ranked_item].each do |assoc|
+          assert_includes includes, assoc
+        end
+      end
+
       private
 
       def cleanup_test_index
