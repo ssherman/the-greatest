@@ -61,4 +61,25 @@ class CalculateRankingsJobTest < ActiveSupport::TestCase
 
     CalculateRankingsJob.new.perform(config.id)
   end
+
+  test "enqueues the ranked-fields reindex after a books configuration succeeds" do
+    config = ranking_configurations(:books_global)
+    RankingConfiguration.any_instance
+      .expects(:calculate_rankings)
+      .returns(ItemRankings::Calculator::Result.new(success?: true, data: [], errors: []))
+    Books::CalculateAuthorRankingsJob.stubs(:perform_async)
+    Books::ReindexRankedFieldsJob.expects(:perform_async).once
+
+    CalculateRankingsJob.new.perform(config.id)
+  end
+
+  test "does not enqueue the ranked-fields reindex for a music configuration" do
+    config = ranking_configurations(:music_albums_global)
+    RankingConfiguration.any_instance
+      .expects(:calculate_rankings)
+      .returns(ItemRankings::Calculator::Result.new(success?: true, data: [], errors: []))
+    Books::ReindexRankedFieldsJob.expects(:perform_async).never
+
+    CalculateRankingsJob.new.perform(config.id)
+  end
 end
