@@ -68,6 +68,11 @@ namespace :data_migration do
     pp Services::BooksMigration::BookTypeCategoryMigrator.call
   end
 
+  desc "Migrate legacy saved_searches into Books::SavedSearch (preserves ids; remaps categories)"
+  task saved_searches: :environment do
+    pp Services::BooksMigration::SavedSearchMigrator.call
+  end
+
   desc "Migrate legacy links into external_links (Books::Book parent; source inferred from host)"
   task external_links: :environment do
     pp Services::BooksMigration::ExternalLinkMigrator.call
@@ -154,5 +159,5 @@ namespace :data_migration do
   task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers,
     :categories, :category_items, :book_attributes, :book_type_categories, :countries,
     :book_countries, :external_links, :lists, :list_items, :ranking_configurations,
-    :ranked_lists, :penalties, :list_penalties, :user_lists, :user_list_items]
+    :ranked_lists, :penalties, :list_penalties, :user_lists, :user_list_items, :saved_searches]
 end
