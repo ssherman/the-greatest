@@ -414,12 +414,20 @@ git commit -m "Add bulk_update partial-document updates to the search index base
 - Test: `test/sidekiq/calculate_rankings_job_test.rb` (existing — append)
 
 **Interfaces:**
-- Consumes: `Search::Base::Index.bulk_update` (Task 2); `RankedItem`; `Books::RankingConfiguration.default_primary`.
-- Produces: `Books::ReindexRankedFieldsJob#perform`, which refreshes `ranked_position` for every book ranked in the primary books configuration.
+- Consumes: `Search::Base::Index.bulk_update` (Task 2); `RankedItem`; `ListItem`; `Books::RankingConfiguration.default_primary`.
+- Produces: `Books::ReindexRankedFieldsJob#perform`, which refreshes `ranked_position` **and**
+  `ranked` together for every book ranked in the primary books configuration — `ranked` is
+  derived per batch from live `ListItem` membership, since it has no reindex hook of its own (see
+  the Step 4 note below). Raises if any per-item OpenSearch update fails, so a partial failure is
+  never reported as success.
 
 **Where it chains:** `CalculateRankingsJob#perform` already fans out to
 `Books::CalculateAuthorRankingsJob` when the configuration is a `Books::RankingConfiguration`. The
-new job goes beside it — same condition, same place.
+new job goes beside it, gated further to only the **primary** configuration
+(`ranking_configuration.default_primary?`) — the author job's condition matches every
+`Books::RankingConfiguration` including non-primary and user-owned ones, but rewriting the whole
+primary ranked set on every one of those recalculations would be pointless work; that broader
+condition on the author job is pre-existing and out of scope here.
 
 **Known limitation, deliberate:** a book that *falls out* of the ranked set keeps its stale
 `ranked_position` in the index until the next full reindex. This is harmless: the field is only a
@@ -518,23 +526,43 @@ class Books::ReindexRankedFieldsJob
     raise "No primary Books::RankingConfiguration; ranked fields not refreshed" if config.nil?
 
     total = 0
+    failed = 0
     RankedItem
       .where(ranking_configuration_id: config.id, item_type: "Books::Book")
       .where.not(rank: nil)
       .in_batches(of: BATCH_SIZE) do |batch|
-        updates = batch.pluck(:item_id, :rank).to_h { |item_id, rank| [item_id, {ranked_position: rank}] }
-        Search::Books::BookIndex.bulk_update(updates)
+        ids_and_ranks = batch.pluck(:item_id, :rank)
+        book_ids = ids_and_ranks.map(&:first)
+        listed_book_ids = ListItem.where(listable_type: "Books::Book", listable_id: book_ids)
+          .distinct.pluck(:listable_id).to_set
+
+        updates = ids_and_ranks.to_h do |item_id, rank|
+          [item_id, {ranked_position: rank, ranked: listed_book_ids.include?(item_id)}]
+        end
+
+        response = Search::Books::BookIndex.bulk_update(updates)
+        failed += response["items"].count { |item| item["update"]["error"] } if response && response["errors"]
         total += updates.size
       end
 
-    Rails.logger.info "Refreshed ranked_position for #{total} books"
+    raise "Failed to refresh ranked fields for #{failed}/#{total} books" if failed > 0
+
+    Rails.logger.info "Refreshed ranked fields for #{total} books"
   end
 end
 ```
 
-The job writes `ranked_position` only. `ranked` tracks list membership, which a ranking
-recalculation does not change — it is refreshed by the ordinary `SearchIndexRequest` path when a
-book's list items change.
+The job writes `ranked_position` **and** `ranked` together, in the same partial update.
+`ListItem` — unlike `CategoryItem` and `Books::BookAuthor` — has no `SearchIndexable` reindex
+hook, so there is no "ordinary path" that keeps `ranked` fresh when a book joins or leaves a
+list; an earlier version of this note claimed one existed, but it does not. Deriving `ranked`
+from live `ListItem` membership in the same batch, and writing it alongside `ranked_position` in
+one request, is what keeps the two fields from disagreeing — the failure mode otherwise is a book
+gaining `ranked_position` from a recalculation while its `ranked` value is stale, which would let
+it wrongly pass (or fail) a saved search's `ranked` filter. The job also inspects each
+`bulk_update` response's `"errors"` and raises if any per-item update failed, rather than logging
+a count of rows attempted regardless of outcome — a book missing from the index otherwise fails
+silently and the log claims success.
 
 - [ ] **Step 5: Run it to verify it passes**
 

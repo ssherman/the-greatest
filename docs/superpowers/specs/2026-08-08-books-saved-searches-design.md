@@ -272,10 +272,15 @@ Every advanced-search query carries `filter: {exists: {field: "ranked_position"}
 candidates from 126,282 to 24,242 — necessary, because the 142 filter-less searches would
 otherwise pull the entire corpus on every page view.
 
-It must be `ranked_position` and not `ranked`. The two are close but not equal: 24,362 books
-have list items while 24,249 are scored, and 7 scored books have no list items. `exists` on
-`ranked_position` **is** the `RankedItem` set by construction, so the narrowing is
-result-preserving; narrowing on `ranked` would silently drop those 7 from every search.
+It must be `ranked_position` and not `ranked`. The two are close but not equal in principle:
+`ranked` tracks list membership, `ranked_position` tracks the `RankedItem` set, and nothing
+guarantees the two agree. Measured against the rebuilt index, they currently do: 24,362 books
+have list items, 24,242 carry a `ranked_position`, and **0** scored books have no list items —
+so today, narrowing on either field returns the same result. `exists` on `ranked_position`
+**is** the `RankedItem` set by construction, so it remains the correct choice regardless: it is
+guaranteed result-preserving, where `ranked` agreeing today is a fact about the current data, not
+a fact about the field. (An earlier measurement, before the rebuild, showed 7 scored books
+missing list items; the current build shows none.)
 
 `max_ranked_position` is deliberately **not** applied here. It resolves in Postgres against
 live `RankedItem.rank`, so the one rank filter users actually see can never be stale. The
@@ -319,6 +324,15 @@ recalculation, when 24k ranks change and no book row does. It chains off the boo
 same hook the authors recalc already uses — and updates only `ranked` and `ranked_position`
 via the bulk `update` action. Both paths write the same two fields.
 
+**`ranked` has no independent refresh path of its own.** Unlike `CategoryItem` and
+`Books::BookAuthor`, `ListItem` carries no `SearchIndexable` reindex hook, so nothing reindexes a
+book when it joins or leaves a list. The recalculation job therefore derives `ranked` itself, per
+batch, from live `ListItem` membership for that batch's book ids, and writes it in the same
+partial update as `ranked_position`. Writing both fields from one source in one request is what
+keeps them from disagreeing — computing `ranked` separately (or worse, assuming every newly-scored
+book is also listed) would let the two drift apart the moment a book is ranked without being on
+any list.
+
 ### 5.4 Fetching ids past the result window
 
 Even narrowed to 24,242, loose searches exceed the 10,000 result window. Ids are pulled with
@@ -328,6 +342,35 @@ cleanup.
 
 Adding these fields requires recreating the index and reindexing all 126,282 books. One-time,
 via the existing `reindex_all`.
+
+### 5.5 Cutover must recreate the index, not just reindex it
+
+`create_index` is skip-if-exists — it returns immediately whenever the index is already present.
+So deploying this increment's code does not, by itself, change the mapping of a books index that
+already exists. Between deploying and running the cutover reindex, the live index still has the
+old mapping: the six new fields are simply absent from it.
+
+If anything indexes a book in that window — an admin edit, a `CategoryItem` or
+`Books::BookAuthor` change, any path that runs a `SearchIndexRequest` through the ordinary
+`Search::IndexerJob` — the document it writes now populates `country_ids` and
+`original_language_id` for the first time. OpenSearch has no explicit mapping for them yet, so it
+dynamically infers a type from the JSON value: both are integer ids, so OpenSearch maps them
+`long`, not the `keyword` this design's `terms`/`term` filters require.
+
+Once that dynamic mapping is set, it is permanent for that index, because `create_index`'s
+skip-if-exists guard means nothing later re-declares it. **This self-heals only because the
+cutover task deletes and recreates the index:** `search:books:recreate_books` calls
+`reindex_all`, which is `delete_index` (if present) followed by `create_index`, so any
+dynamically-mapped field is wiped along with the rest of the index and rebuilt with the correct
+explicit mapping. Re-running the ordinary indexer alone — `Search::IndexerJob`, or any other path
+that calls `bulk_index`/`index_item` without first deleting the index — would leave the wrong
+types in place silently; neither method checks or corrects an existing mapping.
+
+**Cutover requirement:** deploy this increment and run `search:books:recreate_books` (or
+`search:books:recreate_and_reindex_all`) in the same window, before any other book write can
+reach the index. Do not rely on the periodic `Search::IndexerJob` to pick the new fields up
+gradually — for `country_ids` and `original_language_id`, that path locks in the wrong type
+instead.
 
 ---
 
@@ -584,10 +627,20 @@ Increments 1–4 are invisible to users; the feature turns on at 5.
   (§4.1).
 - **Never merge `book_type` into `included_category_ids`** — 183 searches use OR mode and would
   be silently corrupted (§4.2).
-- **Narrow on `exists: ranked_position`, not `ranked`** — the latter drops 7 scored books from
-  every search (§5.2).
+- **Narrow on `exists: ranked_position`, not `ranked`** — the two are not guaranteed to agree;
+  they currently do (0 scored books lack list items, measured), but only `ranked_position` is
+  guaranteed by construction (§5.2).
 - **Rank fields must stay in `as_indexed_json`** — `index_item` is a full document replace, so
   a partial-update-only design loses them whenever a book is edited (§5.3).
+- **`ranked` has no reindex hook of its own** — `ListItem` isn't `SearchIndexable`, unlike
+  `CategoryItem`/`Books::BookAuthor`. The recalculation job must derive and write `ranked`
+  alongside `ranked_position` in the same partial update, or the two fields can drift out of
+  sync (§5.3).
+- **`create_index` is skip-if-exists, so a deploy alone never fixes a stale mapping** — a book
+  indexed through the ordinary `Search::IndexerJob` between deploying this increment and running
+  the cutover reindex lets OpenSearch dynamically (and permanently) mistype `country_ids` /
+  `original_language_id` as `long`. Only a delete-and-recreate cutover (`search:books:recreate_books`)
+  self-heals it (§5.5).
 - **`upsert_all` cannot update `books_books`** — its INSERT arm must satisfy NOT NULL `title`
   and `slug`. Use `UPDATE … FROM (VALUES …)` (§4.4).
 - **`rails g model` for an STI subclass needs `--no-fixture`** — a `saved_searches` fixture for
