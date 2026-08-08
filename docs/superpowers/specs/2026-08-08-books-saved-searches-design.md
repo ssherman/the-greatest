@@ -568,8 +568,18 @@ end
 `summary` ports from legacy for the index page, reading `book_type` through the same §4.2
 constant.
 
-Ids are preserved with a reserved sequence ceiling — the pattern the `user_lists` migration
-already used — because `/searches/:id` must keep resolving.
+**Ids are preserved outright, with no reserved ceiling** — `/searches/:id` must keep resolving,
+and `saved_searches` is created empty by this increment with nothing else writing to it. This is
+the `books_countries` case, not the `user_lists` one: `user_lists` needed
+`IdRangeReservationService` because it already held new-app rows from the other domains, whereas
+here there is no id contention to resolve. `finalize` resets the primary-key sequence past the
+migrated maximum so later inserts do not collide, exactly as `CountryMigrator` does.
+
+**Sequencing requirement:** the migration must run before saved searches become creatable in
+production. That holds naturally — the books site is not yet serving its production domain, and
+no other domain has a `SavedSearch` subclass — but the migrator raises rather than overwriting if
+it ever finds a row already occupying a target id, so a violation fails loudly instead of
+silently reassigning someone's search.
 
 ### 7.2 `SavedSearchMigrator`
 
