@@ -54,6 +54,10 @@ module ActionDispatch
 
       TurboFrameLinks.trapped_candidates(response.body, host: host).each do |candidate|
         get candidate.href
+        # Bounded so a redirect cycle fails fast instead of hanging the test.
+        # follow_redirect! calls host! on an absolute Location, which retargets
+        # this session for every subsequent candidate — harmless today since no
+        # covered page redirects cross-host, but worth knowing if one ever does.
         3.times do
           break unless response.redirect?
           follow_redirect!

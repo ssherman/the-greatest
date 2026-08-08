@@ -101,6 +101,8 @@ link to another page renders "Content missing". Put `target: "_top"` on any fram
 link off-page, and opt pagination back in with
 `@pagy.series_nav(anchor_string: 'data-turbo-frame="<frame_id>"')`. The
 `assert_no_frame_trapped_links` integration assertion guards this.
+`target: "_top"` releases **forms** inside the frame as well as links; a form that must update the
+frame in place needs `data: {turbo_frame: "<frame_id>"}`. The guard checks anchors only.
 
 ## Deeper docs
 

@@ -607,42 +607,6 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-  private
-
-  # Bulk-inserts filler albums + list items so pagination tests can reach page
-  # 2+ against the controller's limit of 100, mirroring the books ranked_items
-  # helper. insert_all skips callbacks deliberately (avoids search indexing).
-  def seed_list_items(list, count)
-    now = Time.current
-    rows = Array.new(count) do |i|
-      {title: "Filler Album #{i}", slug: "filler-album-#{list.id}-#{i}", created_at: now, updated_at: now}
-    end
-    ids = Music::Album.insert_all(rows, returning: :id).rows.flatten
-
-    start_position = list.user_list_items.maximum(:position).to_i + 1
-    UserListItem.insert_all(
-      ids.each_with_index.map do |id, i|
-        {user_list_id: list.id, listable_id: id, listable_type: "Music::Album",
-         position: start_position + i, created_at: now, updated_at: now}
-      end
-    )
-  end
-
-  def capture_sql
-    queries = []
-    callback = ->(_n, _s, _f, _i, payload) { queries << payload[:sql] unless payload[:name] == "SCHEMA" }
-    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { yield }
-    queries
-  end
-
-  # Distinct listable ids in render order (rows/cards carry data-listable-id),
-  # filtered to the items actually in this list.
-  def rendered_listable_ids(list)
-    target = list.user_list_items.pluck(:listable_id)
-    response.body.scan(/data-listable-id="(\d+)"/).flatten.map(&:to_i)
-      .uniq.select { |id| target.include?(id) }
-  end
-
   # --- Turbo frame integrity ---
   #
   # Every link inside the list_items frame has to break out of it: the book,
@@ -705,5 +669,41 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     sign_in_as(@user, stub_auth: true)
 
     assert_no_frame_trapped_links my_list_path(@albums_favorites)
+  end
+
+  private
+
+  # Bulk-inserts filler albums + list items so pagination tests can reach page
+  # 2+ against the controller's limit of 100, mirroring the books ranked_items
+  # helper. insert_all skips callbacks deliberately (avoids search indexing).
+  def seed_list_items(list, count)
+    now = Time.current
+    rows = Array.new(count) do |i|
+      {title: "Filler Album #{i}", slug: "filler-album-#{list.id}-#{i}", created_at: now, updated_at: now}
+    end
+    ids = Music::Album.insert_all(rows, returning: :id).rows.flatten
+
+    start_position = list.user_list_items.maximum(:position).to_i + 1
+    UserListItem.insert_all(
+      ids.each_with_index.map do |id, i|
+        {user_list_id: list.id, listable_id: id, listable_type: "Music::Album",
+         position: start_position + i, created_at: now, updated_at: now}
+      end
+    )
+  end
+
+  def capture_sql
+    queries = []
+    callback = ->(_n, _s, _f, _i, payload) { queries << payload[:sql] unless payload[:name] == "SCHEMA" }
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { yield }
+    queries
+  end
+
+  # Distinct listable ids in render order (rows/cards carry data-listable-id),
+  # filtered to the items actually in this list.
+  def rendered_listable_ids(list)
+    target = list.user_list_items.pluck(:listable_id)
+    response.body.scan(/data-listable-id="(\d+)"/).flatten.map(&:to_i)
+      .uniq.select { |id| target.include?(id) }
   end
 end

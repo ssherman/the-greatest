@@ -16,6 +16,9 @@ module TurboFrameLinks
   # Turbo resolves a click's target frame in this order:
   #   the anchor's data-turbo-frame, the frame's target, the frame's own id.
   # "_top" means the whole page, so those anchors are safe and omitted.
+  # data-turbo="false" is skipped too, but real Turbo ignores that attribute
+  # once an explicit frame id resolves — so that combination (not used in this
+  # app) would be a false negative here.
   def self.trapped_candidates(html, host: nil)
     anchors = Nokogiri::HTML5(html).css("a[href]")
 
