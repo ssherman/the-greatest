@@ -48,6 +48,12 @@ class Books::Book < ApplicationRecord
   friendly_id :slug_candidates, use: [:slugged, :finders]
 
   enum :book_kind, {standalone: 0, collection: 1}
+
+  # page_range and word_count are transitional. Page data belongs on the edition
+  # (books_editions.page_count), but that column is empty for every book: legacy's
+  # editions table carries no page or word counts, so the only source is these
+  # work-level values. They exist to keep book_length derivable until a real
+  # per-edition source arrives, and should go away when one does.
   enum :book_length, {very_short: 0, short: 1, medium: 2, moderate: 3, long: 4, very_long: 5}
 
   belongs_to :original_language, class_name: "Language", optional: true

@@ -58,6 +58,16 @@ namespace :data_migration do
     pp Services::BooksMigration::BookCountryMigrator.call
   end
 
+  desc "Backfill book_length, page_range, and word_count onto migrated books"
+  task book_attributes: :environment do
+    pp Services::BooksMigration::BookAttributesMigrator.call
+  end
+
+  desc "Backfill category links for legacy book_type (recomputes item_count)"
+  task book_type_categories: :environment do
+    pp Services::BooksMigration::BookTypeCategoryMigrator.call
+  end
+
   desc "Migrate legacy links into external_links (Books::Book parent; source inferred from host)"
   task external_links: :environment do
     pp Services::BooksMigration::ExternalLinkMigrator.call
@@ -141,5 +151,8 @@ namespace :data_migration do
   task descriptions: [:book_descriptions, :author_descriptions, :description_safety_net]
 
   desc "Run all Phase-1 migrators in dependency order"
-  task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers, :categories, :category_items, :countries, :book_countries, :external_links, :lists, :list_items, :ranking_configurations, :ranked_lists, :penalties, :list_penalties, :user_lists, :user_list_items]
+  task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers,
+    :categories, :category_items, :book_attributes, :book_type_categories, :countries,
+    :book_countries, :external_links, :lists, :list_items, :ranking_configurations,
+    :ranked_lists, :penalties, :list_penalties, :user_lists, :user_list_items]
 end
