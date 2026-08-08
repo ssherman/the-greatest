@@ -38,10 +38,23 @@ module Services
       end
 
       def preload_context
+        mapped = LegacyIdMap
+          .where(model: "Books::Category", legacy_id: LEGACY_CATEGORY_IDS.values)
+          .joins("INNER JOIN categories ON categories.id = legacy_id_maps.new_id")
+          .pluck(:legacy_id, :new_id, "categories.deleted")
+          .to_h { |legacy_id, new_id, deleted| [legacy_id, [new_id, deleted]] }
+
         @category_ids = LEGACY_CATEGORY_IDS.transform_values do |legacy_id|
-          LegacyIdMap.lookup(model: "Books::Category", legacy_id: legacy_id) ||
+          new_id, deleted = mapped[legacy_id] ||
             raise("no LegacyIdMap for Books::Category legacy_id=#{legacy_id} (run the categories migrator first)")
+          raise "target category (id=#{new_id}) for Books::Category legacy_id=#{legacy_id} is soft-deleted" if deleted
+          new_id
         end
+      end
+
+      def legacy_each(&block)
+        legacy_model.select(:id, :book_type)
+          .find_each(batch_size: BATCH_SIZE) { |record| block.call(record.attributes) }
       end
 
       def build_rows(attrs)

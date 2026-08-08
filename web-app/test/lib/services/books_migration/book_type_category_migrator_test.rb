@@ -63,6 +63,20 @@ class Services::BooksMigration::BookTypeCategoryMigratorTest < ActiveSupport::Te
     refute CategoryItem.exists?(category_id: @fiction.id, item_type: "Books::Book", item_id: @book.id)
   end
 
+  test "raises when a target category is soft-deleted" do
+    # Mirrors CategoryItemMigrator's soft-delete check: as_indexed_json scopes to
+    # categories.active, so linking against a deleted category would inflate
+    # item_count with links that never surface in search.
+    poetry = @categories[3]
+    poetry.update!(deleted: true)
+
+    result = run_migrator([{"id" => @book.id, "book_type" => 0}])
+
+    refute result[:success]
+    assert_match(/target category.*legacy_id=40876.*soft-deleted/, result[:error])
+    refute CategoryItem.exists?(category_id: @fiction.id, item_type: "Books::Book", item_id: @book.id)
+  end
+
   test "recomputes item_count for the affected categories" do
     run_migrator([{"id" => @book.id, "book_type" => 0}])
 

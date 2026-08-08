@@ -19,7 +19,7 @@ module Services
         Services::BooksMigration.without_search_indexing do
           legacy_each do |attrs|
             buffer << row_for(attrs)
-            if buffer.size >= UPDATE_BATCH
+            if buffer.size >= update_batch
               flush(buffer)
               buffer = []
             end
@@ -28,6 +28,7 @@ module Services
           end
           flush(buffer) if buffer.any?
         end
+        finalize
         {success: true, data: {model: model_key, count: @count}}
       rescue => e
         {success: false, error: e.message, data: {model: model_key, count: @count}}
@@ -35,12 +36,21 @@ module Services
 
       private
 
+      def update_batch
+        UPDATE_BATCH
+      end
+
       def legacy_model
         LegacyBooks::Book
       end
 
       def model_key
         "Books::Book"
+      end
+
+      def legacy_each(&block)
+        legacy_model.select(:id, :book_length, :page_range, :word_count)
+          .find_each(batch_size: BATCH_SIZE) { |record| block.call(record.attributes) }
       end
 
       def row_for(attrs)

@@ -1,11 +1,15 @@
 # frozen_string_literal: true
 
 module Books
-  # Ports the legacy site's two book_length derivation rules so books created
-  # after the migration still get a length. page_range wins outright: legacy
-  # runs the two rules in independent before_save callbacks, each guarded on
-  # book_length being blank, so a page_range that fails to parse leaves the
-  # length unset rather than falling through to word_count.
+  # Ports the legacy site's book_length derivation so books created after the
+  # migration still get a length. The "page_range wins, fall back to word_count
+  # only when page_range is blank" rule is ported from legacy's bulk backfill
+  # job (set_missing_book_lengths_from_word_count), which explicitly scopes on
+  # page_range: [nil, ""] -- that job, not legacy's write-time callbacks, is
+  # what populated word-count-derived lengths at scale. Legacy's two callbacks
+  # are independent and can disagree with this: set_book_length_from_word_count
+  # has no page_range guard at all, so it can fall through to word_count even
+  # when a present page_range failed to parse.
   class BookLength
     WORDS_PER_PAGE = 275.0
 

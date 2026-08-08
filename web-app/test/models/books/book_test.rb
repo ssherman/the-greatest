@@ -200,5 +200,23 @@ module Books
 
       assert_equal "long", book.book_length
     end
+
+    test "an explicit book_length survives a later unrelated page_range update" do
+      book = Books::Book.create!(title: "Explicit Then Updated", page_range: "1-10", book_length: :very_long)
+      assert_equal "very_long", book.book_length
+
+      book.update!(page_range: "200-400")
+
+      assert_equal "very_long", book.book_length
+    end
+
+    test "does not derive book_length on save when neither source column changed" do
+      book = Books::Book.create!(title: "Untouched Source")
+      book.update_columns(page_range: "200-400", book_length: nil)
+
+      book.update!(title: "Untouched Source, Renamed")
+
+      assert_nil book.reload.book_length
+    end
   end
 end

@@ -86,7 +86,8 @@ class Books::Book < ApplicationRecord
   validates :title, presence: true
 
   before_validation :normalize_title
-  before_validation :derive_book_length, if: -> { book_length.blank? }
+  before_validation :derive_book_length,
+    if: -> { book_length.blank? && (page_range_changed? || word_count_changed?) }
 
   scope :selectable, -> { where(book_kind: :standalone) }
 
