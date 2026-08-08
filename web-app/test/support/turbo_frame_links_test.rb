@@ -37,6 +37,16 @@ class TurboFrameLinksTest < ActiveSupport::TestCase
     HTML
   end
 
+  test "a frame's target names the frame an inner link actually navigates" do
+    result = candidates(<<~HTML)
+      <turbo-frame id="sidebar" target="content">
+        <a href="/album/animals">Animals</a>
+      </turbo-frame>
+    HTML
+
+    assert_equal [["/album/animals", "content"]], pairs(result)
+  end
+
   test "an explicit data-turbo-frame overrides the frame's own target" do
     result = candidates(<<~HTML)
       <turbo-frame id="list_items" target="_top">
@@ -86,15 +96,15 @@ class TurboFrameLinksTest < ActiveSupport::TestCase
   end
 
   test "an absolute link to another host is not followable" do
-    assert_empty candidates(<<~HTML, host: "dev.thegreatestmusic.org")
+    assert_empty candidates(<<~HTML, host: "books.example.com")
       <turbo-frame id="list_items"><a href="https://example.com/x">x</a></turbo-frame>
     HTML
   end
 
   test "an absolute link to the current host is followable" do
-    result = candidates(<<~HTML, host: "dev.thegreatestmusic.org")
+    result = candidates(<<~HTML, host: "books.example.com")
       <turbo-frame id="list_items">
-        <a href="https://dev.thegreatestmusic.org/album/animals">Animals</a>
+        <a href="https://books.example.com/album/animals">Animals</a>
       </turbo-frame>
     HTML
 
