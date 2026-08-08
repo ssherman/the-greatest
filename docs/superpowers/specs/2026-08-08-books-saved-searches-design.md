@@ -204,8 +204,12 @@ derivable until a real per-edition source arrives, at which point they should go
 
 `Books::BookLength` — a PORO, not a callback — ports both legacy rules behind one call:
 
-- `extract_max_pages(page_range)`: nil if the string contains any letter; otherwise the max of
-  the hyphen-split range, or the number itself.
+- `extract_max_pages(page_range)`: nil if the string contains any letter; a bare number is
+  used as-is when positive (nil otherwise); a hyphenated range is split, and is nil if any
+  part converts to zero, otherwise **`((min + max) / 2.0).round`**.
+  **The method name lies** — despite being called `extract_max_pages` it returns the
+  *midpoint*, not the max. 66,783 of 85,211 values are ranges, so getting this wrong
+  mis-classifies most of the corpus.
 - `word_count / 275.0`, rounded, when no page range resolves.
 - Thresholds: `0..149` very_short, `150..250` short, `251..350` medium, `351..500` moderate,
   `501..1000` long, else very_long.
