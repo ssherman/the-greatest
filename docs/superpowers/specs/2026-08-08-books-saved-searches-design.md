@@ -52,6 +52,22 @@ with full CRUD; legacy URL compatibility including the `/v/:view_type` prefix.
 - **`rc/:id` prefixed saved-search URLs.** Legacy never passes `ranking_configuration:` to
   `advanced_search` from the saved-search controller, so it always uses the default RC.
   Adding the prefix would be new behavior, not a port.
+- **CSV export.** Legacy has a `CsvExport` model worth porting close to wholesale: async status
+  states (`pending → processing → uploading → completed`), an attached file rather than a
+  synchronous stream, `find_matching(name:, url_path:, book_limit:)` to dedup identical requests,
+  and a `book_limit` that bounds the row count. That design already answers the "someone exports
+  the whole corpus" problem structurally. The limit is settled empirically too: of 1,995 legacy
+  exports, **1,771 used `book_limit: 500`** and all completed. It needs the feature to exist
+  first (increment 5), so it is a later increment or its own spec — not part of 3–7.
+
+  If it is ever gated behind payment, note the prerequisite: legacy has 115 live subscriptions and
+  21 donations, but **nothing subscription-, donation-, or payment-related has been migrated to
+  this app**. Paid gating is a much larger piece of work than the export itself.
+
+**Deliberately not limited:** browsing results. `from + size ≤ 10,000` already caps a filter-less
+search at 10,000 books through the UI (§5.4). Capping the result *set* on top of that would break
+legitimate broad searches — "all fiction since 1900" is a real query with 20k+ matches. The bound
+belongs on export, not on browsing.
 
 ---
 
