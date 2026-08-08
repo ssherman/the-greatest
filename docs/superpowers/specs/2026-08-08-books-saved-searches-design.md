@@ -163,6 +163,13 @@ The trade is retention for breadth: those 16 searches will return roughly 8.8× 
 Results stay topically correct, just broader. **This is an accepted deviation**, taken over
 carrying a dead column through the schema, the index mapping, a 126k reindex, and the admin.
 
+Legacy's `book_type` column is `NOT NULL DEFAULT 0` (fiction), so "fiction" is partly a column
+default rather than a classification — every book nobody typed also reads as fiction. Post-run
+dev state is Fiction 68,333 + Nonfiction 56,222 = 124,555 of 126,289 books. A future reader
+should not treat Fiction's membership count as a signal of how much of the corpus was
+deliberately classified; the incremental harm is small (inherited from legacy verbatim, not
+introduced here) and already accepted.
+
 A one-time **category backfill migrator** links every typed book to its category so retention
 reaches 100%:
 
@@ -176,6 +183,14 @@ reaches 100%:
 
 These books also begin appearing on the corresponding public filter pages, which is correct —
 they are fiction/nonfiction/religious/poetry books.
+
+These 6,726 books' OpenSearch documents are stale the moment the backfill migrator runs:
+`as_indexed_json` includes `category_ids`, but the migrator's `upsert_all` bypasses the
+`SearchIndexable` reindex hook entirely, and the whole run is wrapped in
+`without_search_indexing` (§4.4) besides. So the new category links exist in Postgres but do not
+appear in search results until something reindexes. That something is increment 2's full
+`reindex_all` (§5.4) — this increment does not correct the index on its own, and the dependency
+is deliberate, not an oversight.
 
 ### 4.3 Three columns on `books_books`
 

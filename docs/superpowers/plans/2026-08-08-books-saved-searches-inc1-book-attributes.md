@@ -879,9 +879,15 @@ Run:
 bin/rails runner 'puts({book_length: Books::Book.where.not(book_length: nil).count, page_range: Books::Book.where.not(page_range: nil).count, word_count: Books::Book.where.not(word_count: nil).count}.inspect)'
 ```
 
-Expected, matching the legacy source exactly:
+**The invariant to check, wherever this runs:** each new-app non-null count must equal
+`SELECT count(*) FROM books WHERE <col> IS NOT NULL` run against whichever legacy database is
+connected. Production's legacy DB is a larger, different corpus than dev's, so the literals
+below — measured against **dev's** legacy database — will not match a production run; that is
+expected, not a failure. Compare against the legacy query's result, not against these numbers.
 
-| Column | Expected |
+Expected in dev, matching dev's legacy source exactly:
+
+| Column | Expected (dev) |
 |---|---|
 | `book_length` | 84,108 |
 | `page_range` | 85,211 |
@@ -893,7 +899,11 @@ Then verify the category backfill delta:
 bin/rails runner 'ids = Services::BooksMigration::BookTypeCategoryMigrator::LEGACY_CATEGORY_IDS.values.map { |l| LegacyIdMap.lookup(model: "Books::Category", legacy_id: l) }; puts Books::Category.where(id: ids).pluck(:id, :name, :item_count).inspect'
 ```
 
-Expected: four rows, whose `item_count` values exceed their pre-run values by 3,260 (Fiction), 3,218 (Nonfiction), 139 (Religion & Spirituality), and 109 (Poetry) — **6,726 total**. Compare against the Step 3 `category_items` figure: it should have risen by 6,726.
+Expected: four rows, whose `item_count` values rose by however many legacy books of that type
+were missing the link. In dev this was 3,260 (Fiction), 3,218 (Nonfiction), 139 (Religion &
+Spirituality), and 109 (Poetry) — **6,726 total**. Compare the total delta against the Step 3
+`category_items` figure — it should have risen by the same amount, whatever that amount is on
+the database actually connected.
 
 **If any number is off, stop and report it rather than proceeding.** Restore with `bin/snapshot-dev-db.sh --restore` if the data needs resetting.
 
@@ -946,7 +956,11 @@ git commit -m "Wire the book attribute migrators into the data_migration namespa
 
 - [ ] `bin/rails test` passes with zero failures.
 - [ ] `bundle exec standardrb` reports no offenses.
-- [ ] Development data verified: 84,108 `book_length`, 85,211 `page_range`, 17,370 `word_count`, +6,726 `category_items`.
+- [ ] Data verified against whichever legacy database is connected: each new-app non-null count
+      equals `SELECT count(*) FROM books WHERE <col> IS NOT NULL` on that legacy DB, and
+      `category_items` rose by the same amount `item_count` did across the four backfilled
+      categories. In dev this was 84,108 `book_length`, 85,211 `page_range`, 17,370 `word_count`,
+      +6,726 `category_items` — a dev-only observation, not the pass criterion for other runs.
 - [ ] Both migrators verified idempotent by a second run producing identical counts.
 - [ ] `app/models/books/book.rb`'s annotaterb header lists the three columns, and a comment records why two of them are transitional.
 
