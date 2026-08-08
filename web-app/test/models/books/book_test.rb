@@ -229,6 +229,29 @@ module Books
       assert_includes [true, false], json[:ranked]
     end
 
+    test "as_indexed_json category_ids excludes deleted and null-deleted categories, matching the active scope" do
+      book = books_books(:war_and_peace)
+      deleted_category = categories(:books_deleted_genre)
+      CategoryItem.create!(category: deleted_category, item: book)
+      null_deleted_category = ::Books::Category.create!(name: "Null Deleted Category")
+      null_deleted_category.update_column(:deleted, nil)
+      CategoryItem.create!(category: null_deleted_category, item: book)
+
+      json = book.reload.as_indexed_json
+
+      assert_equal book.categories.active.pluck(:id).sort, json[:category_ids].sort
+      assert_not_includes json[:category_ids], deleted_category.id
+      assert_not_includes json[:category_ids], null_deleted_category.id
+    end
+
+    test "as_indexed_json issues no queries beyond the model_includes preload" do
+      books = Books::Book.where(id: books_books(:war_and_peace).id)
+        .includes(Search::Books::BookIndex.model_includes)
+        .to_a
+
+      assert_queries_count(0) { books.first.as_indexed_json }
+    end
+
     test "as_indexed_json emits book_length as its integer enum value, not the string key" do
       book = books_books(:war_and_peace)
       book.update!(book_length: :long)

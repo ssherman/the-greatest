@@ -108,7 +108,7 @@ class Books::Book < ApplicationRecord
       alternate_titles: alternate_titles,
       author_names: authors.map(&:name),
       author_ids: authors.map(&:id),
-      category_ids: categories.active.pluck(:id),
+      category_ids: categories.select { |c| c.deleted == false }.map(&:id),
       book_kind: book_kind,
       first_published_year: first_published_year,
       original_language_id: original_language_id,

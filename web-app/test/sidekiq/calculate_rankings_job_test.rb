@@ -48,6 +48,10 @@ class CalculateRankingsJobTest < ActiveSupport::TestCase
       .expects(:calculate_rankings)
       .returns(ItemRankings::Calculator::Result.new(success?: true, data: [], errors: []))
     Books::CalculateAuthorRankingsJob.expects(:perform_async).once
+    # Sidekiq::Testing.inline! (test_helper.rb) means an unstubbed perform_async here would
+    # really execute Books::ReindexRankedFieldsJob against the test OpenSearch index -- stub it
+    # so this test only exercises the author-ranking chain it's named for.
+    Books::ReindexRankedFieldsJob.stubs(:perform_async)
 
     CalculateRankingsJob.new.perform(config.id)
   end
@@ -78,6 +82,17 @@ class CalculateRankingsJobTest < ActiveSupport::TestCase
     RankingConfiguration.any_instance
       .expects(:calculate_rankings)
       .returns(ItemRankings::Calculator::Result.new(success?: true, data: [], errors: []))
+    Books::ReindexRankedFieldsJob.expects(:perform_async).never
+
+    CalculateRankingsJob.new.perform(config.id)
+  end
+
+  test "does not enqueue the ranked-fields reindex for a non-primary books configuration" do
+    config = ranking_configurations(:books_user)
+    RankingConfiguration.any_instance
+      .expects(:calculate_rankings)
+      .returns(ItemRankings::Calculator::Result.new(success?: true, data: [], errors: []))
+    Books::CalculateAuthorRankingsJob.stubs(:perform_async)
     Books::ReindexRankedFieldsJob.expects(:perform_async).never
 
     CalculateRankingsJob.new.perform(config.id)

@@ -8,7 +8,7 @@ module Search
       end
 
       def self.model_includes
-        [:authors, :categories, :countries, :list_items, :original_language, :primary_ranked_item]
+        [:authors, :categories, :countries, :list_items, :primary_ranked_item]
       end
 
       def self.index_definition

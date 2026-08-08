@@ -75,9 +75,13 @@ module Search
       test "model_includes preloads every association as_indexed_json touches" do
         includes = ::Search::Books::BookIndex.model_includes
 
-        [:authors, :categories, :countries, :list_items, :original_language, :primary_ranked_item].each do |assoc|
+        [:authors, :categories, :countries, :list_items, :primary_ranked_item].each do |assoc|
           assert_includes includes, assoc
         end
+      end
+
+      test "model_includes excludes original_language, which as_indexed_json reads as a raw column" do
+        assert_not_includes ::Search::Books::BookIndex.model_includes, :original_language
       end
 
       private
