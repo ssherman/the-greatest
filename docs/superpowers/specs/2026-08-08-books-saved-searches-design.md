@@ -22,10 +22,12 @@ with include *and* exclude across three independent taxonomies (categories, lang
 countries) — which is why OpenSearch was chosen originally and why it is chosen again here.
 
 The public-filters feature (spec `2026-08-03-books-filters-design.md`) runs on Postgres via
-`Books::RankedBooksQuery`. That stays as it is. The two share a **return contract**, not an
-engine: both hand back a paginatable `RankedItem` relation ordered by `:rank`, so the same
-grid components and `pagy_path` render both. When main-page filtering eventually moves to
-OpenSearch, this design is the thing it moves toward.
+`Books::RankedBooksQuery`, over the ranked set only. That stays as it is. Saved searches reach
+further — the `ranked` criterion can ask for the whole corpus (§3) — so the two share neither an
+engine nor a relation type. What they do share is the **rendering** contract:
+`Books::CardComponent` takes a `book:` and an optional `rank:`, so both feed the same grid, as
+does the author all-books page. When main-page filtering eventually moves to OpenSearch, this
+design is the thing it moves toward.
 
 The model is built generically from day one — `SavedSearch` STI on a shared table, with
 global routes resolving `Current.domain` — so games and music can be added later without
@@ -67,9 +69,11 @@ runs `Book.where(id: book_ids).sorted_by_rank(RankingConfiguration.default)`.
 
 **`sorted_by_rank` inner-joins `ranked_books` and requires a non-nil score.** Verified against
 the legacy database: the primary RC (68, "May 2026") has 123,826 `ranked_books` rows but only
-**24,249 with a score**. So a saved search never returns unranked books, regardless of its
-criteria. This is the single most important fact in the design — it means results are always a
-subset of the ranked set, which is exactly what `RankedItem` already models.
+**24,249 with a score**. So a legacy saved search never returns unranked books, regardless of its
+criteria — including when the user explicitly asked for them.
+
+That is a **defect, not a design**, and this port does not reproduce it. See "The `ranked`
+criterion never worked" below; §5.2 and §5.4 carry the consequences for the query layer.
 
 ### Criteria in use
 
@@ -107,6 +111,24 @@ Two deviations are unavoidable and are recorded here rather than discovered late
 2. **`book_type: religious` (16 searches) broadens ~8.8×.** See §4.
 
 Every other criterion maps exactly.
+
+### The `ranked` criterion never worked, and this design fixes it
+
+The legacy form offers three states — `[["All Books", ""], ["Only Ranked Books", "true"],
+["Only Unranked Books", "false"]]` — but its pipeline can only deliver one of them.
+`advanced_search` ends in `books.sorted_by_rank(...)`, which **inner-joins** `ranked_books` on a
+non-nil score, so every result is a ranked book no matter what `ranked` is set to. "All Books" and
+"Only Unranked Books" were unreachable by construction.
+
+The 13 stored `ranked: "false"` searches did return results — 16 to 98 of them — but those were
+stale-index artifacts: books the index still labelled `ranked: false` after they had joined a list
+and been scored, because legacy had no reindex hook on list membership either (the same `ListItem`
+gap this app has). Those users, six of them, never saw a genuine unranked-books result set.
+
+**Decision: implement all three states properly.** `true` → the ranked set only; `false` → unranked
+books only; absent → the whole corpus. This is the one place this port deliberately diverges from
+legacy behaviour, because legacy's behaviour was a defect rather than an intent — the UI promised
+three things and delivered one. §5.2 and §5.4 carry the consequences.
 
 ---
 
@@ -266,11 +288,21 @@ match them.
 | `ranked` | boolean | `list_items.any?` | the `ranked` criterion |
 | `ranked_position` | integer | `RankedItem` rank, primary RC | coarse narrowing |
 
-### 5.2 Why `ranked_position` is the narrowing filter
+### 5.2 `ranked_position` is the narrowing filter — but only for `ranked: true`
 
-Every advanced-search query carries `filter: {exists: {field: "ranked_position"}}`. This cuts
-candidates from 126,282 to 24,242 — necessary, because the 142 filter-less searches would
-otherwise pull the entire corpus on every page view.
+**This section was amended after increment 2 shipped.** It originally applied the narrowing filter
+to every query, on the assumption that results are always a subset of the ranked set. That
+assumption came from legacy's inner join, which §3 establishes was a defect. Now that all three
+`ranked` states are implemented, only one of them can be narrowed:
+
+| `ranked` | OpenSearch clause | candidates |
+|---|---|---|
+| `"true"` | `filter: {exists: {field: "ranked_position"}}` | ~24,242 |
+| `"false"` | `must_not: {exists: {field: "ranked_position"}}` | ~102,047 |
+| absent | *no rank clause* | 126,289 |
+
+The narrowing filter is therefore an optimisation available to one third of the cases, not a
+universal precondition. §5.4 covers how the other two stay tractable.
 
 It must be `ranked_position` and not `ranked`. The two are close but not equal in principle:
 `ranked` tracks list membership, `ranked_position` tracks the `RankedItem` set, and nothing
@@ -333,12 +365,57 @@ keeps them from disagreeing — computing `ranked` separately (or worse, assumin
 book is also listed) would let the two drift apart the moment a book is ranked without being on
 any list.
 
-### 5.4 Fetching ids past the result window
+### 5.4 OpenSearch sorts and pages; Postgres hydrates one page
 
-Even narrowed to 24,242, loose searches exceed the 10,000 result window. Ids are pulled with
-**`search_after` on `_doc` in 10k batches** — at most 3 round trips at current scale. Legacy
-used the scroll API; `search_after` is the modern equivalent and needs no server-side context
-cleanup.
+**This section was amended after increment 2 shipped**, for the same reason as §5.2. The original
+design pulled *every* matching id — `search_after` on `_doc` in 10k batches — and let Postgres sort
+and page them. That was viable only while results were capped at the ~24k ranked set. With the
+whole 126,289-book corpus reachable, it would mean a 126k-element `IN` clause per page view, which
+is not.
+
+**OpenSearch now does the sorting and paging**, and returns one page of ids:
+
+```
+sort: [
+  {ranked_position: {order: "asc", missing: "_last"}},
+  {first_published_year: {order: "asc", missing: "_last"}},
+  {"title.keyword": {order: "asc"}}
+]
+from: (page - 1) * per_page
+size: per_page
+```
+
+Ranked books come first in rank order, unranked follow. All three sort fields are already in the
+mapping from increment 2. Postgres then hydrates exactly those ids and re-applies the OpenSearch
+order.
+
+This is **simpler** than what it replaces — the `search_after` batching disappears entirely — and
+it mirrors an ordering the app already ships: `Books::AuthorsController#all_books_relation` sorts
+`ranked_items.rank ASC NULLS LAST, first_published_year ASC NULLS LAST, title`, which is the same
+shape expressed in SQL.
+
+**The base relation changes accordingly.** It is no longer a `RankedItem` relation but a
+`Books::Book` relation left-joined to `ranked_items`, again mirroring `all_books_relation`:
+
+```ruby
+Books::Book
+  .where(id: page_ids)
+  .select("books_books.*, ranked_items.rank AS ranked_position")
+  .joins("LEFT OUTER JOIN ranked_items ON ranked_items.item_id = books_books.id
+          AND ranked_items.item_type = 'Books::Book'
+          AND ranked_items.ranking_configuration_id = #{rc.id.to_i}")
+```
+
+`Books::CardComponent` already takes `book:` and an optional `rank:`, so the results grid needs no
+component change — an unranked result simply renders without a position badge, exactly as the
+author all-books page does today.
+
+`max_ranked_position` still resolves in Postgres against live `RankedItem.rank`, unchanged: it only
+ever applies to ranked books, so it is unaffected by this amendment.
+
+**Deep paging cap.** `from + size` may not exceed `index.max_result_window` (10,000 by default), so
+page 200 at 50 per page is the practical limit. Legacy had the same ceiling and nobody reached it;
+raise the window or switch that path to `search_after` only if it ever matters.
 
 Adding these fields requires recreating the index and reindexing all 126,282 books. One-time,
 via the existing `reindex_all`.
@@ -396,13 +473,22 @@ Three objects, each testable in isolation.
 | `excluded_country_ids` | `must_not: {terms: {country_ids: ids}}` |
 | `book_length` | `filter: {terms: {book_length: values}}` |
 | `first_year_published_gt` / `_lt` | `filter: {range: {first_published_year: {gte:, lte:}}}` |
-| `ranked` | `filter: {term: {ranked: bool}}` |
-| *always* | `filter: {exists: {field: ranked_position}}` |
+| `ranked: "true"` | `filter: {exists: {field: ranked_position}}` |
+| `ranked: "false"` | `must_not: {exists: {field: ranked_position}}` |
+| `ranked` absent | *no rank clause — the whole corpus* |
 
-**`Books::SavedSearchQuery`** — criteria + ranking configuration + viewer → the `RankedItem`
-relation. It applies `max_ranked_position` as `where(rank: ..n)`, `hide_read` as an exclusion
-of the read list, then `.order(:rank)`. Same return contract as `Books::RankedBooksQuery`, so
-the existing grid components and `pagy_path` are untouched.
+**`ranked` resolves against `ranked_position`, not the `ranked` field.** The indexed `ranked`
+boolean means "appears on at least one list", which is a different fact: 120 books sit on a list
+without being in the ranked set (some on unapproved lists, some on active lists that fall outside
+the primary configuration). The criterion means "is in the ranked set", so `ranked_position` is
+what answers it. The `ranked` field stays indexed for now but no query reads it — see §13.
+
+**`Books::SavedSearchQuery`** — criteria + ranking configuration + viewer → a **`Books::Book`**
+relation left-joined to `ranked_items` (§5.4), carrying `ranked_position` in its select and
+ordered to match the ids OpenSearch returned. It applies `max_ranked_position` as a bound on
+`ranked_items.rank` and `hide_read` as an exclusion of the read list. `Books::CardComponent`
+takes `book:` and an optional `rank:`, so the grid renders this directly; unranked results simply
+carry no position badge.
 
 ### Preserved behaviors, deliberate not accidental
 
@@ -627,9 +713,15 @@ Increments 1–4 are invisible to users; the feature turns on at 5.
   (§4.1).
 - **Never merge `book_type` into `included_category_ids`** — 183 searches use OR mode and would
   be silently corrupted (§4.2).
-- **Narrow on `exists: ranked_position`, not `ranked`** — the two are not guaranteed to agree;
-  they currently do (0 scored books lack list items, measured), but only `ranked_position` is
-  guaranteed by construction (§5.2).
+- **The `ranked` criterion resolves against `ranked_position`, never the indexed `ranked` field.**
+  They answer different questions: `ranked` means "on at least one list", and **120 books are on a
+  list without being in the ranked set** (unapproved lists, and active lists outside the primary
+  configuration). Only `exists: ranked_position` **is** the `RankedItem` set by construction
+  (§5.2, §6).
+- **The narrowing filter is not universal.** It applies only to `ranked: "true"`. The other two
+  states can match the whole 126,289-book corpus, which is why OpenSearch — not Postgres — does
+  the sorting and paging (§5.4). Any change that reintroduces "fetch every matching id" will fall
+  over on a filter-less search.
 - **Rank fields must stay in `as_indexed_json`** — `index_item` is a full document replace, so
   a partial-update-only design loses them whenever a book is edited (§5.3).
 - **`ranked` has no reindex hook of its own** — `ListItem` isn't `SearchIndexable`, unlike
