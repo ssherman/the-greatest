@@ -2,6 +2,32 @@
 
 require "test_helper"
 
+# == Schema Information
+#
+# Table name: saved_searches
+#
+#  id               :bigint           not null, primary key
+#  criteria         :jsonb            not null
+#  description      :text
+#  last_executed_at :datetime
+#  name             :string
+#  public           :boolean          default(FALSE), not null
+#  result_count     :integer
+#  type             :string           not null
+#  created_at       :datetime         not null
+#  updated_at       :datetime         not null
+#  user_id          :bigint           not null
+#
+# Indexes
+#
+#  index_saved_searches_on_public            (public) WHERE (public = true)
+#  index_saved_searches_on_type_and_user_id  (type,user_id)
+#  index_saved_searches_on_user_id           (user_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (user_id => users.id)
+#
 module Books
   class SavedSearchTest < ActiveSupport::TestCase
     test "is a SavedSearch subclass stored in the shared table" do
