@@ -52,16 +52,17 @@ module Books
       :read
     end
 
-    # category, language, and country criteria are omitted from summary: naming
-    # them requires a database lookup, and the index page renders this for every
-    # one of a user's searches, so keeping those lookup-free avoids an N+1 there.
-    # book_type and book_length don't need that tradeoff -- both are plain enums,
-    # so they render through a label lookup with no query involved.
+    # category, language, and country criteria are omitted: naming them requires
+    # a database lookup, and the index page renders this for every one of a
+    # user's searches, so keeping it lookup-free avoids an N+1 there. book_type
+    # and book_length don't need that tradeoff -- both are plain enums.
+    #
+    # Every value is read through criteria_object rather than the raw hash, so
+    # a form-created search storing "0" renders the same as a migrated row
+    # storing 0.
     def summary
-      return "" if criteria.blank?
-
       parts = [
-        ::Books::BookType.label(criteria["book_type"]),
+        ::Books::BookType.label(criteria_object.book_type),
         book_length_summary,
         year_summary,
         ranked_summary,
@@ -72,37 +73,34 @@ module Books
 
     private
 
-    # Stored criteria is an Array of book_length ints (e.g. [1, 2]) for every
-    # migrated row, but Array() also tolerates a bare scalar, matching legacy's
-    # own `is_a?(Array) ? ... : [value]` normalization.
     def book_length_summary
-      lengths = Array(criteria["book_length"]).compact
-      return nil if lengths.blank?
+      lengths = criteria_object.book_length
+      return nil if lengths.empty?
 
       labels = lengths.map { |length| ::Books::Book.book_lengths.key(length).to_s.titleize }
       "#{labels.join(", ")} Length"
     end
 
     def year_summary
-      gt = criteria["first_year_published_gt"]
-      lt = criteria["first_year_published_lt"]
-      return nil if gt.blank? && lt.blank?
-      return "Published between #{gt} and #{lt}" if gt.present? && lt.present?
-      return "Published after #{gt}" if gt.present?
+      gt = criteria_object.first_year_published_gt
+      lt = criteria_object.first_year_published_lt
+      return nil if gt.nil? && lt.nil?
+      return "Published between #{gt} and #{lt}" if gt && lt
+      return "Published after #{gt}" if gt
 
       "Published before #{lt}"
     end
 
     def ranked_summary
-      case criteria["ranked"]
-      when "true" then "Ranked Books Only"
-      when "false" then "Unranked Books Only"
+      case criteria_object.ranked
+      when :ranked then "Ranked Books Only"
+      when :unranked then "Unranked Books Only"
       end
     end
 
     def max_position_summary
-      position = criteria["max_ranked_position"]
-      return nil if position.blank?
+      position = criteria_object.max_ranked_position
+      return nil if position.nil?
 
       "Top #{position} Ranked Books"
     end
