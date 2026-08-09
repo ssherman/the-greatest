@@ -28,21 +28,6 @@
 #
 module Books
   class SavedSearch < ::SavedSearch
-    # Display labels for legacy book_type values 0-3, kept here deliberately
-    # lookup-free (summary renders for every search on an index page). This is
-    # NOT the legacy-id map -- book_type has no column of its own, so at write
-    # time the value resolves to a category via BookTypeCategoryMigrator::
-    # LEGACY_CATEGORY_IDS. Increment 4's query layer will need that same map to
-    # resolve book_type criteria, so the two should be consolidated then, not now.
-    # "Religion & Spirituality" is a deliberate copy change from legacy's
-    # "Religious" label; the underlying value (2) is unchanged.
-    BOOK_TYPE_LABELS = {
-      0 => "Fiction",
-      1 => "Nonfiction",
-      2 => "Religion & Spirituality",
-      3 => "Poetry"
-    }.freeze
-
     def self.criteria_class_name
       "Books::SavedSearchCriteria"
     end
@@ -76,7 +61,7 @@ module Books
       return "" if criteria.blank?
 
       parts = [
-        BOOK_TYPE_LABELS[criteria["book_type"]],
+        ::Books::BookType.label(criteria["book_type"]),
         book_length_summary,
         year_summary,
         ranked_summary,
