@@ -119,6 +119,22 @@ module Search
           ::Books::BookType.reset_category_ids!
         end
 
+        test "an unresolvable book_type matches nothing rather than everything" do
+          index_book(1, category_ids: [10])
+          index_book(2, category_ids: [20])
+
+          result = ::Search::Books::Search::BookAdvanced.call(criteria({"book_type" => 99}))
+
+          assert_equal [], result[:ids]
+          assert_equal 0, result[:total]
+        end
+
+        test "an absent book_type still matches everything" do
+          index_book(1, category_ids: [10])
+
+          assert_equal [1], ids_for({})
+        end
+
         test "ranked true keeps only books carrying a ranked_position" do
           index_book(1, ranked_position: 5)
           index_book(2, ranked_position: nil)
@@ -205,6 +221,68 @@ module Search
 
           assert_equal 2, result[:ids].size
           assert_equal 3, result[:total]
+        end
+
+        # Shape-only: reproduces the reviewer's exact repro (per_page 120, the
+        # legacy grid/table page size) without needing 10,000 real documents.
+        # Page 84 computes from 9960; unclamped size 120 would put
+        # from + size at 10080, over MAX_RESULT_WINDOW (10,000).
+        test "build_query_definition clamps size so the last reachable page stays within the window (shape only)" do
+          definition = ::Search::Books::Search::BookAdvanced.build_query_definition(
+            criteria({}), page: 84, per_page: 120
+          )
+
+          assert_equal 9960, definition[:from]
+          assert_equal 40, definition[:size]
+        end
+
+        # Shape-only: once `from` itself is beyond the window, nothing there is
+        # reachable, so the definition asks for zero hits instead of raising.
+        test "build_query_definition asks for zero hits once from is beyond the window (shape only)" do
+          definition = ::Search::Books::Search::BookAdvanced.build_query_definition(
+            criteria({}), page: 85, per_page: 120
+          )
+
+          assert_equal 0, definition[:from]
+          assert_equal 0, definition[:size]
+        end
+
+        test "build_query_definition raises ArgumentError for page 0 (shape only)" do
+          assert_raises(ArgumentError) do
+            ::Search::Books::Search::BookAdvanced.build_query_definition(criteria({}), page: 0)
+          end
+        end
+
+        # Real index: OpenSearch validates from + size against
+        # index.max_result_window regardless of how many documents actually
+        # exist, so this reproduces the reviewer's BadRequest without needing
+        # 10,000 real documents -- it would raise here too if the clamp in
+        # build_query_definition were removed.
+        test "a real call at per_page 120 on the last reachable page does not raise (real index)" do
+          index_book(1)
+
+          result = ::Search::Books::Search::BookAdvanced.call(criteria({}), page: 84, per_page: 120)
+
+          assert_equal [], result[:ids]
+          assert_equal 1, result[:total]
+        end
+
+        # Real index: a page entirely beyond the window comes back empty
+        # rather than raising, with an accurate total.
+        test "a real call on a page entirely beyond the window returns no ids with a correct total (real index)" do
+          index_book(1)
+          index_book(2)
+
+          result = ::Search::Books::Search::BookAdvanced.call(criteria({}), page: 85, per_page: 120)
+
+          assert_equal [], result[:ids]
+          assert_equal 2, result[:total]
+        end
+
+        test "a real call with page 0 raises ArgumentError (real index)" do
+          assert_raises(ArgumentError) do
+            ::Search::Books::Search::BookAdvanced.call(criteria({}), page: 0)
+          end
         end
 
         # The `all` mode is the one clause whose SHAPE matters rather than its

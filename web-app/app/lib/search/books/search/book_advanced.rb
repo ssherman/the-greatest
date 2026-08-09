@@ -24,6 +24,11 @@ module Search
 
         DEFAULT_PER_PAGE = 50
 
+        # OpenSearch's ceiling on `from + size` (index.max_result_window,
+        # §5.4). A page beyond it is unreachable; we clamp rather than let
+        # OpenSearch raise a BadRequest.
+        MAX_RESULT_WINDOW = 10_000
+
         def self.index_name
           ::Search::Books::BookIndex.index_name
         end
@@ -41,14 +46,26 @@ module Search
         end
 
         def self.build_query_definition(criteria, page: 1, per_page: DEFAULT_PER_PAGE, excluded_book_ids: [])
+          raise ArgumentError, "page must be >= 1 (got #{page.inspect})" if page < 1
+
+          from = (page - 1) * per_page
+          # `from + size` must stay <= MAX_RESULT_WINDOW or OpenSearch raises
+          # BadRequest. Beyond the window there is nothing reachable to
+          # return, so ask for `from: 0, size: 0` -- zero hits, but `total`
+          # still comes back accurate. Within the window, clamp `size` so the
+          # last reachable page returns short rather than raising: at the
+          # legacy per_page of 120, page 84 computes from 9960 + size 120 =
+          # 10080, over the ceiling.
+          beyond_window = from >= MAX_RESULT_WINDOW
+
           {
             query: ::Search::Shared::Utils.build_bool_query(
               filter: filter_clauses(criteria),
               must_not: must_not_clauses(criteria, excluded_book_ids)
             ),
             sort: SORT,
-            from: (page - 1) * per_page,
-            size: per_page
+            from: beyond_window ? 0 : from,
+            size: beyond_window ? 0 : [per_page, MAX_RESULT_WINDOW - from].min
           }
         end
 
@@ -56,8 +73,13 @@ module Search
           clauses = []
           clauses.concat(category_clauses(criteria))
 
-          book_type_category_id = ::Books::BookType.category_id(criteria.book_type)
-          clauses << {term: {category_ids: book_type_category_id}} if book_type_category_id
+          unless criteria.book_type.nil?
+            category_id = ::Books::BookType.category_id(criteria.book_type)
+            # A book_type we cannot resolve must match NOTHING, not everything: dropping
+            # the clause would turn an unresolvable criterion into a match-all. An empty
+            # terms array is OpenSearch's match-nothing.
+            clauses << (category_id ? {term: {category_ids: category_id}} : {terms: {category_ids: []}})
+          end
 
           languages = criteria.included_language_ids
           clauses << {terms: {original_language_id: languages}} if languages.any?
