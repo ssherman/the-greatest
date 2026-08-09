@@ -251,4 +251,44 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :not_found
   end
+
+  # --- legacy /v/:view_type URLs ---
+  #
+  # Legacy's BookListViewComponent emitted exactly two prefixes, /v/grid and
+  # /v/table; its "List" button linked to the bare path. All three views now
+  # render the same card grid (spec §9), so these 301 rather than rendering --
+  # there is no bookmarked view left to discard.
+
+  test "the legacy view-prefixed index 301s to /searches" do
+    get "/v/grid/searches"
+    assert_redirected_to "/searches"
+    assert_equal 301, response.status
+  end
+
+  test "a legacy grid URL 301s to the canonical search" do
+    get "/v/grid/searches/#{@public_search.id}"
+    assert_redirected_to "/searches/#{@public_search.id}"
+    assert_equal 301, response.status
+  end
+
+  test "a legacy table URL 301s and carries the page number through" do
+    get "/v/table/searches/#{@public_search.id}/page/3"
+    assert_redirected_to "/searches/#{@public_search.id}/page/3"
+    assert_equal 301, response.status
+  end
+
+  # Unconstrained, /v/<anything>/searches/1 is an unbounded space of soft
+  # duplicates -- the same reasoning the browse routes' sort/filter constraints
+  # document. /v/list was never a legacy URL.
+  test "an unknown view type 404s" do
+    get "/v/list/searches/#{@public_search.id}"
+    assert_response :not_found
+
+    get "/v/anything/searches/#{@public_search.id}"
+    assert_response :not_found
+  end
+
+  test "robots.txt disallows /searches" do
+    assert_includes Rails.root.join("public/robots.txt").read, "Disallow: /searches"
+  end
 end

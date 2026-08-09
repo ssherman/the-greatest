@@ -315,6 +315,20 @@ Rails.application.routes.draw do
   get "searches/:id/page/:page", to: "saved_searches#show", as: :saved_search_page,
     constraints: {id: /\d+/, page: /\d+/}
 
+  # Legacy `scope "(/v/:view_type)" { resources :searches }`. These 301 rather
+  # than rendering: increment 5 dropped the view switcher, so grid, table and
+  # the bare path all resolve to the same card grid and a redirect costs the
+  # reader nothing while saving two duplicate URLs and two code paths. The page
+  # number carries through -- an approximation either way, since legacy's grid
+  # and table paged at 120 and this pages at 50.
+  get "v/:view_type/searches", to: redirect("/searches", status: 301),
+    constraints: {view_type: /grid|table/}
+  get "v/:view_type/searches/:id", to: redirect("/searches/%{id}", status: 301),
+    constraints: {view_type: /grid|table/, id: /\d+/}
+  get "v/:view_type/searches/:id/page/:page",
+    to: redirect("/searches/%{id}/page/%{page}", status: 301),
+    constraints: {view_type: /grid|table/, id: /\d+/, page: /\d+/}
+
   # Domain-specific roots using Default controllers
   constraints DomainConstraint.new(Rails.application.config.domains[:music]) do
     get "rankings", to: "music/default#rankings", as: :music_rankings
