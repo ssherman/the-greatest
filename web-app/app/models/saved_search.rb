@@ -63,4 +63,18 @@ class SavedSearch < ApplicationRecord
   def display_name
     name.presence || "Search #{id}"
   end
+
+  # The typed view of `criteria`, built through the subclass's declared
+  # criteria_class. Memoized because summary reads several values from it and
+  # increment 5's controller will hand the same object to the query layer.
+  def criteria_object
+    @criteria_object ||= self.class.criteria_class.new(criteria)
+  end
+
+  # The memo must not outlive the value it wraps -- increment 6's form assigns
+  # criteria and re-renders on the same instance.
+  def criteria=(value)
+    @criteria_object = nil
+    super
+  end
 end

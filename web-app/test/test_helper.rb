@@ -20,6 +20,13 @@ module ActiveSupport
     # Setup all fixtures in test/fixtures/*.yml for all tests in alphabetical order.
     fixtures :all
 
+    # Books::BookType memoizes its LegacyIdMap lookup at the class level, which
+    # would otherwise outlive the per-test transaction and leak an order-dependent
+    # value into every later test in the same worker.
+    setup do
+      ::Books::BookType.reset_category_ids!
+    end
+
     # Add more helper methods to be used by all tests here...
   end
 end

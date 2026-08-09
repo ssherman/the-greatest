@@ -12,12 +12,9 @@ module Services
     # Legacy category ids are remapped through LegacyIdMap because the categories
     # table is shared across domains and its ids were NOT preserved.
     class BookTypeCategoryMigrator < BulkUpsertMigrator
-      LEGACY_CATEGORY_IDS = {
-        0 => 40348,  # Fiction
-        1 => 41013,  # Nonfiction
-        2 => 47008,  # Religion & Spirituality
-        3 => 40876   # Poetry
-      }.freeze
+      # Canonical map lives in ::Books::BookType -- the query layer and the
+      # saved-search summary read the same one.
+      LEGACY_CATEGORY_IDS = ::Books::BookType::LEGACY_CATEGORY_IDS
 
       private
 

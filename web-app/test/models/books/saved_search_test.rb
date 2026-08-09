@@ -110,5 +110,70 @@ module Books
 
       refute_includes search.summary, "Length"
     end
+
+    test "criteria_object wraps the raw hash in the declared criteria class" do
+      search = Books::SavedSearch.new(user: users(:regular_user), criteria: {"book_type" => "0"})
+
+      assert_instance_of Books::SavedSearchCriteria, search.criteria_object
+      assert_equal 0, search.criteria_object.book_type
+    end
+
+    test "criteria_object is memoized" do
+      search = Books::SavedSearch.new(user: users(:regular_user), criteria: {})
+
+      assert_same search.criteria_object, search.criteria_object
+    end
+
+    test "reassigning criteria after reading criteria_object returns a fresh object reflecting the new value" do
+      search = Books::SavedSearch.new(user: users(:regular_user), criteria: {"book_type" => 0})
+      first = search.criteria_object
+      assert_equal 0, first.book_type
+
+      search.criteria = {"book_type" => 1}
+
+      refute_same first, search.criteria_object
+      assert_equal 1, search.criteria_object.book_type
+    end
+
+    test "summary names the book_type category when stored as a string" do
+      search = Books::SavedSearch.new(user: users(:regular_user), criteria: {"book_type" => "0"})
+
+      assert_includes search.summary, "Fiction"
+    end
+
+    test "summary describes the ranked criterion when stored as a boolean" do
+      base = {user: users(:regular_user)}
+
+      assert_includes Books::SavedSearch.new(**base, criteria: {"ranked" => true}).summary, "Ranked"
+      assert_includes Books::SavedSearch.new(**base, criteria: {"ranked" => false}).summary, "Unranked"
+    end
+
+    test "summary describes a year range stored as integers" do
+      search = Books::SavedSearch.new(
+        user: users(:regular_user),
+        criteria: {"first_year_published_gt" => 1980, "first_year_published_lt" => 1990}
+      )
+
+      assert_includes search.summary, "1980"
+      assert_includes search.summary, "1990"
+    end
+
+    test "summary describes max_ranked_position on its own" do
+      search = Books::SavedSearch.new(user: users(:regular_user), criteria: {"max_ranked_position" => "100"})
+
+      assert_equal "Top 100 Ranked Books", search.summary
+    end
+
+    test "summary omits a book_length outside the enum instead of rendering a bare label" do
+      search = Books::SavedSearch.new(user: users(:regular_user), criteria: {"book_length" => [99]})
+
+      assert_equal "", search.summary
+    end
+
+    test "summary renders a book_length stored as strings" do
+      search = Books::SavedSearch.new(user: users(:regular_user), criteria: {"book_length" => ["1", "2"]})
+
+      assert_includes search.summary, "Short, Medium Length"
+    end
   end
 end

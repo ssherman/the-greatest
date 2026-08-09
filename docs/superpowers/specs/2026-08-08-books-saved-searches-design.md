@@ -330,10 +330,19 @@ guaranteed result-preserving, where `ranked` agreeing today is a fact about the 
 a fact about the field. (An earlier measurement, before the rebuild, showed 7 scored books
 missing list items; the current build shows none.)
 
-`max_ranked_position` is deliberately **not** applied here. It resolves in Postgres against
-live `RankedItem.rank`, so the one rank filter users actually see can never be stale. The
-indexed copy is only ever asked "does this exist", where a stale entry is either harmless (the
-Postgres join drops it) or self-correcting on the next reindex.
+**Amended before increment 4.** This section originally kept `max_ranked_position` in Postgres,
+against live `RankedItem.rank`, so the one rank filter users see could never be stale. That is no
+longer possible: §5.4 moved paging into OpenSearch, and a filter applied after the page is sized
+returns short pages. `max_ranked_position` is now `range: {ranked_position: {lte: n}}` against the
+indexed copy (§6).
+
+This is more coherent than the original, not merely a concession. §5.4 already **orders** by the
+indexed `ranked_position`; filtering by live rank while sorting by the indexed copy could place a
+book inside the ordering but outside the filter, or the reverse. Both now read one source.
+
+Staleness is bounded by increment 2's `Books::ReindexRankedFieldsJob`, chained off
+`CalculateRankingsJob`, so the indexed rank trails live rank only between a recalculation and its
+reindex.
 
 ### 5.3 Rank without a cache
 
@@ -426,8 +435,11 @@ Books::Book
 component change — an unranked result simply renders without a position badge, exactly as the
 author all-books page does today.
 
-`max_ranked_position` still resolves in Postgres against live `RankedItem.rank`, unchanged: it only
-ever applies to ranked books, so it is unaffected by this amendment.
+**`max_ranked_position` moved into OpenSearch too** (amended before increment 4). This section
+originally left it in Postgres on the grounds that it only ever applies to ranked books, so paging
+did not disturb it. That was wrong: it filters, and any filter applied after OpenSearch sizes the
+page removes rows from a page already counted. It is now a range filter on the same indexed
+`ranked_position` this section sorts by (§5.2, §6).
 
 **Deep paging cap.** `from + size` may not exceed `index.max_result_window` (10,000 by default), so
 page 200 at 50 per page is the practical limit. Legacy had the same ceiling and nobody reached it;
@@ -471,11 +483,56 @@ instead.
 
 Three objects, each testable in isolation.
 
-**`Books::SavedSearchCriteria`** — a PORO over the raw hash owning every legacy coercion:
-`ranked` arrives as the string `"true"`, years as `"1980"`, `book_length` as an array of ints,
-`book_type` as a bare int. Typed readers out; no database, no OpenSearch.
+**This section was amended before increment 4 was planned.** §5.4's amendment moved sorting and
+paging into OpenSearch, but this section still described `max_ranked_position` and `hide_read` as
+Postgres-side filters — applied *after* OpenSearch had already sized the page, which returns short
+pages under an overstated total. Both now resolve in OpenSearch, which makes it the single source of
+filtering, sorting, paging, and the count. The changes are marked below.
 
-**`Search::Books::Search::BookAdvanced`** — criteria → bool query → ids.
+**`Books::SavedSearchCriteria`** — a PORO over the raw hash owning every legacy coercion.
+Typed readers out; no database, no OpenSearch.
+
+Its readers are **tolerant on input**, because two populations of criteria have to coexist: the
+4,727 migrated rows (which store `book_type` as an Integer and `ranked` as the string `"true"`) and
+future form-created rows (whose params arrive as strings). Rather than normalizing on write — a step
+any future writer can forget — every reader accepts both shapes:
+
+| Reader | Returns | Accepts |
+|---|---|---|
+| `included_*_ids` / `excluded_*_ids` | `[Integer]` | strings or ints |
+| `book_type` | `Integer` or nil | `0` or `"0"` |
+| `book_length` | `[Integer]` | filtered to valid enum values 0–5 |
+| `first_year_published_gt` / `_lt` | `Integer` or nil | `"1980"` or `1980` |
+| `ranked` | `:ranked` / `:unranked` / **nil** | `"true"`, `true`, `"false"`, `false` |
+| `genre_match_mode` | `:any` / `:all` | string |
+| `hide_read` | boolean | |
+| `max_ranked_position` | `Integer` or nil | |
+
+`ranked` returns a **tri-state symbol, not a boolean**: nil (whole corpus) and `:unranked` are
+different requests, and a boolean cannot hold three states.
+
+`book_length` filtering at the reader also closes a latent bug in increment 3's `#summary`, where an
+out-of-range value rendered a stray `" Length"` with no name.
+
+**`Books::SavedSearch#summary` is refactored to read through this object** rather than the raw hash.
+That removes the duplicated coercion and the Integer-vs-String fragility at its source: `summary`'s
+`BOOK_TYPE_LABELS` lookup is keyed on Integers today and would silently drop the label for a
+form-created search storing `"0"`.
+
+**`Books::BookType`** — one value object mapping `0..3` to its label and its legacy category id,
+resolving the current environment's category id through `LegacyIdMap`, memoized. It absorbs both
+existing constants: `Books::SavedSearch::BOOK_TYPE_LABELS` and
+`BookTypeCategoryMigrator::LEGACY_CATEGORY_IDS`. Without it the query layer would introduce a
+*third* independent map keyed on the same legacy 0–3 integers.
+
+Resolution is at runtime, not hardcoded new ids. Measured 2026-08-09: dev and production both
+resolve to `{0=>2683, 1=>3348, 2=>9343, 3=>3211}` — so hardcoding would work today. Runtime
+resolution is preferred only because it costs nothing, matches what `BookTypeCategoryMigrator`
+already does, and does not depend on that agreement holding. Note the agreement itself is worth
+knowing: `categories` is a shared cross-domain table whose ids were *not* preserved, and the two
+migrations ran independently, so divergent ids is the natural assumption — and it is wrong.
+
+**`Search::Books::Search::BookAdvanced`** — criteria → bool query → one page of ids plus a total.
 
 | Criterion | Clause |
 |---|---|
@@ -492,6 +549,20 @@ Three objects, each testable in isolation.
 | `ranked: "true"` | `filter: {exists: {field: ranked_position}}` |
 | `ranked: "false"` | `must_not: {exists: {field: ranked_position}}` |
 | `ranked` absent | *no rank clause — the whole corpus* |
+| `max_ranked_position` | `filter: {range: {ranked_position: {lte: n}}}` **(amended — was Postgres)** |
+| `hide_read` | `must_not: {ids: {values: owner_read_book_ids}}` **(amended — was Postgres)** |
+
+**`max_ranked_position` means "ranked 1..n in the default global ranking configuration".** It is a
+primary filter, not a trim applied to results afterward, and the indexed `ranked_position` answers it
+directly because `Books::Book#as_indexed_json` populates it from `primary_ranked_item`, which is
+scoped to `Books::RankingConfiguration.default_primary`. Two consequences, both correct: it already
+implies ranked-only, so it does not need `ranked: "true"` alongside it; and combined with
+`ranked: "false"` it is self-contradictory and returns nothing.
+
+**`hide_read` excludes the search owner's read list**, so its ids come from one Postgres query
+before the OpenSearch call, using increment 3's `SavedSearch.excluded_list_type` hook. Measured on
+the migrated corpus: read lists run to a median of 20 books, p99 412, max 11,092 — comfortably under
+OpenSearch's 65,536-term ceiling, and only one list exceeds 10,000.
 
 **`ranked` resolves against `ranked_position`, not the `ranked` field.** The indexed `ranked`
 boolean means "appears on at least one list", which is a different fact: 120 books sit on a list
@@ -499,12 +570,22 @@ without being in the ranked set (some on unapproved lists, some on active lists 
 the primary configuration). The criterion means "is in the ranked set", so `ranked_position` is
 what answers it. The `ranked` field stays indexed for now but no query reads it — see §13.
 
-**`Books::SavedSearchQuery`** — criteria + ranking configuration + viewer → a **`Books::Book`**
-relation left-joined to `ranked_items` (§5.4), carrying `ranked_position` in its select and
-ordered to match the ids OpenSearch returned. It applies `max_ranked_position` as a bound on
-`ranked_items.rank` and `hide_read` as an exclusion of the read list. `Books::CardComponent`
-takes `book:` and an optional `rank:`, so the grid renders this directly; unranked results simply
-carry no position badge.
+**`Books::SavedSearchQuery`** — criteria + ranking configuration + viewer → one hydrated page of
+**`Books::Book`** records plus the total. It left-joins `ranked_items` (§5.4) to carry
+`ranked_position` in its select, and re-applies OpenSearch's order in Ruby, since Postgres cannot
+reproduce the ranked-then-unranked interleaving from an `IN` clause. It therefore returns an array,
+not a relation. `Books::CardComponent` takes `book:` and an optional `rank:`, so the grid renders
+this directly; unranked results simply carry no position badge.
+
+**It no longer applies any filter of its own** (amended). `max_ranked_position` and `hide_read` moved
+into `BookAdvanced` above, because a filter applied after OpenSearch has sized the page removes rows
+from a page already counted — yielding short pages under an overstated total.
+
+`ranking_configuration:` is a parameter, defaulting to `Books::RankingConfiguration.default_primary`.
+For now only the default primary is supported and anything else **raises**: the index carries only
+the default primary's rank, so a non-default configuration cannot be answered from `ranked_position`
+and would silently return the wrong ranks. Keeping it a parameter preserves the seam without
+building the path.
 
 ### Preserved behaviors, deliberate not accidental
 
@@ -515,15 +596,36 @@ carry no position badge.
 - **Unknown category/language/country ids match nothing rather than 404.** The opposite of the
   public-filters spec's choice, and correctly so: a saved search is private user data, not an
   indexable URL space.
-- **`result_count` and `last_executed_at` are written on every view** — a write on a read
-  request. It is what the index page's "N results / last run X ago" reads, and 4,356 of 4,391
-  rows have it set.
+- **A criterion that is present but cannot be resolved matches nothing, never everything.** This is
+  the general rule the bullet above is one case of, and it binds beyond ids: `book_type` resolves
+  through `LegacyIdMap`, a migration artifact table, so an absent mapping is reachable in a way a
+  hardcoded constant never would be. The failure mode to avoid is a filter clause silently dropped
+  because it couldn't be built — that reads as "no criterion", which is a match-all, not the
+  match-nothing an unresolvable criterion must produce. Every filter in `BookAdvanced` follows this:
+  a criterion that is absent contributes no clause; a criterion that is present but unresolvable
+  contributes a match-nothing clause (an empty `terms` array, verified against the real index).
+- **`last_executed_at` is written on view** — a write on a read request, and the only one. It
+  drives `by_last_executed`, the index page's default ordering. That write belongs to increment 5's
+  controller; increment 4 is read-only throughout.
 
-### Performance item to verify
+**`result_count` is no longer written** (amended). Its only consumer was the index page's "N
+results" label, where it exists so a listing can show a number without executing every search. It is
+stale by construction — rankings recalc daily and books are added — and for the migrated rows it is
+a figure from the legacy site, potentially years old. Nothing acts on it: the summary line is what
+distinguishes one saved search from another. The column keeps its migrated legacy values as
+historical data, and whether the index page displays counts at all is an increment 5 decision.
 
-The id set handed to Postgres can reach 24,242 entries, and pagy issues a `COUNT` over it. If
-`WHERE item_id IN (…)` is slow at that width, the fallback is `= ANY(VALUES …)`. The number to
-beat is the filters spec's measured 195 ms count.
+### Counting and the paging ceiling
+
+`track_total_hits` stays at OpenSearch's default of 10,000. This is not a compromise: `from + size`
+may not exceed `index.max_result_window` (also 10,000, §5.4), so result 10,001 is unreachable and
+counting past it buys pagination nothing.
+
+The 10,000 default would only matter for *display* — 419 of 4,356 migrated searches carry a legacy
+`result_count` above 10,000, the largest 24,189 — and since `result_count` is no longer written and
+the index page's counts are deferred to increment 5, no consumer needs an exact total today. If
+increment 5 decides to show one, `track_total_hits: true` is the switch, and it is cheap at this
+corpus size.
 
 ---
 
@@ -694,9 +796,19 @@ but its index is missing much of what filtering would need, `release_year`, `ran
 
 **Unit.** `SavedSearchCriteria` and `Books::BookLength` are pure functions — table-driven
 against legacy's thresholds, letter rejection, and the `word_count / 275.0` rule.
-`BookAdvanced` asserts the **built query hash**, covering every criterion→clause mapping with
-no OpenSearch running. `SavedSearchQuery` covers the rank filter, `hide_read` exclusion, and
-ordering.
+`SavedSearchCriteria` asserts every reader in **both** storage shapes — `0` and `"0"`, `"true"` and
+`true` — since migrated and form-created rows differ (§6).
+
+`BookAdvanced` is tested against a **real test index**, matching every other search class in this
+app (`cleanup_test_index` → `create_index` → index fixtures → assert), with one case per
+criterion→clause proving it narrows. Built-query-hash assertions are kept only where a clause's
+*shape* is the thing under test rather than its effect — `genre_match_mode: all` generating one term
+filter per id. A hash assertion alone cannot catch a clause that is well-formed but mismatched
+against the mapping, which is the failure this layer is most exposed to.
+
+`SavedSearchQuery` covers hydration, the re-applied OpenSearch ordering, and the non-default
+ranking-configuration guard. The rank filter and `hide_read` exclusion are `BookAdvanced`'s, not
+its (§6).
 
 **Model & policy.** Validations, `display_name`, `summary`, `visible_to`; policy cases for
 owner, public, other, anonymous.
@@ -723,7 +835,7 @@ Each is its own PR. Gate before each: `bin/rails test` + `bundle exec standardrb
 | 1 | `book_length` / `page_range` / `word_count` columns, `Books::BookLength`, `BookAttributesMigrator`, category backfill, rake wiring | e2e exact counts |
 | 2 | Index fields, `primary_ranked_item`, `as_indexed_json`, reindex, post-recalc partial update | index document assertions |
 | 3 | `SavedSearch` STI + policy + `SavedSearchMigrator` | e2e exact counts (4,391 / 50 / 1,152) |
-| 4 | `SavedSearchCriteria`, `BookAdvanced`, `SavedSearchQuery` | unit tests; nothing user-visible |
+| 4 | `SavedSearchCriteria`, `Books::BookType`, `BookAdvanced`, `SavedSearchQuery`, `#summary` refactor | unit tests; nothing user-visible; read-only |
 | 5 | Routes, controller, index + show, view switcher, legacy URLs | hand-typed legacy URLs |
 | 6 | new/edit form, Stimulus picker, create/update/destroy | Playwright |
 | 7 | E2E + docs | CI |
@@ -750,6 +862,17 @@ Increments 1–4 are invisible to users; the feature turns on at 5.
   states can match the whole 126,289-book corpus, which is why OpenSearch — not Postgres — does
   the sorting and paging (§5.4). Any change that reintroduces "fetch every matching id" will fall
   over on a filter-less search.
+- **No criterion may be applied in Postgres.** Once OpenSearch sizes the page, a filter applied
+  downstream removes rows from a page already counted, so the page comes back short under an
+  overstated total. This is why `max_ranked_position` and `hide_read` moved into the query (§6). The
+  same trap catches any criterion added later.
+- **`ranked` is a tri-state, and nil is not false.** Absent means the whole corpus; `:unranked`
+  means unranked only. A boolean reader collapses the two and silently changes what a stored search
+  returns (§6).
+- **Criteria arrive in two storage shapes.** Migrated rows store `book_type` as an Integer and
+  `ranked` as the string `"true"`; form params arrive as strings. The criteria readers absorb both —
+  anything reading `criteria[...]` directly, as `#summary` originally did, breaks on one of them
+  (§6).
 - **Rank fields must stay in `as_indexed_json`** — `index_item` is a full document replace, so
   a partial-update-only design loses them whenever a book is edited (§5.3).
 - **`ranked` has no reindex hook of its own** — `ListItem` isn't `SearchIndexable`, unlike
