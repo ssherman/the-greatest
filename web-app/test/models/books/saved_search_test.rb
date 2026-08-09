@@ -86,5 +86,29 @@ module Books
 
       assert_includes search.summary, " · "
     end
+
+    test "summary describes the max_ranked_position criterion" do
+      search = Books::SavedSearch.new(user: users(:regular_user), criteria: {"max_ranked_position" => 100})
+
+      assert_equal "Top 100 Ranked Books", search.summary
+    end
+
+    test "summary names a single book_length" do
+      search = Books::SavedSearch.new(user: users(:regular_user), criteria: {"book_length" => [0]})
+
+      assert_equal "Very Short Length", search.summary
+    end
+
+    test "summary joins multiple book_lengths" do
+      search = Books::SavedSearch.new(user: users(:regular_user), criteria: {"book_length" => [0, 1]})
+
+      assert_equal "Very Short, Short Length", search.summary
+    end
+
+    test "summary contributes nothing when book_length is absent" do
+      search = Books::SavedSearch.new(user: users(:regular_user), criteria: {"ranked" => "true"})
+
+      refute_includes search.summary, "Length"
+    end
   end
 end

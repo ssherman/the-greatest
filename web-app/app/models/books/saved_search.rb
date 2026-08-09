@@ -28,10 +28,14 @@
 #
 module Books
   class SavedSearch < ::SavedSearch
-    # book_type has no column: legacy's four values are category data, so the
-    # criterion resolves to a category. Reuses the migrator's legacy ids rather
-    # than hardcoding new ones, because the categories table is shared across
-    # domains and its ids were NOT preserved by the migration.
+    # Display labels for legacy book_type values 0-3, kept here deliberately
+    # lookup-free (summary renders for every search on an index page). This is
+    # NOT the legacy-id map -- book_type has no column of its own, so at write
+    # time the value resolves to a category via BookTypeCategoryMigrator::
+    # LEGACY_CATEGORY_IDS. Increment 4's query layer will need that same map to
+    # resolve book_type criteria, so the two should be consolidated then, not now.
+    # "Religion & Spirituality" is a deliberate copy change from legacy's
+    # "Religious" label; the underlying value (2) is unchanged.
     BOOK_TYPE_LABELS = {
       0 => "Fiction",
       1 => "Nonfiction",
@@ -63,11 +67,17 @@ module Books
       :read
     end
 
+    # category, language, and country criteria are omitted from summary: naming
+    # them requires a database lookup, and the index page renders this for every
+    # one of a user's searches, so keeping those lookup-free avoids an N+1 there.
+    # book_type and book_length don't need that tradeoff -- both are plain enums,
+    # so they render through a label lookup with no query involved.
     def summary
       return "" if criteria.blank?
 
       parts = [
         BOOK_TYPE_LABELS[criteria["book_type"]],
+        book_length_summary,
         year_summary,
         ranked_summary,
         max_position_summary
@@ -76,6 +86,17 @@ module Books
     end
 
     private
+
+    # Stored criteria is an Array of book_length ints (e.g. [1, 2]) for every
+    # migrated row, but Array() also tolerates a bare scalar, matching legacy's
+    # own `is_a?(Array) ? ... : [value]` normalization.
+    def book_length_summary
+      lengths = Array(criteria["book_length"]).compact
+      return nil if lengths.blank?
+
+      labels = lengths.map { |length| ::Books::Book.book_lengths.key(length).to_s.titleize }
+      "#{labels.join(", ")} Length"
+    end
 
     def year_summary
       gt = criteria["first_year_published_gt"]
