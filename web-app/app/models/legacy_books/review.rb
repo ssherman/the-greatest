@@ -11,6 +11,11 @@
 #  book_id    :bigint           not null
 #  user_id    :bigint           not null
 #
+# Indexes
+#
+#  index_reviews_on_book_id  (book_id)
+#  index_reviews_on_user_id  (user_id)
+#
 module LegacyBooks
   class Review < Record
     self.table_name = "reviews"

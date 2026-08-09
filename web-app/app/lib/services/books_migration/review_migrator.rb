@@ -46,6 +46,7 @@ module Services
 
       def preload_context
         @book_ids = ::Books::Book.pluck(:id).to_set
+        @user_ids = ::User.pluck(:id).to_set
         @seen = Set.new
       end
 
@@ -69,12 +70,17 @@ module Services
           raise "no migrated ::Books::Book for legacy reviews.book_id=#{book_id.inspect}"
         end
 
+        user_id = attrs["user_id"]
+        unless @user_ids.include?(user_id)
+          raise "no migrated ::User for legacy reviews.user_id=#{user_id.inspect}"
+        end
+
         # First occurrence wins, and rows arrive newest-first.
-        return [] unless @seen.add?([attrs["user_id"], book_id])
+        return [] unless @seen.add?([user_id, book_id])
 
         [{
           id: attrs["id"],
-          user_id: attrs["user_id"],
+          user_id: user_id,
           reviewable_type: "Books::Book",
           reviewable_id: book_id,
           title: attrs["title"]&.strip.presence,

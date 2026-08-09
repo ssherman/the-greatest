@@ -130,6 +130,13 @@ class Services::BooksMigration::ReviewMigratorTest < ActiveSupport::TestCase
     assert_includes result[:error], "999999999"
   end
 
+  test "fails loudly when the legacy user was never migrated" do
+    result = run_migrator([legacy_review(900_001, "user_id" => 999_999_999)])
+
+    assert_not result[:success]
+    assert_includes result[:error], "999999999"
+  end
+
   test "does not maintain review_summaries" do
     run_migrator([legacy_review(900_001)])
 
@@ -143,5 +150,14 @@ class Services::BooksMigration::ReviewMigratorTest < ActiveSupport::TestCase
     # Without the reset this would return 1 and collide with the migrated row.
     next_id = ::Review.connection.select_value("SELECT nextval('reviews_id_seq')").to_i
     assert_operator next_id, :>, 900_001
+  end
+
+  # The dedup rule ("the newer duplicate wins") is only true because rows arrive
+  # newest-first. Every other test stubs legacy_each, so without this one, deleting
+  # `order: :desc` would silently invert the rule and stay green.
+  test "reads the legacy table newest-first" do
+    LegacyBooks::Review.expects(:find_each).with(has_entry(order: :desc))
+
+    Services::BooksMigration::ReviewMigrator.new.send(:legacy_each) { |_| }
   end
 end

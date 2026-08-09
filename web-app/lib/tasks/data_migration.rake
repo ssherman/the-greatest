@@ -157,9 +157,25 @@ namespace :data_migration do
 
   desc "Migrate legacy reviews into reviews (preserves ids; then rebuilds review_summaries)"
   task reviews: :environment do
+    # Untargeted ON CONFLICT DO NOTHING makes every conflict silent, so print the
+    # arithmetic: on a cold load, inserted MUST equal legacy_distinct_pairs. A shortfall
+    # means rows were skipped -- most likely id collisions with reviews real users wrote
+    # before this ran.
+    expected = LegacyBooks::Record.connection.select_value(
+      "select count(*) from (select distinct user_id, book_id from reviews) t"
+    ).to_i
+    pre_existing = Review.count
+
     result = Services::BooksMigration::ReviewMigrator.call
     pp result
     abort "reviews migration failed: #{result[:error]}" unless result[:success]
+
+    pp({
+      legacy_distinct_pairs: expected,
+      inserted: result[:data][:count],
+      pre_existing: pre_existing,
+      cold_load_matches: pre_existing.zero? && result[:data][:count] == expected
+    })
 
     # insert_all bypassed every after_commit, so the summaries are stale by definition.
     pp({review_summaries: Services::Reviews::SummaryRecalculator.backfill_all!})
