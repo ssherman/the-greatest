@@ -295,6 +295,25 @@ Rails.application.routes.draw do
   get "user_lists/:id", to: "my_lists#show", as: :user_list
   get "user_lists/:id/page/:page", to: "my_lists#show", as: :user_list_page, constraints: {page: /\d+/}
 
+  # Saved searches -- global, never cached, per-domain layout resolved from
+  # Current.domain in the controller. index is owner-only; show serves the
+  # owner or any viewer when the search is public (404s otherwise via
+  # SavedSearch.visible_to). The write actions are increment 6: a route
+  # pointing at an action that does not exist yet is a 500, not a 404, and
+  # `searches/new` falls through to a clean 404 while :id stays \d+-constrained.
+  get "searches", to: "saved_searches#index", as: :saved_searches
+  get "searches/page/1", to: redirect("/searches", status: 301)
+  get "searches/page/:page", to: "saved_searches#index", as: :saved_searches_page,
+    constraints: {page: /\d+/}
+
+  # The show action itself lands in the next task of this increment, but the
+  # index view links to it with `saved_search_path`, so the named route is
+  # declared now. Visiting it before that action exists raises ActionNotFound
+  # (a 500), same as any other route-ahead-of-action gap in this file;
+  # nothing links here yet except the index page's own row links.
+  get "searches/:id", to: "saved_searches#show", as: :saved_search,
+    constraints: {id: /\d+/}
+
   # Domain-specific roots using Default controllers
   constraints DomainConstraint.new(Rails.application.config.domains[:music]) do
     get "rankings", to: "music/default#rankings", as: :music_rankings
