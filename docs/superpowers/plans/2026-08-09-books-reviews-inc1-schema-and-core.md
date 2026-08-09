@@ -266,7 +266,7 @@ end
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `bin/rails test test/lib/services/reviews/body_sanitizer_test.rb`
-Expected: PASS, 21 runs, 0 failures
+Expected: PASS, 20 runs, 0 failures
 
 - [ ] **Step 5: Lint**
 
