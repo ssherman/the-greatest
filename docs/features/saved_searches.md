@@ -5,38 +5,61 @@
 A signed-in user can save a set of book filters (genres, languages, origins, book type/length,
 publication-year range, ranked-only, hide-read, etc.), name it, optionally make it public, and
 revisit it later at a stable URL. It is a **port** of the legacy books site's saved-search
-feature: the stored criteria and the URLs it's reachable at have to keep behaving, because
-**4,727 searches across roughly 1,150 users** were migrated from the legacy database with their
-ids preserved (increments 1–4, merged before this feature had any UI). Increment 5 is what turns
-it on — `/searches` and `/searches/:id` are live for the first time.
+feature: the stored criteria and the URLs it's reachable at have to keep behaving, because a
+large batch of searches were migrated from the legacy database with their ids preserved
+(increments 1–4, merged before this feature had any UI). Increment 5 is what turns it on —
+`/searches` and `/searches/:id` are live for the first time.
+
+The migrated count differs by database: **development** holds 4,391 searches across 1,152 users
+(`SavedSearch.count` / `SavedSearch.distinct.count(:user_id)`), matching the design spec's legacy
+figure exactly. **Production**, migrated 2026-08-09, holds 4,727 rows. Production's legacy books
+corpus is larger than dev's in general, so dev counts never reproduce there — that gap is worth
+knowing because it means an exact-count assertion that passes locally says nothing about
+production.
 
 Only books has saved searches today. The read surface (list, view, legacy-URL redirects) is
 built; creating, editing, and deleting a search is deferred to a later increment.
 
 ## Architecture
 
+Both actions start the same way — `SavedSearchesController` resolves
+`domain_class = SavedSearch.subclass_for(Current.domain)`, 404ing if the current domain has no
+subclass — and then diverge completely. `index` never touches OpenSearch, the query layer, or
+`Books::CardComponent`; it's a plain Postgres list of the signed-in user's own searches:
+
 ```
-GET /searches(/page/:page)  or  GET /searches/:id(/page/:page)
+GET /searches(/page/:page)
   |
   v
-SavedSearchesController
-  |  domain_class = SavedSearch.subclass_for(Current.domain)   # 404 if the domain has none
+domain_class.owned_by(current_user).by_last_executed.by_created   # paged with pagy_path
   |
   v
-Books::SavedSearch (STI on saved_searches, type: "Books::SavedSearch")
-  |  #criteria_object  ->  Books::SavedSearchCriteria (typed reader over the raw jsonb)
+index.html.erb — a DaisyUI `.card` per search (name, description, `#summary`), linking to `show`
+```
+
+`show` resolves one search, then runs its criteria through OpenSearch and hydrates one page from
+Postgres:
+
+```
+GET /searches/:id(/page/:page)
   |
   v
-Books::SavedSearchQuery.call(criteria:, owner:, page:, per_page:)
+domain_class.visible_to(current_user).find(params[:id])   # 404 unless owner or public
+  |
+  v
+@search.criteria_object -> Books::SavedSearchCriteria     # typed reader over the raw criteria jsonb
+  |
+  v
+Books::SavedSearchQuery.call(criteria:, owner: @search.user, page:, per_page:)
   |  owner's read-list ids, if hide_read is set
   v
-Search::Books::Search::BookAdvanced   # OpenSearch: filters + sort + page + total, all in one call
+Search::Books::Search::BookAdvanced   # OpenSearch: filters + sort + page + total, one call
   |
   v
-Books::SavedSearchQuery hydrates the page  # one Postgres query, id order preserved, rank joined in
-  |
+Books::SavedSearchQuery hydrates the page   # a fixed, small number of Postgres queries
+  |                                          # (base SELECT + preloads), not one per book
   v
-app/views/saved_searches/{index,show}.html.erb -> Books::CardComponent grid
+show.html.erb -> Books::CardComponent grid
 ```
 
 `SavedSearchesController` is a single global controller (no `DomainConstraint`), because
@@ -80,6 +103,13 @@ also silently drops any id OpenSearch returned that Postgres no longer has (a bo
 without a reindex) — that page comes back short of `total`, which is considered better than
 failing the request.
 
+Hydration itself is not "one query" — the base `SELECT` plus its `.preload(book_authors:
+:author, primary_image: {file_attachment: :blob})` are separate round trips. What matters, and
+what's actually pinned by `saved_searches_controller_test.rb`'s `assert_queries_count(9)` on
+`show`, is that the count is **fixed regardless of how many books land on the page** — it doesn't
+grow per book, which is the N+1 that a grid of books rendering authors and a cover image per row
+would otherwise invite.
+
 ## The URL surface
 
 | URL | Behaviour |
@@ -122,7 +152,7 @@ To add saved searches to a second domain (e.g. games), add:
 2. A query class (`Games::SavedSearchQuery`) — resolves `hide_read` against that domain's own read/played list and calls that domain's OpenSearch query class.
 3. A filter-labels class (`Games::SavedSearchFilterLabels`) — criteria -> the show page's "Active filters" card.
 4. Two view partials: `saved_searches/games/_active_filters.html.erb` and `saved_searches/games/_results.html.erb`.
-5. One entry in `SavedSearch::DOMAIN_SUBCLASSES` (`"games" => "Games::SavedSearch"`), and a `Games::SavedSearch < ::SavedSearch` subclass that overrides `criteria_class`, `query_class`, `filter_labels_class`, and `excluded_list_type`.
+5. One entry in `SavedSearch::DOMAIN_SUBCLASSES` (`"games" => "Games::SavedSearch"`), and a `Games::SavedSearch < ::SavedSearch` subclass that overrides all five hooks the base class declares abstract: `criteria_class`, `query_class`, `filter_labels_class`, `ranking_configuration_class`, and `excluded_list_type`. Skipping `ranking_configuration_class` — easy to do, since nothing in the controller or query path calls it today — still fails the base class's own contract: `SavedSearch.ranking_configuration_class` raises `NotImplementedError` on the base class, and `test/models/saved_search_test.rb` asserts that for every hook, this one included.
 
 What's inherited for free: the route block, `SavedSearchesController#index`/`#show`,
 `SavedSearch.visible_to`/`owned_by` scoping and the `criteria_object` memo, `SavedSearchPolicy`,
