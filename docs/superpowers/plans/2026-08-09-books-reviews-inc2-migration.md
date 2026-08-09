@@ -629,6 +629,40 @@ Run against development on 2026-08-09, after taking a snapshot
 
 ## Carried forward
 
-- **Production run.** A separate manual step for the owner after merge, matching how saved searches and descriptions were done. Production's legacy DB is larger than development, so the absolute numbers above will not match — verify the *invariants* (zero out-of-range ratings, zero empty-string bodies, summary totals equal to the reviews table) rather than the counts.
+- **Production run.** A separate manual step for the owner after merge, matching how saved searches and descriptions were done.
+
+  - **Must happen BEFORE increment 4 (the write flow) deploys.** Once any real user review exists, `reviews_id_seq` has already handed out low ids to it, and this migration's untargeted `ON CONFLICT DO NOTHING` will silently discard any legacy review whose preserved id collides with one of those rows — the task still reports a `count` that looks like a clean run.
+
+  - **Pre-flight queries against the production legacy DB.** Every one of these returns 0 in development; a non-zero result changes the plan and must be resolved before running the migrator:
+
+    ```sql
+    select count(*) from reviews where rating is null or rating < 1 or rating > 5;
+    select count(*) from reviews where length(title) > 255;
+    select count(*) from reviews r left join users u on u.id = r.user_id where u.id is null;
+    select count(*) from reviews r left join books b on b.id = r.book_id where b.id is null;
+    select count(*) from (select 1 from reviews group by user_id, book_id having count(*) > 2) t;
+    ```
+
+    - A null or out-of-range rating aborts the run: the new `reviews.rating` column is `NOT NULL` with a `reviews_rating_range` check, so `insert_all` raises on the first offending row.
+    - A title over 255 chars imports fine — there is no DB-level length limit — but the row becomes permanently unsaveable through ActiveRecord afterward, so increment 4's edit path would 422 on it with no way for the user to fix it (the validation would reject their own unedited title).
+    - Orphaned `user_id` / `book_id` fail loud, by design (see Fix 3 below and the `ReviewMigrator` guards) — they abort with a message naming the offending legacy id rather than a raw `PG::ForeignKeyViolation`.
+    - The last query matters because development has no duplicate group larger than 2. The `@seen` dedup logic is correct for any N, but it has only ever been *exercised* at N=2 — a larger group in production is new ground, not a new code path.
+
+  - **The cold-load identity to check:** `inserted` must equal `select count(*) from (select distinct user_id, book_id from reviews) t` against the production legacy DB. Anything less means rows were silently skipped. The `data_migration:reviews` rake task now prints this arithmetic directly (`legacy_distinct_pairs`, `inserted`, `pre_existing`, `cold_load_matches`) — see Fix 2 in the inc2 code review.
+
+  - **Verify invariants, not absolute counts**, since production's legacy DB is larger than development and the numbers recorded above will not match:
+    - zero out-of-range ratings
+    - zero empty-string bodies
+    - `ReviewSummary.sum(:ratings_count) == Review.count`
+    - `ReviewSummary.sum(:ratings_sum) == Review.sum(:rating)`
+    - `ReviewSummary.sum(:text_reviews_count) == Review.with_body.count`
+    - `nextval('reviews_id_seq')` greater than the legacy `max(id)`
+
+  - **Mid-run death is safe but leaves two artifacts.** Each `insert_all` batch is its own statement with no wrapping transaction, so a failure partway through leaves prior batches committed, and re-running resumes cleanly — the dedup is deterministic (same newest-first order, rebuilt `@seen`, same winners). But two things do NOT happen on a partial run: `finalize` never fires, so `reviews_id_seq` is left unreset, and `backfill_all!` never fires, so `review_summaries` is left empty or stale. **Re-run the whole `data_migration:reviews` task**, not just the migrator, so both `finalize` and the summary backfill complete.
+
+  - **A re-run is not a re-sync.** `DO NOTHING` means a later run picks up genuinely new `(user, book)` pairs, but it will NOT carry over edits made to an already-migrated review, nor a legacy second review of a pair already migrated. That is correct for a one-time lift — don't expect a re-run to reconcile drift.
+
+- **Known follow-up for increment 4 — inconsistent title stripping.** The migrator does `attrs["title"]&.strip.presence`, but `Review` normalizes with `normalizes :title, with: ->(value) { value.presence }` — no `strip`. Migrated titles are trimmed; titles a real user types through the write path will not be. Worth aligning (add `.strip` to the model's normalizer) when increment 4 lands.
+
 - **Increment 3** — book page read surface: summary line, histogram, paginated text reviews. `title` is NOT sanitized (only `body` is), so it must never be rendered with `raw` or `html_safe`. `by_rating` and `recent` carry an `id` tiebreaker, so paging over them is stable.
 - The deferred findings from increment 1 remain open; see `2026-08-09-books-reviews-inc1-schema-and-core.md`.
