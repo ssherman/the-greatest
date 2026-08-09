@@ -1200,11 +1200,34 @@ git commit -m "Add Services::Reviews::SummaryRecalculator and wire it to Review"
 - [ ] `db/schema.rb` contains `reviews` and `review_summaries` with every index and check constraint listed above
 - [ ] No development data was created or destroyed — increment 1 touches the test database only
 
+## Deferred findings carried out of increment 1
+
+Raised during review, deliberately not fixed here. None blocks merge.
+
+- **`Books::Book has_many :reviews, dependent: :destroy` could be `:delete_all`.** Destroying a book
+  instantiates every review and fires one no-op recalculate transaction each, since the
+  `has_one :review_summary, dependent: :destroy` has already removed the row. Admin-only path, so
+  the waste is negligible. Note the `User` association is **not** the same case — there the
+  per-review recalculate is required work.
+- **The `reviews_body_not_blank` check constraint does not trim Unicode whitespace.** A NBSP-only
+  body is accepted at the DB layer while `BodySanitizer` returns `nil` for it. Only reachable by a
+  writer that bypasses the sanitizer, so it is defense-in-depth only; closing it costs a migration.
+- **Uniqueness is an app-level validation over a DB unique index.** A concurrent double-submit
+  raises `ActiveRecord::RecordNotUnique` rather than failing validation, and the error attaches to
+  `:user_id` — so increment 4's form would render "User has already been taken". Handle it there.
+- **`annotaterb` output is inconsistent** across the four new test/fixture files: `reviews.yml` and
+  `review_test.rb` carry schema annotations, `review_summaries.yml` and `review_summary_test.rb` do
+  not. One more `bundle exec annotaterb models` makes them uniform.
+- **No `docs/` entry for `Review` or `ReviewSummary`.** CLAUDE.md asks for one per model, but the
+  convention is stale: `docs/object_models/` holds only `music/`, and no recently merged model
+  (`Description`, `ExternalLink`, `Books::Country`, `Books::SavedSearch`) has one. The design record
+  for this work is the spec and this plan, both committed.
+
 ## What increment 1 deliberately leaves out
 
 Carried into later increments, each of which gets its own plan:
 
 - **Increment 2** — `LegacyBooks::Review`, `Services::BooksMigration::ReviewMigrator`, the `data_migration:reviews` rake task, and the `backfill_all!` run. Note for that plan: the migrator must call `BodySanitizer` explicitly (bulk insert bypasses `before_validation`), must apply the 25,000-char cap by dropping the body, and **must use an untargeted `ON CONFLICT DO NOTHING`** — with ids preserved, the primary key is a second colliding constraint that a natural-key arbiter will not suppress.
-- **Increment 3** — book page read surface: summary line, histogram, paginated text reviews. Needs a `.review-spoiler` CSS rule in the books stylesheet and a Stimulus controller to reveal it, plus a decision on rendering the stored (already-sanitized) body as HTML.
+- **Increment 3** — book page read surface: summary line, histogram, paginated text reviews. Needs a `.review-spoiler` CSS rule in the books stylesheet and a Stimulus controller to reveal it, plus a decision on rendering the stored (already-sanitized) body as HTML. **`title` is NOT sanitized** — only `body` passes through `BodySanitizer` — so a review title must never be rendered with `raw` or `html_safe`. Both `by_rating` and `recent` now carry an `id` tiebreaker, so paging over them is stable.
 - **Increment 4** — the write flow: cacheable widget, `ReviewStateController` including its `csrf_token`, the modal, `ReviewsController`, `ReviewPolicy`.
 - **Increment 5** — `/my/reviews`, the `/reviews` 301s, and the admin index.
