@@ -566,6 +566,8 @@ The first user-visible surface. A signed-in user's searches, newest-run first, p
 - Consumes: `SavedSearch.subclass_for` and `DomainLayout` (Task 1); `pagy_path` from `PathBasedPagination`.
 - Produces: `saved_searches_path`, `saved_searches_page_path(page)`, `saved_search_path(record)`; `SavedSearchesController#domain_class` (private) → the STI subclass.
 
+Note on `saved_search_path`: the index view links every row to it, so the `searches/:id` route is declared **here**, in Step 3, even though the `show` action it points at arrives in Task 4. Task 4 adds only the two `/page/` lines beside it. Between the two tasks a click from the index 500s — a mid-increment state on a feature branch, and the alternative (an index that links nowhere) is worse.
+
 - [ ] **Step 1: Write the failing tests**
 
 Create `test/controllers/saved_searches_controller_test.rb`:
@@ -690,9 +692,13 @@ In `config/routes.rb`, immediately after the `user_lists/:id/page/:page` line (~
   get "searches/page/1", to: redirect("/searches", status: 301)
   get "searches/page/:page", to: "saved_searches#index", as: :saved_searches_page,
     constraints: {page: /\d+/}
+  get "searches/:id", to: "saved_searches#show", as: :saved_search,
+    constraints: {id: /\d+/}
 ```
 
 Order matters: `searches/page/1` must precede `searches/page/:page`, exactly as the books lists routes do.
+
+`searches/:id` is here rather than in Task 4 because the index view links every row to `saved_search_path`. Its `show` action arrives in Task 4; until then the route resolves to a missing action. Do not add a placeholder `show` to paper over that — the next task fills it.
 
 - [ ] **Step 4: Write the controller**
 
@@ -1055,14 +1061,16 @@ In `app/lib/books/saved_search_query.rb`, replace the `Result` line:
 
 In `config/routes.rb`, directly after the `searches/page/:page` line from Task 3:
 
+Task 3 already declared `searches/:id` — its index view links to `saved_search_path`, so it could not render without it. Add only the two paging lines, directly after it:
+
 ```ruby
-  get "searches/:id", to: "saved_searches#show", as: :saved_search,
-    constraints: {id: /\d+/}
   get "searches/:id/page/1", to: redirect("/searches/%{id}", status: 301),
     constraints: {id: /\d+/}
   get "searches/:id/page/:page", to: "saved_searches#show", as: :saved_search_page,
     constraints: {id: /\d+/, page: /\d+/}
 ```
+
+Between Task 3 and this task, `searches/:id` points at a `show` action that does not exist, so clicking a row on the index 500s. That is a mid-increment state on a feature branch, closed by this task; it is the cost of the index view needing a link target one task before the target exists.
 
 - [ ] **Step 7: Add the show action**
 
