@@ -1,0 +1,58 @@
+# == Schema Information
+#
+# Table name: reviews
+#
+#  id              :bigint           not null, primary key
+#  body            :text
+#  rating          :integer          not null
+#  reviewable_type :string           not null
+#  title           :string
+#  created_at      :datetime         not null
+#  updated_at      :datetime         not null
+#  reviewable_id   :bigint           not null
+#  user_id         :bigint           not null
+#
+# Indexes
+#
+#  index_reviews_on_reviewable              (reviewable_type,reviewable_id)
+#  index_reviews_on_reviewable_with_body    (reviewable_type,reviewable_id) WHERE (body IS NOT NULL)
+#  index_reviews_on_user_and_reviewable     (user_id,reviewable_type,reviewable_id) UNIQUE
+#  index_reviews_on_user_id_and_created_at  (user_id,created_at)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (user_id => users.id)
+#
+class Review < ApplicationRecord
+  # Generous enough that no legitimate legacy review is affected -- the longest is
+  # 20,030 characters -- while catching the one 462KB XSS-fuzz paste. Enforced as a
+  # validation, not by the sanitizer, so an over-long paste is a user-visible error
+  # rather than silent data loss.
+  MAX_BODY_LENGTH = 25_000
+
+  belongs_to :user
+  belongs_to :reviewable, polymorphic: true
+
+  normalizes :title, with: ->(value) { value.presence }
+
+  before_validation :sanitize_body
+
+  validates :rating, presence: true, numericality: {
+    only_integer: true, greater_than_or_equal_to: 1, less_than_or_equal_to: 5
+  }
+  validates :body, length: {maximum: MAX_BODY_LENGTH}
+  validates :user_id, uniqueness: {scope: [:reviewable_type, :reviewable_id]}
+
+  # Honest only because the sanitizer and the reviews_body_not_blank check constraint
+  # make an empty-string body unrepresentable. Legacy's identical scope returned 5,177
+  # empty-string bodies that rendered as blank review cards.
+  scope :with_body, -> { where.not(body: nil) }
+  scope :by_rating, -> { order(rating: :desc) }
+  scope :recent, -> { order(created_at: :desc) }
+
+  private
+
+  def sanitize_body
+    self.body = Services::Reviews::BodySanitizer.call(body)
+  end
+end

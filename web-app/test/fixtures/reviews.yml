@@ -1,0 +1,26 @@
+# war_and_peace: 3 ratings, sum 13, 2 with text (one ★5, two ★4).
+# crime_and_punishment: 1 rating, sum 3, 0 with text (one ★3).
+# review_summaries.yml mirrors these numbers exactly -- keep them in step.
+
+regular_user_war_and_peace:
+  user: regular_user
+  reviewable: war_and_peace (Books::Book)
+  rating: 5
+  title: A monumental achievement
+  body: <p>Worth every one of its twelve hundred pages.</p>
+
+editor_user_war_and_peace:
+  user: editor_user
+  reviewable: war_and_peace (Books::Book)
+  rating: 4
+  body: <p>Skip the philosophy chapters on a first read.</p>
+
+admin_user_war_and_peace:
+  user: admin_user
+  reviewable: war_and_peace (Books::Book)
+  rating: 4
+
+regular_user_crime_and_punishment:
+  user: regular_user
+  reviewable: crime_and_punishment (Books::Book)
+  rating: 3
