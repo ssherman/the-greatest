@@ -118,6 +118,25 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
     assert_nil external_link.submitted_by_id
   end
 
+  test "should destroy user with a saved search" do
+    user_to_delete = User.create!(
+      email: "searchowner@example.com",
+      role: :user,
+      email_verified: false
+    )
+
+    saved_search = Books::SavedSearch.create!(user: user_to_delete, criteria: {"genre_match_mode" => "any"})
+
+    assert_difference("User.count", -1) do
+      delete admin_user_url(user_to_delete)
+    end
+    assert_redirected_to admin_users_url
+
+    # Verify the saved search was destroyed along with the user (dependent: :destroy)
+    # rather than raising ActiveRecord::InvalidForeignKey.
+    assert_nil SavedSearch.find_by(id: saved_search.id)
+  end
+
   test "should allow admin access" do
     get admin_users_url
     assert_response :success
