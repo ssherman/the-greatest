@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_08_151613) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_08_225727) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -776,6 +776,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_08_151613) do
     t.index ["user_id"], name: "index_ranking_configurations_on_user_id"
   end
 
+  create_table "saved_searches", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.jsonb "criteria", null: false
+    t.text "description"
+    t.datetime "last_executed_at"
+    t.string "name"
+    t.boolean "public", default: false, null: false
+    t.integer "result_count"
+    t.string "type", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["public"], name: "index_saved_searches_on_public", where: "(public = true)"
+    t.index ["type", "user_id"], name: "index_saved_searches_on_type_and_user_id"
+    t.index ["user_id"], name: "index_saved_searches_on_user_id"
+  end
+
   create_table "search_index_requests", force: :cascade do |t|
     t.integer "action", null: false
     t.datetime "created_at", null: false
@@ -907,6 +923,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_08_151613) do
   add_foreign_key "ranking_configurations", "lists", column: "secondary_mapped_list_id"
   add_foreign_key "ranking_configurations", "ranking_configurations", column: "inherited_from_id"
   add_foreign_key "ranking_configurations", "users"
+  add_foreign_key "saved_searches", "users"
   add_foreign_key "user_list_items", "user_lists"
   add_foreign_key "user_lists", "users"
 end
