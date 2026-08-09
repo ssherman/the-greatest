@@ -61,12 +61,13 @@ Nothing user-visible. This is the seam that lets one global controller serve boo
 **Files:**
 - Create: `app/controllers/concerns/domain_layout.rb`
 - Modify: `app/models/saved_search.rb`
-- Modify: `app/models/books/saved_search.rb`
 - Modify: `app/controllers/my_lists_controller.rb:9-14, 87-94`
-- Test: `test/models/saved_search_test.rb`, `test/models/books/saved_search_test.rb`
+- Test: `test/models/saved_search_test.rb`
 
 **Interfaces:**
-- Produces: `SavedSearch.subclass_for(domain)` → the STI subclass constant or `nil`; `SavedSearch::DOMAIN_SUBCLASSES` (Hash of String → String); `Books::SavedSearch.filter_labels_class` → `Books::SavedSearchFilterLabels` (Task 2); `DomainLayout#resolve_layout` (private) → layout path String.
+- Produces: `SavedSearch.subclass_for(domain)` → the STI subclass constant or `nil`; `SavedSearch::DOMAIN_SUBCLASSES` (Hash of String → String); `DomainLayout#resolve_layout` (private) → layout path String.
+
+Note: the `filter_labels_class` hook that would naturally live beside `subclass_for` is in Task 2 instead, with the class it resolves. Splitting them would mean committing a test that cannot pass until the next task, and every commit in this plan must leave `bin/rails test` green.
 
 - [ ] **Step 1: Write the failing model tests**
 
@@ -83,26 +84,14 @@ Append to `test/models/saved_search_test.rb`:
     assert_nil SavedSearch.subclass_for(:games)
     assert_nil SavedSearch.subclass_for(nil)
   end
-
-  test "filter_labels_class is abstract on the base class" do
-    assert_raises(NotImplementedError) { SavedSearch.filter_labels_class }
-  end
-```
-
-Append to `test/models/books/saved_search_test.rb`:
-
-```ruby
-  test "filter_labels_class resolves the books labels object" do
-    assert_equal ::Books::SavedSearchFilterLabels, ::Books::SavedSearch.filter_labels_class
-  end
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `bin/rails test test/models/saved_search_test.rb test/models/books/saved_search_test.rb`
-Expected: FAIL — `NoMethodError: undefined method 'subclass_for'`. The `Books::SavedSearch` case will fail on `filter_labels_class` too; it stays red until Task 2 creates the constant, which is expected and called out in Step 4.
+Run: `bin/rails test test/models/saved_search_test.rb`
+Expected: FAIL — `NoMethodError: undefined method 'subclass_for' for SavedSearch`.
 
-- [ ] **Step 3: Add the registry and the abstract hook**
+- [ ] **Step 3: Add the registry**
 
 In `app/models/saved_search.rb`, immediately after `belongs_to :user`:
 
@@ -117,36 +106,10 @@ In `app/models/saved_search.rb`, immediately after `belongs_to :user`:
   end
 ```
 
-Next to the other abstract class methods (after `.query_class`):
-
-```ruby
-  # Builds the show page's active-filters card. Separate from criteria_class
-  # because it hits the database to name categories, languages, and countries,
-  # which the criteria object deliberately never does.
-  def self.filter_labels_class
-    raise NotImplementedError, "#{name} must override .filter_labels_class"
-  end
-```
-
-In `app/models/books/saved_search.rb`, after `.query_class`:
-
-```ruby
-    def self.filter_labels_class_name
-      "Books::SavedSearchFilterLabels"
-    end
-
-    def self.filter_labels_class
-      filter_labels_class_name.constantize
-    end
-```
-
 - [ ] **Step 4: Run the tests**
 
 Run: `bin/rails test test/models/saved_search_test.rb`
 Expected: PASS.
-
-Run: `bin/rails test test/models/books/saved_search_test.rb`
-Expected: the new `filter_labels_class` test FAILS with `NameError: uninitialized constant Books::SavedSearchFilterLabels`; every other test in the file passes. Task 2 creates the constant. Do not stub it — leave this one red and move on.
 
 - [ ] **Step 5: Extract the layout concern**
 
@@ -184,11 +147,10 @@ Expected: PASS — it already asserts the games, music, and books layout markers
 - [ ] **Step 7: Lint and commit**
 
 ```bash
-bundle exec standardrb --fix app/models/saved_search.rb app/models/books/saved_search.rb \
+bin/rails test && bundle exec standardrb --fix app/models/saved_search.rb \
   app/controllers/concerns/domain_layout.rb app/controllers/my_lists_controller.rb
-git add app/models/saved_search.rb app/models/books/saved_search.rb \
-  app/controllers/concerns/domain_layout.rb app/controllers/my_lists_controller.rb \
-  test/models/saved_search_test.rb test/models/books/saved_search_test.rb
+git add app/models/saved_search.rb app/controllers/concerns/domain_layout.rb \
+  app/controllers/my_lists_controller.rb test/models/saved_search_test.rb
 git commit -m "Resolve a saved-search subclass and a layout from Current.domain"
 ```
 
@@ -200,11 +162,13 @@ The show page names the categories, languages, and countries a search filters on
 
 **Files:**
 - Create: `app/lib/books/saved_search_filter_labels.rb`
-- Test: `test/lib/books/saved_search_filter_labels_test.rb`
+- Modify: `app/models/saved_search.rb`
+- Modify: `app/models/books/saved_search.rb`
+- Test: `test/lib/books/saved_search_filter_labels_test.rb`, `test/models/saved_search_test.rb`, `test/models/books/saved_search_test.rb`
 
 **Interfaces:**
-- Consumes: `Books::SavedSearchCriteria` (Task 0 / already shipped) — readers `book_type`, `book_length`, `first_year_published_gt/_lt`, `ranked`, `genre_match_mode`, `hide_read`, `max_ranked_position`, `included_/excluded_{category,language,country}_ids`, `unparseable?(key)`, and the constant `UNPARSEABLE_KEYS`. `Books::BookType.label(int)`.
-- Produces: `Books::SavedSearchFilterLabels.call(criteria) -> [Group]` where `Group = Struct.new(:label, :values, :note, keyword_init: true)`, `values` is an Array of String and `note` is a String or nil.
+- Consumes: `Books::SavedSearchCriteria` (already shipped in increment 4) — readers `book_type`, `book_length`, `first_year_published_gt/_lt`, `ranked`, `genre_match_mode`, `hide_read`, `max_ranked_position`, `included_/excluded_{category,language,country}_ids`, `unparseable?(key)`, and the constant `UNPARSEABLE_KEYS`. `Books::BookType.label(int)`.
+- Produces: `Books::SavedSearchFilterLabels.call(criteria) -> [Group]` where `Group = Struct.new(:label, :values, :note, keyword_init: true)`, `values` is an Array of String and `note` is a String or nil. `Books::SavedSearch.filter_labels_class` → that class; `SavedSearch.filter_labels_class` raises `NotImplementedError`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -345,10 +309,26 @@ class Books::SavedSearchFilterLabelsTest < ActiveSupport::TestCase
 end
 ```
 
+Append to `test/models/saved_search_test.rb`:
+
+```ruby
+  test "filter_labels_class is abstract on the base class" do
+    assert_raises(NotImplementedError) { SavedSearch.filter_labels_class }
+  end
+```
+
+Append to `test/models/books/saved_search_test.rb`:
+
+```ruby
+  test "filter_labels_class resolves the books labels object" do
+    assert_equal ::Books::SavedSearchFilterLabels, ::Books::SavedSearch.filter_labels_class
+  end
+```
+
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `bin/rails test test/lib/books/saved_search_filter_labels_test.rb`
-Expected: FAIL — `NameError: uninitialized constant Books::SavedSearchFilterLabels`.
+Run: `bin/rails test test/lib/books/saved_search_filter_labels_test.rb test/models/saved_search_test.rb test/models/books/saved_search_test.rb`
+Expected: FAIL — `NameError: uninitialized constant Books::SavedSearchFilterLabels` and `NoMethodError: undefined method 'filter_labels_class'`.
 
 - [ ] **Step 3: Implement the labels object**
 
@@ -528,17 +508,45 @@ module Books
 end
 ```
 
-- [ ] **Step 4: Run the tests**
+- [ ] **Step 4: Wire the model hook**
 
-Run: `bin/rails test test/lib/books/saved_search_filter_labels_test.rb test/models/books/saved_search_test.rb`
-Expected: PASS, including the `filter_labels_class` test left red in Task 1.
+In `app/models/saved_search.rb`, next to the other abstract class methods (after `.query_class`):
 
-- [ ] **Step 5: Lint and commit**
+```ruby
+  # Builds the show page's active-filters card. Separate from criteria_class
+  # because it hits the database to name categories, languages, and countries,
+  # which the criteria object deliberately never does.
+  def self.filter_labels_class
+    raise NotImplementedError, "#{name} must override .filter_labels_class"
+  end
+```
+
+In `app/models/books/saved_search.rb`, after `.query_class`:
+
+```ruby
+    def self.filter_labels_class_name
+      "Books::SavedSearchFilterLabels"
+    end
+
+    def self.filter_labels_class
+      filter_labels_class_name.constantize
+    end
+```
+
+- [ ] **Step 5: Run the tests**
+
+Run: `bin/rails test test/lib/books/saved_search_filter_labels_test.rb test/models/saved_search_test.rb test/models/books/saved_search_test.rb`
+Expected: PASS.
+
+- [ ] **Step 6: Full suite, lint, commit**
 
 ```bash
-bundle exec standardrb --fix app/lib/books/saved_search_filter_labels.rb \
+bin/rails test && bundle exec standardrb --fix app/lib/books/saved_search_filter_labels.rb \
+  app/models/saved_search.rb app/models/books/saved_search.rb \
   test/lib/books/saved_search_filter_labels_test.rb
-git add app/lib/books/saved_search_filter_labels.rb test/lib/books/saved_search_filter_labels_test.rb
+git add app/lib/books/saved_search_filter_labels.rb app/models/saved_search.rb \
+  app/models/books/saved_search.rb test/lib/books/saved_search_filter_labels_test.rb \
+  test/models/saved_search_test.rb test/models/books/saved_search_test.rb
 git commit -m "Name a saved search's categories, languages and origins for the filter card"
 ```
 
