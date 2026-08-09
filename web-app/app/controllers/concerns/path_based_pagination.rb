@@ -20,6 +20,22 @@ module PathBasedPagination
     [pagy, records]
   end
 
+  # pagy_path's sibling for a collection the caller has already paged. A saved
+  # search's page is sized by OpenSearch, so there is nothing left for pagy to
+  # slice and no relation for it to count -- it only needs to build the nav.
+  #
+  # Pagy's OffsetPaginator honours a pre-set :count (`options[:count] ||=`), so
+  # passing an empty collection never triggers a count query; the records it
+  # hands back are discarded and the caller renders its own. The bounds check is
+  # pagy_path's, for the same reason: pagy serves an empty 200 past the last
+  # page, which is an unbounded space of thin pages.
+  def pagy_path_count(count, **options)
+    pagy, _records = pagy(:offset, [], count: count, **options, **pagy_path_options)
+    raise ActiveRecord::RecordNotFound if pagy.page > pagy.last
+
+    pagy
+  end
+
   def pagy_path_options
     {request: pagy_path_request, page_path: Pagination::PathBuilder.from_request(request)}
   end

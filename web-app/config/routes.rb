@@ -306,13 +306,14 @@ Rails.application.routes.draw do
   get "searches/page/:page", to: "saved_searches#index", as: :saved_searches_page,
     constraints: {page: /\d+/}
 
-  # The show action itself lands in the next task of this increment, but the
-  # index view links to it with `saved_search_path`, so the named route is
-  # declared now. Visiting it before that action exists raises ActionNotFound
-  # (a 500), same as any other route-ahead-of-action gap in this file;
-  # nothing links here yet except the index page's own row links.
+  # show serves the owner or any viewer when the search is public, including
+  # anonymous, and 404s everything else via SavedSearch.visible_to.
   get "searches/:id", to: "saved_searches#show", as: :saved_search,
     constraints: {id: /\d+/}
+  get "searches/:id/page/1", to: redirect("/searches/%{id}", status: 301),
+    constraints: {id: /\d+/}
+  get "searches/:id/page/:page", to: "saved_searches#show", as: :saved_search_page,
+    constraints: {id: /\d+/, page: /\d+/}
 
   # Domain-specific roots using Default controllers
   constraints DomainConstraint.new(Rails.application.config.domains[:music]) do

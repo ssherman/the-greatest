@@ -17,7 +17,15 @@ module Books
   # Returns an array rather than a relation because Postgres cannot reproduce
   # the ranked-then-unranked interleaving from an IN clause.
   class SavedSearchQuery
-    Result = Struct.new(:books, :total, keyword_init: true)
+    # `capped?` because track_total_hits stays at OpenSearch's default of
+    # 10,000 (spec §6): a broader search reports exactly 10,000 and means "at
+    # least". The knowledge of which number that is belongs next to the query,
+    # not in a controller or a view.
+    Result = Struct.new(:books, :total, keyword_init: true) do
+      def capped?
+        total >= ::Search::Books::Search::BookAdvanced::MAX_RESULT_WINDOW
+      end
+    end
 
     def self.call(criteria:, owner:, ranking_configuration: nil, page: 1, per_page: 50)
       default = ::Books::RankingConfiguration.default_primary
