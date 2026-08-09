@@ -37,4 +37,15 @@ class SavedSearchPolicy < ApplicationPolicy
   def owner?
     user.present? && record.user_id == user.id
   end
+
+  # The inherited default (ApplicationPolicy::Scope#resolve) treats admin/editor
+  # as a global bypass and returns scope.all -- correct for domain-owned content,
+  # wrong here because these are personal, sometimes-private searches. An admin
+  # calling policy_scope(SavedSearch) must see the same visible set as anyone
+  # else: their own plus everyone's public ones, never another user's private one.
+  class Scope < ApplicationPolicy::Scope
+    def resolve
+      scope.visible_to(user)
+    end
+  end
 end

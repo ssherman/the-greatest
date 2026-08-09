@@ -60,4 +60,32 @@ class SavedSearchPolicyTest < ActiveSupport::TestCase
     refute SavedSearchPolicy.new(nil, SavedSearch.new).destroy?
     refute SavedSearchPolicy.new(nil, SavedSearch.new).show?
   end
+
+  test "the owner's scope includes their own private search plus public ones" do
+    resolved = SavedSearchPolicy::Scope.new(@owner, SavedSearch).resolve
+
+    assert_includes resolved, @private_search
+    assert_includes resolved, @public_search
+  end
+
+  test "a non-owner's scope excludes someone else's private search" do
+    resolved = SavedSearchPolicy::Scope.new(users(:editor_user), SavedSearch).resolve
+
+    refute_includes resolved, @private_search
+  end
+
+  test "an admin's scope excludes another user's private search" do
+    # This is the case the inherited ApplicationPolicy::Scope default gets wrong:
+    # it treats admin/editor as a global bypass and would return scope.all.
+    resolved = SavedSearchPolicy::Scope.new(@other, SavedSearch).resolve
+
+    refute_includes resolved, @private_search
+  end
+
+  test "an anonymous viewer's scope includes only public searches" do
+    resolved = SavedSearchPolicy::Scope.new(nil, SavedSearch).resolve
+
+    assert_includes resolved, @public_search
+    refute_includes resolved, @private_search
+  end
 end
