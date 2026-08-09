@@ -629,6 +629,15 @@ Run against development on 2026-08-09, after taking a snapshot
 
 ## Carried forward
 
+- **Deferred review finding: the over-cap test does not pin the cap-after-sanitize ordering.**
+  `review_migrator_test.rb`'s over-cap fixture wraps an already-over-cap string in `<p>`, so it is
+  over-cap both before and after sanitizing — a regression that capped on the raw body would still
+  pass. Deferred rather than fixed because no real legacy row distinguishes the two orderings
+  either: review 101561 is 462,047 chars raw and *grows* to 511,941 once sanitized, so it is
+  over-cap both ways. A fixture that is raw-over-cap only because of stripped markup (e.g.
+  `<div data-x="aaa…">short</div>`) and must be **kept** would prove the ordering is load-bearing.
+  Worth folding into increment 3 if that increment touches the sanitizer's tests.
+
 - **Production run.** A separate manual step for the owner after merge, matching how saved searches and descriptions were done.
 
   - **Must happen BEFORE increment 4 (the write flow) deploys.** Once any real user review exists, `reviews_id_seq` has already handed out low ids to it, and this migration's untargeted `ON CONFLICT DO NOTHING` will silently discard any legacy review whose preserved id collides with one of those rows — the task still reports a `count` that looks like a clean run.
