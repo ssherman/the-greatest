@@ -154,4 +154,24 @@ class ReviewTest < ActiveSupport::TestCase
       Review.where(id: review.id).update_all(rating: 9)
     end
   end
+
+  test "creating a review refreshes the summary" do
+    book = books_books(:got)
+    Review.create!(user: users(:regular_user), reviewable: book, rating: 5)
+
+    summary = ReviewSummary.find_by(reviewable_type: "Books::Book", reviewable_id: book.id)
+    assert_equal 1, summary.ratings_count
+    assert_equal 5, summary.ratings_sum
+  end
+
+  test "destroying a review refreshes the summary" do
+    review = reviews(:admin_user_war_and_peace)
+    book = review.reviewable
+    review.destroy!
+
+    summary = ReviewSummary.find_by(reviewable_type: "Books::Book", reviewable_id: book.id)
+    assert_equal 2, summary.ratings_count
+    assert_equal 9, summary.ratings_sum
+    assert_equal 1, summary.rating_4_count
+  end
 end

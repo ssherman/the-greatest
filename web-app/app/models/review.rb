@@ -50,9 +50,19 @@ class Review < ApplicationRecord
   scope :by_rating, -> { order(rating: :desc) }
   scope :recent, -> { order(created_at: :desc) }
 
+  # Bulk paths (the increment-2 migrator) bypass this by design and call
+  # SummaryRecalculator.backfill_all! once at the end instead.
+  after_commit :recalculate_summary
+
   private
 
   def sanitize_body
     self.body = Services::Reviews::BodySanitizer.call(body)
+  end
+
+  # Type and id rather than the object: this fires on destroy too, where the
+  # association may no longer load from a frozen record.
+  def recalculate_summary
+    Services::Reviews::SummaryRecalculator.recalculate(reviewable_type, reviewable_id)
   end
 end
