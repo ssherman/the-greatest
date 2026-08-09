@@ -148,14 +148,19 @@ the counts it summarizes. Both are available in SQL for the future recommendatio
 
 Order matters:
 
-1. `<spoiler>…</spoiler>` → placeholder tokens built from a per-call `SecureRandom.hex`
-2. `Rails::HTML5::SafeListSanitizer`, allowlist `p br a i b em strong blockquote`, attributes
-   `href title`
-3. placeholder tokens → `<span class="review-spoiler">` on the already-sanitized string
+1. `Rails::HTML5::SafeListSanitizer`, allowlist `p br a i b em strong blockquote` **plus `spoiler`**,
+   attributes `href title`
+2. walk the sanitized fragment with Nokogiri and rename each `<spoiler>` node to
+   `<span class="review-spoiler">`, replacing any `class` the user supplied
 
-Substituting *after* sanitizing means a user can never supply a `class` attribute of their own. The
-spoiler span is blurred by CSS and revealed by a small Stimulus controller — 118 legacy rows use it,
-and dropping the tag would print those spoilers in the clear.
+Spoilers are resolved by the **HTML parser**, never by string substitution. Text that merely looks
+like a spoiler tag inside an attribute value is escaped by the parser and never becomes a node, so
+there is nothing to substitute into. Renaming *after* sanitizing means a user can never supply a
+`class` of their own: `span` is not in the allowlist, so a user-written
+`<span class="review-spoiler">` is stripped outright.
+
+The spoiler span is blurred by CSS and revealed by a small Stimulus controller — 118 legacy rows use
+the tag, and dropping it would print those spoilers in the clear.
 
 Then `.presence`, so a body that sanitizes down to nothing becomes `NULL` (the `<img>`-only case).
 
@@ -315,11 +320,16 @@ Increment 2 adds 128,846 rows to the development database. Snapshot first:
 - **`after_commit` on `Review`** recalculates one summary row per write. Fine at this volume
   (~16k lifetime writes), but the migration deliberately bypasses it via `insert_all` and relies on
   `backfill_all!` instead.
-- **The `<spoiler>` placeholder scheme must not use NUL bytes.** Verified against
-  `rails-html-sanitizer` 1.7.1: Nokogiri strips NUL bytes during sanitizing, so a `\0so\0` sentinel
-  comes back as `so` — the markers vanish and the spoiler renders in the clear. The token must be
-  plain alphanumerics carrying a per-call `SecureRandom.hex`, which passes through untouched and
-  cannot be forged from user input. Tests cover a forgery attempt.
+- **Never resolve spoilers by string substitution.** Two revisions of this spec got it wrong before
+  the Task 1 review caught it, and both failures are worth recording. A NUL-byte sentinel silently
+  vanishes, because Nokogiri strips NUL bytes while sanitizing. Switching to a random alphanumeric
+  token fixes that but opens an injection hole: any marker robust enough to survive sanitizing also
+  survives *inside an attribute value*, so the substitution splices raw markup into a quoted string —
+  `<a href="<spoiler>evil</spoiler>">click</a>` produced
+  `<a href="<span class="review-spoiler">evil</span>">click</a>`, which a browser re-parses into a
+  bogus `href` and visible link text of `evil">click`. Allowlisting `spoiler` as a tag and renaming
+  the resulting nodes closes the hole at its root, because the parser decides what is an element.
+  Regression tests cover the `href` and `title` nesting cases and an event-handler smuggle attempt.
 - **Production data** — the legacy production DB is larger than dev (see the descriptions-subsystem
   notes). Row counts here are dev measurements; the production run will differ and should be
   verified against the invariants, not the absolute numbers.
