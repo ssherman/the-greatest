@@ -49,6 +49,13 @@ module Services
         @seen = Set.new
       end
 
+      # insert_all with explicit ids never advances the sequence, so without this the
+      # first review a real user writes gets id 1 and collides with a migrated row.
+      # finalize runs outside without_search_indexing, so keep it callback-free.
+      def finalize
+        target_model.connection.reset_pk_sequence!("reviews")
+      end
+
       # Newest-first so the dedup below keeps the newer of a duplicated pair.
       def legacy_each(&block)
         legacy_model.find_each(batch_size: BATCH_SIZE, order: :desc) do |record|

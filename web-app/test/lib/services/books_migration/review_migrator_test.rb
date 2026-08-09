@@ -136,4 +136,12 @@ class Services::BooksMigration::ReviewMigratorTest < ActiveSupport::TestCase
     assert_equal 0, ::ReviewSummary.count,
       "insert_all bypasses after_commit by design; the rake task calls backfill_all!"
   end
+
+  test "advances the id sequence past the migrated ids" do
+    run_migrator([legacy_review(900_001)])
+
+    # Without the reset this would return 1 and collide with the migrated row.
+    next_id = ::Review.connection.select_value("SELECT nextval('reviews_id_seq')").to_i
+    assert_operator next_id, :>, 900_001
+  end
 end
