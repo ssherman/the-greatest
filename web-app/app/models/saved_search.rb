@@ -70,4 +70,11 @@ class SavedSearch < ApplicationRecord
   def criteria_object
     @criteria_object ||= self.class.criteria_class.new(criteria)
   end
+
+  # The memo must not outlive the value it wraps -- increment 6's form assigns
+  # criteria and re-renders on the same instance.
+  def criteria=(value)
+    @criteria_object = nil
+    super
+  end
 end

@@ -124,6 +124,17 @@ module Books
       assert_same search.criteria_object, search.criteria_object
     end
 
+    test "reassigning criteria after reading criteria_object returns a fresh object reflecting the new value" do
+      search = Books::SavedSearch.new(user: users(:regular_user), criteria: {"book_type" => 0})
+      first = search.criteria_object
+      assert_equal 0, first.book_type
+
+      search.criteria = {"book_type" => 1}
+
+      refute_same first, search.criteria_object
+      assert_equal 1, search.criteria_object.book_type
+    end
+
     test "summary names the book_type category when stored as a string" do
       search = Books::SavedSearch.new(user: users(:regular_user), criteria: {"book_type" => "0"})
 
