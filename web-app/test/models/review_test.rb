@@ -106,6 +106,23 @@ class ReviewTest < ActiveSupport::TestCase
     assert review.valid?
   end
 
+  test "rejects a title longer than MAX_TITLE_LENGTH" do
+    review = Review.new(
+      user: users(:regular_user), reviewable: books_books(:got), rating: 4,
+      title: "a" * (Review::MAX_TITLE_LENGTH + 1)
+    )
+    assert_not review.valid?
+    assert_includes review.errors[:title], "is too long (maximum is 255 characters)"
+  end
+
+  test "allows a title exactly at MAX_TITLE_LENGTH" do
+    review = Review.new(
+      user: users(:regular_user), reviewable: books_books(:got), rating: 4,
+      title: "a" * Review::MAX_TITLE_LENGTH
+    )
+    assert review.valid?
+  end
+
   test "allows one review per user per reviewable" do
     duplicate = Review.new(
       user: users(:regular_user),
@@ -148,6 +165,13 @@ class ReviewTest < ActiveSupport::TestCase
     end
   end
 
+  test "the database rejects a whitespace-only body" do
+    review = reviews(:admin_user_war_and_peace)
+    assert_raises(ActiveRecord::StatementInvalid) do
+      Review.where(id: review.id).update_all(body: "\t\n")
+    end
+  end
+
   test "the database rejects an out-of-range rating" do
     review = reviews(:admin_user_war_and_peace)
     assert_raises(ActiveRecord::StatementInvalid) do
@@ -173,5 +197,21 @@ class ReviewTest < ActiveSupport::TestCase
     assert_equal 2, summary.ratings_count
     assert_equal 9, summary.ratings_sum
     assert_equal 1, summary.rating_4_count
+  end
+
+  test "updating a review's rating refreshes the summary" do
+    # war_and_peace starts at 3 ratings summing to 13: one 5-star (regular_user), two
+    # 4-star (editor_user, admin_user).
+    review = reviews(:regular_user_war_and_peace)
+    book = review.reviewable
+
+    review.update!(rating: 2)
+
+    summary = ReviewSummary.find_by(reviewable_type: "Books::Book", reviewable_id: book.id)
+    assert_equal 3, summary.ratings_count
+    assert_equal 10, summary.ratings_sum
+    assert_equal 1, summary.rating_2_count
+    assert_equal 2, summary.rating_4_count
+    assert_equal 0, summary.rating_5_count
   end
 end

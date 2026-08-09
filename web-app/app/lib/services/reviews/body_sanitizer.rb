@@ -18,10 +18,17 @@ module Services
     #
     # Renaming after sanitizing is also what stops a user supplying their own class:
     # `span` is not in ALLOWED_TAGS, so a user-written <span class="review-spoiler"> is
-    # stripped, and a class on their own <spoiler> is replaced with ours.
+    # stripped, and a class on their own <spoiler> is replaced with ours -- every other
+    # attribute (title, href, ...) is stripped from the node too, or a native browser
+    # tooltip would leak the spoiler text right through the blur.
     #
-    # .presence comes last -- an <img>-only body is non-blank on input but sanitizes
-    # to "".
+    # Blank is decided on rendered TEXT, not on the markup string -- "<br>", "<p></p>",
+    # an empty <a href>, and a lone &nbsp; all sanitize to non-empty markup that
+    # visually renders as nothing. `fragment.text` is checked (with &nbsp; folded to a
+    # plain space first, since String#strip does not treat U+00A0 as whitespace) after
+    # convert_spoilers, which returns the parsed fragment rather than re-serializing it,
+    # so there is only one parse. This subsumes the plain <img>-only case, since `img`
+    # is not in the allowlist and so contributes no text either.
     #
     # Does not truncate. Length is a Review validation, so an over-long paste raises a
     # user-visible error instead of losing text.
@@ -30,6 +37,7 @@ module Services
       ALLOWED_ATTRIBUTES = %w[href title].freeze
       SPOILER_TAG = "spoiler".freeze
       SPOILER_CLASS = "review-spoiler".freeze
+      NON_BREAKING_SPACE = "\u00A0"
 
       def self.call(body)
         new(body).call
@@ -48,7 +56,10 @@ module Services
           attributes: ALLOWED_ATTRIBUTES
         ).to_s
 
-        convert_spoilers(sanitized).presence
+        fragment = convert_spoilers(sanitized)
+        return nil if blank_text?(fragment)
+
+        fragment.to_html
       end
 
       private
@@ -61,10 +72,14 @@ module Services
         fragment = Nokogiri::HTML5.fragment(html)
         fragment.css(SPOILER_TAG).each do |node|
           node.name = "span"
-          node.remove_attribute("class")
+          node.attributes.keys.each { |name| node.remove_attribute(name) }
           node["class"] = SPOILER_CLASS
         end
-        fragment.to_html
+        fragment
+      end
+
+      def blank_text?(fragment)
+        fragment.text.gsub(NON_BREAKING_SPACE, " ").strip.empty?
       end
     end
   end

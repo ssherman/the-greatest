@@ -5,7 +5,8 @@ module Services
     #   .recalculate(type, id) -- one row, fired from Review#after_commit.
     #   .backfill_all!         -- full set-based rebuild, used after the increment-2
     #                             migration (which bulk-inserts and so never fires the
-    #                             callback) and exposed as a rake task.
+    #                             callback). NOT YET exposed as a rake task -- that is
+    #                             increment 2.
     #
     # Invariant: a summary row exists iff at least one review exists for that
     # reviewable.

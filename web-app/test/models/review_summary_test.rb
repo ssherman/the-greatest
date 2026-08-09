@@ -28,6 +28,12 @@ class ReviewSummaryTest < ActiveSupport::TestCase
     assert_in_delta 0.0, ReviewSummary.new(ratings_count: 0).rating_percentage(5), 0.001
   end
 
+  test "rating_percentage raises for a rating outside 1..5" do
+    summary = review_summaries(:war_and_peace)
+    assert_raises(KeyError) { summary.rating_percentage(0) }
+    assert_raises(KeyError) { summary.rating_percentage("5") }
+  end
+
   test "a book reaches its summary through the association" do
     assert_equal review_summaries(:war_and_peace), books_books(:war_and_peace).review_summary
   end

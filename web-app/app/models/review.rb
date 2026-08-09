@@ -30,6 +30,10 @@ class Review < ApplicationRecord
   # rather than silent data loss.
   MAX_BODY_LENGTH = 25_000
 
+  # The longest legacy title is 100 characters; 255 clears all real data with room to
+  # spare.
+  MAX_TITLE_LENGTH = 255
+
   belongs_to :user
   belongs_to :reviewable, polymorphic: true
 
@@ -40,6 +44,7 @@ class Review < ApplicationRecord
   validates :rating, presence: true, numericality: {
     only_integer: true, greater_than_or_equal_to: 1, less_than_or_equal_to: 5
   }
+  validates :title, length: {maximum: MAX_TITLE_LENGTH}
   validates :body, length: {maximum: MAX_BODY_LENGTH}
   validates :user_id, uniqueness: {scope: [:reviewable_type, :reviewable_id]}
 
@@ -47,8 +52,11 @@ class Review < ApplicationRecord
   # make an empty-string body unrepresentable. Legacy's identical scope returned 5,177
   # empty-string bodies that rendered as blank review cards.
   scope :with_body, -> { where.not(body: nil) }
-  scope :by_rating, -> { order(rating: :desc) }
-  scope :recent, -> { order(created_at: :desc) }
+  # `id: :desc` is a tiebreaker, not a preference -- Postgres gives no ordering
+  # guarantee among ties, and rating has only 5 distinct values / created_at arrives in
+  # bulk-import clusters, so ties are the norm on the paginated surfaces these back.
+  scope :by_rating, -> { order(rating: :desc, id: :desc) }
+  scope :recent, -> { order(created_at: :desc, id: :desc) }
 
   # Bulk paths (the increment-2 migrator) bypass this by design and call
   # SummaryRecalculator.backfill_all! once at the end instead.

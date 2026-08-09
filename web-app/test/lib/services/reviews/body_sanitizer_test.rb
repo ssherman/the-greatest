@@ -43,6 +43,34 @@ module Services
         assert_nil BodySanitizer.call(%(<img src="https://example.test/cover.png">))
       end
 
+      test ".call returns nil for a body that is only a br tag" do
+        assert_nil BodySanitizer.call("<br>")
+      end
+
+      test ".call returns nil for a body that is only br tags" do
+        assert_nil BodySanitizer.call("<br><br>")
+      end
+
+      test ".call returns nil for a body that is only an empty paragraph" do
+        assert_nil BodySanitizer.call("<p></p>")
+      end
+
+      test ".call returns nil for a body that is only whitespace inside a blockquote" do
+        assert_nil BodySanitizer.call("<blockquote>  </blockquote>")
+      end
+
+      test ".call returns nil for a link with no text" do
+        assert_nil BodySanitizer.call(%(<a href="https://x.test"></a>))
+      end
+
+      test ".call returns nil for a body that is only a non-breaking space" do
+        assert_nil BodySanitizer.call("<p>&nbsp;</p>")
+      end
+
+      test ".call keeps a br tag between real text" do
+        assert_equal "one<br>two", BodySanitizer.call("one<br>two")
+      end
+
       test ".call scrubs a javascript href but keeps a real link" do
         result = BodySanitizer.call(
           %(<a href="javascript:alert(1)">bad</a> <a href="https://example.test" title="t">good</a>)
@@ -85,6 +113,11 @@ module Services
       test ".call replaces a class supplied on a spoiler tag" do
         assert_equal %(<span class="review-spoiler">x</span>),
           BodySanitizer.call(%(<spoiler class="evil">x</spoiler>))
+      end
+
+      test ".call strips every attribute on a spoiler tag, not just class" do
+        assert_equal %(<span class="review-spoiler">x</span>),
+          BodySanitizer.call(%(<spoiler title="secret">x</spoiler>))
       end
 
       # Regression: a string-tokenizing implementation spliced raw markup into the

@@ -19,8 +19,11 @@ class CreateReviews < ActiveRecord::Migration[8.1]
     add_index :reviews, [:user_id, :reviewable_type, :reviewable_id],
       unique: true, name: "index_reviews_on_user_and_reviewable"
 
-    # The book page lists only reviews that have text (12.6% of rows), so the
-    # partial index is a fraction of the size of a full one.
+    # A SECOND index on the same columns, alongside the full one that
+    # `t.references :reviewable, polymorphic: true` already created above. Both are
+    # justified, not redundant: the full index serves `book.reviews` and the
+    # recalculator's `GROUP BY`, while this partial one serves the book page's list of
+    # reviews that have text (12.6% of rows) at a fraction of the full index's size.
     add_index :reviews, [:reviewable_type, :reviewable_id],
       where: "body IS NOT NULL", name: "index_reviews_on_reviewable_with_body"
 
