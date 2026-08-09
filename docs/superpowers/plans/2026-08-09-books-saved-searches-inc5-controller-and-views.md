@@ -1437,11 +1437,23 @@ Two files, nothing else. Check `git show --stat HEAD` after committing: anything
 ## Task 7: Documentation and PR
 
 **Files:**
-- Modify: `docs/` class documentation per the repo's convention (check `CLAUDE.md` for which files a new controller/PORO requires)
+- Create: `docs/features/saved_searches.md`
 
-- [ ] **Step 1: Write the class documentation**
+- [ ] **Step 1: Write the feature doc**
 
-Check `CLAUDE.md` for the documentation convention, then document `SavedSearchesController`, `Books::SavedSearchFilterLabels`, and the `DomainLayout` concern to match how `MyListsController` and `Books::SavedSearchQuery` are documented.
+`docs/documentation.md` is explicit that this repo does **not** document individual classes — "Code is the source of truth... AI agents read code well... class docs duplicate what's already clear from well-written code." Feature-level architecture goes in `docs/features/`, and increments 1–4 correctly added nothing but one paragraph to `docs/features/search.md`. So the deliverable here is one feature doc, not class docs.
+
+Create `docs/features/saved_searches.md`, matching the shape and depth of a sibling like `docs/features/rankings.md`. It should cover:
+
+- What the feature is, and that it is a port whose stored criteria and URLs must keep behaving — 4,727 migrated searches across ~1,150 users.
+- The request path end to end: route → `SavedSearchesController` → `SavedSearch.subclass_for(Current.domain)` → `criteria_object` → `Books::SavedSearchQuery` → `BookAdvanced` (OpenSearch filters, sorts, pages, counts) → Postgres hydrates one page → `Books::CardComponent` grid.
+- Why OpenSearch owns filtering *and* paging *and* the count: a filter applied afterward in Postgres removes rows from a page already sized, yielding short pages under an overstated total.
+- The URL surface: `/searches`, `/searches/:id`, `/page/N`, the legacy `?page=N` form, and the `/v/grid|table/` 301s — plus the fact that there is no view switcher and why.
+- The two rules a future editor is most likely to break: `owner:` is the search's owner and never `current_user` (so a public search's `hide_read` stays stable for whoever saved it), and a criterion that is present but unresolvable must match nothing rather than everything.
+- The 10,000 ceiling: `track_total_hits` default, `from + size` window, 50 per page dividing it exactly, and "10,000+" as the display.
+- The domain seam: what a second domain has to add (a criteria class, a query class, a labels class, two view partials, one `DOMAIN_SUBCLASSES` entry) and what it inherits.
+
+Link it from the docs index the way sibling feature docs are linked.
 
 - [ ] **Step 2: Final gate**
 
@@ -1451,7 +1463,9 @@ bin/rails test && bundle exec standardrb
 
 Both must be clean. CI eager-loads (`CI=true`), which is stricter than a local run — if anything is going to surface a constant-resolution problem, it is that.
 
-- [ ] **Step 3: Open the PR**
+- [ ] **Step 3: Open the PR — NOT part of the subagent-executed plan**
+
+Pushing and opening a PR are Shane's call, not an implementer's. Do not run these; they are recorded here so the branch owner has the material ready.
 
 ```bash
 git push -u origin worktree-books-saved-searches-inc5
