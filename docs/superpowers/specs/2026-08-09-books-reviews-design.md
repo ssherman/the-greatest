@@ -148,7 +148,7 @@ the counts it summarizes. Both are available in SQL for the future recommendatio
 
 Order matters:
 
-1. `<spoiler>…</spoiler>` → opaque placeholder tokens
+1. `<spoiler>…</spoiler>` → placeholder tokens built from a per-call `SecureRandom.hex`
 2. `Rails::HTML5::SafeListSanitizer`, allowlist `p br a i b em strong blockquote`, attributes
    `href title`
 3. placeholder tokens → `<span class="review-spoiler">` on the already-sanitized string
@@ -315,7 +315,11 @@ Increment 2 adds 128,846 rows to the development database. Snapshot first:
 - **`after_commit` on `Review`** recalculates one summary row per write. Fine at this volume
   (~16k lifetime writes), but the migration deliberately bypasses it via `insert_all` and relies on
   `backfill_all!` instead.
-- **The `<spoiler>` placeholder scheme** must use tokens no user can type. Tests cover an attempt.
+- **The `<spoiler>` placeholder scheme must not use NUL bytes.** Verified against
+  `rails-html-sanitizer` 1.7.1: Nokogiri strips NUL bytes during sanitizing, so a `\0so\0` sentinel
+  comes back as `so` — the markers vanish and the spoiler renders in the clear. The token must be
+  plain alphanumerics carrying a per-call `SecureRandom.hex`, which passes through untouched and
+  cannot be forged from user input. Tests cover a forgery attempt.
 - **Production data** — the legacy production DB is larger than dev (see the descriptions-subsystem
   notes). Row counts here are dev measurements; the production run will differ and should be
   verified against the invariants, not the absolute numbers.
