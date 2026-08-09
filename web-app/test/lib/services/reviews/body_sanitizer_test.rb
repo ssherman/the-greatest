@@ -67,6 +67,43 @@ module Services
         assert_nil BodySanitizer.call("<p>&nbsp;</p>")
       end
 
+      # String#strip removes only ASCII whitespace, so each of these would otherwise
+      # persist as a visually blank review that `with_body` counts.
+      test ".call returns nil for a body of any Unicode whitespace" do
+        {
+          "em space (U+2003)" => "<p>&emsp;</p>",
+          "en space (U+2002)" => "<p>&ensp;</p>",
+          "thin space (U+2009)" => "<p>&thinsp;</p>",
+          "ideographic space (U+3000)" => "<p>　</p>",
+          "mixed" => "<p>  　</p>"
+        }.each do |label, body|
+          assert_nil BodySanitizer.call(body), "expected nil for #{label}"
+        end
+      end
+
+      test ".call returns nil for a body of only zero-width characters" do
+        {
+          "zero-width space (U+200B)" => "<p>&#8203;</p>",
+          "zero-width joiner (U+200D)" => "<p>‍</p>",
+          "byte order mark (U+FEFF)" => "<p>﻿</p>"
+        }.each do |label, body|
+          assert_nil BodySanitizer.call(body), "expected nil for #{label}"
+        end
+      end
+
+      test ".call keeps a body whose text is padded with Unicode whitespace" do
+        result = BodySanitizer.call("<p>&nbsp;Great&emsp;book&nbsp;</p>")
+
+        assert_not_nil result
+        text = Nokogiri::HTML5.fragment(result).text
+        assert_includes text, "Great"
+        assert_includes text, "book"
+      end
+
+      test ".call keeps a single visible character" do
+        assert_equal "<p>x</p>", BodySanitizer.call("<p>x</p>")
+      end
+
       test ".call keeps a br tag between real text" do
         assert_equal "one<br>two", BodySanitizer.call("one<br>two")
       end

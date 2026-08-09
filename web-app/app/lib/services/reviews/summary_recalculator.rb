@@ -58,6 +58,22 @@ module Services
           updated_at         = NOW()
       SQL
 
+      # Serializes recalculations per reviewable. Without it, the upsert's SELECT
+      # computes the aggregate BEFORE ON CONFLICT takes the row lock, so two callbacks
+      # for the same reviewable can compute in one order and commit in the other -- the
+      # one holding the older snapshot lands last and leaves the counters stale until
+      # the next write or a full backfill. Taking the lock first means whichever
+      # transaction writes last also computed last.
+      #
+      # Hashed to a single bigint rather than using the (int4, int4) form: reviewable_id
+      # is a bigint and would overflow int4. A hash collision only serializes two
+      # unrelated reviewables briefly, which is harmless.
+      #
+      # xact-scoped, so it releases on COMMIT or ROLLBACK with no explicit unlock.
+      # backfill_all! deliberately does NOT take it -- it is a single set-based rebuild
+      # over every reviewable, not a per-row read-modify-write.
+      ADVISORY_LOCK = "SELECT pg_advisory_xact_lock(hashtext(:type || ':' || :id::text))"
+
       def self.recalculate(reviewable_type, reviewable_id)
         new.recalculate(reviewable_type, reviewable_id)
       end
@@ -70,6 +86,7 @@ module Services
         binds = {type: reviewable_type, id: reviewable_id}
 
         ReviewSummary.transaction do
+          connection.execute(sanitize(ADVISORY_LOCK, binds))
           connection.execute(
             sanitize(upsert_sql("WHERE reviewable_type = :type AND reviewable_id = :id"), binds)
           )

@@ -24,11 +24,17 @@ module Services
     #
     # Blank is decided on rendered TEXT, not on the markup string -- "<br>", "<p></p>",
     # an empty <a href>, and a lone &nbsp; all sanitize to non-empty markup that
-    # visually renders as nothing. `fragment.text` is checked (with &nbsp; folded to a
-    # plain space first, since String#strip does not treat U+00A0 as whitespace) after
+    # visually renders as nothing. `fragment.text` is matched against BLANK_TEXT after
     # convert_spoilers, which returns the parsed fragment rather than re-serializing it,
     # so there is only one parse. This subsumes the plain <img>-only case, since `img`
     # is not in the allowlist and so contributes no text either.
+    #
+    # BLANK_TEXT must stay Unicode-aware. String#strip removes only ASCII whitespace, so
+    # a body of &nbsp;, &emsp; (U+2003), &thinsp; (U+2009) or an ideographic space
+    # (U+3000) would otherwise persist and be counted by `with_body` and
+    # text_reviews_count while rendering as nothing. The POSIX [[:space:]] class covers
+    # all of those; the zero-width characters listed alongside it (U+200B-U+200D, U+FEFF)
+    # are NOT Unicode whitespace but render as nothing just the same.
     #
     # Does not truncate. Length is a Review validation, so an over-long paste raises a
     # user-visible error instead of losing text.
@@ -37,7 +43,7 @@ module Services
       ALLOWED_ATTRIBUTES = %w[href title].freeze
       SPOILER_TAG = "spoiler".freeze
       SPOILER_CLASS = "review-spoiler".freeze
-      NON_BREAKING_SPACE = "\u00A0"
+      BLANK_TEXT = /\A[[:space:]\u200B-\u200D\uFEFF]*\z/
 
       def self.call(body)
         new(body).call
@@ -79,7 +85,7 @@ module Services
       end
 
       def blank_text?(fragment)
-        fragment.text.gsub(NON_BREAKING_SPACE, " ").strip.empty?
+        fragment.text.match?(BLANK_TEXT)
       end
     end
   end

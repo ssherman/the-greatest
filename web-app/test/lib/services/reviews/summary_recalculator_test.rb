@@ -134,6 +134,53 @@ module Services
         assert_nil summary_for(gone),
           "both paths must remove the summary for a reviewable with no reviews"
       end
+
+      # The lock is what makes two concurrent recalculates for the same reviewable
+      # safe: without it the aggregate is computed before ON CONFLICT takes the row
+      # lock, so a stale snapshot can win the race and land last. A unit test cannot
+      # exercise the interleave, so pin the two properties that make the fix work --
+      # it is taken, and it is taken BEFORE the aggregate is computed.
+      test ".recalculate takes a per-reviewable advisory lock before computing" do
+        statements = []
+        callback = ->(_name, _start, _finish, _id, payload) { statements << payload[:sql] }
+
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          recalculate(@book)
+        end
+
+        lock_index = statements.index { |sql| sql.include?("pg_advisory_xact_lock") }
+        upsert_index = statements.index { |sql| sql.include?("INSERT INTO review_summaries") }
+
+        assert lock_index, "expected recalculate to take an advisory lock"
+        assert upsert_index, "expected recalculate to run the upsert"
+        assert lock_index < upsert_index,
+          "the advisory lock must be taken before the aggregate is computed"
+      end
+
+      test ".recalculate scopes its advisory lock to the reviewable" do
+        statements = []
+        callback = ->(_name, _start, _finish, _id, payload) { statements << payload[:sql] }
+
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          recalculate(@book)
+        end
+
+        lock_sql = statements.find { |sql| sql.include?("pg_advisory_xact_lock") }
+        assert_includes lock_sql, "Books::Book"
+        assert_includes lock_sql, @book.id.to_s
+      end
+
+      test ".backfill_all! does not take an advisory lock" do
+        statements = []
+        callback = ->(_name, _start, _finish, _id, payload) { statements << payload[:sql] }
+
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          SummaryRecalculator.backfill_all!
+        end
+
+        assert_not statements.any? { |sql| sql.include?("pg_advisory_xact_lock") },
+          "backfill_all! is a single set-based rebuild and must not serialize per row"
+      end
     end
   end
 end
