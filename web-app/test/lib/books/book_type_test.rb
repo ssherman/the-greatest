@@ -46,6 +46,10 @@ module Books
       assert_nil ::Books::BookType.category_id(9)
     end
 
+    test "returns nil for a nil book_type without touching the map" do
+      assert_nil ::Books::BookType.category_id(nil)
+    end
+
     test "memoizes the map so repeated lookups issue one query" do
       category = ::Books::Category.create!(name: "BookType Memo Genre", category_type: :genre)
       LegacyIdMap.record(model: "Books::Category", legacy_id: 41013, new_id: category.id)
