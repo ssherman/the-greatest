@@ -103,6 +103,14 @@ also silently drops any id OpenSearch returned that Postgres no longer has (a bo
 without a reindex) — that page comes back short of `total`, which is considered better than
 failing the request.
 
+**Landmine:** `hide_read` plucks the owner's *entire* read list on every render
+(`Books::SavedSearchQuery.read_book_ids`) and ships it to OpenSearch as a
+`must_not: {ids: {values: […]}}`. Measured on the dev corpus: 565 searches carry `hide_read`, the
+median read list is 20 items, p99 is 412, and the largest is 11,092 (design spec §6). That's
+comfortably under OpenSearch's 65,536-term ceiling and will not error — the point is that this is
+the only per-request payload in this feature that scales with a user's data rather than with page
+size, and it's invisible from reading the controller.
+
 Hydration itself is not "one query" — the base `SELECT` plus its `.preload(book_authors:
 :author, primary_image: {file_attachment: :blob})` are separate round trips. What matters, and
 what's actually pinned by `saved_searches_controller_test.rb`'s `assert_queries_count(9)` on

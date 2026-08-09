@@ -46,6 +46,19 @@ class SavedSearchesController < ApplicationController
     authorize @search, :show?, policy_class: SavedSearchPolicy
     @owner = @search.user_id == current_user&.id
 
+    page = [params[:page].to_i, 1].max
+
+    # Two bounds checks guard this action, and neither replaces the other.
+    # This one runs BEFORE the query: OpenSearch cannot serve anything past
+    # `from + size = MAX_RESULT_WINDOW`, so a page beyond
+    # query_class.max_page is unreachable by construction (10,000 / 50 =
+    # 200), and can 404 at constant cost instead of paying for a full
+    # OpenSearch query it can only discard. pagy_path_count below is the
+    # other one: it catches a page that IS inside the window but past the
+    # end of a small result set, which still needs the query to run once to
+    # learn the real total.
+    raise ActiveRecord::RecordNotFound if page > domain_class.query_class.max_page(per_page: PER_PAGE)
+
     result = domain_class.query_class.call(
       # criteria_object, never the raw hash: the readers absorb both the
       # migrated storage shapes and form params. owner:, never current_user:
@@ -53,7 +66,7 @@ class SavedSearchesController < ApplicationController
       # a public search's results stable for its owner (spec §6).
       criteria: @search.criteria_object,
       owner: @search.user,
-      page: [params[:page].to_i, 1].max,
+      page: page,
       per_page: PER_PAGE
     )
 

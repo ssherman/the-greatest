@@ -721,6 +721,17 @@ on its own host with no new routes.
 get "searches",                to: "saved_searches#index", as: :saved_searches
 get "searches/page/1",         to: redirect("/searches", status: 301)
 get "searches/page/:page",     to: "saved_searches#index", as: :saved_searches_page
+
+# Write surface (increment 6) -- `searches/new` is declared before
+# `searches/:id` below; see the note under this snippet for why that order
+# matters more than the `\d+` constraint alone suggests.
+get    "searches/new",      to: "saved_searches#new",  as: :new_saved_search
+post   "searches",          to: "saved_searches#create"
+get    "searches/:id/edit", to: "saved_searches#edit", as: :edit_saved_search
+patch  "searches/:id",      to: "saved_searches#update"
+put    "searches/:id",      to: "saved_searches#update"
+delete "searches/:id",      to: "saved_searches#destroy"
+
 get "searches/:id",            to: "saved_searches#show",  as: :saved_search
 get "searches/:id/page/1",     to: redirect("/searches/%{id}", status: 301)
 get "searches/:id/page/:page", to: "saved_searches#show",  as: :saved_search_page
@@ -728,14 +739,6 @@ get "searches/:id/page/:page", to: "saved_searches#show",  as: :saved_search_pag
 get "v/:view_type/searches",                to: redirect("/searches", status: 301)
 get "v/:view_type/searches/:id",            to: redirect("/searches/%{id}", status: 301)
 get "v/:view_type/searches/:id/page/:page", to: redirect("/searches/%{id}/page/%{page}", status: 301)
-
-# Write surface (increment 6)
-get    "searches/new",      to: "saved_searches#new",  as: :new_saved_search
-post   "searches",          to: "saved_searches#create"
-get    "searches/:id/edit", to: "saved_searches#edit", as: :edit_saved_search
-patch  "searches/:id",      to: "saved_searches#update"
-put    "searches/:id",      to: "saved_searches#update"
-delete "searches/:id",      to: "saved_searches#destroy"
 ```
 
 `:id` and `:page` are constrained to `/\d+/`; `:view_type` to `/grid|table/`.
@@ -743,8 +746,17 @@ delete "searches/:id",      to: "saved_searches#destroy"
 **The write routes belong to increment 6, not 5.** A route pointing at an action that does not
 exist yet raises `AbstractController::ActionNotFound` — a 500, not a 404 — the moment anything
 hits it. `:id` is `\d+`-constrained, so `/searches/new` falls through to a clean 404 until
-increment 6 declares it. When it does, `searches/new` must be declared *before* `searches/:id`
-by convention even though the constraint already separates them.
+increment 6 declares it.
+
+**`searches/new` must be declared before `searches/:id`, and the snippet above now does that** --
+an earlier version of this section placed the whole write surface after the read surface, which
+put `searches/:id` before `searches/new` and silently relied on the `\d+` constraint to paper
+over it (Rails tries routes in declaration order, and `:id` failing to match `/\d+/` against
+`"new"` is what let the later `searches/new` route still get a turn). That constraint is doing
+real work today, but it is a second line of defense, not a substitute for correct ordering: the
+day `:id` is loosened to admit anything non-numeric (a slug, say), a `searches/:id` declared
+above `searches/new` would swallow `GET /searches/new` as `find("new")` and 404 or raise instead
+of rendering the form. Declare `new` first so that day is a non-event.
 
 **Index pagination was added** — `/searches/page/:page`. This section originally had no index
 paging route on the assumption that a user's search list is short. The migrated corpus says

@@ -27,6 +27,12 @@ module Books
       end
     end
 
+    # The last page OpenSearch can serve: beyond `from + size = MAX_RESULT_WINDOW`
+    # there is nothing reachable, so a request past it can 404 without a query.
+    def self.max_page(per_page:)
+      ::Search::Books::Search::BookAdvanced::MAX_RESULT_WINDOW / per_page
+    end
+
     def self.call(criteria:, owner:, ranking_configuration: nil, page: 1, per_page: 50)
       default = ::Books::RankingConfiguration.default_primary
       rc = ranking_configuration || default

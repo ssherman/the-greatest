@@ -94,7 +94,7 @@ class SavedSearchTest < ActiveSupport::TestCase
     assert_equal [newer.id, older.id], ids
   end
 
-  test "the four subclass hooks raise on the root class" do
+  test "four of the five subclass hooks raise on the root class (filter_labels_class is covered below)" do
     [:criteria_class, :query_class, :ranking_configuration_class, :excluded_list_type].each do |hook|
       assert_raises(NotImplementedError) { SavedSearch.public_send(hook) }
     end

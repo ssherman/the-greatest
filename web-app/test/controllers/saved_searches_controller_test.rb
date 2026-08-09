@@ -88,6 +88,7 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     get saved_searches_path
 
     assert_includes response.body, 'data-theme="books"'
+    assert_includes response.body, 'id="navbar_my_searches"'
   end
 
   test "index page 1 redirects to the bare path" do
@@ -179,10 +180,27 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     assert_equal before.to_i, @public_search.updated_at.to_i
   end
 
+  # This is pagy_path_count's guard: the page is inside OpenSearch's result
+  # window, but past the last page of a small result set. It still has to run
+  # the query once to learn that -- BookAdvanced is stubbed, not forbidden.
   test "a page past the last one 404s and records no execution" do
     stub_advanced(ids: [], total: 50)
     before = @public_search.last_executed_at
     get saved_search_page_path(@public_search, 3)
+
+    assert_response :not_found
+    assert_equal before.to_i, @public_search.reload.last_executed_at.to_i
+  end
+
+  # This is the controller's own guard, upstream of pagy_path_count: a page
+  # past OpenSearch's from+size=10,000 window is unreachable by construction
+  # (200 pages at PER_PAGE=50), so it must 404 WITHOUT running a query --
+  # unlike the small-result-set case above, which still calls BookAdvanced.
+  test "a page past the OpenSearch result window 404s without querying" do
+    ::Search::Books::Search::BookAdvanced.expects(:call).never
+    before = @public_search.last_executed_at
+
+    get saved_search_page_path(@public_search, 201)
 
     assert_response :not_found
     assert_equal before.to_i, @public_search.reload.last_executed_at.to_i
