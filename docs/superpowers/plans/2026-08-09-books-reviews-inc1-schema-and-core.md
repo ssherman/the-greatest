@@ -1209,9 +1209,12 @@ Raised during review, deliberately not fixed here. None blocks merge.
   `has_one :review_summary, dependent: :destroy` has already removed the row. Admin-only path, so
   the waste is negligible. Note the `User` association is **not** the same case — there the
   per-review recalculate is required work.
-- **The `reviews_body_not_blank` check constraint does not trim Unicode whitespace.** A NBSP-only
-  body is accepted at the DB layer while `BodySanitizer` returns `nil` for it. Only reachable by a
-  writer that bypasses the sanitizer, so it is defense-in-depth only; closing it costs a migration.
+- **The `reviews_body_not_blank` check constraint does not trim Unicode whitespace.** A body of
+  U+00A0, U+2003 or U+3000 is accepted at the DB layer while `BodySanitizer` returns `nil` for it.
+  Only reachable by a writer that bypasses the sanitizer, and there is none — the model runs it in
+  `before_validation` and increment 2's migrator, which bulk-inserts, calls it explicitly for
+  exactly this reason. Defense-in-depth only; closing it costs a migration. Raised again in the PR
+  review of #213 and consciously left.
 - **Uniqueness is an app-level validation over a DB unique index.** A concurrent double-submit
   raises `ActiveRecord::RecordNotUnique` rather than failing validation, and the error attaches to
   `:user_id` — so increment 4's form would render "User has already been taken". Handle it there.
