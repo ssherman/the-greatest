@@ -16,10 +16,23 @@ module Search
       class BookAdvanced < ::Search::Base::Search
         # Ranked books first in rank order, then unranked. Mirrors the SQL
         # ordering ::Books::AuthorsController#all_books_relation already ships.
+        #
+        # `_id` is a final tie-breaker, not a fourth ranking key. Books that tie
+        # on all three real keys are common among unranked books (which all tie
+        # on key 1): the dev index has 52 books titled "star wars", 40 "d
+        # ceased", 32 "batman". Without a deterministic tiebreak, OpenSearch
+        # falls back to internal document order, which is not stable across
+        # replicas or index merges -- a `from`/`size` page boundary landing
+        # inside a tie group can duplicate or skip a book on the next page.
+        # `_id` is metadata, not an indexed field, so sorting on it needs no
+        # mapping change and costs nothing measurable; an indexed numeric id
+        # would need a mapping change, and this codebase's books mapping only
+        # changes on a full delete-and-recreate.
         SORT = [
           {ranked_position: {order: "asc", missing: "_last"}},
           {first_published_year: {order: "asc", missing: "_last"}},
-          {"title.keyword" => {order: "asc"}}
+          {"title.keyword" => {order: "asc"}},
+          {_id: {order: "asc"}}
         ].freeze
 
         DEFAULT_PER_PAGE = 50

@@ -203,6 +203,28 @@ module Search
           assert_equal [2, 1, 3], ids_for({})
         end
 
+        # Real index: five books identical on all three real sort keys
+        # (ranked_position absent, first_published_year absent, same title)
+        # force OpenSearch to break the tie somehow. Without the `_id`
+        # tiebreak that fallback is internal document order, which is not
+        # guaranteed stable across `from`/`size` pages, so a page boundary
+        # landing inside the tie group can duplicate or skip a book. Asserted
+        # against the sorted union of every page rather than a hardcoded id
+        # order, since only "no duplicates, no skips" is the property that
+        # matters -- which _id happens to sort first is arbitrary.
+        test "pages through a tie group without duplicating or skipping (real index)" do
+          tied_ids = (1..5)
+          tied_ids.each { |id| index_book(id, title: "Tied Title") }
+
+          page1 = ids_for({}, page: 1, per_page: 2)
+          page2 = ids_for({}, page: 2, per_page: 2)
+          page3 = ids_for({}, page: 3, per_page: 2)
+
+          all_pages = page1 + page2 + page3
+          assert_equal tied_ids.to_a, all_pages.sort
+          assert_equal all_pages.size, all_pages.uniq.size
+        end
+
         test "pages through results" do
           index_book(1, ranked_position: 1)
           index_book(2, ranked_position: 2)
