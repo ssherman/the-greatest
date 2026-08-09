@@ -1,5 +1,30 @@
 require "test_helper"
 
+# == Schema Information
+#
+# Table name: reviews
+#
+#  id              :bigint           not null, primary key
+#  body            :text
+#  rating          :integer          not null
+#  reviewable_type :string           not null
+#  title           :string
+#  created_at      :datetime         not null
+#  updated_at      :datetime         not null
+#  reviewable_id   :bigint           not null
+#  user_id         :bigint           not null
+#
+# Indexes
+#
+#  index_reviews_on_reviewable              (reviewable_type,reviewable_id)
+#  index_reviews_on_reviewable_with_body    (reviewable_type,reviewable_id) WHERE (body IS NOT NULL)
+#  index_reviews_on_user_and_reviewable     (user_id,reviewable_type,reviewable_id) UNIQUE
+#  index_reviews_on_user_id_and_created_at  (user_id,created_at)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (user_id => users.id)
+#
 class ReviewTest < ActiveSupport::TestCase
   test "belongs to a polymorphic reviewable" do
     assert_equal Books::Book, reviews(:regular_user_war_and_peace).reviewable.class

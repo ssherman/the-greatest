@@ -1,0 +1,25 @@
+# Mirrors reviews.yml exactly. Fixtures are inserted directly and never fire
+# after_commit, so these numbers are maintained by hand -- keep them in step with
+# reviews.yml or SummaryRecalculator's tests will disagree with the fixtures.
+
+war_and_peace:
+  reviewable: war_and_peace (Books::Book)
+  ratings_count: 3
+  ratings_sum: 13
+  text_reviews_count: 2
+  rating_1_count: 0
+  rating_2_count: 0
+  rating_3_count: 0
+  rating_4_count: 2
+  rating_5_count: 1
+
+crime_and_punishment:
+  reviewable: crime_and_punishment (Books::Book)
+  ratings_count: 1
+  ratings_sum: 3
+  text_reviews_count: 0
+  rating_1_count: 0
+  rating_2_count: 0
+  rating_3_count: 1
+  rating_4_count: 0
+  rating_5_count: 0

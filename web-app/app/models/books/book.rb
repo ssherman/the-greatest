@@ -69,6 +69,7 @@ class Books::Book < ApplicationRecord
   has_one :primary_image, -> { where(primary: true) }, as: :parent, class_name: "Image"
   has_many :external_links, as: :parent, dependent: :destroy
   has_many :reviews, as: :reviewable, dependent: :destroy
+  has_one :review_summary, as: :reviewable, dependent: :destroy
   has_many :category_items, as: :item, dependent: :destroy, inverse_of: :item
   has_many :categories, through: :category_items, class_name: "Books::Category"
   has_many :book_countries, class_name: "Books::BookCountry", dependent: :destroy

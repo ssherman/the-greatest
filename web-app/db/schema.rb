@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_09_181002) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_09_181829) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -774,6 +774,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_09_181002) do
     t.index ["type", "primary"], name: "index_ranking_configurations_on_type_and_primary"
     t.index ["type", "user_id"], name: "index_ranking_configurations_on_type_and_user_id"
     t.index ["user_id"], name: "index_ranking_configurations_on_user_id"
+  end
+
+  create_table "review_summaries", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "rating_1_count", default: 0, null: false
+    t.integer "rating_2_count", default: 0, null: false
+    t.integer "rating_3_count", default: 0, null: false
+    t.integer "rating_4_count", default: 0, null: false
+    t.integer "rating_5_count", default: 0, null: false
+    t.integer "ratings_count", default: 0, null: false
+    t.integer "ratings_sum", default: 0, null: false
+    t.bigint "reviewable_id", null: false
+    t.string "reviewable_type", null: false
+    t.integer "text_reviews_count", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["reviewable_type", "reviewable_id"], name: "index_review_summaries_on_reviewable", unique: true
   end
 
   create_table "reviews", force: :cascade do |t|
