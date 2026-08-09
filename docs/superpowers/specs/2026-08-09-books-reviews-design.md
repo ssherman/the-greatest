@@ -70,8 +70,15 @@ preserved, verified against the new DB. The migration needs no id remapping and 
 rows, of which **5,177 are blank** — nearly a quarter of every review shown on a book page.
 
 Two further rows (27794, 121405) contain only an `<img>` tag and no text. They are not blank on
-input but are blank *after* sanitizing, since `img` is not in the allowlist. **The normalization
-must therefore run after sanitizing, not before.** Total importing as `NULL` body: **5,179**.
+input but are blank *after* sanitizing, since `img` is not in the allowlist. **The rule this port
+applies is therefore rendered text, not the markup string: a body normalizes to `NULL` whenever the
+sanitized fragment has no visible text, not merely when the markup string itself is empty** —
+`<br>`, `<p></p>`, an empty `<a href>`, and an `&nbsp;`-only body all sanitize to non-empty markup
+that renders as nothing, and all must be caught the same way as the `<img>`-only case. Measured
+against the legacy data: of the 16,269 bodies that are non-blank on input, exactly 2 have no
+visible text, and both are the `<img>`-only rows above — there are zero `<br>`-only rows. The
+"16,267 genuine text reviews" figure above is therefore confirmed correct, and increment 2's import
+is unaffected. Total importing as `NULL` body: **5,179**.
 
 Thirteen rows are near-blank once markup is stripped — `"I"`, `"/"`, `"no"`, `"M"`, `"Eh"`, `"?"`.
 These are kept. They are terse but genuine; any heuristic that strips them is guessing at intent.
