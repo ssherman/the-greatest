@@ -70,6 +70,18 @@ module Books
       assert_includes search.summary, "1990"
     end
 
+    # The clause is gte/lte, so a single bound includes the year itself.
+    # "after 1980" reads as excluding it, and would also disagree with the show
+    # page's filter card, which describes the same criterion.
+    test "summary describes an open-ended year bound inclusively" do
+      base = {user: users(:regular_user)}
+
+      assert_equal "Published 1980 or later",
+        Books::SavedSearch.new(**base, criteria: {"first_year_published_gt" => "1980"}).summary
+      assert_equal "Published 1990 or earlier",
+        Books::SavedSearch.new(**base, criteria: {"first_year_published_lt" => "1990"}).summary
+    end
+
     test "summary describes the ranked criterion in all three states" do
       base = {user: users(:regular_user)}
 

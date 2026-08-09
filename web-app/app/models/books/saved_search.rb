@@ -93,10 +93,13 @@ module Books
       gt = criteria_object.first_year_published_gt
       lt = criteria_object.first_year_published_lt
       return nil if gt.nil? && lt.nil?
+      # Inclusive wording, matching the clause (gte/lte) and the show page's
+      # filter card. "after 1900" would read as excluding 1900, which it does
+      # not, and would make the index and the show page disagree.
       return "Published between #{gt} and #{lt}" if gt && lt
-      return "Published after #{gt}" if gt
+      return "Published #{gt} or later" if gt
 
-      "Published before #{lt}"
+      "Published #{lt} or earlier"
     end
 
     def ranked_summary

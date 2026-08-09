@@ -18,12 +18,13 @@ module Books
   # the ranked-then-unranked interleaving from an IN clause.
   class SavedSearchQuery
     # `capped?` because track_total_hits stays at OpenSearch's default of
-    # 10,000 (spec §6): a broader search reports exactly 10,000 and means "at
-    # least". The knowledge of which number that is belongs next to the query,
-    # not in a controller or a view.
-    Result = Struct.new(:books, :total, keyword_init: true) do
+    # 10,000 (spec §6): past that ceiling it stops counting and reports a lower
+    # bound. It answers that from OpenSearch's own `relation` rather than by
+    # comparing the total to the ceiling -- a search matching *exactly* 10,000
+    # reports "eq" and is an exact total, not a capped one.
+    Result = Struct.new(:books, :total, :total_relation, keyword_init: true) do
       def capped?
-        total >= ::Search::Books::Search::BookAdvanced::MAX_RESULT_WINDOW
+        total_relation == "gte"
       end
     end
 
@@ -45,7 +46,11 @@ module Books
         excluded_book_ids: criteria.hide_read ? read_book_ids(owner) : []
       )
 
-      Result.new(books: hydrate(response[:ids], rc), total: response[:total])
+      Result.new(
+        books: hydrate(response[:ids], rc),
+        total: response[:total],
+        total_relation: response[:total_relation]
+      )
     end
 
     # The index carries only the default primary's ranked_position, so any

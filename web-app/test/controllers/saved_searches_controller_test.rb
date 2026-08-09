@@ -103,8 +103,11 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
 
   # BookAdvanced is stubbed, per house style -- the query layer has its own
   # tests against a real test index. These tests are about the controller.
-  def stub_advanced(ids:, total:)
-    ::Search::Books::Search::BookAdvanced.stubs(:call).returns({ids: ids, total: total})
+  # total_relation defaults to "eq" because that is what OpenSearch returns for
+  # any total below its track_total_hits ceiling, which is every case but one.
+  def stub_advanced(ids:, total:, total_relation: "eq")
+    ::Search::Books::Search::BookAdvanced.stubs(:call)
+      .returns({ids: ids, total: total, total_relation: total_relation})
   end
 
   test "the owner sees a private search" do
@@ -161,11 +164,23 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "1 result"
   end
 
-  test "a total at the window ceiling renders as 10,000+" do
-    stub_advanced(ids: [books_books(:war_and_peace).id], total: 10_000)
+  # OpenSearch stopped counting at its ceiling, so 10,000 is a lower bound.
+  test "a lower-bound total renders as 10,000+" do
+    stub_advanced(ids: [books_books(:war_and_peace).id], total: 10_000, total_relation: "gte")
     get saved_search_path(@public_search)
 
     assert_includes response.body, "10,000+ results"
+  end
+
+  # The knife-edge case: a search matching exactly 10,000 books reports "eq",
+  # which is an exact total and must not grow a plus sign. Reading the relation
+  # rather than comparing the total to the ceiling is what distinguishes them.
+  test "an exact total of 10,000 renders without the plus" do
+    stub_advanced(ids: [books_books(:war_and_peace).id], total: 10_000, total_relation: "eq")
+    get saved_search_path(@public_search)
+
+    assert_includes response.body, "10,000 results"
+    refute_includes response.body, "10,000+ results"
   end
 
   test "show writes last_executed_at, without touching updated_at" do

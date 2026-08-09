@@ -50,11 +50,17 @@ module Books
 
     attr_reader :criteria
 
+    # A numeric book_type outside 0..3 parses fine, so `unparseable?` is false
+    # and no "Unreadable filter" group covers it -- but BookAdvanced still
+    # emits MATCH_NOTHING_CLAUSE for it, because BookType.category_id returns
+    # nil. Rendering nothing would leave a zero-result search with a blank
+    # filter card, the exact failure this card exists to prevent. Falls back to
+    # the same "Unknown (#id)" shape the taxonomy groups use.
     def book_type_group
-      label = ::Books::BookType.label(criteria.book_type)
-      return nil if label.nil?
+      value = criteria.book_type
+      return nil if value.nil?
 
-      Group.new(label: "Book type", values: [label])
+      Group.new(label: "Book type", values: [::Books::BookType.label(value) || "Unknown (##{value})"])
     end
 
     def book_length_group
@@ -90,10 +96,15 @@ module Books
       lt = criteria.first_year_published_lt
       return nil if gt.nil? && lt.nil?
 
+      # Inclusive wording, because the clause is inclusive: BookAdvanced emits
+      # `gte`/`lte`, so a bound of 1900 matches a book published in 1900.
+      # "After 1900" would contradict the results on the same page. The
+      # criteria keys are named _gt/_lt, but that is legacy's naming, not
+      # legacy's behaviour -- its own query used gte/lte too.
       value =
         if gt && lt then "Between #{gt} and #{lt}"
-        elsif gt then "After #{gt}"
-        else "Before #{lt}"
+        elsif gt then "#{gt} or later"
+        else "#{lt} or earlier"
         end
 
       Group.new(label: "Published", values: [value])

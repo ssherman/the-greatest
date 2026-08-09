@@ -143,9 +143,11 @@ Pages are per-user, so they are never cached (`prevent_caching`) and never index
 
 ## The 10,000-result ceiling
 
-OpenSearch's `track_total_hits` is left at its default, which caps the reported total at 10,000
-— a search broader than that reports exactly 10,000 and means "at least this many"
-(`Result#capped?`). `BookAdvanced::MAX_RESULT_WINDOW` (10,000) is also OpenSearch's `from + size`
+OpenSearch's `track_total_hits` is left at its default, which stops the count at 10,000. Past that
+it reports a lower bound, flagged by the `relation` field beside the total: `"gte"` means "at least
+this many", `"eq"` means the number is exact. `Result#capped?` reads that relation rather than
+comparing the total to 10,000 — the two differ for a search matching *exactly* 10,000 books, which
+is exact and must not grow a plus sign. `BookAdvanced::MAX_RESULT_WINDOW` (10,000) is also OpenSearch's `from + size`
 ceiling: a page beyond it is unreachable, so the query clamps `size` (and returns `size: 0` past
 the window) rather than letting OpenSearch raise. `PER_PAGE` is fixed at 50 with no `?limit=`
 override, which divides 10,000 exactly — the last reachable page (200) comes back full instead of

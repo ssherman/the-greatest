@@ -8,10 +8,10 @@ module Books
       ::Books::SavedSearchCriteria.new(hash)
     end
 
-    def stub_search(ids:, total: nil)
+    def stub_search(ids:, total: nil, total_relation: "eq")
       ::Search::Books::Search::BookAdvanced
         .stubs(:call)
-        .returns({ids: ids, total: total || ids.size})
+        .returns({ids: ids, total: total || ids.size, total_relation: total_relation})
     end
 
     # Verified 2026-08-09: these are real fixture labels, `books_global` is the
@@ -48,6 +48,20 @@ module Books
       result = ::Books::SavedSearchQuery.call(criteria: criteria, owner: @owner)
 
       assert_equal 4391, result.total
+    end
+
+    # capped? reads OpenSearch's own relation rather than comparing the total
+    # to the ceiling: past track_total_hits it reports a lower bound ("gte"),
+    # but a search matching *exactly* 10,000 reports "eq" and is exact.
+    test "capped? is true only for a lower-bound total" do
+      stub_search(ids: [@book_a.id], total: 10_000, total_relation: "gte")
+      assert ::Books::SavedSearchQuery.call(criteria: criteria, owner: @owner).capped?
+
+      stub_search(ids: [@book_a.id], total: 10_000, total_relation: "eq")
+      refute ::Books::SavedSearchQuery.call(criteria: criteria, owner: @owner).capped?
+
+      stub_search(ids: [@book_a.id], total: 42, total_relation: "eq")
+      refute ::Books::SavedSearchQuery.call(criteria: criteria, owner: @owner).capped?
     end
 
     test "returns no books when the search matched nothing" do

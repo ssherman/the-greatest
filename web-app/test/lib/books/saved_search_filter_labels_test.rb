@@ -104,11 +104,36 @@ class Books::SavedSearchFilterLabelsTest < ActiveSupport::TestCase
     assert_equal ["Hiding books the owner has read"], group(groups, "Read books").values
   end
 
-  test "renders an open-ended year bound" do
-    assert_equal ["After 1900"],
+  # Inclusive wording, because BookAdvanced emits gte/lte -- a bound of 1900
+  # matches a book published in 1900, so "After 1900" would contradict the
+  # results rendered beside it.
+  test "renders an open-ended year bound inclusively" do
+    assert_equal ["1900 or later"],
       group(labels({"first_year_published_gt" => 1900}), "Published").values
-    assert_equal ["Before 1950"],
+    assert_equal ["1950 or earlier"],
       group(labels({"first_year_published_lt" => 1950}), "Published").values
+  end
+
+  test "the year label matches the clause it describes" do
+    raw = {"first_year_published_gt" => 1900}
+    definition = ::Search::Books::Search::BookAdvanced.build_query_definition(
+      ::Books::SavedSearchCriteria.new(raw)
+    )
+    range = definition[:query][:bool][:filter].find { |clause| clause[:range] }[:range][:first_published_year]
+
+    assert_equal 1900, range[:gte], "the clause includes 1900, so the label must not say 'after'"
+    assert_equal ["1900 or later"], group(labels(raw), "Published").values
+  end
+
+  # A numeric book_type outside 0..3 parses, so unparseable? is false and no
+  # "Unreadable filter" group covers it -- but BookAdvanced still matches
+  # nothing on it. Rendering no group at all would leave a zero-result search
+  # with a blank filter card.
+  test "an unsupported numeric book_type renders as unknown rather than vanishing" do
+    groups = labels({"book_type" => 99})
+
+    assert_equal ["Unknown (#99)"], group(groups, "Book type").values
+    assert_nil ::Books::BookType.category_id(99), "guard: 99 must be unresolvable for this test to mean anything"
   end
 
   # BookAdvanced turns an unparseable criterion into a match-nothing clause
