@@ -83,6 +83,12 @@ class Services::BooksMigration::SavedSearchMigratorTest < ActiveSupport::TestCas
     assert_equal [7], criteria["excluded_country_ids"]
   end
 
+  test "drops blank entries before normalizing passthrough ids to integers" do
+    run_migrator([legacy_row({"included_language_ids" => ["12", ""]})])
+
+    assert_equal [12], SavedSearch.find(900_001).criteria["included_language_ids"]
+  end
+
   test "copies scalar criteria verbatim" do
     run_migrator([legacy_row({
       "book_type" => 0,

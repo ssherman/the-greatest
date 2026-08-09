@@ -53,7 +53,7 @@ module Services
         parsed.each_with_object({}) do |(key, value), out|
           out[key] = case key
           when *CATEGORY_ID_KEYS then remap_category_ids(value)
-          when *PASSTHROUGH_ID_KEYS then Array(value).map(&:to_i)
+          when *PASSTHROUGH_ID_KEYS then Array(value).reject(&:blank?).map(&:to_i)
           else value
           end
         end
