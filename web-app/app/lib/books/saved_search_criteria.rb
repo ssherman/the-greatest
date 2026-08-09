@@ -57,9 +57,12 @@ module Books
       (@raw["genre_match_mode"].to_s == "all") ? :all : :any
     end
 
+    # ActiveModel's cast is what legacy used, and it is what makes a Rails
+    # check_box ("1") and a bare HTML checkbox ("on") read as true. Rejects
+    # "0"/"false"/"off"/""/nil correctly. `!!` because cast returns nil, not
+    # false, for a blank value.
     def hide_read
-      value = @raw["hide_read"]
-      value == true || value.to_s == "true"
+      !!ActiveModel::Type::Boolean.new.cast(@raw["hide_read"])
     end
 
     def max_ranked_position

@@ -101,6 +101,23 @@ module Books
       refute criteria({}).hide_read
     end
 
+    # A Rails check_box submits "1"; a bare HTML checkbox submits "on". Both
+    # must read as true, or a checked box in increment 6's form silently
+    # stores as unchecked.
+    test "reads hide_read as true for every checkbox-submission shape" do
+      assert criteria({"hide_read" => "1"}).hide_read
+      assert criteria({"hide_read" => "on"}).hide_read
+      assert criteria({"hide_read" => true}).hide_read
+    end
+
+    test "reads hide_read as false for every falsy shape, including absence" do
+      refute criteria({"hide_read" => "0"}).hide_read
+      refute criteria({"hide_read" => "false"}).hide_read
+      refute criteria({"hide_read" => ""}).hide_read
+      refute criteria({"hide_read" => nil}).hide_read
+      refute criteria({}).hide_read
+    end
+
     test "reads max_ranked_position from either shape" do
       assert_equal 100, criteria({"max_ranked_position" => 100}).max_ranked_position
       assert_equal 100, criteria({"max_ranked_position" => "100"}).max_ranked_position
