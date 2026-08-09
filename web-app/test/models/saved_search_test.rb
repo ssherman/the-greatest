@@ -85,6 +85,15 @@ class SavedSearchTest < ActiveSupport::TestCase
     assert_equal saved_searches(:books_public).id, ids.first
   end
 
+  test "by_created orders most-recently-created first" do
+    older = Books::SavedSearch.create!(user: users(:regular_user), criteria: {"genre_match_mode" => "any"}, created_at: 2.days.ago)
+    newer = Books::SavedSearch.create!(user: users(:regular_user), criteria: {"genre_match_mode" => "any"}, created_at: 1.day.ago)
+
+    ids = SavedSearch.where(id: [older.id, newer.id]).by_created.pluck(:id)
+
+    assert_equal [newer.id, older.id], ids
+  end
+
   test "the four subclass hooks raise on the root class" do
     [:criteria_class, :query_class, :ranking_configuration_class, :excluded_list_type].each do |hook|
       assert_raises(NotImplementedError) { SavedSearch.public_send(hook) }
