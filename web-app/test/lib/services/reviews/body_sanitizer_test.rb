@@ -72,15 +72,48 @@ module Services
           BodySanitizer.call(%(<spoiler onclick="bad()">y</spoiler>))
       end
 
-      test ".call leaves an unclosed spoiler tag as plain text" do
-        result = BodySanitizer.call("<spoiler>never closed")
-        assert_not_includes result, "<span"
-        assert_includes result, "never closed"
+      test ".call closes an unclosed spoiler tag" do
+        assert_equal %(<span class="review-spoiler">never closed</span>),
+          BodySanitizer.call("<spoiler>never closed")
       end
 
-      test ".call cannot have its token forged from user text" do
-        body = "spo1234567890abcdef hello spc1234567890abcdef"
-        assert_not_includes BodySanitizer.call(body), "<span"
+      test ".call converts nested spoiler tags" do
+        assert_equal %(<span class="review-spoiler">a<span class="review-spoiler">b</span>c</span>),
+          BodySanitizer.call("<spoiler>a<spoiler>b</spoiler>c</spoiler>")
+      end
+
+      test ".call replaces a class supplied on a spoiler tag" do
+        assert_equal %(<span class="review-spoiler">x</span>),
+          BodySanitizer.call(%(<spoiler class="evil">x</spoiler>))
+      end
+
+      # Regression: a string-tokenizing implementation spliced raw markup into the
+      # quoted attribute value here, producing malformed HTML.
+      test ".call does not splice markup into an href attribute value" do
+        result = BodySanitizer.call(%(<a href="<spoiler>evil</spoiler>">click</a>))
+        assert_not_includes result, "<span"
+
+        anchor = Nokogiri::HTML5.fragment(result).at_css("a")
+        assert_equal "<spoiler>evil</spoiler>", anchor["href"]
+        assert_equal "click", anchor.text
+        assert_equal ["href"], anchor.attributes.keys
+      end
+
+      test ".call does not splice markup into a title attribute value" do
+        result = BodySanitizer.call(%(<a title="<spoiler>y</spoiler>">link</a>))
+        assert_not_includes result, "<span"
+
+        anchor = Nokogiri::HTML5.fragment(result).at_css("a")
+        assert_equal "<spoiler>y</spoiler>", anchor["title"]
+        assert_equal "link", anchor.text
+      end
+
+      test ".call strips an event handler smuggled past a spoiler tag" do
+        result = BodySanitizer.call(
+          %(<a title="<spoiler>x" onmouseover="alert(1)" y="</spoiler>">link</a>)
+        )
+        assert_not_includes result, "onmouseover"
+        assert_not_includes result, "alert(1)"
       end
 
       test ".call does not truncate long bodies" do
