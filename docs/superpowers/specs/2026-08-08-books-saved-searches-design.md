@@ -596,6 +596,14 @@ building the path.
 - **Unknown category/language/country ids match nothing rather than 404.** The opposite of the
   public-filters spec's choice, and correctly so: a saved search is private user data, not an
   indexable URL space.
+- **A criterion that is present but cannot be resolved matches nothing, never everything.** This is
+  the general rule the bullet above is one case of, and it binds beyond ids: `book_type` resolves
+  through `LegacyIdMap`, a migration artifact table, so an absent mapping is reachable in a way a
+  hardcoded constant never would be. The failure mode to avoid is a filter clause silently dropped
+  because it couldn't be built — that reads as "no criterion", which is a match-all, not the
+  match-nothing an unresolvable criterion must produce. Every filter in `BookAdvanced` follows this:
+  a criterion that is absent contributes no clause; a criterion that is present but unresolvable
+  contributes a match-nothing clause (an empty `terms` array, verified against the real index).
 - **`last_executed_at` is written on view** — a write on a read request, and the only one. It
   drives `by_last_executed`, the index page's default ordering. That write belongs to increment 5's
   controller; increment 4 is read-only throughout.
