@@ -8,8 +8,22 @@ module Services
     #                             callback) and exposed as a rake task.
     #
     # Invariant: a summary row exists iff at least one review exists for that
-    # reviewable. recalculate deletes when the last review goes; backfill_all! prunes
-    # orphans after upserting. Drop either half and the two paths diverge.
+    # reviewable.
+    #
+    # Both paths are the SAME two unconditional statements -- an upsert and a prune --
+    # differing only in whether they are scoped to one reviewable. That is deliberate:
+    #
+    #   * The upsert's GROUP BY yields no group when the reviewable has no reviews, so
+    #     nothing is inserted. An earlier version bound :type/:id as literals with no
+    #     GROUP BY, which made it a scalar aggregate -- always returning one row, so a
+    #     reviewable with zero reviews got a ghost all-zero summary.
+    #   * The prune removes any row left orphaned.
+    #
+    # There is deliberately NO `if Review.exists?` branch. Check-then-act across two
+    # statements is a TOCTOU race: under READ COMMITTED each statement takes a fresh
+    # snapshot, so a concurrent write committing in between could insert a ghost row
+    # (reviews vanished after the check) or delete a live one (a review arrived after
+    # the check). Two unconditional statements have no such window.
     class SummaryRecalculator
       AGGREGATES = <<~SQL.freeze
         COUNT(*),
@@ -52,20 +66,21 @@ module Services
       end
 
       def recalculate(reviewable_type, reviewable_id)
-        scope = ReviewSummary.where(reviewable_type: reviewable_type, reviewable_id: reviewable_id)
+        binds = {type: reviewable_type, id: reviewable_id}
 
         ReviewSummary.transaction do
-          if Review.where(reviewable_type: reviewable_type, reviewable_id: reviewable_id).exists?
-            connection.execute(upsert_one_sql(reviewable_type, reviewable_id))
-          else
-            scope.delete_all
-          end
+          connection.execute(
+            sanitize(upsert_sql("WHERE reviewable_type = :type AND reviewable_id = :id"), binds)
+          )
+          connection.execute(
+            sanitize(prune_sql("AND s.reviewable_type = :type AND s.reviewable_id = :id"), binds)
+          )
         end
       end
 
       def backfill_all!
         ReviewSummary.transaction do
-          connection.execute(upsert_all_sql)
+          connection.execute(upsert_sql)
           connection.execute(prune_sql)
         end
 
@@ -78,27 +93,24 @@ module Services
         ReviewSummary.connection
       end
 
-      def upsert_one_sql(reviewable_type, reviewable_id)
-        ReviewSummary.sanitize_sql_array([<<~SQL, type: reviewable_type, id: reviewable_id])
-          INSERT INTO review_summaries (#{COLUMNS})
-          SELECT :type, :id, #{AGGREGATES}
-          FROM reviews
-          WHERE reviewable_type = :type AND reviewable_id = :id
-          #{ON_CONFLICT}
-        SQL
+      def sanitize(sql, binds)
+        ReviewSummary.sanitize_sql_array([sql, binds])
       end
 
-      def upsert_all_sql
+      # `scope` is a trusted SQL fragment written in this class, never user input; the
+      # runtime values it references arrive as named binds through #sanitize.
+      def upsert_sql(scope = "")
         <<~SQL
           INSERT INTO review_summaries (#{COLUMNS})
           SELECT reviewable_type, reviewable_id, #{AGGREGATES}
           FROM reviews
+          #{scope}
           GROUP BY reviewable_type, reviewable_id
           #{ON_CONFLICT}
         SQL
       end
 
-      def prune_sql
+      def prune_sql(scope = "")
         <<~SQL
           DELETE FROM review_summaries s
           WHERE NOT EXISTS (
@@ -106,6 +118,7 @@ module Services
             WHERE r.reviewable_type = s.reviewable_type
               AND r.reviewable_id = s.reviewable_id
           )
+          #{scope}
         SQL
       end
     end
