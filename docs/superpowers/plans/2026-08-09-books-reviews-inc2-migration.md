@@ -592,12 +592,32 @@ git commit -m "Record the measured results of the development reviews migration"
 
 ## Measured results
 
-Filled in by Task 3, Step 7. Until then this section reads "not yet run".
+Run against development on 2026-08-09, after taking a snapshot
+(`tmp/db-snapshots/dev-20260809-181115-pre-reviews-migration.dump`).
 
-- Migrator: not yet run
-- Backfill: not yet run
-- Wall clock: not yet run
-- Idempotent re-run: not yet run
+- Migrator (cold load): `{success: true, data: {model: "Review", count: 128846}}`
+- Backfill: `{review_summaries: 53630}`
+- Wall clock: 19.1s (`time bin/rails data_migration:reviews` — 14.83s user, 0.34s
+  system, 79% cpu, 19.107s total)
+- `bin/rails verify:reviews`: all 11 checks OK on the cold load, including the
+  fuzz row (id 101561, `body_nil=true rating=5`) and all three summary totals
+  agreeing with the reviews table.
+- **Expectation correction:** the "text reviews" check originally read
+  16,267, which is the legacy count of bodies with visible text after
+  sanitizing — it applied the blank-rendered-text rule but not the
+  25,000-char cap. The cap drops one further row (the 462KB fuzz paste, id
+  101561, which imports as rating-only), so the correct expectation is
+  16,269 non-blank − 2 that sanitize to nothing (`<img>`-only) − 1 over the
+  cap = **16,266**. This was derived from the spec's two stated rules, not
+  fitted to the observed result; every other check matched the original
+  expectation exactly on the first, cold-load run. Fixed in commit
+  `4a7ce78c` before the run was accepted, so a future reader knows the
+  number was reasoned about rather than adjusted to pass.
+- Idempotent re-run: `bin/rails data_migration:reviews` a second time
+  reported `{success: true, data: {model: "Review", count: 0}}` and
+  `{review_summaries: 53630}` (unchanged) — the untargeted `ON CONFLICT`
+  absorbed all 128,846 rows with zero inserts. `bin/rails verify:reviews`
+  afterward: all 11 checks still OK, identical output to the cold-load run.
 
 ## Definition of Done
 
