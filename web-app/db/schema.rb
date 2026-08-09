@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_08_225727) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_09_181829) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -776,6 +776,39 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_08_225727) do
     t.index ["user_id"], name: "index_ranking_configurations_on_user_id"
   end
 
+  create_table "review_summaries", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "rating_1_count", default: 0, null: false
+    t.integer "rating_2_count", default: 0, null: false
+    t.integer "rating_3_count", default: 0, null: false
+    t.integer "rating_4_count", default: 0, null: false
+    t.integer "rating_5_count", default: 0, null: false
+    t.integer "ratings_count", default: 0, null: false
+    t.integer "ratings_sum", default: 0, null: false
+    t.bigint "reviewable_id", null: false
+    t.string "reviewable_type", null: false
+    t.integer "text_reviews_count", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["reviewable_type", "reviewable_id"], name: "index_review_summaries_on_reviewable", unique: true
+  end
+
+  create_table "reviews", force: :cascade do |t|
+    t.text "body"
+    t.datetime "created_at", null: false
+    t.integer "rating", null: false
+    t.bigint "reviewable_id", null: false
+    t.string "reviewable_type", null: false
+    t.string "title"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["reviewable_type", "reviewable_id"], name: "index_reviews_on_reviewable"
+    t.index ["reviewable_type", "reviewable_id"], name: "index_reviews_on_reviewable_with_body", where: "(body IS NOT NULL)"
+    t.index ["user_id", "created_at"], name: "index_reviews_on_user_id_and_created_at"
+    t.index ["user_id", "reviewable_type", "reviewable_id"], name: "index_reviews_on_user_and_reviewable", unique: true
+    t.check_constraint "body IS NULL OR length(btrim(body, ' \t\n\r\f\v'::text)) > 0", name: "reviews_body_not_blank"
+    t.check_constraint "rating >= 1 AND rating <= 5", name: "reviews_rating_range"
+  end
+
   create_table "saved_searches", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.jsonb "criteria", null: false
@@ -923,6 +956,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_08_225727) do
   add_foreign_key "ranking_configurations", "lists", column: "secondary_mapped_list_id"
   add_foreign_key "ranking_configurations", "ranking_configurations", column: "inherited_from_id"
   add_foreign_key "ranking_configurations", "users"
+  add_foreign_key "reviews", "users"
   add_foreign_key "saved_searches", "users"
   add_foreign_key "user_list_items", "user_lists"
   add_foreign_key "user_lists", "users"

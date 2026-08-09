@@ -48,6 +48,7 @@ class User < ApplicationRecord
   has_many :user_lists, dependent: :destroy
   has_many :user_list_items, through: :user_lists
   has_many :saved_searches, dependent: :destroy
+  has_many :reviews, dependent: :destroy
 
   enum :role, [:user, :admin, :editor]
   enum :external_provider, [:facebook, :twitter, :google, :apple, :password]
