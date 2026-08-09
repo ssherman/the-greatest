@@ -60,9 +60,14 @@ module Search
           )
           response = search(definition)
 
+          # `relation` is "eq" when total is exact and "gte" when
+          # track_total_hits stopped counting at its ceiling. Without it, a
+          # search matching exactly 10,000 books is indistinguishable from one
+          # matching a million, and both render as "10,000+".
           {
             ids: extract_ids(response).map(&:to_i),
-            total: response["hits"]["total"]["value"]
+            total: response["hits"]["total"]["value"],
+            total_relation: response["hits"]["total"]["relation"]
           }
         end
 

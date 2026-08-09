@@ -10,6 +10,7 @@ class MyListsController < ApplicationController
   include Pagy::Method
   include Cacheable
   include PathBasedPagination
+  include DomainLayout
 
   layout :resolve_layout
 
@@ -83,15 +84,6 @@ class MyListsController < ApplicationController
   end
 
   private
-
-  def resolve_layout
-    case Current.domain
-    when :games then "games/application"
-    when :movies then "movies/application"
-    when :books then "books/application"
-    else "music/application"
-    end
-  end
 
   # Persist the view_mode when the owner switches it via the query param. A
   # non-owner's param changes only their own render (see #show).

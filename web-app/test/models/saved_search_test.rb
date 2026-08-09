@@ -94,9 +94,24 @@ class SavedSearchTest < ActiveSupport::TestCase
     assert_equal [newer.id, older.id], ids
   end
 
-  test "the four subclass hooks raise on the root class" do
+  test "four of the five subclass hooks raise on the root class (filter_labels_class is covered below)" do
     [:criteria_class, :query_class, :ranking_configuration_class, :excluded_list_type].each do |hook|
       assert_raises(NotImplementedError) { SavedSearch.public_send(hook) }
     end
+  end
+
+  test "subclass_for returns the STI subclass for a registered domain" do
+    assert_equal ::Books::SavedSearch, SavedSearch.subclass_for(:books)
+    assert_equal ::Books::SavedSearch, SavedSearch.subclass_for("books")
+  end
+
+  test "subclass_for returns nil for a domain with no saved searches" do
+    assert_nil SavedSearch.subclass_for(:music)
+    assert_nil SavedSearch.subclass_for(:games)
+    assert_nil SavedSearch.subclass_for(nil)
+  end
+
+  test "filter_labels_class is abstract on the base class" do
+    assert_raises(NotImplementedError) { SavedSearch.filter_labels_class }
   end
 end

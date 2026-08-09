@@ -1,0 +1,39 @@
+<%
+  content_for :page_title, "#{@search.display_name} - Saved Search | #{domain_name}"
+  total = @total_capped ? "10,000+ results" :
+    "#{number_with_delimiter(@pagy.count)} #{"result".pluralize(@pagy.count)}"
+%>
+
+<div class="space-y-6">
+  <div class="space-y-1">
+    <% if @owner %>
+      <%= link_to saved_searches_path,
+            class: "text-sm text-base-content/60 hover:text-primary",
+            data: {testid: "back-to-searches"} do %>
+        ← My Saved Searches
+      <% end %>
+    <% end %>
+    <h1 class="text-3xl font-bold"><%= @search.display_name %></h1>
+    <% if @search.description.present? %>
+      <p class="text-base-content/70"><%= @search.description %></p>
+    <% end %>
+    <% if !@owner && @search.user.display_name.present? %>
+      <p class="text-sm text-base-content/60" data-testid="search-owner">
+        A saved search by <%= @search.user.display_name %>
+      </p>
+    <% end %>
+  </div>
+
+  <%= render "saved_searches/#{Current.domain}/active_filters", groups: @filter_groups %>
+
+  <p class="text-sm text-base-content/70" data-testid="saved-search-total"><%= total %></p>
+
+  <%= render "saved_searches/#{Current.domain}/results", books: @books %>
+
+  <% if @pagy.pages > 1 %>
+    <div class="flex justify-center"><%== @pagy.series_nav(slots: 5) %></div>
+    <p class="text-center text-sm text-base-content/70">
+      Page <%= number_with_delimiter(@pagy.page) %> of <%= number_with_delimiter(@pagy.last) %>
+    </p>
+  <% end %>
+</div>

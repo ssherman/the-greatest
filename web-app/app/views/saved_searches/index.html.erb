@@ -1,0 +1,44 @@
+<%
+  content_for :page_title, "My Saved Searches | #{domain_name}"
+%>
+
+<div class="space-y-6">
+  <h1 class="text-3xl font-bold">My Saved Searches</h1>
+
+  <% if @searches.any? %>
+    <ul class="space-y-3" data-testid="saved-search-list">
+      <% @searches.each do |search| %>
+        <li>
+          <%= link_to saved_search_path(search),
+                class: "card bg-base-100 shadow-sm hover:shadow-md transition-shadow" do %>
+            <div class="card-body gap-1">
+              <h2 class="card-title text-lg"><%= search.display_name %></h2>
+              <% if search.description.present? %>
+                <p class="text-sm text-base-content/70"><%= search.description %></p>
+              <% end %>
+              <% if search.summary.present? %>
+                <p class="text-sm text-base-content/60"><%= search.summary %></p>
+              <% end %>
+              <div class="flex flex-wrap items-center gap-2 text-xs text-base-content/60">
+                <% if search.public? %>
+                  <span class="badge badge-sm badge-info">Public</span>
+                <% end %>
+                <% if search.last_executed_at %>
+                  <span>Last run <%= time_ago_in_words(search.last_executed_at) %> ago</span>
+                <% end %>
+              </div>
+            </div>
+          <% end %>
+        </li>
+      <% end %>
+    </ul>
+
+    <% if @pagy.pages > 1 %>
+      <div class="flex justify-center"><%== @pagy.series_nav(slots: 5) %></div>
+    <% end %>
+  <% else %>
+    <div class="text-center py-16" data-testid="empty-saved-searches">
+      <p class="text-base-content/70">You haven't saved any searches yet.</p>
+    </div>
+  <% end %>
+</div>

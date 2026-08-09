@@ -108,6 +108,7 @@ frame in place needs `data: {turbo_frame: "<frame_id>"}`. The guard checks ancho
 - `docs/dev-core-values.md` — full development principles
 - `docs/testing.md` — complete testing guide · `docs/features/e2e-testing.md` — Playwright
 - `docs/summary.md` — architecture & goals · `docs/dev_setup.md` — local setup
-- `docs/features/` — feature docs (data_importers, authentication, rankings, search, ...)
+- `docs/features/` — feature docs (data_importers, authentication, rankings, search,
+  saved_searches, ...)
 - `docs/documentation.md` & `docs/spec-instructions.md` — docs/spec workflow (every model/service
   gets a doc in `docs/`; plan non-trivial work in `docs/specs/`)
