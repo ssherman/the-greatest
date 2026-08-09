@@ -110,4 +110,8 @@ class SavedSearchTest < ActiveSupport::TestCase
     assert_nil SavedSearch.subclass_for(:games)
     assert_nil SavedSearch.subclass_for(nil)
   end
+
+  test "filter_labels_class is abstract on the base class" do
+    assert_raises(NotImplementedError) { SavedSearch.filter_labels_class }
+  end
 end

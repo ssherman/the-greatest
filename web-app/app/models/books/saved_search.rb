@@ -44,6 +44,14 @@ module Books
       query_class_name.constantize
     end
 
+    def self.filter_labels_class_name
+      "Books::SavedSearchFilterLabels"
+    end
+
+    def self.filter_labels_class
+      filter_labels_class_name.constantize
+    end
+
     def self.ranking_configuration_class
       ::Books::RankingConfiguration
     end

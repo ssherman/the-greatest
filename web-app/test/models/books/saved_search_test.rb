@@ -175,5 +175,9 @@ module Books
 
       assert_includes search.summary, "Short, Medium Length"
     end
+
+    test "filter_labels_class resolves the books labels object" do
+      assert_equal ::Books::SavedSearchFilterLabels, ::Books::SavedSearch.filter_labels_class
+    end
   end
 end

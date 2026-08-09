@@ -59,6 +59,10 @@ class SavedSearch < ApplicationRecord
     raise NotImplementedError, "#{name} must override .query_class"
   end
 
+  def self.filter_labels_class
+    raise NotImplementedError, "#{name} must override .filter_labels_class"
+  end
+
   def self.ranking_configuration_class
     raise NotImplementedError, "#{name} must override .ranking_configuration_class"
   end
