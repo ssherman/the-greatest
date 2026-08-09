@@ -33,7 +33,8 @@
 | `body IS NULL` | 107,523 |
 | Empty-string bodies | 5,177 |
 | Bodies that sanitize to nothing (`<img>`-only) | 2 |
-| Genuine text reviews after sanitizing | **16,267** |
+| Legacy bodies with visible text after sanitizing | 16,267 |
+| **Expected `Review.with_body.count` after migration** | **16,266** (16,267 minus the one over-cap row) |
 | Bodies over 25,000 chars after sanitizing | 1 (review **101561**, a 462KB XSS-polyglot paste) |
 | Rows with a title | 404 (longest 100 chars) |
 | Distinct raters / books | 1,399 / 53,630 |
@@ -516,7 +517,11 @@ namespace :verify do
     checks = {
       "rows after dedup" => [Review.count, 128_846],
       "all rows are books" => [Review.where(reviewable_type: "Books::Book").count, 128_846],
-      "text reviews" => [Review.with_body.count, 16_267],
+      # 16,269 legacy bodies are non-blank on input; 2 sanitize to no visible text
+      # (the <img>-only rows) and 1 exceeds the cap after sanitizing (the fuzz row),
+      # so 16,269 - 2 - 1. The spec's "16,267 genuine text reviews" describes the
+      # LEGACY data, before the cap rule is applied.
+      "text reviews" => [Review.with_body.count, 16_266],
       "ratings out of range" => [Review.where.not(rating: 1..5).count, 0],
       "null ratings" => [Review.where(rating: nil).count, 0],
       "bodies over the cap" => [Review.where("length(body) > ?", Review::MAX_BODY_LENGTH).count, 0],
