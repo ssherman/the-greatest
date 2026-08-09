@@ -182,6 +182,73 @@ module Search
           assert_equal 0, result[:total]
         end
 
+        # Spec §6: a criterion the user actually set which cannot be parsed at
+        # all (as opposed to absent, or present-but-unmatched) must narrow to
+        # nothing, not silently fall back to "no filter" -- book_type "abc"
+        # parses to nil, the same value an absent book_type produces, so
+        # without the unparseable? guard this clause gets dropped and the
+        # search broadens to the whole corpus instead of matching nothing.
+        test "an unparseable book_type matches nothing rather than everything (real index)" do
+          index_book(1, category_ids: [10])
+          index_book(2, category_ids: [20])
+
+          result = ::Search::Books::Search::BookAdvanced.call(criteria({"book_type" => "abc"}))
+
+          assert_equal [], result[:ids]
+          assert_equal 0, result[:total]
+        end
+
+        # Same bug class as above: included_category_ids ["abc"] parses to
+        # [], the same value an absent criterion produces.
+        test "an unparseable included_category_ids matches nothing rather than everything (real index)" do
+          index_book(1, category_ids: [10])
+          index_book(2, category_ids: [20])
+
+          result = ::Search::Books::Search::BookAdvanced.call(criteria({"included_category_ids" => ["abc"]}))
+
+          assert_equal [], result[:ids]
+          assert_equal 0, result[:total]
+        end
+
+        # The must_not side of the same bug: an unparseable excluded_category_ids
+        # must not silently exclude nothing (which would broaden the results),
+        # it must match nothing overall.
+        test "an unparseable excluded_category_ids matches nothing rather than broadening (real index)" do
+          index_book(1, category_ids: [10])
+          index_book(2, category_ids: [20])
+
+          result = ::Search::Books::Search::BookAdvanced.call(criteria({"excluded_category_ids" => ["abc"]}))
+
+          assert_equal [], result[:ids]
+          assert_equal 0, result[:total]
+        end
+
+        test "an unparseable max_ranked_position matches nothing rather than everything (real index)" do
+          index_book(1, ranked_position: 5)
+
+          result = ::Search::Books::Search::BookAdvanced.call(criteria({"max_ranked_position" => "abc"}))
+
+          assert_equal [], result[:ids]
+          assert_equal 0, result[:total]
+        end
+
+        # book_length [1, 99] is PARTIALLY valid (99 falls outside the enum,
+        # 1 does not) -- it must filter on [1] like any other book_length,
+        # not be treated as unparseable.
+        test "a partially valid book_length still filters normally rather than matching nothing (real index)" do
+          index_book(1, book_length: 1)
+          index_book(2, book_length: 4)
+
+          assert_equal [1], ids_for({"book_length" => [1, 99]})
+        end
+
+        test "an absent included_category_ids still matches everything (real index)" do
+          index_book(1, category_ids: [10])
+          index_book(2, category_ids: [])
+
+          assert_equal [1, 2], ids_for({}).sort
+        end
+
         test "excluded_book_ids removes those books" do
           index_book(1)
           index_book(2)

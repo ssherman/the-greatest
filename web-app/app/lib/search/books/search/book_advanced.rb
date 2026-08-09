@@ -35,6 +35,14 @@ module Search
           {_id: {order: "asc"}}
         ].freeze
 
+        # OpenSearch's match-nothing: an empty terms array matches no document,
+        # regardless of which field it names. Used any time a criterion is
+        # present but cannot be resolved -- see `unparseable_clauses` below and
+        # the book_type-specific case in `filter_clauses` (spec §6: a criterion
+        # that is present but unresolvable must match nothing, never
+        # everything).
+        MATCH_NOTHING_CLAUSE = {terms: {category_ids: []}}.freeze
+
         DEFAULT_PER_PAGE = 50
 
         # OpenSearch's ceiling on `from + size` (index.max_result_window,
@@ -85,13 +93,14 @@ module Search
         def self.filter_clauses(criteria)
           clauses = []
           clauses.concat(category_clauses(criteria))
+          clauses.concat(unparseable_clauses(criteria))
 
           unless criteria.book_type.nil?
             category_id = ::Books::BookType.category_id(criteria.book_type)
             # A book_type we cannot resolve must match NOTHING, not everything: dropping
             # the clause would turn an unresolvable criterion into a match-all. An empty
             # terms array is OpenSearch's match-nothing.
-            clauses << (category_id ? {term: {category_ids: category_id}} : {terms: {category_ids: []}})
+            clauses << (category_id ? {term: {category_ids: category_id}} : MATCH_NOTHING_CLAUSE)
           end
 
           languages = criteria.included_language_ids
@@ -124,6 +133,21 @@ module Search
           ids.map { |id| {term: {category_ids: id}} }
         end
 
+        # One MATCH_NOTHING_CLAUSE per criterion that is present but did not
+        # parse (spec §6). Placed in `filter`, which ANDs with everything
+        # else, so this forces the whole query to zero hits regardless of
+        # whether the source criterion was itself an include or an exclude --
+        # an unparseable excluded_category_ids must not silently exclude
+        # nothing (a broadening no-op), which is what it would do if this
+        # clause were built as a must_not instead. The criteria that are
+        # merely absent (blank raw value) contribute nothing here, same as
+        # every other clause in this class.
+        def self.unparseable_clauses(criteria)
+          ::Books::SavedSearchCriteria::UNPARSEABLE_KEYS
+            .select { |key| criteria.unparseable?(key) }
+            .map { MATCH_NOTHING_CLAUSE }
+        end
+
         def self.year_range(criteria)
           range = {}
           gt = criteria.first_year_published_gt
@@ -152,7 +176,7 @@ module Search
           clauses
         end
 
-        private_class_method :filter_clauses, :category_clauses, :year_range, :must_not_clauses
+        private_class_method :filter_clauses, :category_clauses, :unparseable_clauses, :year_range, :must_not_clauses
       end
     end
   end

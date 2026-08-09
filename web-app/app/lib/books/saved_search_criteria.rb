@@ -16,6 +16,15 @@ module Books
       included_country_ids excluded_country_ids
     ].freeze
 
+    # The criteria `#unparseable?` applies to: the id arrays, book_type,
+    # book_length, the publication-year bounds, and max_ranked_position. NOT
+    # `ranked` (its blank state IS "All Books", not a failure -- see #ranked),
+    # NOT `genre_match_mode` (defaults to :any by design, no invalid state),
+    # NOT `hide_read` (a boolean cast has no unparseable state).
+    UNPARSEABLE_KEYS = (ID_ARRAY_KEYS + %w[
+      book_type book_length first_year_published_gt first_year_published_lt max_ranked_position
+    ]).freeze
+
     def initialize(raw)
       @raw = raw || {}
     end
@@ -69,7 +78,33 @@ module Books
       int_or_nil("max_ranked_position")
     end
 
+    # A criterion the user actually set, which does not parse -- book_type
+    # "abc", included_category_ids ["abc"]. Distinguished from an ABSENT
+    # criterion so the query can match nothing rather than silently
+    # broadening to the whole corpus (spec §6). A blank raw value ("" / nil /
+    # [] / [""]) counts as absent, not invalid; a value that parses to
+    # *something* (even a valid id that matches no record, like category
+    # 999999) is not invalid either -- only a present value that parses to
+    # nothing at all is.
+    def unparseable?(key)
+      key = key.to_s
+      unless UNPARSEABLE_KEYS.include?(key)
+        raise ArgumentError, "#unparseable? does not apply to #{key.inspect}"
+      end
+      return false if blank_raw?(@raw[key])
+
+      send(key).blank?
+    end
+
     private
+
+    # Array(value).all?(&:blank?) so a scalar ("abc"), an all-blank array
+    # (["", nil]), and true blanks (nil, "", []) are all "nothing was set" --
+    # the array case matters because ["", nil] must read the same as [] does
+    # elsewhere in this class.
+    def blank_raw?(value)
+      Array(value).all? { |entry| entry.to_s.strip.empty? }
+    end
 
     # Integer(…, exception: false) rather than to_i: "abc".to_i is 0, which is
     # a valid book_type (Fiction) and a valid book_length. Silent corruption.

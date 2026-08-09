@@ -124,6 +124,50 @@ module Books
       assert_nil criteria({}).max_ranked_position
     end
 
+    test "unparseable? is false for an absent criterion, in every blank shape" do
+      refute criteria({}).unparseable?("book_type")
+      refute criteria({"book_type" => ""}).unparseable?("book_type")
+      refute criteria({"book_type" => nil}).unparseable?("book_type")
+      refute criteria({"included_category_ids" => []}).unparseable?("included_category_ids")
+      refute criteria({"included_category_ids" => [""]}).unparseable?("included_category_ids")
+      refute criteria({"included_category_ids" => ["", nil]}).unparseable?("included_category_ids")
+    end
+
+    test "unparseable? is true for a present value that fails to parse at all" do
+      assert criteria({"book_type" => "abc"}).unparseable?("book_type")
+      assert criteria({"included_category_ids" => ["abc"]}).unparseable?("included_category_ids")
+      assert criteria({"excluded_category_ids" => ["abc"]}).unparseable?("excluded_category_ids")
+      assert criteria({"included_language_ids" => ["abc"]}).unparseable?("included_language_ids")
+      assert criteria({"excluded_language_ids" => ["abc"]}).unparseable?("excluded_language_ids")
+      assert criteria({"included_country_ids" => ["abc"]}).unparseable?("included_country_ids")
+      assert criteria({"excluded_country_ids" => ["abc"]}).unparseable?("excluded_country_ids")
+      assert criteria({"first_year_published_gt" => "abc"}).unparseable?("first_year_published_gt")
+      assert criteria({"first_year_published_lt" => "abc"}).unparseable?("first_year_published_lt")
+      assert criteria({"max_ranked_position" => "abc"}).unparseable?("max_ranked_position")
+    end
+
+    # A category id that parses fine but matches no record (999999) is not
+    # invalid -- it is a normal filter that happens to match nothing. Only a
+    # value that fails to parse AT ALL is unparseable.
+    test "unparseable? is false for a value that parses to a valid, merely non-matching id" do
+      refute criteria({"included_category_ids" => ["999999"]}).unparseable?("included_category_ids")
+    end
+
+    test "unparseable? on book_length is false when at least one entry parses to a valid enum value" do
+      refute criteria({"book_length" => [1, 99]}).unparseable?("book_length")
+    end
+
+    test "unparseable? on book_length is true only when every entry is invalid" do
+      assert criteria({"book_length" => [99]}).unparseable?("book_length")
+      assert criteria({"book_length" => ["abc"]}).unparseable?("book_length")
+    end
+
+    test "unparseable? raises for a criterion the rule does not apply to" do
+      assert_raises(ArgumentError) { criteria({}).unparseable?("ranked") }
+      assert_raises(ArgumentError) { criteria({}).unparseable?("genre_match_mode") }
+      assert_raises(ArgumentError) { criteria({}).unparseable?("hide_read") }
+    end
+
     test "reads without touching the database" do
       c = criteria({"book_length" => [1], "book_type" => "0"})
       ::Books::Book.book_lengths # warm the class so its first-touch schema load isn't counted
