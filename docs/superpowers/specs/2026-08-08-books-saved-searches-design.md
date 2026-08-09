@@ -577,9 +577,11 @@ migrated maximum so later inserts do not collide, exactly as `CountryMigrator` d
 
 **Sequencing requirement:** the migration must run before saved searches become creatable in
 production. That holds naturally — the books site is not yet serving its production domain, and
-no other domain has a `SavedSearch` subclass — but the migrator raises rather than overwriting if
-it ever finds a row already occupying a target id, so a violation fails loudly instead of
-silently reassigning someone's search.
+no other domain has a `SavedSearch` subclass. The migrator uses `find_or_initialize_by(id:)`,
+which finds and overwrites a same-type row already at that id rather than raising — that
+overwrite-on-match is exactly what makes a re-run idempotent, verified against all 4,391 rows.
+Collision safety therefore comes from sequencing, not a code guard: run before the creation UI
+ships, and no other writer can ever be occupying a target id in the first place.
 
 ### 7.2 `SavedSearchMigrator`
 
