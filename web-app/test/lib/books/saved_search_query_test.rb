@@ -136,11 +136,12 @@ module Books
     end
 
     test "defaults to the default primary ranking configuration" do
-      stub_search(ids: [])
+      RankedItem.create!(item: @book_a, ranking_configuration: @rc, rank: 42, score: 99.0)
+      stub_search(ids: [@book_a.id])
 
       result = ::Books::SavedSearchQuery.call(criteria: criteria, owner: @owner)
 
-      assert_equal 0, result.total
+      assert_equal 42, result.books.first.ranked_position.to_i
     end
 
     test "raises for a ranking configuration other than the default primary" do

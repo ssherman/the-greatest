@@ -9,14 +9,20 @@ module Books
   # here would remove rows from a page already counted -- short pages under an
   # overstated total. Every criterion lives in BookAdvanced.
   #
+  # The one exception is `hydrate`: it drops an id OpenSearch returned but
+  # Postgres no longer has, which can happen when a book is deleted without a
+  # reindex. That page comes back short of `total`. This is unavoidable given
+  # that drift, and failing loudly would be worse than a short page.
+  #
   # Returns an array rather than a relation because Postgres cannot reproduce
   # the ranked-then-unranked interleaving from an IN clause.
   class SavedSearchQuery
     Result = Struct.new(:books, :total, keyword_init: true)
 
     def self.call(criteria:, owner:, ranking_configuration: nil, page: 1, per_page: 50)
-      rc = ranking_configuration || ::Books::RankingConfiguration.default_primary
-      ensure_default_primary!(rc)
+      default = ::Books::RankingConfiguration.default_primary
+      rc = ranking_configuration || default
+      ensure_default_primary!(rc, default)
 
       response = ::Search::Books::Search::BookAdvanced.call(
         criteria,
@@ -32,8 +38,7 @@ module Books
     # other configuration would return ranks that silently do not belong to it.
     # The parameter exists so a later increment can build that path without
     # changing this signature.
-    def self.ensure_default_primary!(rc)
-      default = ::Books::RankingConfiguration.default_primary
+    def self.ensure_default_primary!(rc, default)
       return if default && rc && rc.id == default.id
 
       raise ArgumentError,
@@ -51,6 +56,7 @@ module Books
         .where(user_id: owner.id, list_type: ::Books::SavedSearch.excluded_list_type)
         .joins(:user_list_items)
         .where(user_list_items: {listable_type: "Books::Book"})
+        .distinct
         .pluck("user_list_items.listable_id")
     end
 
