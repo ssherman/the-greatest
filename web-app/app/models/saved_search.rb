@@ -29,6 +29,15 @@
 class SavedSearch < ApplicationRecord
   belongs_to :user
 
+  # Which STI subclass serves which host. Mirrors UserList::DOMAIN_SUBCLASSES.
+  # A domain absent from this map has no saved searches, and the controller
+  # 404s rather than rendering an empty page in the wrong layout.
+  DOMAIN_SUBCLASSES = {"books" => "Books::SavedSearch"}.freeze
+
+  def self.subclass_for(domain)
+    DOMAIN_SUBCLASSES[domain.to_s]&.constantize
+  end
+
   validates :criteria, presence: true
 
   scope :public_searches, -> { where(public: true) }

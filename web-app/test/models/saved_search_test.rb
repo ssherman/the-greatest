@@ -99,4 +99,15 @@ class SavedSearchTest < ActiveSupport::TestCase
       assert_raises(NotImplementedError) { SavedSearch.public_send(hook) }
     end
   end
+
+  test "subclass_for returns the STI subclass for a registered domain" do
+    assert_equal ::Books::SavedSearch, SavedSearch.subclass_for(:books)
+    assert_equal ::Books::SavedSearch, SavedSearch.subclass_for("books")
+  end
+
+  test "subclass_for returns nil for a domain with no saved searches" do
+    assert_nil SavedSearch.subclass_for(:music)
+    assert_nil SavedSearch.subclass_for(:games)
+    assert_nil SavedSearch.subclass_for(nil)
+  end
 end
