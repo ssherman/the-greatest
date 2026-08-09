@@ -1372,7 +1372,8 @@ Without this, `/searches` is reachable only by bookmark. The link ships hidden a
 **Files:**
 - Modify: `app/views/layouts/books/application.html.erb:40, 54`
 - Modify: `app/javascript/controllers/user_list_state_controller.js:53-60`
-- Modify: `app/assets/builds/*` (regenerated, committed)
+
+**Do not commit anything under `app/assets/builds/`.** `web-app/.gitignore:36-37` ignores the whole directory except `.keep` — the bundles are build artifacts produced at deploy time, not tracked files. Rebuilding locally is for *verifying* your change reaches the bundle; the rebuilt files must stay out of the commit. (An earlier draft of this plan claimed the opposite. It was wrong: the `.js` files present in a working tree are local artifacts, which is exactly what makes the mistake easy to make.)
 
 **Interfaces:**
 - Consumes: nothing. Produces: a `#navbar_my_searches` element revealed by `_updateMyListsNav`.
@@ -1403,16 +1404,18 @@ In `app/javascript/controllers/user_list_state_controller.js`, change the select
   }
 ```
 
-- [ ] **Step 3: Rebuild the bundles**
-
-The built JS is committed to the repo, so a source-only change ships nothing.
+- [ ] **Step 3: Rebuild the bundles locally to verify the change reaches them**
 
 Run: `yarn build:all`
 
-- [ ] **Step 4: Verify the built output changed**
+This is a verification step, not a deliverable. The output is gitignored and must not be committed.
 
-Run: `git diff --stat app/assets/builds/`
-Expected: `application.js`, `books.js`, `games.js`, `movies.js`, `music.js` and their maps all show as modified, and `grep -c navbar_my_searches app/assets/builds/application.js` returns at least 1.
+- [ ] **Step 4: Verify the built output picked up the selector**
+
+Run: `grep -c navbar_my_searches app/assets/builds/application.js`
+Expected: at least 1.
+
+Then confirm the artifacts are still ignored: `git status --short app/assets/builds/` must print nothing. If it lists files, they were force-added — unstage them before committing.
 
 - [ ] **Step 5: Confirm in the browser**
 
@@ -1423,9 +1426,11 @@ With the server running, load `/` on the books host signed out — no "My Search
 ```bash
 bin/rails test && bundle exec standardrb
 git add app/views/layouts/books/application.html.erb \
-  app/javascript/controllers/user_list_state_controller.js app/assets/builds/
+  app/javascript/controllers/user_list_state_controller.js
 git commit -m "Link My Searches from the books navbar"
 ```
+
+Two files, nothing else. Check `git show --stat HEAD` after committing: anything under `app/assets/builds/` means the commit is wrong.
 
 ---
 
