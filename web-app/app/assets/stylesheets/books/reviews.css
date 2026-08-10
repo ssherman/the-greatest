@@ -1,0 +1,34 @@
+/* Spoiler spans are written by Services::Reviews::BodySanitizer at save time, so
+   Tailwind never sees the class name in a source file -- these rules are hand-written
+   rather than generated. 118 migrated review bodies depend on them. */
+.review-spoiler {
+  @apply cursor-pointer rounded select-none;
+  filter: blur(0.35rem);
+  transition: filter 150ms ease-in-out;
+}
+
+.review-spoiler:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+.review-spoiler--revealed {
+  @apply cursor-auto select-auto;
+  filter: none;
+}
+
+/* Review bodies are sanitized HTML, so Tailwind's preflight has already flattened the
+   <p>, <a> and <blockquote> tags they contain. */
+.review-body p + p {
+  @apply mt-3;
+}
+
+.review-body a {
+  @apply link;
+}
+
+.review-body blockquote {
+  @apply my-3 italic;
+  border-inline-start: 3px solid var(--color-base-300);
+  padding-inline-start: 0.75rem;
+}
