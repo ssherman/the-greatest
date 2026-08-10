@@ -26,14 +26,21 @@ module Reviews
     def fill_percentage
       return 0.0 if rating.nil?
 
-      (rating.to_f.clamp(0.0, MAX_RATING.to_f) / MAX_RATING * 100).round(1)
+      (clamped_rating / MAX_RATING * 100).round(1)
     end
 
     def label
       return @label if @label
       return "Not yet rated" if rating.nil?
 
-      "#{rating.to_f.round(1)} out of #{MAX_RATING} stars"
+      "#{clamped_rating.round(1)} out of #{MAX_RATING} stars"
+    end
+
+    # Shared by fill_percentage and label so the visual fill and the accessible
+    # name never disagree -- an out-of-range rating (e.g. 9) must read as
+    # "5.0 out of 5 stars", not the raw, unclamped input.
+    def clamped_rating
+      rating.to_f.clamp(0.0, MAX_RATING.to_f)
     end
 
     def star_row(filled:)

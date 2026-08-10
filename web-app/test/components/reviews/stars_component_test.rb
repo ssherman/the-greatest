@@ -57,6 +57,13 @@ module Reviews
       assert_selector "[data-testid='stars-fill'][style*='width: 100.0%']"
     end
 
+    test "clamps the accessible label to match the clamped fill" do
+      render_inline(Reviews::StarsComponent.new(rating: 9))
+
+      assert_selector "[data-testid='stars-fill'][style*='width: 100.0%']"
+      assert_selector "[role='img'][aria-label='5.0 out of 5 stars']"
+    end
+
     test "applies a caller-supplied size class to every star" do
       render_inline(Reviews::StarsComponent.new(rating: 2, size: "size-3"))
 
