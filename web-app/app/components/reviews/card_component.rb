@@ -17,7 +17,7 @@ module Reviews
     end
 
     def render?
-      summary.present? && summary.ratings_count.positive?
+      summary&.rated?
     end
 
     private

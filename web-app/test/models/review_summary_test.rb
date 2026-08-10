@@ -53,4 +53,12 @@ class ReviewSummaryTest < ActiveSupport::TestCase
   test "has no rounded average without ratings" do
     assert_nil ReviewSummary.new(reviewable: books_books(:got)).rounded_average_rating
   end
+
+  test "rated? is true once there is at least one rating" do
+    assert review_summaries(:war_and_peace).rated?
+  end
+
+  test "rated? is false with no ratings, including a summary that survived its last review being deleted" do
+    refute ReviewSummary.new(reviewable: books_books(:got), ratings_count: 0).rated?
+  end
 end

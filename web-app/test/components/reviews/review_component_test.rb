@@ -17,7 +17,9 @@ module Reviews
     test "renders the title when there is one" do
       render_inline(Reviews::ReviewComponent.new(review: @review))
 
-      assert_text "A monumental achievement"
+      # Scoped to the testid, not a bare assert_text -- otherwise this and the "omits"
+      # test below would both stay green if the testid were deleted from the template.
+      assert_selector "[data-testid='review-title']", text: "A monumental achievement"
     end
 
     test "omits the title heading when there is none" do
@@ -50,7 +52,12 @@ module Reviews
     test "does not attribute the review to its author" do
       render_inline(Reviews::ReviewComponent.new(review: @review))
 
+      # regular_user has a display_name and a name as well as an email -- refuting only
+      # the email would leave this test green if either name were rendered instead,
+      # which is exactly the privacy decision it exists to guard.
       refute_includes rendered_content, @review.user.email
+      refute_includes rendered_content, @review.user.display_name
+      refute_includes rendered_content, @review.user.name
     end
   end
 end

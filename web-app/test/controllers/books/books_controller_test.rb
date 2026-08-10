@@ -146,6 +146,12 @@ module Books
       Review.create!(user: users(:password_user), reviewable: book, rating: 3, body: "<p>Three.</p>")
       with_more = count_queries { get "/book/#{book.slug}" }
 
+      # Without this, the comparison above passes trivially if CardComponent#render?
+      # ever returns false or the card is dropped from the view -- zero queries would
+      # equal zero queries either way. Pin that the reviews actually rendered so the
+      # query-count comparison is guarding something real.
+      assert_select "[data-testid='review']", 3
+
       assert_equal baseline, with_more,
         "rendering reviews must not issue a query per review"
     end

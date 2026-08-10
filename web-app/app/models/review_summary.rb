@@ -34,6 +34,13 @@ class ReviewSummary < ApplicationRecord
     ratings_sum.to_f / ratings_count
   end
 
+  # Whether there is a rating worth showing at all. A summary row survives the
+  # deletion of its last review, so `present?` alone is not enough -- this is the one
+  # definition the summary line, the reviews card and the histogram all gate on.
+  def rated?
+    ratings_count.to_i.positive?
+  end
+
   # The single rounding site for the average, so the summary line and the reviews card
   # can never print different numbers for the same book.
   def rounded_average_rating

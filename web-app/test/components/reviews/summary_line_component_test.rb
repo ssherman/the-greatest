@@ -21,19 +21,39 @@ module Reviews
       render_inline(Reviews::SummaryLineComponent.new(summary: review_summaries(:crime_and_punishment)))
 
       assert_text(/\b1 rating\b/)
-      assert_no_text "review"
+      # Word-boundary regex, not a plain substring: the link's sr-only "Jump to ratings
+      # and reviews" text legitimately contains "review" as a substring of "reviews",
+      # so a bare `assert_no_text "review"` would fail against that unrelated text. The
+      # \b after "review" does not match inside "reviews" (no boundary between "w" and
+      # "s"), so this still pins that the singular/plural review-count phrase itself is
+      # absent.
+      assert_no_text(/\breview\b/)
     end
 
     test "labels the stars with the average" do
       render_inline(Reviews::SummaryLineComponent.new(summary: review_summaries(:war_and_peace)))
 
-      assert_selector "[role='img'][aria-label='Average rating 4.3 out of 5']"
+      assert_selector "[role='img'][aria-label='Average rating 4.3 out of 5 stars']"
     end
 
     test "links down to the reviews card" do
       render_inline(Reviews::SummaryLineComponent.new(summary: review_summaries(:war_and_peace)))
 
       assert_selector "a[href='#ratings-reviews'][data-testid='review-summary-line']"
+    end
+
+    test "hides the duplicate visible number from the accessible name" do
+      render_inline(Reviews::SummaryLineComponent.new(summary: review_summaries(:war_and_peace)))
+
+      # The stars' aria-label already speaks "4.3" -- without aria-hidden here a screen
+      # reader would hear the average twice with nothing between the two readings.
+      assert_selector "a[data-testid='review-summary-line'] > span[aria-hidden='true']", text: "4.3"
+    end
+
+    test "gives the link a destination in its accessible name" do
+      render_inline(Reviews::SummaryLineComponent.new(summary: review_summaries(:war_and_peace)))
+
+      assert_selector "a[data-testid='review-summary-line'] > .sr-only", text: "Jump to ratings and reviews"
     end
 
     test "renders nothing without a summary" do

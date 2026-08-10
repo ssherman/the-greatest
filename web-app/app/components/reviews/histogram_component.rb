@@ -11,7 +11,7 @@ module Reviews
     # Nil for the 72,659 books nobody has rated; zero-count rows exist too, because a
     # summary survives the deletion of its last review.
     def render?
-      summary.present? && summary.ratings_count.positive?
+      summary&.rated?
     end
 
     private
