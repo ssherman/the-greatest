@@ -4,7 +4,7 @@
       out of 5 stars"), so leaving this span in the accessible name would read the
       average twice with nothing in between telling the reader why. %>
   <span class="font-semibold tabular-nums" aria-hidden="true"><%= summary.rounded_average_rating %></span>
-  <span class="text-base-content/70">
+  <span class="text-base-content/70" data-testid="review-summary-counts">
     · <%= pluralize(summary.ratings_count, "rating") %><% if summary.text_reviews_count.positive? %> · <%= pluralize(summary.text_reviews_count, "review") %><% end %>
   </span>
   <span class="sr-only">Jump to ratings and reviews</span>

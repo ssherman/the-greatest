@@ -21,13 +21,16 @@ module Reviews
       render_inline(Reviews::SummaryLineComponent.new(summary: review_summaries(:crime_and_punishment)))
 
       assert_text(/\b1 rating\b/)
-      # Word-boundary regex, not a plain substring: the link's sr-only "Jump to ratings
-      # and reviews" text legitimately contains "review" as a substring of "reviews",
-      # so a bare `assert_no_text "review"` would fail against that unrelated text. The
-      # \b after "review" does not match inside "reviews" (no boundary between "w" and
-      # "s"), so this still pins that the singular/plural review-count phrase itself is
-      # absent.
-      assert_no_text(/\breview\b/)
+      # Scoped to the counts span, not a page-wide text assertion: the link also
+      # carries an sr-only "Jump to ratings and reviews" destination string, and
+      # "reviews" there matches both a plain substring check for "review" and even a
+      # word-boundary /\breviews?\b/ (confirmed: "Jump to ratings and
+      # reviews" =~ /\breviews?\b/ is truthy) -- a page-wide assertion has no way to
+      # tell that legitimate sr-only text apart from a real review-count leak. Scoping
+      # to [data-testid='review-summary-counts'] excludes the sr-only span entirely, so
+      # the singular/plural review-count phrase can be pinned absent without a false
+      # positive against unrelated text.
+      assert_no_selector "[data-testid='review-summary-counts']", text: /\breviews?\b/
     end
 
     test "labels the stars with the average" do
