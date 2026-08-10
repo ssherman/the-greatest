@@ -50,12 +50,12 @@ export default class extends Controller {
     }
   }
 
-  // Reveals/hides the "My Lists" nav link(s). The link ships hidden in cached
-  // HTML and is revealed client-side once sign-in is detected — same approach as
-  // the Login/Logout toggle — so the navbar stays CDN-cacheable. querySelectorAll
-  // covers both the mobile and desktop menu copies.
+  // Reveals/hides the signed-in-only nav links. They ship hidden in cached
+  // HTML and are revealed client-side once sign-in is detected — same approach
+  // as the Login/Logout toggle — so the navbar stays CDN-cacheable.
+  // querySelectorAll covers both the mobile and desktop menu copies.
   _updateMyListsNav(visible) {
-    document.querySelectorAll("#navbar_my_lists").forEach((el) => {
+    document.querySelectorAll("#navbar_my_lists, #navbar_my_searches").forEach((el) => {
       el.classList.toggle("hidden", !visible)
     })
   }

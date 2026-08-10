@@ -31,7 +31,7 @@ books_public:
   user: regular_user
   name: "Great Russian Novels"
   description: "Long fiction, Russian origin"
-  criteria: { "genre_match_mode": "any", "included_language_ids": [12] }
+  criteria: { "genre_match_mode": "any", "included_language_ids": [<%= ActiveRecord::FixtureSet.identify(:russian) %>] }
   public: true
   last_executed_at: <%= 2.days.ago.to_fs(:db) %>
   result_count: 42

@@ -17,7 +17,22 @@ module Books
   # Returns an array rather than a relation because Postgres cannot reproduce
   # the ranked-then-unranked interleaving from an IN clause.
   class SavedSearchQuery
-    Result = Struct.new(:books, :total, keyword_init: true)
+    # `capped?` because track_total_hits stays at OpenSearch's default of
+    # 10,000 (spec §6): past that ceiling it stops counting and reports a lower
+    # bound. It answers that from OpenSearch's own `relation` rather than by
+    # comparing the total to the ceiling -- a search matching *exactly* 10,000
+    # reports "eq" and is an exact total, not a capped one.
+    Result = Struct.new(:books, :total, :total_relation, keyword_init: true) do
+      def capped?
+        total_relation == "gte"
+      end
+    end
+
+    # The last page OpenSearch can serve: beyond `from + size = MAX_RESULT_WINDOW`
+    # there is nothing reachable, so a request past it can 404 without a query.
+    def self.max_page(per_page:)
+      ::Search::Books::Search::BookAdvanced::MAX_RESULT_WINDOW / per_page
+    end
 
     def self.call(criteria:, owner:, ranking_configuration: nil, page: 1, per_page: 50)
       default = ::Books::RankingConfiguration.default_primary
@@ -31,7 +46,11 @@ module Books
         excluded_book_ids: criteria.hide_read ? read_book_ids(owner) : []
       )
 
-      Result.new(books: hydrate(response[:ids], rc), total: response[:total])
+      Result.new(
+        books: hydrate(response[:ids], rc),
+        total: response[:total],
+        total_relation: response[:total_relation]
+      )
     end
 
     # The index carries only the default primary's ranked_position, so any

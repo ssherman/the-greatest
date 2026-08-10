@@ -613,7 +613,7 @@ results" label, where it exists so a listing can show a number without executing
 stale by construction — rankings recalc daily and books are added — and for the migrated rows it is
 a figure from the legacy site, potentially years old. Nothing acts on it: the summary line is what
 distinguishes one saved search from another. The column keeps its migrated legacy values as
-historical data, and whether the index page displays counts at all is an increment 5 decision.
+historical data. **Increment 5 decided the index page shows no count at all** (§9).
 
 ### Counting and the paging ceiling
 
@@ -622,10 +622,15 @@ may not exceed `index.max_result_window` (also 10,000, §5.4), so result 10,001 
 counting past it buys pagination nothing.
 
 The 10,000 default would only matter for *display* — 419 of 4,356 migrated searches carry a legacy
-`result_count` above 10,000, the largest 24,189 — and since `result_count` is no longer written and
-the index page's counts are deferred to increment 5, no consumer needs an exact total today. If
-increment 5 decides to show one, `track_total_hits: true` is the switch, and it is cheap at this
-corpus size.
+`result_count` above 10,000, the largest 24,189. **Increment 5 keeps the default and renders
+"10,000+"** on the show page when the total reaches the cap; the index page shows no count at all
+(§9), so nothing needs an exact figure. `track_total_hits: true` remains the switch if that ever
+changes, and it is cheap at this corpus size.
+
+At the fixed 50 per page, the cap and the window line up exactly: 10,000 / 50 = 200 pages, and
+page 200 asks for `from: 9950, size: 50` — the boundary, not past it. So the last page is full and
+`BookAdvanced`'s size clamp never engages through the UI. That is a property of choosing 50, not a
+coincidence; legacy's 120 does not divide the window and its page 84 comes back short.
 
 ---
 
@@ -712,27 +717,63 @@ Routes are **global, not inside the books `DomainConstraint`**, mirroring `my_li
 on its own host with no new routes.
 
 ```ruby
-get    "searches",                to: "saved_searches#index",   as: :saved_searches
-get    "searches/new",            to: "saved_searches#new",     as: :new_saved_search
-post   "searches",                to: "saved_searches#create"
-get    "searches/:id",            to: "saved_searches#show",    as: :saved_search
-get    "searches/:id/page/:page", to: "saved_searches#show",    as: :saved_search_page
-get    "searches/:id/edit",       to: "saved_searches#edit",    as: :edit_saved_search
-patch  "searches/:id",            to: "saved_searches#update"
-put    "searches/:id",            to: "saved_searches#update"
-delete "searches/:id",            to: "saved_searches#destroy"
+# Read surface (increment 5)
+get "searches",                to: "saved_searches#index", as: :saved_searches
+get "searches/page/1",         to: redirect("/searches", status: 301)
+get "searches/page/:page",     to: "saved_searches#index", as: :saved_searches_page
+
+# Write surface (increment 6) -- `searches/new` is declared before
+# `searches/:id` below; see the note under this snippet for why that order
+# matters more than the `\d+` constraint alone suggests.
+get    "searches/new",      to: "saved_searches#new",  as: :new_saved_search
+post   "searches",          to: "saved_searches#create"
+get    "searches/:id/edit", to: "saved_searches#edit", as: :edit_saved_search
+patch  "searches/:id",      to: "saved_searches#update"
+put    "searches/:id",      to: "saved_searches#update"
+delete "searches/:id",      to: "saved_searches#destroy"
+
+get "searches/:id",            to: "saved_searches#show",  as: :saved_search
+get "searches/:id/page/1",     to: redirect("/searches/%{id}", status: 301)
+get "searches/:id/page/:page", to: "saved_searches#show",  as: :saved_search_page
 
 get "v/:view_type/searches",                to: redirect("/searches", status: 301)
-get "v/:view_type/searches/:id",            to: "saved_searches#show"
-get "v/:view_type/searches/:id/page/:page", to: "saved_searches#show"
+get "v/:view_type/searches/:id",            to: redirect("/searches/%{id}", status: 301)
+get "v/:view_type/searches/:id/page/:page", to: redirect("/searches/%{id}/page/%{page}", status: 301)
 ```
 
-`:id` and `:page` are constrained to `/\d+/`; `:view_type` to `/grid|table|list/`.
+`:id` and `:page` are constrained to `/\d+/`; `:view_type` to `/grid|table/`.
 
-**`/v/:view_type/searches/:id` renders for real rather than 301ing.** A redirect to
-`/searches/:id` would silently discard the view the user bookmarked. Legacy drove the view
-entirely from the URL segment and so does this — no `view_mode` column, no schema change. The
-show page's view switcher emits these same paths, as legacy's `BookListViewComponent` did.
+**The write routes belong to increment 6, not 5.** A route pointing at an action that does not
+exist yet raises `AbstractController::ActionNotFound` — a 500, not a 404 — the moment anything
+hits it. `:id` is `\d+`-constrained, so `/searches/new` falls through to a clean 404 until
+increment 6 declares it.
+
+**`searches/new` must be declared before `searches/:id`, and the snippet above now does that** --
+an earlier version of this section placed the whole write surface after the read surface, which
+put `searches/:id` before `searches/new` and silently relied on the `\d+` constraint to paper
+over it (Rails tries routes in declaration order, and `:id` failing to match `/\d+/` against
+`"new"` is what let the later `searches/new` route still get a turn). That constraint is doing
+real work today, but it is a second line of defense, not a substitute for correct ordering: the
+day `:id` is loosened to admit anything non-numeric (a slug, say), a `searches/:id` declared
+above `searches/new` would swallow `GET /searches/new` as `find("new")` and 404 or raise instead
+of rendering the form. Declare `new` first so that day is a non-event.
+
+**Index pagination was added** — `/searches/page/:page`. This section originally had no index
+paging route on the assumption that a user's search list is short. The migrated corpus says
+otherwise: the median user has 1 search, but 36 users have more than 20 and one has 146.
+
+**`/v/:view_type/searches/:id` 301s rather than rendering** *(amended for increment 5)*. This
+section originally had it render, on the grounds that redirecting "would silently discard the
+view the user bookmarked". Increment 5 dropped the view switcher (§9), so all three view types
+resolve to the same card grid and there is no view left to discard — which makes the redirect
+strictly better: one code path instead of three, and no triplicate URLs serving identical
+content. The page number is carried through rather than dropped; it is an approximation either
+way, since legacy's grid and table paged at 120 and this pages at 50.
+
+**`:view_type` is `grid|table`, not `grid|table|list`** *(amended)*. Legacy's
+`BookListViewComponent` emits exactly two prefixed paths — `/v/grid` and `/v/table`; its "List"
+button links to the bare path with the prefix stripped. `/v/list/searches/:id` was never a legacy
+URL and 404s here.
 
 **The `view_type` constraint is load-bearing**, the same reasoning the browse routes
 documented for `sort`/`filter`: unconstrained, `/v/anything/searches/1` becomes an unbounded
@@ -746,19 +787,53 @@ anonymous-reachable for public searches. `Cacheable` + `prevent_caching` through
 pages are per-user *and* write `last_executed_at` on read, so they must never reach the edge
 cache. `/searches` gets a robots.txt `Disallow`, consistent with user lists.
 
-Legacy `?page=N` links should keep resolving, since `pagy_path_request` merges
-`request.query_parameters` — to be confirmed during implementation, not assumed.
+**A host with no registered subclass 404s the whole controller.** `SavedSearch::DOMAIN_SUBCLASSES`
+maps `"books" => "Books::SavedSearch"` and nothing else, mirroring `UserList`. The check runs
+*before* `require_signed_in!`, so `/searches` on the music host 404s rather than bouncing an
+anonymous visitor to a sign-in that could not have helped.
+
+Legacy `?page=N` links keep resolving, and for a reason worth recording rather than rediscovering:
+`pagy_path_request` merges `request.query_parameters` with the route's `:page`, and Rails'
+`params[:page]` prefers the route segment identically — so the page the controller hands
+OpenSearch and the page pagy resolves cannot disagree. Pagy's nav then emits the path form, which
+canonicalises the query-string URL on the next click.
+
+**Legacy's `?limit=N` is deliberately dropped.** `SavedSearchesController#show` reads
+`params[:limit] || 50`; honouring an arbitrary limit makes the page space unbounded, and the fixed
+50 divides the 10,000-result window exactly (§5.4).
 
 ---
 
 ## 9. UI
 
-**`index`** lists the user's searches: display name, description, `summary`, result count,
-public badge, last-run time.
+**`index`** lists the user's searches: display name, description, `summary`, public badge,
+last-run time — **no result count** *(decided in increment 5)*. §6 left this open. The migrated
+`result_count` is a figure from the legacy site, stale by construction and blank for every search
+created from here on, since nothing writes it any more; and computing counts live would mean an
+OpenSearch multi-search on every index render, making the page hard-depend on OpenSearch to list
+searches the user cannot see the results of yet. The `summary` line is what distinguishes one
+saved search from another. The column keeps its migrated values as historical data that nothing
+reads.
 
-**`show`** renders the active-filters card, a view switcher emitting
-`/v/grid|table|list/searches/:id`, and results through the existing books grid components and
-`pagy_path`.
+**`show`** renders the active-filters card and results through the existing books grid components
+and `pagy_path`. **There is no view switcher** *(decided in increment 5)*. This section originally
+carried legacy's three views — bare path as compact rows at 50 per page, `/v/grid` as cards at
+120, `/v/table` as a table at 120. The new books site renders books as `Books::CardComponent`
+cards in a grid *everywhere* — the ranked index, author pages, list pages — and has no compact-row
+or table rendering of a bare book anywhere. Porting the switcher would mean two new components
+used on exactly one page, and would make saved searches the only page on the site with a view
+control. All three legacy URLs resolve to the same card grid at 50 per page instead (§8), so
+nothing bookmarked breaks.
+
+Because the active-filters card names categories, languages, and countries — which `#summary`
+omits precisely to stay lookup-free on the index page — show builds them through
+**`Books::SavedSearchFilterLabels`**, a PORO over the criteria object returning ordered
+`{label:, values:}` groups in exactly three queries, one per taxonomy, unioning the include and
+exclude ids of each. It supersedes `#summary` on the show page; `#summary` remains the index's
+one-liner.
+
+Results are **not** wrapped in a turbo frame. Pagination is ordinary full-page navigation, which
+keeps this page out of the frame-trapped-link failure class entirely (`assert_no_frame_trapped_links`).
 
 **`new` / `edit`** share one form. Legacy's 10KB partial simplifies substantially: it used
 server-backed autocomplete for all three taxonomies, but only categories need it. **201
@@ -817,9 +892,12 @@ owner, public, other, anonymous.
 
 **Controller / integration.** Search classes are stubbed, per house style
 (`AlbumAutocomplete.stubs(:call)`). Cases: owner 200, public + anonymous 200, private + other
-404, past-last-page 404, `require_signed_in!` on the write actions, `/v/grid` rendering,
-create/update/destroy. **`assert_queries_count` on `show`** — the results grid renders authors
-and covers in a loop, exactly the N+1 shape.
+404, private + anonymous 404, past-last-page 404, a host with no subclass 404, `require_signed_in!`
+on index and the write actions, `/v/grid` and `/v/table` 301ing to canonical, `?page=N` resolving
+to the same page the path form does, `last_executed_at` written on a 200 and *not* on a 404,
+create/update/destroy. **`assert_queries_count` on `show` and `index`** — the results grid renders
+authors and covers in a loop, exactly the N+1 shape, and the index renders `#summary` for every one
+of a user's searches, which must stay lookup-free.
 
 **E2E (Playwright).** One spec: create a search → apply filters → assert results → edit →
 delete.
@@ -836,7 +914,7 @@ Each is its own PR. Gate before each: `bin/rails test` + `bundle exec standardrb
 | 2 | Index fields, `primary_ranked_item`, `as_indexed_json`, reindex, post-recalc partial update | index document assertions |
 | 3 | `SavedSearch` STI + policy + `SavedSearchMigrator` | e2e exact counts (4,391 / 50 / 1,152) |
 | 4 | `SavedSearchCriteria`, `Books::BookType`, `BookAdvanced`, `SavedSearchQuery`, `#summary` refactor | unit tests; nothing user-visible; read-only |
-| 5 | Routes, controller, index + show, view switcher, legacy URLs | hand-typed legacy URLs |
+| 5 | Read routes, controller, index + show, legacy URL 301s (no view switcher — §9) | hand-typed legacy URLs |
 | 6 | new/edit form, Stimulus picker, create/update/destroy | Playwright |
 | 7 | E2E + docs | CI |
 

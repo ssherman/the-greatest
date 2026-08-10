@@ -1,0 +1,11 @@
+<% if books.any? %>
+  <div class="<%= Books::CardComponent::GRID_CONTAINER_CLASS %>">
+    <% books.each_with_index do |book, index| %>
+      <%= render Books::CardComponent.new(book: book, rank: book.ranked_position, index: index) %>
+    <% end %>
+  </div>
+<% else %>
+  <div class="text-center py-16" data-testid="empty-saved-search-results">
+    <p class="text-base-content/70">No books match this search.</p>
+  </div>
+<% end %>

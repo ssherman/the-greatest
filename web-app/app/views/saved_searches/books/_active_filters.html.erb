@@ -1,0 +1,24 @@
+<% if groups.any? %>
+  <div class="card bg-base-100 shadow-sm" data-testid="active-filters">
+    <div class="card-body">
+      <h2 class="card-title text-lg">Active filters</h2>
+      <dl class="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+        <% groups.each do |group| %>
+          <div>
+            <dt class="text-xs font-semibold uppercase tracking-wide text-base-content/50">
+              <%= group.label %>
+            </dt>
+            <dd class="mt-1 flex flex-wrap gap-1">
+              <% group.values.each do |value| %>
+                <span class="badge badge-outline"><%= value %></span>
+              <% end %>
+            </dd>
+            <% if group.note.present? %>
+              <p class="mt-1 text-xs text-base-content/60"><%= group.note %></p>
+            <% end %>
+          </div>
+        <% end %>
+      </dl>
+    </div>
+  </div>
+<% end %>

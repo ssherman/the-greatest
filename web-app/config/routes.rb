@@ -295,6 +295,40 @@ Rails.application.routes.draw do
   get "user_lists/:id", to: "my_lists#show", as: :user_list
   get "user_lists/:id/page/:page", to: "my_lists#show", as: :user_list_page, constraints: {page: /\d+/}
 
+  # Saved searches -- global, never cached, per-domain layout resolved from
+  # Current.domain in the controller. index is owner-only; show serves the
+  # owner or any viewer when the search is public (404s otherwise via
+  # SavedSearch.visible_to). The write actions are increment 6: a route
+  # pointing at an action that does not exist yet is a 500, not a 404, and
+  # `searches/new` falls through to a clean 404 while :id stays \d+-constrained.
+  get "searches", to: "saved_searches#index", as: :saved_searches
+  get "searches/page/1", to: redirect("/searches", status: 301)
+  get "searches/page/:page", to: "saved_searches#index", as: :saved_searches_page,
+    constraints: {page: /\d+/}
+
+  # show serves the owner or any viewer when the search is public, including
+  # anonymous, and 404s everything else via SavedSearch.visible_to.
+  get "searches/:id", to: "saved_searches#show", as: :saved_search,
+    constraints: {id: /\d+/}
+  get "searches/:id/page/1", to: redirect("/searches/%{id}", status: 301),
+    constraints: {id: /\d+/}
+  get "searches/:id/page/:page", to: "saved_searches#show", as: :saved_search_page,
+    constraints: {id: /\d+/, page: /\d+/}
+
+  # Legacy `scope "(/v/:view_type)" { resources :searches }`. These 301 rather
+  # than rendering: increment 5 dropped the view switcher, so grid, table and
+  # the bare path all resolve to the same card grid and a redirect costs the
+  # reader nothing while saving two duplicate URLs and two code paths. The page
+  # number carries through -- an approximation either way, since legacy's grid
+  # and table paged at 120 and this pages at 50.
+  get "v/:view_type/searches", to: redirect("/searches", status: 301),
+    constraints: {view_type: /grid|table/}
+  get "v/:view_type/searches/:id", to: redirect("/searches/%{id}", status: 301),
+    constraints: {view_type: /grid|table/, id: /\d+/}
+  get "v/:view_type/searches/:id/page/:page",
+    to: redirect("/searches/%{id}/page/%{page}", status: 301),
+    constraints: {view_type: /grid|table/, id: /\d+/, page: /\d+/}
+
   # Domain-specific roots using Default controllers
   constraints DomainConstraint.new(Rails.application.config.domains[:music]) do
     get "rankings", to: "music/default#rankings", as: :music_rankings
