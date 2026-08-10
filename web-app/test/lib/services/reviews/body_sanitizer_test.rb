@@ -190,6 +190,62 @@ module Services
         body = "a" * 30_000
         assert_equal 30_000, BodySanitizer.call(body).length
       end
+
+      test "render keeps the spoiler span the write path produced" do
+        stored = Services::Reviews::BodySanitizer.call("<p>He <spoiler>dies</spoiler>.</p>")
+
+        html = Services::Reviews::BodySanitizer.render(stored)
+
+        assert_includes html, %(<span class="review-spoiler">dies</span>)
+      end
+
+      test "re-running call on a stored body would destroy the spoiler -- do not do it" do
+        stored = Services::Reviews::BodySanitizer.call("<p>He <spoiler>dies</spoiler>.</p>")
+
+        round_tripped = Services::Reviews::BodySanitizer.call(stored)
+
+        refute_includes round_tripped, "review-spoiler"
+        assert_includes round_tripped, "dies"
+      end
+
+      test "render strips a script even though the write path should have already" do
+        html = Services::Reviews::BodySanitizer.render("<p>Hi</p><script>alert(1)</script>")
+
+        refute_includes html, "script"
+        assert_includes html, "Hi"
+      end
+
+      test "render strips an event handler smuggled onto an allowed tag" do
+        html = Services::Reviews::BodySanitizer.render(%(<p onclick="alert(1)">Hi</p>))
+
+        refute_includes html, "onclick"
+      end
+
+      test "render marks untrusted links nofollow, ugc, noopener and opens them away from the page" do
+        html = Services::Reviews::BodySanitizer.render(%(<p><a href="https://example.com">link</a></p>))
+
+        assert_includes html, %(rel="nofollow ugc noopener")
+        assert_includes html, %(target="_blank")
+      end
+
+      test "render replaces any rel the body already carried" do
+        html = Services::Reviews::BodySanitizer.render(%(<a href="https://example.com" rel="dofollow">link</a>))
+
+        refute_includes html, "dofollow"
+        assert_includes html, %(rel="nofollow ugc noopener")
+      end
+
+      test "render returns an html_safe buffer" do
+        html = Services::Reviews::BodySanitizer.render("<p>Hi</p>")
+
+        assert_predicate html, :html_safe?
+      end
+
+      test "render returns nil for a nil or blank body" do
+        assert_nil Services::Reviews::BodySanitizer.render(nil)
+        assert_nil Services::Reviews::BodySanitizer.render("")
+        assert_nil Services::Reviews::BodySanitizer.render("   ")
+      end
     end
   end
 end
