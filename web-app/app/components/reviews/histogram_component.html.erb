@@ -1,0 +1,15 @@
+<ul class="space-y-1.5" data-testid="rating-histogram">
+  <% rows.each do |row| %>
+    <li class="flex items-center gap-3 text-sm" data-testid="histogram-row" data-rating="<%= row[:star] %>">
+      <span class="flex w-14 shrink-0 items-center gap-1 tabular-nums text-base-content/70">
+        <%= row[:star] %>
+        <%= helpers.icon "star", library: "lucide", class: "size-3 shrink-0 fill-current text-warning" %>
+        <span class="sr-only"><%= (row[:star] == 1) ? "star" : "stars" %></span>
+      </span>
+      <span class="h-2 flex-1 overflow-hidden rounded-full bg-base-300">
+        <span class="block h-full bg-primary" style="width: <%= row[:percentage] %>%" data-testid="histogram-bar"></span>
+      </span>
+      <span class="w-12 shrink-0 text-end tabular-nums text-base-content/70" data-testid="histogram-count"><%= row[:count] %></span>
+    </li>
+  <% end %>
+</ul>
