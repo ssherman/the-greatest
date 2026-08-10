@@ -8,14 +8,19 @@ module Reviews
       render_inline(Reviews::SummaryLineComponent.new(summary: review_summaries(:war_and_peace)))
 
       assert_text "4.3"
-      assert_text "3 ratings"
-      assert_text "2 reviews"
+      # Word-boundary regexes, not plain substrings: "3 ratings" is itself a substring
+      # of a corrupted "13 ratings", and "1 rating" (see below) is a substring of the
+      # wrongly-pluralized "1 ratings" -- a bare `assert_text "1 rating"` would pass
+      # against that regression. The trailing \b fails to match between "g" and "s" in
+      # "ratings", which is exactly what pins the singular form.
+      assert_text(/\b3 ratings\b/)
+      assert_text(/\b2 reviews\b/)
     end
 
     test "omits the review count when nothing is written" do
       render_inline(Reviews::SummaryLineComponent.new(summary: review_summaries(:crime_and_punishment)))
 
-      assert_text "1 rating"
+      assert_text(/\b1 rating\b/)
       assert_no_text "review"
     end
 
