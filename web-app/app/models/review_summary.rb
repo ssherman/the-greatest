@@ -34,6 +34,12 @@ class ReviewSummary < ApplicationRecord
     ratings_sum.to_f / ratings_count
   end
 
+  # The single rounding site for the average, so the summary line and the reviews card
+  # can never print different numbers for the same book.
+  def rounded_average_rating
+    average_rating&.round(1)
+  end
+
   def rating_counts
     {
       1 => rating_1_count,
