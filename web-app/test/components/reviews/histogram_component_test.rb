@@ -34,11 +34,12 @@ module Reviews
     test "labels each row for a screen reader" do
       render_inline(Reviews::HistogramComponent.new(summary: @summary))
 
-      # normalize_ws: the row's raw text is "1\n  ...\n  star\n  ...\n  0" -- the icon and
-      # count markup between the number and the sr-only word are whitespace/newlines in the
-      # Nokogiri-backed test render (Capybara.default_normalize_ws is false in this repo).
-      assert_selector "[data-testid='histogram-row'][data-rating='1']", text: "1 star", normalize_ws: true
-      assert_selector "[data-testid='histogram-row'][data-rating='5']", text: "5 stars", normalize_ws: true
+      # Scoped to the .sr-only span with exact_text: true so this pins singular vs.
+      # plural for real -- a substring match against the row (e.g. text: "1 star")
+      # would still pass a broken ternary that always emitted "stars", because
+      # "1 stars 0".include?("1 star") is true.
+      assert_selector "[data-testid='histogram-row'][data-rating='1'] .sr-only", text: "star", exact_text: true
+      assert_selector "[data-testid='histogram-row'][data-rating='5'] .sr-only", text: "stars", exact_text: true
     end
 
     test "renders nothing without a summary" do

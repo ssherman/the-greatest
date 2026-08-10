@@ -3,7 +3,7 @@
     <li class="flex items-center gap-3 text-sm" data-testid="histogram-row" data-rating="<%= row[:star] %>">
       <span class="flex w-14 shrink-0 items-center gap-1 tabular-nums text-base-content/70">
         <%= row[:star] %>
-        <%= helpers.icon "star", library: "lucide", class: "size-3 shrink-0 fill-current text-warning" %>
+        <%= helpers.icon "star", library: "lucide", class: "size-3 shrink-0 fill-current text-warning", aria_hidden: "true" %>
         <span class="sr-only"><%= (row[:star] == 1) ? "star" : "stars" %></span>
       </span>
       <span class="h-2 flex-1 overflow-hidden rounded-full bg-base-300">
