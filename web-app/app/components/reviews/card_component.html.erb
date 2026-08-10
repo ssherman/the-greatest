@@ -1,0 +1,26 @@
+<div class="card bg-base-100 shadow-md scroll-mt-8"
+     id="<%= ANCHOR %>"
+     data-controller="reviews--spoiler"
+     data-action="click->reviews--spoiler#reveal keydown->reviews--spoiler#revealOnKey">
+  <div class="card-body">
+    <h2 class="card-title text-xl">Ratings &amp; Reviews</h2>
+    <p class="text-sm text-base-content/70">
+      <span class="font-semibold tabular-nums"><%= summary.rounded_average_rating %></span>
+      out of 5 · <%= pluralize(summary.ratings_count, "rating") %>
+    </p>
+
+    <div class="mt-4">
+      <%= render Reviews::HistogramComponent.new(summary: summary) %>
+    </div>
+
+    <% if reviews.any? %>
+      <div class="mt-6 space-y-4">
+        <% reviews.each do |review| %>
+          <%= render Reviews::ReviewComponent.new(review: review) %>
+        <% end %>
+      </div>
+    <% else %>
+      <p class="mt-6 text-base-content/70">No written reviews yet.</p>
+    <% end %>
+  </div>
+</div>
