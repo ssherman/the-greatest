@@ -1,0 +1,14 @@
+<article class="border-t border-base-300 pt-4 first:border-t-0 first:pt-0" data-testid="review">
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <%= render Reviews::StarsComponent.new(rating: review.rating, label: stars_label) %>
+    <time datetime="<%= review.created_at.iso8601 %>" class="text-sm text-base-content/60"><%= written_at %></time>
+  </div>
+
+  <% if review.title.present? %>
+    <h3 class="mt-2 text-base font-semibold" data-testid="review-title"><%= review.title %></h3>
+  <% end %>
+
+  <% if body_html %>
+    <div class="review-body mt-2 max-w-[68ch] leading-relaxed text-base-content/80" data-testid="review-body"><%= body_html %></div>
+  <% end %>
+</article>
