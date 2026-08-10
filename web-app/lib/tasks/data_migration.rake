@@ -155,9 +155,36 @@ namespace :data_migration do
   desc "Run the books/authors description backfill in order (both legacy migrators, then the safety net)"
   task descriptions: [:book_descriptions, :author_descriptions, :description_safety_net]
 
+  desc "Migrate legacy reviews into reviews (preserves ids; then rebuilds review_summaries)"
+  task reviews: :environment do
+    # Untargeted ON CONFLICT DO NOTHING makes every conflict silent, so print the
+    # arithmetic: on a cold load, inserted MUST equal legacy_distinct_pairs. A shortfall
+    # means rows were skipped -- most likely id collisions with reviews real users wrote
+    # before this ran.
+    expected = LegacyBooks::Record.connection.select_value(
+      "select count(*) from (select distinct user_id, book_id from reviews) t"
+    ).to_i
+    pre_existing = Review.count
+
+    result = Services::BooksMigration::ReviewMigrator.call
+    pp result
+    abort "reviews migration failed: #{result[:error]}" unless result[:success]
+
+    pp({
+      legacy_distinct_pairs: expected,
+      inserted: result[:data][:count],
+      pre_existing: pre_existing,
+      cold_load_matches: pre_existing.zero? && result[:data][:count] == expected
+    })
+
+    # insert_all bypassed every after_commit, so the summaries are stale by definition.
+    pp({review_summaries: Services::Reviews::SummaryRecalculator.backfill_all!})
+  end
+
   desc "Run all Phase-1 migrators in dependency order"
   task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers,
     :categories, :category_items, :book_attributes, :book_type_categories, :countries,
     :book_countries, :external_links, :lists, :list_items, :ranking_configurations,
-    :ranked_lists, :penalties, :list_penalties, :user_lists, :user_list_items, :saved_searches]
+    :ranked_lists, :penalties, :list_penalties, :user_lists, :user_list_items,
+    :saved_searches, :reviews]
 end
