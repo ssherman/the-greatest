@@ -48,14 +48,24 @@ module Services
       # The render-time allowlist. It is NOT the write-time one, and the two must stay
       # in this file together so they cannot drift apart in review.
       #
-      # `span` and `class` are absent from the write list on purpose -- that is what
-      # stops a user supplying their own review-spoiler class. Stored bodies, however,
-      # already contain the spans this class produced, so the render pass has to let
-      # them through. Re-running .call on stored output instead would strip all 118
+      # `span` is absent from the write list on purpose -- that is what stops a user
+      # supplying their own review-spoiler class. Stored bodies, however, already
+      # contain the spans this class produced, so the render pass has to let them
+      # through. Re-running .call on stored output instead would strip all 118
       # production spoiler wrappers and print their contents in the clear.
       RENDER_TAGS = (ALLOWED_TAGS + %w[span]).freeze
-      RENDER_ATTRIBUTES = (ALLOWED_ATTRIBUTES + %w[class]).freeze
-      LINK_REL = "nofollow ugc noopener"
+
+      # NOT ALLOWED_ATTRIBUTES + class -- the two lists are no longer related by
+      # addition. `title` is dropped: it's decorative, and on a spoiler span it would
+      # leak the spoiler text through the browser's native tooltip, the exact leak
+      # .call strips attributes to prevent. `class` is admitted only so a stored
+      # spoiler span's class can survive the sanitize pass, which applies `attributes:`
+      # globally rather than per-tag -- scrub_classes then narrows that blanket
+      # allowance down to exactly SPOILER_CLASS on a span and removes it everywhere
+      # else, so no other class value (including ones matching compiled utility
+      # classes like `.fixed`/`.inset-0`/`.z-50`) reaches the page.
+      RENDER_ATTRIBUTES = %w[href class].freeze
+      LINK_REL = "nofollow ugc noopener".freeze
 
       def self.call(body)
         new(body).call
@@ -97,6 +107,7 @@ module Services
         ).to_s
 
         fragment = Nokogiri::HTML5.fragment(sanitized)
+        scrub_classes(fragment)
         harden_links(fragment)
         # Safe to mark: everything in the buffer just came out of the sanitizer above.
         fragment.to_html.html_safe # rubocop:disable Rails/OutputSafety
@@ -120,6 +131,21 @@ module Services
 
       def blank_text?(fragment)
         fragment.text.match?(BLANK_TEXT)
+      end
+
+      # RENDER_ATTRIBUTES admits `class` on every tag, not just span, because the
+      # sanitizer applies `attributes:` globally rather than per-tag. This narrows that
+      # blanket allowance to exactly SPOILER_CLASS on a span and drops class everywhere
+      # else, so an attacker-supplied class (e.g. one matching a compiled utility class
+      # like `.fixed`/`.inset-0`/`.z-50`) never reaches the page.
+      def scrub_classes(fragment)
+        fragment.css("[class]").each do |node|
+          if node.name == "span" && node["class"].to_s.split.include?(SPOILER_CLASS)
+            node["class"] = SPOILER_CLASS
+          else
+            node.remove_attribute("class")
+          end
+        end
       end
 
       # Review bodies are untrusted, and this domain has ~156k indexed URLs. Applied at

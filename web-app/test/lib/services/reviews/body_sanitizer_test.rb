@@ -199,6 +199,8 @@ module Services
         assert_includes html, %(<span class="review-spoiler">dies</span>)
       end
 
+      # Companion to "render keeps the spoiler span the write path produced" above --
+      # pins what would happen to that same stored body if .call were used instead.
       test "re-running call on a stored body would destroy the spoiler -- do not do it" do
         stored = Services::Reviews::BodySanitizer.call("<p>He <spoiler>dies</spoiler>.</p>")
 
@@ -245,6 +247,44 @@ module Services
         assert_nil Services::Reviews::BodySanitizer.render(nil)
         assert_nil Services::Reviews::BodySanitizer.render("")
         assert_nil Services::Reviews::BodySanitizer.render("   ")
+      end
+
+      test "render strips a javascript href" do
+        html = Services::Reviews::BodySanitizer.render(%(<a href="javascript:alert(1)">bad</a>))
+
+        refute_includes html, "javascript:"
+      end
+
+      test "render strips a non-spoiler class entirely" do
+        html = Services::Reviews::BodySanitizer.render(%(<p class="fixed inset-0 z-50">x</p>))
+
+        refute_includes html, "fixed"
+        refute_includes html, "class"
+      end
+
+      test "render narrows a spoiler span's class to exactly review-spoiler" do
+        html = Services::Reviews::BodySanitizer.render(
+          %(<span class="review-spoiler fixed inset-0">dies</span>)
+        )
+
+        assert_includes html, %(<span class="review-spoiler">dies</span>)
+        refute_includes html, "fixed"
+        refute_includes html, "inset-0"
+      end
+
+      test "render strips a title attribute, including from a spoiler span" do
+        html = Services::Reviews::BodySanitizer.render(
+          %(<a href="https://example.com" title="secret">link</a>)
+        )
+        refute_includes html, "title"
+        refute_includes html, "secret"
+
+        spoiler_html = Services::Reviews::BodySanitizer.render(
+          %(<span class="review-spoiler" title="the butler did it">dies</span>)
+        )
+        refute_includes spoiler_html, "title"
+        refute_includes spoiler_html, "the butler did it"
+        assert_includes spoiler_html, %(<span class="review-spoiler">dies</span>)
       end
     end
   end
