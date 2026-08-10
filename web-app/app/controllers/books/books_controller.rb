@@ -15,7 +15,7 @@ class Books::BooksController < ApplicationController
     # primary keys, so 137 books with purely numeric slugs would otherwise be
     # ambiguous with a book id.
     @book = Books::Book
-      .includes(:categories, :descriptions, {book_authors: :author})
+      .includes(:categories, :descriptions, :review_summary, {book_authors: :author})
       .includes(primary_image: {file_attachment: {blob: {variant_records: {image_attachment: :blob}}}})
       .find_by!(slug: params[:slug])
 
@@ -34,5 +34,14 @@ class Books::BooksController < ApplicationController
       .where(lists: {status: :active})
       .includes(:list)
       .order(Arel.sql("list_items.position ASC NULLS LAST"), "lists.name")
+
+    # Preloaded above, so this is not a query. Nil for the 72,659 books nobody has
+    # rated -- both review components render nothing in that case.
+    @review_summary = @book.review_summary
+
+    # Written reviews only, newest first, unpaginated: the most-reviewed book in the
+    # corpus has 37. Served by index_reviews_on_reviewable_with_body. No association is
+    # preloaded because a review row renders no author.
+    @reviews = @book.reviews.with_body.recent
   end
 end
