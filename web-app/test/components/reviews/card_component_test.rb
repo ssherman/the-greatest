@@ -36,6 +36,22 @@ module Reviews
       assert_selector "[data-testid='review']", count: 2
     end
 
+    test "loads an unloaded reviews relation exactly once" do
+      # @reviews is `book.reviews.with_body.recent`, still unloaded here. A naive
+      # `reviews.any?` followed by `reviews.each` would issue a SELECT ... LIMIT for
+      # the emptiness check and then a second, full SELECT for the loop -- two queries
+      # against the same relation. Pinned at 1 so that regresses loudly.
+      assert_queries_count(1) do
+        render_inline(Reviews::CardComponent.new(summary: @summary, reviews: @reviews))
+      end
+    end
+
+    test "the anchor target is focusable so keyboard/screen-reader arrival is announced" do
+      render_inline(Reviews::CardComponent.new(summary: @summary, reviews: @reviews))
+
+      assert_selector "#ratings-reviews[tabindex='-1']"
+    end
+
     test "renders the reviews in the order it was given them" do
       # An explicit array, not the scope: both fixture reviews share a created_at, so
       # asserting that a sorted list is sorted would pass without proving anything.

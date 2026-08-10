@@ -23,5 +23,12 @@ module Reviews
     private
 
     attr_reader :summary, :reviews
+
+    # Materialized once so the emptiness check and the loop share a single query
+    # instead of `reviews.any?` (a SELECT ... LIMIT) followed by `reviews.each` (the
+    # full SELECT) against an unloaded relation.
+    def reviews_list
+      @reviews_list ||= reviews.to_a
+    end
   end
 end

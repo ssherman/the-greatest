@@ -1,5 +1,6 @@
 <div class="card bg-base-100 shadow-md scroll-mt-8"
      id="<%= ANCHOR %>"
+     tabindex="-1"
      data-controller="reviews--spoiler"
      data-action="click->reviews--spoiler#reveal keydown->reviews--spoiler#revealOnKey">
   <div class="card-body">
@@ -13,9 +14,9 @@
       <%= render Reviews::HistogramComponent.new(summary: summary) %>
     </div>
 
-    <% if reviews.any? %>
+    <% if reviews_list.any? %>
       <div class="mt-6 space-y-4">
-        <% reviews.each do |review| %>
+        <% reviews_list.each do |review| %>
           <%= render Reviews::ReviewComponent.new(review: review) %>
         <% end %>
       </div>
