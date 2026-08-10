@@ -45,6 +45,7 @@
           <% end %>
         </p>
       <% end %>
+      <%= render Reviews::SummaryLineComponent.new(summary: @review_summary) %>
       <div class="mt-4">
         <%= render UserLists::CardWidgetComponent.new(listable: @book) %>
       </div>
@@ -100,5 +101,7 @@
         </div>
       </div>
     <% end %>
+
+    <%= render Reviews::CardComponent.new(summary: @review_summary, reviews: @reviews) %>
   </div>
 </div>

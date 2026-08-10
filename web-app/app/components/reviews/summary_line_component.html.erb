@@ -1,0 +1,11 @@
+<a href="#<%= ANCHOR %>" class="mt-3 inline-flex flex-wrap items-center gap-2 link link-hover" data-testid="review-summary-line">
+  <%= render Reviews::StarsComponent.new(rating: summary.average_rating, label: stars_label) %>
+  <%# aria-hidden: stars_label above already speaks this number ("Average rating 4.0
+      out of 5 stars"), so leaving this span in the accessible name would read the
+      average twice with nothing in between telling the reader why. %>
+  <span class="font-semibold tabular-nums" aria-hidden="true"><%= summary.rounded_average_rating %></span>
+  <span class="text-base-content/70" data-testid="review-summary-counts">
+    · <%= pluralize(summary.ratings_count, "rating") %><% if summary.text_reviews_count.positive? %> · <%= pluralize(summary.text_reviews_count, "review") %><% end %>
+  </span>
+  <span class="sr-only">Jump to ratings and reviews</span>
+</a>

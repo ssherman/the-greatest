@@ -37,4 +37,28 @@ class ReviewSummaryTest < ActiveSupport::TestCase
   test "a book reaches its summary through the association" do
     assert_equal review_summaries(:war_and_peace), books_books(:war_and_peace).review_summary
   end
+
+  test "rounds the average to one decimal place" do
+    summary = review_summaries(:war_and_peace) # 3 ratings, sum 13
+
+    assert_in_delta 4.3, summary.rounded_average_rating, 0.001
+  end
+
+  test "keeps a whole average at one decimal place when printed" do
+    summary = review_summaries(:crime_and_punishment) # 1 rating, sum 3
+
+    assert_equal "3.0", summary.rounded_average_rating.to_s
+  end
+
+  test "has no rounded average without ratings" do
+    assert_nil ReviewSummary.new(reviewable: books_books(:got)).rounded_average_rating
+  end
+
+  test "rated? is true once there is at least one rating" do
+    assert review_summaries(:war_and_peace).rated?
+  end
+
+  test "rated? is false with no ratings, including a summary that survived its last review being deleted" do
+    refute ReviewSummary.new(reviewable: books_books(:got), ratings_count: 0).rated?
+  end
 end

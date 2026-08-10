@@ -1,0 +1,83 @@
+/* Spoiler spans are written by Services::Reviews::BodySanitizer at save time, so
+   Tailwind never sees the class name in a source file -- these rules are hand-written
+   rather than generated. 118 migrated review bodies depend on them.
+
+   This is a courtesy blur, not a content-security boundary. The spoiler text sits in
+   the DOM unblurred the whole time -- only paint is affected -- so browser
+   find-in-page reads the text directly and will find and scroll to a word inside an
+   unrevealed spoiler regardless of the blur. That gap is known and accepted: the only
+   real fix is withholding the text from the DOM until reveal, which needs
+   server-rendered or JS-gated state, the wrong trade for a page that has to render its
+   content without JavaScript. */
+.review-spoiler {
+  @apply cursor-pointer rounded select-none;
+  filter: blur(0.35rem);
+  transition: filter 150ms ease-in-out;
+}
+
+.review-spoiler:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+.review-spoiler--revealed {
+  @apply cursor-auto select-auto;
+  filter: none;
+}
+
+/* filter is widely supported, but it's a paint effect, not a content property -- some
+   forced-colors / high-contrast configurations strip it along with other cosmetic
+   effects, which would otherwise degrade silently to fully legible spoiler text with
+   no protection at all. Covering the glyphs with a solid, same-color block degrades to
+   "blocked out" instead of "wide open." Scoped to :not(--revealed) rather than adding
+   an override under .review-spoiler--revealed, since the base .review-spoiler class is
+   never removed on reveal (see the Stimulus controller) and would otherwise keep
+   matching here too. */
+@supports not (filter: blur(1px)) {
+  .review-spoiler:not(.review-spoiler--revealed) {
+    color: transparent;
+    background-color: currentColor;
+  }
+}
+
+@media (forced-colors: active) {
+  .review-spoiler:not(.review-spoiler--revealed) {
+    forced-color-adjust: none;
+    color: transparent;
+    background-color: CanvasText;
+  }
+}
+
+/* Goodreads-import artifacts and bare URLs (Rinku autolinking was deliberately not
+   ported, so a URL is plain text) put whitespace-free tokens up to 408 characters into
+   review bodies -- 1,317 reviews across 1,272 books have one at least 60 characters
+   long. daisyUI's .card has no overflow: hidden, and both the grid column and the flex
+   .card-body default to min-width: auto, so an unbroken token's min-content width
+   propagates outward and the whole page scrolls horizontally; on the grid-cols-1
+   mobile layout that drags the title, cover and rank off-screen too.
+
+   `overflow-wrap: anywhere` (NOT `break-word` / Tailwind's `break-words`) is load-
+   bearing here: break-word only wraps when there is no other way to avoid overflow,
+   which does not shrink min-content width, so the column still expands to fit the
+   token. `anywhere` counts the break opportunity toward min-content itself. Review
+   titles reach 100 characters (four exceed 60), so the title gets the same rule. */
+.review-body,
+.review-title {
+  overflow-wrap: anywhere;
+}
+
+/* Review bodies are sanitized HTML, so Tailwind's preflight has already flattened the
+   <p>, <a> and <blockquote> tags they contain. */
+.review-body p + p {
+  @apply mt-3;
+}
+
+.review-body a {
+  @apply link;
+}
+
+.review-body blockquote {
+  @apply my-3 italic;
+  border-inline-start: 3px solid var(--color-base-300);
+  padding-inline-start: 0.75rem;
+}

@@ -22,6 +22,7 @@ Only icons actually referenced in the codebase live here. Currently:
 | `headphones` | `Music::Albums::UserList.list_type_icons[:listened]` |
 | `heart` | `*::UserList.list_type_icons[:favorites]` |
 | `plus` | `UserLists::CardWidgetComponent` button |
+| `star` | `Reviews::StarsComponent` and `Reviews::HistogramComponent` |
 | `trophy` | `Games::UserList.list_type_icons[:beaten]` |
 
 ## Adding a new icon
