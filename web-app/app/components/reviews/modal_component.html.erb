@@ -1,0 +1,58 @@
+<dialog id="review_modal" class="modal" data-controller="reviews--modal">
+  <div class="modal-box">
+    <h3 class="text-lg font-bold" data-reviews--modal-target="heading">Rate this book</h3>
+
+    <form data-reviews--modal-target="form"
+          data-action="turbo:submit-end->reviews--modal#submitted"
+          method="post"
+          accept-charset="UTF-8">
+      <input type="hidden" name="authenticity_token" value="" data-reviews--modal-target="token">
+      <input type="hidden" name="_method" value="post" data-reviews--modal-target="methodField">
+      <input type="hidden" name="review[reviewable_type]" value="" data-reviews--modal-target="reviewableType">
+      <input type="hidden" name="review[reviewable_id]" value="" data-reviews--modal-target="reviewableId">
+      <input type="hidden" name="review[rating]" value="" data-reviews--modal-target="rating">
+
+      <fieldset class="mt-4">
+        <legend class="text-sm font-semibold">Your rating</legend>
+        <div class="mt-2 flex gap-1" role="group" aria-label="Rating out of 5 stars">
+          <% ratings.each do |value| %>
+            <button type="button"
+                    class="btn btn-ghost btn-sm px-1"
+                    data-testid="review-star-button"
+                    data-rating="<%= value %>"
+                    aria-pressed="false"
+                    aria-label="<%= pluralize(value, "star") %>"
+                    data-action="click->reviews--modal#setRating"
+                    data-reviews--modal-target="star">
+              <%= helpers.icon "star", library: "lucide", class: "size-6 shrink-0", aria_hidden: "true" %>
+            </button>
+          <% end %>
+        </div>
+      </fieldset>
+
+      <label class="form-control mt-4 block">
+        <span class="label-text">Title <span class="text-base-content/60">(optional)</span></span>
+        <input type="text" name="review[title]" value="" maxlength="255"
+               class="input input-bordered w-full" data-reviews--modal-target="title">
+      </label>
+
+      <label class="form-control mt-4 block">
+        <span class="label-text">Review <span class="text-base-content/60">(optional)</span></span>
+        <textarea name="review[body]" rows="6" maxlength="25000"
+                  class="textarea textarea-bordered w-full" data-reviews--modal-target="body"></textarea>
+      </label>
+
+      <p class="mt-2 text-sm text-error hidden" data-reviews--modal-target="error" role="alert"></p>
+
+      <div class="modal-action">
+        <button type="button" class="btn btn-error btn-outline hidden"
+                data-testid="review-remove"
+                data-reviews--modal-target="remove"
+                data-action="click->reviews--modal#remove">Remove</button>
+        <button type="button" class="btn btn-ghost" data-action="click->reviews--modal#close">Cancel</button>
+        <button type="submit" class="btn btn-primary" data-reviews--modal-target="save">Save</button>
+      </div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
