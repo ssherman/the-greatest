@@ -45,6 +45,16 @@ module Services
       SPOILER_CLASS = "review-spoiler".freeze
       BLANK_TEXT = /\A[[:space:]\u200B-\u200D\uFEFF]*\z/
 
+      # Guards .call's newline-to-paragraph conversion (see #paragraphize). Matches an
+      # opening p/br/blockquote/pre tag anywhere in the raw body -- good enough to
+      # detect "this body already has real paragraph structure" without a full parse,
+      # and every migrated row has one because ReviewMigrator ran legacy
+      # WYSIWYG-authored HTML through this same .call. `pre` is included even though it
+      # is not in ALLOWED_TAGS (the sanitizer strips it same as always) purely so
+      # paragraphize does not blank-line-split the preformatted text inside it and
+      # splice <p> tags across the boundary before the sanitizer ever sees it.
+      BLOCK_MARKUP = %r{<(?:p|br|blockquote|pre)[\s/>]}i
+
       # The render-time allowlist. It is NOT the write-time one, and the two must stay
       # in this file together so they cannot drift apart in review.
       #
@@ -80,6 +90,25 @@ module Services
         new(body).render
       end
 
+      # Inverse of .call, for ReviewStateController#serialize -- both what .call does to
+      # a written <spoiler> (see convert_spoilers) and what it does to blank-line-
+      # separated plain text (see #paragraphize), so the edit textarea shows what the
+      # author actually typed rather than markup .call generated from it. Getting only
+      # the spoiler half right is not enough: a stored "<p>Line one.</p><p>Line
+      # two.</p>" handed back with its <p> tags intact would show the author literal
+      # tags they never typed, and re-saving it verbatim would hit the BLOCK_MARKUP
+      # guard on the next .call and skip paragraph conversion entirely, so a newly
+      # typed blank line would survive as a bare "\n\n" and render as one run-on line.
+      #
+      # The paragraph half only reverses when doing so is PROVABLY safe -- see
+      # #restore_paragraphs for how "safe" is decided and why a migrated body's real
+      # <p>/<br> structure (never written by paragraphize) is not mistaken for it.
+      def self.for_editing(body)
+        return nil if body.blank?
+
+        new(body).for_editing
+      end
+
       def initialize(body)
         @body = body
       end
@@ -88,7 +117,7 @@ module Services
         return nil if @body.blank?
 
         sanitized = sanitizer.sanitize(
-          @body.to_s,
+          paragraphize(@body.to_s),
           tags: ALLOWED_TAGS + [SPOILER_TAG],
           attributes: ALLOWED_ATTRIBUTES
         ).to_s
@@ -113,10 +142,51 @@ module Services
         fragment.to_html.html_safe # rubocop:disable Rails/OutputSafety
       end
 
+      # HTML-parsed, not string substitution, for the same reason .call itself is (see
+      # this file's header comment): a marker robust enough to survive naive replacement
+      # also survives inside a quoted attribute value on some other tag, and splicing
+      # raw markup into a quoted string re-parses into something a browser reads
+      # completely differently. That reasoning applies just as much running in reverse.
+      #
+      # Plain string, not html_safe -- this is going into a JSON API response and then a
+      # <textarea>'s plain-text value, never rendered as HTML.
+      def for_editing
+        return nil if @body.blank?
+
+        fragment = Nokogiri::HTML5.fragment(@body.to_s)
+        restore_spoiler_tags(fragment)
+        restore_paragraphs(fragment) || fragment.to_html
+      end
+
       private
 
       def sanitizer
         @sanitizer ||= Rails::HTML5::SafeListSanitizer.new
+      end
+
+      # A plain-text body arrives with nothing but newlines -- a browser renders a bare
+      # "\n" as nothing at all, so without this a multi-paragraph review collapses into
+      # one run-on line (.review-body styles `p + p` but has no `white-space` rule to
+      # fall back on). Guarded on BLOCK_MARKUP so a body that already has real paragraph
+      # structure -- every migrated row does -- passes through untouched instead of
+      # having its existing tags' internal newlines reinterpreted. Also a no-op with no
+      # newline at all: a single line with nothing to convert is left exactly as every
+      # other test in this file already pins it (a bare <spoiler> tag, a bare <a>, ...),
+      # not wrapped in a <p> it never asked for.
+      #
+      # A blank-line-separated run becomes a <p>; a lone newline inside a run becomes a
+      # <br>, mirroring what the textarea's own newlines mean to whoever typed them.
+      def paragraphize(text)
+        return text if text.match?(BLOCK_MARKUP)
+        return text unless text.match?(/\r|\n/)
+
+        normalized = text.gsub(/\r\n?/, "\n")
+        normalized.split(/\n[ \t]*\n+/).filter_map do |block|
+          stripped = block.strip
+          next if stripped.empty?
+
+          "<p>#{stripped.gsub("\n", "<br>")}</p>"
+        end.join
       end
 
       def convert_spoilers(html)
@@ -127,6 +197,60 @@ module Services
           node["class"] = SPOILER_CLASS
         end
         fragment
+      end
+
+      # for_editing's half of convert_spoilers, run in place on an already-parsed
+      # fragment instead of returning a new one -- restore_paragraphs (below) needs to
+      # see these nodes as <spoiler> too, since that is what the author typed and what
+      # paragraph_source must put back into the reversed text.
+      def restore_spoiler_tags(fragment)
+        fragment.css("span.#{SPOILER_CLASS}").each do |node|
+          node.name = SPOILER_TAG
+          node.attributes.keys.each { |name| node.remove_attribute(name) }
+        end
+      end
+
+      # Inverse of #paragraphize, but only ever offered when reconverting the result
+      # reproduces this exact stored body -- see the long comment on #for_editing for
+      # why getting this wrong is the whole risk here.
+      #
+      # There is no marker on the stored HTML saying "paragraphize wrote this p tag";
+      # <p>Line one.</p><p>Line two.</p> looks identical whether .call generated it from
+      # "Line one.\n\nLine two." or a migrated row's legacy HTML happened to already be
+      # exactly that. Telling them apart by INSPECTING the markup would mean duplicating
+      # every detail of what paragraphize can and cannot produce, and staying right
+      # forever as that method changes. Telling them apart by SIMULATING is simpler and
+      # self-updating: build the candidate blank-line text this fragment would have come
+      # from, run it back through the real .call, and compare. paragraphize is a pure
+      # function of its input string, so anything it actually wrote reverses and
+      # reconverts losslessly; anything it did NOT write (BLOCK_MARKUP guarded it off,
+      # or a human hand-typed real tags) generally does not, because .call never emits a
+      # bare text/br node outside a <p> and never removes a raw newline that was sitting
+      # inside a tag it left untouched. Nil on any mismatch, so paragraphize itself is
+      # never called against arbitrary parsed structure that might not actually be
+      # blank-line-separated text -- only the one candidate .call already agrees with.
+      #
+      # Guarded to the exact shape paragraphize can produce -- fragment's top level is
+      # one or more <p> elements and nothing else -- so structure that plainly isn't
+      # paragraphize's output (bare top-level text, a bare <br>, a <blockquote>) is
+      # rejected up front without needing the round trip to prove it.
+      def restore_paragraphs(fragment)
+        top_level = fragment.children
+        return nil if top_level.empty?
+        return nil unless top_level.all? { |node| node.element? && node.name == "p" }
+
+        candidate = top_level.map { |p| paragraph_source(p) }.join("\n\n")
+        return nil if self.class.call(candidate) != @body.to_s
+
+        candidate
+      end
+
+      # A <p>'s content, with each <br> child turned back into the newline it came from
+      # and every other child (text, or an inline tag like the restored <spoiler>)
+      # serialized as-is -- paragraphize never looked inside a block, it only split and
+      # wrapped, so nothing here needs to either.
+      def paragraph_source(p)
+        p.children.map { |child| (child.name == "br") ? "\n" : child.to_html }.join
       end
 
       def blank_text?(fragment)

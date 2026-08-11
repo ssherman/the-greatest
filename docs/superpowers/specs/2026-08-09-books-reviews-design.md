@@ -298,9 +298,59 @@ them to render a single book page would be pure waste.
 Clicking the widget opens a DaisyUI modal: five star buttons, optional title, optional body. Save
 posts to `ReviewsController#create` / `#update`, which respond with a Turbo Stream swapping the
 widget and the summary line. **A rating with no text is valid** — that is 87% of all rows.
+**Removing a review lives inside that modal**, shown only when one already exists, rather than as a
+separate affordance on the page.
+
+The modal holds everything — stars, title and body together — rather than saving a rating on a
+single star click. One place where writing happens is simpler to build and to test, and the extra
+clicks for a bare rating were judged an acceptable trade.
 
 `ReviewPolicy` mirrors the legacy one: any signed-in user may create; `edit`/`update`/`destroy`
 require ownership; `Scope` resolves to `where(user:)`.
+
+#### Keeping the cached page honest
+
+Increment 3's summary line and reviews card are **server-rendered into a page Cloudflare holds for
+24 hours**, so a newly written review would otherwise be invisible — to everyone, including its own
+author on reload — until that copy expired. Two shapes were weighed:
+
+A **lazy, never-cached Turbo Frame** holding the whole reviews card would be self-correcting, and
+would delete the state endpoint, the client-side hydration and the CSRF-token problem outright,
+because uncached HTML can be server-rendered with the viewer's own rating already in it. It was
+**rejected on traffic**: the book page is the site's highest-volume page type across ~156k indexed
+URLs and is crawler-heavy, and a frame that is never cached puts an origin request on every single
+view. It would also drop review text out of the indexed HTML.
+
+The decision is therefore to **purge the single book page on write**:
+
+- `Cloudflare::PurgeService` gains `purge_urls(domain, urls)`. Purge-by-URL is available on the
+  **Pro** plan — Cloudflare moved every purge method to every plan — with limits (5 requests/second,
+  1,500 URLs/second) orders of magnitude above this feature's ~13 writes/day.
+- A Sidekiq job resolves a reviewable to its canonical URL and purges just that one.
+
+**Only the canonical `/book/:slug` is purged.** Book pages are also reachable at
+`/rc/:ranking_configuration_id/book/:slug`; those copies stay stale until they expire. They are a
+minority of traffic and carry no crawler weight, and purging them would mean either enumerating
+every ranking configuration or relying on purge-by-prefix.
+
+> **The purge is invoked explicitly from each write path — never from a model callback.** An
+> `after_commit` that makes an external HTTP call is a side effect invisible to its callers, and it
+> would fire on paths that have no business purging: a rake task, a future importer, a bulk
+> backfill, or any test that happens to create a review. `ReviewsController`'s create, update and
+> destroy each enqueue the job themselves, through one small service so the rule lives in a single
+> place. The cost of being explicit is that a new write path must remember to call it — increment
+> 5's admin destroy is the next one that will need to — which is the right trade against a hidden
+> callback firing on every write in the system.
+
+> **Landmine — `Cloudflare::Configuration#initialize` raises when `CLOUDFLARE_CACHE_PURGE_TOKEN` is
+> blank**, which is every development machine and CI. Unguarded, this turns *every* review write in
+> development into an exception. The job must check for configuration and no-op quietly without it.
+
+**Saving shows a toast**: the review is saved and will appear on the page shortly, emitted through
+the `toast:show` event `Toast::RegionComponent` already listens for. That sentence is what makes an
+asynchronous purge safe — a slow or failed purge then reads as the behaviour the user was promised
+rather than as a bug, and the worst case degrades to the old 24-hour wait rather than to data
+appearing lost.
 
 ### `/my/reviews`
 
@@ -362,7 +412,7 @@ Each is independently shippable.
 3. **Book page read surface** — summary line, histogram, full (unpaginated) text-review list,
    `BodySanitizer.render`, spoiler CSS and reveal controller.
 4. **Write flow** — cacheable widget, `ReviewStateController`, modal, `ReviewsController`,
-   `ReviewPolicy`.
+   `ReviewPolicy`, single-URL cache purge on write, and the "appears shortly" toast.
 5. **`/my/reviews`** — profile strip, filters, sorts, pagination, `/reviews` 301s, admin index.
 
 Increment 2 adds 128,846 rows to the development database. Snapshot first:
