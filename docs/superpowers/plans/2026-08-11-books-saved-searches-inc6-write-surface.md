@@ -61,58 +61,18 @@
 | `app/views/saved_searches/show.html.erb` | Edit + Delete for the owner |
 | `app/javascript/controllers/index.js` | Register `saved-search-picker` |
 | `test/controllers/saved_searches_controller_test.rb` | Write-action tests |
-| `test/fixtures/books/books.yml` + image fixture | A book with an attached image (Task 1) |
 
 ---
 
-## Task 1: Give one fixture book an image, and deal with the fallout first
+## Task 1: DROPPED before execution — its premise was false
 
-No fixture book has an attached image today, so every books grid's `assert_queries_count` guard is blind to the nested `primary_image -> file_attachment -> blob` preload — the guards pass whether or not the preload exists. Increment 6 adds a page that renders that grid behind a form, so fix the blind spot before building on it. This is deliberately first and on its own commit: like the category fixtures in the shared-category-search plan, it will shift counts in unrelated tests, and that churn should not be tangled with feature work.
+This task was going to add an image fixture to a books book, on the grounds that no fixture book has one and every books grid's `assert_queries_count` guard is therefore blind to the `primary_image -> file_attachment -> blob` preload.
 
-**Files:**
-- Modify: `test/fixtures/books/books.yml`, and add an `ActiveStorage` blob + attachment fixture
-- Test: whatever the suite turns up
+The first half is true and the second is not. `test/controllers/books/lists_controller_test.rb:160` builds its covered books' images programmatically — `Image.new(parent:, primary: true)` plus `image.file.attach(io: StringIO.new(...))` — then calls `ActiveRecord::Base.connection.clear_query_cache` and pins `assert_queries_count(12)`. `books/authors_controller_test.rb`, `books/authors/ranked_items_controller_test.rb` and `lib/books/ranked_books_query_test.rb` do the same. The guards exercise the preload; they simply do not use fixtures to do it.
 
-**Interfaces:**
-- Produces: a books fixture whose `primary_image` resolves, for later tasks' query-count guards.
-- Consumes: nothing.
+Adding a fixture would therefore buy nothing and cost real risk: an `images.yml` books row shifts counts in unrelated tests, and an ActiveStorage blob fixture references a storage key with no bytes behind it.
 
-- [ ] **Step 1: Find how images attach to a book**
-
-Read the model and an existing grid guard before writing any fixture:
-
-```bash
-grep -rn "primary_image" app/models/books/book.rb app/models/concerns/ | head
-grep -rn "assert_queries_count" test/controllers/books/ | head
-```
-
-`primary_image` is an association, not a column. Establish whether it is an `Image` model with an ActiveStorage attachment or a direct `has_one_attached` before choosing the fixture shape — the two need completely different YAML.
-
-- [ ] **Step 2: Add the fixtures**
-
-Add an ActiveStorage blob fixture and the attachment row linking it to one existing books fixture. Follow whatever shape Step 1 established; do not invent a schema. If `test/fixtures/active_storage/` does not exist, create it.
-
-- [ ] **Step 3: Run the full suite and fix what moved**
-
-```bash
-bin/rails test
-```
-
-Fix each failure by correcting the expected number. Do NOT weaken an exact `assert_queries_count` into `assert_operator :<=` — the whole point of this task is that those numbers start meaning something. **If a failure is not a count moving, stop and report it** rather than guessing.
-
-- [ ] **Step 4: Prove the guard is no longer blind**
-
-Pick one books grid controller test with an `assert_queries_count`. Temporarily delete the `primary_image` preload from that controller's query, run the test, and confirm it now FAILS. Restore the preload.
-
-This step is the deliverable. Without it you have added a fixture and know nothing about whether it did its job.
-
-- [ ] **Step 5: Lint and commit**
-
-```bash
-bin/rails test && bundle exec standardrb
-git add test/fixtures/
-git commit -m "Give a fixture book an image so grid query guards stop passing vacuously"
-```
+**Task numbering is unchanged** so cross-references and `task-brief` extraction stay stable. Execution starts at Task 2.
 
 ---
 
@@ -1433,6 +1393,6 @@ Do NOT push and do NOT open a PR.
 
 **Deliberately not covered.** A "save this search" button on the browse page (stated in Global Constraints). Increment 7's own scope: broader E2E for the index and show pages, plus `docs/features/saved_searches.md` updates.
 
-**Known risks, stated rather than hidden.** Task 1 adds an image fixture that will move query counts in unrelated tests, and says to correct the numbers rather than weaken the assertions, and to stop if a failure is not a count moving. Task 4 loads `::Books::Country` in a domain-generic controller and says what to do when games arrives instead of pretending the seam is clean. Task 5's chip rendering handles a stored id whose category no longer resolves, which would otherwise drop silently on the next save.
+**Known risks, stated rather than hidden.** Task 1 was dropped before execution once its premise turned out to be false (see the task). Task 4 loads `::Books::Country` in a domain-generic controller and says what to do when games arrives instead of pretending the seam is clean. Task 5's chip rendering handles a stored id whose category no longer resolves, which would otherwise drop silently on the next save.
 
 **Type consistency.** `Books::SavedSearchCriteriaParams.call(hash) -> Hash` is defined in Task 2 and consumed in Task 3 via the `criteria_params_class` hook added in Task 3 Step 5. `category_class` is added in Task 5 Step 1 and consumed in Task 5 Step 4. The Stimulus identifier is `saved-search-picker` in the controller file, the registration, the `data-controller`, every `data-action`, and both Playwright specs.
