@@ -5,12 +5,25 @@ const BOOK = '/book/nightmare-abbey';
 
 async function removeExistingReview(page) {
   await page.getByTestId('review-widget-label').click();
+
+  // widget_controller#open() is async (it may still be awaiting its /review_state
+  // fetch), so the dialog does not necessarily exist the instant the click resolves.
+  // Wait for it to actually be open -- an auto-retrying expect, not a one-shot
+  // isVisible() -- before reading the Remove button's state. modal_controller's
+  // _onOpen() decides removeTarget's hidden class before it calls showModal(), so by
+  // the time the dialog is visible that decision is already settled. This also fails
+  // loudly (throws) rather than silently doing nothing if the dialog never opens at
+  // all, which matters here: a cleanup hook for irreplaceable dev data must not give
+  // up quietly.
+  await expect(page.locator('#review_modal')).toBeVisible();
+
   const remove = page.getByTestId('review-remove');
   if (await remove.isVisible()) {
     await remove.click();
     await expect(page.locator('#review_modal')).not.toBeVisible();
   } else {
     await page.locator('#review_modal').press('Escape');
+    await expect(page.locator('#review_modal')).not.toBeVisible();
   }
 }
 
