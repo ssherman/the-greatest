@@ -29,6 +29,16 @@ class ReviewsControllerTest < ActionDispatch::IntegrationTest
     {review: {reviewable_type: "Books::Book", reviewable_id: @book.id, rating: 4}.merge(overrides)}
   end
 
+  # NOT Review.last: fixture ids are hashed from their labels (see
+  # ActiveRecord::FixtureSet.identify) and can land above the sequence's next
+  # value, so `.last` intermittently returned a fixture instead of the row
+  # this test just created -- reproduced directly with a handful of
+  # `bin/rails test` reruns of the full suite. @user has no other review on
+  # @book (got has none per reviews.yml/books.yml), so this is unambiguous.
+  def created_review
+    @user.reviews.find_by!(reviewable_type: "Books::Book", reviewable_id: @book.id)
+  end
+
   test "creates a rating with no text" do
     sign_in_as(@user, stub_auth: true)
 
@@ -37,8 +47,8 @@ class ReviewsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :success
-    assert_equal 4, Review.last.rating
-    assert_nil Review.last.body
+    assert_equal 4, created_review.rating
+    assert_nil created_review.body
   end
 
   test "creates a review with a body" do
@@ -47,7 +57,7 @@ class ReviewsControllerTest < ActionDispatch::IntegrationTest
     post reviews_path, params: valid_params(body: "<p>Superb.</p>"), as: :turbo_stream
 
     assert_response :success
-    assert_equal "<p>Superb.</p>", Review.last.body
+    assert_equal "<p>Superb.</p>", created_review.body
   end
 
   # test_helper.rb sets Sidekiq::Testing.inline! globally, which runs the job
@@ -101,6 +111,23 @@ class ReviewsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 2, @own_review.reload.rating
   end
 
+  # Mutation testing showed update's purge_cached_page call was untested --
+  # deleting all three call sites left only the create and destroy purge tests
+  # red. Editing a rating is the most common write on this surface, so a
+  # silently dropped purge here leaves the page stale at the edge for 24 hours.
+  test "enqueues a cache purge when a review is updated" do
+    sign_in_as(@user, stub_auth: true)
+
+    Sidekiq::Testing.fake! do
+      Reviews::PurgeCachedPageJob.jobs.clear
+
+      patch review_path(@own_review), params: {review: {rating: 2}}, as: :turbo_stream
+
+      assert_equal 1, Reviews::PurgeCachedPageJob.jobs.size
+      assert_equal ["Books::Book", @own_review.reviewable_id], Reviews::PurgeCachedPageJob.jobs.first["args"]
+    end
+  end
+
   test "403s when updating someone else's review" do
     sign_in_as(users(:password_user), stub_auth: true)
 
@@ -122,6 +149,7 @@ class ReviewsControllerTest < ActionDispatch::IntegrationTest
 
   test "enqueues a cache purge when a review is destroyed" do
     sign_in_as(@user, stub_auth: true)
+    reviewable_id = @own_review.reviewable_id
 
     Sidekiq::Testing.fake! do
       Reviews::PurgeCachedPageJob.jobs.clear
@@ -129,6 +157,7 @@ class ReviewsControllerTest < ActionDispatch::IntegrationTest
       delete review_path(@own_review), as: :turbo_stream
 
       assert_equal 1, Reviews::PurgeCachedPageJob.jobs.size
+      assert_equal ["Books::Book", reviewable_id], Reviews::PurgeCachedPageJob.jobs.first["args"]
     end
   end
 

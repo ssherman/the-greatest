@@ -31,6 +31,23 @@ class ReviewsController < ApplicationController
     render turbo_stream: [], status: :not_found
   end
 
+  # Rails' own unhandled response to this exception renders public/422.html --
+  # again an HTML body on a non-2xx status. Reachable in production even
+  # though the form always submits *some* token: widget_controller#open
+  # depends on a freshly-fetched token from /review_state, and if that fetch
+  # errors or returns early, the modal (see reviews/modal_controller.js#_onOpen)
+  # sets the field to "" rather than leaving the cached page's stale <meta>
+  # value in place. That is the "stale/rejected CSRF token" case
+  # modal_controller.js#submitted's own comment names. allow_forgery_protection
+  # is false in the test environment (config/environments/test.rb), so no
+  # request spec can raise this here -- verified instead by reading that
+  # rescue_from takes precedence over Rails' default exceptions_app handling
+  # for any subclass of StandardError raised inside the action, which
+  # InvalidAuthenticityToken is.
+  rescue_from ActionController::InvalidAuthenticityToken do
+    render turbo_stream: [], status: :unprocessable_entity
+  end
+
   def create
     reviewable = find_reviewable(params.dig(:review, :reviewable_type), params.dig(:review, :reviewable_id))
     return render turbo_stream: [], status: :bad_request if reviewable.nil?
