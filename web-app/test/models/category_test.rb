@@ -166,4 +166,19 @@ class CategoryTest < ActiveSupport::TestCase
     @music_rock.slug = nil
     assert @music_rock.should_generate_new_friendly_id?
   end
+
+  test "name_with_type labels the category's type" do
+    assert_equal "Fiction (Genre)", categories(:books_fiction_genre).name_with_type
+    assert_equal "Politics (Subject)", categories(:books_politics_subject).name_with_type
+    assert_equal "France (Location)", categories(:books_france_location).name_with_type
+  end
+
+  # The column is `default: 0` but nullable (db/schema.rb:224), so this is
+  # reachable; the admin JSON has always guarded it.
+  test "name_with_type says Unknown when the category has no type" do
+    category = categories(:books_fiction_genre)
+    category.update_column(:category_type, nil)
+
+    assert_equal "Fiction (Unknown)", category.reload.name_with_type
+  end
 end

@@ -317,6 +317,19 @@ module Admin
         @category.reload
         assert @category.deleted
       end
+
+      # Admin::CategoriesBaseController#search is shared, so the books test of
+      # domain isolation does not cover this controller's own model_class.
+      # Asserting the music hit as well keeps the empty-result half honest.
+      test "search returns only this domain's categories" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        get search_admin_categories_path(q: "rock"), as: :json
+        assert_includes response.parsed_body.map { |r| r["text"] }, "Rock (Genre)"
+
+        get search_admin_categories_path(q: "fict"), as: :json
+        assert_equal [], response.parsed_body
+      end
     end
   end
 end

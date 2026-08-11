@@ -5,6 +5,15 @@ const openModal = async (page) => {
   await expect(page.locator('dialog#books_filter_modal')).toBeVisible();
 };
 
+// Every category result carries a type tag, so the tag alone no longer says
+// anything about a row. A tag reading Subject or Setting does: FilterFacetsQuery
+// .genres only ever returns genre-type rows, so such a row cannot be in the
+// browse facet list, which is the structural guarantee two tests below need.
+const nonGenreResult = (page) =>
+  page
+    .locator('turbo-frame#books_filter_results_category label')
+    .filter({ has: page.locator('.badge', { hasText: /^(Subject|Setting)$/ }) });
+
 test.describe('Books filters', () => {
   test('no pane is fetched until its axis is opened', async ({ page }) => {
     const paneRequests: string[] = [];
@@ -67,14 +76,12 @@ test.describe('Books filters', () => {
     await openModal(page);
     await page.getByRole('button', { name: /Category/ }).click();
 
-    // A badge (rendered only for category_type subject/location, never genre)
-    // is the structural signal that a row can't be in the browse facet list --
-    // FilterFacetsQuery.genres only ever returns genre-type rows -- so this
-    // guarantees the hoist path (no twin to adopt into) rather than relying on
-    // search-result order.
+    // A Subject/Setting row can't be in the browse facet list (see
+    // nonGenreResult), so this guarantees the hoist path (no twin to adopt
+    // into) rather than relying on search-result order.
     const search = page.getByPlaceholder('Search genres, subjects, settings');
     await search.fill('novels');
-    const hit = page.locator("turbo-frame#books_filter_results_category label:has(.badge)").first().locator('input');
+    const hit = nonGenreResult(page).first().locator('input');
     await hit.waitFor();
     const slug = await hit.getAttribute('value');
     await hit.check();
@@ -158,6 +165,30 @@ test.describe('Books filters', () => {
     await expect(page.locator("turbo-frame#books_filter_results_category input")).toHaveCount(0);
   });
 
+  test('every category search result is tagged with its type, genres included', async ({ page }) => {
+    await page.goto('/');
+    await openModal(page);
+    await page.getByRole('button', { name: /Category/ }).click();
+
+    const search = page.getByPlaceholder('Search genres, subjects, settings');
+    const rows = page.locator('turbo-frame#books_filter_results_category label');
+    const tagged = (text: RegExp) => rows.filter({ has: page.locator('.badge', { hasText: text }) });
+
+    // Genre rows carried no tag at all before this change, so a search spanning
+    // all three types gave the user no way to tell a genre from a setting.
+    await search.fill('novels');
+    await expect(rows.first()).toBeVisible();
+    await expect(tagged(/^Genre$/).first()).toBeVisible();
+
+    // A location is tagged "Setting" -- friendlier than the enum's own word for
+    // a place a book is set in.
+    await search.fill('new york');
+    await expect(tagged(/^Setting$/).first()).toBeVisible();
+
+    // Untagged rows would mean a type is slipping through unlabelled.
+    await expect(rows).toHaveCount(await tagged(/./).count());
+  });
+
   test('search results stack one per row rather than flowing into columns', async ({ page }) => {
     await page.goto('/');
     await openModal(page);
@@ -198,14 +229,12 @@ test.describe('Books filters', () => {
     await openModal(page);
     await page.getByRole('button', { name: /Category/ }).click();
 
-    // A badge (rendered only for category_type subject/location, never genre)
-    // is the structural signal that a row can't be in the browse facet list --
-    // FilterFacetsQuery.genres only ever returns genre-type rows. Picking a
-    // badged row, rather than relying on search-result order, guarantees this
-    // test exercises the move path regardless of how facet ranking shifts.
+    // Picking a Subject/Setting row (see nonGenreResult), rather than relying
+    // on search-result order, guarantees this test exercises the move path
+    // regardless of how facet ranking shifts.
     const search = page.getByPlaceholder('Search genres, subjects, settings');
     await search.fill('novels');
-    const hit = page.locator("turbo-frame#books_filter_results_category label:has(.badge)").first().locator('input');
+    const hit = nonGenreResult(page).first().locator('input');
     await hit.waitFor();
     const slug = await hit.getAttribute('value');
 

@@ -52,16 +52,30 @@ module Books
       assert_no_text "1,234"
     end
 
-    test "badges a subject and a location but never a genre" do
+    # Every type is badged, genres included. Search spans all three types and a
+    # row that says nothing is indistinguishable from the ones that do.
+    test "badges every category type, calling a location a Setting" do
       render_rows(axis: :category, rows: [
         categories(:books_politics_subject),
         categories(:books_france_location),
         categories(:books_novels_genre)
       ])
 
-      assert_selector "label[data-option-value='politics']", text: "Subject"
-      assert_selector "label[data-option-value='france']", text: "Setting"
-      assert_no_selector "label[data-option-value='novels'] .badge"
+      assert_selector "label[data-option-value='politics'] .badge", exact_text: "Subject"
+      assert_selector "label[data-option-value='france'] .badge", exact_text: "Setting"
+      assert_selector "label[data-option-value='novels'] .badge", exact_text: "Genre"
+    end
+
+    # category_type is nullable (db/schema.rb), so an untyped row must render a
+    # row rather than a badge reading "Unknown".
+    test "never badges a category with no type" do
+      untyped = categories(:books_novels_genre)
+      untyped.update_column(:category_type, nil)
+
+      render_rows(axis: :category, rows: [untyped.reload])
+
+      assert_selector "input[value='novels']"
+      assert_no_selector ".badge"
     end
 
     test "never badges a country" do
