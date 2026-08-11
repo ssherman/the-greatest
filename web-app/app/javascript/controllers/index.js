@@ -31,8 +31,14 @@ application.register("modal-form", ModalFormController)
 import ReviewFilterController from "./review_filter_controller"
 application.register("review-filter", ReviewFilterController)
 
+import Reviews__ModalController from "./reviews/modal_controller"
+application.register("reviews--modal", Reviews__ModalController)
+
 import Reviews__SpoilerController from "./reviews/spoiler_controller"
 application.register("reviews--spoiler", Reviews__SpoilerController)
+
+import Reviews__WidgetController from "./reviews/widget_controller"
+application.register("reviews--widget", Reviews__WidgetController)
 
 import SharedModalController from "./shared_modal_controller"
 application.register("shared-modal", SharedModalController)
