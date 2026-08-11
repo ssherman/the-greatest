@@ -223,6 +223,20 @@ module Services
         assert_equal body, BodySanitizer.call(body)
       end
 
+      # Regression: pre was missing from BLOCK_MARKUP, so paragraphize blank-line-split
+      # the raw string right through a <pre> block's own boundaries -- "<pre>line
+      # one\n\nline two</pre>" became "<p><pre>line one</p><p>line two</pre></p>", a
+      # <pre> opened in one paragraph and closed in another. pre is not in
+      # ALLOWED_TAGS, so the sanitizer always unwraps it (keeps the text, drops the
+      # tag) -- the guard's job is only to stop paragraphize reinterpreting the blank
+      # line inside it before that unwrapping ever happens.
+      test ".call does not splice paragraph tags across a pre tag's boundary" do
+        result = BodySanitizer.call("<pre>line one\n\nline two</pre>")
+
+        assert_equal "line one\n\nline two", result
+        refute_includes result, "<p"
+      end
+
       test "render keeps the spoiler span the write path produced" do
         stored = Services::Reviews::BodySanitizer.call("<p>He <spoiler>dies</spoiler>.</p>")
 
@@ -338,6 +352,80 @@ module Services
 
         assert_equal stored, resaved
         assert_includes resaved, "review-spoiler"
+      end
+
+      # Regression: for_editing only reversed spoiler spans, not paragraphize's <p>
+      # tags, so reopening the dialog on a multi-paragraph review showed the literal
+      # <p> markup instead of the blank lines the author typed.
+      test "for_editing reverses call's paragraph conversion back to a blank line" do
+        stored = Services::Reviews::BodySanitizer.call("Line one.\n\nLine two.")
+
+        assert_equal "Line one.\n\nLine two.", Services::Reviews::BodySanitizer.for_editing(stored)
+      end
+
+      test "for_editing reverses call's single-newline conversion back to a line break" do
+        stored = Services::Reviews::BodySanitizer.call("Line one.\nLine two.")
+
+        assert_equal "Line one.\nLine two.", Services::Reviews::BodySanitizer.for_editing(stored)
+      end
+
+      # The property the fix is for: a plain-text body must survive an arbitrary
+      # number of edit cycles unchanged, not just one round trip. Checked twice, not
+      # once, so a fix that merely reverses call's output without also being a stable
+      # fixed point (e.g. one that drifts a <br> into something paragraphize itself
+      # would not have written) cannot pass by accident.
+      test "a plain-text body with mixed single and blank lines survives repeated edit cycles unchanged" do
+        raw = "Para one line A.\nPara one line B.\n\nPara two."
+
+        stored = Services::Reviews::BodySanitizer.call(raw)
+        edited = Services::Reviews::BodySanitizer.for_editing(stored)
+        assert_equal raw, edited
+
+        restored = Services::Reviews::BodySanitizer.call(edited)
+        assert_equal stored, restored
+
+        edited_again = Services::Reviews::BodySanitizer.for_editing(restored)
+        restored_again = Services::Reviews::BodySanitizer.call(edited_again)
+        assert_equal stored, restored_again
+      end
+
+      # Companion safety check for the guard test above ("does not paragraphize a body
+      # that already contains a p tag"): that body's own internal "\n" (not a real
+      # <br>) must not be reinterpreted as a paragraph break on the way back out
+      # either, or an author who reopens a migrated review and saves without changing
+      # anything would silently rewrite it -- BodySanitizer.for_editing must not
+      # mistake pass-through markup for markup it generated itself. This is exactly
+      # why for_editing verifies its candidate against .call rather than reversing
+      # any body shaped like a sequence of <p> tags: reversing this one would produce
+      # "First.\n\nSecond.\nStill second.", and re-running .call on that text (no
+      # BLOCK_MARKUP left to guard it) would turn the "\n" into a real <br>, changing
+      # the stored body on a no-op edit.
+      test "for_editing does not mangle a migrated body whose own p tag was never paragraphize's" do
+        body = "<p>First.</p><p>Second.\nStill second.</p>"
+        stored = Services::Reviews::BodySanitizer.call(body)
+
+        assert_equal body, stored # pins the existing guard behaviour this test relies on
+        assert_equal body, Services::Reviews::BodySanitizer.for_editing(stored)
+      end
+
+      # Same guard, the other pinned shape: real markup with a bare <br> and bare text
+      # at the top level, which paragraphize itself never produces.
+      test "for_editing does not mangle a migrated body with its own br tag" do
+        body = "First line.<br>Second line.\n\nThird paragraph, never wrapped."
+        stored = Services::Reviews::BodySanitizer.call(body)
+
+        assert_equal body, stored
+        assert_equal body, Services::Reviews::BodySanitizer.for_editing(stored)
+      end
+
+      # Composition: a paragraph break and a spoiler in the same body. Proves
+      # restore_paragraphs' per-paragraph serialization puts the restored <spoiler>
+      # tag (not the stored <span>) back into the reversed text.
+      test "for_editing reverses paragraph conversion and a spoiler together" do
+        raw = "Before the twist.\n\n<spoiler>Snape kills Dumbledore</spoiler>"
+        stored = Services::Reviews::BodySanitizer.call(raw)
+
+        assert_equal raw, Services::Reviews::BodySanitizer.for_editing(stored)
       end
 
       test "render strips a title attribute, including from a spoiler span" do

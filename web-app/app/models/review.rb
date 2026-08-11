@@ -45,7 +45,7 @@ class Review < ApplicationRecord
     only_integer: true, greater_than_or_equal_to: 1, less_than_or_equal_to: 5
   }
   validates :title, length: {maximum: MAX_TITLE_LENGTH}
-  validates :body, length: {maximum: MAX_BODY_LENGTH}
+  validate :validate_body_length
   validates :user_id, uniqueness: {scope: [:reviewable_type, :reviewable_id]}
 
   # Honest only because the sanitizer and the reviews_body_not_blank check constraint
@@ -65,7 +65,31 @@ class Review < ApplicationRecord
   private
 
   def sanitize_body
+    # Captured before BodySanitizer touches body, for validate_body_length below --
+    # sanitizing runs before any validation (before_validation callbacks always
+    # precede validations, regardless of declaration order), so by the time a plain
+    # `validates :body, length:` would run, body is no longer what was submitted.
+    @body_length_before_sanitizing = body.to_s.length
     self.body = Services::Reviews::BodySanitizer.call(body)
+  end
+
+  # Checked against what was SUBMITTED, not what BodySanitizer produced from it.
+  # BodySanitizer adds markup on write -- wrapping blank-line-separated plain text in
+  # <p>/<br> (see Services::Reviews::BodySanitizer#paragraphize), expanding a typed
+  # <spoiler> into a <span class="review-spoiler"> -- and either can push a body that
+  # fit the textarea's maxlength=25000 over MAX_BODY_LENGTH on its own. Validating the
+  # sanitized body's length would then reject a submission the form told the author
+  # was acceptable. The textarea's maxlength constrains what was submitted, not what
+  # BodySanitizer produces from it, so that is the only length that can fail here
+  # without contradicting the form -- and per BodySanitizer's header comment ("Does not
+  # truncate... an over-long paste raises a user-visible error"), the paste IS the
+  # submitted value, so this still catches a genuinely over-long paste exactly as
+  # before: an input already over MAX_BODY_LENGTH before sanitizing was always over the
+  # limit as typed, regardless of what sanitizing does to it afterward.
+  def validate_body_length
+    return unless @body_length_before_sanitizing.to_i > MAX_BODY_LENGTH
+
+    errors.add(:body, :too_long, count: MAX_BODY_LENGTH)
   end
 
   # Type and id rather than the object: this fires on destroy too, where the

@@ -106,6 +106,35 @@ class ReviewTest < ActiveSupport::TestCase
     assert review.valid?
   end
 
+  # Regression: paragraphize adds ~7 characters of <p></p> markup per paragraph, so a
+  # plain-text body the textarea's maxlength=25000 accepted could come out of
+  # BodySanitizer.call over MAX_BODY_LENGTH and 422 on something the form told the
+  # author was fine. The raw submission here is exactly at the limit; only the
+  # *stored* body, after conversion, goes over it.
+  test "allows a raw body exactly at MAX_BODY_LENGTH even when paragraph conversion pushes the stored body over it" do
+    raw = ("a" * 12_499) + "\n\n" + ("a" * 12_499)
+    assert_equal Review::MAX_BODY_LENGTH, raw.length
+
+    review = Review.new(user: users(:regular_user), reviewable: books_books(:got), rating: 4, body: raw)
+
+    assert review.valid?
+    assert_operator review.body.length, :>, Review::MAX_BODY_LENGTH
+  end
+
+  # The other side of the same boundary: a raw submission genuinely over the limit --
+  # not just inflated by markup this code added -- must still be rejected, with
+  # newlines present so paragraph conversion is actually in play (unlike the
+  # newline-free "rejects a body longer than MAX_BODY_LENGTH" test above).
+  test "rejects a raw body one character over MAX_BODY_LENGTH even with paragraph breaks" do
+    raw = ("a" * 12_500) + "\n\n" + ("a" * 12_499)
+    assert_equal Review::MAX_BODY_LENGTH + 1, raw.length
+
+    review = Review.new(user: users(:regular_user), reviewable: books_books(:got), rating: 4, body: raw)
+
+    assert_not review.valid?
+    assert_includes review.errors[:body], "is too long (maximum is 25000 characters)"
+  end
+
   test "rejects a title longer than MAX_TITLE_LENGTH" do
     review = Review.new(
       user: users(:regular_user), reviewable: books_books(:got), rating: 4,
