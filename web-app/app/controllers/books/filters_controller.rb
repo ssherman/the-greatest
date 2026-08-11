@@ -41,7 +41,14 @@ class Books::FiltersController < ApplicationController
   end
 
   def render_pane_results(axis)
-    rows = (axis == :category) ? Books::CategorySearchQuery.call(params[:q]) : Books::CountrySearchQuery.call(params[:q])
+    # No types: -- the Category axis is defined as genres, subjects AND
+    # settings. Scoping it here would break the pane's own placeholder and two
+    # Playwright tests.
+    rows = if axis == :category
+      CategorySearchQuery.call(params[:q], scope: ::Books::Category)
+    else
+      ::Books::CountrySearchQuery.call(params[:q])
+    end
 
     render partial: "books/filters/results",
       locals: {axis: axis, rows: rows, results_src: pane_path(axis)},

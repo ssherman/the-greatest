@@ -155,6 +155,30 @@ module Books
       assert_select "input[name='category_slugs[]']", false
     end
 
+    test "a category search result row tags its category type" do
+      get "/filters/categories", params: {q: "americ"}
+
+      assert_response :success
+      assert_select "label[data-option-value=americana] .badge", text: "Genre"
+    end
+
+    # The Category axis spans genres, subjects and settings deliberately.
+    # Scoping it here would break e2e/tests/books/filters.spec.ts.
+    test "a category search still returns every category type, each tagged" do
+      get "/filters/categories", params: {q: "americ"}
+
+      assert_select "label[data-option-value=american-history] .badge", text: "Subject"
+      assert_select "label[data-option-value=american-setting] .badge", text: "Setting"
+    end
+
+    test "a country search result row is not tagged with a category type" do
+      get "/filters/countries", params: {q: "fren"}
+
+      assert_response :success
+      assert_select "label[data-option-value=french]"
+      assert_select "label[data-option-value=french] .badge", false
+    end
+
     test "the pane 404s on an unknown slug" do
       get "/filters/categories", params: {category_slugs: ["no-such-genre"]}
 
