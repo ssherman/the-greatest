@@ -1,0 +1,79 @@
+import { test, expect } from '@playwright/test';
+
+// A book with no migrated reviews, so this spec never disturbs real data.
+const BOOK = '/book/nightmare-abbey';
+
+async function removeExistingReview(page) {
+  await page.getByTestId('review-widget-label').click();
+  const remove = page.getByTestId('review-remove');
+  if (await remove.isVisible()) {
+    await remove.click();
+    await expect(page.locator('#review_modal')).not.toBeVisible();
+  } else {
+    await page.locator('#review_modal').press('Escape');
+  }
+}
+
+test.describe('Writing a review', () => {
+  test.afterEach(async ({ page }) => {
+    await page.goto(BOOK);
+    await removeExistingReview(page);
+  });
+
+  test('a signed-in reader can leave a rating with no text', async ({ page }) => {
+    await page.goto(BOOK);
+
+    await page.getByTestId('review-widget-label').click();
+    await expect(page.locator('#review_modal')).toBeVisible();
+
+    await page.getByTestId('review-star-button').nth(3).click();
+    await page.getByRole('button', { name: 'Save' }).click();
+
+    await expect(page.locator('#review_modal')).not.toBeVisible();
+    await expect(page.getByTestId('review-widget-label')).toHaveText('Edit your review');
+    await expect(page.locator('#review_summary_line')).toContainText('1 rating');
+  });
+
+  test('a rating can be given a written review and edited', async ({ page }) => {
+    await page.goto(BOOK);
+
+    await page.getByTestId('review-widget-label').click();
+    await page.getByTestId('review-star-button').nth(4).click();
+    await page.locator('#review_modal textarea').fill('A strange little book.');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.locator('#review_modal')).not.toBeVisible();
+
+    // ReviewsController#render_widget_and_summary only updates #review_widget and
+    // #review_summary_line via Turbo Stream -- never the Ratings & Reviews card,
+    // which is server-rendered once per full page load from @reviews. That is the
+    // toast's own "It will appear on this page shortly" wording (modal_controller.js
+    // #submitted), not a bug: a reload is required to see the written body.
+    await page.reload();
+    await expect(page.getByTestId('review')).toContainText('A strange little book.');
+
+    await page.getByTestId('review-widget-label').click();
+    await expect(page.locator('#review_modal textarea')).toHaveValue('A strange little book.');
+    await page.locator('#review_modal textarea').fill('Revised opinion.');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.locator('#review_modal')).not.toBeVisible();
+
+    await page.reload();
+    await expect(page.getByTestId('review')).toContainText('Revised opinion.');
+  });
+
+  test('a review can be removed', async ({ page }) => {
+    await page.goto(BOOK);
+
+    await page.getByTestId('review-widget-label').click();
+    await page.getByTestId('review-star-button').nth(2).click();
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByTestId('review-widget-label')).toHaveText('Edit your review');
+
+    await page.getByTestId('review-widget-label').click();
+    await page.getByTestId('review-remove').click();
+
+    await expect(page.getByTestId('review-widget-label')).toHaveText('Rate this book');
+    // The wrapper survives the update; the component inside it renders nothing.
+    await expect(page.getByTestId('review-summary-line')).toHaveCount(0);
+  });
+});

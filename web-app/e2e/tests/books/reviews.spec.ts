@@ -78,4 +78,13 @@ test.describe('Book page ratings and reviews', () => {
     await expect(page.getByTestId('review-summary-line')).toHaveCount(0);
     await expect(page.locator('#ratings-reviews')).toHaveCount(0);
   });
+
+  test('a signed-out visitor is asked to sign in before rating', async ({ page }) => {
+    await page.goto('/book/the-great-gatsby');
+
+    await page.getByTestId('review-widget-label').click();
+
+    await expect(page.locator('#review_modal')).not.toBeVisible();
+    await expect(page.locator('#login_modal')).toBeVisible();
+  });
 });
