@@ -28,12 +28,12 @@ export default class extends Controller {
 
   // Coalesces concurrent callers -- the eager fetch kicked off from connect() and
   // a click that lands before it resolves -- onto a single in-flight request.
-  // Same pattern as user_list_state_controller#ensureCsrf. open() awaits this, so
-  // the modal is only ever handed a real (or an honestly-failed) token, never the
-  // pre-fetch null: without it, a click that beats the fetch would dispatch
-  // reviews-modal:open with csrfToken still null, the modal would bake that empty
-  // value into its hidden field, and Rails would reject the save with no way for
-  // the user to recover short of reloading the page.
+  // Same pattern as user_list_state_controller#ensureCsrf's refresh(). Cleared in
+  // .finally() the moment the request settles: this alone only prevents duplicate
+  // requests while one is already in flight. Callers that want "fetch once, then
+  // reuse" (see open()'s csrfToken short-circuit below) must check for a result
+  // before calling this, the same way ensureCsrf checks `if (this.csrf) return`
+  // before calling refresh().
   load() {
     if (this._inflightLoad) return this._inflightLoad
     this._inflightLoad = this._doLoad().finally(() => {
@@ -115,7 +115,14 @@ export default class extends Controller {
       return
     }
 
-    await this.load()
+    // Mirrors user_list_state_controller#ensureCsrf's `if (this.csrf) return
+    // this.csrf` short-circuit: once a load has completed successfully,
+    // csrfToken is set (the endpoint always returns one for a signed-in
+    // request, review or no review), so later clicks dispatch synchronously
+    // from memory instead of re-fetching. Only a click with no token yet --
+    // the first click, one racing the initial fetch, or one following a
+    // failed fetch that left csrfToken null -- awaits load().
+    if (!this.csrfToken) await this.load()
 
     window.dispatchEvent(new CustomEvent("reviews-modal:open", {
       detail: {
