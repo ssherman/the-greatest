@@ -52,16 +52,18 @@ class Admin::CategoriesBaseController < Admin::BaseController
     redirect_to categories_path, notice: "Category deleted successfully."
   end
 
+  # The JSON shape is a contract with AutocompleteComponent's value_key/
+  # display_key defaults -- every admin category picker breaks at once if it
+  # changes. `types` is accepted but unused by any current caller.
   def search
-    categories = model_class.active
+    categories = CategorySearchQuery.call(
+      params[:q],
+      scope: model_class,
+      types: Array(params[:types]),
+      limit: 20
+    )
 
-    if params[:q].present?
-      categories = categories.search_by_name(params[:q])
-    end
-
-    categories = categories.order(:name).limit(20)
-
-    render json: categories.map { |c| {value: c.id, text: "#{c.name} (#{c.category_type&.titleize || "Unknown"})"} }
+    render json: categories.map { |c| {value: c.id, text: c.name_with_type} }
   end
 
   private
