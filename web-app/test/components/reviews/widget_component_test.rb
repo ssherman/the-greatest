@@ -20,7 +20,13 @@ module Reviews
       render_inline(Reviews::WidgetComponent.new(reviewable: @book))
 
       assert_selector "[data-testid='review-widget-label']", text: "Rate this book"
-      assert_no_selector "[data-testid='review-widget-stars']"
+      assert_selector "[data-testid='review-widget-stars'] [role='img'][aria-label='Not yet rated']"
+    end
+
+    test "the neutral stars ship with a zero fill, not a hidden element" do
+      render_inline(Reviews::WidgetComponent.new(reviewable: @book))
+
+      assert_selector "[data-testid='review-widget-stars'] [data-testid='stars-fill'][style='width: 0.0%']"
     end
 
     test "renders the rating when a review is given" do

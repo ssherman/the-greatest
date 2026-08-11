@@ -3,7 +3,7 @@
     <h3 class="text-lg font-bold" data-reviews--modal-target="heading">Rate this book</h3>
 
     <form data-reviews--modal-target="form"
-          data-action="turbo:submit-end->reviews--modal#submitted"
+          data-action="submit->reviews--modal#validate turbo:submit-end->reviews--modal#submitted"
           method="post"
           accept-charset="UTF-8">
       <input type="hidden" name="authenticity_token" value="" data-reviews--modal-target="token">
@@ -50,7 +50,7 @@
                 data-reviews--modal-target="remove"
                 data-action="click->reviews--modal#remove">Remove</button>
         <button type="button" class="btn btn-ghost" data-action="click->reviews--modal#close">Cancel</button>
-        <button type="submit" class="btn btn-primary" data-reviews--modal-target="save">Save</button>
+        <button type="submit" class="btn btn-primary">Save</button>
       </div>
     </form>
   </div>
