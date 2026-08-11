@@ -77,6 +77,14 @@ class Category < ApplicationRecord
     update!(deleted: true)
   end
 
+  # "Americana (Genre)". One definition, because the admin autocomplete JSON
+  # and the multi-select picker a later increment adds both render it.
+  # category_type is nullable, so the Unknown branch is reachable rather than
+  # defensive.
+  def name_with_type
+    "#{name} (#{category_type&.titleize || "Unknown"})"
+  end
+
   # Override to_param for FriendlyId
   def to_param
     slug

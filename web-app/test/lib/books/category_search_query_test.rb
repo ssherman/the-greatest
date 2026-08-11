@@ -42,7 +42,7 @@ module Books
     test "applies the limit after ordering, so the most-used win" do
       results = Books::CategorySearchQuery.call("c", limit: 1)
 
-      assert_equal [categories(:books_fiction_genre)], results
+      assert_equal [categories(:books_american_history_subject)], results
     end
 
     test "escapes LIKE wildcards in the query" do
