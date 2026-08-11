@@ -326,9 +326,21 @@ The decision is therefore to **purge the single book page on write**:
 - `Cloudflare::PurgeService` gains `purge_urls(domain, urls)`. Purge-by-URL is available on the
   **Pro** plan — Cloudflare moved every purge method to every plan — with limits (5 requests/second,
   1,500 URLs/second) orders of magnitude above this feature's ~13 writes/day.
-- A Sidekiq job resolves a reviewable to its canonical URL and purges just that one, fired from
-  `Review`'s existing `after_commit` on create, update **and** destroy, alongside the summary
-  recalculation.
+- A Sidekiq job resolves a reviewable to its canonical URL and purges just that one.
+
+**Only the canonical `/book/:slug` is purged.** Book pages are also reachable at
+`/rc/:ranking_configuration_id/book/:slug`; those copies stay stale until they expire. They are a
+minority of traffic and carry no crawler weight, and purging them would mean either enumerating
+every ranking configuration or relying on purge-by-prefix.
+
+> **The purge is invoked explicitly from each write path — never from a model callback.** An
+> `after_commit` that makes an external HTTP call is a side effect invisible to its callers, and it
+> would fire on paths that have no business purging: a rake task, a future importer, a bulk
+> backfill, or any test that happens to create a review. `ReviewsController`'s create, update and
+> destroy each enqueue the job themselves, through one small service so the rule lives in a single
+> place. The cost of being explicit is that a new write path must remember to call it — increment
+> 5's admin destroy is the next one that will need to — which is the right trade against a hidden
+> callback firing on every write in the system.
 
 > **Landmine — `Cloudflare::Configuration#initialize` raises when `CLOUDFLARE_CACHE_PURGE_TOKEN` is
 > blank**, which is every development machine and CI. Unguarded, this turns *every* review write in
