@@ -45,9 +45,16 @@
           <% end %>
         </p>
       <% end %>
-      <%= render Reviews::SummaryLineComponent.new(summary: @review_summary) %>
-      <div class="mt-4">
+      <%# Stable Turbo Stream target. It must exist even when the component renders
+          nothing, or the first rating on an unrated book has nothing to replace. %>
+      <div id="review_summary_line">
+        <%= render Reviews::SummaryLineComponent.new(summary: @review_summary) %>
+      </div>
+      <div class="mt-4 flex flex-wrap items-center gap-2">
         <%= render UserLists::CardWidgetComponent.new(listable: @book) %>
+        <div id="review_widget">
+          <%= render Reviews::WidgetComponent.new(reviewable: @book) %>
+        </div>
       </div>
     </div>
 

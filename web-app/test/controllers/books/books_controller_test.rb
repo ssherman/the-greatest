@@ -156,6 +156,36 @@ module Books
         "rendering reviews must not issue a query per review"
     end
 
+    test "renders the rating widget for every visitor" do
+      get "/book/#{@book.slug}"
+
+      assert_select "#review_widget [data-controller='reviews--widget']"
+    end
+
+    test "renders the widget with no user-specific state for an anonymous visitor" do
+      get "/book/#{@book.slug}"
+
+      # Mirrors the component's own pinned neutral-fill selector
+      # (test/components/reviews/widget_component_test.rb) -- the stars span is
+      # always present (Task 6), so "no user-specific state" now means a zero
+      # fill rather than an absent element.
+      assert_select "#review_widget [data-testid='review-widget-stars'] [data-testid='stars-fill'][style='width: 0.0%']"
+    end
+
+    # The very first rating on an unrated book has to have something to replace.
+    test "renders an empty summary-line target for an unrated book" do
+      get "/book/#{books_books(:got).slug}"
+
+      assert_response :success
+      assert_select "#review_summary_line"
+    end
+
+    test "renders the summary-line target for a rated book" do
+      get "/book/#{@book.slug}"
+
+      assert_select "#review_summary_line [data-testid='review-summary-line']"
+    end
+
     # Deliberately not declared `private`. Minitest only collects public `test_`
     # methods, so a `private` keyword here would silently stop every test defined
     # after it in the file from running.
