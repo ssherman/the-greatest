@@ -135,6 +135,39 @@ class ReviewTest < ActiveSupport::TestCase
     assert_includes review.errors[:body], "is too long (maximum is 25000 characters)"
   end
 
+  # Regression: before_validation runs on every validation pass, not just the
+  # first, so validating the same object twice used to re-derive "the submitted
+  # length" from the FIRST pass's own sanitized output (paragraph markup this code
+  # added) instead of the original submission -- a boundary body validated true,
+  # then false on the very next pass on the same object, with nothing having
+  # changed. #valid? must give the same answer both times.
+  test "validating the same boundary-length review twice gives the same answer" do
+    raw = ("a" * 12_499) + "\n\n" + ("a" * 12_499)
+    review = Review.new(user: users(:regular_user), reviewable: books_books(:got), rating: 4, body: raw)
+
+    first_result = review.valid?
+    second_result = review.valid?
+
+    assert first_result
+    assert_equal first_result, second_result
+  end
+
+  # The other half of the same regression: a record the app already created and
+  # accepted -- its *stored* body over MAX_BODY_LENGTH purely from paragraph markup,
+  # exactly like the review above once saved -- must stay savable by a path that
+  # never touches body at all, such as an admin correcting the rating.
+  test "a persisted boundary-length review stays savable when only the rating changes" do
+    raw = ("a" * 12_499) + "\n\n" + ("a" * 12_499)
+    created = Review.create!(user: users(:regular_user), reviewable: books_books(:got), rating: 4, body: raw)
+    assert_operator created.body.length, :>, Review::MAX_BODY_LENGTH
+
+    reloaded = Review.find(created.id)
+    reloaded.rating = 2
+
+    assert reloaded.save
+    assert_equal 2, reloaded.reload.rating
+  end
+
   test "rejects a title longer than MAX_TITLE_LENGTH" do
     review = Review.new(
       user: users(:regular_user), reviewable: books_books(:got), rating: 4,
