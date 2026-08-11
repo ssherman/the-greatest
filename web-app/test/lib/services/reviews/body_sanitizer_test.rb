@@ -191,6 +191,38 @@ module Services
         assert_equal 30_000, BodySanitizer.call(body).length
       end
 
+      # Proven end to end in production: a stored body of "Line one.\n\nLine two."
+      # rendered as exactly that, one continuous line, because nothing converted the
+      # newlines into markup and .review-body has no white-space CSS rule to fall
+      # back on.
+      test ".call turns a blank-line-separated plain-text body into paragraphs" do
+        assert_equal "<p>Line one.</p><p>Line two.</p>",
+          BodySanitizer.call("Line one.\n\nLine two.")
+      end
+
+      test ".call turns a single newline in a plain-text body into a line break" do
+        assert_equal "<p>Line one.<br>Line two.</p>",
+          BodySanitizer.call("Line one.\nLine two.")
+      end
+
+      test ".call ignores extra blank lines around and between paragraphs" do
+        assert_equal "<p>Line one.</p><p>Line two.</p>",
+          BodySanitizer.call("\n\nLine one.\n\n\n\nLine two.\n\n")
+      end
+
+      # Guard: a body that already has real paragraph structure -- every migrated row
+      # does -- must pass through untouched, not have its own internal newlines
+      # reinterpreted as line breaks.
+      test ".call does not paragraphize a body that already contains a p tag" do
+        body = "<p>First.</p><p>Second.\nStill second.</p>"
+        assert_equal body, BodySanitizer.call(body)
+      end
+
+      test ".call does not paragraphize a body that already contains a br tag" do
+        body = "First line.<br>Second line.\n\nThird paragraph, never wrapped."
+        assert_equal body, BodySanitizer.call(body)
+      end
+
       test "render keeps the spoiler span the write path produced" do
         stored = Services::Reviews::BodySanitizer.call("<p>He <spoiler>dies</spoiler>.</p>")
 
@@ -270,6 +302,42 @@ module Services
         assert_includes html, %(<span class="review-spoiler">dies</span>)
         refute_includes html, "fixed"
         refute_includes html, "inset-0"
+      end
+
+      test "for_editing returns nil for a nil body" do
+        assert_nil Services::Reviews::BodySanitizer.for_editing(nil)
+      end
+
+      test "for_editing converts a stored spoiler span back to a spoiler tag" do
+        stored = Services::Reviews::BodySanitizer.call("<p>He <spoiler>dies</spoiler>.</p>")
+
+        assert_equal "<p>He <spoiler>dies</spoiler>.</p>", Services::Reviews::BodySanitizer.for_editing(stored)
+      end
+
+      test "for_editing converts several stored spoiler spans back to spoiler tags" do
+        stored = Services::Reviews::BodySanitizer.call("<spoiler>one</spoiler> and <spoiler>two</spoiler>")
+
+        assert_equal "<spoiler>one</spoiler> and <spoiler>two</spoiler>",
+          Services::Reviews::BodySanitizer.for_editing(stored)
+      end
+
+      test "for_editing returns a stored body with no spoilers unchanged" do
+        stored = Services::Reviews::BodySanitizer.call("<p>No spoilers here.</p>")
+
+        assert_equal "<p>No spoilers here.</p>", Services::Reviews::BodySanitizer.for_editing(stored)
+      end
+
+      # The exact scenario the bug report proved: a reader hides a spoiler, later
+      # reopens the dialog, and saves again without touching the spoiler text. Without
+      # for_editing restoring <spoiler>, the textarea would show the raw <span> markup
+      # and the next .call would strip it, publishing the spoiler in the clear.
+      test "for_editing round-trips through call without destroying the spoiler" do
+        stored = Services::Reviews::BodySanitizer.call("<spoiler>Snape kills Dumbledore</spoiler>")
+        edited = Services::Reviews::BodySanitizer.for_editing(stored)
+        resaved = Services::Reviews::BodySanitizer.call(edited)
+
+        assert_equal stored, resaved
+        assert_includes resaved, "review-spoiler"
       end
 
       test "render strips a title attribute, including from a spoiler span" do

@@ -14,7 +14,7 @@
 
       <fieldset class="mt-4">
         <legend class="text-sm font-semibold">Your rating</legend>
-        <div class="mt-2 flex gap-1" role="group" aria-label="Rating out of 5 stars">
+        <div class="mt-2 flex gap-1">
           <% ratings.each do |value| %>
             <button type="button"
                     class="btn btn-ghost btn-sm px-1"
@@ -40,6 +40,7 @@
         <span class="label-text">Review <span class="text-base-content/60">(optional)</span></span>
         <textarea name="review[body]" rows="6" maxlength="25000"
                   class="textarea textarea-bordered w-full" data-reviews--modal-target="body"></textarea>
+        <span class="label-text-alt mt-1 text-base-content/60">Leave a blank line to start a new paragraph.</span>
       </label>
 
       <p class="mt-2 text-sm text-error hidden" data-reviews--modal-target="error" role="alert"></p>

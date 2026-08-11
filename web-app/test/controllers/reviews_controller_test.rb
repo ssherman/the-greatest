@@ -60,6 +60,19 @@ class ReviewsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "<p>Superb.</p>", created_review.body
   end
 
+  # Reviews::CardComponent is wrapped in #review_card in show.html.erb specifically so
+  # a write has something to stream into -- without this target the summary line's
+  # link to #ratings-reviews and the newly-written body would both go stale until a
+  # reload.
+  test "streams the reviews card alongside the widget and summary line" do
+    sign_in_as(@user, stub_auth: true)
+
+    post reviews_path, params: valid_params, as: :turbo_stream
+
+    assert_response :success
+    assert_includes response.body, %(target="review_card")
+  end
+
   # test_helper.rb sets Sidekiq::Testing.inline! globally, which runs the job
   # instead of recording it -- `.jobs` would always be empty. Assert inside a
   # fake! block, the pattern the existing job tests in test/sidekiq/ use.
@@ -84,6 +97,7 @@ class ReviewsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :unprocessable_entity
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
   end
 
   test "rejects an unknown reviewable type" do
@@ -94,12 +108,14 @@ class ReviewsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :bad_request
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
   end
 
   test "401s for an anonymous visitor" do
     post reviews_path, params: valid_params, as: :turbo_stream
 
     assert_response :unauthorized
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
   end
 
   test "updates the owner's own review" do
@@ -134,6 +150,7 @@ class ReviewsControllerTest < ActionDispatch::IntegrationTest
     patch review_path(@own_review), params: {review: {rating: 1}}, as: :turbo_stream
 
     assert_response :forbidden
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
     assert_equal 5, @own_review.reload.rating
   end
 
@@ -169,6 +186,7 @@ class ReviewsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :forbidden
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
   end
 
   # ApplicationController's inherited RecordNotFound handler serves
@@ -185,6 +203,7 @@ class ReviewsControllerTest < ActionDispatch::IntegrationTest
     patch review_path(missing_id), params: {review: {rating: 3}}, as: :turbo_stream
 
     assert_response :not_found
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
   end
 
   test "404s destroying a review that no longer exists" do
@@ -195,6 +214,7 @@ class ReviewsControllerTest < ActionDispatch::IntegrationTest
     delete review_path(missing_id), as: :turbo_stream
 
     assert_response :not_found
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
   end
 
   test "a user cannot review the same book twice" do
@@ -206,5 +226,25 @@ class ReviewsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :unprocessable_entity
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+  end
+
+  # The class comment on the InvalidAuthenticityToken rescue_from used to claim no
+  # request spec could raise this, because allow_forgery_protection is off in the test
+  # environment. Flipping it on for the duration of one request proves that claim
+  # wrong: this exact rescue_from -- not Rails' default public/422.html handler --
+  # answers a bogus token, and the answer is a turbo stream, not an HTML body on a
+  # non-2xx status.
+  test "422s and stays a turbo stream when the csrf token is invalid" do
+    sign_in_as(@user, stub_auth: true)
+    original = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+
+    post reviews_path, params: valid_params.merge(authenticity_token: "bogus"), as: :turbo_stream
+
+    assert_response :unprocessable_entity
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+  ensure
+    ActionController::Base.allow_forgery_protection = original
   end
 end

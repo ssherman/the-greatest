@@ -104,12 +104,13 @@ export default class extends Controller {
     if (success) {
       const wasRemoval = this.methodFieldTarget.value === "delete"
       this.close()
+      // ReviewsController#render_widget_and_summary streams the widget, the summary
+      // line AND the Ratings & Reviews card, so this is describing what already
+      // happened by the time the toast shows, not a promise about later.
       window.dispatchEvent(new CustomEvent("toast:show", {
         detail: {
           type: "success",
-          message: wasRemoval
-            ? "Removed."
-            : "Saved. It will appear on this page shortly."
+          message: wasRemoval ? "Removed." : "Saved."
         }
       }))
       return

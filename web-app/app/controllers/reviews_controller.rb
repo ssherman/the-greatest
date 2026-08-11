@@ -39,11 +39,11 @@ class ReviewsController < ApplicationController
   # sets the field to "" rather than leaving the cached page's stale <meta>
   # value in place. That is the "stale/rejected CSRF token" case
   # modal_controller.js#submitted's own comment names. allow_forgery_protection
-  # is false in the test environment (config/environments/test.rb), so no
-  # request spec can raise this here -- verified instead by reading that
-  # rescue_from takes precedence over Rails' default exceptions_app handling
-  # for any subclass of StandardError raised inside the action, which
-  # InvalidAuthenticityToken is.
+  # is false in the test environment (config/environments/test.rb), so a
+  # request spec does not raise this by default -- but flipping
+  # ActionController::Base.allow_forgery_protection on for the duration of a
+  # single request does reach this rescue directly; see "422s and stays a
+  # turbo stream when the csrf token is invalid" in reviews_controller_test.rb.
   rescue_from ActionController::InvalidAuthenticityToken do
     render turbo_stream: [], status: :unprocessable_entity
   end
@@ -121,16 +121,19 @@ class ReviewsController < ApplicationController
   end
 
   # SummaryRecalculator runs in Review's after_commit, so the association cached
-  # on the reviewable is stale by now. Load the row fresh.
+  # on the reviewable is stale by now. Load the row fresh, and load reviews the
+  # same way Books::BooksController#show does so the streamed card and a
+  # freshly-loaded page always agree.
   def render_widget_and_summary(reviewable, review)
     summary = ReviewSummary.find_by(reviewable_type: reviewable.class.name, reviewable_id: reviewable.id)
+    reviews = reviewable.reviews.with_body.recent
 
     # `update`, NOT `replace`. `replace` swaps the element carrying the id, so the
     # wrapper -- and with it the Turbo Stream target -- would vanish after the first
     # save and every later save would land nowhere. `update` replaces the wrapper's
     # contents and leaves the wrapper in place. This also matters for the summary
-    # line, whose component renders nothing at all when a book's last review is
-    # removed: with `replace` the target would be gone for good.
+    # line and the card, both of which render nothing at all when a book's last
+    # review is removed: with `replace` the target would be gone for good.
     render turbo_stream: [
       turbo_stream.update(
         "review_widget",
@@ -139,6 +142,10 @@ class ReviewsController < ApplicationController
       turbo_stream.update(
         "review_summary_line",
         Reviews::SummaryLineComponent.new(summary: summary).render_in(view_context)
+      ),
+      turbo_stream.update(
+        "review_card",
+        Reviews::CardComponent.new(summary: summary, reviews: reviews).render_in(view_context)
       )
     ]
   end

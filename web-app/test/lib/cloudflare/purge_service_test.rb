@@ -156,6 +156,21 @@ module Cloudflare
       assert result[:success]
     end
 
+    # Regression: result[:result]["id"] raised NoMethodError on a null `result`, which
+    # is not an Exceptions::Error and so escaped the rescue below despite the purge
+    # itself having succeeded -- failing the Sidekiq job through all its retries.
+    test "succeeds without raising when the api response has a null result payload" do
+      @config.expects(:zone_id).with(:books).returns("zone-abc")
+      @client.expects(:post)
+        .with("zones/zone-abc/purge_cache", body: {files: ["https://example.test/book/x"]})
+        .returns({result: nil, metadata: {response_time: 0.1}})
+
+      result = PurgeService.new(client: @client, config: @config).purge_urls(:books, ["https://example.test/book/x"])
+
+      assert result[:success]
+      assert_nil result[:purge_id]
+    end
+
     test "reports failure without raising when the zone is not configured" do
       @config.expects(:zone_id).with(:books).returns(nil)
       @client.expects(:post).never

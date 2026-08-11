@@ -72,7 +72,10 @@ module Cloudflare
 
       result = client.post("zones/#{zone_id}/purge_cache", body: {files: urls})
       log_success(domain, zone_id)
-      {success: true, purge_id: result[:result]["id"]}
+      # dig, not result[:result]["id"] -- a null `result` in Cloudflare's response body
+      # would otherwise raise NoMethodError here, which is not an Exceptions::Error and
+      # so escapes the rescue below despite the purge itself having succeeded.
+      {success: true, purge_id: result.dig(:result, "id")}
     rescue Exceptions::Error => e
       log_failure(domain, e)
       {success: false, error: e.message}

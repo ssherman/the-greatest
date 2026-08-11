@@ -56,12 +56,9 @@ test.describe('Writing a review', () => {
     await page.getByRole('button', { name: 'Save' }).click();
     await expect(page.locator('#review_modal')).not.toBeVisible();
 
-    // ReviewsController#render_widget_and_summary only updates #review_widget and
-    // #review_summary_line via Turbo Stream -- never the Ratings & Reviews card,
-    // which is server-rendered once per full page load from @reviews. That is the
-    // toast's own "It will appear on this page shortly" wording (modal_controller.js
-    // #submitted), not a bug: a reload is required to see the written body.
-    await page.reload();
+    // ReviewsController#render_widget_and_summary streams #review_widget,
+    // #review_summary_line AND the Ratings & Reviews card, so the written body
+    // shows up live without a reload.
     await expect(page.getByTestId('review')).toContainText('A strange little book.');
 
     await page.getByTestId('review-widget-label').click();
@@ -70,7 +67,6 @@ test.describe('Writing a review', () => {
     await page.getByRole('button', { name: 'Save' }).click();
     await expect(page.locator('#review_modal')).not.toBeVisible();
 
-    await page.reload();
     await expect(page.getByTestId('review')).toContainText('Revised opinion.');
   });
 

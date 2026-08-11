@@ -45,6 +45,13 @@ module Services
       SPOILER_CLASS = "review-spoiler".freeze
       BLANK_TEXT = /\A[[:space:]\u200B-\u200D\uFEFF]*\z/
 
+      # Guards .call's newline-to-paragraph conversion (see #paragraphize). Matches an
+      # opening p/br/blockquote tag anywhere in the raw body -- good enough to detect
+      # "this body already has real paragraph structure" without a full parse, and every
+      # migrated row has one because ReviewMigrator ran legacy WYSIWYG-authored HTML
+      # through this same .call.
+      BLOCK_MARKUP = %r{<(?:p|br|blockquote)[\s/>]}i
+
       # The render-time allowlist. It is NOT the write-time one, and the two must stay
       # in this file together so they cannot drift apart in review.
       #
@@ -80,6 +87,20 @@ module Services
         new(body).render
       end
 
+      # Inverse of convert_spoilers, for ReviewStateController#serialize. A stored body
+      # already contains <span class="review-spoiler">, which is what .call turned a
+      # written <spoiler> into -- span is absent from .call's own write-time tag
+      # allowlist (see RENDER_TAGS's comment), so feeding a stored body back into .call
+      # strips the span tag on the next save and leaves the spoiler as plain, public
+      # text. This restores <spoiler> so the edit textarea shows what the author
+      # actually typed, rather than the raw <span> markup, and so a re-save round-trips
+      # through .call correctly instead of destroying the spoiler.
+      def self.for_editing(body)
+        return nil if body.blank?
+
+        new(body).for_editing
+      end
+
       def initialize(body)
         @body = body
       end
@@ -88,7 +109,7 @@ module Services
         return nil if @body.blank?
 
         sanitized = sanitizer.sanitize(
-          @body.to_s,
+          paragraphize(@body.to_s),
           tags: ALLOWED_TAGS + [SPOILER_TAG],
           attributes: ALLOWED_ATTRIBUTES
         ).to_s
@@ -113,10 +134,54 @@ module Services
         fragment.to_html.html_safe # rubocop:disable Rails/OutputSafety
       end
 
+      # HTML-parsed, not string substitution, for the same reason .call itself is (see
+      # this file's header comment): a marker robust enough to survive naive replacement
+      # also survives inside a quoted attribute value on some other tag, and splicing
+      # raw markup into a quoted string re-parses into something a browser reads
+      # completely differently. That reasoning applies just as much running in reverse.
+      #
+      # Plain string, not html_safe -- this is going into a JSON API response and then a
+      # <textarea>'s plain-text value, never rendered as HTML.
+      def for_editing
+        return nil if @body.blank?
+
+        fragment = Nokogiri::HTML5.fragment(@body.to_s)
+        fragment.css("span.#{SPOILER_CLASS}").each do |node|
+          node.name = SPOILER_TAG
+          node.attributes.keys.each { |name| node.remove_attribute(name) }
+        end
+        fragment.to_html
+      end
+
       private
 
       def sanitizer
         @sanitizer ||= Rails::HTML5::SafeListSanitizer.new
+      end
+
+      # A plain-text body arrives with nothing but newlines -- a browser renders a bare
+      # "\n" as nothing at all, so without this a multi-paragraph review collapses into
+      # one run-on line (.review-body styles `p + p` but has no `white-space` rule to
+      # fall back on). Guarded on BLOCK_MARKUP so a body that already has real paragraph
+      # structure -- every migrated row does -- passes through untouched instead of
+      # having its existing tags' internal newlines reinterpreted. Also a no-op with no
+      # newline at all: a single line with nothing to convert is left exactly as every
+      # other test in this file already pins it (a bare <spoiler> tag, a bare <a>, ...),
+      # not wrapped in a <p> it never asked for.
+      #
+      # A blank-line-separated run becomes a <p>; a lone newline inside a run becomes a
+      # <br>, mirroring what the textarea's own newlines mean to whoever typed them.
+      def paragraphize(text)
+        return text if text.match?(BLOCK_MARKUP)
+        return text unless text.match?(/\r|\n/)
+
+        normalized = text.gsub(/\r\n?/, "\n")
+        normalized.split(/\n[ \t]*\n+/).filter_map do |block|
+          stripped = block.strip
+          next if stripped.empty?
+
+          "<p>#{stripped.gsub("\n", "<br>")}</p>"
+        end.join
       end
 
       def convert_spoilers(html)

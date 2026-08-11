@@ -109,6 +109,11 @@
       </div>
     <% end %>
 
-    <%= render Reviews::CardComponent.new(summary: @review_summary, reviews: @reviews) %>
+    <%# Stable Turbo Stream target. It must exist even when the component renders
+        nothing, or the first rating on a previously-unrated book has nothing to
+        replace. %>
+    <div id="review_card">
+      <%= render Reviews::CardComponent.new(summary: @review_summary, reviews: @reviews) %>
+    </div>
   </div>
 </div>
