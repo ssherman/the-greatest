@@ -31,6 +31,9 @@ application.register("modal-form", ModalFormController)
 import ReviewFilterController from "./review_filter_controller"
 application.register("review-filter", ReviewFilterController)
 
+import Reviews__SpoilerController from "./reviews/spoiler_controller"
+application.register("reviews--spoiler", Reviews__SpoilerController)
+
 import SharedModalController from "./shared_modal_controller"
 application.register("shared-modal", SharedModalController)
 

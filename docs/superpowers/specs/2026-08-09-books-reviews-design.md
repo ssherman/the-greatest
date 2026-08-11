@@ -220,12 +220,57 @@ Idempotent and re-runnable, consistent with every other migrator in `app/lib/ser
 
 ### Book page — `/book/:slug`
 
-Two additions to `Books::BooksController#show`, which preloads `review_summary` (one join):
+Two additions to `Books::BooksController#show`, which preloads `review_summary`:
 
-- **Summary line** under the rank: `★★★★☆ 4.2 · 87 ratings · 12 reviews`, anchoring to the reviews card.
+- **Summary line** under the rank: `★★★★☆ 4.0 · 450 ratings · 37 reviews`, anchoring to the reviews card.
 - **`Ratings & Reviews` card** at the bottom of the right column, after *Appears on N lists*:
-  the histogram on the left, then the paginated text-review list. Only `body IS NOT NULL` rows are
-  listed; the remaining ratings feed the numbers only, as legacy did.
+  the histogram, then the text-review list. Only `body IS NOT NULL` rows are listed; the remaining
+  ratings feed the numbers only, as legacy did.
+
+Decisions settled when increment 3 was planned, measured against the migrated data:
+
+> **No pagination.** The most-reviewed book in the corpus — *The Great Gatsby*, book 38 — has **37**
+> written reviews. Twelve books exceed 20; **none** exceeds 50. Legacy accumulated 16,267 text
+> reviews over 3.5 years across 11,663 books, so the list grows by roughly one review per book per
+> decade. Every written review renders; a paged route would be machinery for a case that does not
+> exist, and would mint crawler-facing URLs that today would never have a page 2.
+
+> **Newest first**, not legacy's rating-desc. Rating-desc puts the most flattering reviews at the
+> top of every book and buries a new critical one; it also means a review written through
+> increment 4's flow lands out of sight instead of where its author expects it.
+
+> **No attribution**, matching what the legacy book page renders today: stars, relative time,
+> optional title, body — no author. Only 56 of the 364 people who have written a review ever set a
+> display name, so a name line would read "A reader" on 85% of rows. It would also newly publish
+> those 56 real names against 141,869 already-migrated rows whose authors never agreed to it, and it
+> keeps the row free of any association, so no per-row user load exists to become an N+1.
+
+Three states, by measured population:
+
+| Book has | Books | Renders |
+|---|---|---|
+| no ratings | 72,659 | nothing — page identical to today |
+| ratings, no text | 41,967 | summary line, histogram, "No written reviews yet." |
+| text reviews | 11,663 | full card |
+
+**Stars are drawn by clipping, not by rounding.** `Reviews::StarsComponent` lays a filled five-star
+row over an outline five-star row and clips the fill to `rating / 5 × 100%`. An average of 3.96
+clips at 79.2% — proportional rather than rounded to 4 — and an integer rating of 4 clips at exactly
+80%, landing on a star boundary, so one component serves both the average and the per-review stars.
+Fill is a single colour; the histogram bars likewise. No hue scale carries meaning anywhere on this
+surface.
+
+**Rendering a body must not re-run `BodySanitizer.call`.** Stored bodies carry
+`<span class="review-spoiler">` wrappers (118 rows), and `span` is deliberately absent from the
+write-time allowlist — so a second `.call` strips every wrapper and prints those spoilers in the
+clear. Render-time sanitizing is therefore a separate `BodySanitizer.render`, with its own allowlist
+(write tags plus `span`, write attributes plus `class`), kept in the same file so the two lists
+cannot drift, and pinned by a test that asserts the re-run failure mode directly.
+
+The spoiler reveal mounts **on the card, not on the spans**: the sanitizer strips `data-action`, so a
+span can never carry its own. The Stimulus controller delegates clicks through
+`closest(".review-spoiler")` and, on connect, gives each span `tabindex="0"` and `role="button"` so
+it is reachable by keyboard.
 
 ### Write flow
 
@@ -314,7 +359,8 @@ Each is independently shippable.
    and services only, no UI.
 2. **Migration** — `LegacyBooks::Review`, `ReviewMigrator`, `data_migration:reviews`, backfill. Data
    lands but is still invisible.
-3. **Book page read surface** — summary line, histogram, paginated text reviews.
+3. **Book page read surface** — summary line, histogram, full (unpaginated) text-review list,
+   `BodySanitizer.render`, spoiler CSS and reveal controller.
 4. **Write flow** — cacheable widget, `ReviewStateController`, modal, `ReviewsController`,
    `ReviewPolicy`.
 5. **`/my/reviews`** — profile strip, filters, sorts, pagination, `/reviews` 301s, admin index.
