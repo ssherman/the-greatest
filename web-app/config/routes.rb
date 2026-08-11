@@ -264,6 +264,11 @@ Rails.application.routes.draw do
 
   # Per-item review state — global (non-domain-constrained), JSON-only, never cached.
   get "review_state", to: "review_state#show", as: :review_state
+
+  # Review writes — global (non-domain-constrained), Turbo Stream, never cached.
+  post "reviews", to: "reviews#create", as: :reviews
+  patch "reviews/:id", to: "reviews#update", as: :review
+  delete "reviews/:id", to: "reviews#destroy"
   post "user_lists", to: "user_lists#create", as: :user_lists
   post "user_lists/:user_list_id/items",
     to: "user_list_items#create",
