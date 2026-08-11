@@ -261,6 +261,9 @@ Rails.application.routes.draw do
   # User-list endpoints — global (non-domain-constrained), JSON-only.
   # The state endpoint is scoped to Current.domain via the controller.
   get "user_list_state", to: "user_list_state#show", as: :user_list_state
+
+  # Per-item review state — global (non-domain-constrained), JSON-only, never cached.
+  get "review_state", to: "review_state#show", as: :review_state
   post "user_lists", to: "user_lists#create", as: :user_lists
   post "user_lists/:user_list_id/items",
     to: "user_list_items#create",
