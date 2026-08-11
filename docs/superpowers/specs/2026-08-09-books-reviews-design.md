@@ -153,23 +153,53 @@ the counts it summarizes. Both are available in SQL for the future recommendatio
 `Services::Reviews::BodySanitizer` is the single implementation, called from `Review`'s
 `before_validation` **and** directly by the migrator, which bulk-inserts and so bypasses callbacks.
 
-Order matters:
+> **Revised 2026-08-11, after increment 4 shipped.** The original design converted markup on
+> **write** — `<spoiler>` became `<span class="review-spoiler">`, and blank lines became `<p>`.
+> Both conversions produced markup that `call`'s own allowlist rejects, so `call` was **not
+> idempotent**, and every edit path had to un-convert first. That produced **three separate
+> production-class bugs** in one increment: editing a review destroyed its spoiler and published it
+> in the clear; a `PATCH` omitting the body did the same; and paragraph conversion stopped working
+> after the first edit. Each fix defended the round trip rather than removing it.
+>
+> **The rule now: `call` sanitizes and never transforms. All markup generation happens at render.**
+> Storing exactly what the author typed makes `call` idempotent, and an idempotent write path makes
+> the entire class of round-trip bug unrepresentable rather than defended against.
 
-1. `Rails::HTML5::SafeListSanitizer`, allowlist `p br a i b em strong blockquote` **plus `spoiler`**,
-   attributes `href title`
-2. walk the sanitized fragment with Nokogiri and rename each `<spoiler>` node to
-   `<span class="review-spoiler">`, replacing any `class` the user supplied
+**Write — `call`:** `Rails::HTML5::SafeListSanitizer`, allowlist `p br a i b em strong blockquote`,
+attributes `href title`. Then `.presence` on rendered text, so a body that sanitizes down to nothing
+becomes `NULL` (the `<img>`-only case). **No conversions.** `call(call(x)) == call(x)` is the
+property the tests pin, and it is what retires `for_editing` entirely.
 
-Spoilers are resolved by the **HTML parser**, never by string substitution. Text that merely looks
-like a spoiler tag inside an attribute value is escaped by the parser and never becomes a node, so
-there is nothing to substitute into. Renaming *after* sanitizing means a user can never supply a
-`class` of their own: `span` is not in the allowlist, so a user-written
-`<span class="review-spoiler">` is stripped outright.
+**Read — `render`:** parse the sanitized fragment once, then
 
-The spoiler span is blurred by CSS and revealed by a small Stimulus controller — 118 legacy rows use
-the tag, and dropping it would print those spoilers in the clear.
+1. if the body contains no block-level element, wrap its loose text into paragraphs (blank lines
+   separate paragraphs, single newlines become `<br>`). Migrated bodies already carry `<p>`/`<br>`
+   from the legacy import, so the guard skips them and ~16,000 reviews render exactly as before
+2. walk **text nodes only**, replacing `||spoiler||` with `<span class="review-spoiler">`
+3. harden every `<a>` with `rel="nofollow ugc noopener"` and `target="_blank"`
 
-Then `.presence`, so a body that sanitizes down to nothing becomes `NULL` (the `<img>`-only case).
+**Text nodes only is the safety property.** An attribute value is not a text node, so
+`<a href="||evil||">` can never receive a spliced span — the same failure the original
+string-substitution attempt produced, avoided the same way.
+
+Spoiler syntax is `||…||`. Measured against the corpus: **0 bodies contain `||`, 7 contain `>!`**,
+so the Discord delimiter is collision-free here and the Reddit one is not. A reader who types `||`
+twice in prose gets a spoiler, exactly as Discord behaves; there is no escape hatch until one is
+needed. `<spoiler>` as *input* stops working — it is no longer in the allowlist — and the dialog's
+hint teaches `||` instead.
+
+Because `span` and `class` leave the render allowlist with this change, `scrub_classes` is deleted
+too: no stored body legitimately contains a `span` any more, so the blanket-`class` hole that pass
+existed to narrow closes by construction.
+
+**Two data paths this revision must not miss:**
+
+- **119 stored rows carry `<span class="review-spoiler">`** and convert to `||…||` via a rake task,
+  run against production as increment 2's migration was. Not optional — the moment `span` leaves the
+  render allowlist, any row still holding one prints its spoiler in the clear.
+- **`ReviewMigrator` calls `call`**, so at the eventual legacy cutover, when everything re-imports
+  from scratch, legacy `<spoiler>` tags would be stripped to bare text. The migrator gains an
+  explicit parser-based pre-pass converting them to `||`, since `call` no longer knows the tag.
 
 Bodies over **25,000 characters** after sanitizing import as rating-only, with the body dropped and
 the id logged. The cap clears the longest legitimate legacy review (20,030) and catches only review
@@ -260,12 +290,18 @@ clips at 79.2% — proportional rather than rounded to 4 — and an integer rati
 Fill is a single colour; the histogram bars likewise. No hue scale carries meaning anywhere on this
 surface.
 
-**Rendering a body must not re-run `BodySanitizer.call`.** Stored bodies carry
+**Rendering a body must not re-run `BodySanitizer.call`.** Stored bodies carried
 `<span class="review-spoiler">` wrappers (118 rows), and `span` is deliberately absent from the
-write-time allowlist — so a second `.call` strips every wrapper and prints those spoilers in the
-clear. Render-time sanitizing is therefore a separate `BodySanitizer.render`, with its own allowlist
-(write tags plus `span`, write attributes plus `class`), kept in the same file so the two lists
-cannot drift, and pinned by a test that asserts the re-run failure mode directly.
+write-time allowlist — so a second `.call` stripped every wrapper and printed those spoilers in the
+clear. Render-time sanitizing is therefore a separate `BodySanitizer.render`, kept in the same file
+as `call` so the two allowlists cannot drift, and pinned by a test asserting the failure mode.
+
+> **Superseded 2026-08-11 by the `Body handling` revision above, which removes the root cause.**
+> `call` no longer generates a `span` at all — spoilers are stored as `||…||` and converted at
+> render — so the two allowlists are once again the same set, `span` and `class` leave the render
+> list, and `scrub_classes` is deleted. The separation of `call` and `render` remains; what goes
+> away is the asymmetry that made re-running `call` destructive. The test asserting that failure
+> mode is replaced by a stronger one: **`call` is idempotent.**
 
 The spoiler reveal mounts **on the card, not on the spans**: the sanitizer strips `data-action`, so a
 span can never carry its own. The Stimulus controller delegates clicks through
