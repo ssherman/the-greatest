@@ -83,7 +83,12 @@ export default class extends Controller {
     this.showError("Pick a rating from 1 to 5 before saving.")
   }
 
+  // Stash the method that was in force (patch/post) so a failed delete can be
+  // un-armed in submitted() below -- otherwise a reader whose removal fails
+  // due to a transient error is left with a dialog that still submits DELETE
+  // on the next Save, silently destroying the review they meant to keep.
   remove() {
+    this._methodBeforeRemove = this.methodFieldTarget.value
     this.methodFieldTarget.value = "delete"
     this.formTarget.requestSubmit()
   }
@@ -100,9 +105,9 @@ export default class extends Controller {
   // collapse into one honest "try again" rather than a guess that might be wrong.
   submitted(event) {
     const { success, fetchResponse } = event.detail || {}
+    const wasRemoval = this.methodFieldTarget.value === "delete"
 
     if (success) {
-      const wasRemoval = this.methodFieldTarget.value === "delete"
       this.close()
       // ReviewsController#render_widget_and_summary streams the widget, the summary
       // line AND the Ratings & Reviews card, so this is describing what already
@@ -114,6 +119,14 @@ export default class extends Controller {
         }
       }))
       return
+    }
+
+    // A failed delete leaves the dialog open. Restore the patch/post method
+    // remove() overwrote so a subsequent Save submits an update, not another
+    // DELETE, and so validate()'s delete exemption stops applying again once
+    // the form is back to being a save.
+    if (wasRemoval && this._methodBeforeRemove) {
+      this.methodFieldTarget.value = this._methodBeforeRemove
     }
 
     this.showError(this.errorMessageFor(fetchResponse))
