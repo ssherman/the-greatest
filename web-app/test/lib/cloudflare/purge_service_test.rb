@@ -137,4 +137,51 @@ module Cloudflare
         )
     end
   end
+
+  class PurgeServiceUrlsTest < ActiveSupport::TestCase
+    setup do
+      @config = mock("config")
+      @client = mock("client")
+    end
+
+    test "posts the urls as a files body to the domain's zone" do
+      @config.expects(:zone_id).with(:books).returns("zone-abc")
+      @client.expects(:post)
+        .with("zones/zone-abc/purge_cache", body: {files: ["https://example.test/book/x"]})
+        .returns({result: {"id" => "purge-1"}, metadata: {response_time: 0.1}})
+
+      service = PurgeService.new(client: @client, config: @config)
+      result = service.purge_urls(:books, ["https://example.test/book/x"])
+
+      assert result[:success]
+    end
+
+    test "reports failure without raising when the zone is not configured" do
+      @config.expects(:zone_id).with(:books).returns(nil)
+      @client.expects(:post).never
+
+      result = PurgeService.new(client: @client, config: @config).purge_urls(:books, ["https://example.test/x"])
+
+      refute result[:success]
+      assert_match(/not configured/i, result[:error])
+    end
+
+    test "reports failure without raising when the api call errors" do
+      @config.expects(:zone_id).with(:books).returns("zone-abc")
+      @client.expects(:post).raises(Cloudflare::Exceptions::NetworkError.new("boom"))
+
+      result = PurgeService.new(client: @client, config: @config).purge_urls(:books, ["https://example.test/x"])
+
+      refute result[:success]
+      assert_match(/boom/, result[:error])
+    end
+
+    test "does nothing for an empty url list" do
+      @client.expects(:post).never
+
+      result = PurgeService.new(client: @client, config: @config).purge_urls(:books, [])
+
+      refute result[:success]
+    end
+  end
 end
