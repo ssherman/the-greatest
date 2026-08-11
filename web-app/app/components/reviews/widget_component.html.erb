@@ -1,0 +1,18 @@
+<div class="reviews-widget inline-flex items-center gap-2"
+     data-controller="reviews--widget"
+     data-reviews--widget-reviewable-type-value="<%= reviewable_type %>"
+     data-reviews--widget-reviewable-id-value="<%= reviewable.id %>">
+  <button type="button"
+          class="btn btn-sm btn-ghost"
+          data-action="click->reviews--widget#open"
+          data-reviews--widget-target="button">
+    <span data-reviews--widget-target="stars" class="<%= "hidden" unless review %>">
+      <% if review %>
+        <span data-testid="review-widget-stars">
+          <%= render Reviews::StarsComponent.new(rating: review.rating, size: "size-4", label: stars_label) %>
+        </span>
+      <% end %>
+    </span>
+    <span data-reviews--widget-target="label" data-testid="review-widget-label"><%= label %></span>
+  </button>
+</div>
