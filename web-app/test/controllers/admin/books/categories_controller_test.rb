@@ -109,6 +109,49 @@ module Admin
         get search_admin_books_categories_path(q: "Fic"), as: :json
         assert_response :success
       end
+
+      test "search returns the autocomplete JSON shape with the type in the text" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get search_admin_books_categories_path(q: "fict"), as: :json
+
+        assert_response :success
+        row = response.parsed_body.find { |r| r["value"] == categories(:books_fiction_genre).id }
+        assert_equal "Fiction (Genre)", row["text"]
+      end
+
+      # A book is legitimately tagged with a subject or a setting, so the admin
+      # picker must keep offering every type.
+      test "search is not scoped to any category_type by default" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get search_admin_books_categories_path(q: "americ"), as: :json
+
+        texts = response.parsed_body.map { |r| r["text"] }
+        assert_includes texts, "Americana (Genre)"
+        assert_includes texts, "American History (Subject)"
+        assert_includes texts, "American (Location)"
+      end
+
+      test "search orders by item_count descending" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get search_admin_books_categories_path(q: "americ"), as: :json
+
+        assert_equal ["American History (Subject)", "Americana (Genre)", "American (Location)"],
+          response.parsed_body.map { |r| r["text"] }.first(3)
+      end
+
+      test "search returns nothing for a blank query" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get search_admin_books_categories_path(q: ""), as: :json
+
+        assert_equal [], response.parsed_body
+      end
+
+      test "search returns only this domain's categories" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get search_admin_books_categories_path(q: "rock"), as: :json
+
+        assert_equal [], response.parsed_body
+      end
     end
   end
 end

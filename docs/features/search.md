@@ -334,6 +334,27 @@ ids.map { |id| records_by_id[id] }.compact
 
 Admin controllers (e.g., `Admin::Music::ArtistsController#search`) expose `GET /admin/artists/search?q=...` returning JSON `[{value: id, text: name}]` for select widget autocomplete.
 
+## Category Search (Postgres, not OpenSearch)
+
+Categories are **not** indexed in OpenSearch. `CategorySearchQuery` (`app/lib/category_search_query.rb`) is a plain `ILIKE` query over the `categories` table, and it is the only one — it replaced two implementations that had drifted apart on ordering, limit, and blank-query handling.
+
+```ruby
+CategorySearchQuery.call("americ", scope: Books::Category, limit: 10)
+CategorySearchQuery.call("americ", scope: Books::Category, types: [:genre])
+```
+
+It takes `scope:` rather than a domain symbol, so an admin controller passes its `model_class` and a public controller passes the class directly; the query never learns about domains. Results are `active` only, ordered `item_count DESC, name ASC` — on a table of ~52,000 books categories, alphabetical order surfaces whichever match happens to sort first rather than the one the user meant. A blank query returns `[]`.
+
+**`types:` is optional and defaults to unscoped, and that default is load-bearing.** Both callers need every `category_type`:
+
+- `Admin::CategoriesBaseController#search`, because a book is legitimately tagged with a subject or a setting, not just a genre.
+- `Books::FiltersController#render_pane_results`, because the books filter modal's Category axis is *defined* as genres, subjects and settings. Its placeholder says so and `e2e/tests/books/filters.spec.ts` pins it. Note that browse and search differ on purpose here: `FilterFacetsQuery.genres` scopes the browsable list to genres, because browsing 52,000 rows is only useful narrowed to the ~200 genres, while searching by name benefits from the whole space.
+
+Because a result set spans three types, every result says which type it is. Two surfaces render that, differently on purpose:
+
+- `Category#name_with_type` returns `"Americana (Genre)"`, and `"Unknown"` when `category_type` is `nil` (the column is nullable). The admin JSON uses it, since `{value:, text:}` has nowhere to put markup.
+- `Books::FilterOptionRowsComponent` renders a separate tag next to the name, keeping the name itself clean. Its `BADGE_LABELS` overrides only one word — a location is tagged **Setting**, which reads better than the enum's own word for a place a book is set in.
+
 ## Views
 
 **File**: `app/views/music/searches/index.html.erb`

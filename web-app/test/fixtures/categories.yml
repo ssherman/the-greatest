@@ -151,6 +151,42 @@ books_france_location:
   deleted: false
   parent:
 
+# Three types sharing a name prefix, so a type filter can be proven to filter
+# and ordering can be proven to order. Without an overlap like this, a
+# types: [:genre] test passes whether or not the filter is implemented.
+books_american_history_subject:
+  type: "Books::Category"
+  name: "American History"
+  slug: "american-history"
+  description: "Books about American history"
+  category_type: 2  # subject
+  alternative_names: []
+  item_count: 1948
+  deleted: false
+  parent:
+
+books_americana_genre:
+  type: "Books::Category"
+  name: "Americana"
+  slug: "americana"
+  description: "Americana"
+  category_type: 0  # genre
+  alternative_names: []
+  item_count: 1634
+  deleted: false
+  parent:
+
+books_american_location:
+  type: "Books::Category"
+  name: "American"
+  slug: "american-setting"
+  description: "Books set in America"
+  category_type: 1  # location
+  alternative_names: []
+  item_count: 705
+  deleted: false
+  parent:
+
 books_deleted_genre:
   type: "Books::Category"
   name: "Retired Genre"
