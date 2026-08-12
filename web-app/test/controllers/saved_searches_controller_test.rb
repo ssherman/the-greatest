@@ -515,6 +515,29 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
 
   # --- edit / update ---
 
+  # Serializes the rendered form's criteria fields the way a browser would --
+  # selected options only, checked boxes only, every hidden and text input --
+  # and returns them as the nested params hash a real submit would send. Tests
+  # that build their params by hand cannot catch a control that is MISSING from
+  # the form, which is the exact defect this section guards against.
+  def submitted_criteria(html)
+    form = Nokogiri::HTML5.fragment(html).at_css("form")
+    pairs = form.css("[name^='saved_search[criteria]']").flat_map do |node|
+      case node.name
+      when "select"
+        node.css("option[selected]").map { |option| [node["name"], option["value"]] }
+      when "input"
+        next [] if node["type"] == "checkbox" && node["checked"].nil?
+        [[node["name"], node["value"]]]
+      else
+        []
+      end
+    end
+
+    query = pairs.map { |name, value| "#{name}=#{URI.encode_www_form_component(value.to_s)}" }.join("&")
+    Rack::Utils.parse_nested_query(query).dig("saved_search", "criteria") || {}
+  end
+
   test "edit renders the form for the owner" do
     sign_in_as(@user, stub_auth: true)
 
@@ -538,6 +561,71 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
 
     assert_select "select[name='saved_search[criteria][book_type]'] option[value='1'][selected]"
     assert_select "select[name='saved_search[criteria][ranked]'] option[value='false'][selected]"
+  end
+
+  # Every criterion the form can write must come back pre-rendered, because
+  # `criteria=` REPLACES the whole hash: a field that renders blank is a field
+  # whose stored value an unedited resave silently deletes. This asserts the
+  # whole surface at once rather than one key at a time, since the failure mode
+  # is a key nobody remembered to add a control for (that is finding 1).
+  test "edit pre-renders every criterion the form can write" do
+    sign_in_as(@user, stub_auth: true)
+    stored = {
+      "book_type" => 1,
+      "book_length" => [::Books::Book.book_lengths["long"]],
+      "first_year_published_gt" => 1837,
+      "first_year_published_lt" => 1901,
+      "ranked" => "false",
+      "max_ranked_position" => 250,
+      "hide_read" => true,
+      "genre_match_mode" => "all",
+      "included_category_ids" => [categories(:books_fiction_genre).id],
+      "excluded_category_ids" => [categories(:books_americana_genre).id],
+      "included_language_ids" => [languages(:russian).id],
+      "excluded_language_ids" => [languages(:french).id],
+      "included_country_ids" => [books_countries(:french).id],
+      "excluded_country_ids" => [books_countries(:japanese).id]
+    }
+    @private_search.update!(criteria: stored)
+
+    get edit_saved_search_path(@private_search)
+    assert_response :success
+
+    # Reading back the whole criteria surface off the DOM, then comparing it to
+    # what is stored, is what makes a missing control fail rather than pass by
+    # omission -- an assert_select per key can only check keys it lists.
+    assert_equal stored, Books::SavedSearchCriteriaParams.call(submitted_criteria(response.body))
+  end
+
+  # A criterion whose control renders blank costs nothing at render time and
+  # everything on the next save. This posts what the FORM itself would post --
+  # read off the rendered DOM, not values the test invents -- so deleting a
+  # control from the partial turns the assertion red instead of just changing
+  # what a hand-written params hash happens to say.
+  #
+  # genre_match_mode is the live case: it is set on all 4,391 migrated searches
+  # and "all" on 151 of them, and it had no control at all until finding 1.
+  test "resaving an unedited search preserves every stored criterion" do
+    sign_in_as(@user, stub_auth: true)
+    stored = {
+      "book_type" => 1,
+      "ranked" => "false",
+      "hide_read" => true,
+      "genre_match_mode" => "all",
+      "max_ranked_position" => 250,
+      "included_category_ids" => [categories(:books_fiction_genre).id],
+      "included_language_ids" => [languages(:russian).id]
+    }
+    @private_search.update!(criteria: stored)
+
+    get edit_saved_search_path(@private_search)
+    patch saved_search_path(@private_search), params: {
+      saved_search: {name: @private_search.name, criteria: submitted_criteria(response.body)}
+    }
+
+    assert_redirected_to saved_search_path(@private_search)
+    assert_equal stored, @private_search.reload.criteria
+    assert_equal :all, @private_search.criteria_object.genre_match_mode
   end
 
   test "edit renders a chip for each stored category, labelled with its type" do

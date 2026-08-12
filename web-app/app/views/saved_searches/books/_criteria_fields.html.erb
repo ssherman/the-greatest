@@ -125,6 +125,20 @@
           </div>
         <% end %>
       </div>
+
+      <div class="form-control">
+        <%= c.label :genre_match_mode, class: "label" do %><span class="label-text font-semibold">Category matching</span><% end %>
+        <%# Must render even though "any" is the reader's default: `criteria=`
+            REPLACES the whole hash, so with no control here an owner resaving
+            one of the 151 migrated searches that store "all" would post no
+            genre_match_mode, and their AND search would silently become an OR.
+            selected: belongs in the THIRD (options) argument -- Tags::Select
+            only reads @options[:selected], so html_options is a silent no-op. %>
+        <%= c.select :genre_match_mode,
+              [["Match any of these categories", "any"], ["Match all of these categories", "all"]],
+              {selected: criteria.genre_match_mode.to_s},
+              {class: "select select-bordered w-full"} %>
+      </div>
     <% end %>
   </div>
 </div>
