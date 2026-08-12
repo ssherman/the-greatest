@@ -469,26 +469,51 @@ module Services
         assert_includes html, "a || b"
       end
 
-      test "render escapes text around a spoiler marker" do
-        html = Services::Reviews::BodySanitizer.render("<script>x</script> ||hidden||")
+      # A <script> tag here would pass even without any spoiler-aware escaping at
+      # all -- RENDER_TAGS already strips it upstream, before convert_spoiler_markers
+      # ever sees a text node. Special characters that legitimately survive the
+      # sanitizer as plain text (a literal & or <) next to a marker are the real
+      # test: the text this method relocates into a new node must still serialize
+      # correctly, not leak a bare & or < that could be misread as markup.
+      test "render safely serializes text around a spoiler marker" do
+        html = Services::Reviews::BodySanitizer.render("Fish & chips <3 ||hidden||")
 
-        refute_includes html, "<script"
+        assert_includes html, "Fish &amp; chips &lt;3 "
         assert_includes html, %(<span class="review-spoiler">hidden</span>)
+        parsed = Nokogiri::HTML5.fragment(html)
+        assert_equal "Fish & chips <3 hidden", parsed.text
       end
 
+      # Same reasoning as above, aimed at the captured content instead: a <script>
+      # tag inside the marker would also pass with no spoiler-aware escaping at
+      # all, since the sanitizer already removes it before conversion runs.
+      # Characters that survive as literal text within the marker are what this
+      # method is actually responsible for re-serializing safely.
       test "render escapes markup inside a spoiler marker" do
+        html = Services::Reviews::BodySanitizer.render("||1 < 2 & 3||")
+
+        assert_includes html, %(<span class="review-spoiler">1 &lt; 2 &amp; 3</span>)
+        span = Nokogiri::HTML5.fragment(html).at_css("span.review-spoiler")
+        assert_equal "1 < 2 & 3", span.text
+      end
+
+      test "render escapes a script tag inside a spoiler marker" do
         html = Services::Reviews::BodySanitizer.render("||<script>alert(1)</script>||")
 
         refute_includes html, "<script"
         assert_includes html, "review-spoiler"
       end
 
-      # The whole safety property: an attribute value is not a text node.
+      # The whole safety property: an attribute value is not a text node. A
+      # negative check alone (refute_includes the spliced string) would also pass
+      # if the href were simply dropped, so this asserts the href survives INTACT.
       test "render does not splice a span into an attribute value" do
         html = Services::Reviews::BodySanitizer.render(%(<a href="https://example.test/||evil||">click</a>))
 
+        anchor = Nokogiri::HTML5.fragment(html).at_css("a")
+        assert_equal "https://example.test/||evil||", anchor["href"]
+        assert_equal "click", anchor.text
         refute_includes html, %(href="https://example.test/<span)
-        assert_includes html, "click"
       end
 
       test "render wraps blank-line-separated text in paragraphs" do
@@ -522,6 +547,56 @@ module Services
 
         assert_includes html, %(rel="nofollow ugc noopener")
         assert_includes html, %(target="_blank")
+      end
+
+      # paragraphize runs before convert_spoiler_markers and turns a single typed
+      # newline into a real <br> element, splitting what was one text node into two.
+      # A spoiler must still work across that split -- matching has to reach across
+      # node boundaries, not just within a single text node.
+      test "render converts a spoiler marker across a single newline" do
+        html = Services::Reviews::BodySanitizer.render("||He dies\nand so does she||")
+
+        assert_includes html, %(<span class="review-spoiler">He dies<br>and so does she</span>)
+      end
+
+      # The marker delimiters sit outside the <b>, so the whole element has to be
+      # picked up and moved into the span as a real, still-functioning tag -- not
+      # escaped the way disallowed markup typed inside a marker is.
+      test "render converts a spoiler marker around an inline tag" do
+        html = Services::Reviews::BodySanitizer.render("||He <b>dies</b> at the end||")
+
+        assert_includes html, %(<span class="review-spoiler">He <b>dies</b> at the end</span>)
+      end
+
+      # Documented scope limit, not a bug: a spoiler spanning a blank line (a
+      # paragraph boundary) is not supported, matching Discord's own behavior.
+      # Each marker here is alone in its own <p> once paragraphize runs, so
+      # neither pairs up and both are left exactly as typed.
+      test "render does not convert a spoiler marker pair that spans a paragraph break" do
+        html = Services::Reviews::BodySanitizer.render("Para one ||starts.\n\nEnds|| here.")
+
+        refute_includes html, "review-spoiler"
+        assert_includes html, "||starts."
+        assert_includes html, "Ends||"
+      end
+
+      # Corpus shape (id=124730): plain text ending in a single trailing newline,
+      # no block markup at all. Before this task, render's newline was inert (no
+      # <br>/<p> rule to fall back on) and the body rendered as one run-on line;
+      # this pins the now-deliberate paragraph conversion for that shape.
+      test "render turns a single line of plain text with a trailing newline into one paragraph" do
+        html = Services::Reviews::BodySanitizer.render("average\n")
+
+        assert_equal "<p>average</p>", html
+      end
+
+      # Corpus shape (id=130717): a quoted line, a single newline, then the rest of
+      # the review -- no blank line, so this is one paragraph with a line break,
+      # not two paragraphs.
+      test "render turns a quoted line and a newline into one paragraph with a line break" do
+        html = Services::Reviews::BodySanitizer.render(%("Great book."\nReally enjoyed it.))
+
+        assert_equal %(<p>"Great book."<br>Really enjoyed it.</p>), html
       end
     end
   end

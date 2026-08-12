@@ -49,11 +49,20 @@ module Services
       # choosing it: 0 existing bodies contain "||", 7 contain ">!", so the Discord
       # delimiter is collision-free here and the Reddit one is not.
       #
-      # Non-greedy and multiline: a body with two spoilers must produce two spans, not
-      # one span swallowing everything between the first and last marker, and a spoiler
-      # may span a newline inside a paragraph.
+      # Non-greedy: a body with two spoilers must produce two spans, not one span
+      # swallowing everything between the first and last marker. Multiline (/m) so `.`
+      # matches a literal newline WITHIN one text node's content -- but how far a
+      # match is actually allowed to reach (a single <br>, a whole inline tag, never
+      # a paragraph boundary) is decided by convert_spoiler_markers below, not by
+      # this pattern alone.
       SPOILER_MARKER = "||".freeze
       SPOILER_PATTERN = /\|\|(.+?)\|\|/m
+
+      # A spoiler match must never straddle two different paragraphs -- p/blockquote
+      # are the only block-level tags render ever produces or preserves
+      # (see RENDER_TAGS), so partitioning a spoiler sweep on just these two names
+      # is exhaustive. See convert_spoiler_markers for why the boundary matters.
+      SPOILER_SCOPE_BOUNDARY_TAGS = %w[p blockquote].freeze
 
       # Guards .call's newline-to-paragraph conversion (see #paragraphize). Matches an
       # opening p/br/blockquote/pre tag anywhere in the raw body -- good enough to
@@ -150,7 +159,9 @@ module Services
         convert_spoiler_markers(fragment)
         harden_links(fragment)
         # Safe to mark: everything in the buffer came out of the sanitizer above, and
-        # convert_spoiler_markers escapes every character it did not itself emit.
+        # convert_spoiler_markers only ever moves existing nodes or builds new
+        # Nokogiri::XML::Text nodes (auto-escaped by Nokogiri on serialization) --
+        # never a string that gets reparsed as markup.
         fragment.to_html.html_safe # rubocop:disable Rails/OutputSafety
       end
 
@@ -294,44 +305,163 @@ module Services
         end
       end
 
-      # Walks TEXT NODES ONLY. An attribute value is not a text node, so
-      # <a href="||evil||"> cannot receive a spliced span -- the exact failure this
-      # file's header documents from the original string-substitution attempt, avoided
-      # the same way, just running in the other direction.
-      #
-      # Text either side of a marker pair is escaped before being reparsed, so nothing
-      # a user typed can become markup: the ONLY element this introduces is the span
-      # written here.
-      #
-      # Collected before mutating: replacing a node while traversing the same live
-      # NodeSet is undefined.
+      # Entry point: partitions the fragment into independent search scopes at every
+      # p/blockquote boundary (see SPOILER_SCOPE_BOUNDARY_TAGS) before matching a
+      # single marker pair, so a spoiler can never merge two different paragraphs
+      # into one giant span even when the raw text technically contains a pair of
+      # markers straddling them -- that is a defensible scope limit (Discord
+      # behaves the same way: a spoiler does not survive a paragraph break), not
+      # an oversight. It also avoids a subtler failure: String#scan does not
+      # backtrack past a match it already consumed, so without this partition a
+      # stray unpaired "||" left over in one paragraph could swallow a LATER
+      # paragraph's own legitimate pair as its closing delimiter, silently
+      # breaking that second, unrelated spoiler.
       def convert_spoiler_markers(fragment)
-        text_nodes = fragment.xpath(".//text()").to_a
-        text_nodes.each do |node|
-          content = node.content
-          next unless content.include?(SPOILER_MARKER)
-          next unless content.match?(SPOILER_PATTERN)
-
-          node.replace(Nokogiri::HTML5.fragment(spoiler_html_for(content)))
-        end
+        convert_spoiler_scope(fragment.children.to_a, fragment.document)
       end
 
-      # String#split against a pattern with ONE capture group interleaves the captures
-      # into the result, so even indices are the literal text between markers and odd
-      # indices are the spoiler contents. That avoids hand-tracking match offsets, and
-      # it makes the escaping rule obvious: everything gets escaped, and the only
-      # element emitted is the span written here.
-      #
-      # The -1 limit keeps a trailing empty field, so a body ending in a spoiler does
-      # not silently lose the (empty) text after it.
-      def spoiler_html_for(content)
-        content.split(SPOILER_PATTERN, -1).each_with_index.map { |part, index|
-          if index.odd?
-            %(<span class="#{SPOILER_CLASS}">#{CGI.escapeHTML(part)}</span>)
+      # Walks one level of siblings, accumulating a "run" of everything that is NOT
+      # a scope boundary (plain text and inline elements -- br, a, i, b, em, strong,
+      # an already-existing spoiler span) and flushing it through
+      # convert_spoiler_run as one shared search scope. Hitting a boundary tag
+      # flushes the current run and recurses into that element's own children,
+      # which start a fresh, independent partition of runs one level down.
+      def convert_spoiler_scope(siblings, document)
+        run = []
+        siblings.each do |node|
+          if node.element? && SPOILER_SCOPE_BOUNDARY_TAGS.include?(node.name)
+            convert_spoiler_run(run, document)
+            run = []
+            convert_spoiler_scope(node.children.to_a, document)
           else
-            CGI.escapeHTML(part)
+            run << node
           end
-        }.join
+        end
+        convert_spoiler_run(run, document)
+      end
+
+      # One scope's worth of matching. TEXT NODES ONLY, gathered from every node in
+      # `nodes` (recursing into an inline element's own descendants, so nested
+      # formatting like <b><i>text</i></b> is reachable too) and concatenated into
+      # one string, so SPOILER_PATTERN can match ACROSS node boundaries: a marker
+      # either side of a <br> (a single typed newline, once paragraphize has turned
+      # it into an element) or wrapped around a whole inline element
+      # (||He <b>dies</b> at the end||) is found here, not just a marker sitting
+      # inside a single node.
+      #
+      # An attribute value is never part of `combined` -- it is not reachable via
+      # `.//text()` at all, regardless of how far matching reaches across siblings
+      # -- so <a href="||evil||"> cannot receive a spliced span. That is the exact
+      # failure this file's header documents from the original string-substitution
+      # attempt, avoided the same way it always was: never treat serialized markup,
+      # or anything that could contain it, as a plain string to search and replace.
+      def convert_spoiler_run(nodes, document)
+        return if nodes.empty?
+
+        text_nodes = nodes.flat_map { |node| node.text? ? [node] : node.xpath(".//text()").to_a }
+        return if text_nodes.empty?
+
+        contents = text_nodes.map(&:content)
+        combined = contents.join
+        return unless combined.include?(SPOILER_MARKER)
+
+        matches = combined.to_enum(:scan, SPOILER_PATTERN).map { Regexp.last_match }
+        return if matches.empty?
+
+        starts = spoiler_node_offsets(contents)
+
+        # Reverse: converting a match only ever truncates its start/end node from
+        # the right and inserts new siblings after it, so an earlier (leftward)
+        # match's node references and offsets are never invalidated by processing
+        # a later one first.
+        matches.reverse_each { |match| convert_spoiler_match(document, text_nodes, starts, contents, match) }
+      end
+
+      def spoiler_node_offsets(contents)
+        offsets = []
+        position = 0
+        contents.each do |content|
+          offsets << position
+          position += content.length
+        end
+        offsets
+      end
+
+      def spoiler_node_index(offsets, contents, char_position)
+        offsets.each_index do |index|
+          return index if char_position < offsets[index] + contents[index].length
+        end
+        offsets.length - 1
+      end
+
+      # Rewraps exactly one match. Same node on both ends is the common case (a
+      # marker pair sitting inside one run of plain text); different nodes means
+      # the match reaches across one or more inline elements (or a <br>), which
+      # are moved into the new span WHOLE via `add_child` -- never touched, never
+      # re-escaped -- so a real <b> stays a real, functioning <b> inside the
+      # spoiler, the same way it would outside one.
+      #
+      # Requires start and end to be direct siblings: `next_sibling` is how the
+      # in-between nodes are located and moved. A match whose start and end sit at
+      # different depths (the delimiter typed on one side of an inline tag but not
+      # reachable via a sibling walk from the other) is left unconverted rather
+      # than guessed at -- a narrower, defensible limit, not silent corruption.
+      #
+      # New text is built as real Nokogiri::XML::Text nodes, not by string-building
+      # and reparsing: `.content` already returns fully-decoded text, and Nokogiri
+      # re-encodes a Text node's content correctly on serialization, so nothing
+      # needs manual escaping and nothing typed by a user can introduce a tag --
+      # the only element this ever adds is the span constructed here.
+      def convert_spoiler_match(document, text_nodes, starts, contents, match)
+        start_index = spoiler_node_index(starts, contents, match.begin(0))
+        end_index = spoiler_node_index(starts, contents, match.end(0) - 1)
+        start_node = text_nodes[start_index]
+        end_node = text_nodes[end_index]
+        return if start_index != end_index && start_node.parent != end_node.parent
+
+        span = Nokogiri::XML::Node.new("span", document)
+        span["class"] = SPOILER_CLASS
+
+        local_outer_start = match.begin(0) - starts[start_index]
+        local_inner_start = match.begin(1) - starts[start_index]
+        local_inner_end = match.end(1) - starts[end_index]
+        local_outer_end = match.end(0) - starts[end_index]
+
+        # Live content, not the `contents` snapshot: an earlier (rightward) match
+        # sharing this same node already truncated it, and reverse processing
+        # guarantees the region this match touches was untouched by that.
+        start_text = start_node.content
+        end_text = end_node.content
+        before = start_text[0...local_outer_start]
+
+        if start_index == end_index
+          span_text = start_text[local_inner_start...local_inner_end]
+          after = start_text[local_outer_end..]
+
+          span.add_child(Nokogiri::XML::Text.new(span_text, document)) unless span_text.empty?
+          start_node.content = before
+          start_node.add_next_sibling(span)
+          span.add_next_sibling(Nokogiri::XML::Text.new(after, document)) unless after.empty?
+        else
+          between = []
+          sibling = start_node.next_sibling
+          while sibling && !sibling.equal?(end_node)
+            between << sibling
+            sibling = sibling.next_sibling
+          end
+
+          start_inside = start_text[local_inner_start..]
+          end_inside = end_text[0...local_inner_end]
+          after = end_text[local_outer_end..]
+
+          span.add_child(Nokogiri::XML::Text.new(start_inside, document)) unless start_inside.empty?
+          between.each { |sibling_node| span.add_child(sibling_node) }
+          span.add_child(Nokogiri::XML::Text.new(end_inside, document)) unless end_inside.empty?
+
+          start_node.content = before
+          end_node.content = after
+          start_node.add_next_sibling(span)
+        end
       end
     end
   end
