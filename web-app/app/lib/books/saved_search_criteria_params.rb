@@ -42,7 +42,7 @@ module Books
         .uniq.select { |v| ::Books::Book.book_lengths.value?(v) }
       out["book_length"] = lengths if lengths.any?
 
-      out["ranked"] = @raw["ranked"] if %w[true false].include?(@raw["ranked"].to_s)
+      out["ranked"] = @raw["ranked"].to_s if %w[true false].include?(@raw["ranked"].to_s)
       out["hide_read"] = true if ActiveModel::Type::Boolean.new.cast(@raw["hide_read"])
       out["genre_match_mode"] = "all" if @raw["genre_match_mode"].to_s == "all"
 

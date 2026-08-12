@@ -54,6 +54,13 @@ module Books
       assert_equal({}, normalize({"ranked" => "nonsense"}))
     end
 
+    test "stores ranked as a string even when given a native boolean" do
+      # A JSON request body preserves true/false; form-urlencoded never does.
+      assert_equal({"ranked" => "true"}, normalize({"ranked" => true}))
+      assert_equal({"ranked" => "false"}, normalize({"ranked" => false}))
+      assert_instance_of String, normalize({"ranked" => true})["ranked"]
+    end
+
     test "stores hide_read only when it is true" do
       assert_equal({"hide_read" => true}, normalize({"hide_read" => "1"}))
       assert_equal({}, normalize({"hide_read" => "0"}))
