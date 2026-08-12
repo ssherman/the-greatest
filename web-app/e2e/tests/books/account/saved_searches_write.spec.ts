@@ -14,19 +14,29 @@ test.describe('Saved search write flow', () => {
     await page.getByLabel('Type').selectOption({ label: 'Fiction' });
     await page.getByLabel('Ranking').selectOption({ label: 'Ranked books only' });
 
-    // The category picker is the only field needing a round trip.
+    // The category, language and country pickers all share the same
+    // Stimulus controller -- exercising one of each is what proves the
+    // language and country boxes actually got the picker treatment rather
+    // than staying broken <select multiple> boxes.
     const included = page.locator('[data-saved-search-picker-name-value*="included_category_ids"]');
     await included.getByPlaceholder('Search genres, subjects, settings').fill('fict');
     await included.locator('[data-action="saved-search-picker#add"]').first().click();
     await expect(included.locator('[data-chip]')).toHaveCount(1);
 
+    const includedLanguage = page.locator('[data-saved-search-picker-name-value*="included_language_ids"]');
+    await includedLanguage.getByPlaceholder('Search languages').fill('engl');
+    await includedLanguage.locator('[data-action="saved-search-picker#add"]').first().click();
+    await expect(includedLanguage.locator('[data-chip]')).toHaveCount(1);
+
     await page.getByRole('button', { name: 'Create search' }).click();
 
     await expect(page.getByRole('heading', { level: 1 })).toContainText(name);
 
-    // Edit: the stored chip must come back server-rendered.
+    // Edit: the stored chips must come back server-rendered.
     await page.getByRole('link', { name: 'Edit' }).click();
     await expect(page.locator('[data-saved-search-picker-name-value*="included_category_ids"] [data-chip]'))
+      .toHaveCount(1);
+    await expect(page.locator('[data-saved-search-picker-name-value*="included_language_ids"] [data-chip]'))
       .toHaveCount(1);
 
     await page.getByLabel('Name').fill(`${name} (edited)`);
