@@ -12,11 +12,18 @@ class ConvertReviewSpoilerSpansToMarkers < ActiveRecord::Migration[8.1]
   end
 
   def up
-    MigrationReview.where("body LIKE ?", "%review-spoiler%").find_each do |review|
-      converted = Services::Reviews::SpoilerSpanConverter.call(review.body)
-      next if converted == review.body
+    say_with_time "Converting stored spoiler spans to markers" do
+      converted_count = 0
 
-      review.update_columns(body: converted)
+      MigrationReview.where("body LIKE ?", "%review-spoiler%").find_each do |review|
+        converted = Services::Reviews::SpoilerSpanConverter.call(review.body)
+        next if converted == review.body
+
+        review.update_columns(body: converted)
+        converted_count += 1
+      end
+
+      converted_count
     end
   end
 
