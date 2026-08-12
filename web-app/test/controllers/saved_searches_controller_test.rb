@@ -459,15 +459,24 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     name_field = form.at_css("input[name$='[name]']")
     book_type_field = form.at_css("select[name$='[criteria][book_type]']")
     book_length_field = form.at_css("input[type=checkbox][name$='[criteria][book_length][]']")
+    # The hidden blank field is what lets a `multiple` select be cleared --
+    # it posts nothing on its own when nothing is selected. Reading it off
+    # the DOM here (rather than just asserting the normalizer drops an
+    # inline [""] the test invents) is what catches the field going missing
+    # from the view itself.
+    language_hidden_field = form.at_css("input[type=hidden][name='saved_search[criteria][included_language_ids][]']")
 
     assert name_field, "the rendered form has no [name] input"
     assert book_type_field, "the rendered form has no [criteria][book_type] select"
     assert book_length_field, "the rendered form has no [criteria][book_length][] checkbox"
+    assert language_hidden_field, "the rendered form has no hidden blank [criteria][included_language_ids][] field"
+    assert_equal "", language_hidden_field["value"]
 
     query = [
       "#{name_field["name"]}=#{URI.encode_www_form_component("From the real form")}",
       "#{book_type_field["name"]}=#{URI.encode_www_form_component("0")}",
-      "#{book_length_field["name"]}=#{URI.encode_www_form_component(book_length_field["value"])}"
+      "#{book_length_field["name"]}=#{URI.encode_www_form_component(book_length_field["value"])}",
+      "#{language_hidden_field["name"]}=#{URI.encode_www_form_component(language_hidden_field["value"])}"
     ].join("&")
 
     assert_difference "Books::SavedSearch.count", 1 do
@@ -477,6 +486,10 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     search = Books::SavedSearch.order(:id).last
     assert_equal "From the real form", search.name
     assert_equal({"book_type" => 0, "book_length" => [book_length_field["value"].to_i]}, search.criteria)
+    # The select itself was never selected/submitted here -- only its hidden
+    # blank sibling -- so the normalizer must drop the key entirely rather
+    # than store an empty array or an unparsed [""].
+    assert_not search.criteria.key?("included_language_ids")
   end
 
   # --- edit / update ---
@@ -526,6 +539,29 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to saved_search_path(@private_search)
     assert_equal "Renamed", @private_search.reload.name
     assert_equal({"book_type" => 1}, @private_search.criteria)
+  end
+
+  # The hidden blank field before each multi-select is what makes clearing
+  # possible at all: a `multiple` select posts nothing when nothing is
+  # selected, so without the hidden field this PATCH would leave the stored
+  # ids untouched instead of clearing them.
+  #
+  # book_type is carried along and resubmitted so the surviving criteria hash
+  # isn't empty -- `criteria=` REPLACES the whole hash (it is not a merge),
+  # and `validates :criteria, presence: true` treats `{}` as blank, which
+  # would 422 the whole update and mask whether the id array itself cleared.
+  test "deselecting every language clears the stored ids" do
+    sign_in_as(@user, stub_auth: true)
+    @private_search.update!(criteria: {"included_language_ids" => [languages(:english).id], "book_type" => 0})
+
+    patch saved_search_path(@private_search), params: {saved_search: {
+      name: @private_search.name,
+      criteria: {"included_language_ids" => [""], "book_type" => "0"}
+    }}
+
+    criteria = @private_search.reload.criteria
+    assert_not criteria.key?("included_language_ids")
+    assert_equal 0, criteria["book_type"]
   end
 
   test "update 404s for a stranger" do
