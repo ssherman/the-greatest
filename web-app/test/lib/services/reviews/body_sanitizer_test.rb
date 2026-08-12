@@ -122,39 +122,43 @@ module Services
         assert_includes result, "not really a spoiler"
       end
 
-      test ".call converts a spoiler tag to a safe span" do
-        assert_equal %(before <span class="review-spoiler">the butler did it</span> after),
+      # <spoiler> is no longer input syntax that .call resolves -- it is just another
+      # disallowed tag now, unwrapped like any other: the tag goes, the text stays.
+      # (Formerly "converts a spoiler tag to a safe span".)
+      test ".call strips a spoiler tag and keeps its text" do
+        assert_equal "before the butler did it after",
           BodySanitizer.call("before <spoiler>the butler did it</spoiler> after")
       end
 
-      test ".call converts multiple spoiler tags" do
-        assert_equal %(<span class="review-spoiler">one</span> and <span class="review-spoiler">two</span>),
+      # (Formerly "converts multiple spoiler tags".)
+      test ".call strips multiple spoiler tags, keeping their text" do
+        assert_equal "one and two",
           BodySanitizer.call("<spoiler>one</spoiler> and <spoiler>two</spoiler>")
       end
 
-      test ".call ignores attributes on a spoiler tag" do
-        assert_equal %(<span class="review-spoiler">y</span>),
-          BodySanitizer.call(%(<spoiler onclick="bad()">y</spoiler>))
+      # (Formerly "ignores attributes on a spoiler tag".)
+      test ".call strips a spoiler tag's attributes along with the tag" do
+        assert_equal "y", BodySanitizer.call(%(<spoiler onclick="bad()">y</spoiler>))
       end
 
-      test ".call closes an unclosed spoiler tag" do
-        assert_equal %(<span class="review-spoiler">never closed</span>),
-          BodySanitizer.call("<spoiler>never closed")
+      # (Formerly "closes an unclosed spoiler tag".)
+      test ".call strips an unclosed spoiler tag" do
+        assert_equal "never closed", BodySanitizer.call("<spoiler>never closed")
       end
 
-      test ".call converts nested spoiler tags" do
-        assert_equal %(<span class="review-spoiler">a<span class="review-spoiler">b</span>c</span>),
-          BodySanitizer.call("<spoiler>a<spoiler>b</spoiler>c</spoiler>")
+      # (Formerly "converts nested spoiler tags".)
+      test ".call strips nested spoiler tags, keeping all their text" do
+        assert_equal "abc", BodySanitizer.call("<spoiler>a<spoiler>b</spoiler>c</spoiler>")
       end
 
-      test ".call replaces a class supplied on a spoiler tag" do
-        assert_equal %(<span class="review-spoiler">x</span>),
-          BodySanitizer.call(%(<spoiler class="evil">x</spoiler>))
+      # (Formerly "replaces a class supplied on a spoiler tag" -- there is no longer
+      # anything to replace the class WITH, since the whole tag is unwrapped.)
+      test ".call strips a class supplied on a spoiler tag, along with the tag" do
+        assert_equal "x", BodySanitizer.call(%(<spoiler class="evil">x</spoiler>))
       end
 
       test ".call strips every attribute on a spoiler tag, not just class" do
-        assert_equal %(<span class="review-spoiler">x</span>),
-          BodySanitizer.call(%(<spoiler title="secret">x</spoiler>))
+        assert_equal "x", BodySanitizer.call(%(<spoiler title="secret">x</spoiler>))
       end
 
       # Regression: a string-tokenizing implementation spliced raw markup into the
@@ -191,22 +195,24 @@ module Services
         assert_equal 30_000, BodySanitizer.call(body).length
       end
 
-      # Proven end to end in production: a stored body of "Line one.\n\nLine two."
-      # rendered as exactly that, one continuous line, because nothing converted the
-      # newlines into markup and .review-body has no white-space CSS rule to fall
-      # back on.
-      test ".call turns a blank-line-separated plain-text body into paragraphs" do
-        assert_equal "<p>Line one.</p><p>Line two.</p>",
-          BodySanitizer.call("Line one.\n\nLine two.")
+      # Paragraph conversion moved to #render (Task 1) and is no longer part of what
+      # gets stored -- .call keeps the blank line exactly as the author typed it. A
+      # stored body of "Line one.\n\nLine two." now relies on #render, not .call, to
+      # turn that into paragraphs at display time.
+      # (Formerly "turns a blank-line-separated plain-text body into paragraphs".)
+      test ".call stores a blank-line-separated plain-text body as typed, without paragraphizing" do
+        assert_equal "Line one.\n\nLine two.", BodySanitizer.call("Line one.\n\nLine two.")
       end
 
-      test ".call turns a single newline in a plain-text body into a line break" do
-        assert_equal "<p>Line one.<br>Line two.</p>",
-          BodySanitizer.call("Line one.\nLine two.")
+      # (Formerly "turns a single newline in a plain-text body into a line break".)
+      test ".call stores a single newline in a plain-text body as typed, without a line break" do
+        assert_equal "Line one.\nLine two.", BodySanitizer.call("Line one.\nLine two.")
       end
 
-      test ".call ignores extra blank lines around and between paragraphs" do
-        assert_equal "<p>Line one.</p><p>Line two.</p>",
+      # (Formerly "ignores extra blank lines around and between paragraphs" -- there
+      # is no longer a paragraph pass to ignore them for; they are stored verbatim.)
+      test ".call stores extra blank lines around and between paragraphs as typed" do
+        assert_equal "\n\nLine one.\n\n\n\nLine two.\n\n",
           BodySanitizer.call("\n\nLine one.\n\n\n\nLine two.\n\n")
       end
 
@@ -237,23 +243,33 @@ module Services
         refute_includes result, "<p"
       end
 
-      test "render keeps the spoiler span the write path produced" do
-        stored = Services::Reviews::BodySanitizer.call("<p>He <spoiler>dies</spoiler>.</p>")
+      # .call no longer produces a spoiler span (see the "strips a spoiler tag" tests
+      # above), but 141,869 rows were written before this task, and some already
+      # contain a real <span class="review-spoiler"> from the old write-time
+      # conversion. #render still has to display those as-is, so this constructs a
+      # legacy-shaped stored body directly instead of deriving it from .call.
+      # (Formerly "render keeps the spoiler span the write path produced".)
+      test "render keeps a spoiler span already present in a stored body" do
+        stored = %(<p>He <span class="review-spoiler">dies</span>.</p>)
 
         html = Services::Reviews::BodySanitizer.render(stored)
 
         assert_includes html, %(<span class="review-spoiler">dies</span>)
       end
 
-      # Companion to "render keeps the spoiler span the write path produced" above --
-      # pins what would happen to that same stored body if .call were used instead.
-      test "re-running call on a stored body would destroy the spoiler -- do not do it" do
-        stored = Services::Reviews::BodySanitizer.call("<p>He <spoiler>dies</spoiler>.</p>")
+      # Formerly "re-running call on a stored body would destroy the spoiler -- do not
+      # do it": under the old write-time conversion, re-running .call on its own
+      # output stripped the span it had just produced -- the exact non-idempotence
+      # this whole task exists to close (see "call is idempotent" above). Under the
+      # new contract there is nothing to destroy: a stored spoiler marker is literal
+      # text, so .call leaves it untouched no matter how many times it runs.
+      test "re-running call on a stored spoiler marker leaves it untouched" do
+        stored = Services::Reviews::BodySanitizer.call("He ||dies|| at the end.")
 
         round_tripped = Services::Reviews::BodySanitizer.call(stored)
 
-        refute_includes round_tripped, "review-spoiler"
-        assert_includes round_tripped, "dies"
+        assert_equal stored, round_tripped
+        assert_includes round_tripped, "||dies||"
       end
 
       test "render strips a script even though the write path should have already" do
@@ -322,14 +338,20 @@ module Services
         assert_nil Services::Reviews::BodySanitizer.for_editing(nil)
       end
 
+      # .call no longer produces a stored span from a <spoiler> tag, so this
+      # constructs the legacy-shaped stored body directly -- see the comment on
+      # "render keeps a spoiler span already present in a stored body" above for why
+      # that shape still exists and still has to be handled.
+      # (Formerly derived `stored` via .call.)
       test "for_editing converts a stored spoiler span back to a spoiler tag" do
-        stored = Services::Reviews::BodySanitizer.call("<p>He <spoiler>dies</spoiler>.</p>")
+        stored = %(<p>He <span class="review-spoiler">dies</span>.</p>)
 
         assert_equal "<p>He <spoiler>dies</spoiler>.</p>", Services::Reviews::BodySanitizer.for_editing(stored)
       end
 
+      # (Formerly derived `stored` via .call.)
       test "for_editing converts several stored spoiler spans back to spoiler tags" do
-        stored = Services::Reviews::BodySanitizer.call("<spoiler>one</spoiler> and <spoiler>two</spoiler>")
+        stored = %(<span class="review-spoiler">one</span> and <span class="review-spoiler">two</span>)
 
         assert_equal "<spoiler>one</spoiler> and <spoiler>two</spoiler>",
           Services::Reviews::BodySanitizer.for_editing(stored)
@@ -341,17 +363,23 @@ module Services
         assert_equal "<p>No spoilers here.</p>", Services::Reviews::BodySanitizer.for_editing(stored)
       end
 
-      # The exact scenario the bug report proved: a reader hides a spoiler, later
-      # reopens the dialog, and saves again without touching the spoiler text. Without
-      # for_editing restoring <spoiler>, the textarea would show the raw <span> markup
-      # and the next .call would strip it, publishing the spoiler in the clear.
-      test "for_editing round-trips through call without destroying the spoiler" do
-        stored = Services::Reviews::BodySanitizer.call("<spoiler>Snape kills Dumbledore</spoiler>")
+      # Formerly "for_editing round-trips through call without destroying the
+      # spoiler": that guarantee is broken BY DESIGN as of this task, not a
+      # regression to defend. for_editing still reverses a legacy stored span back to
+      # <spoiler> tag text for the textarea (restore_spoiler_tags is untouched here),
+      # but .call no longer turns a resaved <spoiler> tag back into a span -- it
+      # strips the tag like any other disallowed markup (see the "strips a spoiler
+      # tag" tests above). Resaving without editing the spoiler now loses the
+      # hiding wrapper, though not the underlying text. This is exactly why
+      # for_editing is retired next, not something Task 2 can or should paper over.
+      test "for_editing round-trips a stored spoiler span's text, but no longer its wrapper" do
+        stored = %(<span class="review-spoiler">Snape kills Dumbledore</span>)
         edited = Services::Reviews::BodySanitizer.for_editing(stored)
         resaved = Services::Reviews::BodySanitizer.call(edited)
 
-        assert_equal stored, resaved
-        assert_includes resaved, "review-spoiler"
+        assert_equal "<spoiler>Snape kills Dumbledore</spoiler>", edited
+        refute_includes resaved, "review-spoiler"
+        assert_includes resaved, "Snape kills Dumbledore"
       end
 
       # Regression: for_editing only reversed spoiler spans, not paragraphize's <p>
@@ -418,14 +446,19 @@ module Services
         assert_equal body, Services::Reviews::BodySanitizer.for_editing(stored)
       end
 
-      # Composition: a paragraph break and a spoiler in the same body. Proves
-      # restore_paragraphs' per-paragraph serialization puts the restored <spoiler>
-      # tag (not the stored <span>) back into the reversed text.
-      test "for_editing reverses paragraph conversion and a spoiler together" do
+      # Formerly "for_editing reverses paragraph conversion and a spoiler together":
+      # `raw` typed a paragraph break AND the old <spoiler> tag syntax together, but
+      # .call now stores neither transformed -- the blank line survives as typed and
+      # the <spoiler> tag is stripped like any other disallowed markup (see the
+      # "strips a spoiler tag" tests above), leaving nothing shaped like a stored
+      # span for for_editing to restore. What's left is a plain-text identity round
+      # trip, not a reversal.
+      test "for_editing round-trips a body with a blank line, once the spoiler tag it also typed is stripped on save" do
         raw = "Before the twist.\n\n<spoiler>Snape kills Dumbledore</spoiler>"
         stored = Services::Reviews::BodySanitizer.call(raw)
 
-        assert_equal raw, Services::Reviews::BodySanitizer.for_editing(stored)
+        assert_equal "Before the twist.\n\nSnape kills Dumbledore", stored
+        assert_equal stored, Services::Reviews::BodySanitizer.for_editing(stored)
       end
 
       test "render strips a title attribute, including from a spoiler span" do
@@ -760,6 +793,48 @@ module Services
               "#{node.name} gained an unexpected attribute for #{input.inspect} -- rendered #{html.inspect}"
           end
         end
+      end
+
+      # THE property. call() no longer generates markup its own allowlist would reject,
+      # so nothing has to un-generate it -- which is what retires for_editing and the
+      # whole class of round-trip bug that cost three defects in one increment.
+      test "call is idempotent" do
+        [
+          "Plain text.",
+          "He ||dies|| at the end.",
+          "Line one.\n\nLine two.",
+          "Line one.\nStill one.",
+          "Tom & Jerry",
+          "<p>Migrated.</p><p>Body.</p>",
+          "<p>With <i>tags</i> and a <a href=\"https://example.test\">link</a>.</p>",
+          "||one|| and ||two||"
+        ].each do |input|
+          once = Services::Reviews::BodySanitizer.call(input)
+          twice = Services::Reviews::BodySanitizer.call(once)
+
+          assert_equal once, twice, "call was not idempotent for #{input.inspect}"
+        end
+      end
+
+      test "call stores a spoiler marker as typed" do
+        stored = Services::Reviews::BodySanitizer.call("He ||dies|| at the end.")
+
+        assert_includes stored, "||dies||"
+        refute_includes stored, "review-spoiler"
+      end
+
+      test "call stores newlines as typed" do
+        stored = Services::Reviews::BodySanitizer.call("Line one.\n\nLine two.")
+
+        assert_includes stored, "\n\n"
+        refute_includes stored, "<p>"
+      end
+
+      test "call strips a spoiler tag, which is no longer input syntax" do
+        stored = Services::Reviews::BodySanitizer.call("He <spoiler>dies</spoiler>.")
+
+        refute_includes stored, "spoiler>"
+        assert_includes stored, "dies"
       end
 
       private

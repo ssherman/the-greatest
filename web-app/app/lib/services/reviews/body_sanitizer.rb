@@ -4,30 +4,36 @@ module Services
     # before_validation and directly by the increment-2 migrator, which bulk-inserts
     # and so bypasses callbacks.
     #
-    # Spoilers are resolved by the HTML parser, never by string substitution. `spoiler`
-    # is allowlisted for the sanitize pass so a genuine <spoiler> becomes a real node,
-    # then those nodes are renamed. Text that merely looks like a spoiler tag inside an
-    # attribute value is escaped by the parser and never becomes a node.
+    # ||spoiler|| markers are resolved by the HTML parser at render time, never by
+    # string substitution -- see #render and convert_spoiler_markers below. .call
+    # itself does not treat `spoiler` as special: a literal <spoiler> tag, whether
+    # hand-typed or left over from before this method generated them itself, is
+    # unwrapped like any other disallowed tag -- its text survives, the tag does not.
     #
-    # Do NOT go back to tokenizing the string and substituting after sanitizing. Any
-    # marker robust enough to survive sanitizing also survives inside an attribute
+    # Do NOT go back to tokenizing a string and substituting into it after sanitizing.
+    # Any marker robust enough to survive sanitizing also survives inside an attribute
     # value, so the substitution splices raw markup into a quoted string:
     # `<a href="<spoiler>evil</spoiler>">click</a>` became
     # `<a href="<span class="review-spoiler">evil</span>">click</a>`, which a browser
-    # re-parses into a bogus href and visible link text of `evil">click`.
+    # re-parses into a bogus href and visible link text of `evil">click`. That was
+    # this file's original write-time <spoiler>-to-<span> conversion; the same
+    # reasoning is why #render's marker conversion also walks parsed text nodes
+    # instead of substituting into the raw string.
     #
-    # Renaming after sanitizing is also what stops a user supplying their own class:
-    # `span` is not in ALLOWED_TAGS, so a user-written <span class="review-spoiler"> is
-    # stripped, and a class on their own <spoiler> is replaced with ours -- every other
-    # attribute (title, href, ...) is stripped from the node too, or a native browser
-    # tooltip would leak the spoiler text right through the blur.
+    # `span` and `spoiler` are both absent from .call's tags on purpose: a user-written
+    # <span class="review-spoiler"> or <spoiler title="secret"> is unwrapped like any
+    # other disallowed tag -- the tag AND every attribute on it are dropped, only its
+    # text content survives. That is what stops a user supplying their own spoiler
+    # class or smuggling a title through; on a real spoiler span a title would leak the
+    # hidden text right through the browser's native tooltip (see RENDER_ATTRIBUTES for
+    # the render-time half of that same defense).
     #
     # Blank is decided on rendered TEXT, not on the markup string -- "<br>", "<p></p>",
     # an empty <a href>, and a lone &nbsp; all sanitize to non-empty markup that
-    # visually renders as nothing. `fragment.text` is matched against BLANK_TEXT after
-    # convert_spoilers, which returns the parsed fragment rather than re-serializing it,
-    # so there is only one parse. This subsumes the plain <img>-only case, since `img`
-    # is not in the allowlist and so contributes no text either.
+    # visually renders as nothing. `fragment.text` is matched against BLANK_TEXT on the
+    # already-parsed fragment rather than re-serializing it first, so there is only one
+    # parse. This subsumes the plain <img>-only case, since `img` is not in the
+    # allowlist and so contributes no text either.
     #
     # BLANK_TEXT must stay Unicode-aware. String#strip removes only ASCII whitespace, so
     # a body of &nbsp;, &emsp; (U+2003), &thinsp; (U+2009) or an ideographic space
@@ -115,15 +121,13 @@ module Services
         new(body).render
       end
 
-      # Inverse of .call, for ReviewStateController#serialize -- both what .call does to
-      # a written <spoiler> (see convert_spoilers) and what it does to blank-line-
+      # Inverse of what .call used to do on write, for ReviewStateController#serialize
+      # -- both a stored spoiler span (see restore_spoiler_tags) and blank-line-
       # separated plain text (see #paragraphize), so the edit textarea shows what the
-      # author actually typed rather than markup .call generated from it. Getting only
-      # the spoiler half right is not enough: a stored "<p>Line one.</p><p>Line
-      # two.</p>" handed back with its <p> tags intact would show the author literal
-      # tags they never typed, and re-saving it verbatim would hit the BLOCK_MARKUP
-      # guard on the next .call and skip paragraph conversion entirely, so a newly
-      # typed blank line would survive as a bare "\n\n" and render as one run-on line.
+      # author actually typed rather than markup a previous save generated from it.
+      # Getting only the spoiler half right is not enough: a stored "<p>Line one.</p>
+      # <p>Line two.</p>" handed back with its <p> tags intact would show the author
+      # literal tags they never typed.
       #
       # The paragraph half only reverses when doing so is PROVABLY safe -- see
       # #restore_paragraphs for how "safe" is decided and why a migrated body's real
@@ -138,16 +142,25 @@ module Services
         @body = body
       end
 
+      # Sanitizes. Does NOT transform.
+      #
+      # Every markup transformation lives in #render instead, so what is stored is what
+      # the author typed: ||spoilers|| as literal text, paragraphs as newlines. That
+      # makes this method idempotent, and an idempotent write path is what makes the
+      # round-trip bug class unrepresentable -- converting on write produced markup this
+      # method's own allowlist rejects, so every edit path had to un-convert first, and
+      # three separate production-class defects came out of that. Do not reintroduce a
+      # transformation here.
       def call
         return nil if @body.blank?
 
         sanitized = sanitizer.sanitize(
-          paragraphize(@body.to_s),
-          tags: ALLOWED_TAGS + [SPOILER_TAG],
+          @body.to_s,
+          tags: ALLOWED_TAGS,
           attributes: ALLOWED_ATTRIBUTES
         ).to_s
 
-        fragment = convert_spoilers(sanitized)
+        fragment = Nokogiri::HTML5.fragment(sanitized)
         return nil if blank_text?(fragment)
 
         fragment.to_html
@@ -218,20 +231,10 @@ module Services
         end.join
       end
 
-      def convert_spoilers(html)
-        fragment = Nokogiri::HTML5.fragment(html)
-        fragment.css(SPOILER_TAG).each do |node|
-          node.name = "span"
-          node.attributes.keys.each { |name| node.remove_attribute(name) }
-          node["class"] = SPOILER_CLASS
-        end
-        fragment
-      end
-
-      # for_editing's half of convert_spoilers, run in place on an already-parsed
-      # fragment instead of returning a new one -- restore_paragraphs (below) needs to
-      # see these nodes as <spoiler> too, since that is what the author typed and what
-      # paragraph_source must put back into the reversed text.
+      # for_editing's half of the old write-time spoiler conversion, run in place on an
+      # already-parsed fragment instead of returning a new one -- restore_paragraphs
+      # (below) needs to see these nodes as <spoiler> too, since that is what the
+      # author typed and what paragraph_source must put back into the reversed text.
       def restore_spoiler_tags(fragment)
         fragment.css("span.#{SPOILER_CLASS}").each do |node|
           node.name = SPOILER_TAG
