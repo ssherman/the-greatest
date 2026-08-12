@@ -376,10 +376,9 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
 
   test "create ignores a user_id in the params" do
     sign_in_as(@user, stub_auth: true)
-    other = users(:regular_user)
 
     post saved_searches_path, params: {saved_search: {
-      name: "Not yours", user_id: other.id, criteria: {book_type: "0"}
+      name: "Not yours", user_id: @other.id, criteria: {book_type: "0"}
     }}
 
     assert_equal @user, Books::SavedSearch.order(:id).last.user
@@ -412,6 +411,22 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select "form[action=?]", saved_search_path(@private_search)
+  end
+
+  # The type and ranked selects hand `selected:` to the FormBuilder's
+  # `options` argument, not `html_options` -- Tags::Select#render only reads
+  # `@options.fetch(:selected)`, so a value in the wrong slot renders no
+  # pre-selection at all. An unedited resave would then silently drop the
+  # stored value (spec §6's tri-state warning applies to display, not just
+  # storage, for the 437 rows that set it).
+  test "edit pre-selects the stored book_type and ranked values" do
+    sign_in_as(@user, stub_auth: true)
+    @private_search.update!(criteria: {"book_type" => 1, "ranked" => "false"})
+
+    get edit_saved_search_path(@private_search)
+
+    assert_select "select[name='books_saved_search[criteria][book_type]'] option[value='1'][selected]"
+    assert_select "select[name='books_saved_search[criteria][ranked]'] option[value='false'][selected]"
   end
 
   # 404, never 403 -- a 403 confirms the id exists (spec §8).
