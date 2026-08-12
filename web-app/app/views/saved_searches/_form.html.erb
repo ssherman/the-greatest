@@ -20,13 +20,13 @@
   <div class="card bg-base-100 shadow-sm">
     <div class="card-body gap-4">
       <fieldset class="fieldset">
-        <%= f.label :name, "Name", class: "label font-semibold" %>
+        <%= f.label :name, "Name", class: "fieldset-legend" %>
         <%= f.text_field :name, class: "input w-full",
               placeholder: "Long Victorian novels" %>
       </fieldset>
 
       <fieldset class="fieldset">
-        <%= f.label :description, "Description", class: "label font-semibold" %>
+        <%= f.label :description, "Description", class: "fieldset-legend" %>
         <%= f.text_area :description, rows: 2, class: "textarea w-full" %>
       </fieldset>
 

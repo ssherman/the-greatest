@@ -13,7 +13,7 @@
         as a real object and its readers supply the fallback values. %>
     <%= f.fields_for :criteria, criteria do |c| %>
       <fieldset class="fieldset">
-        <%= c.label :book_type, "Type", class: "label font-semibold" %>
+        <%= c.label :book_type, "Type", class: "fieldset-legend" %>
         <%= c.select :book_type,
               ::Books::BookType::LABELS.map { |value, label| [label, value] },
               {include_blank: "Any type", selected: criteria.book_type},
@@ -35,19 +35,19 @@
 
       <div class="grid gap-4 sm:grid-cols-2">
         <fieldset class="fieldset">
-          <%= c.label :first_year_published_gt, "Published from", class: "label font-semibold" %>
+          <%= c.label :first_year_published_gt, "Published from", class: "fieldset-legend" %>
           <%= c.number_field :first_year_published_gt, value: criteria.first_year_published_gt,
                 class: "input w-full", placeholder: "1837" %>
         </fieldset>
         <fieldset class="fieldset">
-          <%= c.label :first_year_published_lt, "Published to", class: "label font-semibold" %>
+          <%= c.label :first_year_published_lt, "Published to", class: "fieldset-legend" %>
           <%= c.number_field :first_year_published_lt, value: criteria.first_year_published_lt,
                 class: "input w-full", placeholder: "1901" %>
         </fieldset>
       </div>
 
       <fieldset class="fieldset">
-        <%= c.label :ranked, "Ranking", class: "label font-semibold" %>
+        <%= c.label :ranked, "Ranking", class: "fieldset-legend" %>
         <%# Tri-state, not a boolean: "" is All Books, and collapsing it into
             false silently changes what 437 stored searches return (spec §6). %>
         <%= c.select :ranked,
@@ -57,7 +57,7 @@
       </fieldset>
 
       <fieldset class="fieldset">
-        <%= c.label :max_ranked_position, "Top N ranked books", class: "label font-semibold" %>
+        <%= c.label :max_ranked_position, "Top N ranked books", class: "fieldset-legend" %>
         <%= c.number_field :max_ranked_position, value: criteria.max_ranked_position,
               class: "input w-full", placeholder: "100" %>
       </fieldset>
@@ -153,7 +153,7 @@
       <% end %>
 
       <fieldset class="fieldset">
-        <%= c.label :genre_match_mode, "Category matching", class: "label font-semibold" %>
+        <%= c.label :genre_match_mode, "Category matching", class: "fieldset-legend" %>
         <%# Must render even though "any" is the reader's default: `criteria=`
             REPLACES the whole hash, so with no control here an owner resaving
             one of the 151 migrated searches that store "all" would post no
