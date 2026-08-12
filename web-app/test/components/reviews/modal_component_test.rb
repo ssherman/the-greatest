@@ -54,5 +54,11 @@ module Reviews
 
       assert_selector "input[name='review[title]'][value='']"
     end
+
+    test "tells the writer how to hide a spoiler" do
+      render_inline(Reviews::ModalComponent.new)
+
+      assert_text "||"
+    end
   end
 end
