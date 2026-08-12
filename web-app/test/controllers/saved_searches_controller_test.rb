@@ -293,6 +293,30 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     assert_queries_count(9) { get saved_search_path(@public_search) }
   end
 
+  # The owner-only branch in show.html.erb. A public search is the case that
+  # matters: a stranger can legitimately reach the page, and must not be
+  # offered controls that would 404 (or, worse, work).
+  test "a signed-in non-owner sees no edit or delete control on a public search" do
+    stub_advanced(ids: [], total: 0)
+    sign_in_as(@other, stub_auth: true)
+
+    get saved_search_path(@public_search)
+
+    assert_response :success
+    assert_select "a[href=?]", edit_saved_search_path(@public_search), count: 0
+    assert_select "form[action=?][method=post]", saved_search_path(@public_search), count: 0
+  end
+
+  test "the owner does see the edit and delete controls" do
+    stub_advanced(ids: [], total: 0)
+    sign_in_as(@user, stub_auth: true)
+
+    get saved_search_path(@public_search)
+
+    assert_select "a[href=?]", edit_saved_search_path(@public_search)
+    assert_select "form[action=?][method=post]", saved_search_path(@public_search)
+  end
+
   test "show 404s on a domain with no saved searches" do
     host! Rails.application.config.domains[:music]
     get saved_search_path(@public_search)
