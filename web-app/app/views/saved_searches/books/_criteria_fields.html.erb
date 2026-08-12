@@ -79,6 +79,45 @@
           <% end %>
         </div>
       <% end %>
+
+      <% selected_categories = ::Books::Category.where(
+           id: criteria.included_category_ids + criteria.excluded_category_ids
+         ).index_by(&:id) %>
+
+      <div class="grid gap-4 sm:grid-cols-2">
+        <% [:included, :excluded].each do |mode| %>
+          <% key = "#{mode}_category_ids" %>
+          <div class="form-control" data-controller="saved-search-picker"
+               data-saved-search-picker-url-value="<%= saved_search_categories_path %>"
+               data-saved-search-picker-name-value="saved_search[criteria][<%= key %>][]">
+            <label class="label" for="saved_search_criteria_<%= key %>">
+              <span class="label-text font-semibold"><%= "#{mode} categories".titleize %></span>
+            </label>
+            <%# Cleared state: without this, deselecting every chip posts no key
+                at all and the stored ids survive. The normalizer drops [""]. %>
+            <%= hidden_field_tag "saved_search[criteria][#{key}][]", "", id: nil %>
+            <input type="search" id="saved_search_criteria_<%= key %>"
+                   class="input input-bordered w-full"
+                   placeholder="Search genres, subjects, settings"
+                   autocomplete="off"
+                   data-saved-search-picker-target="query"
+                   data-action="input->saved-search-picker#search keydown->saved-search-picker#suppressEnter">
+            <div class="flex flex-col gap-1 mt-1" data-saved-search-picker-target="results"></div>
+            <div class="flex flex-wrap gap-2 mt-2" data-saved-search-picker-target="chips">
+              <% criteria.public_send(key).each do |id| %>
+                <% category = selected_categories[id] %>
+                <span class="badge badge-outline gap-1" data-chip="<%= id %>">
+                  <%= hidden_field_tag "saved_search[criteria][#{key}][]", id, id: nil %>
+                  <span><%= category ? category.name_with_type : "Category #{id}" %></span>
+                  <button type="button" class="btn btn-ghost btn-xs px-1"
+                          aria-label="Remove <%= category&.name_with_type || id %>"
+                          data-action="saved-search-picker#remove">×</button>
+                </span>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+      </div>
     <% end %>
   </div>
 </div>

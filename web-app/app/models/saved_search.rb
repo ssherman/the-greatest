@@ -77,6 +77,10 @@ class SavedSearch < ApplicationRecord
     raise NotImplementedError, "#{name} must override .excluded_list_type"
   end
 
+  def self.category_class
+    raise NotImplementedError, "#{name} must override .category_class"
+  end
+
   def display_name
     name.presence || "Search #{id}"
   end

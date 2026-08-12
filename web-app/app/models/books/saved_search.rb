@@ -68,6 +68,10 @@ module Books
       :read
     end
 
+    def self.category_class
+      ::Books::Category
+    end
+
     # category, language, and country criteria are omitted: naming them requires
     # a database lookup, and the index page renders this for every one of a
     # user's searches, so keeping it lookup-free avoids an N+1 there. book_type

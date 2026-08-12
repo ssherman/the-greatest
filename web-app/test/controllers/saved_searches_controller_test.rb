@@ -519,6 +519,19 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     assert_select "select[name='saved_search[criteria][ranked]'] option[value='false'][selected]"
   end
 
+  test "edit renders a chip for each stored category, labelled with its type" do
+    sign_in_as(@user, stub_auth: true)
+    category = categories(:books_fiction_genre)
+    @private_search.update!(criteria: {"included_category_ids" => [category.id]})
+
+    get edit_saved_search_path(@private_search)
+
+    assert_select "[data-chip='#{category.id}']" do
+      assert_select "input[name='saved_search[criteria][included_category_ids][]'][value=?]", category.id.to_s
+    end
+    assert_select "[data-chip='#{category.id}']", text: /Fiction \(Genre\)/
+  end
+
   # 404, never 403 -- a 403 confirms the id exists (spec §8).
   test "edit 404s for a stranger, even on a public search" do
     @private_search.update_column(:public, true)
