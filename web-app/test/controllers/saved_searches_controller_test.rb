@@ -387,15 +387,22 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     assert_no_frame_trapped_links new_saved_search_path
   end
 
-  test "the form offers every language and country" do
+  # The category/language/country axes all use the same saved-search-picker
+  # Stimulus controller (a 201-language, 253-country <select multiple> is what
+  # this replaced -- daisyUI 5's .select is display:inline-flex, which laid
+  # every <option> out as a flex row instead of a list). One picker per
+  # include/excluded pair per axis, wired to that axis's own JSON endpoint.
+  test "the form offers a picker for every taxonomy" do
     sign_in_as(@user, stub_auth: true)
 
     get new_saved_search_path
 
-    assert_select "select[name='saved_search[criteria][included_language_ids][]'] option",
-      count: Language.count
-    assert_select "select[name='saved_search[criteria][excluded_country_ids][]'] option",
-      count: ::Books::Country.count
+    assert_select "[data-controller='saved-search-picker'][data-saved-search-picker-url-value=?]",
+      saved_search_languages_path, count: 2
+    assert_select "[data-controller='saved-search-picker'][data-saved-search-picker-url-value=?]",
+      saved_search_countries_path, count: 2
+    assert_select "[data-controller='saved-search-picker'][data-saved-search-picker-url-value=?]",
+      saved_search_categories_path, count: 2
   end
 
   test "create stores selected language and country ids as integers" do
@@ -413,13 +420,17 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     assert_equal [country.id], criteria["excluded_country_ids"]
   end
 
-  # Loading 201 + 253 rows must not become one query per option.
-  test "the form loads its taxonomies in a bounded number of queries" do
+  # Regression guard for the defect the picker replaced: the old multi-selects
+  # preloaded every language and country row (201 + 253) on every render of
+  # this page, selected or not. The picker's own JSON endpoints load rows only
+  # on a keystroke, so a blank `new` form should query for nothing but the
+  # session's own user -- there is nothing yet to preload.
+  test "the form does not preload every language and country row" do
     sign_in_as(@user, stub_auth: true)
     get new_saved_search_path # warm any cached lookups
     ActiveRecord::Base.connection.clear_query_cache
 
-    assert_queries_count(3) do
+    assert_queries_count(1) do
       get new_saved_search_path
     end
   end
@@ -504,10 +515,10 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     name_field = form.at_css("input[name$='[name]']")
     book_type_field = form.at_css("select[name$='[criteria][book_type]']")
     book_length_field = form.at_css("input[type=checkbox][name$='[criteria][book_length][]']")
-    # The hidden blank field that makes an empty `multiple` select post an
-    # explicit key rather than nothing at all. Reading it off the DOM here
-    # (rather than just asserting the normalizer drops an inline [""] the test
-    # invents) is what catches the field going missing from the view itself.
+    # The hidden blank field that makes an empty picker post an explicit key
+    # rather than nothing at all. Reading it off the DOM here (rather than
+    # just asserting the normalizer drops an inline [""] the test invents) is
+    # what catches the field going missing from the view itself.
     language_hidden_field = form.at_css("input[type=hidden][name='saved_search[criteria][included_language_ids][]']")
 
     assert name_field, "the rendered form has no [name] input"
@@ -694,11 +705,11 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
 
   # What actually clears the ids is that `criteria=` REPLACES the whole hash,
   # so a key nobody posted is simply absent -- book_length has no hidden blank
-  # field and clears the same way. The hidden blank field before each
-  # multi-select (a `multiple` select posts nothing when nothing is selected)
-  # only makes the cleared key explicit in the request; this test passes with
-  # or without it. It posts [""] because that is what the real form sends, and
-  # the normalizer has to drop it rather than store an unparseable [""].
+  # field and clears the same way. The hidden blank field before each picker
+  # (a picker with every chip removed posts nothing on its own) only makes
+  # the cleared key explicit in the request; this test passes with or without
+  # it. It posts [""] because that is what the real form sends, and the
+  # normalizer has to drop it rather than store an unparseable [""].
   #
   # book_type is carried along and resubmitted so the surviving criteria hash
   # isn't empty -- `criteria=` REPLACES the whole hash (it is not a merge),
