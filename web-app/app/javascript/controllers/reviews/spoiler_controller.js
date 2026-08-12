@@ -3,7 +3,7 @@ import { Controller } from "@hotwired/stimulus"
 // Reveals a blurred spoiler inside a review body.
 //
 // Mounted on the reviews card and delegating downward -- never on the spans. Review
-// bodies go through SafeListSanitizer with a render-time allowlist of href/class (NOT
+// bodies go through SafeListSanitizer with a render-time allowlist of just href (NOT
 // title -- see BodySanitizer::RENDER_ATTRIBUTES; a title on a spoiler span leaked its
 // text through the browser's native tooltip, so title must never come back), so a span
 // inside a body can never carry its own data-action or Stimulus target. connect() also

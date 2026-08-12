@@ -194,9 +194,11 @@ existed to narrow closes by construction.
 
 **Two data paths this revision must not miss:**
 
-- **119 stored rows carry `<span class="review-spoiler">`** and convert to `||…||` via a rake task,
-  run against production as increment 2's migration was. Not optional — the moment `span` leaves the
-  render allowlist, any row still holding one prints its spoiler in the clear.
+- **119 stored rows carry `<span class="review-spoiler">`** and convert to `||…||` via a Rails
+  migration that runs automatically before the app boots — `bin/docker-entrypoint` calls `db:prepare`
+  first, so there is no separate rake task to remember after deploy, a deliberate departure from
+  increments 2 and 3. Not optional — the moment `span` leaves the render allowlist, any row still
+  holding one prints its spoiler in the clear.
 - **`ReviewMigrator` calls `call`**, so at the eventual legacy cutover, when everything re-imports
   from scratch, legacy `<spoiler>` tags would be stripped to bare text. The migrator gains an
   explicit parser-based pre-pass converting them to `||`, since `call` no longer knows the tag.

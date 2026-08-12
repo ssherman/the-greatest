@@ -107,9 +107,12 @@ class ReviewTest < ActiveSupport::TestCase
   end
 
   # The other side of the same boundary: a raw submission genuinely over the limit --
-  # not just inflated by markup this code added -- must still be rejected, with
-  # newlines present so paragraph conversion is actually in play (unlike the
-  # newline-free "rejects a body longer than MAX_BODY_LENGTH" test above).
+  # not just inflated by markup this code added -- must still be rejected. Newlines
+  # are included here (unlike the newline-free "rejects a body longer than
+  # MAX_BODY_LENGTH" test above) to pin that length is measured on the raw characters
+  # as typed: .call no longer paragraphizes on write (that moved to #render), so a
+  # blank line still counts toward the cap as two literal characters rather than
+  # being collapsed or reinterpreted before the length check runs.
   test "rejects a raw body one character over MAX_BODY_LENGTH even with paragraph breaks" do
     raw = ("a" * 12_500) + "\n\n" + ("a" * 12_499)
     assert_equal Review::MAX_BODY_LENGTH + 1, raw.length
@@ -165,6 +168,7 @@ class ReviewTest < ActiveSupport::TestCase
     review.rating = 2
 
     assert review.save
+    assert_equal 2, review.reload.rating
   end
 
   test "rejects a title longer than MAX_TITLE_LENGTH" do

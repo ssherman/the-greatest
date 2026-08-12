@@ -219,9 +219,8 @@ module Services
       # Walks one level of siblings, accumulating a "run" of everything that is NOT
       # a scope boundary (plain text and inline elements -- br, a, i, b, em, strong)
       # and flushing it through convert_spoiler_run as one shared search scope. Hitting
-      # a boundary tag
-      # flushes the current run and recurses into that element's own children,
-      # which start a fresh, independent partition of runs one level down.
+      # a boundary tag flushes the current run and recurses into that element's own
+      # children, which start a fresh, independent partition of runs one level down.
       def convert_spoiler_scope(siblings, document)
         run = []
         siblings.each do |node|
