@@ -176,6 +176,21 @@ class Services::BooksMigration::ReviewMigratorTest < ActiveSupport::TestCase
     refute_includes body, "spoiler>"
   end
 
+  # Regression: everything downstream of this pre-pass is case-insensitive (the
+  # HTML5 parser lowercases tag names; BodySanitizer's own spoiler handling and
+  # BLOCK_MARKUP are case-insensitive too), so an uppercase legacy <SPOILER> tag
+  # must convert exactly the same as a lowercase one. A prior version of the
+  # guard here checked for the literal lowercase string and skipped uppercase
+  # tags entirely, unwrapping them like any other disallowed tag and publishing
+  # the spoiler text in the clear.
+  test "converts an uppercase legacy spoiler tag into a marker" do
+    run_migrator([legacy_review(900_001, "body" => "He <SPOILER>dies</SPOILER> at the end.")])
+
+    body = ::Review.find(900_001).body
+    assert_includes body, "||dies||"
+    refute_includes body.downcase, "spoiler>"
+  end
+
   # Real data: 31 of the 118 legacy rows with a <spoiler> tag wrap a <br>. Unwrapping
   # in place, not flattening to `.text`, is what keeps it.
   test "keeps a <br> inside a legacy spoiler tag" do

@@ -131,12 +131,23 @@ module Services
       # probe against the legacy DB (not a test -- no test may touch that database):
       # both of that converter's hard-won lessons are real here too, so this reuses
       # its two-path approach rather than the simpler "always flatten to .text" one.
+      #
+      # No pre-parse string fast path (e.g. checking body.include?("<spoiler")) before
+      # the real Nokogiri parse below: `fragment.css("spoiler")` is case-insensitive by
+      # construction (the HTML5 parser lowercases tag names on the way in), and a
+      # string check narrow enough to mirror that exactly would just be a second,
+      # harder-to-keep-in-sync copy of what css() already does correctly. A prior
+      # version of this guard checked for the lowercase literal only and let an
+      # uppercase `<SPOILER>` tag skip conversion entirely -- same input, unwrapped in
+      # the clear instead of hidden.
       def convert_legacy_spoilers(body)
         return body if body.blank?
-        return body unless body.to_s.include?("<spoiler")
 
         fragment = Nokogiri::HTML5.fragment(body.to_s)
-        fragment.css("spoiler").each { |node| convert_spoiler_tag(node, fragment.document) }
+        spoilers = fragment.css("spoiler")
+        return body if spoilers.empty?
+
+        spoilers.each { |node| convert_spoiler_tag(node, fragment.document) }
         fragment.to_html
       end
 
@@ -161,6 +172,17 @@ module Services
       # Not handled: a legacy row whose <spoiler> text already contains "||" would
       # unbalance the marker pairing this inserts (see SpoilerSpanConverter's class
       # comment for the same caveat). Verified absent from all 118 real rows.
+      #
+      # Also not handled: a NESTED <spoiler> (one inside another) partially leaks.
+      # fragment.css("spoiler") above yields both nodes in document order -- outer
+      # first, then inner -- and this method is called once per node with no
+      # awareness of the other call. Unwrapping the outer node first inserts "||"
+      # around ALL of its text, inner tag included; unwrapping the inner node then
+      # inserts a second "||" pair around just its own text, splitting what was one
+      # marker pair into two adjacent ones. "<spoiler>a<spoiler>b</spoiler>c</spoiler>"
+      # becomes "||a||b||c||", which BodySanitizer's non-greedy matching reads as two
+      # spoilers ("a" and "c") with "b" sitting unmatched, in the clear, between them.
+      # Verified absent from all 118 real rows -- none nests a <spoiler>.
       def convert_spoiler_tag(node, document)
         if node.css(BLOCK_BOUNDARY_TAGS.join(",")).any?
           node.replace(Nokogiri::XML::Text.new("||#{node.text}||", document))
