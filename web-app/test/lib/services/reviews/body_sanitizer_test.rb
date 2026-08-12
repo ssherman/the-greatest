@@ -580,6 +580,62 @@ module Services
         assert_includes html, "Ends||"
       end
 
+      # Regression (Critical 1): the OPENING "||" itself straddled a node boundary
+      # once paragraphize turned the newline between its two pipes into a <br>,
+      # so the captured content's own start landed in a different node than the
+      # outer delimiter's start. Slicing against the wrong node's offset returned
+      # nil and crashed on `.empty?` -- a 500 on a public page from ordinary
+      # typing, no HTML required. Must render successfully and lose nothing.
+      test "render does not raise when an opening spoiler marker straddles a newline" do
+        html = Services::Reviews::BodySanitizer.render("Rated 9|\n|10, and ||the twist|| is great")
+
+        assert_equal "<p>Rated 9|<br>|10, and ||the twist|| is great</p>", html
+      end
+
+      # Regression (Critical 2): the CLOSING "||" straddled a node boundary the
+      # same way, but on this side the wrong offset was negative, so Ruby quietly
+      # returned a wrong-but-non-nil slice instead of raising -- duplicating and
+      # losing text rather than crashing. Must render successfully with every
+      # character preserved exactly once.
+      test "render does not lose or duplicate text when a closing spoiler marker straddles a newline" do
+        html = Services::Reviews::BodySanitizer.render("a ||b|\n|c and more")
+
+        assert_equal "<p>a ||b|<br>|c and more</p>", html
+      end
+
+      # Important 3: the write allowlist keeps b/i/em/strong/a, so a marker pair can
+      # be typed with one delimiter inside an inline tag and the other outside it.
+      # The parent guard keeps this structurally safe (nothing corrupts), but it is
+      # a real, reachable shape via ordinary typing -- not a hypothetical -- and it
+      # fails OPEN: the spoiler is left exactly as typed, visible "||" and all,
+      # rather than hidden. Documented as a known, accepted limit, not silently.
+      test "render does not convert a spoiler marker pair split across an inline tag boundary" do
+        html = Services::Reviews::BodySanitizer.render("<b>||He dies</b> at the end||")
+
+        assert_equal "<b>||He dies</b> at the end||", html
+        refute_includes html, "review-spoiler"
+      end
+
+      test "render does not convert a spoiler marker pair split across an inline tag boundary the other way" do
+        html = Services::Reviews::BodySanitizer.render("He was ||shocked when <b>she died||</b>")
+
+        assert_equal "He was ||shocked when <b>she died||</b>", html
+        refute_includes html, "review-spoiler"
+      end
+
+      # Minor 4 (SPOILER_SCOPE_BOUNDARY_TAGS comment fix): a <p> nested inside an
+      # inline tag is reachable through convert_spoiler_run's descendant walk even
+      # though <p> is a scope boundary at the sibling level. Pinning the actual
+      # (safe, non-crashing) behavior: the whole subtree, <p> included, moves into
+      # the spoiler span. No injection risk either way -- span/class are the only
+      # things this method ever writes -- this just documents what happens rather
+      # than leaving it unspecified.
+      test "render moves a paragraph nested inside an inline tag into the spoiler span" do
+        html = Services::Reviews::BodySanitizer.render("<b>||a<p>mid</p>b||</b>")
+
+        assert_equal %(<b><span class="review-spoiler">a<p>mid</p>b</span></b>), html
+      end
+
       # Corpus shape (id=124730): plain text ending in a single trailing newline,
       # no block markup at all. Before this task, render's newline was inert (no
       # <br>/<p> rule to fall back on) and the body rendered as one run-on line;

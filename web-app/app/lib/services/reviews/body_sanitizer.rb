@@ -58,10 +58,16 @@ module Services
       SPOILER_MARKER = "||".freeze
       SPOILER_PATTERN = /\|\|(.+?)\|\|/m
 
-      # A spoiler match must never straddle two different paragraphs -- p/blockquote
-      # are the only block-level tags render ever produces or preserves
-      # (see RENDER_TAGS), so partitioning a spoiler sweep on just these two names
-      # is exhaustive. See convert_spoiler_markers for why the boundary matters.
+      # A spoiler match must never straddle two different paragraphs, so a search
+      # scope is cut at every p/blockquote SIBLING encountered while walking the
+      # tree (see convert_spoiler_scope). This is NOT a guarantee that a p or
+      # blockquote can never end up inside one scope's search text by some other
+      # route: convert_spoiler_run pulls text through EVERY descendant of a
+      # non-boundary node via `.//text()`, so a <p> nested inside an inline tag --
+      # e.g. "<b>||a<p>mid</p>b||</b>", which real HTML5 parsing allows -- is
+      # reached and can be moved into a spoiler span along with everything else in
+      # that <b>. Harmless in practice (no injection, and a browser still renders
+      # the nesting), just not something this list alone rules out.
       SPOILER_SCOPE_BOUNDARY_TAGS = %w[p blockquote].freeze
 
       # Guards .call's newline-to-paragraph conversion (see #paragraphize). Matches an
@@ -403,9 +409,17 @@ module Services
       #
       # Requires start and end to be direct siblings: `next_sibling` is how the
       # in-between nodes are located and moved. A match whose start and end sit at
-      # different depths (the delimiter typed on one side of an inline tag but not
-      # reachable via a sibling walk from the other) is left unconverted rather
-      # than guessed at -- a narrower, defensible limit, not silent corruption.
+      # different depths is left unconverted rather than guessed at -- a narrower,
+      # defensible limit, not silent corruption. This IS reachable with ordinary
+      # allowed-tag typing, not just a theoretical shape: a body stored as
+      # "<b>||He dies</b> at the end||" (opening marker inside a <b>, closing
+      # marker outside it) has its "||" delimiters in nodes with different
+      # parents, and is left exactly as typed -- visibly leaking the marker text
+      # rather than hiding it. Structurally safe (nothing corrupts), but it
+      # reintroduces the exact leak spoiler conversion exists to close. Known and
+      # accepted for now; a future task could widen this by walking up to a
+      # shared ancestor and moving partial subtrees on both sides, which this
+      # method does not attempt.
       #
       # New text is built as real Nokogiri::XML::Text nodes, not by string-building
       # and reparsing: `.content` already returns fully-decoded text, and Nokogiri
@@ -418,6 +432,25 @@ module Services
         start_node = text_nodes[start_index]
         end_node = text_nodes[end_index]
         return if start_index != end_index && start_node.parent != end_node.parent
+
+        # The "||" delimiter itself can straddle a node boundary (one pipe as the
+        # last character of one node, the other as the first character of the
+        # next -- an ordinary typed newline right between them does this once
+        # paragraphize turns it into a <br>). When that happens, begin(1)/end(1)
+        # -- the CAPTURED content's bounds -- land in a different node than
+        # begin(0)/end(0), the bounds start_index/end_index were computed from.
+        # Slicing the captured bounds against starts[start_index]/starts[end_index]
+        # in that situation is simply wrong: too large an offset returns nil and
+        # crashes on `.empty?` (a 500 on a public page); too negative an offset
+        # returns a wrong-but-non-nil slice, silently duplicating and losing text
+        # instead of raising. Bail the same fail-safe way as the parent-mismatch
+        # guard above: require the captured bounds to land in the SAME nodes the
+        # outer bounds did, or leave the match unconverted.
+        inner_start_index = spoiler_node_index(starts, contents, match.begin(1))
+        return if inner_start_index != start_index
+
+        inner_end_index = spoiler_node_index(starts, contents, match.end(1) - 1)
+        return if inner_end_index != end_index
 
         span = Nokogiri::XML::Node.new("span", document)
         span["class"] = SPOILER_CLASS
