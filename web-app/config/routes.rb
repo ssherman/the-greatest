@@ -314,6 +314,17 @@ Rails.application.routes.draw do
   get "searches/page/:page", to: "saved_searches#index", as: :saved_searches_page,
     constraints: {page: /\d+/}
 
+  # Write surface (increment 6). `new` is declared before `:id` deliberately:
+  # Rails tries routes in declaration order, and the day `:id` is loosened to
+  # admit a slug, a `searches/:id` above this would swallow GET /searches/new.
+  get "searches/new", to: "saved_searches#new", as: :new_saved_search
+  post "searches", to: "saved_searches#create"
+  get "searches/:id/edit", to: "saved_searches#edit", as: :edit_saved_search,
+    constraints: {id: /\d+/}
+  patch "searches/:id", to: "saved_searches#update", constraints: {id: /\d+/}
+  put "searches/:id", to: "saved_searches#update", constraints: {id: /\d+/}
+  delete "searches/:id", to: "saved_searches#destroy", constraints: {id: /\d+/}
+
   # show serves the owner or any viewer when the search is public, including
   # anonymous, and 404s everything else via SavedSearch.visible_to.
   get "searches/:id", to: "saved_searches#show", as: :saved_search,

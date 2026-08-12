@@ -52,6 +52,14 @@ module Books
       filter_labels_class_name.constantize
     end
 
+    def self.criteria_params_class_name
+      "Books::SavedSearchCriteriaParams"
+    end
+
+    def self.criteria_params_class
+      criteria_params_class_name.constantize
+    end
+
     def self.ranking_configuration_class
       ::Books::RankingConfiguration
     end

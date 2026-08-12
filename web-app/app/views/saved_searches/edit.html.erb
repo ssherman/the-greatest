@@ -1,0 +1,8 @@
+<%
+  content_for :page_title, "Edit #{@search.display_name} | #{domain_name}"
+%>
+
+<div class="space-y-6">
+  <h1 class="text-3xl font-bold">Edit Saved Search</h1>
+  <%= render "form", search: @search, url: saved_search_path(@search) %>
+</div>

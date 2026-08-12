@@ -324,4 +324,153 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
   test "robots.txt disallows /searches" do
     assert_includes Rails.root.join("public/robots.txt").read, "Disallow: /searches"
   end
+
+  # --- new / create ---
+
+  test "new renders the form for a signed-in user" do
+    sign_in_as(@user, stub_auth: true)
+
+    get new_saved_search_path
+
+    assert_response :success
+    assert_select "form[action=?]", saved_searches_path
+  end
+
+  test "new redirects an anonymous visitor" do
+    get new_saved_search_path
+
+    assert_response :redirect
+  end
+
+  test "create stores a search owned by the current user" do
+    sign_in_as(@user, stub_auth: true)
+
+    assert_difference "Books::SavedSearch.count", 1 do
+      post saved_searches_path, params: {saved_search: {
+        name: "Long Victorian novels",
+        description: "For winter",
+        public: "1",
+        criteria: {book_type: "0", first_year_published_gt: "1837", ranked: "true"}
+      }}
+    end
+
+    search = Books::SavedSearch.order(:id).last
+    assert_redirected_to saved_search_path(search)
+    assert_equal @user, search.user
+    assert_equal "Long Victorian novels", search.name
+    assert search.public?
+  end
+
+  # The normalizer is wired in, not merely defined (Task 2).
+  test "create drops blank criteria rather than storing them" do
+    sign_in_as(@user, stub_auth: true)
+
+    post saved_searches_path, params: {saved_search: {
+      name: "Sparse",
+      criteria: {book_type: "", ranked: "", included_category_ids: ["", ""], first_year_published_gt: "1900"}
+    }}
+
+    criteria = Books::SavedSearch.order(:id).last.criteria
+    assert_equal({"first_year_published_gt" => 1900}, criteria)
+  end
+
+  test "create ignores a user_id in the params" do
+    sign_in_as(@user, stub_auth: true)
+    other = users(:regular_user)
+
+    post saved_searches_path, params: {saved_search: {
+      name: "Not yours", user_id: other.id, criteria: {book_type: "0"}
+    }}
+
+    assert_equal @user, Books::SavedSearch.order(:id).last.user
+  end
+
+  test "create re-renders the form when the record is invalid" do
+    sign_in_as(@user, stub_auth: true)
+
+    assert_no_difference "Books::SavedSearch.count" do
+      post saved_searches_path, params: {saved_search: {name: "Empty", criteria: {}}}
+    end
+
+    assert_response :unprocessable_entity
+  end
+
+  test "create redirects an anonymous visitor without writing" do
+    assert_no_difference "Books::SavedSearch.count" do
+      post saved_searches_path, params: {saved_search: {name: "x", criteria: {book_type: "0"}}}
+    end
+
+    assert_response :redirect
+  end
+
+  # --- edit / update ---
+
+  test "edit renders the form for the owner" do
+    sign_in_as(@user, stub_auth: true)
+
+    get edit_saved_search_path(@private_search)
+
+    assert_response :success
+    assert_select "form[action=?]", saved_search_path(@private_search)
+  end
+
+  # 404, never 403 -- a 403 confirms the id exists (spec §8).
+  test "edit 404s for a stranger, even on a public search" do
+    @private_search.update_column(:public, true)
+    sign_in_as(@other, stub_auth: true)
+
+    get edit_saved_search_path(@private_search)
+
+    assert_response :not_found
+  end
+
+  test "update changes the search" do
+    sign_in_as(@user, stub_auth: true)
+
+    patch saved_search_path(@private_search), params: {saved_search: {
+      name: "Renamed", criteria: {book_type: "1"}
+    }}
+
+    assert_redirected_to saved_search_path(@private_search)
+    assert_equal "Renamed", @private_search.reload.name
+    assert_equal({"book_type" => 1}, @private_search.criteria)
+  end
+
+  test "update 404s for a stranger" do
+    sign_in_as(@other, stub_auth: true)
+
+    patch saved_search_path(@private_search), params: {saved_search: {name: "Hijacked"}}
+
+    assert_response :not_found
+    assert_not_equal "Hijacked", @private_search.reload.name
+  end
+
+  # --- destroy ---
+
+  test "destroy removes the search" do
+    sign_in_as(@user, stub_auth: true)
+
+    assert_difference "Books::SavedSearch.count", -1 do
+      delete saved_search_path(@private_search)
+    end
+
+    assert_redirected_to saved_searches_path
+  end
+
+  test "destroy 404s for a stranger" do
+    sign_in_as(@other, stub_auth: true)
+
+    assert_no_difference "Books::SavedSearch.count" do
+      delete saved_search_path(@private_search)
+    end
+
+    assert_response :not_found
+  end
+
+  # --- routing ---
+
+  test "searches/new resolves to new, not show" do
+    assert_routing({method: "get", path: "/searches/new"},
+      {controller: "saved_searches", action: "new"})
+  end
 end

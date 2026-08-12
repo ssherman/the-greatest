@@ -1,0 +1,66 @@
+<% criteria = search.criteria_object %>
+
+<div class="card bg-base-100 shadow-sm">
+  <div class="card-body gap-4">
+    <h2 class="card-title text-lg">Filters</h2>
+
+    <%= f.fields_for :criteria, search.criteria do |c| %>
+      <div class="form-control">
+        <%= c.label :book_type, class: "label" do %><span class="label-text font-semibold">Type</span><% end %>
+        <%= c.select :book_type,
+              ::Books::BookType::LABELS.map { |value, label| [label, value] },
+              {include_blank: "Any type", selected: criteria.book_type},
+              {class: "select select-bordered w-full"} %>
+      </div>
+
+      <fieldset class="form-control">
+        <legend class="label-text font-semibold">Length</legend>
+        <div class="flex flex-wrap gap-3">
+          <% ::Books::Book.book_lengths.each do |key, value| %>
+            <label class="label cursor-pointer justify-start gap-2">
+              <%= check_box_tag "saved_search[criteria][book_length][]", value,
+                    criteria.book_length.include?(value), id: nil, class: "checkbox checkbox-sm" %>
+              <span class="label-text"><%= key.to_s.titleize %></span>
+            </label>
+          <% end %>
+        </div>
+      </fieldset>
+
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div class="form-control">
+          <%= c.label :first_year_published_gt, class: "label" do %><span class="label-text font-semibold">Published from</span><% end %>
+          <%= c.number_field :first_year_published_gt, value: criteria.first_year_published_gt,
+                class: "input input-bordered w-full", placeholder: "1837" %>
+        </div>
+        <div class="form-control">
+          <%= c.label :first_year_published_lt, class: "label" do %><span class="label-text font-semibold">Published to</span><% end %>
+          <%= c.number_field :first_year_published_lt, value: criteria.first_year_published_lt,
+                class: "input input-bordered w-full", placeholder: "1901" %>
+        </div>
+      </div>
+
+      <div class="form-control">
+        <%= c.label :ranked, class: "label" do %><span class="label-text font-semibold">Ranking</span><% end %>
+        <%# Tri-state, not a boolean: "" is All Books, and collapsing it into
+            false silently changes what 437 stored searches return (spec §6). %>
+        <%= c.select :ranked,
+              [["All books", ""], ["Ranked books only", "true"], ["Unranked books only", "false"]],
+              {selected: {ranked: "true", unranked: "false"}[criteria.ranked].to_s},
+              {class: "select select-bordered w-full"} %>
+      </div>
+
+      <div class="form-control">
+        <%= c.label :max_ranked_position, class: "label" do %><span class="label-text font-semibold">Top N ranked books</span><% end %>
+        <%= c.number_field :max_ranked_position, value: criteria.max_ranked_position,
+              class: "input input-bordered w-full", placeholder: "100" %>
+      </div>
+
+      <div class="form-control">
+        <label class="label cursor-pointer justify-start gap-3">
+          <%= c.check_box :hide_read, {checked: criteria.hide_read}, "1", "0" %>
+          <span class="label-text">Hide books I've read</span>
+        </label>
+      </div>
+    <% end %>
+  </div>
+</div>
