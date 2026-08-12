@@ -243,18 +243,20 @@ module Services
         refute_includes result, "<p"
       end
 
-      # .call no longer produces a spoiler span (see the "strips a spoiler tag" tests
-      # above), but 141,869 rows were written before this task, and some already
-      # contain a real <span class="review-spoiler"> from the old write-time
-      # conversion. #render still has to display those as-is, so this constructs a
-      # legacy-shaped stored body directly instead of deriving it from .call.
-      # (Formerly "render keeps the spoiler span the write path produced".)
-      test "render keeps a spoiler span already present in a stored body" do
+      # A legacy-shaped stored span is no longer possible in production -- the
+      # migration converted all 119 rows that had one to ||markers|| -- but this pins
+      # what happens if one were ever stored anyway: it is unwrapped like any other
+      # disallowed tag, same as a freshly user-written one (see "render strips a user-
+      # written spoiler span" below). (Formerly "render keeps the spoiler span the
+      # write path produced", then "render keeps a spoiler span already present in a
+      # stored body" while render still admitted span.)
+      test "render unwraps a stored span instead of displaying it" do
         stored = %(<p>He <span class="review-spoiler">dies</span>.</p>)
 
         html = Services::Reviews::BodySanitizer.render(stored)
 
-        assert_includes html, %(<span class="review-spoiler">dies</span>)
+        refute_includes html, "review-spoiler"
+        assert_includes html, "He dies."
       end
 
       # Formerly "re-running call on a stored body would destroy the spoiler -- do not
@@ -324,29 +326,36 @@ module Services
         refute_includes html, "class"
       end
 
-      test "render narrows a spoiler span's class to exactly review-spoiler" do
+      # A span carrying review-spoiler alongside other classes is unwrapped the same as
+      # any other class combination -- there is no longer a narrowing step, only the
+      # ordinary disallowed-tag path every other class-bearing tag already takes.
+      test "render strips a span carrying the spoiler class among others, along with the tag" do
         html = Services::Reviews::BodySanitizer.render(
           %(<span class="review-spoiler fixed inset-0">dies</span>)
         )
 
-        assert_includes html, %(<span class="review-spoiler">dies</span>)
+        refute_includes html, "review-spoiler"
         refute_includes html, "fixed"
         refute_includes html, "inset-0"
+        assert_includes html, "dies"
       end
 
-      test "render strips a title attribute, including from a spoiler span" do
+      test "render strips a title attribute, including from a user-written spoiler span" do
         html = Services::Reviews::BodySanitizer.render(
           %(<a href="https://example.com" title="secret">link</a>)
         )
         refute_includes html, "title"
         refute_includes html, "secret"
 
+        # The span is unwrapped along with its title -- not narrowed to a bare
+        # <span class="review-spoiler">, since span no longer survives render at all.
         spoiler_html = Services::Reviews::BodySanitizer.render(
           %(<span class="review-spoiler" title="the butler did it">dies</span>)
         )
         refute_includes spoiler_html, "title"
         refute_includes spoiler_html, "the butler did it"
-        assert_includes spoiler_html, %(<span class="review-spoiler">dies</span>)
+        refute_includes spoiler_html, "review-spoiler"
+        assert_includes spoiler_html, "dies"
       end
 
       test "render converts a spoiler marker into a spoiler span" do
@@ -708,6 +717,26 @@ module Services
 
         refute_includes stored, "spoiler>"
         assert_includes stored, "dies"
+      end
+
+      test "render strips a user-written spoiler span" do
+        html = Services::Reviews::BodySanitizer.render(%(<span class="review-spoiler">forged</span>))
+
+        refute_includes html, "review-spoiler"
+        assert_includes html, "forged"
+      end
+
+      test "render strips any class" do
+        html = Services::Reviews::BodySanitizer.render(%(<p class="fixed inset-0 z-50">overlay</p>))
+
+        refute_includes html, "fixed"
+        refute_includes html, "class="
+      end
+
+      test "render strips a title attribute" do
+        html = Services::Reviews::BodySanitizer.render(%(<a href="https://example.test" title="leak">x</a>))
+
+        refute_includes html, "leak"
       end
 
       private
