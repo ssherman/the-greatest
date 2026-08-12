@@ -1,4 +1,12 @@
-<%= form_with model: search, url: url, class: "space-y-6" do |f| %>
+<%
+  # scope: :saved_search -- form_with derives its top-level param key from
+  # the STI subclass (search.model_name.param_key => "books_saved_search"),
+  # not the base class. Pinning it to :saved_search keeps every
+  # fields_for-derived name under the same key the domain-generic controller
+  # reads (params.require(:saved_search)) and the same key the criteria
+  # partial's hardcoded book_length check_box_tag already uses.
+%>
+<%= form_with model: search, url: url, scope: :saved_search, class: "space-y-6" do |f| %>
   <% if search.errors.any? %>
     <div class="alert alert-error" role="alert">
       <ul class="list-disc list-inside">

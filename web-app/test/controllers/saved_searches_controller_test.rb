@@ -402,6 +402,46 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     assert_response :redirect
   end
 
+  # Every other test in this file POSTs a hand-written `saved_search: {...}`
+  # hash, which exercises the controller but never the form's own field
+  # names -- and those can drift apart silently. `form_with model: search`
+  # on the `Books::SavedSearch` STI subclass derives its top-level key from
+  # the SUBCLASS name ("books_saved_search"), not "saved_search"; the
+  # book_length checkboxes are a separate `check_box_tag` that hardcodes
+  # "saved_search" regardless. Reading the real `name` attributes out of the
+  # rendered form -- rather than assuming what they are -- is what makes this
+  # test catch that kind of drift instead of just re-asserting the bug.
+  test "the rendered new-search form submits under its own field names" do
+    sign_in_as(@user, stub_auth: true)
+    get new_saved_search_path
+    assert_response :success
+
+    form = Nokogiri::HTML5.fragment(response.body).at_css("form")
+    action = form["action"]
+
+    name_field = form.at_css("input[name$='[name]']")
+    book_type_field = form.at_css("select[name$='[criteria][book_type]']")
+    book_length_field = form.at_css("input[type=checkbox][name$='[criteria][book_length][]']")
+
+    assert name_field, "the rendered form has no [name] input"
+    assert book_type_field, "the rendered form has no [criteria][book_type] select"
+    assert book_length_field, "the rendered form has no [criteria][book_length][] checkbox"
+
+    query = [
+      "#{name_field["name"]}=#{URI.encode_www_form_component("From the real form")}",
+      "#{book_type_field["name"]}=#{URI.encode_www_form_component("0")}",
+      "#{book_length_field["name"]}=#{URI.encode_www_form_component(book_length_field["value"])}"
+    ].join("&")
+
+    assert_difference "Books::SavedSearch.count", 1 do
+      post action, params: Rack::Utils.parse_nested_query(query)
+    end
+
+    search = Books::SavedSearch.order(:id).last
+    assert_equal "From the real form", search.name
+    assert_equal({"book_type" => 0, "book_length" => [book_length_field["value"].to_i]}, search.criteria)
+  end
+
   # --- edit / update ---
 
   test "edit renders the form for the owner" do
@@ -425,8 +465,8 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
 
     get edit_saved_search_path(@private_search)
 
-    assert_select "select[name='books_saved_search[criteria][book_type]'] option[value='1'][selected]"
-    assert_select "select[name='books_saved_search[criteria][ranked]'] option[value='false'][selected]"
+    assert_select "select[name='saved_search[criteria][book_type]'] option[value='1'][selected]"
+    assert_select "select[name='saved_search[criteria][ranked]'] option[value='false'][selected]"
   end
 
   # 404, never 403 -- a 403 confirms the id exists (spec §8).
