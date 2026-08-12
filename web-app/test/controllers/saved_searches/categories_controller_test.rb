@@ -55,6 +55,17 @@ module SavedSearches
       assert_response :unauthorized
     end
 
+    # Every other saved-search endpoint calls prevent_caching, and
+    # SavedSearchesController's header states the whole feature is never
+    # cached. This is signed-in only, so it has to say so too.
+    test "is never cached" do
+      sign_in_as(@user, stub_auth: true)
+
+      get saved_search_categories_path(q: "fict"), as: :json
+
+      assert_includes response.headers["Cache-Control"], "no-store"
+    end
+
     test "404s on a host with no saved searches" do
       host! Rails.application.config.domains[:music]
       sign_in_as(@user, stub_auth: true)
