@@ -91,6 +91,12 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, 'id="navbar_my_searches"'
   end
 
+  test "no link on the index is trapped in a frame" do
+    sign_in_as(@user, stub_auth: true)
+
+    assert_no_frame_trapped_links saved_searches_path
+  end
+
   test "index page 1 redirects to the bare path" do
     sign_in_as(@user, stub_auth: true)
     get "/searches/page/1"
@@ -263,6 +269,15 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, 'name="robots" content="noindex, follow"'
   end
 
+  # show renders its results grid outside any turbo frame on purpose (spec
+  # §9), so this passes vacuously today -- it is here to catch a frame ever
+  # being added around a link without an escape hatch.
+  test "no link on show is trapped in a frame" do
+    stub_advanced(ids: [], total: 0)
+
+    assert_no_frame_trapped_links saved_search_path(@public_search)
+  end
+
   # The grid renders authors and a cover per book -- the exact N+1 shape.
   test "show does not query per result book" do
     ids = [books_books(:war_and_peace).id, books_books(:crime_and_punishment).id]
@@ -340,6 +355,12 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     get new_saved_search_path
 
     assert_response :redirect
+  end
+
+  test "no link on new is trapped in a frame" do
+    sign_in_as(@user, stub_auth: true)
+
+    assert_no_frame_trapped_links new_saved_search_path
   end
 
   test "the form offers every language and country" do
@@ -530,6 +551,12 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
       assert_select "input[name='saved_search[criteria][included_category_ids][]'][value=?]", category.id.to_s
     end
     assert_select "[data-chip='#{category.id}']", text: /Fiction \(Genre\)/
+  end
+
+  test "no link on edit is trapped in a frame" do
+    sign_in_as(@user, stub_auth: true)
+
+    assert_no_frame_trapped_links edit_saved_search_path(@private_search)
   end
 
   # 404, never 403 -- a 403 confirms the id exists (spec §8).
