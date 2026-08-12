@@ -106,6 +106,10 @@ test.describe('Writing a review', () => {
     await page.getByRole('button', { name: 'Save' }).click();
     await expect(page.locator('#review_modal')).not.toBeVisible();
 
+    // Proves the edit actually landed -- without this, a 422 or a failed Turbo
+    // Stream re-render would leave the pre-edit DOM in place and the spoiler
+    // assertion below would pass for the wrong reason.
+    await expect(page.getByTestId('review')).toContainText('at the very end.');
     await expect(page.locator('.review-spoiler')).toHaveText('dies');
   });
 });
