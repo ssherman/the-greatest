@@ -27,6 +27,7 @@ class SavedSearchesController < ApplicationController
   before_action :require_domain_support!
   before_action :require_signed_in!, only: [:index, :new, :create, :edit, :update, :destroy]
   before_action :set_owned_search, only: [:edit, :update, :destroy]
+  before_action :load_taxonomies, only: [:new, :create, :edit, :update]
   before_action :prevent_caching
 
   # GET /searches(/page/:page)
@@ -137,6 +138,18 @@ class SavedSearchesController < ApplicationController
 
   def require_domain_support!
     raise ActiveRecord::RecordNotFound if domain_class.nil?
+  end
+
+  # Ordered by name so the two multi-selects are scannable. Loaded for create
+  # and update too, because both re-render the form on a validation failure.
+  #
+  # ::Books::Country is books-specific in a domain-generic controller. That is
+  # acceptable only because this increment ships one domain; when games
+  # arrives, move both loads behind a `domain_class.taxonomies_for_form` hook
+  # rather than adding a conditional here.
+  def load_taxonomies
+    @languages = Language.order(:name)
+    @countries = ::Books::Country.order(:name)
   end
 
   # Scoped to the owner, so a stranger gets RecordNotFound -- a 404, not the

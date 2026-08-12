@@ -342,6 +342,43 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     assert_response :redirect
   end
 
+  test "the form offers every language and country" do
+    sign_in_as(@user, stub_auth: true)
+
+    get new_saved_search_path
+
+    assert_select "select[name='saved_search[criteria][included_language_ids][]'] option",
+      count: Language.count
+    assert_select "select[name='saved_search[criteria][excluded_country_ids][]'] option",
+      count: ::Books::Country.count
+  end
+
+  test "create stores selected language and country ids as integers" do
+    sign_in_as(@user, stub_auth: true)
+    language = languages(:english)
+    country = books_countries(:french)
+
+    post saved_searches_path, params: {saved_search: {
+      name: "Taxonomies",
+      criteria: {included_language_ids: [language.id.to_s], excluded_country_ids: [country.id.to_s]}
+    }}
+
+    criteria = Books::SavedSearch.order(:id).last.criteria
+    assert_equal [language.id], criteria["included_language_ids"]
+    assert_equal [country.id], criteria["excluded_country_ids"]
+  end
+
+  # Loading 201 + 253 rows must not become one query per option.
+  test "the form loads its taxonomies in a bounded number of queries" do
+    sign_in_as(@user, stub_auth: true)
+    get new_saved_search_path # warm any cached lookups
+    ActiveRecord::Base.connection.clear_query_cache
+
+    assert_queries_count(3) do
+      get new_saved_search_path
+    end
+  end
+
   test "create stores a search owned by the current user" do
     sign_in_as(@user, stub_auth: true)
 

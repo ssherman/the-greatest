@@ -61,6 +61,24 @@
           <span class="label-text">Hide books I've read</span>
         </label>
       </div>
+
+      <% {language: @languages, country: @countries}.each do |axis, records| %>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <% [:included, :excluded].each do |mode| %>
+            <% key = "#{mode}_#{axis}_ids" %>
+            <div class="form-control">
+              <label class="label" for="saved_search_criteria_<%= key %>">
+                <span class="label-text font-semibold"><%= "#{mode} #{axis}".titleize %></span>
+              </label>
+              <%= hidden_field_tag "saved_search[criteria][#{key}][]", "", id: nil %>
+              <%= select_tag "saved_search[criteria][#{key}][]",
+                    options_from_collection_for_select(records, :id, :name, criteria.public_send(key)),
+                    multiple: true, size: 8, id: "saved_search_criteria_#{key}",
+                    class: "select select-bordered w-full h-auto" %>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
     <% end %>
   </div>
 </div>
