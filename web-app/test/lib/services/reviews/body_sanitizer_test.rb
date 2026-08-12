@@ -621,12 +621,33 @@ module Services
       # splitting a text node; "<b>"/"</b>" is a real element that can split a
       # marker pair across siblings the same way. All three past defects involved
       # exactly two or three of these landing next to each other, so length 6
-      # covers every such adjacency with room either side.
+      # covers most such adjacencies with room either side -- but not all of them:
+      # a marker flush against a tag on BOTH sides, like "||<b>a</b>||", is 7
+      # tokens and cannot appear in this corpus by construction. That specific
+      # shape is pinned separately, not exhaustively, by the named examples in
+      # "render converts a spoiler marker flush against an inline tag with no
+      # text between" and "...against a newline-turned-br with no text between"
+      # above.
+      #
+      # Also covers .call's idempotency (Important 3): call() is the write path,
+      # so a non-idempotent call corrupts STORED data permanently, unlike render
+      # (display-only, self-correcting on the next page load) -- the higher-risk
+      # property earns the exhaustive corpus too, not just a short hand-picked
+      # list. Cheap to add here: .call does no paragraphizing or spoiler-marker
+      # work, so it costs a fraction of the render+parse work already in this loop.
       test "render satisfies its safety invariants across an exhaustive small corpus" do
         tokens = ["a", "|", "\n", "<b>", "</b>"]
         corpus = tokens.repeated_permutation(6).map(&:join)
 
         corpus.each do |input|
+          once = Services::Reviews::BodySanitizer.call(input)
+          twice = Services::Reviews::BodySanitizer.call(once)
+          if once.nil?
+            assert_nil twice, "call was not idempotent for #{input.inspect}"
+          else
+            assert_equal once, twice, "call was not idempotent for #{input.inspect}"
+          end
+
           # Any exception here fails the test immediately -- this is the
           # "rendering never raises" invariant; no explicit assertion needed.
           html = Services::Reviews::BodySanitizer.render(input)
