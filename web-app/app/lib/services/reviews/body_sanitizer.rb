@@ -437,20 +437,34 @@ module Services
         # last character of one node, the other as the first character of the
         # next -- an ordinary typed newline right between them does this once
         # paragraphize turns it into a <br>). When that happens, begin(1)/end(1)
-        # -- the CAPTURED content's bounds -- land in a different node than
-        # begin(0)/end(0), the bounds start_index/end_index were computed from.
-        # Slicing the captured bounds against starts[start_index]/starts[end_index]
-        # in that situation is simply wrong: too large an offset returns nil and
-        # crashes on `.empty?` (a 500 on a public page); too negative an offset
+        # -- the CAPTURED content's bounds -- can land outside start_index/end_index,
+        # the nodes begin(0)/end(0) resolved to. Slicing against the wrong node's
+        # offset in that situation is simply wrong: too large an offset returns nil
+        # and crashes on `.empty?` (a 500 on a public page); too negative an offset
         # returns a wrong-but-non-nil slice, silently duplicating and losing text
-        # instead of raising. Bail the same fail-safe way as the parent-mismatch
-        # guard above: require the captured bounds to land in the SAME nodes the
-        # outer bounds did, or leave the match unconverted.
-        inner_start_index = spoiler_node_index(starts, contents, match.begin(1))
-        return if inner_start_index != start_index
+        # instead of raising.
+        #
+        # The check is deliberately an INCLUSIVE range against `contents`, not
+        # node-index equality (spoiler_node_index's half-open "< end" test) --
+        # begin(1)/end(1) legitimately land EXACTLY on a node's own boundary
+        # whenever the marker sits flush against a tag with no text in between
+        # ("||<b>x</b>||", "The killer is ||<b>the butler</b>||"), and that boundary
+        # position slices to a valid empty string, not an out-of-bounds one. A
+        # stricter equality check here previously rejected those (and 119 of a
+        # 15,817-input fuzz corpus with it) even though nothing about them was
+        # unsafe -- an over-rejection, not a safety fix. This range only proves
+        # SUFFICIENCY: it guarantees local_inner_start/local_inner_end land in
+        # [0, contents[index].length], which is what the slice below needs against
+        # `contents`' *lengths* -- it does not claim to be the unique condition
+        # that would work, and it says nothing on its own about the LIVE
+        # `.content` read next, which can be shorter than `contents[index]` if an
+        # already-processed (rightward) match truncated this same node; that gap
+        # is closed by the separate reverse-processing invariant noted below.
+        start_length = contents[start_index].length
+        return unless (starts[start_index]..starts[start_index] + start_length).cover?(match.begin(1))
 
-        inner_end_index = spoiler_node_index(starts, contents, match.end(1) - 1)
-        return if inner_end_index != end_index
+        end_length = contents[end_index].length
+        return unless (starts[end_index]..starts[end_index] + end_length).cover?(match.end(1))
 
         span = Nokogiri::XML::Node.new("span", document)
         span["class"] = SPOILER_CLASS

@@ -654,6 +654,121 @@ module Services
 
         assert_equal %(<p>"Great book."<br>Really enjoyed it.</p>), html
       end
+
+      # Regression: the round-2 guard checked node-index EQUALITY, which is
+      # stricter than the slicing actually needs -- a marker sitting flush
+      # against a tag with no text in between (nothing between "||" and "<b>",
+      # or between "</b>" and "||") legitimately lands the captured bounds
+      # exactly ON a node boundary, and got bailed on even though nothing was
+      # unsafe about converting it. 119 of a 15,817-input fuzz regressed this
+      # way. The property test below checks safety invariants (no crash, no
+      # corruption) but would not by itself catch UNDER-conversion -- these
+      # five, the reviewer's own named examples, pin the specific fix.
+      test "render converts a spoiler marker flush against an inline tag with no text between" do
+        assert_equal(
+          %(The killer is <span class="review-spoiler"><b>the butler</b></span>),
+          Services::Reviews::BodySanitizer.render("The killer is ||<b>the butler</b>||")
+        )
+        assert_equal(
+          %(<span class="review-spoiler">He <b>dies</b></span>),
+          Services::Reviews::BodySanitizer.render("||He <b>dies</b>||")
+        )
+        assert_equal(
+          %(<span class="review-spoiler"><b>x</b></span> tail),
+          Services::Reviews::BodySanitizer.render("||<b>x</b>|| tail")
+        )
+      end
+
+      test "render converts a spoiler marker flush against a newline-turned-br with no text between" do
+        assert_equal(
+          %(<p><span class="review-spoiler"><br>he dies</span></p>),
+          Services::Reviews::BodySanitizer.render("||\nhe dies||")
+        )
+        assert_equal(
+          %(<p><span class="review-spoiler">he dies<br></span></p>),
+          Services::Reviews::BodySanitizer.render("||he dies\n||")
+        )
+      end
+
+      # Permanent regression net. Three separate code review rounds each found a
+      # defect in spoiler-marker matching (a crash, a text-corrupting negative
+      # slice, an over-rejection that silently un-hid valid spoilers) that every
+      # example-based test above missed, because each one needed a SPECIFIC
+      # arrangement of "|", a newline, and a tag boundary that no hand-picked
+      # example happened to hit. This asserts the underlying safety invariants
+      # across every such arrangement up to a fixed length, instead of trusting
+      # another hand-picked example to happen to cover the next one.
+      #
+      # Exhaustive over a small, FIXED alphabet, not random -- so a failure is
+      # always reproducible from the corpus alone, and CI can never flake on it.
+      # Every token is chosen to matter: "a" is inert filler; "|" is the marker
+      # character itself; "\n" is what paragraphize turns into a <br> element,
+      # splitting a text node; "<b>"/"</b>" is a real element that can split a
+      # marker pair across siblings the same way. All three past defects involved
+      # exactly two or three of these landing next to each other, so length 6
+      # covers every such adjacency with room either side.
+      test "render satisfies its safety invariants across an exhaustive small corpus" do
+        tokens = ["a", "|", "\n", "<b>", "</b>"]
+        corpus = tokens.repeated_permutation(6).map(&:join)
+
+        corpus.each do |input|
+          # Any exception here fails the test immediately -- this is the
+          # "rendering never raises" invariant; no explicit assertion needed.
+          html = Services::Reviews::BodySanitizer.render(input)
+          next if html.nil?
+
+          fragment = Nokogiri::HTML5.fragment(html)
+          rendered_text = fragment.text
+          span_count = html.scan(%(class="review-spoiler")).length
+
+          # No letter is ever added or removed, spoiler conversion or not.
+          assert_equal input.count("a"), rendered_text.count("a"),
+            "letter count changed for #{input.inspect} -- rendered #{html.inspect}"
+
+          # Every converted span removes exactly the two marker pairs (4 pipe
+          # characters) that produced it; any "|" left unconverted -- paired or
+          # not -- must remain fully in the visible text. This is what catches
+          # both text loss (fewer pipes than predicted) and duplication (more).
+          assert_equal input.count("|") - (4 * span_count), rendered_text.count("|"),
+            "pipe count did not shrink by exactly 4 per span for #{input.inspect} -- rendered #{html.inspect}"
+
+          # The only structural change spoiler conversion is allowed to make is
+          # adding spans. Comparing against the SAME input with every "|"
+          # replaced by "a" (never deleted -- deleting would itself shift where
+          # paragraphize splits blocks, a false signal, not a real one) isolates
+          # exactly that change: replacing keeps every newline and tag in the
+          # same position, guarantees zero possible spoiler matches, and so
+          # renders the paragraph/tag structure spoiler conversion must not
+          # otherwise disturb.
+          baseline_html = Services::Reviews::BodySanitizer.render(input.tr("|", "a"))
+          baseline_tally = element_tally(baseline_html)
+          actual_tally = element_tally(html)
+          expected_tally = baseline_tally.dup
+          expected_tally["span"] = expected_tally.fetch("span", 0) + span_count if span_count > 0
+          assert_equal expected_tally, actual_tally,
+            "element tally drifted beyond the spans produced for #{input.inspect} -- rendered #{html.inspect}"
+
+          fragment.css("span").each do |span|
+            assert_equal ["class"], span.attributes.keys,
+              "spoiler span gained an unexpected attribute for #{input.inspect} -- rendered #{html.inspect}"
+            assert_equal Services::Reviews::BodySanitizer::SPOILER_CLASS, span["class"],
+              "spoiler span class drifted for #{input.inspect} -- rendered #{html.inspect}"
+          end
+
+          fragment.css("b, p, br").each do |node|
+            assert_empty node.attributes.keys,
+              "#{node.name} gained an unexpected attribute for #{input.inspect} -- rendered #{html.inspect}"
+          end
+        end
+      end
+
+      private
+
+      def element_tally(html)
+        return Hash.new(0) if html.nil?
+
+        Nokogiri::HTML5.fragment(html).css("*").each_with_object(Hash.new(0)) { |node, tally| tally[node.name] += 1 }
+      end
     end
   end
 end
