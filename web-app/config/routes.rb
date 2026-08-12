@@ -318,10 +318,12 @@ Rails.application.routes.draw do
   # Rails tries routes in declaration order, and the day `:id` is loosened to
   # admit a slug, a `searches/:id` above this would swallow GET /searches/new.
   get "searches/new", to: "saved_searches#new", as: :new_saved_search
-  # The saved-search form's category picker (JSON only). Declared alongside
+  # The saved-search form's taxonomy pickers (JSON only). Declared alongside
   # `searches/new`, above `searches/:id`: declaration order is what keeps a
-  # future-loosened :id constraint from swallowing this path, same as new.
+  # future-loosened :id constraint from swallowing these paths, same as new.
   get "searches/categories", to: "saved_searches/categories#index", as: :saved_search_categories
+  get "searches/languages", to: "saved_searches/languages#index", as: :saved_search_languages
+  get "searches/countries", to: "saved_searches/countries#index", as: :saved_search_countries
   post "searches", to: "saved_searches#create"
   get "searches/:id/edit", to: "saved_searches#edit", as: :edit_saved_search,
     constraints: {id: /\d+/}

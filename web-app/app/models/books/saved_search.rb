@@ -72,6 +72,14 @@ module Books
       ::Books::Category
     end
 
+    def self.language_search_query_class
+      ::Books::LanguageSearchQuery
+    end
+
+    def self.country_search_query_class
+      ::Books::CountrySearchQuery
+    end
+
     # category, language, and country criteria are omitted: naming them requires
     # a database lookup, and the index page renders this for every one of a
     # user's searches, so keeping it lookup-free avoids an N+1 there. book_type

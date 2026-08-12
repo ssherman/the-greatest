@@ -24,4 +24,6 @@ class Language < ApplicationRecord
   validates :name, presence: true
   validates :iso_639_1, length: {is: 2}, allow_blank: true
   validates :iso_639_3, length: {is: 3}, allow_blank: true, uniqueness: {allow_nil: true}
+
+  scope :search_by_name, ->(name) { where("name ILIKE ?", "%" + sanitize_sql_like(name) + "%") }
 end

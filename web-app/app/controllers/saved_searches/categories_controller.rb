@@ -13,6 +13,7 @@ module SavedSearches
   # ("Never cached") has to hold for the endpoint the form fetches from too.
   class CategoriesController < ApplicationController
     include Cacheable
+    include SavedSearchDomainScoped
 
     LIMIT = 10
 
@@ -28,18 +29,6 @@ module SavedSearches
       )
 
       render json: categories.map { |c| {value: c.id, text: c.name_with_type} }
-    end
-
-    private
-
-    def domain_class
-      return @domain_class if defined?(@domain_class)
-
-      @domain_class = SavedSearch.subclass_for(Current.domain)
-    end
-
-    def require_domain_support!
-      raise ActiveRecord::RecordNotFound if domain_class.nil?
     end
   end
 end

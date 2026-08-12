@@ -81,6 +81,14 @@ class SavedSearch < ApplicationRecord
     raise NotImplementedError, "#{name} must override .category_class"
   end
 
+  def self.language_search_query_class
+    raise NotImplementedError, "#{name} must override .language_search_query_class"
+  end
+
+  def self.country_search_query_class
+    raise NotImplementedError, "#{name} must override .country_search_query_class"
+  end
+
   def display_name
     name.presence || "Search #{id}"
   end
