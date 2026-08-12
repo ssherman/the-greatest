@@ -106,21 +106,6 @@ class ReviewTest < ActiveSupport::TestCase
     assert review.valid?
   end
 
-  # Regression: paragraphize adds ~7 characters of <p></p> markup per paragraph, so a
-  # plain-text body the textarea's maxlength=25000 accepted could come out of
-  # BodySanitizer.call over MAX_BODY_LENGTH and 422 on something the form told the
-  # author was fine. The raw submission here is exactly at the limit; only the
-  # *stored* body, after conversion, goes over it.
-  test "allows a raw body exactly at MAX_BODY_LENGTH even when paragraph conversion pushes the stored body over it" do
-    raw = ("a" * 12_499) + "\n\n" + ("a" * 12_499)
-    assert_equal Review::MAX_BODY_LENGTH, raw.length
-
-    review = Review.new(user: users(:regular_user), reviewable: books_books(:got), rating: 4, body: raw)
-
-    assert review.valid?
-    assert_operator review.body.length, :>, Review::MAX_BODY_LENGTH
-  end
-
   # The other side of the same boundary: a raw submission genuinely over the limit --
   # not just inflated by markup this code added -- must still be rejected, with
   # newlines present so paragraph conversion is actually in play (unlike the
@@ -152,20 +137,34 @@ class ReviewTest < ActiveSupport::TestCase
     assert_equal first_result, second_result
   end
 
-  # The other half of the same regression: a record the app already created and
-  # accepted -- its *stored* body over MAX_BODY_LENGTH purely from paragraph markup,
-  # exactly like the review above once saved -- must stay savable by a path that
-  # never touches body at all, such as an admin correcting the rating.
-  test "a persisted boundary-length review stays savable when only the rating changes" do
-    raw = ("a" * 12_499) + "\n\n" + ("a" * 12_499)
-    created = Review.create!(user: users(:regular_user), reviewable: books_books(:got), rating: 4, body: raw)
-    assert_operator created.body.length, :>, Review::MAX_BODY_LENGTH
+  test "rejects a body over the cap" do
+    review = Review.new(user: users(:regular_user), reviewable: books_books(:got), rating: 4, body: "x" * 25_001)
 
-    reloaded = Review.find(created.id)
-    reloaded.rating = 2
+    refute review.valid?
+    assert_includes review.errors[:body], "is too long (maximum is 25000 characters)"
+  end
 
-    assert reloaded.save
-    assert_equal 2, reloaded.reload.rating
+  test "accepts a body at the cap" do
+    review = Review.new(user: users(:regular_user), reviewable: books_books(:got), rating: 4, body: "x" * 25_000)
+
+    assert review.valid?
+  end
+
+  # Regression: the pre-sanitize length machinery this replaces made valid? depend on
+  # how many times it had run.
+  test "validating twice gives the same answer" do
+    review = Review.new(user: users(:regular_user), reviewable: books_books(:got), rating: 4, body: "x" * 25_000)
+
+    assert_equal review.valid?, review.valid?
+  end
+
+  test "a saved boundary review stays savable when only the rating changes" do
+    review = Review.create!(user: users(:regular_user), reviewable: books_books(:got), rating: 4, body: "x" * 25_000)
+
+    review.reload
+    review.rating = 2
+
+    assert review.save
   end
 
   test "rejects a title longer than MAX_TITLE_LENGTH" do
