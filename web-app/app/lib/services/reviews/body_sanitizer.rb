@@ -45,6 +45,16 @@ module Services
       SPOILER_CLASS = "review-spoiler".freeze
       BLANK_TEXT = /\A[[:space:]\u200B-\u200D\uFEFF]*\z/
 
+      # Spoilers are written as ||like this||. Measured against the corpus before
+      # choosing it: 0 existing bodies contain "||", 7 contain ">!", so the Discord
+      # delimiter is collision-free here and the Reddit one is not.
+      #
+      # Non-greedy and multiline: a body with two spoilers must produce two spans, not
+      # one span swallowing everything between the first and last marker, and a spoiler
+      # may span a newline inside a paragraph.
+      SPOILER_MARKER = "||".freeze
+      SPOILER_PATTERN = /\|\|(.+?)\|\|/m
+
       # Guards .call's newline-to-paragraph conversion (see #paragraphize). Matches an
       # opening p/br/blockquote/pre tag anywhere in the raw body -- good enough to
       # detect "this body already has real paragraph structure" without a full parse,
@@ -130,15 +140,17 @@ module Services
 
       def render
         sanitized = sanitizer.sanitize(
-          @body.to_s,
+          paragraphize(@body.to_s),
           tags: RENDER_TAGS,
           attributes: RENDER_ATTRIBUTES
         ).to_s
 
         fragment = Nokogiri::HTML5.fragment(sanitized)
         scrub_classes(fragment)
+        convert_spoiler_markers(fragment)
         harden_links(fragment)
-        # Safe to mark: everything in the buffer just came out of the sanitizer above.
+        # Safe to mark: everything in the buffer came out of the sanitizer above, and
+        # convert_spoiler_markers escapes every character it did not itself emit.
         fragment.to_html.html_safe # rubocop:disable Rails/OutputSafety
       end
 
@@ -280,6 +292,46 @@ module Services
           node["rel"] = LINK_REL
           node["target"] = "_blank"
         end
+      end
+
+      # Walks TEXT NODES ONLY. An attribute value is not a text node, so
+      # <a href="||evil||"> cannot receive a spliced span -- the exact failure this
+      # file's header documents from the original string-substitution attempt, avoided
+      # the same way, just running in the other direction.
+      #
+      # Text either side of a marker pair is escaped before being reparsed, so nothing
+      # a user typed can become markup: the ONLY element this introduces is the span
+      # written here.
+      #
+      # Collected before mutating: replacing a node while traversing the same live
+      # NodeSet is undefined.
+      def convert_spoiler_markers(fragment)
+        text_nodes = fragment.xpath(".//text()").to_a
+        text_nodes.each do |node|
+          content = node.content
+          next unless content.include?(SPOILER_MARKER)
+          next unless content.match?(SPOILER_PATTERN)
+
+          node.replace(Nokogiri::HTML5.fragment(spoiler_html_for(content)))
+        end
+      end
+
+      # String#split against a pattern with ONE capture group interleaves the captures
+      # into the result, so even indices are the literal text between markers and odd
+      # indices are the spoiler contents. That avoids hand-tracking match offsets, and
+      # it makes the escaping rule obvious: everything gets escaped, and the only
+      # element emitted is the span written here.
+      #
+      # The -1 limit keeps a trailing empty field, so a body ending in a spoiler does
+      # not silently lose the (empty) text after it.
+      def spoiler_html_for(content)
+        content.split(SPOILER_PATTERN, -1).each_with_index.map { |part, index|
+          if index.odd?
+            %(<span class="#{SPOILER_CLASS}">#{CGI.escapeHTML(part)}</span>)
+          else
+            CGI.escapeHTML(part)
+          end
+        }.join
       end
     end
   end

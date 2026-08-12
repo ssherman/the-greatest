@@ -442,6 +442,87 @@ module Services
         refute_includes spoiler_html, "the butler did it"
         assert_includes spoiler_html, %(<span class="review-spoiler">dies</span>)
       end
+
+      test "render converts a spoiler marker into a spoiler span" do
+        html = Services::Reviews::BodySanitizer.render("He ||dies|| at the end.")
+
+        assert_includes html, %(<span class="review-spoiler">dies</span>)
+        assert_includes html, "at the end."
+      end
+
+      test "render converts a spoiler marker in a body with no tags at all" do
+        html = Services::Reviews::BodySanitizer.render("||everything||")
+
+        assert_includes html, %(<span class="review-spoiler">everything</span>)
+      end
+
+      test "render converts several spoiler markers in one body" do
+        html = Services::Reviews::BodySanitizer.render("||one|| and ||two||")
+
+        assert_equal 2, html.scan("review-spoiler").length
+      end
+
+      test "render leaves an unpaired marker alone" do
+        html = Services::Reviews::BodySanitizer.render("a || b")
+
+        refute_includes html, "review-spoiler"
+        assert_includes html, "a || b"
+      end
+
+      test "render escapes text around a spoiler marker" do
+        html = Services::Reviews::BodySanitizer.render("<script>x</script> ||hidden||")
+
+        refute_includes html, "<script"
+        assert_includes html, %(<span class="review-spoiler">hidden</span>)
+      end
+
+      test "render escapes markup inside a spoiler marker" do
+        html = Services::Reviews::BodySanitizer.render("||<script>alert(1)</script>||")
+
+        refute_includes html, "<script"
+        assert_includes html, "review-spoiler"
+      end
+
+      # The whole safety property: an attribute value is not a text node.
+      test "render does not splice a span into an attribute value" do
+        html = Services::Reviews::BodySanitizer.render(%(<a href="https://example.test/||evil||">click</a>))
+
+        refute_includes html, %(href="https://example.test/<span)
+        assert_includes html, "click"
+      end
+
+      test "render wraps blank-line-separated text in paragraphs" do
+        html = Services::Reviews::BodySanitizer.render("Line one.\n\nLine two.")
+
+        assert_includes html, "<p>Line one.</p>"
+        assert_includes html, "<p>Line two.</p>"
+      end
+
+      test "render turns a single newline into a line break" do
+        html = Services::Reviews::BodySanitizer.render("Line one.\nStill one.")
+
+        assert_includes html, "<br>"
+      end
+
+      test "render leaves a body that already has block markup alone" do
+        html = Services::Reviews::BodySanitizer.render("<p>Migrated.</p><p>Body.</p>")
+
+        assert_equal 2, html.scan("<p>").length
+      end
+
+      test "render converts a spoiler marker inside a paragraph" do
+        html = Services::Reviews::BodySanitizer.render("Intro.\n\nHe ||dies||.")
+
+        assert_includes html, "<p>Intro.</p>"
+        assert_includes html, %(<span class="review-spoiler">dies</span>)
+      end
+
+      test "render still hardens links" do
+        html = Services::Reviews::BodySanitizer.render(%(<a href="https://example.test">x</a>))
+
+        assert_includes html, %(rel="nofollow ugc noopener")
+        assert_includes html, %(target="_blank")
+      end
     end
   end
 end
