@@ -58,6 +58,34 @@
   .table {
     background-color: var(--color-base-100);
   }
+
+  .fieldset-legend {
+    font-size: 1rem;
+  }
+}
+
+/* daisyUI sets .fieldset to 0.75rem, and .label inherits it, so form labels
+   render at 12px against 16px body copy. Lora is a serif, which reads smaller
+   still at a given size. Lift labels to 14px; the legend rule above lifts group
+   headings to 16px. No CSS variables are exposed for either — the sizes are
+   literals in daisyUI's own rules.
+
+   This one has to live in `utilities`, not `components`. daisyUI emits
+   `.fieldset` inside `@layer utilities { @layer daisyui.l1.l2.l3 { ... } }`, and
+   layer order beats specificity, so a `components` rule loses no matter how it
+   is written. Un-nested rules sort after that layer's nested sub-layers, so this
+   wins.
+
+   `:where()` is load-bearing. Tailwind's own size utilities are un-nested in
+   `utilities` too, so a plain `.fieldset` would tie them on specificity and beat
+   them on source order — `<fieldset class="fieldset text-lg">` would silently
+   stay 14px. Zeroing specificity keeps the win over daisyUI (layer order) while
+   yielding to any size utility put on the element (specificity).
+   `.fieldset-legend` needs none of this: daisyUI declares no font-size for it. */
+@layer utilities {
+  :where(.fieldset) {
+    font-size: 0.875rem;
+  }
 }
 
 @layer base {
