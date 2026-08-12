@@ -19,23 +19,23 @@
 
   <div class="card bg-base-100 shadow-sm">
     <div class="card-body gap-4">
-      <div class="form-control">
-        <%= f.label :name, class: "label" do %><span class="label-text font-semibold">Name</span><% end %>
-        <%= f.text_field :name, class: "input input-bordered w-full",
+      <fieldset class="fieldset">
+        <%= f.label :name, "Name", class: "label font-semibold" %>
+        <%= f.text_field :name, class: "input w-full",
               placeholder: "Long Victorian novels" %>
-      </div>
+      </fieldset>
 
-      <div class="form-control">
-        <%= f.label :description, class: "label" do %><span class="label-text font-semibold">Description</span><% end %>
-        <%= f.text_area :description, rows: 2, class: "textarea textarea-bordered w-full" %>
-      </div>
+      <fieldset class="fieldset">
+        <%= f.label :description, "Description", class: "label font-semibold" %>
+        <%= f.text_area :description, rows: 2, class: "textarea w-full" %>
+      </fieldset>
 
-      <div class="form-control">
+      <fieldset class="fieldset">
         <label class="label cursor-pointer justify-start gap-3">
           <%= f.check_box :public, class: "checkbox" %>
-          <span class="label-text">Make this search public</span>
+          Make this search public
         </label>
-      </div>
+      </fieldset>
     </div>
   </div>
 

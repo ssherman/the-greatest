@@ -12,129 +12,137 @@
         own jsonb attribute hash. SavedSearchCriteria is not a Hash, so it binds
         as a real object and its readers supply the fallback values. %>
     <%= f.fields_for :criteria, criteria do |c| %>
-      <div class="form-control">
-        <%= c.label :book_type, class: "label" do %><span class="label-text font-semibold">Type</span><% end %>
+      <fieldset class="fieldset">
+        <%= c.label :book_type, "Type", class: "label font-semibold" %>
         <%= c.select :book_type,
               ::Books::BookType::LABELS.map { |value, label| [label, value] },
               {include_blank: "Any type", selected: criteria.book_type},
-              {class: "select select-bordered w-full"} %>
-      </div>
+              {class: "select w-full"} %>
+      </fieldset>
 
-      <fieldset class="form-control">
-        <legend class="label-text font-semibold">Length</legend>
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Length</legend>
         <div class="flex flex-wrap gap-3">
           <% ::Books::Book.book_lengths.each do |key, value| %>
             <label class="label cursor-pointer justify-start gap-2">
               <%= check_box_tag "saved_search[criteria][book_length][]", value,
                     criteria.book_length.include?(value), id: nil, class: "checkbox checkbox-sm" %>
-              <span class="label-text"><%= key.to_s.titleize %></span>
+              <%= key.to_s.titleize %>
             </label>
           <% end %>
         </div>
       </fieldset>
 
       <div class="grid gap-4 sm:grid-cols-2">
-        <div class="form-control">
-          <%= c.label :first_year_published_gt, class: "label" do %><span class="label-text font-semibold">Published from</span><% end %>
+        <fieldset class="fieldset">
+          <%= c.label :first_year_published_gt, "Published from", class: "label font-semibold" %>
           <%= c.number_field :first_year_published_gt, value: criteria.first_year_published_gt,
-                class: "input input-bordered w-full", placeholder: "1837" %>
-        </div>
-        <div class="form-control">
-          <%= c.label :first_year_published_lt, class: "label" do %><span class="label-text font-semibold">Published to</span><% end %>
+                class: "input w-full", placeholder: "1837" %>
+        </fieldset>
+        <fieldset class="fieldset">
+          <%= c.label :first_year_published_lt, "Published to", class: "label font-semibold" %>
           <%= c.number_field :first_year_published_lt, value: criteria.first_year_published_lt,
-                class: "input input-bordered w-full", placeholder: "1901" %>
-        </div>
+                class: "input w-full", placeholder: "1901" %>
+        </fieldset>
       </div>
 
-      <div class="form-control">
-        <%= c.label :ranked, class: "label" do %><span class="label-text font-semibold">Ranking</span><% end %>
+      <fieldset class="fieldset">
+        <%= c.label :ranked, "Ranking", class: "label font-semibold" %>
         <%# Tri-state, not a boolean: "" is All Books, and collapsing it into
             false silently changes what 437 stored searches return (spec §6). %>
         <%= c.select :ranked,
               [["All books", ""], ["Ranked books only", "true"], ["Unranked books only", "false"]],
               {selected: {ranked: "true", unranked: "false"}[criteria.ranked].to_s},
-              {class: "select select-bordered w-full"} %>
-      </div>
+              {class: "select w-full"} %>
+      </fieldset>
 
-      <div class="form-control">
-        <%= c.label :max_ranked_position, class: "label" do %><span class="label-text font-semibold">Top N ranked books</span><% end %>
+      <fieldset class="fieldset">
+        <%= c.label :max_ranked_position, "Top N ranked books", class: "label font-semibold" %>
         <%= c.number_field :max_ranked_position, value: criteria.max_ranked_position,
-              class: "input input-bordered w-full", placeholder: "100" %>
-      </div>
+              class: "input w-full", placeholder: "100" %>
+      </fieldset>
 
-      <div class="form-control">
+      <fieldset class="fieldset">
         <label class="label cursor-pointer justify-start gap-3">
           <%= c.check_box :hide_read, {checked: criteria.hide_read}, "1", "0" %>
-          <span class="label-text">Hide books I've read</span>
+          Hide books I've read
         </label>
-      </div>
+      </fieldset>
 
-      <% {language: @languages, country: @countries}.each do |axis, records| %>
+      <%# Every taxonomy axis shares one picker shape (Stimulus controller
+          saved-search-picker, type-to-search, chips with hidden inputs). Each
+          taxonomy's `records` is a preload of ONLY the ids already stored on
+          this search -- the search-as-you-type results come from the picker's
+          own JSON endpoint, never from a full table load, which is what kept
+          the 201-language, 253-country multi-selects from ever being usable
+          in the first place. %>
+      <% picker_taxonomies = [
+           {
+             axis: "language", plural: "Languages", singular: "Language",
+             url: saved_search_languages_path, placeholder: "Search languages",
+             records: ::Language.where(
+               id: criteria.included_language_ids + criteria.excluded_language_ids
+             ).index_by(&:id),
+             name: ->(record) { record.name }
+           },
+           {
+             axis: "country", plural: "Countries", singular: "Country",
+             url: saved_search_countries_path, placeholder: "Search countries",
+             records: ::Books::Country.where(
+               id: criteria.included_country_ids + criteria.excluded_country_ids
+             ).index_by(&:id),
+             name: ->(record) { record.name }
+           },
+           {
+             axis: "category", plural: "Categories", singular: "Category",
+             url: saved_search_categories_path, placeholder: "Search genres, subjects, settings",
+             records: ::Books::Category.where(
+               id: criteria.included_category_ids + criteria.excluded_category_ids
+             ).index_by(&:id),
+             name: ->(record) { record.name_with_type }
+           }
+         ] %>
+
+      <% picker_taxonomies.each do |taxonomy| %>
         <div class="grid gap-4 sm:grid-cols-2">
           <% [:included, :excluded].each do |mode| %>
-            <% key = "#{mode}_#{axis}_ids" %>
-            <div class="form-control">
-              <label class="label" for="saved_search_criteria_<%= key %>">
-                <span class="label-text font-semibold"><%= "#{mode} #{axis}".titleize %></span>
-              </label>
+            <% key = "#{mode}_#{taxonomy[:axis]}_ids" %>
+            <fieldset class="fieldset" data-controller="saved-search-picker"
+                 data-saved-search-picker-url-value="<%= taxonomy[:url] %>"
+                 data-saved-search-picker-name-value="saved_search[criteria][<%= key %>][]">
+              <legend class="fieldset-legend"><%= "#{mode} #{taxonomy[:plural]}".titleize %></legend>
               <%# Not what makes clearing work -- `criteria=` replaces the whole
-                  hash, so an unposted key is simply absent (book_length has no
-                  hidden sibling and clears fine). It buys an explicit posted
-                  key, and safety if criteria ever became a merge. The
-                  normalizer drops the resulting [""]. %>
+                  hash, so deselecting every chip clears the ids with or without
+                  this. It buys an explicit posted key, and safety if criteria
+                  ever became a merge. The normalizer drops the resulting [""]. %>
               <%= hidden_field_tag "saved_search[criteria][#{key}][]", "", id: nil %>
-              <%= select_tag "saved_search[criteria][#{key}][]",
-                    options_from_collection_for_select(records, :id, :name, criteria.public_send(key)),
-                    multiple: true, size: 8, id: "saved_search_criteria_#{key}",
-                    class: "select select-bordered w-full h-auto" %>
-            </div>
+              <input type="search"
+                     class="input w-full"
+                     placeholder="<%= taxonomy[:placeholder] %>"
+                     aria-label="<%= "#{mode} #{taxonomy[:plural]}".titleize %>"
+                     autocomplete="off"
+                     data-saved-search-picker-target="query"
+                     data-action="input->saved-search-picker#search keydown->saved-search-picker#suppressEnter">
+              <div class="flex flex-col gap-1 mt-1" data-saved-search-picker-target="results"></div>
+              <div class="flex flex-wrap gap-2 mt-2" data-saved-search-picker-target="chips">
+                <% criteria.public_send(key).each do |id| %>
+                  <% record = taxonomy[:records][id] %>
+                  <span class="badge badge-outline gap-1" data-chip="<%= id %>">
+                    <%= hidden_field_tag "saved_search[criteria][#{key}][]", id, id: nil %>
+                    <span><%= record ? taxonomy[:name].call(record) : "#{taxonomy[:singular]} #{id}" %></span>
+                    <button type="button" class="btn btn-ghost btn-xs px-1"
+                            aria-label="Remove <%= record ? taxonomy[:name].call(record) : id %>"
+                            data-action="saved-search-picker#remove">×</button>
+                  </span>
+                <% end %>
+              </div>
+            </fieldset>
           <% end %>
         </div>
       <% end %>
 
-      <% selected_categories = ::Books::Category.where(
-           id: criteria.included_category_ids + criteria.excluded_category_ids
-         ).index_by(&:id) %>
-
-      <div class="grid gap-4 sm:grid-cols-2">
-        <% [:included, :excluded].each do |mode| %>
-          <% key = "#{mode}_category_ids" %>
-          <div class="form-control" data-controller="saved-search-picker"
-               data-saved-search-picker-url-value="<%= saved_search_categories_path %>"
-               data-saved-search-picker-name-value="saved_search[criteria][<%= key %>][]">
-            <label class="label" for="saved_search_criteria_<%= key %>">
-              <span class="label-text font-semibold"><%= "#{mode} categories".titleize %></span>
-            </label>
-            <%# Not what makes clearing work -- `criteria=` replaces the whole
-                hash, so deselecting every chip clears the ids with or without
-                this. It buys an explicit posted key, and safety if criteria
-                ever became a merge. The normalizer drops the resulting [""]. %>
-            <%= hidden_field_tag "saved_search[criteria][#{key}][]", "", id: nil %>
-            <input type="search" id="saved_search_criteria_<%= key %>"
-                   class="input input-bordered w-full"
-                   placeholder="Search genres, subjects, settings"
-                   autocomplete="off"
-                   data-saved-search-picker-target="query"
-                   data-action="input->saved-search-picker#search keydown->saved-search-picker#suppressEnter">
-            <div class="flex flex-col gap-1 mt-1" data-saved-search-picker-target="results"></div>
-            <div class="flex flex-wrap gap-2 mt-2" data-saved-search-picker-target="chips">
-              <% criteria.public_send(key).each do |id| %>
-                <% category = selected_categories[id] %>
-                <span class="badge badge-outline gap-1" data-chip="<%= id %>">
-                  <%= hidden_field_tag "saved_search[criteria][#{key}][]", id, id: nil %>
-                  <span><%= category ? category.name_with_type : "Category #{id}" %></span>
-                  <button type="button" class="btn btn-ghost btn-xs px-1"
-                          aria-label="Remove <%= category&.name_with_type || id %>"
-                          data-action="saved-search-picker#remove">×</button>
-                </span>
-              <% end %>
-            </div>
-          </div>
-        <% end %>
-      </div>
-
-      <div class="form-control">
-        <%= c.label :genre_match_mode, class: "label" do %><span class="label-text font-semibold">Category matching</span><% end %>
+      <fieldset class="fieldset">
+        <%= c.label :genre_match_mode, "Category matching", class: "label font-semibold" %>
         <%# Must render even though "any" is the reader's default: `criteria=`
             REPLACES the whole hash, so with no control here an owner resaving
             one of the 151 migrated searches that store "all" would post no
@@ -144,8 +152,8 @@
         <%= c.select :genre_match_mode,
               [["Match any of these categories", "any"], ["Match all of these categories", "all"]],
               {selected: criteria.genre_match_mode.to_s},
-              {class: "select select-bordered w-full"} %>
-      </div>
+              {class: "select w-full"} %>
+      </fieldset>
     <% end %>
   </div>
 </div>
