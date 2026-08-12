@@ -626,7 +626,12 @@ In `app/models/books/saved_search.rb`:
 `app/views/saved_searches/_form.html.erb` — the shared shell. The criteria body is a per-domain partial, which is the whole domain seam (spec §9):
 
 ```erb
-<%= form_with model: search, url: url, class: "space-y-6" do |f| %>
+<%# scope: :saved_search is load-bearing. Without it form_with derives the key from
+    the STI subclass -- books_saved_search[...] -- which matches neither the
+    hardcoded check_box_tag names below nor the controller's require(:saved_search),
+    and a real submission silently saves a record with name: nil. It is `scope:`,
+    not `as:`; the latter is form_for's. %>
+<%= form_with model: search, url: url, scope: :saved_search, class: "space-y-6" do |f| %>
   <% if search.errors.any? %>
     <div class="alert alert-error" role="alert">
       <ul class="list-disc list-inside">
