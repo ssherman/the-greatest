@@ -480,11 +480,10 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     name_field = form.at_css("input[name$='[name]']")
     book_type_field = form.at_css("select[name$='[criteria][book_type]']")
     book_length_field = form.at_css("input[type=checkbox][name$='[criteria][book_length][]']")
-    # The hidden blank field is what lets a `multiple` select be cleared --
-    # it posts nothing on its own when nothing is selected. Reading it off
-    # the DOM here (rather than just asserting the normalizer drops an
-    # inline [""] the test invents) is what catches the field going missing
-    # from the view itself.
+    # The hidden blank field that makes an empty `multiple` select post an
+    # explicit key rather than nothing at all. Reading it off the DOM here
+    # (rather than just asserting the normalizer drops an inline [""] the test
+    # invents) is what catches the field going missing from the view itself.
     language_hidden_field = form.at_css("input[type=hidden][name='saved_search[criteria][included_language_ids][]']")
 
     assert name_field, "the rendered form has no [name] input"
@@ -669,10 +668,13 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     assert_equal({"book_type" => 1}, @private_search.criteria)
   end
 
-  # The hidden blank field before each multi-select is what makes clearing
-  # possible at all: a `multiple` select posts nothing when nothing is
-  # selected, so without the hidden field this PATCH would leave the stored
-  # ids untouched instead of clearing them.
+  # What actually clears the ids is that `criteria=` REPLACES the whole hash,
+  # so a key nobody posted is simply absent -- book_length has no hidden blank
+  # field and clears the same way. The hidden blank field before each
+  # multi-select (a `multiple` select posts nothing when nothing is selected)
+  # only makes the cleared key explicit in the request; this test passes with
+  # or without it. It posts [""] because that is what the real form sends, and
+  # the normalizer has to drop it rather than store an unparseable [""].
   #
   # book_type is carried along and resubmitted so the surviving criteria hash
   # isn't empty -- `criteria=` REPLACES the whole hash (it is not a merge),

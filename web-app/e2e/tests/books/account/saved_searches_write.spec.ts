@@ -42,8 +42,11 @@ test.describe('Saved search write flow', () => {
   });
 
   test('removing every category chip clears the stored ids', async ({ page }) => {
-    // The hidden blank field is what makes this possible; without it the form
-    // posts no key at all and the stored ids survive the save. Type is set
+    // What makes this work is that the controller REPLACES the whole criteria
+    // hash on save, so a key nobody posted is simply absent -- not the hidden
+    // blank field before the picker, which this spec never checks and which
+    // only makes the cleared key explicit in the request. Do not treat a green
+    // run here as evidence that the hidden field is load-bearing. Type is set
     // too, so removing the chip leaves criteria as {"book_type"=>0} rather
     // than {} -- SavedSearch validates :criteria, presence: true, and an
     // empty hash is blank, which would 422 the update and mask whether the

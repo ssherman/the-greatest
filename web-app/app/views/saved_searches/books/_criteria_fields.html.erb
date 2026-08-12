@@ -77,6 +77,11 @@
               <label class="label" for="saved_search_criteria_<%= key %>">
                 <span class="label-text font-semibold"><%= "#{mode} #{axis}".titleize %></span>
               </label>
+              <%# Not what makes clearing work -- `criteria=` replaces the whole
+                  hash, so an unposted key is simply absent (book_length has no
+                  hidden sibling and clears fine). It buys an explicit posted
+                  key, and safety if criteria ever became a merge. The
+                  normalizer drops the resulting [""]. %>
               <%= hidden_field_tag "saved_search[criteria][#{key}][]", "", id: nil %>
               <%= select_tag "saved_search[criteria][#{key}][]",
                     options_from_collection_for_select(records, :id, :name, criteria.public_send(key)),
@@ -100,8 +105,10 @@
             <label class="label" for="saved_search_criteria_<%= key %>">
               <span class="label-text font-semibold"><%= "#{mode} categories".titleize %></span>
             </label>
-            <%# Cleared state: without this, deselecting every chip posts no key
-                at all and the stored ids survive. The normalizer drops [""]. %>
+            <%# Not what makes clearing work -- `criteria=` replaces the whole
+                hash, so deselecting every chip clears the ids with or without
+                this. It buys an explicit posted key, and safety if criteria
+                ever became a merge. The normalizer drops the resulting [""]. %>
             <%= hidden_field_tag "saved_search[criteria][#{key}][]", "", id: nil %>
             <input type="search" id="saved_search_criteria_<%= key %>"
                    class="input input-bordered w-full"
