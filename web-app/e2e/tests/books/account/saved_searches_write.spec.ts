@@ -93,4 +93,74 @@ test.describe('Saved search write flow', () => {
     await page.getByRole('button', { name: 'Delete' }).click();
     await expect(page).toHaveURL('/searches');
   });
+
+  test('a stale category search response never clobbers a fresher one', async ({ page }) => {
+    // Delay only the response to the query that gets superseded. Letting the
+    // fresh query's own response through immediately means it has plenty of
+    // time to render before the stale one finally lands -- if the controller
+    // applies whichever response arrives last rather than whichever query is
+    // still current, the fresh results get wiped out from underneath a box
+    // that no longer even reads that query.
+    await page.route('**/searches/categories*', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.searchParams.get('q') === 'zzznomatch') {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+      await route.continue();
+    });
+
+    await page.goto('/searches');
+    await page.getByRole('link', { name: 'New Saved Search' }).click();
+
+    const included = page.locator('[data-saved-search-picker-name-value*="included_category_ids"]');
+    const search = included.getByPlaceholder('Search genres, subjects, settings');
+    const results = included.locator('[data-action="saved-search-picker#add"]');
+
+    const staleRequest = page.waitForRequest(
+      (req) => req.url().includes('/searches/categories') && new URL(req.url()).searchParams.get('q') === 'zzznomatch'
+    );
+    await search.fill('zzznomatch');
+    await staleRequest; // the debounce fired; the (delayed) fetch is now in flight
+
+    await search.fill('fict');
+    await expect(results.first()).toBeVisible();
+    const freshCount = await results.count();
+    expect(freshCount).toBeGreaterThan(0);
+
+    // Give the stale, delayed (empty-result) response time to land. If it
+    // clobbers the box, the fresh results disappear from underneath it.
+    await page.waitForTimeout(2500);
+    await expect(results).toHaveCount(freshCount);
+  });
+
+  test('clearing the category search box stays empty even after a delayed response lands', async ({ page }) => {
+    await page.route('**/searches/categories*', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.searchParams.get('q') === 'fict') {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+      await route.continue();
+    });
+
+    await page.goto('/searches');
+    await page.getByRole('link', { name: 'New Saved Search' }).click();
+
+    const included = page.locator('[data-saved-search-picker-name-value*="included_category_ids"]');
+    const search = included.getByPlaceholder('Search genres, subjects, settings');
+    const results = included.locator('[data-action="saved-search-picker#add"]');
+
+    const delayedRequest = page.waitForRequest(
+      (req) => req.url().includes('/searches/categories') && new URL(req.url()).searchParams.get('q') === 'fict'
+    );
+    await search.fill('fict');
+    await delayedRequest; // the debounce fired; the (delayed) fetch is now in flight
+
+    await search.fill('');
+    await expect(results).toHaveCount(0);
+
+    // Give the delayed response -- for a query the box no longer holds --
+    // time to land. It must not repopulate an empty box.
+    await page.waitForTimeout(2500);
+    await expect(results).toHaveCount(0);
+  });
 });

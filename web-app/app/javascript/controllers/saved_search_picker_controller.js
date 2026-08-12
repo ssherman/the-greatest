@@ -13,10 +13,12 @@ export default class extends Controller {
 
   connect() {
     this.timer = null
+    this.abortController = null
   }
 
   disconnect() {
     clearTimeout(this.timer)
+    this.abortController?.abort()
   }
 
   search() {
@@ -31,8 +33,11 @@ export default class extends Controller {
   }
 
   async run() {
+    this.abortController?.abort()
+
     const query = this.queryTarget.value.trim()
     if (query === "") {
+      this.abortController = null
       this.resultsTarget.replaceChildren()
       return
     }
@@ -40,14 +45,24 @@ export default class extends Controller {
     const url = new URL(this.urlValue, window.location.origin)
     url.searchParams.set("q", query)
 
+    this.abortController = new AbortController()
+
     let rows = []
     try {
-      const response = await fetch(url, { headers: { Accept: "application/json" } })
+      const response = await fetch(url, {
+        headers: { Accept: "application/json" },
+        signal: this.abortController.signal
+      })
       if (!response.ok) return
       rows = await response.json()
     } catch {
       return
     }
+
+    // The abort above narrows the window but isn't instantaneous and doesn't
+    // cover every interleaving (e.g. a response that lands just as add()
+    // clears the query). Only apply results that still match what's typed.
+    if (this.queryTarget.value.trim() !== query) return
 
     this.resultsTarget.replaceChildren(...rows.map((row) => this.resultButton(row)))
   }
@@ -68,6 +83,7 @@ export default class extends Controller {
 
     if (this.selectedValues().includes(value)) return
 
+    this.abortController?.abort()
     this.chipsTarget.appendChild(this.chip(value, label))
     this.queryTarget.value = ""
     this.resultsTarget.replaceChildren()
