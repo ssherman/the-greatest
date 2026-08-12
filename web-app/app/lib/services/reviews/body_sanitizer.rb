@@ -47,7 +47,6 @@ module Services
     class BodySanitizer
       ALLOWED_TAGS = %w[p br a i b em strong blockquote].freeze
       ALLOWED_ATTRIBUTES = %w[href title].freeze
-      SPOILER_TAG = "spoiler".freeze
       SPOILER_CLASS = "review-spoiler".freeze
       BLANK_TEXT = /\A[[:space:]\u200B-\u200D\uFEFF]*\z/
 
