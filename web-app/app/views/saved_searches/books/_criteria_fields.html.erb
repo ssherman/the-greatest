@@ -4,7 +4,14 @@
   <div class="card-body gap-4">
     <h2 class="card-title text-lg">Filters</h2>
 
-    <%= f.fields_for :criteria, search.criteria do |c| %>
+    <%# criteria_object, NOT the raw `search.criteria` hash: fields_for treats a
+        Hash in the record slot as its OPTIONS argument (form_helper.rb's
+        `fields_options, record_object = record_object, nil if ...
+        record_object.is_a?(Hash)`), so the nested builder would bind to nil AND
+        Rails would write :builder/:namespace/:parent_builder into the model's
+        own jsonb attribute hash. SavedSearchCriteria is not a Hash, so it binds
+        as a real object and its readers supply the fallback values. %>
+    <%= f.fields_for :criteria, criteria do |c| %>
       <div class="form-control">
         <%= c.label :book_type, class: "label" do %><span class="label-text font-semibold">Type</span><% end %>
         <%= c.select :book_type,
