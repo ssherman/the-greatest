@@ -34,6 +34,30 @@ module Books
       assert_equal({"excluded_language_ids" => [5, 6]}, result)
     end
 
+    # With genre_match_mode "all" each id becomes its own bool clause, so an
+    # uncapped array is a hand-rolled POST away from a query past OpenSearch's
+    # max_clause_count -- a 500 for everyone, if the search is public. The cap
+    # truncates rather than rejects: no UI path can reach it.
+    test "caps each id array at MAX_IDS" do
+      ids = (1..250).map(&:to_s)
+
+      result = normalize({"included_category_ids" => ids, "excluded_country_ids" => ids})
+
+      assert_equal 200, Books::SavedSearchCriteriaParams::MAX_IDS
+      assert_equal 200, result["included_category_ids"].length
+      assert_equal 200, result["excluded_country_ids"].length
+      assert_equal (1..200).to_a, result["included_category_ids"]
+    end
+
+    # The cap counts distinct ids, not posted entries: 400 duplicates of the
+    # same 100 ids is a 100-id search, and must not be truncated to nothing
+    # useful by counting before the uniq.
+    test "the cap applies after deduplication" do
+      result = normalize({"included_category_ids" => (1..100).to_a.cycle.first(400).map(&:to_s)})
+
+      assert_equal (1..100).to_a, result["included_category_ids"]
+    end
+
     test "casts book_type to an integer" do
       assert_equal({"book_type" => 0}, normalize({"book_type" => "0"}))
     end

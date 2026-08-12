@@ -17,6 +17,14 @@ module Books
     SCALAR_INT_KEYS = %w[book_type first_year_published_gt first_year_published_lt max_ranked_position].freeze
     ID_ARRAY_KEYS = ::Books::SavedSearchCriteria::ID_ARRAY_KEYS
 
+    # Each id array becomes clauses in an OpenSearch bool query, and with
+    # genre_match_mode "all" that is one clause PER id. Nothing in the UI can
+    # reach 200 -- the picker adds one chip at a time -- but a hand-rolled POST
+    # can, and marking the search public then hands every visitor an uncached
+    # page whose query blows past max_clause_count, i.e. a 500. Truncating is
+    # deliberate: a cap silently applied beats a saved search nobody can open.
+    MAX_IDS = 200
+
     def self.call(raw)
       new(raw).call
     end
@@ -34,7 +42,7 @@ module Books
       end
 
       ID_ARRAY_KEYS.each do |key|
-        ids = Array(@raw[key]).filter_map { |v| integer_or_nil(v) }.uniq
+        ids = Array(@raw[key]).filter_map { |v| integer_or_nil(v) }.uniq.first(MAX_IDS)
         out[key] = ids if ids.any?
       end
 
