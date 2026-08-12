@@ -167,16 +167,23 @@ class SavedSearchesController < ApplicationController
 
   # Permitted explicitly rather than with `criteria: {}` -- a bare hash permit
   # would store whatever the form posted, including keys no reader knows.
+  #
+  # The respond_to?(:permit) guard is not decoration: a hand-rolled
+  # `saved_search[criteria]=x` makes this a String (or an Array, for
+  # `criteria[]=x`), and String#permit is a NoMethodError -- a 500 on a
+  # malformed submission. Reading as "no criteria" instead lets the record's own
+  # `validates :criteria, presence: true` reject it with a 422.
   def criteria_params
-    domain_class.criteria_params_class.call(
-      params.require(:saved_search).fetch(:criteria, nil)&.permit(
-        :book_type, :ranked, :hide_read, :genre_match_mode,
-        :first_year_published_gt, :first_year_published_lt, :max_ranked_position,
-        book_length: [],
-        included_category_ids: [], excluded_category_ids: [],
-        included_language_ids: [], excluded_language_ids: [],
-        included_country_ids: [], excluded_country_ids: []
-      )
-    )
+    raw = params.require(:saved_search)[:criteria]
+    permitted = raw.respond_to?(:permit) ? raw.permit(
+      :book_type, :ranked, :hide_read, :genre_match_mode,
+      :first_year_published_gt, :first_year_published_lt, :max_ranked_position,
+      book_length: [],
+      included_category_ids: [], excluded_category_ids: [],
+      included_language_ids: [], excluded_language_ids: [],
+      included_country_ids: [], excluded_country_ids: []
+    ) : nil
+
+    domain_class.criteria_params_class.call(permitted)
   end
 end

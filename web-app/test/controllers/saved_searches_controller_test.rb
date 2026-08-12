@@ -694,6 +694,30 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, criteria["book_type"]
   end
 
+  # `saved_search[criteria]=x` (or `criteria[]=x`) makes criteria a String or an
+  # Array, and neither responds to #permit -- a NoMethodError, i.e. a 500 on a
+  # malformed request. It has to read as "no criteria" and fall to the record's
+  # own presence validation instead.
+  test "a scalar criteria param is rejected, not a 500" do
+    sign_in_as(@user, stub_auth: true)
+
+    post saved_searches_path, params: {saved_search: {name: "Scalar", criteria: "x"}}
+    assert_response :unprocessable_entity
+
+    post saved_searches_path, params: {saved_search: {name: "Array", criteria: ["x"]}}
+    assert_response :unprocessable_entity
+  end
+
+  test "a scalar criteria param on update is rejected without overwriting" do
+    sign_in_as(@user, stub_auth: true)
+    before = @private_search.criteria
+
+    patch saved_search_path(@private_search), params: {saved_search: {name: "Scalar", criteria: "x"}}
+
+    assert_response :unprocessable_entity
+    assert_equal before, @private_search.reload.criteria
+  end
+
   test "update 404s for a stranger" do
     sign_in_as(@other, stub_auth: true)
 
