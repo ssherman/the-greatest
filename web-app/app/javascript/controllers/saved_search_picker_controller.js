@@ -38,7 +38,7 @@ export default class extends Controller {
     const query = this.queryTarget.value.trim()
     if (query === "") {
       this.abortController = null
-      this.resultsTarget.replaceChildren()
+      this.clearResults()
       return
     }
 
@@ -65,6 +65,7 @@ export default class extends Controller {
     if (this.queryTarget.value.trim() !== query) return
 
     this.resultsTarget.replaceChildren(...rows.map((row) => this.resultButton(row)))
+    this.resultsTarget.classList.toggle("hidden", rows.length === 0)
   }
 
   resultButton(row) {
@@ -86,7 +87,7 @@ export default class extends Controller {
     this.abortController?.abort()
     this.chipsTarget.appendChild(this.chip(value, label))
     this.queryTarget.value = ""
-    this.resultsTarget.replaceChildren()
+    this.clearResults()
   }
 
   remove(event) {
@@ -95,6 +96,16 @@ export default class extends Controller {
 
   selectedValues() {
     return Array.from(this.chipsTarget.querySelectorAll("input[type=hidden]")).map((el) => el.value)
+  }
+
+  // Empty the results panel and hide it. Once the panel has a background and
+  // shadow (to float over the page instead of pushing it down), leaving it
+  // visible with zero children would show a small empty box floating over
+  // the form. Called on query-cleared and on chip-added; the zero-results
+  // case is handled inline in run() since it already has the fetched rows.
+  clearResults() {
+    this.resultsTarget.replaceChildren()
+    this.resultsTarget.classList.add("hidden")
   }
 
   chip(value, label) {

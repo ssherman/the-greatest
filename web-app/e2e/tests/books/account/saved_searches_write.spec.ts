@@ -143,6 +143,39 @@ test.describe('Saved search write flow', () => {
     await expect(results).toHaveCount(freshCount);
   });
 
+  test('typing into a picker does not push the rest of the form down the page', async ({ page }) => {
+    // The bug: the results panel used to render in-flow (a plain block
+    // element), so with results showing it pushed everything below it --
+    // the Category matching select, the Create search button -- down the
+    // page. It must float over the page instead. Category matching sits
+    // right after the picker block, so it is the most sensitive tripwire;
+    // the Create search button (further down, outside the card) is checked
+    // too so a fix that only floats the last picker's panel doesn't pass.
+    //
+    // Document-relative Y (getBoundingClientRect().top + scrollY), not
+    // Playwright's boundingBox(): filling the input auto-scrolls it into
+    // view, which shifts every viewport-relative box on the page even when
+    // nothing in the DOM moved, making boundingBox() compare apples to
+    // oranges here.
+    const docY = (locator: import('@playwright/test').Locator) =>
+      locator.evaluate((el) => el.getBoundingClientRect().top + window.scrollY);
+
+    await page.goto('/searches');
+    await page.getByRole('link', { name: 'New Saved Search' }).click();
+
+    const categoryMatchSelect = page.getByLabel('Category matching');
+    const createButton = page.getByRole('button', { name: 'Create search' });
+    const selectBefore = await docY(categoryMatchSelect);
+    const buttonBefore = await docY(createButton);
+
+    const included = page.locator('[data-saved-search-picker-name-value*="included_category_ids"]');
+    await included.getByPlaceholder('Search genres, subjects, settings').fill('fict');
+    await expect(included.locator('[data-action="saved-search-picker#add"]').first()).toBeVisible();
+
+    expect(await docY(categoryMatchSelect)).toBe(selectBefore);
+    expect(await docY(createButton)).toBe(buttonBefore);
+  });
+
   test('clearing the category search box stays empty even after a delayed response lands', async ({ page }) => {
     await page.route('**/searches/categories*', async (route) => {
       const url = new URL(route.request().url());

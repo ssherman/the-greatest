@@ -116,14 +116,25 @@
                   this. It buys an explicit posted key, and safety if criteria
                   ever became a merge. The normalizer drops the resulting [""]. %>
               <%= hidden_field_tag "saved_search[criteria][#{key}][]", "", id: nil %>
-              <input type="search"
-                     class="input w-full"
-                     placeholder="<%= taxonomy[:placeholder] %>"
-                     aria-label="<%= "#{mode} #{taxonomy[:plural]}".titleize %>"
-                     autocomplete="off"
-                     data-saved-search-picker-target="query"
-                     data-action="input->saved-search-picker#search keydown->saved-search-picker#suppressEnter">
-              <div class="flex flex-col gap-1 mt-1" data-saved-search-picker-target="results"></div>
+              <%# Positioning context for the results dropdown below: it must float
+                  over the chips/rest-of-form, not push them down the page. Scoped to
+                  this wrapper (not the whole fieldset) so the panel's width tracks the
+                  input, matching the house pattern in autocomplete_controller.js#L79. %>
+              <div class="relative">
+                <input type="search"
+                       class="input w-full"
+                       placeholder="<%= taxonomy[:placeholder] %>"
+                       aria-label="<%= "#{mode} #{taxonomy[:plural]}".titleize %>"
+                       autocomplete="off"
+                       data-saved-search-picker-target="query"
+                       data-action="input->saved-search-picker#search keydown->saved-search-picker#suppressEnter">
+                <%# Hidden by default -- the controller only reveals this once it has
+                    at least one result button to show (see saved_search_picker_controller.js).
+                    Without the guard, an empty absolutely-positioned panel with its own
+                    background/shadow would float over the page as a small blank box. %>
+                <div class="hidden absolute dropdown-content p-2 shadow-lg bg-base-100 rounded-box w-full mt-1 max-h-80 overflow-y-auto z-[9999] left-0 top-full flex flex-col gap-1"
+                     data-saved-search-picker-target="results"></div>
+              </div>
               <div class="flex flex-wrap gap-2 mt-2" data-saved-search-picker-target="chips">
                 <% criteria.public_send(key).each do |id| %>
                   <% record = taxonomy[:records][id] %>
