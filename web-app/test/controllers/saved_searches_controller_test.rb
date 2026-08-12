@@ -91,6 +91,12 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, 'id="navbar_my_searches"'
   end
 
+  test "no link on the index is trapped in a frame" do
+    sign_in_as(@user, stub_auth: true)
+
+    assert_no_frame_trapped_links saved_searches_path
+  end
+
   test "index page 1 redirects to the bare path" do
     sign_in_as(@user, stub_auth: true)
     get "/searches/page/1"
@@ -263,6 +269,15 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, 'name="robots" content="noindex, follow"'
   end
 
+  # show renders its results grid outside any turbo frame on purpose (spec
+  # §9), so this passes vacuously today -- it is here to catch a frame ever
+  # being added around a link without an escape hatch.
+  test "no link on show is trapped in a frame" do
+    stub_advanced(ids: [], total: 0)
+
+    assert_no_frame_trapped_links saved_search_path(@public_search)
+  end
+
   # The grid renders authors and a cover per book -- the exact N+1 shape.
   test "show does not query per result book" do
     ids = [books_books(:war_and_peace).id, books_books(:crime_and_punishment).id]
@@ -276,6 +291,30 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     ActiveRecord::Base.connection.clear_query_cache
     stub_advanced(ids: ids, total: 2)
     assert_queries_count(9) { get saved_search_path(@public_search) }
+  end
+
+  # The owner-only branch in show.html.erb. A public search is the case that
+  # matters: a stranger can legitimately reach the page, and must not be
+  # offered controls that would 404 (or, worse, work).
+  test "a signed-in non-owner sees no edit or delete control on a public search" do
+    stub_advanced(ids: [], total: 0)
+    sign_in_as(@other, stub_auth: true)
+
+    get saved_search_path(@public_search)
+
+    assert_response :success
+    assert_select "a[href=?]", edit_saved_search_path(@public_search), count: 0
+    assert_select "form[action=?][method=post]", saved_search_path(@public_search), count: 0
+  end
+
+  test "the owner does see the edit and delete controls" do
+    stub_advanced(ids: [], total: 0)
+    sign_in_as(@user, stub_auth: true)
+
+    get saved_search_path(@public_search)
+
+    assert_select "a[href=?]", edit_saved_search_path(@public_search)
+    assert_select "form[action=?][method=post]", saved_search_path(@public_search)
   end
 
   test "show 404s on a domain with no saved searches" do
@@ -323,5 +362,432 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
 
   test "robots.txt disallows /searches" do
     assert_includes Rails.root.join("public/robots.txt").read, "Disallow: /searches"
+  end
+
+  # --- new / create ---
+
+  test "new renders the form for a signed-in user" do
+    sign_in_as(@user, stub_auth: true)
+
+    get new_saved_search_path
+
+    assert_response :success
+    assert_select "form[action=?]", saved_searches_path
+  end
+
+  test "new redirects an anonymous visitor" do
+    get new_saved_search_path
+
+    assert_response :redirect
+  end
+
+  test "no link on new is trapped in a frame" do
+    sign_in_as(@user, stub_auth: true)
+
+    assert_no_frame_trapped_links new_saved_search_path
+  end
+
+  # The category/language/country axes all use the same saved-search-picker
+  # Stimulus controller (a 201-language, 253-country <select multiple> is what
+  # this replaced -- daisyUI 5's .select is display:inline-flex, which laid
+  # every <option> out as a flex row instead of a list). One picker per
+  # include/excluded pair per axis, wired to that axis's own JSON endpoint.
+  test "the form offers a picker for every taxonomy" do
+    sign_in_as(@user, stub_auth: true)
+
+    get new_saved_search_path
+
+    assert_select "[data-controller='saved-search-picker'][data-saved-search-picker-url-value=?]",
+      saved_search_languages_path, count: 2
+    assert_select "[data-controller='saved-search-picker'][data-saved-search-picker-url-value=?]",
+      saved_search_countries_path, count: 2
+    assert_select "[data-controller='saved-search-picker'][data-saved-search-picker-url-value=?]",
+      saved_search_categories_path, count: 2
+  end
+
+  test "create stores selected language and country ids as integers" do
+    sign_in_as(@user, stub_auth: true)
+    language = languages(:english)
+    country = books_countries(:french)
+
+    post saved_searches_path, params: {saved_search: {
+      name: "Taxonomies",
+      criteria: {included_language_ids: [language.id.to_s], excluded_country_ids: [country.id.to_s]}
+    }}
+
+    criteria = Books::SavedSearch.order(:id).last.criteria
+    assert_equal [language.id], criteria["included_language_ids"]
+    assert_equal [country.id], criteria["excluded_country_ids"]
+  end
+
+  # Regression guard for the defect the picker replaced: the old multi-selects
+  # preloaded every language and country row (201 + 253) on every render of
+  # this page, selected or not. The picker's own JSON endpoints load rows only
+  # on a keystroke, so a blank `new` form should query for nothing but the
+  # session's own user -- there is nothing yet to preload.
+  test "the form does not preload every language and country row" do
+    sign_in_as(@user, stub_auth: true)
+    get new_saved_search_path # warm any cached lookups
+    ActiveRecord::Base.connection.clear_query_cache
+
+    assert_queries_count(1) do
+      get new_saved_search_path
+    end
+  end
+
+  test "create stores a search owned by the current user" do
+    sign_in_as(@user, stub_auth: true)
+
+    assert_difference "Books::SavedSearch.count", 1 do
+      post saved_searches_path, params: {saved_search: {
+        name: "Long Victorian novels",
+        description: "For winter",
+        public: "1",
+        criteria: {book_type: "0", first_year_published_gt: "1837", ranked: "true"}
+      }}
+    end
+
+    search = Books::SavedSearch.order(:id).last
+    assert_redirected_to saved_search_path(search)
+    assert_equal @user, search.user
+    assert_equal "Long Victorian novels", search.name
+    assert search.public?
+  end
+
+  # The normalizer is wired in, not merely defined (Task 2).
+  test "create drops blank criteria rather than storing them" do
+    sign_in_as(@user, stub_auth: true)
+
+    post saved_searches_path, params: {saved_search: {
+      name: "Sparse",
+      criteria: {book_type: "", ranked: "", included_category_ids: ["", ""], first_year_published_gt: "1900"}
+    }}
+
+    criteria = Books::SavedSearch.order(:id).last.criteria
+    assert_equal({"first_year_published_gt" => 1900}, criteria)
+  end
+
+  test "create ignores a user_id in the params" do
+    sign_in_as(@user, stub_auth: true)
+
+    post saved_searches_path, params: {saved_search: {
+      name: "Not yours", user_id: @other.id, criteria: {book_type: "0"}
+    }}
+
+    assert_equal @user, Books::SavedSearch.order(:id).last.user
+  end
+
+  test "create re-renders the form when the record is invalid" do
+    sign_in_as(@user, stub_auth: true)
+
+    assert_no_difference "Books::SavedSearch.count" do
+      post saved_searches_path, params: {saved_search: {name: "Empty", criteria: {}}}
+    end
+
+    assert_response :unprocessable_entity
+  end
+
+  test "create redirects an anonymous visitor without writing" do
+    assert_no_difference "Books::SavedSearch.count" do
+      post saved_searches_path, params: {saved_search: {name: "x", criteria: {book_type: "0"}}}
+    end
+
+    assert_response :redirect
+  end
+
+  # Every other test in this file POSTs a hand-written `saved_search: {...}`
+  # hash, which exercises the controller but never the form's own field
+  # names -- and those can drift apart silently. `form_with model: search`
+  # on the `Books::SavedSearch` STI subclass derives its top-level key from
+  # the SUBCLASS name ("books_saved_search"), not "saved_search"; the
+  # book_length checkboxes are a separate `check_box_tag` that hardcodes
+  # "saved_search" regardless. Reading the real `name` attributes out of the
+  # rendered form -- rather than assuming what they are -- is what makes this
+  # test catch that kind of drift instead of just re-asserting the bug.
+  test "the rendered new-search form submits under its own field names" do
+    sign_in_as(@user, stub_auth: true)
+    get new_saved_search_path
+    assert_response :success
+
+    form = Nokogiri::HTML5.fragment(response.body).at_css("form")
+    action = form["action"]
+
+    name_field = form.at_css("input[name$='[name]']")
+    book_type_field = form.at_css("select[name$='[criteria][book_type]']")
+    book_length_field = form.at_css("input[type=checkbox][name$='[criteria][book_length][]']")
+    # The hidden blank field that makes an empty picker post an explicit key
+    # rather than nothing at all. Reading it off the DOM here (rather than
+    # just asserting the normalizer drops an inline [""] the test invents) is
+    # what catches the field going missing from the view itself.
+    language_hidden_field = form.at_css("input[type=hidden][name='saved_search[criteria][included_language_ids][]']")
+
+    assert name_field, "the rendered form has no [name] input"
+    assert book_type_field, "the rendered form has no [criteria][book_type] select"
+    assert book_length_field, "the rendered form has no [criteria][book_length][] checkbox"
+    assert language_hidden_field, "the rendered form has no hidden blank [criteria][included_language_ids][] field"
+    assert_equal "", language_hidden_field["value"]
+
+    query = [
+      "#{name_field["name"]}=#{URI.encode_www_form_component("From the real form")}",
+      "#{book_type_field["name"]}=#{URI.encode_www_form_component("0")}",
+      "#{book_length_field["name"]}=#{URI.encode_www_form_component(book_length_field["value"])}",
+      "#{language_hidden_field["name"]}=#{URI.encode_www_form_component(language_hidden_field["value"])}"
+    ].join("&")
+
+    assert_difference "Books::SavedSearch.count", 1 do
+      post action, params: Rack::Utils.parse_nested_query(query)
+    end
+
+    search = Books::SavedSearch.order(:id).last
+    assert_equal "From the real form", search.name
+    assert_equal({"book_type" => 0, "book_length" => [book_length_field["value"].to_i]}, search.criteria)
+    # The select itself was never selected/submitted here -- only its hidden
+    # blank sibling -- so the normalizer must drop the key entirely rather
+    # than store an empty array or an unparsed [""].
+    assert_not search.criteria.key?("included_language_ids")
+  end
+
+  # --- edit / update ---
+
+  # Serializes the rendered form's criteria fields the way a browser would --
+  # selected options only, checked boxes only, every hidden and text input --
+  # and returns them as the nested params hash a real submit would send. Tests
+  # that build their params by hand cannot catch a control that is MISSING from
+  # the form, which is the exact defect this section guards against.
+  def submitted_criteria(html)
+    form = Nokogiri::HTML5.fragment(html).at_css("form")
+    pairs = form.css("[name^='saved_search[criteria]']").flat_map do |node|
+      case node.name
+      when "select"
+        node.css("option[selected]").map { |option| [node["name"], option["value"]] }
+      when "input"
+        next [] if node["type"] == "checkbox" && node["checked"].nil?
+        [[node["name"], node["value"]]]
+      else
+        []
+      end
+    end
+
+    query = pairs.map { |name, value| "#{name}=#{URI.encode_www_form_component(value.to_s)}" }.join("&")
+    Rack::Utils.parse_nested_query(query).dig("saved_search", "criteria") || {}
+  end
+
+  test "edit renders the form for the owner" do
+    sign_in_as(@user, stub_auth: true)
+
+    get edit_saved_search_path(@private_search)
+
+    assert_response :success
+    assert_select "form[action=?]", saved_search_path(@private_search)
+  end
+
+  # The type and ranked selects hand `selected:` to the FormBuilder's
+  # `options` argument, not `html_options` -- Tags::Select#render only reads
+  # `@options.fetch(:selected)`, so a value in the wrong slot renders no
+  # pre-selection at all. An unedited resave would then silently drop the
+  # stored value (spec §6's tri-state warning applies to display, not just
+  # storage, for the 437 rows that set it).
+  test "edit pre-selects the stored book_type and ranked values" do
+    sign_in_as(@user, stub_auth: true)
+    @private_search.update!(criteria: {"book_type" => 1, "ranked" => "false"})
+
+    get edit_saved_search_path(@private_search)
+
+    assert_select "select[name='saved_search[criteria][book_type]'] option[value='1'][selected]"
+    assert_select "select[name='saved_search[criteria][ranked]'] option[value='false'][selected]"
+  end
+
+  # Every criterion the form can write must come back pre-rendered, because
+  # `criteria=` REPLACES the whole hash: a field that renders blank is a field
+  # whose stored value an unedited resave silently deletes. This asserts the
+  # whole surface at once rather than one key at a time, since the failure mode
+  # is a key nobody remembered to add a control for (that is finding 1).
+  test "edit pre-renders every criterion the form can write" do
+    sign_in_as(@user, stub_auth: true)
+    stored = {
+      "book_type" => 1,
+      "book_length" => [::Books::Book.book_lengths["long"]],
+      "first_year_published_gt" => 1837,
+      "first_year_published_lt" => 1901,
+      "ranked" => "false",
+      "max_ranked_position" => 250,
+      "hide_read" => true,
+      "genre_match_mode" => "all",
+      "included_category_ids" => [categories(:books_fiction_genre).id],
+      "excluded_category_ids" => [categories(:books_americana_genre).id],
+      "included_language_ids" => [languages(:russian).id],
+      "excluded_language_ids" => [languages(:french).id],
+      "included_country_ids" => [books_countries(:french).id],
+      "excluded_country_ids" => [books_countries(:japanese).id]
+    }
+    @private_search.update!(criteria: stored)
+
+    get edit_saved_search_path(@private_search)
+    assert_response :success
+
+    # Reading back the whole criteria surface off the DOM, then comparing it to
+    # what is stored, is what makes a missing control fail rather than pass by
+    # omission -- an assert_select per key can only check keys it lists.
+    assert_equal stored, Books::SavedSearchCriteriaParams.call(submitted_criteria(response.body))
+  end
+
+  # A criterion whose control renders blank costs nothing at render time and
+  # everything on the next save. This posts what the FORM itself would post --
+  # read off the rendered DOM, not values the test invents -- so deleting a
+  # control from the partial turns the assertion red instead of just changing
+  # what a hand-written params hash happens to say.
+  #
+  # genre_match_mode is the live case: it is set on all 4,391 migrated searches
+  # and "all" on 151 of them, and it had no control at all until finding 1.
+  test "resaving an unedited search preserves every stored criterion" do
+    sign_in_as(@user, stub_auth: true)
+    stored = {
+      "book_type" => 1,
+      "ranked" => "false",
+      "hide_read" => true,
+      "genre_match_mode" => "all",
+      "max_ranked_position" => 250,
+      "included_category_ids" => [categories(:books_fiction_genre).id],
+      "included_language_ids" => [languages(:russian).id]
+    }
+    @private_search.update!(criteria: stored)
+
+    get edit_saved_search_path(@private_search)
+    patch saved_search_path(@private_search), params: {
+      saved_search: {name: @private_search.name, criteria: submitted_criteria(response.body)}
+    }
+
+    assert_redirected_to saved_search_path(@private_search)
+    assert_equal stored, @private_search.reload.criteria
+    assert_equal :all, @private_search.criteria_object.genre_match_mode
+  end
+
+  test "edit renders a chip for each stored category, labelled with its type" do
+    sign_in_as(@user, stub_auth: true)
+    category = categories(:books_fiction_genre)
+    @private_search.update!(criteria: {"included_category_ids" => [category.id]})
+
+    get edit_saved_search_path(@private_search)
+
+    assert_select "[data-chip='#{category.id}']" do
+      assert_select "input[name='saved_search[criteria][included_category_ids][]'][value=?]", category.id.to_s
+    end
+    assert_select "[data-chip='#{category.id}']", text: /Fiction \(Genre\)/
+  end
+
+  test "no link on edit is trapped in a frame" do
+    sign_in_as(@user, stub_auth: true)
+
+    assert_no_frame_trapped_links edit_saved_search_path(@private_search)
+  end
+
+  # 404, never 403 -- a 403 confirms the id exists (spec §8).
+  test "edit 404s for a stranger, even on a public search" do
+    @private_search.update_column(:public, true)
+    sign_in_as(@other, stub_auth: true)
+
+    get edit_saved_search_path(@private_search)
+
+    assert_response :not_found
+  end
+
+  test "update changes the search" do
+    sign_in_as(@user, stub_auth: true)
+
+    patch saved_search_path(@private_search), params: {saved_search: {
+      name: "Renamed", criteria: {book_type: "1"}
+    }}
+
+    assert_redirected_to saved_search_path(@private_search)
+    assert_equal "Renamed", @private_search.reload.name
+    assert_equal({"book_type" => 1}, @private_search.criteria)
+  end
+
+  # What actually clears the ids is that `criteria=` REPLACES the whole hash,
+  # so a key nobody posted is simply absent -- book_length has no hidden blank
+  # field and clears the same way. The hidden blank field before each picker
+  # (a picker with every chip removed posts nothing on its own) only makes
+  # the cleared key explicit in the request; this test passes with or without
+  # it. It posts [""] because that is what the real form sends, and the
+  # normalizer has to drop it rather than store an unparseable [""].
+  #
+  # book_type is carried along and resubmitted so the surviving criteria hash
+  # isn't empty -- `criteria=` REPLACES the whole hash (it is not a merge),
+  # and `validates :criteria, presence: true` treats `{}` as blank, which
+  # would 422 the whole update and mask whether the id array itself cleared.
+  test "deselecting every language clears the stored ids" do
+    sign_in_as(@user, stub_auth: true)
+    @private_search.update!(criteria: {"included_language_ids" => [languages(:english).id], "book_type" => 0})
+
+    patch saved_search_path(@private_search), params: {saved_search: {
+      name: @private_search.name,
+      criteria: {"included_language_ids" => [""], "book_type" => "0"}
+    }}
+
+    criteria = @private_search.reload.criteria
+    assert_not criteria.key?("included_language_ids")
+    assert_equal 0, criteria["book_type"]
+  end
+
+  # `saved_search[criteria]=x` (or `criteria[]=x`) makes criteria a String or an
+  # Array, and neither responds to #permit -- a NoMethodError, i.e. a 500 on a
+  # malformed request. It has to read as "no criteria" and fall to the record's
+  # own presence validation instead.
+  test "a scalar criteria param is rejected, not a 500" do
+    sign_in_as(@user, stub_auth: true)
+
+    post saved_searches_path, params: {saved_search: {name: "Scalar", criteria: "x"}}
+    assert_response :unprocessable_entity
+
+    post saved_searches_path, params: {saved_search: {name: "Array", criteria: ["x"]}}
+    assert_response :unprocessable_entity
+  end
+
+  test "a scalar criteria param on update is rejected without overwriting" do
+    sign_in_as(@user, stub_auth: true)
+    before = @private_search.criteria
+
+    patch saved_search_path(@private_search), params: {saved_search: {name: "Scalar", criteria: "x"}}
+
+    assert_response :unprocessable_entity
+    assert_equal before, @private_search.reload.criteria
+  end
+
+  test "update 404s for a stranger" do
+    sign_in_as(@other, stub_auth: true)
+
+    patch saved_search_path(@private_search), params: {saved_search: {name: "Hijacked"}}
+
+    assert_response :not_found
+    assert_not_equal "Hijacked", @private_search.reload.name
+  end
+
+  # --- destroy ---
+
+  test "destroy removes the search" do
+    sign_in_as(@user, stub_auth: true)
+
+    assert_difference "Books::SavedSearch.count", -1 do
+      delete saved_search_path(@private_search)
+    end
+
+    assert_redirected_to saved_searches_path
+  end
+
+  test "destroy 404s for a stranger" do
+    sign_in_as(@other, stub_auth: true)
+
+    assert_no_difference "Books::SavedSearch.count" do
+      delete saved_search_path(@private_search)
+    end
+
+    assert_response :not_found
+  end
+
+  # --- routing ---
+
+  test "searches/new resolves to new, not show" do
+    assert_routing({method: "get", path: "/searches/new"},
+      {controller: "saved_searches", action: "new"})
   end
 end

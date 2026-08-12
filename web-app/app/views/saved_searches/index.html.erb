@@ -3,7 +3,10 @@
 %>
 
 <div class="space-y-6">
-  <h1 class="text-3xl font-bold">My Saved Searches</h1>
+  <div class="flex items-center justify-between gap-4">
+    <h1 class="text-3xl font-bold">My Saved Searches</h1>
+    <%= link_to "New Saved Search", new_saved_search_path, class: "btn btn-primary" %>
+  </div>
 
   <% if @searches.any? %>
     <ul class="space-y-3" data-testid="saved-search-list">
@@ -39,6 +42,7 @@
   <% else %>
     <div class="text-center py-16" data-testid="empty-saved-searches">
       <p class="text-base-content/70">You haven't saved any searches yet.</p>
+      <%= link_to "Create your first search", new_saved_search_path, class: "btn btn-primary mt-4" %>
     </div>
   <% end %>
 </div>

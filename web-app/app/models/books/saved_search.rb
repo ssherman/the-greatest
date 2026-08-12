@@ -52,12 +52,32 @@ module Books
       filter_labels_class_name.constantize
     end
 
+    def self.criteria_params_class_name
+      "Books::SavedSearchCriteriaParams"
+    end
+
+    def self.criteria_params_class
+      criteria_params_class_name.constantize
+    end
+
     def self.ranking_configuration_class
       ::Books::RankingConfiguration
     end
 
     def self.excluded_list_type
       :read
+    end
+
+    def self.category_class
+      ::Books::Category
+    end
+
+    def self.language_search_query_class
+      ::Books::LanguageSearchQuery
+    end
+
+    def self.country_search_query_class
+      ::Books::CountrySearchQuery
     end
 
     # category, language, and country criteria are omitted: naming them requires

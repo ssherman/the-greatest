@@ -40,6 +40,9 @@ application.register("reviews--spoiler", Reviews__SpoilerController)
 import Reviews__WidgetController from "./reviews/widget_controller"
 application.register("reviews--widget", Reviews__WidgetController)
 
+import SavedSearchPickerController from "./saved_search_picker_controller"
+application.register("saved-search-picker", SavedSearchPickerController)
+
 import SharedModalController from "./shared_modal_controller"
 application.register("shared-modal", SharedModalController)
 

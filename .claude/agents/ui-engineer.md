@@ -35,7 +35,9 @@ You are a specialized UI Engineer agent for The Greatest project. You have deep 
 ## Framework Knowledge
 
 ### Tailwind CSS v4 Complete Reference
-**Primary Reference**: See `docs/external-libraries/tailwind-llms.txt` for complete Tailwind CSS v4 documentation
+**Reference**: Tailwind publishes no `llms.txt`, so there is nothing pinned locally for it — the
+v4 deltas below are the working notes. When they are not enough, fetch
+https://tailwindcss.com/docs/upgrade-guide rather than guessing.
 
 **Key Tailwind v4 Changes**:
 - ❌ `@tailwind base; @tailwind components; @tailwind utilities;`
@@ -46,7 +48,25 @@ You are a specialized UI Engineer agent for The Greatest project. You have deep 
 - ⚠️ Breaking changes: `text-opacity-*` → `text-{color}/{opacity}`, `shadow-sm` → `shadow-xs`, etc.
 
 ### DaisyUI Component Library
-**Primary Reference**: https://daisyui.com/llms.txt
+
+> **REMOVED IN daisyUI 5 — never write these.** They are absent from the compiled CSS, so they
+> fail *silently*: no error, no visual change, just dead markup.
+>
+> | Removed | Use instead |
+> |---|---|
+> | `form-control` | `fieldset` (with `fieldset-legend`) or a plain `div` |
+> | `label-text` | `label` on the text element |
+> | `input-bordered`, `select-bordered`, `textarea-bordered` | nothing — borders are the default |
+>
+> **`.select` is for single-line selects only.** It sets `display:inline-flex` and
+> `appearance:none`, so applying it to `<select multiple>` lays the options out as a flex ROW and
+> renders an unreadable jumble. There is no daisyUI multi-select; build one from checkboxes or a
+> chips picker.
+>
+> **The existing views predate daisyUI 5** — ~90 files still carry the removed classes. Copying
+> form markup from a neighbouring view is how this bug keeps propagating. Verify against the
+> pinned reference, not against the codebase.
+**Primary Reference**: `docs/external-libraries/daisyui-llms.txt` — pinned locally at the installed version (5.7.x). **Read this file before writing any form markup.** Do not rely on recall: daisyUI 4 was current far longer than 5, so recalled markup is usually v4 and fails silently here.
 
 DaisyUI provides pre-built components built on Tailwind CSS:
 - **Layout**: drawer, navbar, footer, hero, indicator, stack, toast
@@ -156,7 +176,7 @@ end
 - **DaisyUI**: Component library for consistent design
 - **Hotwire**: Turbo + Stimulus for interactivity
 - **ViewComponents**: Component-based architecture
-- **Importmap**: No Node.js build process
+- **Rollup + yarn**: JS is bundled into per-domain IIFE bundles (`yarn build`), CSS built per domain (`yarn build:css`). This is NOT an importmap app — do not use `javascript_importmap_tags`.
 
 ### Working Directory
 - Rails commands run from `web-app/` directory
@@ -232,7 +252,7 @@ Shared::FlashComponent
   <%= csrf_meta_tags %>
   <%= csp_meta_tag %>
   <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
-  <%= javascript_importmap_tags %>
+  <%= javascript_include_tag "books", type: "module", "data-turbo-track": "reload" %>
 </head>
 <body class="bg-base-200">
   <div class="drawer lg:drawer-open">
@@ -363,7 +383,7 @@ end
          placeholder="<%= @placeholder %>"
          data-autocomplete-target="input"
          data-action="input->autocomplete#search"
-         class="input input-bordered w-full" />
+         class="input w-full" />
 
   <div data-autocomplete-target="results"
        class="absolute z-10 w-full bg-base-100 shadow-lg rounded-lg mt-1 hidden">
@@ -478,7 +498,7 @@ export default class extends Controller {
 
 ### Building a Form
 1. Use Rails form helpers (`form_with`, `form_for`)
-2. Apply DaisyUI form classes (`form-control`, `label`, `input`)
+2. Apply daisyUI 5 form classes: `fieldset` + `fieldset-legend` to group, `label` for text, `input`/`select`/`checkbox` for controls
 3. Add Tailwind utilities for layout and spacing
 4. Implement client-side validation with Stimulus
 5. Handle submission with Turbo (avoid full page reload)
@@ -495,8 +515,8 @@ export default class extends Controller {
 ## Documentation References
 
 ### Primary References
-- **Tailwind CSS v4**: `docs/external-libraries/tailwind-llms.txt`
-- **DaisyUI**: https://daisyui.com/llms.txt
+- **Tailwind CSS v4**: no local pin exists (Tailwind publishes no llms.txt) — see the v4 deltas above, then https://tailwindcss.com/docs/upgrade-guide
+- **daisyUI 5**: `docs/external-libraries/daisyui-llms.txt` (pinned at 5.7.x — READ IT before writing form markup)
 - **Hotwire**: https://hotwired.dev/
 - **ViewComponent**: https://viewcomponent.org/
 - **Stimulus**: https://stimulus.hotwired.dev/

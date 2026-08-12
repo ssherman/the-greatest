@@ -63,6 +63,10 @@ class SavedSearch < ApplicationRecord
     raise NotImplementedError, "#{name} must override .filter_labels_class"
   end
 
+  def self.criteria_params_class
+    raise NotImplementedError, "#{name} must override .criteria_params_class"
+  end
+
   def self.ranking_configuration_class
     raise NotImplementedError, "#{name} must override .ranking_configuration_class"
   end
@@ -71,6 +75,18 @@ class SavedSearch < ApplicationRecord
   # :played for games.
   def self.excluded_list_type
     raise NotImplementedError, "#{name} must override .excluded_list_type"
+  end
+
+  def self.category_class
+    raise NotImplementedError, "#{name} must override .category_class"
+  end
+
+  def self.language_search_query_class
+    raise NotImplementedError, "#{name} must override .language_search_query_class"
+  end
+
+  def self.country_search_query_class
+    raise NotImplementedError, "#{name} must override .country_search_query_class"
   end
 
   def display_name

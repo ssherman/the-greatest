@@ -13,6 +13,7 @@ class SavedSearchesController < ApplicationController
   include Cacheable
   include PathBasedPagination
   include DomainLayout
+  include SavedSearchDomainScoped
 
   # Fixed, with no ?limit= escape hatch -- legacy honoured one, which makes the
   # page space unbounded. 50 also divides OpenSearch's 10,000-result window
@@ -25,7 +26,8 @@ class SavedSearchesController < ApplicationController
   # 404s instead of bouncing an anonymous visitor to a sign-in that would not
   # have helped.
   before_action :require_domain_support!
-  before_action :require_signed_in!, only: [:index]
+  before_action :require_signed_in!, only: [:index, :new, :create, :edit, :update, :destroy]
+  before_action :set_owned_search, only: [:edit, :update, :destroy]
   before_action :prevent_caching
 
   # GET /searches(/page/:page)
@@ -84,15 +86,82 @@ class SavedSearchesController < ApplicationController
     @search.update_column(:last_executed_at, Time.current)
   end
 
-  private
-
-  def domain_class
-    return @domain_class if defined?(@domain_class)
-
-    @domain_class = SavedSearch.subclass_for(Current.domain)
+  # GET /searches/new
+  def new
+    @search = domain_class.new(user: current_user, criteria: {})
+    authorize @search, :new?, policy_class: SavedSearchPolicy
   end
 
-  def require_domain_support!
-    raise ActiveRecord::RecordNotFound if domain_class.nil?
+  # POST /searches
+  def create
+    @search = domain_class.new(saved_search_params)
+    @search.user = current_user
+    @search.criteria = criteria_params
+    authorize @search, :create?, policy_class: SavedSearchPolicy
+
+    if @search.save
+      redirect_to saved_search_path(@search), notice: "Search saved."
+    else
+      render :new, status: :unprocessable_entity
+    end
+  end
+
+  # GET /searches/:id/edit
+  def edit
+  end
+
+  # PATCH/PUT /searches/:id
+  def update
+    @search.assign_attributes(saved_search_params)
+    @search.criteria = criteria_params if params[:saved_search].key?(:criteria)
+
+    if @search.save
+      redirect_to saved_search_path(@search), notice: "Search updated."
+    else
+      render :edit, status: :unprocessable_entity
+    end
+  end
+
+  # DELETE /searches/:id
+  def destroy
+    @search.destroy
+    redirect_to saved_searches_path, notice: "Search deleted.", status: :see_other
+  end
+
+  private
+
+  # Scoped to the owner, so a stranger gets RecordNotFound -- a 404, not the
+  # 403 Pundit would raise, which would confirm the id exists (spec §8).
+  # authorize still runs: the scope is the security boundary, the policy is the
+  # statement of intent, and Pundit's verify_authorized would flag its absence.
+  def set_owned_search
+    @search = domain_class.owned_by(current_user).find(params[:id])
+    authorize @search, :"#{action_name}?", policy_class: SavedSearchPolicy
+  end
+
+  def saved_search_params
+    params.require(:saved_search).permit(:name, :description, :public)
+  end
+
+  # Permitted explicitly rather than with `criteria: {}` -- a bare hash permit
+  # would store whatever the form posted, including keys no reader knows.
+  #
+  # The respond_to?(:permit) guard is not decoration: a hand-rolled
+  # `saved_search[criteria]=x` makes this a String (or an Array, for
+  # `criteria[]=x`), and String#permit is a NoMethodError -- a 500 on a
+  # malformed submission. Reading as "no criteria" instead lets the record's own
+  # `validates :criteria, presence: true` reject it with a 422.
+  def criteria_params
+    raw = params.require(:saved_search)[:criteria]
+    permitted = raw.respond_to?(:permit) ? raw.permit(
+      :book_type, :ranked, :hide_read, :genre_match_mode,
+      :first_year_published_gt, :first_year_published_lt, :max_ranked_position,
+      book_length: [],
+      included_category_ids: [], excluded_category_ids: [],
+      included_language_ids: [], excluded_language_ids: [],
+      included_country_ids: [], excluded_country_ids: []
+    ) : nil
+
+    domain_class.criteria_params_class.call(permitted)
   end
 end
