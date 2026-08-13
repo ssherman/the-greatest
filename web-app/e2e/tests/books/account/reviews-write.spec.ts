@@ -85,4 +85,31 @@ test.describe('Writing a review', () => {
     // The wrapper survives the update; the component inside it renders nothing.
     await expect(page.getByTestId('review-summary-line')).toHaveCount(0);
   });
+
+  test('a spoiler survives being written, reloaded and edited', async ({ page }) => {
+    await page.goto(BOOK);
+
+    await page.getByTestId('review-widget-label').click();
+    await page.getByTestId('review-star-button').nth(3).click();
+    await page.locator('#review_modal textarea').fill('He ||dies|| at the end.');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.locator('#review_modal')).not.toBeVisible();
+
+    await expect(page.locator('.review-spoiler')).toHaveText('dies');
+
+    // The author sees what they typed, not generated markup.
+    await page.getByTestId('review-widget-label').click();
+    await expect(page.locator('#review_modal textarea')).toHaveValue('He ||dies|| at the end.');
+
+    // And the spoiler survives an edit -- the defect this whole change removes.
+    await page.locator('#review_modal textarea').fill('He ||dies|| at the very end.');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.locator('#review_modal')).not.toBeVisible();
+
+    // Proves the edit actually landed -- without this, a 422 or a failed Turbo
+    // Stream re-render would leave the pre-edit DOM in place and the spoiler
+    // assertion below would pass for the wrong reason.
+    await expect(page.getByTestId('review')).toContainText('at the very end.');
+    await expect(page.locator('.review-spoiler')).toHaveText('dies');
+  });
 });

@@ -20,6 +20,11 @@ module Services
     # sanitized explicitly here and review_summaries is rebuilt afterwards by
     # SummaryRecalculator.backfill_all! (see the data_migration:reviews rake task).
     class ReviewMigrator < InsertOnlyMigrator
+      # Same list BodySanitizer#render partitions spoiler-marker search scopes on --
+      # see convert_spoiler_tag below for why a legacy <spoiler> wrapping one of these
+      # needs different handling than the ordinary case.
+      BLOCK_BOUNDARY_TAGS = Services::Reviews::BodySanitizer::SPOILER_SCOPE_BOUNDARY_TAGS
+
       private
 
       def legacy_model
@@ -95,7 +100,7 @@ module Services
       # text, so the 462KB fuzz paste is only over-length once cleaned. One legacy row
       # (101561) is affected; it imports as rating-only.
       def body_for(attrs)
-        body = Services::Reviews::BodySanitizer.call(attrs["body"])
+        body = Services::Reviews::BodySanitizer.call(convert_legacy_spoilers(attrs["body"]))
         return nil if body.nil?
 
         if body.length > ::Review::MAX_BODY_LENGTH
@@ -107,6 +112,91 @@ module Services
         end
 
         body
+      end
+
+      # Legacy stored a spoiler as a literal <spoiler> tag. BodySanitizer no longer
+      # knows that tag -- spoilers are ||markers|| now -- so without this pre-pass the
+      # sanitizer below would unwrap it like any other disallowed tag and publish
+      # every legacy spoiler in the clear at the cutover (see BodySanitizer's header
+      # for why `spoiler` and `span` are both deliberately absent from its allowlist).
+      #
+      # Parser-based, not string substitution: legacy bodies are untrusted HTML, and a
+      # marker robust enough to survive naive replacement also survives inside a
+      # quoted attribute value -- the exact failure BodySanitizer's own header
+      # documents from this file's original write-time conversion.
+      #
+      # Mirrors Services::Reviews::SpoilerSpanConverter, which solved the identical
+      # problem for stored <span class="review-spoiler">. Verified against the 118
+      # legacy rows that actually contain a <spoiler> tag with a read-only runner
+      # probe against the legacy DB (not a test -- no test may touch that database):
+      # both of that converter's hard-won lessons are real here too, so this reuses
+      # its two-path approach rather than the simpler "always flatten to .text" one.
+      #
+      # No pre-parse string fast path (e.g. checking body.include?("<spoiler")) before
+      # the real Nokogiri parse below: `fragment.css("spoiler")` is case-insensitive by
+      # construction (the HTML5 parser lowercases tag names on the way in), and a
+      # string check narrow enough to mirror that exactly would just be a second,
+      # harder-to-keep-in-sync copy of what css() already does correctly. A prior
+      # version of this guard checked for the lowercase literal only and let an
+      # uppercase `<SPOILER>` tag skip conversion entirely -- same input, unwrapped in
+      # the clear instead of hidden.
+      def convert_legacy_spoilers(body)
+        return body if body.blank?
+
+        fragment = Nokogiri::HTML5.fragment(body.to_s)
+        spoilers = fragment.css("spoiler")
+        return body if spoilers.empty?
+
+        spoilers.each { |node| convert_spoiler_tag(node, fragment.document) }
+        fragment.to_html
+      end
+
+      # Unwraps one <spoiler>: its children move out to where the tag was, sandwiched
+      # between two literal "||" text nodes, so inline markup inside stays exactly
+      # what it was -- only the <spoiler> wrapper is gone. 31 of the 118 legacy rows
+      # wrap a <br> and 2 wrap an <i>; flattening to `.text` (the simpler approach)
+      # would collapse those into a run-on string with the line breaks and formatting
+      # silently gone.
+      #
+      # A <spoiler> with a block-level descendant (p or blockquote --
+      # BLOCK_BOUNDARY_TAGS) cannot go through that path: a block element is a
+      # spoiler SCOPE boundary at render time (BodySanitizer#convert_spoiler_scope),
+      # so the "||" this would place before it and the "||" placed after it end up in
+      # two different search scopes and never pair up -- everything after the block
+      # child would render in the clear instead of inside a spoiler. Falls back to
+      # flattening the whole node to `.text` instead: that loses this spoiler's
+      # internal formatting, but the result is one text run with both markers in the
+      # same scope, so it stays hidden. Reachable with real data: legacy review 88697
+      # has two <blockquote>s nested inside its <spoiler>.
+      #
+      # Not handled: a legacy row whose <spoiler> text already contains "||" would
+      # unbalance the marker pairing this inserts (see SpoilerSpanConverter's class
+      # comment for the same caveat). Verified absent from all 118 real rows.
+      #
+      # Also not handled: a NESTED <spoiler> (one inside another) partially leaks.
+      # fragment.css("spoiler") above yields both nodes in document order -- outer
+      # first, then inner -- and this method is called once per node with no
+      # awareness of the other call. Unwrapping the outer node first inserts "||"
+      # around ALL of its text, inner tag included; unwrapping the inner node then
+      # inserts a second "||" pair around just its own text, splitting what was one
+      # marker pair into two adjacent ones. "<spoiler>a<spoiler>b</spoiler>c</spoiler>"
+      # becomes "||a||b||c||", which BodySanitizer's non-greedy matching reads as two
+      # spoilers ("a" and "c") with "b" sitting unmatched, in the clear, between them.
+      # Verified absent from all 118 real rows -- none nests a <spoiler>.
+      def convert_spoiler_tag(node, document)
+        if node.css(BLOCK_BOUNDARY_TAGS.join(",")).any?
+          node.replace(Nokogiri::XML::Text.new("||#{node.text}||", document))
+          return
+        end
+
+        node.add_previous_sibling(Nokogiri::XML::Text.new("||", document))
+        # .to_a snapshots the child list before mutating it -- add_previous_sibling
+        # reparents each child as it runs, and each new insertion lands immediately
+        # before the (still-present) node, i.e. right after the previous insertion,
+        # so original child order is preserved.
+        node.children.to_a.each { |child| node.add_previous_sibling(child) }
+        node.add_previous_sibling(Nokogiri::XML::Text.new("||", document))
+        node.remove
       end
     end
   end

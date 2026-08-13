@@ -42,7 +42,7 @@ module Reviews
     end
 
     test "keeps a spoiler span so the reveal controller has something to find" do
-      @review.update!(body: "<p>He <spoiler>dies</spoiler>.</p>")
+      @review.update!(body: "He ||dies|| at the end.")
 
       render_inline(Reviews::ReviewComponent.new(review: @review))
 

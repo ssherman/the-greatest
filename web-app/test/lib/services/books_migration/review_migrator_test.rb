@@ -160,4 +160,76 @@ class Services::BooksMigration::ReviewMigratorTest < ActiveSupport::TestCase
 
     Services::BooksMigration::ReviewMigrator.new.send(:legacy_each) { |_| }
   end
+
+  test "converts a legacy spoiler tag into a marker before sanitizing" do
+    migrator = Services::BooksMigration::ReviewMigrator.new
+    migrator.stubs(:legacy_each).multiple_yields(
+      [{"id" => 1, "user_id" => users(:regular_user).id, "book_id" => books_books(:war_and_peace).id,
+        "rating" => 4, "title" => nil, "body" => "He <spoiler>dies</spoiler> at the end.",
+        "created_at" => Time.current, "updated_at" => Time.current}]
+    )
+
+    migrator.call
+
+    body = ::Review.find(1).body
+    assert_includes body, "||dies||"
+    refute_includes body, "spoiler>"
+  end
+
+  # Regression: everything downstream of this pre-pass is case-insensitive (the
+  # HTML5 parser lowercases tag names; BodySanitizer's own spoiler handling and
+  # BLOCK_MARKUP are case-insensitive too), so an uppercase legacy <SPOILER> tag
+  # must convert exactly the same as a lowercase one. A prior version of the
+  # guard here checked for the literal lowercase string and skipped uppercase
+  # tags entirely, unwrapping them like any other disallowed tag and publishing
+  # the spoiler text in the clear.
+  test "converts an uppercase legacy spoiler tag into a marker" do
+    run_migrator([legacy_review(900_001, "body" => "He <SPOILER>dies</SPOILER> at the end.")])
+
+    body = ::Review.find(900_001).body
+    assert_includes body, "||dies||"
+    refute_includes body.downcase, "spoiler>"
+  end
+
+  # Real data: 31 of the 118 legacy rows with a <spoiler> tag wrap a <br>. Unwrapping
+  # in place, not flattening to `.text`, is what keeps it.
+  test "keeps a <br> inside a legacy spoiler tag" do
+    run_migrator([legacy_review(900_001, "body" => "<spoiler>line one<br>line two</spoiler>")])
+
+    assert_includes ::Review.find(900_001).body, "||line one<br>line two||"
+  end
+
+  # Real data: 2 of the 118 rows wrap an <i>.
+  test "keeps an inline tag like <i> inside a legacy spoiler tag" do
+    run_migrator([legacy_review(900_001, "body" => "He <spoiler>said <i>hello</i> to her</spoiler>.")])
+
+    assert_includes ::Review.find(900_001).body, "||said <i>hello</i> to her||"
+  end
+
+  # Real data: legacy review 88697's <spoiler> wraps two <blockquote>s. blockquote is
+  # a spoiler SCOPE boundary at render time, so unwrapping in place would split the
+  # opening and closing "||" into two scopes that never pair up, leaking everything
+  # after the blockquote. Flattening to `.text` instead loses the internal formatting
+  # but keeps both markers -- and everything between them -- in one scope.
+  test "falls back to flattening a legacy spoiler tag with a block-level child" do
+    run_migrator([legacy_review(900_001,
+      "body" => "<spoiler>before<blockquote>quoted</blockquote>after</spoiler>")])
+
+    body = ::Review.find(900_001).body
+    assert_includes body, "||beforequotedafter||"
+    refute_includes body, "<blockquote"
+  end
+
+  # Real data: 17 of the 118 rows have more than one <spoiler> tag.
+  test "converts multiple legacy spoiler tags in one body" do
+    run_migrator([legacy_review(900_001, "body" => "<spoiler>one</spoiler> and <spoiler>two</spoiler>")])
+
+    assert_includes ::Review.find(900_001).body, "||one|| and ||two||"
+  end
+
+  test "leaves a body with no legacy spoiler tag unaffected by the conversion pass" do
+    run_migrator([legacy_review(900_001, "body" => "<p>Nothing hidden.</p>")])
+
+    assert_equal "<p>Nothing hidden.</p>", ::Review.find(900_001).body
+  end
 end

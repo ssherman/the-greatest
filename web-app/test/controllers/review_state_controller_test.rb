@@ -79,4 +79,13 @@ class ReviewStateControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :bad_request
   end
+
+  test "returns the stored body verbatim so the author sees what they typed" do
+    sign_in_as(@user, stub_auth: true)
+    @review.update!(body: "He ||dies||.\n\nSecond paragraph.")
+
+    get review_state_path(reviewable_type: "Books::Book", reviewable_id: @book.id), as: :json
+
+    assert_equal "He ||dies||.\n\nSecond paragraph.", response.parsed_body["review"]["body"]
+  end
 end

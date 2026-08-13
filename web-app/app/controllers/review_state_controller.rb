@@ -37,19 +37,15 @@ class ReviewStateController < ApplicationController
 
   private
 
-  # body is restored to <spoiler> form, not returned as stored: the stored body
-  # already contains the <span class="review-spoiler"> .call itself produced, and
-  # modal_controller.js drops this straight into the edit textarea. Handing that
-  # span back verbatim would both show the reader raw markup they never typed and,
-  # on the next save, feed .call its own previous output -- span isn't in .call's
-  # write-time tag allowlist, so it strips the tag and the spoiler is destroyed. See
-  # Services::Reviews::BodySanitizer.for_editing.
+  # The stored body is exactly what the author typed -- BodySanitizer.call sanitizes
+  # but never transforms, so there is no generated markup to undo before putting it
+  # back in a textarea.
   def serialize(review)
     {
       id: review.id,
       rating: review.rating,
       title: review.title,
-      body: Services::Reviews::BodySanitizer.for_editing(review.body)
+      body: review.body
     }
   end
 end

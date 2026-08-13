@@ -45,7 +45,7 @@ class Review < ApplicationRecord
     only_integer: true, greater_than_or_equal_to: 1, less_than_or_equal_to: 5
   }
   validates :title, length: {maximum: MAX_TITLE_LENGTH}
-  validate :validate_body_length
+  validates :body, length: {maximum: MAX_BODY_LENGTH}
   validates :user_id, uniqueness: {scope: [:reviewable_type, :reviewable_id]}
 
   # Honest only because the sanitizer and the reviews_body_not_blank check constraint
@@ -64,64 +64,11 @@ class Review < ApplicationRecord
 
   private
 
+  # BodySanitizer.call sanitizes but never transforms, so this is idempotent: running
+  # it again on its own output returns the same string. That is why no length has to be
+  # captured before it runs, and why validating twice gives the same answer.
   def sanitize_body
-    # Captured before BodySanitizer touches body, for validate_body_length below --
-    # sanitizing runs before any validation (before_validation callbacks always
-    # precede validations, regardless of declaration order), so by the time a plain
-    # `validates :body, length:` would run, body is no longer what was submitted.
-    #
-    # Memoized against @sanitized_body -- this method's own last output -- rather
-    # than recaptured on every call, or Review#valid? stops being idempotent.
-    # before_validation runs on every validation pass, not just the first: call
-    # #valid? twice on the same object (or save it, then validate it again later)
-    # and, without this guard, the second pass would find `body` already holding
-    # the FIRST pass's own sanitized output -- paragraph/spoiler markup this code
-    # added -- and wrongly recapture that markup-inflated length as if it were a
-    # fresh submission. `body != @sanitized_body` is false exactly when nothing new
-    # has been assigned since the last time this method ran, so the original
-    # submission length survives untouched across repeat passes; it only recomputes
-    # when body has genuinely changed (a real new assignment, not our own prior
-    # output echoed back).
-    if body != @sanitized_body
-      @body_length_before_sanitizing = body.to_s.length
-    end
-
-    @sanitized_body = Services::Reviews::BodySanitizer.call(body)
-    self.body = @sanitized_body
-  end
-
-  # Checked against what was SUBMITTED, not what BodySanitizer produced from it, and
-  # only when body is actually part of what's being saved. BodySanitizer adds markup
-  # on write -- wrapping blank-line-separated plain text in <p>/<br> (see
-  # Services::Reviews::BodySanitizer#paragraphize), expanding a typed <spoiler> into
-  # a <span class="review-spoiler"> -- and either can push a body that fit the
-  # textarea's maxlength=25000 over MAX_BODY_LENGTH on its own. Validating the
-  # sanitized body's length whenever body is present would then reject a submission
-  # the form told the author was acceptable -- and would keep rejecting it on every
-  # later save, since .call's own idempotency (BLOCK_MARKUP, span absent from the
-  # write-time allowlist) means re-sanitizing an already-stored over-length body just
-  # reproduces the same length. That would make a record this code already accepted
-  # once permanently unsavable by any path that doesn't rewrite body -- a rating-only
-  # edit, a console fix-up, increment 5's admin edit.
-  #
-  # will_save_change_to_body? -- checked here, after sanitize_body has set the final
-  # value -- is false for exactly that case: a persisted record whose sanitized body
-  # equals what's already stored has nothing new to reject, so the check is skipped
-  # and the save goes through regardless of how long the *stored* body already is.
-  # It is true whenever body is genuinely changing, including every new record (nil
-  # is never equal to real content), so the guarantee this validation exists for --
-  # a body that fit the textarea cannot fail purely because of markup this code
-  # added -- still holds on every save that actually writes a body. And per
-  # BodySanitizer's header comment ("Does not truncate... an over-long paste raises a
-  # user-visible error"), the paste IS the submitted value, so a genuinely over-long
-  # paste is still caught exactly as before: an input already over MAX_BODY_LENGTH
-  # before sanitizing was always over the limit as typed, regardless of what
-  # sanitizing does to it afterward.
-  def validate_body_length
-    return unless will_save_change_to_body?
-    return unless @body_length_before_sanitizing.to_i > MAX_BODY_LENGTH
-
-    errors.add(:body, :too_long, count: MAX_BODY_LENGTH)
+    self.body = Services::Reviews::BodySanitizer.call(body)
   end
 
   # Type and id rather than the object: this fires on destroy too, where the
