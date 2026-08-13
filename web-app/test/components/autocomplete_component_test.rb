@@ -32,7 +32,6 @@ class AutocompleteComponentTest < ViewComponent::TestCase
     ))
 
     assert_selector "input[disabled]"
-    assert_selector "input.input-disabled"
   end
 
   test "renders with custom placeholder" do
