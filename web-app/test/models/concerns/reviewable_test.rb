@@ -37,10 +37,19 @@ class ReviewableTest < ActiveSupport::TestCase
   test "review_text_search matches an author name without duplicating rows" do
     book = books_books(:war_and_peace)
     author_name = book.authors.first.name
+    # A second author whose name ALSO matches the search term is what makes a plain
+    # INNER JOIN multiply: with only one matching author (the fixture default), a
+    # join filtered by WHERE happens to collapse back down to one row per review, so
+    # it would pass here even with the join bug this test exists to catch. Two
+    # matching authors on one book makes a join return two joined rows per review
+    # (6 total for 3 reviews) where EXISTS still returns one (3 total).
+    second_author = ::Books::Author.create!(name: "#{author_name} Estate", kind: :organization)
+    ::Books::BookAuthor.create!(book: book, author: second_author, position: 2)
+
     scope = Review.joins("INNER JOIN books_books ON books_books.id = reviews.reviewable_id")
       .where(reviewable_type: "Books::Book", reviewable_id: book.id)
     results = ::Books::Book.review_text_search(scope, author_name).to_a
-    assert_equal results.map(&:id).uniq.size, results.size, "author join must not multiply rows"
+    assert_equal results.size, results.map(&:id).uniq.size, "author join must not multiply rows"
     assert_equal 3, results.size
   end
 
