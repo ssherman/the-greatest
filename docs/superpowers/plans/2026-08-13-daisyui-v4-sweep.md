@@ -377,7 +377,11 @@ Four deliberate breaks, each reverted after checking:
 1. Add `class="tabs tabs-boxed"` to any file under `app/views/books/` → the "outside the allowlist" test must fail naming that file.
 2. Add `className = "label-text"` to any file under `app/javascript/` → must also fail, proving the JS scan and the `className` branch both work.
 3. Add `el.classList.add("input-bordered")` to any file under `app/javascript/` → must also fail, proving the `classList` branch works. **This is the path a plain `class`/`className` matcher misses**, and the reason it is covered at all is a review finding on this plan (PR #223).
-4. Delete one entry from `ALLOWLIST` → the "no stale entries" test must fail naming it.
+4. **Add** a bogus `ALLOWLIST` entry for a file with no removed class → the "no stale entries" test
+   must fail naming it. (An earlier revision of this plan said to *delete* an entry and expect that
+   same test to fire. It cannot: `stale = ALLOWLIST - offenders.keys`, so removing an element can
+   never add one — deleting an entry surfaces through the *other* assertion instead. Corrected after
+   the Task 4 implementer hit it.)
 
 If break 2 or 3 does not fail, the matcher is wrong — fix it before continuing. The matcher was
 pre-verified against 8 inputs while amending this plan, including `classList.toggle("hidden", !atCap)`
