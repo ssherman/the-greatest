@@ -320,7 +320,10 @@ Change `target_files`:
   end
 ```
 
-And widen the matcher to catch `className =` assignments and backtick strings:
+And widen the matcher to catch `className =` assignments, backtick strings, **and `classList`
+mutations**. That last one is not optional: this codebase makes 34 `classList.add/remove/toggle`
+calls with string-literal class names, so a guard that only reads `class`/`className` followed by
+`:` or `=` would advertise JavaScript coverage while missing the most idiomatic way JS adds a class.
 
 ```ruby
   def removed_classes_in(content)
@@ -330,9 +333,20 @@ And widen the matcher to catch `className =` assignments and backtick strings:
         found << token if REMOVED_CLASSES.include?(token)
       end
     end
+    # classList.add("a", "b") / .remove(...) / .toggle("x", cond) / .replace(...)
+    content.scan(/classList\.(?:add|remove|toggle|replace)\(([^)]*)\)/m) do |args|
+      args[0].scan(/["'`]([^"'`]*)["'`]/) do |literal|
+        literal[0].split(/\s+/).each do |token|
+          found << token if REMOVED_CLASSES.include?(token)
+        end
+      end
+    end
     found.uniq
   end
 ```
+
+Only string literals inside the call are read, so `classList.toggle("hidden", !atCap)` contributes
+nothing and a variable class name is out of reach — an accepted limit, not a silent one.
 
 - [ ] **Step 5: Regenerate the allowlist so the guard is green before the sweep**
 
@@ -358,13 +372,16 @@ Expected: PASS, both tests.
 
 - [ ] **Step 7: Prove the widened guard is not vacuous**
 
-Three deliberate breaks, each reverted after checking:
+Four deliberate breaks, each reverted after checking:
 
 1. Add `class="tabs tabs-boxed"` to any file under `app/views/books/` → the "outside the allowlist" test must fail naming that file.
 2. Add `className = "label-text"` to any file under `app/javascript/` → must also fail, proving the JS scan and the `className` branch both work.
-3. Delete one entry from `ALLOWLIST` → the "no stale entries" test must fail naming it.
+3. Add `el.classList.add("input-bordered")` to any file under `app/javascript/` → must also fail, proving the `classList` branch works. **This is the path a plain `class`/`className` matcher misses**, and the reason it is covered at all is a review finding on this plan (PR #223).
+4. Delete one entry from `ALLOWLIST` → the "no stale entries" test must fail naming it.
 
-If break 2 does not fail, the `className`/backtick regex is wrong — fix it before continuing.
+If break 2 or 3 does not fail, the matcher is wrong — fix it before continuing. The matcher was
+pre-verified against 8 inputs while amending this plan, including `classList.toggle("hidden", !atCap)`
+and `classList.add("file-input")` correctly producing no hit; 0 failures.
 
 - [ ] **Step 8: Commit**
 
