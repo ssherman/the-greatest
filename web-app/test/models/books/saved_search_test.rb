@@ -43,6 +43,12 @@ module Books
       assert_equal :read, Books::SavedSearch.excluded_list_type
     end
 
+    test "declares its taxonomy search classes" do
+      assert_equal ::Books::Category, Books::SavedSearch.category_class
+      assert_equal ::Books::LanguageSearchQuery, Books::SavedSearch.language_search_query_class
+      assert_equal ::Books::CountrySearchQuery, Books::SavedSearch.country_search_query_class
+    end
+
     test "names its criteria and query classes without resolving them" do
       assert_equal "Books::SavedSearchCriteria", Books::SavedSearch.criteria_class_name
       assert_equal "Books::SavedSearchQuery", Books::SavedSearch.query_class_name

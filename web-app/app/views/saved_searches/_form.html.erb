@@ -1,0 +1,49 @@
+<%
+  # scope: :saved_search -- form_with derives its top-level param key from
+  # the STI subclass (search.model_name.param_key => "books_saved_search"),
+  # not the base class. Pinning it to :saved_search keeps every
+  # fields_for-derived name under the same key the domain-generic controller
+  # reads (params.require(:saved_search)) and the same key the criteria
+  # partial's hardcoded book_length check_box_tag already uses.
+%>
+<%= form_with model: search, url: url, scope: :saved_search, class: "space-y-6" do |f| %>
+  <% if search.errors.any? %>
+    <div class="alert alert-error" role="alert">
+      <ul class="list-disc list-inside">
+        <% search.errors.full_messages.each do |message| %>
+          <li><%= message %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <div class="card bg-base-100 shadow-sm">
+    <div class="card-body gap-4">
+      <fieldset class="fieldset">
+        <%= f.label :name, "Name", class: "fieldset-legend" %>
+        <%= f.text_field :name, class: "input w-full",
+              placeholder: "Long Victorian novels" %>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <%= f.label :description, "Description", class: "fieldset-legend" %>
+        <%= f.text_area :description, rows: 2, class: "textarea w-full" %>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <label class="label cursor-pointer justify-start gap-3">
+          <%= f.check_box :public, class: "checkbox" %>
+          Make this search public
+        </label>
+      </fieldset>
+    </div>
+  </div>
+
+  <%= render "saved_searches/#{Current.domain}/criteria_fields", f: f, search: search %>
+
+  <div class="flex flex-wrap gap-2">
+    <%= f.submit search.persisted? ? "Save changes" : "Create search", class: "btn btn-primary" %>
+    <%= link_to "Cancel", search.persisted? ? saved_search_path(search) : saved_searches_path,
+          class: "btn btn-ghost" %>
+  </div>
+<% end %>
