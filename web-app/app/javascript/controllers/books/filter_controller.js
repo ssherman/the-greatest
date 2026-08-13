@@ -254,7 +254,7 @@ export default class extends Controller {
 
     const summary = this.summaryTargets.find((el) => el.dataset.axis === axis)
     if (summary) {
-      const names = checked.map((el) => el.closest("label")?.querySelector(".label-text")?.textContent.trim())
+      const names = checked.map((el) => el.closest("label")?.querySelector("[data-option-label]")?.textContent.trim())
       summary.textContent = names.filter(Boolean).join(", ") || "Any"
     }
   }

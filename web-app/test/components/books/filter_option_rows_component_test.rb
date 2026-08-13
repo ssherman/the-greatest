@@ -89,5 +89,17 @@ module Books
 
       assert_no_selector "input"
     end
+
+    test "marks the option name with a stable hook the filter controller can read" do
+      render_rows(axis: :category, rows: [categories(:books_novels_genre)])
+
+      assert_selector "label[data-option-value='novels'] span[data-option-label]", exact_text: "Novels"
+    end
+
+    test "the count span is not mistaken for the option name" do
+      render_rows(axis: :category, rows: [{record: categories(:books_novels_genre), count: 1234}])
+
+      assert_selector "span[data-option-label]", count: 1
+    end
   end
 end
