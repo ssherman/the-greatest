@@ -4,10 +4,6 @@ class ReviewsController < ApplicationController
   before_action :prevent_caching
   before_action :require_signed_in!
 
-  # Same allowlist rule as ReviewStateController: reviewable_type is user input,
-  # and a visitor must not be able to attach a review to an arbitrary class.
-  REVIEWABLE_TYPES = ["Books::Book"].freeze
-
   # A Turbo-submitted form that receives a non-2xx response without a
   # turbo-stream content type gets its body rendered as a whole new page --
   # and `head` sends an empty body, so the user's page goes blank. Every
@@ -107,8 +103,10 @@ class ReviewsController < ApplicationController
     params.require(:review).permit(:rating, :title, :body)
   end
 
+  # reviewable_type is user input; Reviews::Registry is the allowlist that stops a
+  # visitor attaching a review to an arbitrary class.
   def find_reviewable(type, id)
-    return nil unless REVIEWABLE_TYPES.include?(type.to_s)
+    return nil unless Reviews::Registry.allowed?(type)
 
     type.to_s.constantize.find_by(id: id)
   end
