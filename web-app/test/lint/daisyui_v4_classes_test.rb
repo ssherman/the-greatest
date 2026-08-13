@@ -32,9 +32,14 @@ class DaisyuiV4ClassesTest < ActiveSupport::TestCase
   REMOVED_CLASSES = %w[
     form-control
     label-text
+    label-text-alt
     input-bordered
     select-bordered
     textarea-bordered
+    file-input-bordered
+    input-disabled
+    table-hover
+    tabs-boxed
   ].freeze
 
   ALLOWLIST = %w[
@@ -54,6 +59,7 @@ class DaisyuiV4ClassesTest < ActiveSupport::TestCase
     app/components/admin/lists/index_component.html.erb
     app/components/admin/lists/research_prompt_modal_component.html.erb
     app/components/admin/lists/show_component.html.erb
+    app/components/admin/lists/table_component.html.erb
     app/components/admin/music/albums/wizard/parse_step_component.html.erb
     app/components/admin/music/albums/wizard/review_step_component.html.erb
     app/components/admin/music/songs/wizard/edit_metadata_modal_component.html.erb
@@ -72,6 +78,7 @@ class DaisyuiV4ClassesTest < ActiveSupport::TestCase
     app/components/music/filter_tabs_component.html.erb
     app/components/reviews/modal_component.html.erb
     app/components/user_lists/modal_component/modal_component.html.erb
+    app/javascript/controllers/user_list_modal_controller.js
     app/views/admin/books/authors/_author_relationships_list.html.erb
     app/views/admin/books/authors/_form.html.erb
     app/views/admin/books/authors/show.html.erb
@@ -89,9 +96,11 @@ class DaisyuiV4ClassesTest < ActiveSupport::TestCase
     app/views/admin/descriptions/_form_fields.html.erb
     app/views/admin/domain_roles/index.html.erb
     app/views/admin/games/companies/_form.html.erb
+    app/views/admin/games/companies/_table.html.erb
     app/views/admin/games/companies/show.html.erb
     app/views/admin/games/games/_companies_list.html.erb
     app/views/admin/games/games/_form.html.erb
+    app/views/admin/games/games/_table.html.erb
     app/views/admin/games/games/index.html.erb
     app/views/admin/games/games/show.html.erb
     app/views/admin/games/list_items_actions/modals/_edit_metadata.html.erb
@@ -99,13 +108,17 @@ class DaisyuiV4ClassesTest < ActiveSupport::TestCase
     app/views/admin/games/list_items_actions/modals/_link_igdb_id.html.erb
     app/views/admin/games/list_items_actions/modals/_search_igdb_games.html.erb
     app/views/admin/games/platforms/_form.html.erb
+    app/views/admin/games/platforms/_table.html.erb
     app/views/admin/games/platforms/show.html.erb
     app/views/admin/games/series/_form.html.erb
+    app/views/admin/games/series/_table.html.erb
     app/views/admin/games/series/show.html.erb
     app/views/admin/images/_image_card.html.erb
+    app/views/admin/music/ai_chats/_table.html.erb
     app/views/admin/music/ai_chats/show.html.erb
     app/views/admin/music/albums/_artists_list.html.erb
     app/views/admin/music/albums/_form.html.erb
+    app/views/admin/music/albums/_table.html.erb
     app/views/admin/music/albums/list_items_actions/modals/_edit_metadata.html.erb
     app/views/admin/music/albums/list_items_actions/modals/_link_album.html.erb
     app/views/admin/music/albums/list_items_actions/modals/_search_musicbrainz_artists.html.erb
@@ -114,23 +127,29 @@ class DaisyuiV4ClassesTest < ActiveSupport::TestCase
     app/views/admin/music/artists/_albums_list.html.erb
     app/views/admin/music/artists/_form.html.erb
     app/views/admin/music/artists/_songs_list.html.erb
+    app/views/admin/music/artists/_table.html.erb
     app/views/admin/music/artists/index.html.erb
     app/views/admin/music/artists/ranking_configurations/_form.html.erb
+    app/views/admin/music/artists/ranking_configurations/_table.html.erb
     app/views/admin/music/artists/ranking_configurations/show.html.erb
     app/views/admin/music/artists/show.html.erb
     app/views/admin/music/songs/_artists_list.html.erb
     app/views/admin/music/songs/_form.html.erb
+    app/views/admin/music/songs/_table.html.erb
     app/views/admin/music/songs/list_items_actions/modals/_edit_metadata.html.erb
     app/views/admin/music/songs/list_items_actions/modals/_link_song.html.erb
     app/views/admin/music/songs/list_items_actions/modals/_search_musicbrainz_artists.html.erb
     app/views/admin/music/songs/list_items_actions/modals/_search_musicbrainz_recordings.html.erb
     app/views/admin/music/songs/show.html.erb
     app/views/admin/penalties/_form.html.erb
+    app/views/admin/penalties/_table.html.erb
     app/views/admin/penalties/index.html.erb
     app/views/admin/penalties/show.html.erb
     app/views/admin/ranking_configurations/_form.html.erb
+    app/views/admin/ranking_configurations/_table.html.erb
     app/views/admin/ranking_configurations/show.html.erb
     app/views/admin/users/_form.html.erb
+    app/views/admin/users/_table.html.erb
     app/views/admin/users/show.html.erb
     app/views/books/lists/index.html.erb
     app/views/games/lists/index.html.erb
@@ -164,12 +183,15 @@ class DaisyuiV4ClassesTest < ActiveSupport::TestCase
   # Path (relative to Rails.root) => array of removed classes found, for
   # every file under app/views/** and app/components/** that uses one.
   #
-  # Only scans text inside a `class="..."` (HTML) or `class: "..."` (Ruby
-  # hash option) value -- ERB/Ruby comments are stripped first -- and only
-  # counts a whole space-separated class token as a hit, never a substring.
-  # That second part matters: "file-input-bordered" is a valid, current
-  # daisyUI class (the bordered variant of "file-input") that contains
-  # "input-bordered" as a substring, and a naive match would wrongly flag it.
+  # Only scans text inside a `class="..."` / `class: "..."` / `className = "..."`
+  # value -- ERB/Ruby comments are stripped first -- and only counts a whole
+  # space-separated class token as a hit, never a substring.
+  #
+  # Whole-token matching matters because "file-input-bordered" contains
+  # "input-bordered". Both are dead, and both are listed above; token matching
+  # is what makes a file containing the former get reported as that class
+  # alone rather than as two overlapping hits. Note that plain "file-input"
+  # IS a current daisyUI 5 class and must never be added to the list.
   def offenders
     @offenders ||= scan_target_files
   end
@@ -182,7 +204,7 @@ class DaisyuiV4ClassesTest < ActiveSupport::TestCase
   end
 
   def target_files
-    Dir.glob(Rails.root.join("{app/views,app/components}/**/*"))
+    Dir.glob(Rails.root.join("{app/views,app/components,app/javascript}/**/*"))
       .select { |path| File.file?(path) }
       .map { |path| Pathname.new(path).relative_path_from(Rails.root).to_s }
       .sort
@@ -196,9 +218,17 @@ class DaisyuiV4ClassesTest < ActiveSupport::TestCase
 
   def removed_classes_in(content)
     found = []
-    content.scan(/class\s*[:=]\s*(["'])(.*?)\1/m) do |_quote, value|
+    content.scan(/\bclass(?:Name)?\s*[:=]\s*(["'`])(.*?)\1/m) do |_quote, value|
       value.split(/\s+/).each do |token|
         found << token if REMOVED_CLASSES.include?(token)
+      end
+    end
+    # classList.add("a", "b") / .remove(...) / .toggle("x", cond) / .replace(...)
+    content.scan(/classList\.(?:add|remove|toggle|replace)\(([^)]*)\)/m) do |args|
+      args[0].scan(/["'`]([^"'`]*)["'`]/) do |literal|
+        literal[0].split(/\s+/).each do |token|
+          found << token if REMOVED_CLASSES.include?(token)
+        end
       end
     end
     found.uniq
