@@ -12,5 +12,16 @@ Rails.application.config.x.rate_limit_store =
   if Rails.env.test?
     ActiveSupport::Cache::MemoryStore.new
   else
-    ActiveSupport::Cache::RedisCacheStore.new(url: ENV.fetch("REDIS_URL", "redis://localhost:6379/0"))
+    # namespace is load-bearing, not cosmetic: ActiveSupport::Cache::RedisCacheStore#clear
+    # runs a bare `redis.flushdb` when no namespace is configured, and only does a
+    # scoped `delete_matched` when one is set. This store points at the same
+    # REDIS_URL Sidekiq uses for its queues, and a `.clear` call already exists at a
+    # test call site (reviews_controller_test.rb's setup) -- harmless today only
+    # because the test environment resolves to the MemoryStore branch above. Do not
+    # remove this as noise; removing it turns any future `.clear` call in a non-test
+    # environment into a full wipe of Sidekiq's database.
+    ActiveSupport::Cache::RedisCacheStore.new(
+      url: ENV.fetch("REDIS_URL", "redis://localhost:6379/0"),
+      namespace: "rate-limit"
+    )
   end
