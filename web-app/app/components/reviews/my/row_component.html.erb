@@ -34,7 +34,7 @@
     <% end %>
   </div>
 
-  <div class="shrink-0 self-center">
+  <div class="shrink-0 self-center flex items-center gap-2">
     <button type="button"
             class="btn btn-sm <%= written? ? "btn-ghost" : "btn-primary" %>"
             data-testid="<%= written? ? "edit-review" : "write-review" %>"
@@ -47,5 +47,22 @@
             data-body="<%= review.body %>">
       <%= written? ? "Edit" : "Write a review" %>
     </button>
+
+    <%# Labelled "Delete", not an icon alone: this is the one destructive control
+        on the page and it must be identifiable without relying on its colour. %>
+    <%= button_to review_path(review),
+          method: :delete,
+          class: "btn btn-sm btn-ghost text-error",
+          "aria-label": "Delete your review of #{reviewable.title}",
+          data: {testid: "delete-review"},
+          form: {
+            data: {
+              turbo_confirm: delete_confirmation,
+              my_reviews_delete: "true",
+              my_reviews_delete_last: last_on_page.to_s
+            }
+          } do %>
+      Delete
+    <% end %>
   </div>
 </li>
