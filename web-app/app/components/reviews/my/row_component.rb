@@ -15,6 +15,8 @@ module Reviews
 
       def reviewable = review.reviewable
 
+      def reviewable_class = reviewable.class
+
       def written? = review.body.present?
 
       # Rendered, not stored: markup is generated at render time so what is stored
@@ -24,9 +26,11 @@ module Reviews
       end
 
       def creators
-        return [] unless reviewable.respond_to?(:book_authors)
+        reviewable_class.review_creator_names(reviewable)
+      end
 
-        reviewable.book_authors.map { |book_author| book_author.author.name }
+      def reviewable_path
+        reviewable_class.review_public_path(reviewable)
       end
     end
   end

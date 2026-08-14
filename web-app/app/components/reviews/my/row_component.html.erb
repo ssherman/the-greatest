@@ -1,11 +1,11 @@
 <li class="flex gap-4 py-4 border-b border-base-300">
   <% if reviewable.primary_image&.file&.attached? %>
-    <%= link_to book_path(reviewable.slug), class: "shrink-0" do %>
+    <%= link_to reviewable_path, class: "shrink-0" do %>
       <%= image_tag rails_public_blob_url(reviewable.primary_image.file),
             alt: reviewable.title, class: "w-16 h-auto rounded shadow-sm", loading: "lazy" %>
     <% end %>
   <% else %>
-    <%= link_to book_path(reviewable.slug), class: "shrink-0" do %>
+    <%= link_to reviewable_path, class: "shrink-0" do %>
       <div class="w-16 aspect-[2/3] bg-base-300 rounded flex items-center justify-center" aria-hidden="true">
         <span class="text-xl opacity-40">📖</span>
       </div>
@@ -14,7 +14,7 @@
   <% end %>
 
   <div class="flex-1 min-w-0">
-    <%= link_to reviewable.title, book_path(reviewable.slug), class: "font-semibold link link-hover" %>
+    <%= link_to reviewable.title, reviewable_path, class: "font-semibold link link-hover" %>
     <% if creators.any? %>
       <p class="text-sm text-base-content/70"><%= creators.join(", ") %></p>
     <% end %>

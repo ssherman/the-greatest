@@ -135,6 +135,17 @@ class Books::Book < ApplicationRecord
     ::Books::RankingConfiguration
   end
 
+  # Same association walk as Books::CardComponent#author_names and
+  # books/books/show.html.erb -- book_authors is already ordered by position,
+  # so no additional sort is needed here.
+  def self.review_creator_names(record)
+    record.book_authors.map { |book_author| book_author.author.name }
+  end
+
+  def self.review_public_path(record)
+    Rails.application.routes.url_helpers.book_path(record.slug)
+  end
+
   def as_indexed_json
     {
       title: title,

@@ -42,5 +42,19 @@ module Reviewable
     def ranking_configuration_class
       raise NotImplementedError, "#{name} must override .ranking_configuration_class"
     end
+
+    # The creators to display for one record, in display order (e.g. a book's
+    # ordered author names). Takes the record rather than being an instance
+    # method so generic review code can call it without knowing the reviewable's
+    # class ahead of time -- same shape as every other method in this contract.
+    def review_creator_names(record)
+      raise NotImplementedError, "#{name} must override .review_creator_names"
+    end
+
+    # The record's own public page path, for the cover and title links on a
+    # review row.
+    def review_public_path(record)
+      raise NotImplementedError, "#{name} must override .review_public_path"
+    end
   end
 end

@@ -13,12 +13,29 @@ class ReviewableTest < ActiveSupport::TestCase
       assert_raises(NotImplementedError) { UnimplementedReviewable.public_send(method) }
     end
     assert_raises(NotImplementedError) { UnimplementedReviewable.review_text_search(Review.all, "x") }
+    assert_raises(NotImplementedError) { UnimplementedReviewable.review_creator_names(UnimplementedReviewable.new) }
+    assert_raises(NotImplementedError) { UnimplementedReviewable.review_public_path(UnimplementedReviewable.new) }
   end
 
   test "Books::Book implements the whole contract" do
     assert_equal [{primary_image: {file_attachment: :blob}}, {book_authors: :author}], ::Books::Book.review_row_includes
     assert_equal "COALESCE(books_books.sort_title, books_books.title)", ::Books::Book.review_title_order
     assert_equal ::Books::RankingConfiguration, ::Books::Book.ranking_configuration_class
+
+    book = books_books(:war_and_peace)
+    assert_equal ["Leo Tolstoy"], ::Books::Book.review_creator_names(book)
+    assert_equal Rails.application.routes.url_helpers.book_path(book.slug), ::Books::Book.review_public_path(book)
+  end
+
+  test "review_creator_names preserves book_authors' position order" do
+    book = books_books(:war_and_peace)
+    second_author = ::Books::Author.create!(name: "A Second Author", kind: :organization)
+    ::Books::BookAuthor.create!(book: book, author: second_author, position: 0)
+
+    # position 0 sorts before the fixture author's position 1, so a correct
+    # implementation puts the new author first -- pinning that this delegates
+    # to book_authors' own ordering rather than an unordered `authors` walk.
+    assert_equal ["A Second Author", "Leo Tolstoy"], ::Books::Book.review_creator_names(book)
   end
 
   test "the concern supplies the review associations" do
