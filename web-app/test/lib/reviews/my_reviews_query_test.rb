@@ -74,20 +74,39 @@ module Reviews
     end
 
     test "sorts A-Z by the reviewable's title" do
+      # Fixture timestamps are assigned once per fixture FILE, so every review in
+      # reviews.yml shares one created_at -- the default sort's tiebreak (id DESC)
+      # then decides everything on its own. The fixture ids are
+      # Zlib.crc32(label) % (2**30-1), and it happens that crime_and_punishment's
+      # id sorts above war_and_peace's, which is ALSO title-ascending order: a
+      # title-sort test using only those two fixtures would still pass with the
+      # "title" branch deleted entirely. A third title that alphabetically lands
+      # between them, backed by a freshly-inserted row whose id sorts outside
+      # that order (fixture loading resets the pk sequence past every fixture
+      # id), proves the ORDER BY clause itself does the work.
+      middle_book = ::Books::Book.create!(title: "Don Quixote")
+      Review.create!(user: @user, reviewable: middle_book, rating: 4)
+
       titles = query(sort: "title").call.map { |review| review.reviewable.title }
-      assert_equal titles.sort_by(&:downcase), titles
+      assert_equal ["Crime and Punishment", "Don Quixote", "War and Peace"], titles
     end
 
     test "sorts by site rank with unranked last" do
+      # Ranking war_and_peace (not crime_and_punishment) so the ranked order is
+      # the REVERSE of the default id-DESC order (crime, war) -- see the title
+      # test above for why that coincidence matters. If it discriminates only
+      # INNER-vs-LEFT-join but not "is rank ordering applied at all", deleting
+      # the "rank" branch entirely (falling back to the default order) would
+      # still pass.
       config = ::Books::RankingConfiguration.default_primary
-      RankedItem.create!(item: @crime, ranking_configuration: config, rank: 1)
+      RankedItem.create!(item: @war_and_peace, ranking_configuration: config, rank: 1)
       results = query(sort: "rank").call.to_a
       # Both of the user's reviews must still appear -- an INNER JOIN to
       # ranked_items would silently drop the unranked one instead of sorting it
       # last, which on a personal history reads as data loss.
       assert_equal 2, results.size
-      assert_equal @crime.id, results.first.reviewable_id
-      assert_equal @war_and_peace.id, results.last.reviewable_id
+      assert_equal @war_and_peace.id, results.first.reviewable_id
+      assert_equal @crime.id, results.last.reviewable_id
     end
 
     test "offers the rank sort only when a default primary configuration exists" do
