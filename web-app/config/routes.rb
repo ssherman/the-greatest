@@ -432,6 +432,8 @@ Rails.application.routes.draw do
 
       resources :lists
 
+      resources :reviews, only: [:index, :destroy]
+
       resources :ranking_configurations do
         member { post :execute_action }
         collection { post :index_action }
