@@ -25,7 +25,7 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Chat Type</span>
+                <span class="font-semibold">Chat Type</span>
               </label>
               <span class="badge <%= ai_chat_type_badge_class(@ai_chat.chat_type) %> badge-lg">
                 <%= @ai_chat.chat_type.humanize %>
@@ -34,7 +34,7 @@
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Provider</span>
+                <span class="font-semibold">Provider</span>
               </label>
               <span class="badge <%= ai_chat_provider_badge_class(@ai_chat.provider) %> badge-lg">
                 <%= @ai_chat.provider.humanize %>
@@ -43,21 +43,21 @@
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Model</span>
+                <span class="font-semibold">Model</span>
               </label>
               <p class="font-mono"><%= @ai_chat.model %></p>
             </div>
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Temperature</span>
+                <span class="font-semibold">Temperature</span>
               </label>
               <p><%= @ai_chat.temperature %></p>
             </div>
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">JSON Mode</span>
+                <span class="font-semibold">JSON Mode</span>
               </label>
               <% if @ai_chat.json_mode? %>
                 <span class="badge badge-success">Enabled</span>
@@ -121,11 +121,11 @@
             <h2 class="card-title text-lg">Parent</h2>
             <div class="space-y-3 text-sm">
               <div>
-                <label class="label-text font-semibold">Type</label>
+                <label class="font-semibold">Type</label>
                 <p class="text-base-content/70"><%= ai_chat_parent_type_label(@ai_chat) %></p>
               </div>
               <div>
-                <label class="label-text font-semibold">Name</label>
+                <label class="font-semibold">Name</label>
                 <% parent_path = admin_ai_chat_parent_path(@ai_chat) %>
                 <% if parent_path %>
                   <p>
@@ -149,7 +149,7 @@
             <h2 class="card-title text-lg">User</h2>
             <div class="space-y-3 text-sm">
               <div>
-                <label class="label-text font-semibold">Email</label>
+                <label class="font-semibold">Email</label>
                 <p>
                   <%= link_to @ai_chat.user.email,
                       admin_user_path(@ai_chat.user),
@@ -159,7 +159,7 @@
               </div>
               <% if @ai_chat.user.display_name.present? %>
                 <div>
-                  <label class="label-text font-semibold">Display Name</label>
+                  <label class="font-semibold">Display Name</label>
                   <p class="text-base-content/70"><%= @ai_chat.user.display_name %></p>
                 </div>
               <% end %>
@@ -173,15 +173,15 @@
           <h2 class="card-title text-lg">Metadata</h2>
           <div class="space-y-3 text-sm">
             <div>
-              <label class="label-text font-semibold">ID</label>
+              <label class="font-semibold">ID</label>
               <p class="text-base-content/70 font-mono"><%= @ai_chat.id %></p>
             </div>
             <div>
-              <label class="label-text font-semibold">Created At</label>
+              <label class="font-semibold">Created At</label>
               <p class="text-base-content/70"><%= @ai_chat.created_at.strftime("%B %d, %Y at %I:%M %p") %></p>
             </div>
             <div>
-              <label class="label-text font-semibold">Updated At</label>
+              <label class="font-semibold">Updated At</label>
               <p class="text-base-content/70"><%= @ai_chat.updated_at.strftime("%B %d, %Y at %I:%M %p") %></p>
             </div>
           </div>

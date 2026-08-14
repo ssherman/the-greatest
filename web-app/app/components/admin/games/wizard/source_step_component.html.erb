@@ -7,9 +7,9 @@
   <% step.with_step_content do %>
     <%= form_with url: advance_step_path, method: :post, data: { turbo_frame: "wizard_content" } do |f| %>
       <div class="space-y-6">
-        <div class="form-control">
+        <div>
           <label class="label">
-            <span class="label-text font-bold">Select Import Source</span>
+            <span class="font-bold">Select Import Source</span>
           </label>
 
           <div class="space-y-3">
@@ -24,11 +24,11 @@
         </div>
 
         <!-- Batch Processing Option -->
-        <div class="form-control mt-4 p-4 bg-base-200 rounded-lg">
+        <div class="mt-4 p-4 bg-base-200 rounded-lg">
           <label class="label cursor-pointer justify-start gap-4">
             <%= check_box_tag :batch_mode, "1", default_batch_mode, class: "checkbox" %>
             <div>
-              <span class="label-text font-semibold">Process in batches</span>
+              <span class="font-semibold">Process in batches</span>
               <p class="text-sm text-base-content/70 mt-1">
                 Enable for large plain text lists with one item per line (recommended for 500+ items).
                 Processes 100 items at a time to ensure all items are captured.

@@ -97,14 +97,17 @@ No Rails asset pipeline — builds are served from `public/`.
 
 **DaisyUI is 5.7.x, Tailwind is v4.** These classes were removed in v5 and fail **silently** — absent
 from the compiled CSS, no build error, no visual change: `form-control`, `label-text`,
-`input-bordered`, `select-bordered`, `textarea-bordered`. Use `fieldset` + `fieldset-legend`, `label`,
-and bare `input`/`select`/`checkbox` instead. `.select` is single-line only — on `<select multiple>` it
-sets `display:inline-flex` and renders the options as an unreadable row; there is no daisyUI
-multi-select. **The existing views predate daisyUI 5**, so copying form markup from a neighbouring view
-reproduces the bug — verify against `docs/external-libraries/daisyui-llms.txt` (pinned at the installed
-version), not the surrounding code. `test/lint/daisyui_v4_classes_test.rb` scans `app/views/**` and
-`app/components/**` for the removed classes and fails on any new occurrence outside its explicit,
-shrinking allowlist of pre-existing offenders.
+`label-text-alt`, `input-bordered`, `select-bordered`, `textarea-bordered`, `file-input-bordered`,
+`input-disabled`, `table-hover`, `tabs-boxed`. Use `fieldset` + `fieldset-legend`, `label`, and bare
+`input`/`select`/`checkbox` instead. `.select` is single-line only — on `<select multiple>` it sets
+`display:inline-flex` and renders the options as an unreadable row; there is no daisyUI multi-select.
+**A branch-wide sweep already removed every occurrence of these ten classes from the codebase**, so
+copying form markup from a neighbouring view or component is safe again — for anything new or
+unfamiliar, `docs/external-libraries/daisyui-llms.txt` (pinned at the installed version) remains the
+authority. `test/lint/daisyui_v4_classes_test.rb` scans `app/views/**`, `app/components/**`,
+`app/javascript/**`, and `app/helpers/**` for the removed classes and fails on any new occurrence; its
+allowlist is empty and is meant to stay that way — the fix when it fails is to remove the class, not
+to add an entry.
 
 **Turbo Frames trap links.** Every `<a>` inside a `turbo_frame_tag` navigates *that frame*, so a
 link to another page renders "Content missing". Put `target: "_top"` on any frame whose contents

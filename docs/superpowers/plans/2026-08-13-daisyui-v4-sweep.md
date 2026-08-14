@@ -377,7 +377,11 @@ Four deliberate breaks, each reverted after checking:
 1. Add `class="tabs tabs-boxed"` to any file under `app/views/books/` → the "outside the allowlist" test must fail naming that file.
 2. Add `className = "label-text"` to any file under `app/javascript/` → must also fail, proving the JS scan and the `className` branch both work.
 3. Add `el.classList.add("input-bordered")` to any file under `app/javascript/` → must also fail, proving the `classList` branch works. **This is the path a plain `class`/`className` matcher misses**, and the reason it is covered at all is a review finding on this plan (PR #223).
-4. Delete one entry from `ALLOWLIST` → the "no stale entries" test must fail naming it.
+4. **Add** a bogus `ALLOWLIST` entry for a file with no removed class → the "no stale entries" test
+   must fail naming it. (An earlier revision of this plan said to *delete* an entry and expect that
+   same test to fire. It cannot: `stale = ALLOWLIST - offenders.keys`, so removing an element can
+   never add one — deleting an entry surfaces through the *other* assertion instead. Corrected after
+   the Task 4 implementer hit it.)
 
 If break 2 or 3 does not fail, the matcher is wrong — fix it before continuing. The matcher was
 pre-verified against 8 inputs while amending this plan, including `classList.toggle("hidden", !atCap)`
@@ -410,8 +414,14 @@ reference. Plain file-input is the real class and stays off the list."
 - [ ] **Step 1: Re-confirm no dead class sits in a multi-line class attribute**
 
 A multi-line attribute is the one case where token removal could reflow markup and create diff
-noise. **This was measured while writing the plan and the answer was 0**, which is why the script
-below can normalise horizontal whitespace safely. Re-run it, because `main` may have moved:
+noise. **This was measured while writing the plan and the answer was 0.** Re-run it, because `main`
+may have moved.
+
+**This check is necessary but NOT sufficient, and its original rationale was wrong.** It looks for
+multi-line attributes *containing a dead class*. The reflow damage that actually occurred came from
+multi-line attributes containing **no** dead class, which this query cannot see by construction. The
+script below is hardened so that it never rewrites an attribute without a dead token, which is what
+makes whitespace normalisation safe — not this count being 0.
 
 ```bash
 python3 - <<'PY'
@@ -436,22 +446,53 @@ after the script runs and check their diffs individually.
 Save as `/tmp/claude-1001/sweep.py`. It removes whole tokens only, never substrings, and never
 touches `file-input`:
 
+**Two bugs were found in an earlier draft of this script by running it and reading the diff. Both
+damaged files containing ZERO dead classes** — the least likely place anyone would look. The version
+below is the corrected one; do not simplify it back.
+
 ```python
 #!/usr/bin/env python3
-"""One-shot codemod: strip daisyUI classes removed in v5. Whole tokens only."""
+"""One-shot codemod: strip daisyUI classes removed in v5. Whole tokens only.
+
+Two corrections over the naive version, both found by running it and reading
+the diff:
+
+1. ATTR treats `<%...%>` as an opaque unit when hunting the closing quote.
+   Without that, a same-quote literal inside an ERB ternary --
+   `class="btn <%= @sort == "position" ? 'a' : 'b' %>"` -- terminates the
+   non-greedy match early, and the "value" then gets whitespace-collapsed,
+   corrupting unrelated sort logic into `@sort =="position"`. There are 8+
+   such attributes in this codebase.
+
+2. An attribute is rewritten ONLY if it contains a dead class as a whole
+   token. The naive version collapsed whitespace in every class attribute it
+   matched, reflowing multi-line indentation in files with nothing to sweep.
+"""
 import re, pathlib
 
 DEAD = ['form-control', 'label-text-alt', 'label-text', 'input-bordered',
         'select-bordered', 'textarea-bordered', 'file-input-bordered',
         'input-disabled', 'table-hover', 'tabs-boxed']
 
-ATTR = re.compile(r'(class(?:Name)?\s*[:=]\s*)(["\'`])(.*?)\2', re.S)
+DEAD_PATTERNS = [re.compile(r'(?<![\w-])' + re.escape(c) + r'(?![\w-])') for c in DEAD]
+
+# Value is either literal text, or an opaque <% ... %> tag consumed whole, so
+# quotes inside the tag can never be mistaken for the attribute's own closer.
+ATTR = re.compile(r'(class(?:Name)?\s*[:=]\s*)(["\'`])((?:<%.*?%>|(?!\2).)*)\2', re.S)
+
+def has_dead(value):
+    return any(p.search(value) for p in DEAD_PATTERNS)
 
 def clean(value):
-    for c in DEAD:
-        value = re.sub(r'(?<![\w-])' + re.escape(c) + r'(?![\w-])', '', value)
+    for p in DEAD_PATTERNS:
+        value = p.sub('', value)
     value = re.sub(r'[ \t]{2,}', ' ', value)
     return value.strip(' \t')
+
+def repl(m):
+    if not has_dead(m.group(3)):
+        return m.group(0)
+    return m.group(1) + m.group(2) + clean(m.group(3)) + m.group(2)
 
 changed = []
 targets = [q for d in ('app/views', 'app/components') for q in pathlib.Path(d).rglob('*.erb')]
@@ -459,13 +500,18 @@ targets.append(pathlib.Path('app/javascript/controllers/user_list_modal_controll
 
 for p in targets:
     src = p.read_text()
-    out = ATTR.sub(lambda m: m.group(1) + m.group(2) + clean(m.group(3)) + m.group(2), src)
+    out = ATTR.sub(repl, src)
     if out != src:
         p.write_text(out)
         changed.append(str(p))
 
 print(f"{len(changed)} files changed")
 ```
+
+**Read the diff before committing regardless.** Both bugs above were invisible to Step 1's
+pre-check and to every boundary test of `clean()` — they only appeared in the diff. The strongest
+cheap invariant: the set of changed files must equal the guard's allowlist exactly, and every file's
+insertions must equal its deletions.
 
 - [ ] **Step 3: Run it**
 
@@ -639,5 +685,7 @@ assumed, and both hold:
   `file-input-bordered` is removed, and `input-error` survives while `input-bordered` is removed —
   the negative lookbehind `(?<![\w-])` is what prevents the shorter name matching inside the longer.
   0 failures.
-- Multi-line class attributes containing a dead class: **0**, so horizontal-whitespace
-  normalisation cannot reflow markup.
+- Multi-line class attributes containing a dead class: **0** at the time this was checked. That
+  count is not what makes horizontal-whitespace normalisation safe, though — see the correction in
+  Task 5 Step 1. What actually prevents reflow is the codemod being hardened to never rewrite an
+  attribute that contains no dead token in the first place.

@@ -1,5 +1,5 @@
 <div class="mb-6">
-  <div role="tablist" class="tabs tabs-boxed bg-base-200 p-1 flex flex-wrap gap-1">
+  <div role="tablist" class="tabs bg-base-200 p-1 flex flex-wrap gap-1">
     <%= link_to "All Time", base_path, role: "tab", class: tab_class(active: all_time_active?) %>
     <% decades.each do |decade| %>
       <%= link_to decade, decade_path(decade), role: "tab", class: tab_class(active: decade_active?(decade)) %>
@@ -16,28 +16,28 @@
     <h3 class="font-bold text-lg mb-4">Custom Year Range</h3>
 
     <div class="grid grid-cols-2 gap-4">
-      <div class="form-control">
+      <div>
         <label class="label">
-          <span class="label-text">From Year <span class="text-base-content/50">(optional)</span></span>
+          <span>From Year <span class="text-base-content/50">(optional)</span></span>
         </label>
         <input type="number"
                placeholder="1980"
                min="1951"
                max="2099"
-               class="input input-bordered w-full"
+               class="input w-full"
                data-year-range-modal-target="fromYear"
                data-action="input->year-range-modal#validate">
       </div>
 
-      <div class="form-control">
+      <div>
         <label class="label">
-          <span class="label-text">To Year <span class="text-base-content/50">(optional)</span></span>
+          <span>To Year <span class="text-base-content/50">(optional)</span></span>
         </label>
         <input type="number"
                placeholder="2025"
                min="1951"
                max="2099"
-               class="input input-bordered w-full"
+               class="input w-full"
                data-year-range-modal-target="toYear"
                data-action="input->year-range-modal#validate">
       </div>

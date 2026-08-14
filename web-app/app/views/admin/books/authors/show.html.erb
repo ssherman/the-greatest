@@ -127,17 +127,17 @@
       <div class="modal-box">
         <h3 class="font-bold text-lg mb-4">Add Image</h3>
         <%= form_with model: Image.new, url: admin_books_author_images_path(@author), method: :post, data: {controller: "modal-form", modal_form_modal_id_value: "add_author_image_modal"} do |f| %>
-          <label class="form-control">
-            <span class="label-text">File</span>
-            <%= f.file_field :file, accept: "image/jpeg,image/png,image/webp,image/gif", required: true, class: "file-input file-input-bordered" %>
+          <label>
+            <span>File</span>
+            <%= f.file_field :file, accept: "image/jpeg,image/png,image/webp,image/gif", required: true, class: "file-input" %>
           </label>
-          <label class="form-control mt-2">
-            <span class="label-text">Notes</span>
-            <%= f.text_field :notes, class: "input input-bordered" %>
+          <label class="mt-2">
+            <span>Notes</span>
+            <%= f.text_field :notes, class: "input" %>
           </label>
           <label class="label cursor-pointer mt-2 justify-start gap-2">
             <%= f.check_box :primary, class: "checkbox" %>
-            <span class="label-text">Primary</span>
+            <span>Primary</span>
           </label>
           <div class="modal-action">
             <%= f.submit "Upload", class: "btn btn-primary" %>
@@ -152,13 +152,13 @@
       <div class="modal-box">
         <h3 class="font-bold text-lg mb-4">Add Relationship</h3>
         <%= form_with model: ::Books::AuthorRelationship.new, url: admin_books_author_author_relationships_path(@author), method: :post, class: "space-y-4", data: {controller: "modal-form", modal_form_modal_id_value: "add_author_relationship_modal"} do |f| %>
-          <div class="form-control">
-            <%= f.label :to_author_id, class: "label" do %><span class="label-text font-semibold">Author <span class="text-error">*</span></span><% end %>
+          <div>
+            <%= f.label :to_author_id, class: "label" do %><span class="font-semibold">Author <span class="text-error">*</span></span><% end %>
             <%= render AutocompleteComponent.new(name: "books_author_relationship[to_author_id]", url: search_admin_books_authors_path(exclude_id: @author.id), placeholder: "Search for an author…", required: true) %>
           </div>
-          <div class="form-control">
-            <%= f.label :relation_type, class: "label" do %><span class="label-text font-semibold">Relation</span><% end %>
-            <%= f.select :relation_type, ::Books::AuthorRelationship.relation_types.keys.map { |k| [k.titleize, k] }, {}, class: "select select-bordered w-full" %>
+          <div>
+            <%= f.label :relation_type, class: "label" do %><span class="font-semibold">Relation</span><% end %>
+            <%= f.select :relation_type, ::Books::AuthorRelationship.relation_types.keys.map { |k| [k.titleize, k] }, {}, class: "select w-full" %>
           </div>
           <div class="modal-action">
             <button type="button" class="btn" onclick="add_author_relationship_modal.close()">Cancel</button>

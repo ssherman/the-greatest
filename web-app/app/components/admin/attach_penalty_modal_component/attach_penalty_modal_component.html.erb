@@ -12,14 +12,14 @@
                       turbo_frame: "list_penalties_list"
                     } do |f| %>
 
-        <div class="form-control">
+        <div>
           <%= f.label :penalty_id, "Penalty", class: "label" %>
           <%= f.select :penalty_id,
               options_from_collection_for_select(available_penalties, :id, :name),
               { prompt: "Select a penalty..." },
-              { class: "select select-bordered w-full", required: true } %>
+              { class: "select w-full", required: true } %>
           <label class="label">
-            <span class="label-text-alt">Only compatible penalties shown (Global + <%= @list.type.split("::").first %>)</span>
+            <span>Only compatible penalties shown (Global + <%= @list.type.split("::").first %>)</span>
           </label>
         </div>
 

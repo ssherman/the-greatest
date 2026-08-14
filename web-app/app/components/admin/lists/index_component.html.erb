@@ -18,7 +18,7 @@
     <div class="card-body">
       <div class="mb-4" data-controller="admin--search" data-admin--search-debounce-value="300">
         <%= form_with url: domain_config[:lists_path], method: :get, data: { turbo_frame: "lists_table", turbo_action: "advance", admin__search_target: "form" }, class: "flex flex-col sm:flex-row gap-4 sm:items-center" do |f| %>
-          <label class="input input-bordered flex items-center gap-2">
+          <label class="input flex items-center gap-2">
             <%= f.text_field :q, value: search_query,
                 placeholder: "Search by name or source...",
                 class: "grow",
@@ -37,7 +37,7 @@
                 ["Active", "active"]
               ], selected_status),
               {},
-              class: "select select-bordered",
+              class: "select",
               onchange: "this.form.requestSubmit()" %>
         <% end %>
       </div>

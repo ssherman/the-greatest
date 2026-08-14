@@ -11,9 +11,9 @@
                   turbo_frame: "_top"
                 } do |f| %>
 
-    <div class="form-control mt-4 min-h-96">
+    <div class="mt-4 min-h-96">
       <label class="label">
-        <span class="label-text">Search MusicBrainz for artists:</span>
+        <span>Search MusicBrainz for artists:</span>
       </label>
       <%= render AutocompleteComponent.new(
         name: "mb_artist_id",
@@ -26,7 +26,7 @@
         required: true
       ) %>
       <label class="label">
-        <span class="label-text-alt">Select an artist to replace the current artist match</span>
+        <span>Select an artist to replace the current artist match</span>
       </label>
     </div>
 

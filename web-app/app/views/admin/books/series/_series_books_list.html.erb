@@ -44,19 +44,19 @@
                 <div class="modal-box">
                   <h3 class="font-bold text-lg mb-4">Edit Series Book</h3>
                   <%= form_with model: sb, url: admin_books_series_book_path(sb), method: :patch, class: "space-y-4", data: {controller: "modal-form", modal_form_modal_id_value: "edit_series_book_#{sb.id}_modal", turbo_frame: "series_books_list"} do |f| %>
-                    <div class="form-control">
-                      <%= f.label :position, class: "label" do %><span class="label-text font-semibold">Position</span><% end %>
-                      <%= f.number_field :position, step: "0.01", class: "input input-bordered w-full" %>
+                    <div>
+                      <%= f.label :position, class: "label" do %><span class="font-semibold">Position</span><% end %>
+                      <%= f.number_field :position, step: "0.01", class: "input w-full" %>
                     </div>
-                    <div class="form-control">
+                    <div>
                       <label class="label cursor-pointer justify-start gap-2">
                         <%= f.check_box :numbered, class: "checkbox" %>
-                        <span class="label-text font-semibold">Numbered</span>
+                        <span class="font-semibold">Numbered</span>
                       </label>
                     </div>
-                    <div class="form-control">
-                      <%= f.label :position_label, class: "label" do %><span class="label-text font-semibold">Position Label</span><% end %>
-                      <%= f.text_field :position_label, class: "input input-bordered w-full" %>
+                    <div>
+                      <%= f.label :position_label, class: "label" do %><span class="font-semibold">Position Label</span><% end %>
+                      <%= f.text_field :position_label, class: "input w-full" %>
                     </div>
                     <div class="modal-action">
                       <button type="button" class="btn" onclick="edit_series_book_<%= sb.id %>_modal.close()">Cancel</button>

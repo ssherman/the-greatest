@@ -12,25 +12,25 @@
                       turbo_frame: "penalty_applications_list"
                     } do |f| %>
 
-        <div class="form-control">
+        <div>
           <%= f.label :penalty_id, "Penalty", class: "label" %>
-          <input type="text" value="<%= @penalty_application.penalty.name %>" class="input input-bordered w-full" disabled />
+          <input type="text" value="<%= @penalty_application.penalty.name %>" class="input w-full" disabled />
           <label class="label">
-            <span class="label-text-alt">Penalty cannot be changed</span>
+            <span>Penalty cannot be changed</span>
           </label>
         </div>
 
-        <div class="form-control">
+        <div>
           <%= f.label :value, "Value (%)", class: "label" %>
           <%= f.number_field :value,
               min: 0,
               max: 100,
               step: 1,
               placeholder: "0-100",
-              class: "input input-bordered w-full",
+              class: "input w-full",
               required: true %>
           <label class="label">
-            <span class="label-text-alt">Penalty percentage (0-100)</span>
+            <span>Penalty percentage (0-100)</span>
           </label>
         </div>
 

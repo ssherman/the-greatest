@@ -16,7 +16,7 @@
       <%= f.hidden_field :sort, value: @sort %>
       <%= f.search_field :q, value: @query, placeholder: "Search lists",
             "aria-label": "Search lists by name, source or url",
-            class: "input input-bordered join-item" %>
+            class: "input join-item" %>
       <%= f.submit "Search", class: "btn btn-primary join-item" %>
     <% end %>
 

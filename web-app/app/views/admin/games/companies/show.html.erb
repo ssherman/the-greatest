@@ -47,7 +47,7 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Name</span>
+                <span class="font-semibold">Name</span>
               </label>
               <p class="text-lg"><%= @company.name %></p>
             </div>
@@ -55,7 +55,7 @@
             <% if @company.country.present? %>
               <div>
                 <label class="label">
-                  <span class="label-text font-semibold">Country</span>
+                  <span class="font-semibold">Country</span>
                 </label>
                 <p><%= @company.country %></p>
               </div>
@@ -64,7 +64,7 @@
             <% if @company.year_founded.present? %>
               <div>
                 <label class="label">
-                  <span class="label-text font-semibold">Year Founded</span>
+                  <span class="font-semibold">Year Founded</span>
                 </label>
                 <p><%= @company.year_founded %></p>
               </div>

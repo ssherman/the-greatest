@@ -22,63 +22,63 @@
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <!-- Title -->
-        <div class="form-control md:col-span-2">
+        <div class="md:col-span-2">
           <%= f.label :title, class: "label" do %>
-            <span class="label-text font-semibold">Title <span class="text-error">*</span></span>
+            <span class="font-semibold">Title <span class="text-error">*</span></span>
           <% end %>
           <%= f.text_field :title,
-              class: "input input-bordered w-full #{@game.errors[:title].any? ? 'input-error' : ''}",
+              class: "input w-full #{@game.errors[:title].any? ? 'input-error' : ''}",
               placeholder: "Enter game title",
               required: true,
               autofocus: true %>
           <% if @game.errors[:title].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @game.errors[:title].first %></span>
+              <span class="text-error"><%= @game.errors[:title].first %></span>
             </label>
           <% end %>
         </div>
 
         <!-- Release Year -->
-        <div class="form-control">
+        <div>
           <%= f.label :release_year, class: "label" do %>
-            <span class="label-text font-semibold">Release Year</span>
+            <span class="font-semibold">Release Year</span>
           <% end %>
           <%= f.number_field :release_year,
-              class: "input input-bordered w-full #{@game.errors[:release_year].any? ? 'input-error' : ''}",
+              class: "input w-full #{@game.errors[:release_year].any? ? 'input-error' : ''}",
               placeholder: "e.g., 2023",
               min: 1951,
               max: Time.current.year + 2 %>
           <label class="label">
-            <span class="label-text-alt">Initial release year</span>
+            <span>Initial release year</span>
           </label>
           <% if @game.errors[:release_year].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @game.errors[:release_year].first %></span>
+              <span class="text-error"><%= @game.errors[:release_year].first %></span>
             </label>
           <% end %>
         </div>
 
         <!-- Game Type -->
-        <div class="form-control">
+        <div>
           <%= f.label :game_type, class: "label" do %>
-            <span class="label-text font-semibold">Game Type <span class="text-error">*</span></span>
+            <span class="font-semibold">Game Type <span class="text-error">*</span></span>
           <% end %>
           <%= f.select :game_type,
               Games::Game.game_types.keys.map { |t| [t.titleize, t] },
               { include_blank: "Select type..." },
-              class: "select select-bordered w-full #{@game.errors[:game_type].any? ? 'select-error' : ''}",
+              class: "select w-full #{@game.errors[:game_type].any? ? 'select-error' : ''}",
               required: true %>
           <% if @game.errors[:game_type].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @game.errors[:game_type].first %></span>
+              <span class="text-error"><%= @game.errors[:game_type].first %></span>
             </label>
           <% end %>
         </div>
 
         <!-- Parent Game (for remake/remaster/expansion/dlc types) -->
-        <div class="form-control">
+        <div>
           <%= f.label :parent_game_id, class: "label" do %>
-            <span class="label-text font-semibold">Parent Game</span>
+            <span class="font-semibold">Parent Game</span>
           <% end %>
           <%= render AutocompleteComponent.new(
             name: "games_game[parent_game_id]",
@@ -88,19 +88,19 @@
             selected_text: @game.parent_game&.title
           ) %>
           <label class="label">
-            <span class="label-text-alt">Set for remakes, remasters, expansions, and DLC</span>
+            <span>Set for remakes, remasters, expansions, and DLC</span>
           </label>
           <% if @game.errors[:parent_game].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @game.errors[:parent_game].first %></span>
+              <span class="text-error"><%= @game.errors[:parent_game].first %></span>
             </label>
           <% end %>
         </div>
 
         <!-- Series -->
-        <div class="form-control">
+        <div>
           <%= f.label :series_id, class: "label" do %>
-            <span class="label-text font-semibold">Series</span>
+            <span class="font-semibold">Series</span>
           <% end %>
           <%= render AutocompleteComponent.new(
             name: "games_game[series_id]",
@@ -110,7 +110,7 @@
             selected_text: @game.series&.name
           ) %>
           <label class="label">
-            <span class="label-text-alt">Optional: Assign to a game franchise/series</span>
+            <span>Optional: Assign to a game franchise/series</span>
           </label>
         </div>
       </div>

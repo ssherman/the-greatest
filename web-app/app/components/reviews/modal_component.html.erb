@@ -30,17 +30,17 @@
         </div>
       </fieldset>
 
-      <label class="form-control mt-4 block">
-        <span class="label-text">Title <span class="text-base-content/60">(optional)</span></span>
+      <label class="mt-4 block">
+        <span>Title <span class="text-base-content/60">(optional)</span></span>
         <input type="text" name="review[title]" value="" maxlength="255"
-               class="input input-bordered w-full" data-reviews--modal-target="title">
+               class="input w-full" data-reviews--modal-target="title">
       </label>
 
-      <label class="form-control mt-4 block">
-        <span class="label-text">Review <span class="text-base-content/60">(optional)</span></span>
+      <label class="mt-4 block">
+        <span>Review <span class="text-base-content/60">(optional)</span></span>
         <textarea name="review[body]" rows="6" maxlength="25000"
-                  class="textarea textarea-bordered w-full" data-reviews--modal-target="body"></textarea>
-        <span class="label-text-alt mt-1 text-base-content/60">Leave a blank line to start a new paragraph. Wrap text in ||double pipes|| to hide a spoiler.</span>
+                  class="textarea w-full" data-reviews--modal-target="body"></textarea>
+        <span class="mt-1 text-base-content/60">Leave a blank line to start a new paragraph. Wrap text in ||double pipes|| to hide a spoiler.</span>
       </label>
 
       <p class="mt-2 text-sm text-error hidden" data-reviews--modal-target="error" role="alert"></p>

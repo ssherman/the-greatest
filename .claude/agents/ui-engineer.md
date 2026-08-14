@@ -55,17 +55,22 @@ https://tailwindcss.com/docs/upgrade-guide rather than guessing.
 > | Removed | Use instead |
 > |---|---|
 > | `form-control` | `fieldset` (with `fieldset-legend`) or a plain `div` |
-> | `label-text` | `label` on the text element |
-> | `input-bordered`, `select-bordered`, `textarea-bordered` | nothing — borders are the default |
+> | `label-text`, `label-text-alt` | `label` on the text element |
+> | `input-bordered`, `select-bordered`, `textarea-bordered`, `file-input-bordered` | nothing — borders are the default (plain `file-input` IS still a valid v5 class, just not the `-bordered` variant) |
+> | `input-disabled` | nothing — native `input:disabled` styling already covers it |
+> | `table-hover` | a Tailwind utility on each `<tr>`, e.g. `hover:bg-base-200` |
+> | `tabs-boxed` | `tabs-box` — daisyUI 5 renamed this one, it didn't just delete it |
 >
 > **`.select` is for single-line selects only.** It sets `display:inline-flex` and
 > `appearance:none`, so applying it to `<select multiple>` lays the options out as a flex ROW and
 > renders an unreadable jumble. There is no daisyUI multi-select; build one from checkboxes or a
 > chips picker.
 >
-> **The existing views predate daisyUI 5** — ~90 files still carry the removed classes. Copying
-> form markup from a neighbouring view is how this bug keeps propagating. Verify against the
-> pinned reference, not against the codebase.
+> **A branch-wide sweep already removed every occurrence of these ten classes from the codebase.**
+> Copying form markup from a neighbouring view is safe again — the codebase is the clean pattern
+> now. For anything new or unfamiliar, still verify against the pinned reference below; that's
+> what stays authoritative, not because the existing views can't be trusted, but because recalled
+> daisyUI 4 markup is easy to reach for from memory and this pin is what catches it.
 **Primary Reference**: `docs/external-libraries/daisyui-llms.txt` — pinned locally at the installed version (5.7.x). **Read this file before writing any form markup.** Do not rely on recall: daisyUI 4 was current far longer than 5, so recalled markup is usually v4 and fails silently here.
 
 DaisyUI provides pre-built components built on Tailwind CSS:

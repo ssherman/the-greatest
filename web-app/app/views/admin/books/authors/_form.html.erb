@@ -20,67 +20,67 @@
       <h2 class="card-title">Basic Information</h2>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="form-control md:col-span-2">
+        <div class="md:col-span-2">
           <%= f.label :name, class: "label" do %>
-            <span class="label-text font-semibold">Name <span class="text-error">*</span></span>
+            <span class="font-semibold">Name <span class="text-error">*</span></span>
           <% end %>
           <%= f.text_field :name,
-              class: "input input-bordered w-full #{@author.errors[:name].any? ? 'input-error' : ''}",
+              class: "input w-full #{@author.errors[:name].any? ? 'input-error' : ''}",
               placeholder: "Enter author name",
               required: true,
               autofocus: true %>
           <% if @author.errors[:name].any? %>
-            <label class="label"><span class="label-text-alt text-error"><%= @author.errors[:name].first %></span></label>
+            <label class="label"><span class="text-error"><%= @author.errors[:name].first %></span></label>
           <% end %>
         </div>
 
-        <div class="form-control">
+        <div>
           <%= f.label :sort_name, class: "label" do %>
-            <span class="label-text font-semibold">Sort Name</span>
+            <span class="font-semibold">Sort Name</span>
           <% end %>
-          <%= f.text_field :sort_name, class: "input input-bordered w-full" %>
+          <%= f.text_field :sort_name, class: "input w-full" %>
         </div>
 
-        <div class="form-control">
+        <div>
           <%= f.label :kind, class: "label" do %>
-            <span class="label-text font-semibold">Kind</span>
+            <span class="font-semibold">Kind</span>
           <% end %>
           <%= f.select :kind,
               ::Books::Author.kinds.keys.map { |k| [k.titleize, k] },
               {},
-              class: "select select-bordered w-full #{@author.errors[:kind].any? ? 'select-error' : ''}" %>
+              class: "select w-full #{@author.errors[:kind].any? ? 'select-error' : ''}" %>
         </div>
 
-        <div class="form-control">
+        <div>
           <%= f.label :birth_year, class: "label" do %>
-            <span class="label-text font-semibold">Birth Year</span>
+            <span class="font-semibold">Birth Year</span>
           <% end %>
-          <%= f.number_field :birth_year, class: "input input-bordered w-full", min: -3000, max: 3000 %>
+          <%= f.number_field :birth_year, class: "input w-full", min: -3000, max: 3000 %>
         </div>
 
-        <div class="form-control">
+        <div>
           <%= f.label :death_year, class: "label" do %>
-            <span class="label-text font-semibold">Death Year</span>
+            <span class="font-semibold">Death Year</span>
           <% end %>
-          <%= f.number_field :death_year, class: "input input-bordered w-full", min: -3000, max: 3000 %>
+          <%= f.number_field :death_year, class: "input w-full", min: -3000, max: 3000 %>
         </div>
 
-        <div class="form-control md:col-span-2">
+        <div class="md:col-span-2">
           <%= f.label :exclude_from_rankings, class: "label cursor-pointer justify-start gap-3" do %>
             <%= f.check_box :exclude_from_rankings, class: "checkbox checkbox-primary" %>
-            <span class="label-text font-semibold">Exclude from author rankings</span>
+            <span class="font-semibold">Exclude from author rankings</span>
           <% end %>
           <label class="label">
-            <span class="label-text-alt">For placeholder records such as "Unknown" that should never appear in The Greatest Authors.</span>
+            <span>For placeholder records such as "Unknown" that should never appear in The Greatest Authors.</span>
           </label>
         </div>
 
-        <div class="form-control md:col-span-2">
+        <div class="md:col-span-2">
           <%= f.label :alternate_names, class: "label" do %>
-            <span class="label-text font-semibold">Alternate Names</span>
+            <span class="font-semibold">Alternate Names</span>
           <% end %>
-          <%= text_field_tag "books_author[alternate_names_string]", @author.alternate_names.join(", "), class: "input input-bordered w-full" %>
-          <label class="label"><span class="label-text-alt">Comma-separated</span></label>
+          <%= text_field_tag "books_author[alternate_names_string]", @author.alternate_names.join(", "), class: "input w-full" %>
+          <label class="label"><span>Comma-separated</span></label>
         </div>
       </div>
     </div>

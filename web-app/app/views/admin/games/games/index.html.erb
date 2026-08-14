@@ -63,23 +63,23 @@
                     modal_form_modal_id_value: "import-igdb-modal"
                   } do |f| %>
 
-      <div class="form-control">
+      <div>
         <label class="label">
-          <span class="label-text font-semibold">IGDB URL or ID</span>
+          <span class="font-semibold">IGDB URL or ID</span>
         </label>
         <input type="text" name="igdb_url"
-               class="input input-bordered w-full"
+               class="input w-full"
                placeholder="e.g., https://www.igdb.com/games/flight-simulator or 12515" />
         <label class="label">
-          <span class="label-text-alt">Paste an IGDB game URL or numeric ID</span>
+          <span>Paste an IGDB game URL or numeric ID</span>
         </label>
       </div>
 
       <div class="divider text-sm text-base-content/50">OR</div>
 
-      <div class="form-control">
+      <div>
         <label class="label">
-          <span class="label-text font-semibold">Search by name</span>
+          <span class="font-semibold">Search by name</span>
         </label>
         <%= render AutocompleteComponent.new(
           name: "igdb_id",
@@ -91,7 +91,7 @@
           debounce: 300
         ) %>
         <label class="label">
-          <span class="label-text-alt">Start typing to search the IGDB database</span>
+          <span>Start typing to search the IGDB database</span>
         </label>
       </div>
 
