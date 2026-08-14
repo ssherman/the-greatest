@@ -16,18 +16,31 @@ class Admin::ReviewsBaseController < Admin::BaseController
       .preload(reviewable: reviewable_includes)
 
     # Written reviews by default: of ~128,000 rows only ~16,000 carry text, so an
-    # unfiltered index is overwhelmingly rating-only noise.
+    # unfiltered index is overwhelmingly rating-only noise. Review.with_body is
+    # the same scope the model itself carries the empty-string-body rationale
+    # for -- reuse it rather than re-deriving `where.not(body: nil)` here.
     @written_only = params[:written] != "all"
-    scope = scope.where.not(body: nil) if @written_only
+    scope = scope.with_body if @written_only
 
-    @search_query = params[:q].presence
+    # params[:q] arrives as an Array for a request like ?q[]=war -- to_s first
+    # so User.sanitize_sql_like always receives a String. Reviews::MyReviewsQuery
+    # hit the identical shape with ?rating[]=1 earlier on this branch.
+    @search_query = params[:q].to_s.presence
     scope = apply_search(scope, @search_query) if @search_query
 
     @pagy, @reviews = pagy(scope.order(created_at: :desc, id: :desc), limit: 50)
   end
 
   def destroy
-    review = Review.find(params[:id])
+    # Scoped to this controller's reviewable_type, exactly like index -- NOT a
+    # bare Review.find. require_domain_write! only proves write access to the
+    # domain this controller is mounted under; without this scope a books
+    # editor could delete a music or games review by id, and because the purge
+    # is enqueued with the victim's own reviewable_type, the cross-domain
+    # deletion would propagate cleanly instead of erroring. Not exploitable
+    # today (the registry holds only Books::Book) but this base class exists
+    # precisely so other domains subclass it.
+    review = Review.where(reviewable_type: reviewable_class.name).find(params[:id])
     reviewable_type = review.reviewable_type
     reviewable_id = review.reviewable_id
     review.destroy!
@@ -45,12 +58,19 @@ class Admin::ReviewsBaseController < Admin::BaseController
   # reviewable_class.review_text_search applies a title/author EXISTS match to
   # a scope already joined to the reviewable's table -- see Books::Book. Both
   # branches below are built from the SAME joined relation (rather than one
-  # joined and one not) specifically so `.or` sees identical joins_values on
-  # both sides; ActiveRecord's structural-compatibility check for `.or` only
-  # relaxes when a value is flatly *unset* on one side (nil), not when the two
-  # sides disagree, so deriving the two branches from different starting
-  # points would raise "Relation passed to #or must be structurally
-  # compatible". Verified directly against this schema before relying on it.
+  # joined and one not), so their joins_values are the same array on both
+  # sides of the `.or`.
+  #
+  # This is NOT the only shape that would pass: ActiveRecord's structural-
+  # compatibility check for `.or` (see structurally_incompatible_values_for in
+  # activerecord's query_methods.rb) relaxes whenever a value is flatly
+  # *unset* on one side (nil, meaning that relation method was never called),
+  # so a version with one branch joined and the other left bare also happens
+  # to pass -- verified directly against this schema. But that passes only by
+  # accident of which values happen to be nil rather than merely different,
+  # which is a fragile thing to depend on deliberately. Building both branches
+  # from the same `joined` relation makes the two sides compatible on the
+  # merits, independent of that relaxation rule.
   def apply_search(scope, term)
     joined = scope.joins("INNER JOIN #{reviewable_class.table_name} ON #{reviewable_class.table_name}.id = reviews.reviewable_id")
     pattern = "%#{User.sanitize_sql_like(term)}%"
