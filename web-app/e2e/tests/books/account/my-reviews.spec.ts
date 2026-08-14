@@ -1,13 +1,19 @@
 import { test, expect } from '@playwright/test';
 
 // This spec depends on the e2e-admin account having a healthy body of reviews to
-// filter/sort/page through. As of writing that account has 30 Books::Book reviews
-// (ratings cycling 1-5 evenly, alternating written/rating-only), seeded once via a
-// targeted, additive `bin/rails runner` script -- see task-11-report.md for the
-// exact script. One of those, "Animal Farm", has a title no other seeded review
-// shares, which is what makes it a safe, exact search term below.
+// filter/sort/page through. Run `bin/rails e2e:my_reviews` (lib/tasks/e2e.rake)
+// first -- it idempotently seeds 30 Books::Book reviews for that account (6 per
+// rating, alternating written/rating-only, avoiding the 3 book slugs other specs
+// in this directory depend on). One of those 30, "Animal Farm", has a title no
+// other seeded review shares, which is what makes it a safe, exact search term
+// below.
 const SEARCH_TITLE = 'Animal Farm';
-const SEEDED_MINIMUM = 30;
+// Exact, not a lower bound: playwright.config.ts runs with workers: 1 and
+// fullyParallel: false, so spec files run strictly sequentially in this worker,
+// and no other spec in this directory leaves a permanent Books::Book review
+// behind on this account (reviews-write.spec.ts always removes what it creates,
+// in its own afterEach, on a book excluded from this seed).
+const SEEDED_COUNT = 30;
 
 test.describe('My Reviews', () => {
   test('renders and shows a total count', async ({ page }) => {
@@ -16,10 +22,7 @@ test.describe('My Reviews', () => {
     await expect(page.getByRole('heading', { name: 'My Reviews', level: 1 })).toBeVisible();
 
     const total = Number((await page.getByTestId('my-reviews-total').innerText()).trim());
-    // A lower bound, not an exact match: other specs in this directory (e.g.
-    // reviews-write.spec.ts) transiently add and remove a review of their own
-    // elsewhere in the same account during a full suite run.
-    expect(total).toBeGreaterThanOrEqual(SEEDED_MINIMUM);
+    expect(total).toBe(SEEDED_COUNT);
   });
 
   test('clicking a rating bar filters, and the URL carries the rating', async ({ page }) => {
@@ -117,6 +120,14 @@ test.describe('My Reviews', () => {
     await expect(page.getByRole('link', { name: SEARCH_TITLE, exact: true }).last()).toBeVisible();
   });
 
+  // This permanently rotates whichever review is currently first among
+  // `edit-review` rows to a different rating on every run, and never restores it
+  // -- unlike reviews-write.spec.ts, which creates a review and removes it again
+  // in its own afterEach. There is no "original" rating to restore here: this
+  // row is itself seed data with an arbitrary rating to begin with, and
+  // `(currentRating % 5) + 1` is self-consistent and deterministic across
+  // repeated runs, so leaving the rotation in place is intentional, not an
+  // oversight.
   test('opening the dialog from a row, changing the rating and saving reloads the row with the new value', async ({page}) => {
     await page.goto('/my/reviews');
 
