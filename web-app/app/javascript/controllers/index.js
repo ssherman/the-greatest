@@ -34,6 +34,9 @@ application.register("review-filter", ReviewFilterController)
 import Reviews__ModalController from "./reviews/modal_controller"
 application.register("reviews--modal", Reviews__ModalController)
 
+import Reviews__MyReviewsController from "./reviews/my_reviews_controller"
+application.register("reviews--my-reviews", Reviews__MyReviewsController)
+
 import Reviews__SpoilerController from "./reviews/spoiler_controller"
 application.register("reviews--spoiler", Reviews__SpoilerController)
 

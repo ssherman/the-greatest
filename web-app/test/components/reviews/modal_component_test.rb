@@ -10,6 +10,16 @@ module Reviews
       assert_selector "dialog#review_modal[data-controller='reviews--modal']"
     end
 
+    # /my/reviews' reload guard (event.target.closest("#review_modal")) depends
+    # on the form living inside this specific id -- if the dialog's id ever
+    # moved, that guard would silently stop matching and the reload it exists
+    # for would stop firing.
+    test "the form lives inside the review_modal dialog" do
+      render_inline(Reviews::ModalComponent.new)
+
+      assert_selector "#review_modal form[data-reviews--modal-target='form']"
+    end
+
     test "renders five star buttons that announce their pressed state" do
       render_inline(Reviews::ModalComponent.new)
 

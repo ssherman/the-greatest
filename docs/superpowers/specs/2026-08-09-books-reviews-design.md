@@ -392,6 +392,14 @@ appearing lost.
 
 ### `/my/reviews`
 
+> **Superseded by `docs/superpowers/specs/2026-08-13-my-reviews-design.md`.** This section and the
+> `### Admin` section below were written before increments 3 and 4 shipped, and before reviews were
+> required to generalise past books. Three things changed: the results Turbo Frame is dropped (every
+> row links off-page, which is the trapped-link shape, and the page is uncached so a frame buys
+> nothing), the reviewable contract moved onto a `Reviewable` concern plus a domain registry, and the
+> page scopes to one reviewable type at a time so no sort ever spans two tables. Read the newer spec
+> for anything in this increment; what remains below is the original sketch.
+
 `MyReviewsController`, following `MyListsController`: `require_signed_in!`, `prevent_caching`,
 `PathBasedPagination` for `/my/reviews/page/N`.
 

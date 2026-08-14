@@ -1,0 +1,43 @@
+<section class="card bg-base-100 shadow-sm mb-6">
+  <div class="card-body gap-4">
+    <div class="flex flex-wrap items-baseline gap-6">
+      <div>
+        <span class="text-4xl font-bold" data-testid="my-reviews-average"><%= stats.average || "—" %></span>
+        <span class="text-base-content/70">average</span>
+      </div>
+      <div>
+        <span class="text-2xl font-semibold" data-testid="my-reviews-total"><%= stats.total %></span>
+        <span class="text-base-content/70">rated</span>
+      </div>
+      <div>
+        <span class="text-2xl font-semibold" data-testid="my-reviews-written"><%= stats.written %></span>
+        <span class="text-base-content/70">written</span>
+      </div>
+      <div>
+        <span class="text-2xl font-semibold" data-testid="my-reviews-rating-only"><%= stats.rating_only %></span>
+        <span class="text-base-content/70">rated without a review</span>
+      </div>
+    </div>
+
+    <ul class="flex flex-col gap-1">
+      <% ratings.each do |rating| %>
+        <li>
+          <a href="<%= path_for(rating) %>"
+             data-testid="rating-bar-<%= rating %>"
+             aria-current="<%= selected?(rating) %>"
+             class="flex items-center gap-3 hover:bg-base-200 rounded px-2 py-1 <%= "bg-base-200 font-semibold" if selected?(rating) %>">
+            <span class="w-12 shrink-0"><%= rating %> ★</span>
+            <span class="flex-1 h-3 bg-base-300 rounded overflow-hidden">
+              <span class="block h-full bg-primary" style="width: <%= stats.percentage_for(rating) %>%"></span>
+            </span>
+            <span class="w-12 shrink-0 text-right tabular-nums"><%= stats.counts_by_rating[rating] %></span>
+          </a>
+        </li>
+      <% end %>
+    </ul>
+
+    <% if selected_rating %>
+      <a href="<%= path_for(nil) %>" class="link link-hover text-sm">Show all ratings</a>
+    <% end %>
+  </div>
+</section>

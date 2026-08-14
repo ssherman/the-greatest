@@ -6,10 +6,6 @@ class ReviewStateController < ApplicationController
   before_action :prevent_caching
   before_action :require_signed_in!
 
-  # `reviewable_type` arrives from the query string. Allowlist it -- constantizing
-  # or querying with user input would let a visitor name any class in the app.
-  REVIEWABLE_TYPES = ["Books::Book"].freeze
-
   # GET /review_state?reviewable_type=Books::Book&reviewable_id=:id
   #
   # Returns ONE record, unlike /user_list_state which returns every membership the
@@ -19,7 +15,9 @@ class ReviewStateController < ApplicationController
     type = params[:reviewable_type].to_s
     id = params[:reviewable_id].to_s
 
-    if !REVIEWABLE_TYPES.include?(type) || id.blank?
+    # reviewable_type arrives from the query string; Reviews::Registry is the
+    # allowlist that stops a visitor naming an arbitrary class.
+    if !Reviews::Registry.allowed?(type) || id.blank?
       return render json: {error: {code: "bad_request", message: "Unknown reviewable"}},
         status: :bad_request
     end

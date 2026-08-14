@@ -289,6 +289,12 @@ Rails.application.routes.draw do
   get "my/lists/:id", to: "my_lists#show", as: :my_list
   get "my/lists/:id/page/:page", to: "my_lists#show", as: :my_list_page, constraints: {page: /\d+/}
 
+  # My Reviews (personal ratings library) -- global, never cached, per-domain
+  # layout resolved from Current.domain in the controller. 404s on a domain with
+  # no reviewable types (Reviews::Registry) rather than rendering an empty page.
+  get "my/reviews", to: "my_reviews#index", as: :my_reviews
+  get "my/reviews/page/:page", to: "my_reviews#index", as: :my_reviews_page, constraints: {page: /\d+/}
+
   # Compatibility alias: the books site (and earlier Greatest sites) link to a
   # user list at /user_lists/:id. Point it at the same show action — owner or
   # any viewer when the list is public, per UserList.visible_to — so those URLs
@@ -302,6 +308,11 @@ Rails.application.routes.draw do
   get "user_lists/:id/edit", to: redirect("/my/lists/%{id}", status: 301), constraints: {id: /\d+/}
   get "user_lists/:id", to: "my_lists#show", as: :user_list
   get "user_lists/:id/page/:page", to: "my_lists#show", as: :user_list_page, constraints: {page: /\d+/}
+
+  # Legacy review URLs from the books site. GET "reviews" does not collide with
+  # the POST "reviews" create route above -- different verbs.
+  get "reviews", to: redirect("/my/reviews", status: 301)
+  get "reviews/account_required", to: redirect("/my/reviews", status: 301)
 
   # Saved searches -- global, never cached, per-domain layout resolved from
   # Current.domain in the controller. index is owner-only; show serves the
@@ -420,6 +431,8 @@ Rails.application.routes.draw do
       end
 
       resources :lists
+
+      resources :reviews, only: [:index, :destroy]
 
       resources :ranking_configurations do
         member { post :execute_action }

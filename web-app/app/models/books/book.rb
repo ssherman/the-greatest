@@ -36,6 +36,7 @@
 class Books::Book < ApplicationRecord
   include Describable
   include SearchIndexable
+  include Reviewable
 
   extend FriendlyId
 
@@ -68,8 +69,6 @@ class Books::Book < ApplicationRecord
   has_many :images, as: :parent, dependent: :destroy
   has_one :primary_image, -> { where(primary: true) }, as: :parent, class_name: "Image"
   has_many :external_links, as: :parent, dependent: :destroy
-  has_many :reviews, as: :reviewable, dependent: :destroy
-  has_one :review_summary, as: :reviewable, dependent: :destroy
   has_many :category_items, as: :item, dependent: :destroy, inverse_of: :item
   has_many :categories, through: :category_items, class_name: "Books::Category"
   has_many :book_countries, class_name: "Books::BookCountry", dependent: :destroy
@@ -101,6 +100,50 @@ class Books::Book < ApplicationRecord
 
   def release_year
     first_published_year
+  end
+
+  # {file_attachment: :blob}, not a bare :primary_image -- the row and its
+  # cover-image variant components go through the ActiveStorage attachment and
+  # blob, not just the Image row, and both need to be preloaded or `.attached?`
+  # and the URL helper each cost one query per row. Same shape as
+  # Books::AuthorsController's ranked_books/all_books_relation preloads.
+  def self.review_row_includes
+    [{primary_image: {file_attachment: :blob}}, {book_authors: :author}]
+  end
+
+  def self.review_title_order
+    "COALESCE(books_books.sort_title, books_books.title)"
+  end
+
+  # EXISTS rather than a join to books_authors: a book with three reviews and two
+  # authors would otherwise come back three times over, which silently inflates
+  # both the page and its count.
+  def self.review_text_search(scope, term)
+    pattern = "%#{sanitize_sql_like(term.to_s.strip)}%"
+    scope.where(
+      "books_books.title ILIKE :pattern OR EXISTS (
+         SELECT 1 FROM books_book_authors
+         INNER JOIN books_authors ON books_authors.id = books_book_authors.author_id
+         WHERE books_book_authors.book_id = books_books.id
+           AND books_authors.name ILIKE :pattern
+       )",
+      pattern: pattern
+    )
+  end
+
+  def self.ranking_configuration_class
+    ::Books::RankingConfiguration
+  end
+
+  # Same association walk as Books::CardComponent#author_names and
+  # books/books/show.html.erb -- book_authors is already ordered by position,
+  # so no additional sort is needed here.
+  def self.review_creator_names(record)
+    record.book_authors.map { |book_author| book_author.author.name }
+  end
+
+  def self.review_public_path(record)
+    Rails.application.routes.url_helpers.book_path(record.slug)
   end
 
   def as_indexed_json

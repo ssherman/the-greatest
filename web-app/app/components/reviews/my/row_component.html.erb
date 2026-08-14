@@ -1,0 +1,51 @@
+<li class="flex gap-4 py-4 border-b border-base-300">
+  <% if reviewable.primary_image&.file&.attached? %>
+    <%= link_to reviewable_path, class: "shrink-0" do %>
+      <%= image_tag rails_public_blob_url(reviewable.primary_image.file),
+            alt: reviewable.title, class: "w-16 h-auto rounded shadow-sm", loading: "lazy" %>
+    <% end %>
+  <% else %>
+    <%= link_to reviewable_path, class: "shrink-0" do %>
+      <div class="w-16 aspect-[2/3] bg-base-300 rounded flex items-center justify-center" aria-hidden="true">
+        <span class="text-xl opacity-40">📖</span>
+      </div>
+      <span class="sr-only"><%= reviewable.title %></span>
+    <% end %>
+  <% end %>
+
+  <div class="flex-1 min-w-0">
+    <%= link_to reviewable.title, reviewable_path, class: "font-semibold link link-hover" %>
+    <% if creators.any? %>
+      <p class="text-sm text-base-content/70"><%= creators.join(", ") %></p>
+    <% end %>
+
+    <div class="flex items-center gap-2 mt-1 text-sm">
+      <%= render Reviews::StarsComponent.new(rating: review.rating) %>
+      <span class="text-base-content/60"><%= time_ago_in_words(review.created_at) %> ago</span>
+    </div>
+
+    <% if written? %>
+      <div class="review-body mt-2 text-sm line-clamp-2 [overflow-wrap:anywhere]"
+           data-testid="review-snippet"
+           data-controller="reviews--spoiler"
+           data-action="click->reviews--spoiler#reveal keydown->reviews--spoiler#revealOnKey">
+        <%= snippet %>
+      </div>
+    <% end %>
+  </div>
+
+  <div class="shrink-0 self-center">
+    <button type="button"
+            class="btn btn-sm <%= written? ? "btn-ghost" : "btn-primary" %>"
+            data-testid="<%= written? ? "edit-review" : "write-review" %>"
+            data-action="click->reviews--my-reviews#open"
+            data-review-id="<%= review.id %>"
+            data-reviewable-type="<%= review.reviewable_type %>"
+            data-reviewable-id="<%= review.reviewable_id %>"
+            data-rating="<%= review.rating %>"
+            data-title="<%= review.title %>"
+            data-body="<%= review.body %>">
+      <%= written? ? "Edit" : "Write a review" %>
+    </button>
+  </div>
+</li>

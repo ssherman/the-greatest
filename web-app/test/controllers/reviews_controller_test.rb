@@ -19,6 +19,12 @@ class ReviewsControllerTest < ActionDispatch::IntegrationTest
     # makes the guard explicit instead of accidental.
     @original_purge_token = ENV["CLOUDFLARE_CACHE_PURGE_TOKEN"]
     ENV.delete("CLOUDFLARE_CACHE_PURGE_TOKEN")
+
+    # The rate limit store is a single MemoryStore instance shared by the whole
+    # process (config/initializers/rate_limit_store.rb) -- without clearing it
+    # here, whichever test runs 21st in the suite trips the limit instead of the
+    # dedicated rate-limit tests below.
+    Rails.application.config.x.rate_limit_store.clear
   end
 
   teardown do
@@ -246,5 +252,69 @@ class ReviewsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "text/vnd.turbo-stream.html", response.media_type
   ensure
     ActionController::Base.allow_forgery_protection = original
+  end
+
+  test "the write endpoints are rate limited and answer as a turbo stream" do
+    Rails.application.config.x.rate_limit_store.clear
+    sign_in_as(@user, stub_auth: true)
+
+    21.times do |index|
+      book = ::Books::Book.create!(title: "Rate limit probe #{index}")
+      post reviews_path, params: valid_params(reviewable_id: book.id), as: :turbo_stream
+    end
+
+    assert_response :too_many_requests
+    assert_equal "text/vnd.turbo-stream.html", response.media_type,
+      "a non-2xx without a turbo-stream body replaces the whole page"
+  end
+
+  test "the limit is per user, not global" do
+    Rails.application.config.x.rate_limit_store.clear
+    sign_in_as(@user, stub_auth: true)
+    20.times do |index|
+      book = ::Books::Book.create!(title: "Probe #{index}")
+      post reviews_path, params: valid_params(reviewable_id: book.id), as: :turbo_stream
+    end
+
+    sign_in_as(users(:editor_user), stub_auth: true)
+    post reviews_path, params: valid_params(reviewable_id: @book.id), as: :turbo_stream
+    assert_response :success
+  end
+
+  # One bucket spans create/update/destroy, so the cap is 20 writes a minute in
+  # total -- not 20 of each. ActionController::RateLimiting builds its key as
+  # ["rate-limit", scope, name, by] with scope defaulting to controller_path and
+  # name to nil (actionpack rate_limiting.rb#rate_limiting); action_name is not
+  # part of it, and this controller makes a single rate_limit call covering all
+  # three actions. Pinned because the alternative reading -- a per-action bucket
+  # allowing 60 writes and 60 cache-purge jobs a minute -- is exactly the abuse
+  # the limit exists to stop, and nothing else here would catch a regression to
+  # it (adding a second rate_limit call, or an explicit differing name:, would
+  # split the bucket silently).
+  test "one rate limit bucket covers create, update and destroy together" do
+    Rails.application.config.x.rate_limit_store.clear
+    sign_in_as(@user, stub_auth: true)
+
+    20.times do |index|
+      book = ::Books::Book.create!(title: "Shared bucket probe #{index}")
+      post reviews_path, params: valid_params(reviewable_id: book.id), as: :turbo_stream
+      assert_response :success, "probe #{index} should be under the limit"
+    end
+
+    # The 21st write is an UPDATE, not a create. If each action had its own
+    # bucket this would be the first update of the minute and would succeed.
+    patch review_path(@own_review), params: {review: {rating: 2}}, as: :turbo_stream
+    assert_response :too_many_requests
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
+
+    # And a delete, for the third action.
+    original_rating = @own_review.rating
+    assert_no_difference("Review.count") do
+      delete review_path(@own_review), as: :turbo_stream
+    end
+    assert_response :too_many_requests
+
+    assert_equal original_rating, @own_review.reload.rating,
+      "a blocked PATCH must not have been applied"
   end
 end

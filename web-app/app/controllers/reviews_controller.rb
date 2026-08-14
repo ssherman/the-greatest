@@ -4,10 +4,6 @@ class ReviewsController < ApplicationController
   before_action :prevent_caching
   before_action :require_signed_in!
 
-  # Same allowlist rule as ReviewStateController: reviewable_type is user input,
-  # and a visitor must not be able to attach a review to an arbitrary class.
-  REVIEWABLE_TYPES = ["Books::Book"].freeze
-
   # A Turbo-submitted form that receives a non-2xx response without a
   # turbo-stream content type gets its body rendered as a whole new page --
   # and `head` sends an empty body, so the user's page goes blank. Every
@@ -47,6 +43,26 @@ class ReviewsController < ApplicationController
   rescue_from ActionController::InvalidAuthenticityToken do
     render turbo_stream: [], status: :unprocessable_entity
   end
+
+  # 20 saves a minute is far above any human clicking through book pages, and it
+  # caps a runaway script at 1,200/hour rather than unbounded -- which matters
+  # because every write enqueues a Cloudflare purge, and an unbounded loop would
+  # drain the purge budget and silently starve everyone else's.
+  #
+  # `with:` is not optional. Rails' default raises TooManyRequests, which renders
+  # an HTML error body on a non-2xx status -- and a Turbo-submitted form receiving
+  # that replaces the user's whole page with it. This is the same failure the four
+  # rescue_from handlers above exist to avoid; the rate limit is the fifth door.
+  #
+  # Declared after require_signed_in! (filters run in declaration order, and
+  # rate_limit installs its own before_action) so an anonymous request is already
+  # turned away as :unauthorized before by: runs -- otherwise current_user&.id is
+  # nil for every anonymous caller and they'd all share one bucket.
+  rate_limit to: 20, within: 1.minute,
+    by: -> { current_user&.id },
+    with: -> { render turbo_stream: [], status: :too_many_requests },
+    store: Rails.application.config.x.rate_limit_store,
+    only: [:create, :update, :destroy]
 
   def create
     reviewable = find_reviewable(params.dig(:review, :reviewable_type), params.dig(:review, :reviewable_id))
@@ -107,8 +123,10 @@ class ReviewsController < ApplicationController
     params.require(:review).permit(:rating, :title, :body)
   end
 
+  # reviewable_type is user input; Reviews::Registry is the allowlist that stops a
+  # visitor attaching a review to an arbitrary class.
   def find_reviewable(type, id)
-    return nil unless REVIEWABLE_TYPES.include?(type.to_s)
+    return nil unless Reviews::Registry.allowed?(type)
 
     type.to_s.constantize.find_by(id: id)
   end
