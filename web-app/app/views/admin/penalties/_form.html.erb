@@ -20,37 +20,37 @@
       <h2 class="card-title">Basic Information</h2>
 
       <div class="grid grid-cols-1 gap-4">
-        <div class="form-control">
+        <div>
           <%= f.label :name, class: "label" do %>
-            <span class="label-text font-semibold">Name <span class="text-error">*</span></span>
+            <span class="font-semibold">Name <span class="text-error">*</span></span>
           <% end %>
           <%= f.text_field :name,
-              class: "input input-bordered w-full #{@penalty.errors[:name].any? ? 'input-error' : ''}",
+              class: "input w-full #{@penalty.errors[:name].any? ? 'input-error' : ''}",
               placeholder: "Enter penalty name",
               required: true,
               autofocus: true,
               maxlength: 255 %>
           <% if @penalty.errors[:name].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @penalty.errors[:name].first %></span>
+              <span class="text-error"><%= @penalty.errors[:name].first %></span>
             </label>
           <% end %>
         </div>
 
-        <div class="form-control">
+        <div>
           <%= f.label :description, class: "label" do %>
-            <span class="label-text font-semibold">Description</span>
+            <span class="font-semibold">Description</span>
           <% end %>
           <%= f.text_area :description,
-              class: "textarea textarea-bordered w-full #{@penalty.errors[:description].any? ? 'textarea-error' : ''}",
+              class: "textarea w-full #{@penalty.errors[:description].any? ? 'textarea-error' : ''}",
               placeholder: "Enter a description of the penalty...",
               rows: 4 %>
           <label class="label">
-            <span class="label-text-alt">Optional description explaining this penalty</span>
+            <span>Optional description explaining this penalty</span>
           </label>
           <% if @penalty.errors[:description].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @penalty.errors[:description].first %></span>
+              <span class="text-error"><%= @penalty.errors[:description].first %></span>
             </label>
           <% end %>
         </div>
@@ -63,9 +63,9 @@
       <h2 class="card-title">Type Configuration</h2>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="form-control">
+        <div>
           <%= f.label :type, class: "label" do %>
-            <span class="label-text font-semibold">Penalty Type <span class="text-error">*</span></span>
+            <span class="font-semibold">Penalty Type <span class="text-error">*</span></span>
           <% end %>
           <%= f.select :type,
               options_for_select([
@@ -76,10 +76,10 @@
                 ["Games", "Games::Penalty"]
               ], @penalty.type || "Global::Penalty"),
               {},
-              class: "select select-bordered w-full #{@penalty.errors[:type].any? ? 'select-error' : ''}",
+              class: "select w-full #{@penalty.errors[:type].any? ? 'select-error' : ''}",
               disabled: @penalty.persisted? %>
           <label class="label">
-            <span class="label-text-alt">
+            <span>
               <% if @penalty.persisted? %>
                 Type cannot be changed after creation
               <% else %>
@@ -89,14 +89,14 @@
           </label>
           <% if @penalty.errors[:type].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @penalty.errors[:type].first %></span>
+              <span class="text-error"><%= @penalty.errors[:type].first %></span>
             </label>
           <% end %>
         </div>
 
-        <div class="form-control">
+        <div>
           <%= f.label :dynamic_type, class: "label" do %>
-            <span class="label-text font-semibold">Dynamic Type</span>
+            <span class="font-semibold">Dynamic Type</span>
           <% end %>
           <%= f.select :dynamic_type,
               options_for_select(
@@ -104,13 +104,13 @@
                 @penalty.dynamic_type
               ),
               {},
-              class: "select select-bordered w-full #{@penalty.errors[:dynamic_type].any? ? 'select-error' : ''}" %>
+              class: "select w-full #{@penalty.errors[:dynamic_type].any? ? 'select-error' : ''}" %>
           <label class="label">
-            <span class="label-text-alt">Select a dynamic type for runtime calculation, or 'Static' for fixed penalties</span>
+            <span>Select a dynamic type for runtime calculation, or 'Static' for fixed penalties</span>
           </label>
           <% if @penalty.errors[:dynamic_type].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @penalty.errors[:dynamic_type].first %></span>
+              <span class="text-error"><%= @penalty.errors[:dynamic_type].first %></span>
             </label>
           <% end %>
         </div>

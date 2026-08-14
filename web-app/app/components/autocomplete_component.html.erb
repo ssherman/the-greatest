@@ -1,4 +1,4 @@
-<div class="form-control">
+<div>
   <div data-controller="autocomplete"
        data-autocomplete-url-value="<%= url %>"
        data-autocomplete-min-length-value="<%= min_length %>"
@@ -18,12 +18,12 @@
            data-autocomplete-target="input"
            value="<%= selected_text %>"
            placeholder="<%= placeholder %>"
-           class="input input-bordered w-full <%= 'input-disabled' if disabled %>"
+           class="input w-full"
            autocomplete="off"
            <%= 'disabled' if disabled %>>
   </div>
 
   <label class="label">
-    <span class="label-text-alt">Start typing to search (min <%= min_length %> characters)</span>
+    <span>Start typing to search (min <%= min_length %> characters)</span>
   </label>
 </div>

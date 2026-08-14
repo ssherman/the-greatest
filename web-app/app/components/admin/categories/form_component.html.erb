@@ -22,64 +22,64 @@
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <!-- Name -->
-        <div class="form-control md:col-span-2">
+        <div class="md:col-span-2">
           <%= f.label :name, class: "label" do %>
-            <span class="label-text font-semibold">Name <span class="text-error">*</span></span>
+            <span class="font-semibold">Name <span class="text-error">*</span></span>
           <% end %>
           <%= f.text_field :name,
-              class: "input input-bordered w-full #{category.errors[:name].any? ? 'input-error' : ''}",
+              class: "input w-full #{category.errors[:name].any? ? 'input-error' : ''}",
               placeholder: "Enter category name",
               required: true,
               autofocus: true %>
           <% if category.errors[:name].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= category.errors[:name].first %></span>
+              <span class="text-error"><%= category.errors[:name].first %></span>
             </label>
           <% end %>
         </div>
 
         <!-- Category Type -->
-        <div class="form-control">
+        <div>
           <%= f.label :category_type, class: "label" do %>
-            <span class="label-text font-semibold">Category Type <span class="text-error">*</span></span>
+            <span class="font-semibold">Category Type <span class="text-error">*</span></span>
           <% end %>
           <%= f.select :category_type,
               Category.category_types.keys.map { |t| [t.titleize, t] },
               { include_blank: "Select type..." },
-              class: "select select-bordered w-full #{category.errors[:category_type].any? ? 'select-error' : ''}",
+              class: "select w-full #{category.errors[:category_type].any? ? 'select-error' : ''}",
               required: true %>
           <% if category.errors[:category_type].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= category.errors[:category_type].first %></span>
+              <span class="text-error"><%= category.errors[:category_type].first %></span>
             </label>
           <% end %>
         </div>
 
         <!-- Parent Category -->
-        <div class="form-control">
+        <div>
           <%= f.label :parent_id, class: "label" do %>
-            <span class="label-text font-semibold">Parent Category</span>
+            <span class="font-semibold">Parent Category</span>
           <% end %>
           <%= f.select :parent_id,
               parent_categories.map { |c| [c.name, c.id] },
               { include_blank: "None (top-level category)" },
-              class: "select select-bordered w-full" %>
+              class: "select w-full" %>
           <label class="label">
-            <span class="label-text-alt">Optional: Select a parent to create a subcategory</span>
+            <span>Optional: Select a parent to create a subcategory</span>
           </label>
         </div>
 
         <!-- Description -->
-        <div class="form-control md:col-span-2">
+        <div class="md:col-span-2">
           <%= f.label :description, class: "label" do %>
-            <span class="label-text font-semibold">Description</span>
+            <span class="font-semibold">Description</span>
           <% end %>
           <%= f.text_area :description,
-              class: "textarea textarea-bordered w-full h-32 #{category.errors[:description].any? ? 'textarea-error' : ''}",
+              class: "textarea w-full h-32 #{category.errors[:description].any? ? 'textarea-error' : ''}",
               placeholder: "Enter a description for this category..." %>
           <% if category.errors[:description].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= category.errors[:description].first %></span>
+              <span class="text-error"><%= category.errors[:description].first %></span>
             </label>
           <% end %>
         </div>

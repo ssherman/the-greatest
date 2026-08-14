@@ -29,17 +29,17 @@
                 <div class="modal-box">
                   <h3 class="font-bold text-lg mb-4">Edit Author</h3>
                   <%= form_with model: book_author, url: admin_books_book_author_path(book_author), method: :patch, class: "space-y-4", data: {controller: "modal-form", modal_form_modal_id_value: "edit_book_author_#{book_author.id}_modal", turbo_frame: "book_authors_list"} do |f| %>
-                    <div class="form-control">
-                      <%= f.label :role, class: "label" do %><span class="label-text font-semibold">Role</span><% end %>
-                      <%= f.select :role, ::Books::BookAuthor.roles.keys.map { |k| [k.titleize, k] }, {}, class: "select select-bordered w-full" %>
+                    <div>
+                      <%= f.label :role, class: "label" do %><span class="font-semibold">Role</span><% end %>
+                      <%= f.select :role, ::Books::BookAuthor.roles.keys.map { |k| [k.titleize, k] }, {}, class: "select w-full" %>
                     </div>
-                    <div class="form-control">
-                      <%= f.label :position, class: "label" do %><span class="label-text font-semibold">Position</span><% end %>
-                      <%= f.number_field :position, min: 1, class: "input input-bordered w-full" %>
+                    <div>
+                      <%= f.label :position, class: "label" do %><span class="font-semibold">Position</span><% end %>
+                      <%= f.number_field :position, min: 1, class: "input w-full" %>
                     </div>
-                    <div class="form-control">
-                      <%= f.label :credited_as, class: "label" do %><span class="label-text font-semibold">Credited As</span><% end %>
-                      <%= f.text_field :credited_as, class: "input input-bordered w-full" %>
+                    <div>
+                      <%= f.label :credited_as, class: "label" do %><span class="font-semibold">Credited As</span><% end %>
+                      <%= f.text_field :credited_as, class: "input w-full" %>
                     </div>
                     <div class="modal-action">
                       <button type="button" class="btn" onclick="edit_book_author_<%= book_author.id %>_modal.close()">Cancel</button>

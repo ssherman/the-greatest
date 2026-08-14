@@ -25,9 +25,9 @@
                 <div class="modal-box">
                   <h3 class="font-bold text-lg mb-4">Edit Relationship</h3>
                   <%= form_with model: rel, url: admin_books_author_relationship_path(rel), method: :patch, class: "space-y-4", data: {controller: "modal-form", modal_form_modal_id_value: "edit_author_relationship_#{rel.id}_modal", turbo_frame: "author_relationships_list"} do |f| %>
-                    <div class="form-control">
-                      <%= f.label :relation_type, class: "label" do %><span class="label-text font-semibold">Relation</span><% end %>
-                      <%= f.select :relation_type, ::Books::AuthorRelationship.relation_types.keys.map { |k| [k.titleize, k] }, {}, class: "select select-bordered w-full" %>
+                    <div>
+                      <%= f.label :relation_type, class: "label" do %><span class="font-semibold">Relation</span><% end %>
+                      <%= f.select :relation_type, ::Books::AuthorRelationship.relation_types.keys.map { |k| [k.titleize, k] }, {}, class: "select w-full" %>
                     </div>
                     <div class="modal-action">
                       <button type="button" class="btn" onclick="edit_author_relationship_<%= rel.id %>_modal.close()">Cancel</button>

@@ -15,7 +15,7 @@
         <%= f.hidden_field :listable_type, value: expected_listable_type %>
 
         <% if autocomplete_url.present? %>
-          <div class="form-control">
+          <div>
             <%= f.label :listable_id, item_label, class: "label" %>
             <%= render AutocompleteComponent.new(
               name: "list_item[listable_id]",
@@ -26,39 +26,39 @@
               required: true
             ) %>
             <label class="label">
-              <span class="label-text-alt">Search and select <%= item_label.downcase %> to add</span>
+              <span>Search and select <%= item_label.downcase %> to add</span>
             </label>
           </div>
         <% end %>
 
-        <div class="form-control">
+        <div>
           <%= f.label :position, "Position", class: "label" %>
           <%= f.number_field :position,
               min: 1,
               step: 1,
               placeholder: "1",
-              class: "input input-bordered w-full",
+              class: "input w-full",
               required: true %>
           <label class="label">
-            <span class="label-text-alt">Position in the list (must be > 0)</span>
+            <span>Position in the list (must be > 0)</span>
           </label>
         </div>
 
-        <div class="form-control">
+        <div>
           <%= f.label :metadata, "Metadata (JSON, optional)", class: "label" %>
           <%= f.text_area :metadata,
               rows: 3,
               placeholder: '{"custom_field": "value"}',
-              class: "textarea textarea-bordered w-full" %>
+              class: "textarea w-full" %>
           <label class="label">
-            <span class="label-text-alt">Optional JSON metadata</span>
+            <span>Optional JSON metadata</span>
           </label>
         </div>
 
-        <div class="form-control">
+        <div>
           <label class="label cursor-pointer justify-start gap-2">
             <%= f.check_box :verified, class: "checkbox" %>
-            <span class="label-text">Mark as verified</span>
+            <span>Mark as verified</span>
           </label>
         </div>
 

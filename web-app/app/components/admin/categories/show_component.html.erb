@@ -48,14 +48,14 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Name</span>
+                <span class="font-semibold">Name</span>
               </label>
               <p class="text-lg"><%= category.name %></p>
             </div>
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Category Type</span>
+                <span class="font-semibold">Category Type</span>
               </label>
               <span class="badge badge-outline badge-lg">
                 <%= category.category_type.titleize %>
@@ -64,7 +64,7 @@
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Parent Category</span>
+                <span class="font-semibold">Parent Category</span>
               </label>
               <% if category.parent.present? %>
                 <%= link_to category.parent.name, category_path(category.parent), class: "link link-primary" %>
@@ -75,7 +75,7 @@
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Total Items</span>
+                <span class="font-semibold">Total Items</span>
               </label>
               <p class="text-lg font-mono"><%= category.item_count %></p>
             </div>
@@ -84,7 +84,7 @@
           <% if category.description.present? %>
             <div class="mt-4">
               <label class="label">
-                <span class="label-text font-semibold">Description</span>
+                <span class="font-semibold">Description</span>
               </label>
               <p class="text-base-content/80 whitespace-pre-wrap"><%= category.description %></p>
             </div>

@@ -60,20 +60,20 @@
                     modal_form_modal_id_value: "edit_image_#{image.id}_modal"
                   } do |f| %>
 
-      <div class="form-control">
+      <div>
         <%= f.label :notes, class: "label" do %>
-          <span class="label-text font-semibold">Notes</span>
+          <span class="font-semibold">Notes</span>
         <% end %>
         <%= f.text_area :notes,
-            class: "textarea textarea-bordered w-full",
+            class: "textarea w-full",
             rows: 3,
             placeholder: "Optional description or notes about this image" %>
       </div>
 
-      <div class="form-control">
+      <div>
         <label class="label cursor-pointer justify-start gap-2">
           <%= f.check_box :primary, class: "checkbox checkbox-primary" %>
-          <span class="label-text">Set as primary image</span>
+          <span>Set as primary image</span>
         </label>
       </div>
 

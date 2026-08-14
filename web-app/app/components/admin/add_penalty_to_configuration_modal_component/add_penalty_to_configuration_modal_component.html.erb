@@ -12,28 +12,28 @@
                       turbo_frame: "penalty_applications_list"
                     } do |f| %>
 
-        <div class="form-control">
+        <div>
           <%= f.label :penalty_id, "Penalty", class: "label" %>
           <%= f.select :penalty_id,
               options_from_collection_for_select(available_penalties, :id, :name),
               { prompt: "Select a penalty..." },
-              { class: "select select-bordered w-full", required: true } %>
+              { class: "select w-full", required: true } %>
           <label class="label">
-            <span class="label-text-alt">Only compatible penalties shown (Global + <%= @ranking_configuration.type.split("::").first %>)</span>
+            <span>Only compatible penalties shown (Global + <%= @ranking_configuration.type.split("::").first %>)</span>
           </label>
         </div>
 
-        <div class="form-control">
+        <div>
           <%= f.label :value, "Value (%)", class: "label" %>
           <%= f.number_field :value,
               min: 0,
               max: 100,
               step: 1,
               placeholder: "0-100",
-              class: "input input-bordered w-full",
+              class: "input w-full",
               required: true %>
           <label class="label">
-            <span class="label-text-alt">Penalty percentage (0-100)</span>
+            <span>Penalty percentage (0-100)</span>
           </label>
         </div>
 

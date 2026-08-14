@@ -9,17 +9,17 @@
       <%# Step 1a: Input HTML %>
       <%= form_with url: helpers.save_html_admin_games_list_wizard_path(list_id: list.id), method: :post, data: { turbo_frame: "wizard_content" } do |f| %>
         <div class="space-y-6">
-          <div class="form-control">
+          <div>
             <label class="label">
-              <span class="label-text font-bold">Paste HTML Content</span>
+              <span class="font-bold">Paste HTML Content</span>
             </label>
             <%= f.text_area :raw_content,
                 rows: 15,
                 placeholder: "Paste the HTML content from your source list here...\n\nFor example:\n1. The Legend of Zelda: Breath of the Wild (2017)\n2. Red Dead Redemption 2 (2018)",
-                class: "textarea textarea-bordered w-full font-mono text-sm",
+                class: "textarea w-full font-mono text-sm",
                 required: true %>
             <label class="label">
-              <span class="label-text-alt">Paste the HTML from a ranked game list. The AI will extract game titles and release years.</span>
+              <span>Paste the HTML from a ranked game list. The AI will extract game titles and release years.</span>
             </label>
           </div>
 

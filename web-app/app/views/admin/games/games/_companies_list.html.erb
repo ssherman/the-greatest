@@ -67,42 +67,42 @@
                               turbo_frame: "game_companies_list"
                             } do |f| %>
 
-                <div class="form-control">
+                <div>
                   <%= f.label :game_id, "Game", class: "label" do %>
-                    <span class="label-text font-semibold">Game</span>
+                    <span class="font-semibold">Game</span>
                   <% end %>
                   <%= f.text_field :game_id,
                       value: game.title,
                       disabled: true,
-                      class: "input input-bordered input-disabled w-full" %>
+                      class: "input w-full" %>
                 </div>
 
-                <div class="form-control">
+                <div>
                   <%= f.label :company_id, "Company", class: "label" do %>
-                    <span class="label-text font-semibold">Company</span>
+                    <span class="font-semibold">Company</span>
                   <% end %>
                   <%= f.text_field :company_id,
                       value: game_company.company.name,
                       disabled: true,
-                      class: "input input-bordered input-disabled w-full" %>
+                      class: "input w-full" %>
                 </div>
 
-                <div class="form-control">
+                <div>
                   <label class="label cursor-pointer justify-start gap-2">
                     <%= f.check_box :developer, class: "checkbox checkbox-primary" %>
-                    <span class="label-text">Developer</span>
+                    <span>Developer</span>
                   </label>
                 </div>
 
-                <div class="form-control">
+                <div>
                   <label class="label cursor-pointer justify-start gap-2">
                     <%= f.check_box :publisher, class: "checkbox checkbox-primary" %>
-                    <span class="label-text">Publisher</span>
+                    <span>Publisher</span>
                   </label>
                 </div>
 
                 <label class="label">
-                  <span class="label-text-alt text-warning">At least one role (developer or publisher) must be selected</span>
+                  <span class="text-warning">At least one role (developer or publisher) must be selected</span>
                 </label>
 
                 <div class="modal-action">

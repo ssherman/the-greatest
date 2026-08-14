@@ -356,24 +356,24 @@
                   } do |f| %>
       <%= f.hidden_field :action_name, value: "MergeSong" %>
 
-      <div class="form-control">
+      <div>
         <%= f.label :source_song_id, "Source Song ID (to be deleted)", class: "label" %>
         <%= f.number_field :source_song_id,
-                          class: "input input-bordered w-full",
+                          class: "input w-full",
                           placeholder: "e.g., 123",
                           required: true %>
         <label class="label">
-          <span class="label-text-alt">Enter the ID of the duplicate song</span>
+          <span>Enter the ID of the duplicate song</span>
         </label>
       </div>
 
-      <div class="form-control">
+      <div>
         <label class="label cursor-pointer justify-start gap-2">
           <%= f.check_box :confirm_merge, class: "checkbox", required: true %>
-          <span class="label-text">I understand this action cannot be undone</span>
+          <span>I understand this action cannot be undone</span>
         </label>
         <label class="label">
-          <span class="label-text-alt text-warning">The source song will be permanently deleted after merging</span>
+          <span class="text-warning">The source song will be permanently deleted after merging</span>
         </label>
       </div>
 
@@ -405,20 +405,20 @@
                     modal_form_modal_id_value: "add_artist_modal"
                   } do |f| %>
 
-      <div class="form-control">
+      <div>
         <%= f.label :song_id, "Song", class: "label" do %>
-          <span class="label-text font-semibold">Song</span>
+          <span class="font-semibold">Song</span>
         <% end %>
         <%= f.text_field :song_id,
             value: @song.title,
             disabled: true,
-            class: "input input-bordered input-disabled w-full" %>
+            class: "input w-full" %>
         <%= f.hidden_field :song_id, value: @song.id %>
       </div>
 
-      <div class="form-control">
+      <div>
         <%= f.label :artist_id, "Artist", class: "label" do %>
-          <span class="label-text font-semibold">Artist <span class="text-error">*</span></span>
+          <span class="font-semibold">Artist <span class="text-error">*</span></span>
         <% end %>
         <%= render AutocompleteComponent.new(
           name: "music_song_artist[artist_id]",
@@ -428,17 +428,17 @@
         ) %>
       </div>
 
-      <div class="form-control">
+      <div>
         <%= f.label :position, class: "label" do %>
-          <span class="label-text font-semibold">Position</span>
+          <span class="font-semibold">Position</span>
         <% end %>
         <%= f.number_field :position,
             value: @song.song_artists.maximum(:position).to_i + 1,
             min: 1,
-            class: "input input-bordered w-full",
+            class: "input w-full",
             required: true %>
         <label class="label">
-          <span class="label-text-alt">Position in artist ordering (1 = first artist)</span>
+          <span>Position in artist ordering (1 = first artist)</span>
         </label>
       </div>
 

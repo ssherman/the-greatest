@@ -45,10 +45,10 @@
 
       <!-- Email + Continue -->
       <form data-action="submit->authentication#continueWithEmail">
-        <div class="form-control mb-3">
+        <div class="mb-3">
           <input type="email"
                  placeholder="Email address"
-                 class="input input-bordered w-full"
+                 class="input w-full"
                  data-authentication-target="emailInput"
                  required>
         </div>
@@ -70,10 +70,10 @@
       </div>
 
       <form data-action="submit->authentication#submitEmailForm">
-        <div class="form-control mb-3">
+        <div class="mb-3">
           <input type="password"
                  placeholder="Password"
-                 class="input input-bordered w-full"
+                 class="input w-full"
                  data-authentication-target="passwordInput"
                  minlength="6"
                  required>
@@ -102,10 +102,10 @@
     <div data-authentication-target="forgotPasswordForm" class="hidden">
       <form data-action="submit->authentication#submitForgotPassword">
         <p class="text-sm text-gray-600 mb-3">Enter your email and we'll send you a reset link.</p>
-        <div class="form-control mb-3">
+        <div class="mb-3">
           <input type="email"
                  placeholder="Email address"
-                 class="input input-bordered w-full"
+                 class="input w-full"
                  data-authentication-target="resetEmailInput"
                  required>
         </div>

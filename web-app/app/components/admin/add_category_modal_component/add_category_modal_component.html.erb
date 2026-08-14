@@ -16,9 +16,9 @@
                       turbo_frame: "category_items_list"
                     } do |f| %>
 
-        <div class="form-control">
+        <div>
           <%= f.label :category_id, "Category", class: "label" do %>
-            <span class="label-text font-semibold">Category <span class="text-error">*</span></span>
+            <span class="font-semibold">Category <span class="text-error">*</span></span>
           <% end %>
           <%= render AutocompleteComponent.new(
             name: "category_item[category_id]",

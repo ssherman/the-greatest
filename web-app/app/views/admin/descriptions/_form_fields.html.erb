@@ -1,40 +1,40 @@
-<div class="form-control">
+<div>
   <%= f.label :content, class: "label" do %>
-    <span class="label-text font-semibold">Content <span class="text-error">*</span></span>
+    <span class="font-semibold">Content <span class="text-error">*</span></span>
   <% end %>
-  <%= f.text_area :content, class: "textarea textarea-bordered w-full h-32", required: true %>
+  <%= f.text_area :content, class: "textarea w-full h-32", required: true %>
 </div>
 
-<div class="form-control">
+<div>
   <%= f.label :source, class: "label" do %>
-    <span class="label-text font-semibold">Source <span class="text-error">*</span></span>
+    <span class="font-semibold">Source <span class="text-error">*</span></span>
   <% end %>
   <%= f.select :source, Description.sources.keys.map { |s| [s.humanize, s] },
-      {}, class: "select select-bordered w-full", required: true,
+      {}, class: "select w-full", required: true,
       data: {conditional_field_target: "select", action: "change->conditional-field#toggle"} %>
 </div>
 
-<div class="form-control" data-conditional-field-target="field">
+<div data-conditional-field-target="field">
   <%= f.label :source_name, class: "label" do %>
-    <span class="label-text font-semibold">Source Name</span>
+    <span class="font-semibold">Source Name</span>
   <% end %>
-  <%= f.text_field :source_name, class: "input input-bordered w-full" %>
+  <%= f.text_field :source_name, class: "input w-full" %>
   <label class="label">
-    <span class="label-text-alt">Shown only when Source is "Other"</span>
+    <span>Shown only when Source is "Other"</span>
   </label>
 </div>
 
-<div class="form-control">
+<div>
   <%= f.label :source_url, class: "label" do %>
-    <span class="label-text font-semibold">Source URL</span>
+    <span class="font-semibold">Source URL</span>
   <% end %>
-  <%= f.url_field :source_url, class: "input input-bordered w-full" %>
+  <%= f.url_field :source_url, class: "input w-full" %>
 </div>
 
-<div class="form-control">
+<div>
   <%= f.label :license, class: "label" do %>
-    <span class="label-text font-semibold">License</span>
+    <span class="font-semibold">License</span>
   <% end %>
   <%= f.select :license, Description.licenses.keys.map { |l| [l.humanize, l] },
-      {include_blank: "Not recorded"}, class: "select select-bordered w-full" %>
+      {include_blank: "Not recorded"}, class: "select w-full" %>
 </div>

@@ -68,14 +68,14 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Name</span>
+                <span class="font-semibold">Name</span>
               </label>
               <p class="text-lg"><%= list.name %></p>
             </div>
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Status</span>
+                <span class="font-semibold">Status</span>
               </label>
               <span class="badge <%= list.approved? ? 'badge-success' : list.active? ? 'badge-primary' : list.rejected? ? 'badge-error' : 'badge-ghost' %> badge-lg">
                 <%= list.status.titleize %>
@@ -89,7 +89,7 @@
               %>
               <div>
                 <label class="label">
-                  <span class="label-text font-semibold">Source</span>
+                  <span class="font-semibold">Source</span>
                 </label>
                 <% if list.url.present? %>
                   <%= link_to source_display, list.url,
@@ -105,7 +105,7 @@
             <% if list.year_published.present? %>
               <div>
                 <label class="label">
-                  <span class="label-text font-semibold">Year Published</span>
+                  <span class="font-semibold">Year Published</span>
                 </label>
                 <p><%= list.year_published %></p>
               </div>
@@ -114,7 +114,7 @@
             <% if list.submitted_by.present? %>
               <div>
                 <label class="label">
-                  <span class="label-text font-semibold">Submitted By</span>
+                  <span class="font-semibold">Submitted By</span>
                 </label>
                 <p><%= list.submitted_by.email %></p>
               </div>
@@ -122,14 +122,14 @@
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Created</span>
+                <span class="font-semibold">Created</span>
               </label>
               <p><%= list.created_at.strftime("%B %d, %Y at %I:%M %p") %></p>
             </div>
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Updated</span>
+                <span class="font-semibold">Updated</span>
               </label>
               <p><%= list.updated_at.strftime("%B %d, %Y at %I:%M %p") %></p>
             </div>
@@ -138,7 +138,7 @@
           <% if list.description.present? %>
             <div class="mt-4">
               <label class="label">
-                <span class="label-text font-semibold">Description</span>
+                <span class="font-semibold">Description</span>
               </label>
               <p class="text-base-content/80 whitespace-pre-wrap"><%= list.description %></p>
             </div>
@@ -154,7 +154,7 @@
               <% if list.number_of_voters.present? %>
                 <div>
                   <label class="label">
-                    <span class="label-text font-semibold">Number of Voters</span>
+                    <span class="font-semibold">Number of Voters</span>
                   </label>
                   <p><%= number_with_delimiter(list.number_of_voters) %></p>
                 </div>
@@ -163,7 +163,7 @@
               <% if list.estimated_quality.present? %>
                 <div>
                   <label class="label">
-                    <span class="label-text font-semibold">Estimated Quality</span>
+                    <span class="font-semibold">Estimated Quality</span>
                   </label>
                   <p><%= list.estimated_quality %></p>
                 </div>
@@ -172,7 +172,7 @@
               <% if list.num_years_covered.present? %>
                 <div>
                   <label class="label">
-                    <span class="label-text font-semibold">Years Covered</span>
+                    <span class="font-semibold">Years Covered</span>
                   </label>
                   <p><%= list.num_years_covered %></p>
                 </div>
@@ -181,7 +181,7 @@
               <% if show_musicbrainz_field? && list.musicbrainz_series_id.present? %>
                 <div class="md:col-span-2">
                   <label class="label">
-                    <span class="label-text font-semibold">MusicBrainz Series ID</span>
+                    <span class="font-semibold">MusicBrainz Series ID</span>
                   </label>
                   <p class="font-mono"><%= list.musicbrainz_series_id %></p>
                 </div>

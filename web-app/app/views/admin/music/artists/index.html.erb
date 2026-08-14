@@ -71,9 +71,9 @@
                     modal_form_modal_id_value: "import-musicbrainz-modal"
                   } do |f| %>
 
-      <div class="form-control">
+      <div>
         <label class="label">
-          <span class="label-text font-semibold">Artist <span class="text-error">*</span></span>
+          <span class="font-semibold">Artist <span class="text-error">*</span></span>
         </label>
         <%= render AutocompleteComponent.new(
           name: "musicbrainz_id",
@@ -82,7 +82,7 @@
           required: true
         ) %>
         <label class="label">
-          <span class="label-text-alt">Start typing to search MusicBrainz database</span>
+          <span>Start typing to search MusicBrainz database</span>
         </label>
       </div>
 

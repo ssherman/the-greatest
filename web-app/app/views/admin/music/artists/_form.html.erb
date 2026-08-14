@@ -22,26 +22,26 @@
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <!-- Name -->
-        <div class="form-control md:col-span-2">
+        <div class="md:col-span-2">
           <%= f.label :name, class: "label" do %>
-            <span class="label-text font-semibold">Name <span class="text-error">*</span></span>
+            <span class="font-semibold">Name <span class="text-error">*</span></span>
           <% end %>
           <%= f.text_field :name,
-              class: "input input-bordered w-full #{@artist.errors[:name].any? ? 'input-error' : ''}",
+              class: "input w-full #{@artist.errors[:name].any? ? 'input-error' : ''}",
               placeholder: "Enter artist or band name",
               required: true,
               autofocus: true %>
           <% if @artist.errors[:name].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @artist.errors[:name].first %></span>
+              <span class="text-error"><%= @artist.errors[:name].first %></span>
             </label>
           <% end %>
         </div>
 
         <!-- Kind -->
-        <div class="form-control">
+        <div>
           <%= f.label :kind, class: "label" do %>
-            <span class="label-text font-semibold">Type <span class="text-error">*</span></span>
+            <span class="font-semibold">Type <span class="text-error">*</span></span>
           <% end %>
           <%= f.select :kind,
               options_for_select(
@@ -49,32 +49,32 @@
                 @artist.kind
               ),
               {},
-              class: "select select-bordered w-full #{@artist.errors[:kind].any? ? 'select-error' : ''}",
+              class: "select w-full #{@artist.errors[:kind].any? ? 'select-error' : ''}",
               required: true %>
           <% if @artist.errors[:kind].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @artist.errors[:kind].first %></span>
+              <span class="text-error"><%= @artist.errors[:kind].first %></span>
             </label>
           <% end %>
         </div>
 
         <!-- Country -->
-        <div class="form-control">
+        <div>
           <%= f.label :country, class: "label" do %>
-            <span class="label-text font-semibold">Country Code</span>
+            <span class="font-semibold">Country Code</span>
           <% end %>
           <%= f.text_field :country,
-              class: "input input-bordered w-full #{@artist.errors[:country].any? ? 'input-error' : ''}",
+              class: "input w-full #{@artist.errors[:country].any? ? 'input-error' : ''}",
               placeholder: "US",
               maxlength: 2,
               pattern: "[A-Z]{2}",
               title: "Two-letter country code (e.g., US, GB, CA)" %>
           <label class="label">
-            <span class="label-text-alt">Two-letter ISO code (e.g., US, GB, CA)</span>
+            <span>Two-letter ISO code (e.g., US, GB, CA)</span>
           </label>
           <% if @artist.errors[:country].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @artist.errors[:country].first %></span>
+              <span class="text-error"><%= @artist.errors[:country].first %></span>
             </label>
           <% end %>
         </div>
@@ -82,32 +82,32 @@
         <!-- Person-specific fields -->
         <div id="person-fields" class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4" style="<%= 'display: none;' unless @artist.person? %>">
           <!-- Born On -->
-          <div class="form-control">
+          <div>
             <%= f.label :born_on, class: "label" do %>
-              <span class="label-text font-semibold">Born On</span>
+              <span class="font-semibold">Born On</span>
             <% end %>
             <%= f.date_field :born_on,
-                class: "input input-bordered w-full #{@artist.errors[:born_on].any? ? 'input-error' : ''}" %>
+                class: "input w-full #{@artist.errors[:born_on].any? ? 'input-error' : ''}" %>
             <% if @artist.errors[:born_on].any? %>
               <label class="label">
-                <span class="label-text-alt text-error"><%= @artist.errors[:born_on].first %></span>
+                <span class="text-error"><%= @artist.errors[:born_on].first %></span>
               </label>
             <% end %>
           </div>
 
           <!-- Year Died -->
-          <div class="form-control">
+          <div>
             <%= f.label :year_died, class: "label" do %>
-              <span class="label-text font-semibold">Year Died</span>
+              <span class="font-semibold">Year Died</span>
             <% end %>
             <%= f.number_field :year_died,
-                class: "input input-bordered w-full #{@artist.errors[:year_died].any? ? 'input-error' : ''}",
+                class: "input w-full #{@artist.errors[:year_died].any? ? 'input-error' : ''}",
                 placeholder: "e.g., 2000",
                 min: 1900,
                 max: Time.current.year %>
             <% if @artist.errors[:year_died].any? %>
               <label class="label">
-                <span class="label-text-alt text-error"><%= @artist.errors[:year_died].first %></span>
+                <span class="text-error"><%= @artist.errors[:year_died].first %></span>
               </label>
             <% end %>
           </div>
@@ -116,35 +116,35 @@
         <!-- Band-specific fields -->
         <div id="band-fields" class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4" style="<%= 'display: none;' unless @artist.band? %>">
           <!-- Year Formed -->
-          <div class="form-control">
+          <div>
             <%= f.label :year_formed, class: "label" do %>
-              <span class="label-text font-semibold">Year Formed</span>
+              <span class="font-semibold">Year Formed</span>
             <% end %>
             <%= f.number_field :year_formed,
-                class: "input input-bordered w-full #{@artist.errors[:year_formed].any? ? 'input-error' : ''}",
+                class: "input w-full #{@artist.errors[:year_formed].any? ? 'input-error' : ''}",
                 placeholder: "e.g., 1980",
                 min: 1900,
                 max: Time.current.year %>
             <% if @artist.errors[:year_formed].any? %>
               <label class="label">
-                <span class="label-text-alt text-error"><%= @artist.errors[:year_formed].first %></span>
+                <span class="text-error"><%= @artist.errors[:year_formed].first %></span>
               </label>
             <% end %>
           </div>
 
           <!-- Year Disbanded -->
-          <div class="form-control">
+          <div>
             <%= f.label :year_disbanded, class: "label" do %>
-              <span class="label-text font-semibold">Year Disbanded</span>
+              <span class="font-semibold">Year Disbanded</span>
             <% end %>
             <%= f.number_field :year_disbanded,
-                class: "input input-bordered w-full #{@artist.errors[:year_disbanded].any? ? 'input-error' : ''}",
+                class: "input w-full #{@artist.errors[:year_disbanded].any? ? 'input-error' : ''}",
                 placeholder: "e.g., 2010",
                 min: 1900,
                 max: Time.current.year %>
             <% if @artist.errors[:year_disbanded].any? %>
               <label class="label">
-                <span class="label-text-alt text-error"><%= @artist.errors[:year_disbanded].first %></span>
+                <span class="text-error"><%= @artist.errors[:year_disbanded].first %></span>
               </label>
             <% end %>
           </div>

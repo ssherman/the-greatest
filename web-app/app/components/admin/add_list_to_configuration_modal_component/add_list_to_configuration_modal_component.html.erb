@@ -12,15 +12,15 @@
                       turbo_frame: "ranked_lists_list"
                     } do |f| %>
 
-        <div class="form-control">
+        <div>
           <%= f.label :list_id, "List", class: "label" %>
           <% if available_lists.any? %>
             <%= f.select :list_id,
                 options_from_collection_for_select(available_lists, :id, ->(list) { "#{list.name} (#{list.source || 'No source'})" }),
                 { prompt: "Select a list..." },
-                { class: "select select-bordered w-full", required: true } %>
+                { class: "select w-full", required: true } %>
             <label class="label">
-              <span class="label-text-alt">Only compatible lists shown (not already added)</span>
+              <span>Only compatible lists shown (not already added)</span>
             </label>
           <% else %>
             <div class="alert alert-warning">

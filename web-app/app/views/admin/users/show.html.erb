@@ -51,7 +51,7 @@
                 </div>
                 <div>
                   <label class="label">
-                    <span class="label-text font-semibold">Profile Photo</span>
+                    <span class="font-semibold">Profile Photo</span>
                   </label>
                   <p class="text-sm text-base-content/70 break-all"><%= @user.photo_url %></p>
                 </div>
@@ -60,14 +60,14 @@
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Email</span>
+                <span class="font-semibold">Email</span>
               </label>
               <p class="text-lg"><%= @user.email %></p>
             </div>
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Display Name</span>
+                <span class="font-semibold">Display Name</span>
               </label>
               <% if @user.display_name.present? %>
                 <p class="text-lg"><%= @user.display_name %></p>
@@ -78,7 +78,7 @@
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Full Name</span>
+                <span class="font-semibold">Full Name</span>
               </label>
               <% if @user.name.present? %>
                 <p class="text-lg"><%= @user.name %></p>
@@ -89,7 +89,7 @@
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Role</span>
+                <span class="font-semibold">Role</span>
               </label>
               <%
                 role_badge_class = case @user.role
@@ -115,7 +115,7 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Sign-in Provider</span>
+                <span class="font-semibold">Sign-in Provider</span>
               </label>
               <% if @user.external_provider.present? %>
                 <span class="badge badge-info badge-lg"><%= @user.external_provider.humanize %></span>
@@ -126,7 +126,7 @@
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Email Verified</span>
+                <span class="font-semibold">Email Verified</span>
               </label>
               <% if @user.email_verified? %>
                 <span class="badge badge-success badge-lg">Verified</span>
@@ -137,7 +137,7 @@
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Original Signup Domain</span>
+                <span class="font-semibold">Original Signup Domain</span>
               </label>
               <% if @user.original_signup_domain.present? %>
                 <p><%= @user.original_signup_domain %></p>
@@ -148,7 +148,7 @@
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Email Confirmed At</span>
+                <span class="font-semibold">Email Confirmed At</span>
               </label>
               <% if @user.confirmed_at.present? %>
                 <p class="text-base-content/70"><%= @user.confirmed_at.strftime("%B %d, %Y at %I:%M %p") %></p>
@@ -166,14 +166,14 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Sign-in Count</span>
+                <span class="font-semibold">Sign-in Count</span>
               </label>
               <p class="text-2xl font-bold"><%= @user.sign_in_count || 0 %></p>
             </div>
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Last Sign In</span>
+                <span class="font-semibold">Last Sign In</span>
               </label>
               <% if @user.last_sign_in_at.present? %>
                 <p class="text-base-content/70"><%= @user.last_sign_in_at.strftime("%B %d, %Y at %I:%M %p") %></p>
@@ -191,7 +191,7 @@
             <h2 class="card-title">Billing</h2>
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Stripe Customer ID</span>
+                <span class="font-semibold">Stripe Customer ID</span>
               </label>
               <p class="font-mono text-sm"><%= @user.stripe_customer_id %></p>
             </div>
@@ -206,15 +206,15 @@
           <h2 class="card-title text-lg">Metadata</h2>
           <div class="space-y-3 text-sm">
             <div>
-              <label class="label-text font-semibold">ID</label>
+              <label class="font-semibold">ID</label>
               <p class="text-base-content/70 font-mono"><%= @user.id %></p>
             </div>
             <div>
-              <label class="label-text font-semibold">Created At</label>
+              <label class="font-semibold">Created At</label>
               <p class="text-base-content/70"><%= @user.created_at.strftime("%B %d, %Y at %I:%M %p") %></p>
             </div>
             <div>
-              <label class="label-text font-semibold">Updated At</label>
+              <label class="font-semibold">Updated At</label>
               <p class="text-base-content/70"><%= @user.updated_at.strftime("%B %d, %Y at %I:%M %p") %></p>
             </div>
           </div>

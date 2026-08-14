@@ -82,14 +82,14 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Name</span>
+                <span class="font-semibold">Name</span>
               </label>
               <p class="text-lg"><%= @artist.name %></p>
             </div>
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Type</span>
+                <span class="font-semibold">Type</span>
               </label>
               <span class="badge <%= @artist.person? ? 'badge-primary' : 'badge-secondary' %> badge-lg">
                 <%= @artist.kind.titleize %>
@@ -99,7 +99,7 @@
             <% if @artist.country.present? %>
               <div>
                 <label class="label">
-                  <span class="label-text font-semibold">Country</span>
+                  <span class="font-semibold">Country</span>
                 </label>
                 <p><%= @artist.country %></p>
               </div>
@@ -109,7 +109,7 @@
               <% if @artist.born_on.present? %>
                 <div>
                   <label class="label">
-                    <span class="label-text font-semibold">Born On</span>
+                    <span class="font-semibold">Born On</span>
                   </label>
                   <p><%= @artist.born_on.strftime("%B %d, %Y") %></p>
                 </div>
@@ -118,7 +118,7 @@
               <% if @artist.year_died.present? %>
                 <div>
                   <label class="label">
-                    <span class="label-text font-semibold">Year Died</span>
+                    <span class="font-semibold">Year Died</span>
                   </label>
                   <p><%= @artist.year_died %></p>
                 </div>
@@ -127,7 +127,7 @@
               <% if @artist.year_formed.present? %>
                 <div>
                   <label class="label">
-                    <span class="label-text font-semibold">Year Formed</span>
+                    <span class="font-semibold">Year Formed</span>
                   </label>
                   <p><%= @artist.year_formed %></p>
                 </div>
@@ -136,7 +136,7 @@
               <% if @artist.year_disbanded.present? %>
                 <div>
                   <label class="label">
-                    <span class="label-text font-semibold">Year Disbanded</span>
+                    <span class="font-semibold">Year Disbanded</span>
                   </label>
                   <p><%= @artist.year_disbanded %></p>
                 </div>
@@ -345,20 +345,20 @@
                     modal_form_modal_id_value: "add_album_modal"
                   } do |f| %>
 
-      <div class="form-control">
+      <div>
         <%= f.label :artist_id, "Artist", class: "label" do %>
-          <span class="label-text font-semibold">Artist</span>
+          <span class="font-semibold">Artist</span>
         <% end %>
         <%= f.text_field :artist_id,
             value: @artist.name,
             disabled: true,
-            class: "input input-bordered input-disabled w-full" %>
+            class: "input w-full" %>
         <%= f.hidden_field :artist_id, value: @artist.id %>
       </div>
 
-      <div class="form-control">
+      <div>
         <%= f.label :album_id, "Album", class: "label" do %>
-          <span class="label-text font-semibold">Album <span class="text-error">*</span></span>
+          <span class="font-semibold">Album <span class="text-error">*</span></span>
         <% end %>
         <%= render AutocompleteComponent.new(
           name: "music_album_artist[album_id]",
@@ -368,17 +368,17 @@
         ) %>
       </div>
 
-      <div class="form-control">
+      <div>
         <%= f.label :position, class: "label" do %>
-          <span class="label-text font-semibold">Position</span>
+          <span class="font-semibold">Position</span>
         <% end %>
         <%= f.number_field :position,
             value: 1,
             min: 1,
-            class: "input input-bordered w-full",
+            class: "input w-full",
             required: true %>
         <label class="label">
-          <span class="label-text-alt">Position in album ordering (1 = first album)</span>
+          <span>Position in album ordering (1 = first album)</span>
         </label>
       </div>
 
@@ -410,20 +410,20 @@
                     modal_form_modal_id_value: "add_song_modal"
                   } do |f| %>
 
-      <div class="form-control">
+      <div>
         <%= f.label :artist_id, "Artist", class: "label" do %>
-          <span class="label-text font-semibold">Artist</span>
+          <span class="font-semibold">Artist</span>
         <% end %>
         <%= f.text_field :artist_id,
             value: @artist.name,
             disabled: true,
-            class: "input input-bordered input-disabled w-full" %>
+            class: "input w-full" %>
         <%= f.hidden_field :artist_id, value: @artist.id %>
       </div>
 
-      <div class="form-control">
+      <div>
         <%= f.label :song_id, "Song", class: "label" do %>
-          <span class="label-text font-semibold">Song <span class="text-error">*</span></span>
+          <span class="font-semibold">Song <span class="text-error">*</span></span>
         <% end %>
         <%= render AutocompleteComponent.new(
           name: "music_song_artist[song_id]",
@@ -433,17 +433,17 @@
         ) %>
       </div>
 
-      <div class="form-control">
+      <div>
         <%= f.label :position, class: "label" do %>
-          <span class="label-text font-semibold">Position</span>
+          <span class="font-semibold">Position</span>
         <% end %>
         <%= f.number_field :position,
             value: @artist.song_artists.maximum(:position).to_i + 1,
             min: 1,
-            class: "input input-bordered w-full",
+            class: "input w-full",
             required: true %>
         <label class="label">
-          <span class="label-text-alt">Position in song ordering (1 = first song)</span>
+          <span>Position in song ordering (1 = first song)</span>
         </label>
       </div>
 
@@ -480,9 +480,9 @@
                   } do |f| %>
       <%= f.hidden_field :action_name, value: "MergeArtist" %>
 
-      <div class="form-control">
+      <div>
         <%= f.label :source_artist_id, "Source Artist (to be deleted)", class: "label" do %>
-          <span class="label-text font-semibold">Source Artist <span class="text-error">*</span></span>
+          <span class="font-semibold">Source Artist <span class="text-error">*</span></span>
         <% end %>
         <%= render AutocompleteComponent.new(
           name: "source_artist_id",
@@ -491,17 +491,17 @@
           required: true
         ) %>
         <label class="label">
-          <span class="label-text-alt">Search for the duplicate artist you want to merge into this one</span>
+          <span>Search for the duplicate artist you want to merge into this one</span>
         </label>
       </div>
 
-      <div class="form-control">
+      <div>
         <label class="label cursor-pointer justify-start gap-2">
           <%= f.check_box :confirm_merge, class: "checkbox", required: true %>
-          <span class="label-text">I understand this action cannot be undone</span>
+          <span>I understand this action cannot be undone</span>
         </label>
         <label class="label">
-          <span class="label-text-alt text-warning">The source artist will be permanently deleted after merging</span>
+          <span class="text-warning">The source artist will be permanently deleted after merging</span>
         </label>
       </div>
 
@@ -533,33 +533,33 @@
                     modal_form_modal_id_value: "add_image_modal"
                   } do |f| %>
 
-      <div class="form-control">
+      <div>
         <%= f.label :file, class: "label" do %>
-          <span class="label-text font-semibold">Image File <span class="text-error">*</span></span>
+          <span class="font-semibold">Image File <span class="text-error">*</span></span>
         <% end %>
         <%= f.file_field :file,
             accept: "image/jpeg,image/png,image/webp,image/gif",
-            class: "file-input file-input-bordered w-full",
+            class: "file-input w-full",
             required: true %>
         <label class="label">
-          <span class="label-text-alt">Max recommended size: 10MB</span>
+          <span>Max recommended size: 10MB</span>
         </label>
       </div>
 
-      <div class="form-control">
+      <div>
         <%= f.label :notes, class: "label" do %>
-          <span class="label-text font-semibold">Notes</span>
+          <span class="font-semibold">Notes</span>
         <% end %>
         <%= f.text_area :notes,
-            class: "textarea textarea-bordered w-full",
+            class: "textarea w-full",
             rows: 2,
             placeholder: "Optional description or notes about this image" %>
       </div>
 
-      <div class="form-control">
+      <div>
         <label class="label cursor-pointer justify-start gap-2">
           <%= f.check_box :primary, class: "checkbox checkbox-primary" %>
-          <span class="label-text">Set as primary image</span>
+          <span>Set as primary image</span>
         </label>
       </div>
 

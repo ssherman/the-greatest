@@ -82,17 +82,17 @@
       <div class="modal-box">
         <h3 class="font-bold text-lg mb-4">Add Image</h3>
         <%= form_with model: Image.new, url: admin_books_series_images_path(@series), method: :post, data: {controller: "modal-form", modal_form_modal_id_value: "add_series_image_modal"} do |f| %>
-          <label class="form-control">
-            <span class="label-text">File</span>
-            <%= f.file_field :file, accept: "image/jpeg,image/png,image/webp,image/gif", required: true, class: "file-input file-input-bordered" %>
+          <label>
+            <span>File</span>
+            <%= f.file_field :file, accept: "image/jpeg,image/png,image/webp,image/gif", required: true, class: "file-input" %>
           </label>
-          <label class="form-control mt-2">
-            <span class="label-text">Notes</span>
-            <%= f.text_field :notes, class: "input input-bordered" %>
+          <label class="mt-2">
+            <span>Notes</span>
+            <%= f.text_field :notes, class: "input" %>
           </label>
           <label class="label cursor-pointer mt-2 justify-start gap-2">
             <%= f.check_box :primary, class: "checkbox" %>
-            <span class="label-text">Primary</span>
+            <span>Primary</span>
           </label>
           <div class="modal-action">
             <%= f.submit "Upload", class: "btn btn-primary" %>
@@ -107,23 +107,23 @@
       <div class="modal-box">
         <h3 class="font-bold text-lg mb-4">Add Book to Series</h3>
         <%= form_with model: ::Books::SeriesBook.new, url: admin_books_series_series_books_path(@series), method: :post, class: "space-y-4", data: {controller: "modal-form", modal_form_modal_id_value: "add_series_book_modal"} do |f| %>
-          <div class="form-control">
-            <%= f.label :book_id, class: "label" do %><span class="label-text font-semibold">Book <span class="text-error">*</span></span><% end %>
+          <div>
+            <%= f.label :book_id, class: "label" do %><span class="font-semibold">Book <span class="text-error">*</span></span><% end %>
             <%= render AutocompleteComponent.new(name: "books_series_book[book_id]", url: search_admin_books_books_path, placeholder: "Search for a book…", required: true) %>
           </div>
-          <div class="form-control">
-            <%= f.label :position, class: "label" do %><span class="label-text font-semibold">Position</span><% end %>
-            <%= f.number_field :position, value: @series.series_books.maximum(:position).to_i + 1, step: "0.01", class: "input input-bordered w-full" %>
+          <div>
+            <%= f.label :position, class: "label" do %><span class="font-semibold">Position</span><% end %>
+            <%= f.number_field :position, value: @series.series_books.maximum(:position).to_i + 1, step: "0.01", class: "input w-full" %>
           </div>
-          <div class="form-control">
+          <div>
             <label class="label cursor-pointer justify-start gap-2">
               <%= f.check_box :numbered, checked: true, class: "checkbox" %>
-              <span class="label-text font-semibold">Numbered</span>
+              <span class="font-semibold">Numbered</span>
             </label>
           </div>
-          <div class="form-control">
-            <%= f.label :position_label, class: "label" do %><span class="label-text font-semibold">Position Label</span><% end %>
-            <%= f.text_field :position_label, class: "input input-bordered w-full" %>
+          <div>
+            <%= f.label :position_label, class: "label" do %><span class="font-semibold">Position Label</span><% end %>
+            <%= f.text_field :position_label, class: "input w-full" %>
           </div>
           <div class="modal-action">
             <button type="button" class="btn" onclick="add_series_book_modal.close()">Cancel</button>
