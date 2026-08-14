@@ -685,5 +685,7 @@ assumed, and both hold:
   `file-input-bordered` is removed, and `input-error` survives while `input-bordered` is removed —
   the negative lookbehind `(?<![\w-])` is what prevents the shorter name matching inside the longer.
   0 failures.
-- Multi-line class attributes containing a dead class: **0**, so horizontal-whitespace
-  normalisation cannot reflow markup.
+- Multi-line class attributes containing a dead class: **0** at the time this was checked. That
+  count is not what makes horizontal-whitespace normalisation safe, though — see the correction in
+  Task 5 Step 1. What actually prevents reflow is the codemod being hardened to never rewrite an
+  attribute that contains no dead token in the first place.

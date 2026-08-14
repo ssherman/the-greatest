@@ -101,6 +101,31 @@ Affected files (pre-sweep):
 > `app/components/autocomplete_component.html.erb`, which applied the class conditionally via ERB
 > interpolation rather than as a plain literal). The number above is the confirmed count.
 
+## Bare wrapper elements left behind — real debt, not a trivial tidy-up
+
+Removing the ten class names left some now-classless wrapper elements behind: 203 bare `<div>`,
+157 bare `<span>`, and 4 bare `<label>` across the swept templates. It is tempting to read these as
+leftover noise from the sweep and delete them in a follow-up "cleanup" pass. **Don't, without
+checking each one individually** — in both cases the class removal deleted layout behavior, not
+just a name, and the bare element is now the only thing still providing it:
+
+- **Bare `<span>` inside `<label class="label">`.** daisyUI 5's `.label` is
+  `display:inline-flex; align-items:center; gap:.375rem` — a flex container. A `<span>` that lost
+  `label-text` (or `label-text-alt`) is still a **flex item** of that `.label`, sitting alongside
+  whatever else is inside it. Deleting the now-bare span and inlining its text merges two flex items
+  into one and silently drops the `0.375rem` gap between them — a real, visible spacing regression,
+  not a no-op.
+- **Bare `<div>` where `form-control` used to be.** `form-control` set
+  `display:flex; flex-direction:column` on its element. The bare `<div>` left behind is the only
+  thing still applying that layout. Deleting the div — rather than replacing it with the equivalent
+  Tailwind utilities — changes the layout wherever its parent is itself a grid or flex container,
+  because the children then participate directly in the parent's layout instead of being grouped
+  into their own column first.
+
+Net: this is real, worth doing, follow-up debt — but it is a per-element layout judgment call, not a
+mechanical "remove the empty wrapper" cleanup. Treat each occurrence individually, checking what the
+removed class was actually rendering (`display`/`flex-direction`/`gap`) before touching it.
+
 ## Follow-up work (not part of this change)
 
 - Add a `hover:` background utility to the 13 admin table partials/components listed above.
