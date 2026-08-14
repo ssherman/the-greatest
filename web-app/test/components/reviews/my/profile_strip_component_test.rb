@@ -20,7 +20,7 @@ module Reviews
       test "renders the average and the counts" do
         stats = stats_for(users(:regular_user))
         render_strip
-        assert_text stats.average.to_s, normalize_ws: true
+        assert_selector "[data-testid='my-reviews-average']", text: /\A#{Regexp.escape(stats.average.to_s)}\z/
         assert_selector "[data-testid='my-reviews-total']", text: /\A#{stats.total}\z/
         assert_selector "[data-testid='my-reviews-written']", text: /\A#{stats.written}\z/
       end
@@ -35,6 +35,7 @@ module Reviews
       test "the selected rating is marked and offers a way back to all" do
         render_strip(selected_rating: 5)
         assert_selector "[data-testid='rating-bar-5'][aria-current='true']"
+        assert_selector "[data-testid='rating-bar-1'][aria-current='false']"
         assert_selector "a[href='/my/reviews']"
       end
 
