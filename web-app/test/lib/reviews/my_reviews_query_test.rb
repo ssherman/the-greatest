@@ -36,6 +36,31 @@ module Reviews
       assert_nil query(rating: "9").rating
     end
 
+    test "a crafted ?rating[]=1 array is ignored instead of raising" do
+      assert_nil query(rating: ["1"]).rating
+      assert_nothing_raised { query(rating: ["1"]).call.to_a }
+    end
+
+    test "a crafted ?rating[a]=1 hash is ignored instead of raising" do
+      assert_nil query(rating: {"a" => "1"}).rating
+      assert_nothing_raised { query(rating: {"a" => "1"}).call.to_a }
+    end
+
+    test "sort and kind fall back safely on a non-scalar param" do
+      # Array#to_s / Hash#to_s never raise, so #sort and #kind's `.to_s` guard
+      # already tolerates this -- an array simply fails the allowlist check and
+      # falls back, same as any other unrecognised string would.
+      assert_equal "recent", query(sort: ["rating_high"]).sort
+      assert_nil query(kind: ["written"]).kind
+    end
+
+    test "term does not raise on a non-scalar param, even though the result is not useful" do
+      # `["war"].to_s` stringifies to the literal `["war"]`, which becomes a
+      # harmless zero-result ILIKE pattern rather than a crash -- review_text_search
+      # binds it as a SQL parameter, never interpolates it.
+      assert_nothing_raised { query(q: ["war"]).call.to_a }
+    end
+
     test "filters to written and to rating-only" do
       assert query(kind: "written").call.all? { |review| review.body.present? }
       assert query(kind: "rating_only").call.all? { |review| review.body.nil? }

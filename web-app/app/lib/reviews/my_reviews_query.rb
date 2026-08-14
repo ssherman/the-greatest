@@ -44,8 +44,15 @@ module Reviews
       available_sorts.include?(requested) ? requested : DEFAULT_SORT
     end
 
+    # A crafted `?rating[]=1` or `?rating[a]=1` hands back an Array or an
+    # ActionController::Parameters instead of a scalar -- neither responds to
+    # `#to_i`, so this must check the type before converting rather than
+    # rescuing after the fact.
     def rating
-      value = params[:rating].to_i
+      value = params[:rating]
+      return nil unless value.is_a?(String) || value.is_a?(Integer)
+
+      value = value.to_i
       RATINGS.include?(value) ? value : nil
     end
 

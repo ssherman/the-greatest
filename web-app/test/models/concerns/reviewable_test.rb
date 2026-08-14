@@ -16,7 +16,7 @@ class ReviewableTest < ActiveSupport::TestCase
   end
 
   test "Books::Book implements the whole contract" do
-    assert_equal [:primary_image, {book_authors: :author}], ::Books::Book.review_row_includes
+    assert_equal [{primary_image: {file_attachment: :blob}}, {book_authors: :author}], ::Books::Book.review_row_includes
     assert_equal "COALESCE(books_books.sort_title, books_books.title)", ::Books::Book.review_title_order
     assert_equal ::Books::RankingConfiguration, ::Books::Book.ranking_configuration_class
   end

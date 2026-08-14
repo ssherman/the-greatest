@@ -53,3 +53,19 @@ dark_side_remaster_cover:
   notes: "2011 remaster cover artwork"
   metadata: {}
   primary: true
+
+# No attached file (no active_storage_attachments/blobs fixture backs this
+# row) -- that's deliberate. This exists so Books::Book.review_row_includes'
+# {primary_image: {file_attachment: :blob}} preload has a real, non-empty
+# primary_image to preload FOR, on one of the two books regular_user reviews
+# (see reviews.yml). Without it, every /my/reviews row's `primary_image` was
+# always nil and the file_attachment/blob preload was silently never
+# exercised at all -- see MyReviewsControllerTest's N+1 pin. `.attached?`
+# still resolves to false here (no blob), so the placeholder branch renders,
+# same as before; what changed is that resolving that false now costs zero
+# EXTRA queries instead of one per row, because it is preloaded.
+crime_and_punishment_cover:
+  parent: crime_and_punishment (Books::Book)
+  notes: "Cover for Crime and Punishment"
+  metadata: {}
+  primary: true

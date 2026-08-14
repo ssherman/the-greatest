@@ -9,6 +9,7 @@
       <div class="w-16 aspect-[2/3] bg-base-300 rounded flex items-center justify-center" aria-hidden="true">
         <span class="text-xl opacity-40">📖</span>
       </div>
+      <span class="sr-only"><%= reviewable.title %></span>
     <% end %>
   <% end %>
 
@@ -24,7 +25,10 @@
     </div>
 
     <% if written? %>
-      <div class="mt-2 text-sm line-clamp-2 [overflow-wrap:anywhere]" data-testid="review-snippet">
+      <div class="review-body mt-2 text-sm line-clamp-2 [overflow-wrap:anywhere]"
+           data-testid="review-snippet"
+           data-controller="reviews--spoiler"
+           data-action="click->reviews--spoiler#reveal keydown->reviews--spoiler#revealOnKey">
         <%= snippet %>
       </div>
     <% end %>

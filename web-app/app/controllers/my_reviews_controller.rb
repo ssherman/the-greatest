@@ -13,6 +13,11 @@ class MyReviewsController < ApplicationController
 
   PER_PAGE = 25
 
+  # Every param a link on this page ever needs to preserve. Sliced rather than
+  # excluding an unwanted set, so an arbitrary visitor-invented query param is
+  # never echoed back into every link on the page.
+  FILTER_KEYS = %w[q kind rating sort reviewable].freeze
+
   SORT_LABELS = {
     "recent" => "Recently rated",
     "rating_high" => "My rating: high to low",
@@ -55,11 +60,17 @@ class MyReviewsController < ApplicationController
   end
 
   # Every control must preserve the OTHER filters -- a sort link inside a rating
-  # filter has to keep the rating. `page` is always dropped: a user on page 7 who
-  # filters to 5-star would otherwise land on an empty page 7, which
-  # PathBasedPagination turns into a 404.
+  # filter has to keep the rating. `page` is never in the slice, which is what
+  # drops it: under PathBasedPagination a page number arrives as a PATH segment
+  # (/my/reviews/page/7), not a query parameter -- see
+  # PathBasedPagination#pagy_path_request, which explicitly re-adds :page from
+  # path_parameters for pagy's own benefit precisely because query_parameters
+  # never carries it. A user on page 7 who filters to 5-star would otherwise
+  # land on an empty page 7, which PathBasedPagination turns into a 404; the
+  # fix here is not stripping a "page" query key (there rarely is one) but
+  # simply never building a my_reviews_page_path link at all.
   def filter_params(overrides = {})
-    request.query_parameters.except("page").merge(overrides.stringify_keys).compact
+    request.query_parameters.slice(*FILTER_KEYS).merge(overrides.stringify_keys).compact
   end
 
   def hidden_filter_params

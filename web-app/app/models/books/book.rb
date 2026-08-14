@@ -102,8 +102,13 @@ class Books::Book < ApplicationRecord
     first_published_year
   end
 
+  # {file_attachment: :blob}, not a bare :primary_image -- the row and its
+  # cover-image variant components go through the ActiveStorage attachment and
+  # blob, not just the Image row, and both need to be preloaded or `.attached?`
+  # and the URL helper each cost one query per row. Same shape as
+  # Books::AuthorsController's ranked_books/all_books_relation preloads.
   def self.review_row_includes
-    [:primary_image, {book_authors: :author}]
+    [{primary_image: {file_attachment: :blob}}, {book_authors: :author}]
   end
 
   def self.review_title_order
