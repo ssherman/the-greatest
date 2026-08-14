@@ -19,6 +19,12 @@ class ReviewsControllerTest < ActionDispatch::IntegrationTest
     # makes the guard explicit instead of accidental.
     @original_purge_token = ENV["CLOUDFLARE_CACHE_PURGE_TOKEN"]
     ENV.delete("CLOUDFLARE_CACHE_PURGE_TOKEN")
+
+    # The rate limit store is a single MemoryStore instance shared by the whole
+    # process (config/initializers/rate_limit_store.rb) -- without clearing it
+    # here, whichever test runs 21st in the suite trips the limit instead of the
+    # dedicated rate-limit tests below.
+    Rails.application.config.x.rate_limit_store.clear
   end
 
   teardown do
@@ -246,5 +252,32 @@ class ReviewsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "text/vnd.turbo-stream.html", response.media_type
   ensure
     ActionController::Base.allow_forgery_protection = original
+  end
+
+  test "the write endpoints are rate limited and answer as a turbo stream" do
+    Rails.application.config.x.rate_limit_store.clear
+    sign_in_as(@user, stub_auth: true)
+
+    21.times do |index|
+      book = ::Books::Book.create!(title: "Rate limit probe #{index}")
+      post reviews_path, params: valid_params(reviewable_id: book.id), as: :turbo_stream
+    end
+
+    assert_response :too_many_requests
+    assert_equal "text/vnd.turbo-stream.html", response.media_type,
+      "a non-2xx without a turbo-stream body replaces the whole page"
+  end
+
+  test "the limit is per user, not global" do
+    Rails.application.config.x.rate_limit_store.clear
+    sign_in_as(@user, stub_auth: true)
+    20.times do |index|
+      book = ::Books::Book.create!(title: "Probe #{index}")
+      post reviews_path, params: valid_params(reviewable_id: book.id), as: :turbo_stream
+    end
+
+    sign_in_as(users(:editor_user), stub_auth: true)
+    post reviews_path, params: valid_params(reviewable_id: @book.id), as: :turbo_stream
+    assert_response :success
   end
 end
