@@ -34,8 +34,19 @@ export default class extends Controller {
   // no-ops on every one of them here. Reload instead: it recomputes the row,
   // the profile strip's bar chart and the counts server-side, so nothing on
   // this page can drift out of step with what was just written.
+  //
+  // Listening on @document (see the view) is required -- the dialog is a
+  // layout-level sibling rendered after </footer>, outside this controller's
+  // own container -- but turbo:submit-end also bubbles here from this page's
+  // own GET search form. Turbo dispatches turbo:submit-end unconditionally
+  // in FormSubmission#requestFinished, target: this.formElement, for every
+  // submission including safe (GET) ones, and reports success: true for a
+  // successful search exactly as for the dialog's save. So a reload here has
+  // to be scoped to submits that actually came from the dialog, or searching
+  // reloads the pre-search URL and silently discards the query.
   submitted(event) {
     if (!event.detail?.success) return
+    if (!event.target.closest?.("#review_modal")) return
     window.location.reload()
   }
 }
