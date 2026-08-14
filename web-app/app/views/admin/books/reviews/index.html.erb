@@ -3,9 +3,9 @@
 <div class="flex items-center justify-between mb-6">
   <h1 class="text-2xl font-bold">Reviews</h1>
   <div class="flex gap-2">
-    <%= link_to "Written", admin_books_reviews_path(request.query_parameters.except("written", "page")),
+    <%= link_to "Written", admin_books_reviews_path(filter_params.except("written")),
           class: "btn btn-sm #{"btn-active" if @written_only}" %>
-    <%= link_to "All", admin_books_reviews_path(request.query_parameters.except("page").merge("written" => "all")),
+    <%= link_to "All", admin_books_reviews_path(filter_params(written: "all")),
           class: "btn btn-sm #{"btn-active" unless @written_only}" %>
   </div>
 </div>

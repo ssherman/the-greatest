@@ -4,11 +4,27 @@
 # Domain-agnostic on purpose: reviews exist only for books today, but nothing
 # here may assume that -- later increments add music and games. Each domain
 # supplies its own routable subclass (see Admin::Books::ReviewsController) that
-# fills in reviewable_class, reviewable_includes and reviews_path, and mixes in
-# Admin::DomainScopedAuth itself, because admin auth is domain-scoped through
-# that concern.
+# fills in reviewable_class, reviewable_includes and reviews_index_path, and
+# mixes in Admin::DomainScopedAuth itself, because admin auth is domain-scoped
+# through that concern.
+#
+# reviews_index_path, not reviews_path: the global route helper `reviews_path`
+# already names the public POST /reviews create endpoint (see routes.rb). A
+# private controller method of that same name would shadow it -- inertly today
+# since Ruby resolves the controller's own instance method first, but it costs
+# nothing to remove the trap.
 class Admin::ReviewsBaseController < Admin::BaseController
   before_action :require_domain_write!, only: [:destroy]
+
+  # Every param a link on this page ever needs to preserve, mirroring
+  # MyReviewsController::FILTER_KEYS on the public side -- sliced rather than
+  # excluding an unwanted set, so an arbitrary visitor-invented query param is
+  # never echoed back into every link on the page. "page" is deliberately
+  # absent: switching the written/all toggle or searching should land back on
+  # page 1, not carry a stale page number to a shorter result set.
+  FILTER_KEYS = %w[q written].freeze
+
+  helper_method :filter_params
 
   def index
     scope = Review.where(reviewable_type: reviewable_class.name)
@@ -50,7 +66,7 @@ class Admin::ReviewsBaseController < Admin::BaseController
     # rake tasks and importers. This is the write path that comment predicted.
     ::Reviews::PurgeCachedPageJob.perform_async(reviewable_type, reviewable_id)
 
-    redirect_to reviews_path, notice: "Review deleted."
+    redirect_to reviews_index_path, notice: "Review deleted."
   end
 
   private
@@ -88,7 +104,11 @@ class Admin::ReviewsBaseController < Admin::BaseController
     raise NotImplementedError, "Subclass must implement reviewable_includes"
   end
 
-  def reviews_path
-    raise NotImplementedError, "Subclass must implement reviews_path"
+  def reviews_index_path
+    raise NotImplementedError, "Subclass must implement reviews_index_path"
+  end
+
+  def filter_params(overrides = {})
+    request.query_parameters.slice(*FILTER_KEYS).merge(overrides.stringify_keys).compact
   end
 end

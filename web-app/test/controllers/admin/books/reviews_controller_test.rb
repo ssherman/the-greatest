@@ -58,6 +58,24 @@ module Admin
         assert_response :success
       end
 
+      # The test above only proves apply_search doesn't 500 -- a version that
+      # matched everything (e.g. an `.or` built from two structurally
+      # incompatible branches that silently degrades to one side) would pass it
+      # too. This proves the query actually narrows: crime_and_punishment's
+      # title, author and reviewer identity all lack "war", so its row must be
+      # absent from a q=war search. Identifies rows by the delete form's action,
+      # same convention as the written-filter tests above.
+      test "index search narrows to matching rows, not merely avoids a 500" do
+        sign_in_as(@admin_user, stub_auth: true)
+        matching_review = @review
+        non_matching_review = reviews(:regular_user_crime_and_punishment)
+
+        get admin_books_reviews_path(q: "war", written: "all")
+
+        assert_select "form[action=?]", admin_books_review_path(matching_review)
+        assert_select "form[action=?]", admin_books_review_path(non_matching_review), count: 0
+      end
+
       test "index accepts the written=all filter without error" do
         sign_in_as(@admin_user, stub_auth: true)
         get admin_books_reviews_path(written: "all")
