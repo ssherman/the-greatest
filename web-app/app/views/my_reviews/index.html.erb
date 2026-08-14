@@ -1,4 +1,73 @@
-<div class="container mx-auto px-4 py-8">
-  <h1 class="text-3xl font-bold">My Reviews</h1>
-  <p class="mt-2"><%= @stats.total %> rated</p>
+<% content_for :page_title, "My Reviews" %>
+
+<div class="container mx-auto px-4 py-8"
+     data-controller="reviews--my-reviews"
+     data-action="turbo:submit-end@document->reviews--my-reviews#submitted">
+  <h1 class="text-3xl font-bold mb-6">My Reviews</h1>
+
+  <%= render Reviews::My::ProfileStripComponent.new(
+        stats: @stats,
+        selected_rating: @query.rating,
+        path_for_rating: ->(rating) { my_reviews_path(filter_params(rating: rating)) }
+      ) %>
+
+  <% if @reviewable_classes.size > 1 %>
+    <div role="tablist" class="tabs tabs-box mb-4">
+      <% @reviewable_classes.each do |klass| %>
+        <%= link_to klass.model_name.human.pluralize,
+              my_reviews_path(filter_params(reviewable: klass.name)),
+              role: "tab",
+              class: "tab #{"tab-active" if klass == @reviewable_class}" %>
+      <% end %>
+    </div>
+  <% end %>
+
+  <div class="flex flex-wrap items-end gap-4 mb-4">
+    <%= form_with url: my_reviews_path, method: :get, class: "flex gap-2" do |form| %>
+      <% hidden_filter_params.each do |key, value| %>
+        <%= hidden_field_tag key, value %>
+      <% end %>
+      <%= form.search_field :q, value: @query.term, placeholder: "Search your reviews",
+            class: "input w-64", "aria-label": "Search your reviews" %>
+      <%= form.submit "Search", class: "btn" %>
+    <% end %>
+
+    <div class="join">
+      <%= link_to "All", my_reviews_path(filter_params(kind: nil)),
+            class: "btn join-item #{"btn-active" if @query.kind.nil?}" %>
+      <%= link_to "Written", my_reviews_path(filter_params(kind: "written")),
+            class: "btn join-item #{"btn-active" if @query.kind == "written"}" %>
+      <%= link_to "Rating only", my_reviews_path(filter_params(kind: "rating_only")),
+            class: "btn join-item #{"btn-active" if @query.kind == "rating_only"}" %>
+    </div>
+
+    <label class="flex items-center gap-2">
+      <span class="text-sm">Sort</span>
+      <select class="select w-56"
+              onchange="window.location = this.value"
+              aria-label="Sort your reviews">
+        <% @query.available_sorts.each do |sort_key| %>
+          <option value="<%= my_reviews_path(filter_params(sort: sort_key)) %>"
+                  <%= "selected" if @query.sort == sort_key %>>
+            <%= sort_labels.fetch(sort_key) %>
+          </option>
+        <% end %>
+      </select>
+    </label>
+  </div>
+
+  <% if @reviews.any? %>
+    <ul class="mb-6">
+      <% @reviews.each do |review| %>
+        <%= render Reviews::My::RowComponent.new(review: review) %>
+      <% end %>
+    </ul>
+    <%== @pagy.series_nav %>
+  <% else %>
+    <p class="py-12 text-center text-base-content/70">
+      Nothing here yet. Rate a book and it will show up on this page.
+    </p>
+  <% end %>
 </div>
+
+<%= render Reviews::ModalComponent.new %>

@@ -13,6 +13,16 @@ class MyReviewsController < ApplicationController
 
   PER_PAGE = 25
 
+  SORT_LABELS = {
+    "recent" => "Recently rated",
+    "rating_high" => "My rating: high to low",
+    "rating_low" => "My rating: low to high",
+    "rank" => "Site rank",
+    "title" => "Title A–Z"
+  }.freeze
+
+  helper_method :sort_labels, :filter_params, :hidden_filter_params
+
   def index
     @reviewable_classes = Reviews::Registry.classes_for(Current.domain)
     # Not an empty state: a domain with no reviewable types has no such page at
@@ -42,5 +52,21 @@ class MyReviewsController < ApplicationController
   def resolve_reviewable_class
     requested = params[:reviewable].to_s
     @reviewable_classes.find { |klass| klass.name == requested } || @reviewable_classes.first
+  end
+
+  # Every control must preserve the OTHER filters -- a sort link inside a rating
+  # filter has to keep the rating. `page` is always dropped: a user on page 7 who
+  # filters to 5-star would otherwise land on an empty page 7, which
+  # PathBasedPagination turns into a 404.
+  def filter_params(overrides = {})
+    request.query_parameters.except("page").merge(overrides.stringify_keys).compact
+  end
+
+  def hidden_filter_params
+    filter_params.except("q")
+  end
+
+  def sort_labels
+    SORT_LABELS
   end
 end

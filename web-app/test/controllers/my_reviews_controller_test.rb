@@ -51,4 +51,21 @@ class MyReviewsControllerTest < ActionDispatch::IntegrationTest
     get my_reviews_path(reviewable: "User")
     assert_response :success
   end
+
+  test "renders a page of rows without an N+1" do
+    sign_in_as(@user, stub_auth: true)
+    get my_reviews_path # warm any per-request memoization
+    assert_response :success
+
+    ActiveRecord::Base.connection.clear_query_cache
+    assert_queries_count(11) do
+      get my_reviews_path
+    end
+    assert_response :success
+  end
+
+  test "no link on the reviews index is trapped in a turbo frame" do
+    sign_in_as(@user, stub_auth: true)
+    assert_no_frame_trapped_links my_reviews_path
+  end
 end
