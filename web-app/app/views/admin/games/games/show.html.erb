@@ -50,14 +50,14 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Title</span>
+                <span class="font-semibold">Title</span>
               </label>
               <p class="text-lg"><%= @game.title %></p>
             </div>
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Game Type</span>
+                <span class="font-semibold">Game Type</span>
               </label>
               <span class="badge badge-outline badge-lg">
                 <%= @game.game_type.titleize %>
@@ -67,7 +67,7 @@
             <% if @game.release_year.present? %>
               <div>
                 <label class="label">
-                  <span class="label-text font-semibold">Release Year</span>
+                  <span class="font-semibold">Release Year</span>
                 </label>
                 <p><%= @game.release_year %></p>
               </div>
@@ -76,7 +76,7 @@
             <% if @game.series.present? %>
               <div>
                 <label class="label">
-                  <span class="label-text font-semibold">Series</span>
+                  <span class="font-semibold">Series</span>
                 </label>
                 <p>
                   <%= link_to @game.series.name, admin_games_series_path(@game.series), class: "link link-primary" %>
@@ -87,7 +87,7 @@
             <% if @game.parent_game.present? %>
               <div>
                 <label class="label">
-                  <span class="label-text font-semibold">Parent Game</span>
+                  <span class="font-semibold">Parent Game</span>
                 </label>
                 <p>
                   <%= link_to @game.parent_game.title, admin_games_game_path(@game.parent_game), class: "link link-primary" %>
@@ -98,7 +98,7 @@
             <% if @game.slug.present? %>
               <div class="md:col-span-2">
                 <label class="label">
-                  <span class="label-text font-semibold">Slug</span>
+                  <span class="font-semibold">Slug</span>
                 </label>
                 <p class="font-mono text-sm text-base-content/70"><%= @game.slug %></p>
               </div>
@@ -289,20 +289,20 @@
                     modal_form_modal_id_value: "add_company_modal"
                   } do |f| %>
 
-      <div class="form-control">
+      <div>
         <%= f.label :game_id, "Game", class: "label" do %>
-          <span class="label-text font-semibold">Game</span>
+          <span class="font-semibold">Game</span>
         <% end %>
         <%= f.text_field :game_id,
             value: @game.title,
             disabled: true,
-            class: "input input-bordered input-disabled w-full" %>
+            class: "input w-full" %>
         <%= f.hidden_field :game_id, value: @game.id %>
       </div>
 
-      <div class="form-control">
+      <div>
         <%= f.label :company_id, "Company", class: "label" do %>
-          <span class="label-text font-semibold">Company <span class="text-error">*</span></span>
+          <span class="font-semibold">Company <span class="text-error">*</span></span>
         <% end %>
         <%= render AutocompleteComponent.new(
           name: "games_game_company[company_id]",
@@ -312,17 +312,17 @@
         ) %>
       </div>
 
-      <div class="form-control">
+      <div>
         <label class="label cursor-pointer justify-start gap-2">
           <%= f.check_box :developer, class: "checkbox checkbox-primary", checked: true %>
-          <span class="label-text">Developer</span>
+          <span>Developer</span>
         </label>
       </div>
 
-      <div class="form-control">
+      <div>
         <label class="label cursor-pointer justify-start gap-2">
           <%= f.check_box :publisher, class: "checkbox checkbox-primary" %>
-          <span class="label-text">Publisher</span>
+          <span>Publisher</span>
         </label>
       </div>
 
@@ -354,20 +354,20 @@
                     modal_form_modal_id_value: "add_platform_modal"
                   } do |f| %>
 
-      <div class="form-control">
+      <div>
         <%= f.label :game_id, "Game", class: "label" do %>
-          <span class="label-text font-semibold">Game</span>
+          <span class="font-semibold">Game</span>
         <% end %>
         <%= f.text_field :game_id,
             value: @game.title,
             disabled: true,
-            class: "input input-bordered input-disabled w-full" %>
+            class: "input w-full" %>
         <%= f.hidden_field :game_id, value: @game.id %>
       </div>
 
-      <div class="form-control">
+      <div>
         <%= f.label :platform_id, "Platform", class: "label" do %>
-          <span class="label-text font-semibold">Platform <span class="text-error">*</span></span>
+          <span class="font-semibold">Platform <span class="text-error">*</span></span>
         <% end %>
         <%= render AutocompleteComponent.new(
           name: "games_game_platform[platform_id]",
@@ -408,33 +408,33 @@
                     modal_form_modal_id_value: "add_image_modal"
                   } do |f| %>
 
-      <div class="form-control">
+      <div>
         <%= f.label :file, class: "label" do %>
-          <span class="label-text font-semibold">Image File <span class="text-error">*</span></span>
+          <span class="font-semibold">Image File <span class="text-error">*</span></span>
         <% end %>
         <%= f.file_field :file,
             accept: "image/jpeg,image/png,image/webp,image/gif",
-            class: "file-input file-input-bordered w-full",
+            class: "file-input w-full",
             required: true %>
         <label class="label">
-          <span class="label-text-alt">Max recommended size: 10MB</span>
+          <span>Max recommended size: 10MB</span>
         </label>
       </div>
 
-      <div class="form-control">
+      <div>
         <%= f.label :notes, class: "label" do %>
-          <span class="label-text font-semibold">Notes</span>
+          <span class="font-semibold">Notes</span>
         <% end %>
         <%= f.text_area :notes,
-            class: "textarea textarea-bordered w-full",
+            class: "textarea w-full",
             rows: 2,
             placeholder: "Optional description or notes about this image" %>
       </div>
 
-      <div class="form-control">
+      <div>
         <label class="label cursor-pointer justify-start gap-2">
           <%= f.check_box :primary, class: "checkbox checkbox-primary" %>
-          <span class="label-text">Set as primary image</span>
+          <span>Set as primary image</span>
         </label>
       </div>
 

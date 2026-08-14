@@ -55,37 +55,37 @@
                               turbo_frame: "song_artists_list"
                             } do |f| %>
 
-                <div class="form-control">
+                <div>
                   <%= f.label :song_id, "Song", class: "label" do %>
-                    <span class="label-text font-semibold">Song</span>
+                    <span class="font-semibold">Song</span>
                   <% end %>
                   <%= f.text_field :song_id,
                       value: song.title,
                       disabled: true,
-                      class: "input input-bordered input-disabled w-full" %>
+                      class: "input w-full" %>
                 </div>
 
-                <div class="form-control">
+                <div>
                   <%= f.label :artist_id, "Artist", class: "label" do %>
-                    <span class="label-text font-semibold">Artist</span>
+                    <span class="font-semibold">Artist</span>
                   <% end %>
                   <%= f.text_field :artist_id,
                       value: song_artist.artist.name,
                       disabled: true,
-                      class: "input input-bordered input-disabled w-full" %>
+                      class: "input w-full" %>
                 </div>
 
-                <div class="form-control">
+                <div>
                   <%= f.label :position, class: "label" do %>
-                    <span class="label-text font-semibold">Position <span class="text-error">*</span></span>
+                    <span class="font-semibold">Position <span class="text-error">*</span></span>
                   <% end %>
                   <%= f.number_field :position,
                       value: song_artist.position,
                       min: 1,
-                      class: "input input-bordered w-full",
+                      class: "input w-full",
                       required: true %>
                   <label class="label">
-                    <span class="label-text-alt">Position in artist ordering (1 = first artist)</span>
+                    <span>Position in artist ordering (1 = first artist)</span>
                   </label>
                 </div>
 

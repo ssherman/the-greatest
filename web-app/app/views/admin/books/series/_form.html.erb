@@ -20,17 +20,17 @@
       <h2 class="card-title">Basic Information</h2>
 
       <div class="grid grid-cols-1 gap-4">
-        <div class="form-control">
+        <div>
           <%= f.label :title, class: "label" do %>
-            <span class="label-text font-semibold">Title <span class="text-error">*</span></span>
+            <span class="font-semibold">Title <span class="text-error">*</span></span>
           <% end %>
           <%= f.text_field :title,
-              class: "input input-bordered w-full #{@series.errors[:title].any? ? 'input-error' : ''}",
+              class: "input w-full #{@series.errors[:title].any? ? 'input-error' : ''}",
               placeholder: "Enter series title",
               required: true,
               autofocus: true %>
           <% if @series.errors[:title].any? %>
-            <label class="label"><span class="label-text-alt text-error"><%= @series.errors[:title].first %></span></label>
+            <label class="label"><span class="text-error"><%= @series.errors[:title].first %></span></label>
           <% end %>
         </div>
       </div>

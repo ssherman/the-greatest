@@ -20,9 +20,9 @@
     <div class="card-body">
       <div class="mb-4">
         <%= form_with url: admin_penalties_path, method: :get, data: { turbo_frame: "penalties_table", turbo_action: "advance" }, class: "flex gap-2 items-center" do |f| %>
-          <label class="form-control w-full max-w-xs">
+          <label class="w-full max-w-xs">
             <div class="label">
-              <span class="label-text">Filter by Type</span>
+              <span>Filter by Type</span>
             </div>
             <%= f.select :type,
                 options_for_select([
@@ -34,7 +34,7 @@
                   ["Games", "Games"]
                 ], @selected_type),
                 {},
-                class: "select select-bordered",
+                class: "select",
                 onchange: "this.form.requestSubmit()" %>
           </label>
         <% end %>

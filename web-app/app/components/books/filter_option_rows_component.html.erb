@@ -3,12 +3,12 @@
   <label class="label cursor-pointer justify-start gap-2" data-option-value="<%= record.slug %>">
     <%= check_box_tag input_name, record.slug, checked, id: nil, class: "checkbox checkbox-sm",
           data: {axis: axis, action: "change->books--filter#toggle"} %>
-    <span class="label-text"><%= record.name %></span>
+    <span data-option-label><%= record.name %></span>
     <% if (badge = badge_for(record)) %>
       <span class="badge badge-ghost badge-sm"><%= badge %></span>
     <% end %>
     <% if (count = count_for(row)) %>
-      <span class="label-text text-base-content/60">(<%= number_with_delimiter(count) %>)</span>
+      <span class="text-base-content/60">(<%= number_with_delimiter(count) %>)</span>
     <% end %>
   </label>
 <% end %>

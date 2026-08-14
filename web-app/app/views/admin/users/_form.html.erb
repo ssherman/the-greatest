@@ -20,52 +20,52 @@
       <h2 class="card-title">Account Information</h2>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="form-control md:col-span-2">
+        <div class="md:col-span-2">
           <%= f.label :email, class: "label" do %>
-            <span class="label-text font-semibold">Email <span class="text-error">*</span></span>
+            <span class="font-semibold">Email <span class="text-error">*</span></span>
           <% end %>
           <%= f.email_field :email,
-              class: "input input-bordered w-full #{@user.errors[:email].any? ? 'input-error' : ''}",
+              class: "input w-full #{@user.errors[:email].any? ? 'input-error' : ''}",
               placeholder: "user@example.com",
               required: true,
               autofocus: true %>
           <% if @user.errors[:email].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @user.errors[:email].first %></span>
+              <span class="text-error"><%= @user.errors[:email].first %></span>
             </label>
           <% end %>
         </div>
 
-        <div class="form-control">
+        <div>
           <%= f.label :display_name, class: "label" do %>
-            <span class="label-text font-semibold">Display Name</span>
+            <span class="font-semibold">Display Name</span>
           <% end %>
           <%= f.text_field :display_name,
-              class: "input input-bordered w-full #{@user.errors[:display_name].any? ? 'input-error' : ''}",
+              class: "input w-full #{@user.errors[:display_name].any? ? 'input-error' : ''}",
               placeholder: "Public display name" %>
           <label class="label">
-            <span class="label-text-alt">User's public display name</span>
+            <span>User's public display name</span>
           </label>
           <% if @user.errors[:display_name].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @user.errors[:display_name].first %></span>
+              <span class="text-error"><%= @user.errors[:display_name].first %></span>
             </label>
           <% end %>
         </div>
 
-        <div class="form-control">
+        <div>
           <%= f.label :name, class: "label" do %>
-            <span class="label-text font-semibold">Full Name</span>
+            <span class="font-semibold">Full Name</span>
           <% end %>
           <%= f.text_field :name,
-              class: "input input-bordered w-full #{@user.errors[:name].any? ? 'input-error' : ''}",
+              class: "input w-full #{@user.errors[:name].any? ? 'input-error' : ''}",
               placeholder: "John Doe" %>
           <label class="label">
-            <span class="label-text-alt">User's full name</span>
+            <span>User's full name</span>
           </label>
           <% if @user.errors[:name].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @user.errors[:name].first %></span>
+              <span class="text-error"><%= @user.errors[:name].first %></span>
             </label>
           <% end %>
         </div>
@@ -77,9 +77,9 @@
     <div class="card-body">
       <h2 class="card-title">Access Control</h2>
 
-      <div class="form-control max-w-xs">
+      <div class="max-w-xs">
         <%= f.label :role, class: "label" do %>
-          <span class="label-text font-semibold">Role <span class="text-error">*</span></span>
+          <span class="font-semibold">Role <span class="text-error">*</span></span>
         <% end %>
         <%= f.select :role,
             options_for_select([
@@ -88,13 +88,13 @@
               ["Admin", "admin"]
             ], @user.role),
             {},
-            class: "select select-bordered w-full #{@user.errors[:role].any? ? 'select-error' : ''}" %>
+            class: "select w-full #{@user.errors[:role].any? ? 'select-error' : ''}" %>
         <label class="label">
-          <span class="label-text-alt">Controls access to admin features</span>
+          <span>Controls access to admin features</span>
         </label>
         <% if @user.errors[:role].any? %>
           <label class="label">
-            <span class="label-text-alt text-error"><%= @user.errors[:role].first %></span>
+            <span class="text-error"><%= @user.errors[:role].first %></span>
           </label>
         <% end %>
       </div>
@@ -105,19 +105,19 @@
     <div class="card-body">
       <h2 class="card-title">Billing</h2>
 
-      <div class="form-control">
+      <div>
         <%= f.label :stripe_customer_id, class: "label" do %>
-          <span class="label-text font-semibold">Stripe Customer ID</span>
+          <span class="font-semibold">Stripe Customer ID</span>
         <% end %>
         <%= f.text_field :stripe_customer_id,
-            class: "input input-bordered w-full font-mono #{@user.errors[:stripe_customer_id].any? ? 'input-error' : ''}",
+            class: "input w-full font-mono #{@user.errors[:stripe_customer_id].any? ? 'input-error' : ''}",
             placeholder: "cus_..." %>
         <label class="label">
-          <span class="label-text-alt">Stripe customer identifier for billing</span>
+          <span>Stripe customer identifier for billing</span>
         </label>
         <% if @user.errors[:stripe_customer_id].any? %>
           <label class="label">
-            <span class="label-text-alt text-error"><%= @user.errors[:stripe_customer_id].first %></span>
+            <span class="text-error"><%= @user.errors[:stripe_customer_id].first %></span>
           </label>
         <% end %>
       </div>

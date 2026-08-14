@@ -2,7 +2,7 @@
      data-admin--search-url-value="<%= url %>"
      data-admin--search-debounce-value="300">
   <%= form_with url: url, method: :get, data: { turbo_frame: turbo_frame, admin__search_target: "form" } do %>
-    <label class="input input-bordered flex items-center gap-2">
+    <label class="input flex items-center gap-2">
       <%= text_field_tag param, value,
           placeholder: placeholder,
           class: "grow",

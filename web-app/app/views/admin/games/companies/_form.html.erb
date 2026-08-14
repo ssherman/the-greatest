@@ -22,54 +22,54 @@
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <!-- Name -->
-        <div class="form-control md:col-span-2">
+        <div class="md:col-span-2">
           <%= f.label :name, class: "label" do %>
-            <span class="label-text font-semibold">Name <span class="text-error">*</span></span>
+            <span class="font-semibold">Name <span class="text-error">*</span></span>
           <% end %>
           <%= f.text_field :name,
-              class: "input input-bordered w-full #{@company.errors[:name].any? ? 'input-error' : ''}",
+              class: "input w-full #{@company.errors[:name].any? ? 'input-error' : ''}",
               placeholder: "Enter company name",
               required: true,
               autofocus: true %>
           <% if @company.errors[:name].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @company.errors[:name].first %></span>
+              <span class="text-error"><%= @company.errors[:name].first %></span>
             </label>
           <% end %>
         </div>
 
         <!-- Country -->
-        <div class="form-control">
+        <div>
           <%= f.label :country, class: "label" do %>
-            <span class="label-text font-semibold">Country</span>
+            <span class="font-semibold">Country</span>
           <% end %>
           <%= f.text_field :country,
-              class: "input input-bordered w-full #{@company.errors[:country].any? ? 'input-error' : ''}",
+              class: "input w-full #{@company.errors[:country].any? ? 'input-error' : ''}",
               placeholder: "e.g., US, JP, GB",
               maxlength: 2 %>
           <label class="label">
-            <span class="label-text-alt">2-letter country code (ISO 3166-1 alpha-2)</span>
+            <span>2-letter country code (ISO 3166-1 alpha-2)</span>
           </label>
           <% if @company.errors[:country].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @company.errors[:country].first %></span>
+              <span class="text-error"><%= @company.errors[:country].first %></span>
             </label>
           <% end %>
         </div>
 
         <!-- Year Founded -->
-        <div class="form-control">
+        <div>
           <%= f.label :year_founded, class: "label" do %>
-            <span class="label-text font-semibold">Year Founded</span>
+            <span class="font-semibold">Year Founded</span>
           <% end %>
           <%= f.number_field :year_founded,
-              class: "input input-bordered w-full #{@company.errors[:year_founded].any? ? 'input-error' : ''}",
+              class: "input w-full #{@company.errors[:year_founded].any? ? 'input-error' : ''}",
               placeholder: "e.g., 1986",
               min: 1900,
               max: Time.current.year %>
           <% if @company.errors[:year_founded].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @company.errors[:year_founded].first %></span>
+              <span class="text-error"><%= @company.errors[:year_founded].first %></span>
             </label>
           <% end %>
         </div>

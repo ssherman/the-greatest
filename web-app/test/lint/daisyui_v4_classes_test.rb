@@ -8,138 +8,53 @@ require "test_helper"
 # daisyUI 4 and were removed in 5 -- they are simply absent from the compiled
 # CSS, so using one is a SILENT failure: no build error, no runtime error, no
 # visual difference until someone notices a control that looks subtly wrong
-# (or, in the case of "select" on a <select multiple>, badly wrong). Because
-# ~90 files already contain these classes, "follow the existing pattern in
-# this file/a neighbouring file" reliably reproduces the bug -- see CLAUDE.md.
+# (or, in the case of "select" on a <select multiple>, badly wrong).
+#
+# The codebase is CLEAN: a branch-wide sweep removed every occurrence of
+# every REMOVED_CLASSES token from app/views, app/components, app/javascript,
+# and app/helpers (everywhere target_files below scans), and ALLOWLIST is
+# empty. If you trip this guard, the fix is to remove the class from the
+# file you just touched -- NOT to add that file to ALLOWLIST. Adding an
+# allowlist entry is the one move that would let a removed class back into a
+# codebase that was just made free of them; it undoes the point of the
+# sweep, it does not sanction it.
 #
 # REMOVED_CLASSES: the list. Extend it if a future daisyUI upgrade removes
 # more classes app code still relies on.
 #
-# ALLOWLIST: a literal, generated-once list of files that already contained a
-# removed class at the time this guardrail was added. Sweeping all of them to
-# daisyUI 5 markup is separate work and deliberately not bundled into whatever
-# change added this test. It is a plain array of paths -- not a glob, not a
-# directory prefix -- so every grandfathered file is visible here and can be
-# deleted as it gets cleaned up. The test enforces both directions:
-#   - a NEW file, or a NEW occurrence in a file not on this list, fails the
-#     "no removed classes outside the allowlist" assertion below
-#   - an allowlisted file that has been fully cleaned up (no more removed
-#     classes anywhere in it) fails the "allowlist has no stale entries"
-#     assertion -- that failure message tells you which line to delete here
-# That second check is what keeps this list shrinking instead of becoming a
-# permanent exemption. When you clean up a file, delete its entry.
+# ALLOWLIST: the escape hatch, kept for whenever one is genuinely needed
+# again (e.g. a removed class that must temporarily coexist with this guard
+# mid-migration on some future change) -- not a place to park today's
+# violation. It is empty and is meant to stay empty. It is a plain array of
+# paths -- not a glob, not a directory prefix -- so any entry that does get
+# added is visible here, not hidden in a pattern. The test enforces both
+# directions:
+#   - a file with a removed class not on ALLOWLIST fails "no removed classes
+#     outside the allowlist" below
+#   - an ALLOWLIST entry for a file that no longer contains any removed
+#     class fails "allowlist has no stale entries" -- that failure message
+#     tells you which line to delete
+# With ALLOWLIST empty, the second check has nothing to compare against and
+# can never fail right now -- it only starts pulling weight again once an
+# entry exists. Until then, THIS COMMENT is the only thing stopping someone
+# from reading "there's an allowlist" and treating it as the sanctioned fix.
 class DaisyuiV4ClassesTest < ActiveSupport::TestCase
   REMOVED_CLASSES = %w[
     form-control
     label-text
+    label-text-alt
     input-bordered
     select-bordered
     textarea-bordered
+    file-input-bordered
+    input-disabled
+    table-hover
+    tabs-boxed
   ].freeze
 
-  ALLOWLIST = %w[
-    app/components/admin/add_category_modal_component/add_category_modal_component.html.erb
-    app/components/admin/add_item_to_list_modal_component/add_item_to_list_modal_component.html.erb
-    app/components/admin/add_list_to_configuration_modal_component/add_list_to_configuration_modal_component.html.erb
-    app/components/admin/add_penalty_to_configuration_modal_component/add_penalty_to_configuration_modal_component.html.erb
-    app/components/admin/attach_penalty_modal_component/attach_penalty_modal_component.html.erb
-    app/components/admin/categories/form_component.html.erb
-    app/components/admin/categories/show_component.html.erb
-    app/components/admin/edit_list_item_form_component/edit_list_item_form_component.html.erb
-    app/components/admin/edit_penalty_application_modal_component/edit_penalty_application_modal_component.html.erb
-    app/components/admin/games/wizard/parse_step_component.html.erb
-    app/components/admin/games/wizard/review_step_component.html.erb
-    app/components/admin/games/wizard/source_step_component.html.erb
-    app/components/admin/lists/form_component.html.erb
-    app/components/admin/lists/index_component.html.erb
-    app/components/admin/lists/research_prompt_modal_component.html.erb
-    app/components/admin/lists/show_component.html.erb
-    app/components/admin/music/albums/wizard/parse_step_component.html.erb
-    app/components/admin/music/albums/wizard/review_step_component.html.erb
-    app/components/admin/music/songs/wizard/edit_metadata_modal_component.html.erb
-    app/components/admin/music/songs/wizard/link_song_modal_component.html.erb
-    app/components/admin/music/songs/wizard/parse_step_component.html.erb
-    app/components/admin/music/songs/wizard/review_step_component.html.erb
-    app/components/admin/music/songs/wizard/search_musicbrainz_modal_component.html.erb
-    app/components/admin/music/wizard/base_source_step_component.html.erb
-    app/components/admin/music/wizard/link_musicbrainz_url_modal_component.html.erb
-    app/components/admin/search_component/search_component.html.erb
-    app/components/authentication/widget_component/widget_component.html.erb
-    app/components/autocomplete_component.html.erb
-    app/components/books/filter_modal_component.html.erb
-    app/components/books/filter_option_rows_component.html.erb
-    app/components/games/filter_tabs_component.html.erb
-    app/components/music/filter_tabs_component.html.erb
-    app/components/reviews/modal_component.html.erb
-    app/components/user_lists/modal_component/modal_component.html.erb
-    app/views/admin/books/authors/_author_relationships_list.html.erb
-    app/views/admin/books/authors/_form.html.erb
-    app/views/admin/books/authors/show.html.erb
-    app/views/admin/books/books/_book_authors_list.html.erb
-    app/views/admin/books/books/_book_relationships_list.html.erb
-    app/views/admin/books/books/_form.html.erb
-    app/views/admin/books/books/show.html.erb
-    app/views/admin/books/credits/_add_credit_modal.html.erb
-    app/views/admin/books/credits/_credits_list.html.erb
-    app/views/admin/books/editions/_form.html.erb
-    app/views/admin/books/editions/show.html.erb
-    app/views/admin/books/series/_form.html.erb
-    app/views/admin/books/series/_series_books_list.html.erb
-    app/views/admin/books/series/show.html.erb
-    app/views/admin/descriptions/_form_fields.html.erb
-    app/views/admin/domain_roles/index.html.erb
-    app/views/admin/games/companies/_form.html.erb
-    app/views/admin/games/companies/show.html.erb
-    app/views/admin/games/games/_companies_list.html.erb
-    app/views/admin/games/games/_form.html.erb
-    app/views/admin/games/games/index.html.erb
-    app/views/admin/games/games/show.html.erb
-    app/views/admin/games/list_items_actions/modals/_edit_metadata.html.erb
-    app/views/admin/games/list_items_actions/modals/_link_game.html.erb
-    app/views/admin/games/list_items_actions/modals/_link_igdb_id.html.erb
-    app/views/admin/games/list_items_actions/modals/_search_igdb_games.html.erb
-    app/views/admin/games/platforms/_form.html.erb
-    app/views/admin/games/platforms/show.html.erb
-    app/views/admin/games/series/_form.html.erb
-    app/views/admin/games/series/show.html.erb
-    app/views/admin/images/_image_card.html.erb
-    app/views/admin/music/ai_chats/show.html.erb
-    app/views/admin/music/albums/_artists_list.html.erb
-    app/views/admin/music/albums/_form.html.erb
-    app/views/admin/music/albums/list_items_actions/modals/_edit_metadata.html.erb
-    app/views/admin/music/albums/list_items_actions/modals/_link_album.html.erb
-    app/views/admin/music/albums/list_items_actions/modals/_search_musicbrainz_artists.html.erb
-    app/views/admin/music/albums/list_items_actions/modals/_search_musicbrainz_releases.html.erb
-    app/views/admin/music/albums/show.html.erb
-    app/views/admin/music/artists/_albums_list.html.erb
-    app/views/admin/music/artists/_form.html.erb
-    app/views/admin/music/artists/_songs_list.html.erb
-    app/views/admin/music/artists/index.html.erb
-    app/views/admin/music/artists/ranking_configurations/_form.html.erb
-    app/views/admin/music/artists/ranking_configurations/show.html.erb
-    app/views/admin/music/artists/show.html.erb
-    app/views/admin/music/songs/_artists_list.html.erb
-    app/views/admin/music/songs/_form.html.erb
-    app/views/admin/music/songs/list_items_actions/modals/_edit_metadata.html.erb
-    app/views/admin/music/songs/list_items_actions/modals/_link_song.html.erb
-    app/views/admin/music/songs/list_items_actions/modals/_search_musicbrainz_artists.html.erb
-    app/views/admin/music/songs/list_items_actions/modals/_search_musicbrainz_recordings.html.erb
-    app/views/admin/music/songs/show.html.erb
-    app/views/admin/penalties/_form.html.erb
-    app/views/admin/penalties/index.html.erb
-    app/views/admin/penalties/show.html.erb
-    app/views/admin/ranking_configurations/_form.html.erb
-    app/views/admin/ranking_configurations/show.html.erb
-    app/views/admin/users/_form.html.erb
-    app/views/admin/users/show.html.erb
-    app/views/books/lists/index.html.erb
-    app/views/games/lists/index.html.erb
-    app/views/layouts/games/application.html.erb
-    app/views/layouts/music/application.html.erb
-    app/views/music/lists/_form.html.erb
-  ].freeze
+  ALLOWLIST = %w[].freeze
 
-  test "no removed daisyUI v4 classes outside the grandfathered allowlist" do
+  test "no removed daisyUI v4 classes outside the allowlist" do
     unexpected = offenders.keys - ALLOWLIST
 
     assert_empty unexpected,
@@ -162,14 +77,18 @@ class DaisyuiV4ClassesTest < ActiveSupport::TestCase
   private
 
   # Path (relative to Rails.root) => array of removed classes found, for
-  # every file under app/views/** and app/components/** that uses one.
+  # every file under app/views/**, app/components/**, app/javascript/**, and
+  # app/helpers/** that uses one.
   #
-  # Only scans text inside a `class="..."` (HTML) or `class: "..."` (Ruby
-  # hash option) value -- ERB/Ruby comments are stripped first -- and only
-  # counts a whole space-separated class token as a hit, never a substring.
-  # That second part matters: "file-input-bordered" is a valid, current
-  # daisyUI class (the bordered variant of "file-input") that contains
-  # "input-bordered" as a substring, and a naive match would wrongly flag it.
+  # Only scans text inside a `class="..."` / `class: "..."` / `className = "..."`
+  # value -- ERB/Ruby comments are stripped first -- and only counts a whole
+  # space-separated class token as a hit, never a substring.
+  #
+  # Whole-token matching matters because "file-input-bordered" contains
+  # "input-bordered". Both are dead, and both are listed above; token matching
+  # is what makes a file containing the former get reported as that class
+  # alone rather than as two overlapping hits. Note that plain "file-input"
+  # IS a current daisyUI 5 class and must never be added to the list.
   def offenders
     @offenders ||= scan_target_files
   end
@@ -182,7 +101,7 @@ class DaisyuiV4ClassesTest < ActiveSupport::TestCase
   end
 
   def target_files
-    Dir.glob(Rails.root.join("{app/views,app/components}/**/*"))
+    Dir.glob(Rails.root.join("{app/views,app/components,app/javascript,app/helpers}/**/*"))
       .select { |path| File.file?(path) }
       .map { |path| Pathname.new(path).relative_path_from(Rails.root).to_s }
       .sort
@@ -194,11 +113,53 @@ class DaisyuiV4ClassesTest < ActiveSupport::TestCase
       .gsub(/^\s*#.*$/, "") # full-line Ruby comments, e.g. in .rb component files
   end
 
+  # Known limitations (documented, not chased -- these are accepted gaps,
+  # not a to-do list; matching them would mean parsing ERB/Ruby/JS, not
+  # scanning text):
+  #
+  # - A dead class hidden inside ERB/Ruby interpolation, e.g.
+  #   class="input <%= 'input-bordered' if disabled %>" or
+  #   class: "input #{'input-bordered' if y}". The class(?:Name)? regex
+  #   below does capture the full attribute value in these cases, but the
+  #   quoted literal keeps its own quote characters when the value is
+  #   whitespace-split, so the token never equals the bare class name and
+  #   the whole-token match misses it. This is the exact shape of the one
+  #   occurrence the sweep's codemod could not rewrite automatically
+  #   (app/components/autocomplete_component.html.erb) -- this guard
+  #   structurally cannot catch the hardest case it just cleaned up.
+  # - Variable/dynamic class-name construction generally: `class: ["input",
+  #   "input-bordered"]` (array literal), `class: class_names(...)`, and
+  #   `setAttribute("class", ...)` are all different syntax shapes than the
+  #   `class(?:Name)?\s*[:=]\s*(["'`])` pattern expects immediately after the
+  #   colon/equals, so none of them are scanned at all.
+  # - `classList.toggle(isValid(x), "input-bordered")`: the classList regex's
+  #   `[^)]*` argument capture stops at the first `)`, so a parenthesised
+  #   call in an earlier argument hides any string literal that comes after
+  #   it. Inert today -- the only non-literal first argument anywhere in the
+  #   codebase has no parenthesis (e.g.
+  #   `spoiler.classList.add(this.constructor.REVEALED_CLASSES)`) -- but a
+  #   future `classList.toggle(someCall(x), "dead-class")` would slip
+  #   through silently.
+  #
+  # Separately: strip_comments above only strips ERB comments and full-line
+  # Ruby `#` comments -- it does not strip JS `//` or `/* */`. A
+  # commented-out `classList.add("input-bordered")` in a .js file would
+  # therefore false-positive. That fails safe (blocks CI on text that looks
+  # like a dead class even though it isn't live) and is left as-is on
+  # purpose.
   def removed_classes_in(content)
     found = []
-    content.scan(/class\s*[:=]\s*(["'])(.*?)\1/m) do |_quote, value|
+    content.scan(/\bclass(?:Name)?\s*[:=]\s*(["'`])(.*?)\1/m) do |_quote, value|
       value.split(/\s+/).each do |token|
         found << token if REMOVED_CLASSES.include?(token)
+      end
+    end
+    # classList.add("a", "b") / .remove(...) / .toggle("x", cond) / .replace(...)
+    content.scan(/classList\.(?:add|remove|toggle|replace)\(([^)]*)\)/m) do |args|
+      args[0].scan(/["'`]([^"'`]*)["'`]/) do |literal|
+        literal[0].split(/\s+/).each do |token|
+          found << token if REMOVED_CLASSES.include?(token)
+        end
       end
     end
     found.uniq

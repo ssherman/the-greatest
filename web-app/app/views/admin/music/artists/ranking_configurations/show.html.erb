@@ -71,21 +71,21 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Name</span>
+                <span class="font-semibold">Name</span>
               </label>
               <p class="text-lg"><%= @ranking_configuration.name %></p>
             </div>
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Type</span>
+                <span class="font-semibold">Type</span>
               </label>
               <span class="badge badge-outline badge-lg"><%= @ranking_configuration.type %></span>
             </div>
 
             <div class="md:col-span-2">
               <label class="label">
-                <span class="label-text font-semibold">Flags</span>
+                <span class="font-semibold">Flags</span>
               </label>
               <div class="flex flex-wrap gap-2">
                 <span class="badge <%= @ranking_configuration.primary? ? 'badge-primary' : 'badge-ghost' %>">
@@ -103,7 +103,7 @@
             <% if @ranking_configuration.published_at.present? %>
               <div>
                 <label class="label">
-                  <span class="label-text font-semibold">Published At</span>
+                  <span class="font-semibold">Published At</span>
                 </label>
                 <p><%= @ranking_configuration.published_at.strftime("%B %d, %Y at %I:%M %p") %></p>
               </div>
@@ -111,14 +111,14 @@
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Created At</span>
+                <span class="font-semibold">Created At</span>
               </label>
               <p><%= @ranking_configuration.created_at.strftime("%B %d, %Y at %I:%M %p") %></p>
             </div>
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Updated At</span>
+                <span class="font-semibold">Updated At</span>
               </label>
               <p><%= @ranking_configuration.updated_at.strftime("%B %d, %Y at %I:%M %p") %></p>
             </div>
@@ -127,7 +127,7 @@
           <% if @ranking_configuration.description.present? %>
             <div class="mt-4">
               <label class="label">
-                <span class="label-text font-semibold">Description</span>
+                <span class="font-semibold">Description</span>
               </label>
               <p class="text-base-content/80 whitespace-pre-wrap"><%= @ranking_configuration.description %></p>
             </div>
@@ -145,28 +145,28 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 opacity-50">
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Algorithm Version</span>
+                <span class="font-semibold">Algorithm Version</span>
               </label>
               <span class="badge badge-ghost badge-lg"><%= @ranking_configuration.algorithm_version %></span>
             </div>
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Exponent</span>
+                <span class="font-semibold">Exponent</span>
               </label>
               <p class="text-lg font-mono"><%= @ranking_configuration.exponent %> <span class="text-xs text-base-content/50">(not used)</span></p>
             </div>
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Bonus Pool Percentage</span>
+                <span class="font-semibold">Bonus Pool Percentage</span>
               </label>
               <p class="text-lg font-mono"><%= @ranking_configuration.bonus_pool_percentage %>% <span class="text-xs text-base-content/50">(not used)</span></p>
             </div>
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Min List Weight</span>
+                <span class="font-semibold">Min List Weight</span>
               </label>
               <p class="text-lg font-mono"><%= @ranking_configuration.min_list_weight %> <span class="text-xs text-base-content/50">(not used)</span></p>
             </div>

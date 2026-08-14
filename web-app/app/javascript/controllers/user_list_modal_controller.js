@@ -97,7 +97,7 @@ export default class extends Controller {
       row.className = "label cursor-pointer justify-start items-start gap-3 py-1 min-w-0"
       row.innerHTML = `
         <input type="checkbox" class="checkbox checkbox-sm mt-0.5 shrink-0" data-list-id="${list.id}">
-        <span class="label-text flex-1 min-w-0 break-words text-left">${this._escape(list.name)}</span>
+        <span class="flex-1 min-w-0 break-words text-left">${this._escape(list.name)}</span>
       `
       const input = row.querySelector("input")
       input.checked = memberMap.has(list.id)

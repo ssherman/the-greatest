@@ -40,8 +40,8 @@
             &lsaquo; <%= AXES.find { |row| row[:axis] == axis }[:label] %>
           </button>
 
-          <div class="form-control mb-3">
-            <input type="search" class="input input-bordered w-full"
+          <div class="mb-3">
+            <input type="search" class="input w-full"
                    placeholder="<%= (axis == "category") ? "Search genres, subjects, settings" : "Search origins" %>"
                    aria-label="<%= (axis == "category") ? "Search genres, subjects, settings" : "Search origins" %>"
                    data-books--filter-target="query" data-axis="<%= axis %>"
@@ -73,14 +73,14 @@
           &lsaquo; Published
         </button>
         <div class="grid grid-cols-2 gap-4">
-          <div class="form-control">
-            <label class="label" for="year_start"><span class="label-text">From year</span></label>
-            <%= number_field_tag :year_start, year_start, class: "input input-bordered w-full", placeholder: "Any",
+          <div>
+            <label class="label" for="year_start"><span>From year</span></label>
+            <%= number_field_tag :year_start, year_start, class: "input w-full", placeholder: "Any",
                   data: {"books--filter-target": "year", axis: "year", action: "input->books--filter#refresh"} %>
           </div>
-          <div class="form-control">
-            <label class="label" for="year_end"><span class="label-text">To year</span></label>
-            <%= number_field_tag :year_end, year_end, class: "input input-bordered w-full", placeholder: "Any",
+          <div>
+            <label class="label" for="year_end"><span>To year</span></label>
+            <%= number_field_tag :year_end, year_end, class: "input w-full", placeholder: "Any",
                   data: {"books--filter-target": "year", axis: "year", action: "input->books--filter#refresh"} %>
           </div>
         </div>

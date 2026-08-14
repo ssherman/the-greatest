@@ -22,108 +22,108 @@
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <!-- Title -->
-        <div class="form-control md:col-span-2">
+        <div class="md:col-span-2">
           <%= f.label :title, class: "label" do %>
-            <span class="label-text font-semibold">Title <span class="text-error">*</span></span>
+            <span class="font-semibold">Title <span class="text-error">*</span></span>
           <% end %>
           <%= f.text_field :title,
-              class: "input input-bordered w-full #{@book.errors[:title].any? ? 'input-error' : ''}",
+              class: "input w-full #{@book.errors[:title].any? ? 'input-error' : ''}",
               placeholder: "Enter book title",
               required: true,
               autofocus: true %>
           <% if @book.errors[:title].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @book.errors[:title].first %></span>
+              <span class="text-error"><%= @book.errors[:title].first %></span>
             </label>
           <% end %>
         </div>
 
         <!-- Subtitle -->
-        <div class="form-control">
+        <div>
           <%= f.label :subtitle, class: "label" do %>
-            <span class="label-text font-semibold">Subtitle</span>
+            <span class="font-semibold">Subtitle</span>
           <% end %>
           <%= f.text_field :subtitle,
-              class: "input input-bordered w-full #{@book.errors[:subtitle].any? ? 'input-error' : ''}" %>
+              class: "input w-full #{@book.errors[:subtitle].any? ? 'input-error' : ''}" %>
           <% if @book.errors[:subtitle].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @book.errors[:subtitle].first %></span>
+              <span class="text-error"><%= @book.errors[:subtitle].first %></span>
             </label>
           <% end %>
         </div>
 
         <!-- Sort Title -->
-        <div class="form-control">
+        <div>
           <%= f.label :sort_title, class: "label" do %>
-            <span class="label-text font-semibold">Sort Title</span>
+            <span class="font-semibold">Sort Title</span>
           <% end %>
           <%= f.text_field :sort_title,
-              class: "input input-bordered w-full #{@book.errors[:sort_title].any? ? 'input-error' : ''}" %>
+              class: "input w-full #{@book.errors[:sort_title].any? ? 'input-error' : ''}" %>
           <% if @book.errors[:sort_title].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @book.errors[:sort_title].first %></span>
+              <span class="text-error"><%= @book.errors[:sort_title].first %></span>
             </label>
           <% end %>
         </div>
 
         <!-- Kind -->
-        <div class="form-control">
+        <div>
           <%= f.label :book_kind, class: "label" do %>
-            <span class="label-text font-semibold">Kind</span>
+            <span class="font-semibold">Kind</span>
           <% end %>
           <%= f.select :book_kind,
               ::Books::Book.book_kinds.keys.map { |k| [k.titleize, k] },
               {},
-              class: "select select-bordered w-full #{@book.errors[:book_kind].any? ? 'select-error' : ''}" %>
+              class: "select w-full #{@book.errors[:book_kind].any? ? 'select-error' : ''}" %>
           <% if @book.errors[:book_kind].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @book.errors[:book_kind].first %></span>
+              <span class="text-error"><%= @book.errors[:book_kind].first %></span>
             </label>
           <% end %>
         </div>
 
         <!-- First Published Year -->
-        <div class="form-control">
+        <div>
           <%= f.label :first_published_year, class: "label" do %>
-            <span class="label-text font-semibold">First Published Year</span>
+            <span class="font-semibold">First Published Year</span>
           <% end %>
           <%= f.number_field :first_published_year,
-              class: "input input-bordered w-full #{@book.errors[:first_published_year].any? ? 'input-error' : ''}",
+              class: "input w-full #{@book.errors[:first_published_year].any? ? 'input-error' : ''}",
               min: -3000,
               max: 3000 %>
           <% if @book.errors[:first_published_year].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @book.errors[:first_published_year].first %></span>
+              <span class="text-error"><%= @book.errors[:first_published_year].first %></span>
             </label>
           <% end %>
         </div>
 
         <!-- Original Language -->
-        <div class="form-control">
+        <div>
           <%= f.label :original_language_id, class: "label" do %>
-            <span class="label-text font-semibold">Original Language</span>
+            <span class="font-semibold">Original Language</span>
           <% end %>
           <%= f.collection_select :original_language_id,
               Language.order(:name),
               :id,
               :name,
               {include_blank: "—"},
-              class: "select select-bordered w-full #{@book.errors[:original_language_id].any? ? 'select-error' : ''}" %>
+              class: "select w-full #{@book.errors[:original_language_id].any? ? 'select-error' : ''}" %>
           <% if @book.errors[:original_language_id].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @book.errors[:original_language_id].first %></span>
+              <span class="text-error"><%= @book.errors[:original_language_id].first %></span>
             </label>
           <% end %>
         </div>
 
         <!-- Alternate Titles -->
-        <div class="form-control md:col-span-2">
+        <div class="md:col-span-2">
           <%= f.label :alternate_titles, class: "label" do %>
-            <span class="label-text font-semibold">Alternate Titles</span>
+            <span class="font-semibold">Alternate Titles</span>
           <% end %>
-          <%= text_field_tag "books_book[alternate_titles_string]", @book.alternate_titles.join(", "), class: "input input-bordered w-full" %>
+          <%= text_field_tag "books_book[alternate_titles_string]", @book.alternate_titles.join(", "), class: "input w-full" %>
           <label class="label">
-            <span class="label-text-alt">Comma-separated</span>
+            <span>Comma-separated</span>
           </label>
         </div>
       </div>

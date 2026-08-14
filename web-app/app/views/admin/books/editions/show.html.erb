@@ -108,17 +108,17 @@
       <div class="modal-box">
         <h3 class="font-bold text-lg mb-4">Add Image</h3>
         <%= form_with model: Image.new, url: admin_books_edition_images_path(@edition), method: :post, data: {controller: "modal-form", modal_form_modal_id_value: "add_edition_image_modal"} do |f| %>
-          <label class="form-control">
-            <span class="label-text">File</span>
-            <%= f.file_field :file, accept: "image/jpeg,image/png,image/webp,image/gif", required: true, class: "file-input file-input-bordered" %>
+          <label>
+            <span>File</span>
+            <%= f.file_field :file, accept: "image/jpeg,image/png,image/webp,image/gif", required: true, class: "file-input" %>
           </label>
-          <label class="form-control mt-2">
-            <span class="label-text">Notes</span>
-            <%= f.text_field :notes, class: "input input-bordered" %>
+          <label class="mt-2">
+            <span>Notes</span>
+            <%= f.text_field :notes, class: "input" %>
           </label>
           <label class="label cursor-pointer mt-2 justify-start gap-2">
             <%= f.check_box :primary, class: "checkbox" %>
-            <span class="label-text">Primary</span>
+            <span>Primary</span>
           </label>
           <div class="modal-action">
             <%= f.submit "Upload", class: "btn btn-primary" %>

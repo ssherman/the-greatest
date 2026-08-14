@@ -11,7 +11,7 @@
                 } do |f| %>
 
     <% if autocomplete_url.present? %>
-      <div class="form-control">
+      <div>
         <%= f.label :item_name, "Current: #{item_display_name}", class: "label" %>
         <%= render AutocompleteComponent.new(
           name: "list_item[listable_id]",
@@ -22,46 +22,46 @@
         ) %>
       </div>
     <% else %>
-      <div class="form-control">
+      <div>
         <%= f.label :item_name, "Item", class: "label" %>
-        <div class="input input-bordered w-full bg-base-200">
+        <div class="input w-full bg-base-200">
           <%= item_display_name %>
         </div>
         <label class="label">
-          <span class="label-text-alt">Item cannot be changed</span>
+          <span>Item cannot be changed</span>
         </label>
       </div>
     <% end %>
 
-    <div class="form-control">
+    <div>
       <%= f.label :position, "Position", class: "label" %>
       <%= f.number_field :position,
           min: 1,
           step: 1,
           value: @list_item.position,
-          class: "input input-bordered w-full",
+          class: "input w-full",
           required: true %>
       <label class="label">
-        <span class="label-text-alt">Position in the list (must be > 0)</span>
+        <span>Position in the list (must be > 0)</span>
       </label>
     </div>
 
-    <div class="form-control">
+    <div>
       <%= f.label :metadata, "Metadata (JSON, optional)", class: "label" %>
       <%= f.text_area :metadata,
           rows: 3,
           value: metadata_json,
           placeholder: '{"custom_field": "value"}',
-          class: "textarea textarea-bordered w-full" %>
+          class: "textarea w-full" %>
       <label class="label">
-        <span class="label-text-alt">Optional JSON metadata</span>
+        <span>Optional JSON metadata</span>
       </label>
     </div>
 
-    <div class="form-control">
+    <div>
       <label class="label cursor-pointer justify-start gap-2">
         <%= f.check_box :verified, checked: @list_item.verified, class: "checkbox" %>
-        <span class="label-text">Mark as verified</span>
+        <span>Mark as verified</span>
       </label>
     </div>
 

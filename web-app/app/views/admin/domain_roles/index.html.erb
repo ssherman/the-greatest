@@ -77,7 +77,7 @@
                       <td>
                         <div class="flex gap-2">
                           <%= form_with url: admin_user_domain_role_path(@user, role), method: :patch, class: "inline-flex gap-2" do |f| %>
-                            <%= f.select :permission_level, DomainRole.permission_levels.keys.map { |k| [k.humanize, k] }, {}, class: "select select-bordered select-sm" %>
+                            <%= f.select :permission_level, DomainRole.permission_levels.keys.map { |k| [k.humanize, k] }, {}, class: "select select-sm" %>
                             <%= f.submit "Update", class: "btn btn-sm btn-primary" %>
                           <% end %>
                           <%= button_to admin_user_domain_role_path(@user, role),
@@ -115,17 +115,17 @@
           <div class="card-body">
             <h2 class="card-title text-lg">Grant New Role</h2>
             <%= form_with url: admin_user_domain_roles_path(@user), scope: :domain_role, method: :post, class: "space-y-4" do |f| %>
-              <div class="form-control">
+              <div>
                 <label class="label">
-                  <span class="label-text">Domain</span>
+                  <span>Domain</span>
                 </label>
-                <%= f.select :domain, @available_domains.map { |d| [d.humanize, d] }, { prompt: "Select domain..." }, class: "select select-bordered w-full" %>
+                <%= f.select :domain, @available_domains.map { |d| [d.humanize, d] }, { prompt: "Select domain..." }, class: "select w-full" %>
               </div>
-              <div class="form-control">
+              <div>
                 <label class="label">
-                  <span class="label-text">Permission Level</span>
+                  <span>Permission Level</span>
                 </label>
-                <%= f.select :permission_level, DomainRole.permission_levels.keys.map { |k| [k.humanize, k] }, {}, class: "select select-bordered w-full" %>
+                <%= f.select :permission_level, DomainRole.permission_levels.keys.map { |k| [k.humanize, k] }, {}, class: "select w-full" %>
               </div>
               <%= f.submit "Grant Role", class: "btn btn-primary w-full" %>
             <% end %>

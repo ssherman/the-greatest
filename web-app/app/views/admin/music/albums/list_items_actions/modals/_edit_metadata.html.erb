@@ -11,14 +11,14 @@
                   turbo_frame: "_top"
                 } do |f| %>
 
-    <div class="form-control mt-4">
+    <div class="mt-4">
       <label for="list_item_metadata_json" class="label">
-        <span class="label-text">Metadata (JSON):</span>
+        <span>Metadata (JSON):</span>
       </label>
       <textarea name="list_item[metadata_json]"
                 id="list_item_metadata_json"
                 rows="15"
-                class="textarea textarea-bordered font-mono text-sm w-full"
+                class="textarea font-mono text-sm w-full"
                 data-metadata-editor-target="textarea"
                 data-action="input->metadata-editor#validate"><%= formatted_metadata(item) %></textarea>
       <div id="<%= Admin::Music::Albums::Wizard::SharedModalComponent::ERROR_ID %>" class="text-error text-sm mt-2" data-metadata-editor-target="error"></div>

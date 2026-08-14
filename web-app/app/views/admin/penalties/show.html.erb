@@ -44,14 +44,14 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Name</span>
+                <span class="font-semibold">Name</span>
               </label>
               <p class="text-lg"><%= @penalty.name %></p>
             </div>
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Type</span>
+                <span class="font-semibold">Type</span>
               </label>
               <%
                 type_badge_class = case @penalty.type
@@ -76,7 +76,7 @@
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">Dynamic Type</span>
+                <span class="font-semibold">Dynamic Type</span>
               </label>
               <% if @penalty.dynamic_type.present? %>
                 <span class="badge badge-warning badge-lg">
@@ -89,7 +89,7 @@
 
             <div>
               <label class="label">
-                <span class="label-text font-semibold">User</span>
+                <span class="font-semibold">User</span>
               </label>
               <% if @penalty.user_id.nil? %>
                 <span class="badge badge-ghost badge-lg">System-wide</span>
@@ -101,7 +101,7 @@
             <% if @penalty.description.present? %>
               <div class="md:col-span-2">
                 <label class="label">
-                  <span class="label-text font-semibold">Description</span>
+                  <span class="font-semibold">Description</span>
                 </label>
                 <p class="text-base-content/80"><%= @penalty.description %></p>
               </div>
@@ -153,11 +153,11 @@
           <h2 class="card-title text-lg">Metadata</h2>
           <div class="space-y-3 text-sm">
             <div>
-              <label class="label-text font-semibold">Created At</label>
+              <label class="font-semibold">Created At</label>
               <p class="text-base-content/70"><%= @penalty.created_at.strftime("%B %d, %Y at %I:%M %p") %></p>
             </div>
             <div>
-              <label class="label-text font-semibold">Updated At</label>
+              <label class="font-semibold">Updated At</label>
               <p class="text-base-content/70"><%= @penalty.updated_at.strftime("%B %d, %Y at %I:%M %p") %></p>
             </div>
           </div>

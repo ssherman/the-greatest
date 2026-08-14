@@ -22,38 +22,38 @@
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <!-- Title -->
-        <div class="form-control md:col-span-2">
+        <div class="md:col-span-2">
           <%= f.label :title, class: "label" do %>
-            <span class="label-text font-semibold">Title <span class="text-error">*</span></span>
+            <span class="font-semibold">Title <span class="text-error">*</span></span>
           <% end %>
           <%= f.text_field :title,
-              class: "input input-bordered w-full #{@album.errors[:title].any? ? 'input-error' : ''}",
+              class: "input w-full #{@album.errors[:title].any? ? 'input-error' : ''}",
               placeholder: "Enter album title",
               required: true,
               autofocus: true %>
           <% if @album.errors[:title].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @album.errors[:title].first %></span>
+              <span class="text-error"><%= @album.errors[:title].first %></span>
             </label>
           <% end %>
         </div>
 
         <!-- Release Year -->
-        <div class="form-control">
+        <div>
           <%= f.label :release_year, class: "label" do %>
-            <span class="label-text font-semibold">Release Year</span>
+            <span class="font-semibold">Release Year</span>
           <% end %>
           <%= f.number_field :release_year,
-              class: "input input-bordered w-full #{@album.errors[:release_year].any? ? 'input-error' : ''}",
+              class: "input w-full #{@album.errors[:release_year].any? ? 'input-error' : ''}",
               placeholder: "e.g., 1973",
               min: 1900,
               max: Time.current.year + 2 %>
           <label class="label">
-            <span class="label-text-alt">Initial release year</span>
+            <span>Initial release year</span>
           </label>
           <% if @album.errors[:release_year].any? %>
             <label class="label">
-              <span class="label-text-alt text-error"><%= @album.errors[:release_year].first %></span>
+              <span class="text-error"><%= @album.errors[:release_year].first %></span>
             </label>
           <% end %>
         </div>

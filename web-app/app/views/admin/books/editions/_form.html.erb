@@ -17,84 +17,84 @@
       <h2 class="card-title">Edition Details</h2>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="form-control">
+        <div>
           <%= f.label :edition_type, class: "label" do %>
-            <span class="label-text font-semibold">Type <span class="text-error">*</span></span>
+            <span class="font-semibold">Type <span class="text-error">*</span></span>
           <% end %>
           <%= f.select :edition_type,
               ::Books::Edition.edition_types.keys.map { |k| [k.titleize, k] },
               {},
-              class: "select select-bordered w-full #{@edition.errors[:edition_type].any? ? 'select-error' : ''}",
+              class: "select w-full #{@edition.errors[:edition_type].any? ? 'select-error' : ''}",
               required: true %>
           <% if @edition.errors[:edition_type].any? %>
-            <label class="label"><span class="label-text-alt text-error"><%= @edition.errors[:edition_type].first %></span></label>
+            <label class="label"><span class="text-error"><%= @edition.errors[:edition_type].first %></span></label>
           <% end %>
         </div>
 
-        <div class="form-control">
+        <div>
           <%= f.label :book_binding, class: "label" do %>
-            <span class="label-text font-semibold">Binding</span>
+            <span class="font-semibold">Binding</span>
           <% end %>
           <%= f.select :book_binding,
               ::Books::Edition.book_bindings.keys.map { |k| [k.titleize, k] },
               {include_blank: "—"},
-              class: "select select-bordered w-full" %>
+              class: "select w-full" %>
         </div>
 
-        <div class="form-control md:col-span-2">
+        <div class="md:col-span-2">
           <%= f.label :title, class: "label" do %>
-            <span class="label-text font-semibold">Title</span>
+            <span class="font-semibold">Title</span>
           <% end %>
-          <%= f.text_field :title, class: "input input-bordered w-full", placeholder: "Leave blank to use the book title" %>
+          <%= f.text_field :title, class: "input w-full", placeholder: "Leave blank to use the book title" %>
         </div>
 
-        <div class="form-control md:col-span-2">
+        <div class="md:col-span-2">
           <%= f.label :subtitle, class: "label" do %>
-            <span class="label-text font-semibold">Subtitle</span>
+            <span class="font-semibold">Subtitle</span>
           <% end %>
-          <%= f.text_field :subtitle, class: "input input-bordered w-full" %>
+          <%= f.text_field :subtitle, class: "input w-full" %>
         </div>
 
-        <div class="form-control">
+        <div>
           <%= f.label :publication_year, class: "label" do %>
-            <span class="label-text font-semibold">Publication Year</span>
+            <span class="font-semibold">Publication Year</span>
           <% end %>
-          <%= f.number_field :publication_year, class: "input input-bordered w-full", min: -3000, max: 3000 %>
+          <%= f.number_field :publication_year, class: "input w-full", min: -3000, max: 3000 %>
         </div>
 
-        <div class="form-control">
+        <div>
           <%= f.label :publisher_name, class: "label" do %>
-            <span class="label-text font-semibold">Publisher</span>
+            <span class="font-semibold">Publisher</span>
           <% end %>
-          <%= f.text_field :publisher_name, class: "input input-bordered w-full" %>
+          <%= f.text_field :publisher_name, class: "input w-full" %>
         </div>
 
-        <div class="form-control">
+        <div>
           <%= f.label :page_count, class: "label" do %>
-            <span class="label-text font-semibold">Page Count</span>
+            <span class="font-semibold">Page Count</span>
           <% end %>
-          <%= f.number_field :page_count, class: "input input-bordered w-full", min: 0 %>
+          <%= f.number_field :page_count, class: "input w-full", min: 0 %>
         </div>
 
-        <div class="form-control">
+        <div>
           <%= f.label :volume_number, class: "label" do %>
-            <span class="label-text font-semibold">Volume Number</span>
+            <span class="font-semibold">Volume Number</span>
           <% end %>
-          <%= f.number_field :volume_number, class: "input input-bordered w-full", min: 0 %>
+          <%= f.number_field :volume_number, class: "input w-full", min: 0 %>
         </div>
 
-        <div class="form-control">
+        <div>
           <%= f.label :language_id, class: "label" do %>
-            <span class="label-text font-semibold">Language</span>
+            <span class="font-semibold">Language</span>
           <% end %>
-          <%= f.collection_select :language_id, Language.order(:name), :id, :name, {include_blank: "—"}, class: "select select-bordered w-full" %>
+          <%= f.collection_select :language_id, Language.order(:name), :id, :name, {include_blank: "—"}, class: "select w-full" %>
         </div>
 
-        <div class="form-control">
+        <div>
           <%= f.label :popularity, class: "label" do %>
-            <span class="label-text font-semibold">Popularity</span>
+            <span class="font-semibold">Popularity</span>
           <% end %>
-          <%= f.number_field :popularity, class: "input input-bordered w-full" %>
+          <%= f.number_field :popularity, class: "input w-full" %>
         </div>
       </div>
     </div>
