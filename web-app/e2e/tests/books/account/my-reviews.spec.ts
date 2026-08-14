@@ -150,4 +150,58 @@ test.describe('My Reviews', () => {
     await expect(page.locator('#review_modal')).not.toBeVisible();
     await expect(page.getByTestId('edit-review').first()).toHaveAttribute('data-rating', String(newRating));
   });
+
+  // Deleting from a row is destructive and irreversible, so this test creates its
+  // own review to destroy rather than touching the seeded 30 -- on the one book
+  // e2e:my_reviews deliberately excludes. The afterEach is a safety net for a
+  // mid-test failure: without it a crashed run would leave a 31st review behind
+  // and the exact-count assertion at the top of this file would fail on every
+  // later run, for a reason nowhere near where it broke.
+  test.describe('deleting from a row', () => {
+    const SCRATCH_BOOK = '/book/nightmare-abbey';
+
+    test.afterEach(async ({ page }) => {
+      await page.goto('/my/reviews');
+      const leftovers = page.locator(`[data-testid="delete-review"]`);
+      while (await leftovers.count() > SEEDED_COUNT) {
+        page.once('dialog', (d) => d.accept());
+        await leftovers.last().click();
+        await page.waitForLoadState('load');
+      }
+    });
+
+    test('a row can be deleted directly, after confirming', async ({ page }) => {
+      // Create the review to delete, through the normal book-page write flow.
+      await page.goto(SCRATCH_BOOK);
+      await page.getByTestId('review-widget-label').click();
+      await expect(page.locator('#review_modal')).toBeVisible();
+      await page.getByTestId('review-star-button').nth(2).click();
+      await page.getByRole('button', { name: 'Save' }).click();
+      await expect(page.locator('#review_modal')).not.toBeVisible();
+
+      await page.goto('/my/reviews');
+      await expect(page.getByTestId('my-reviews-total')).toHaveText(String(SEEDED_COUNT + 1));
+
+      // The row for the scratch book, identified by its link rather than position,
+      // so a sort change elsewhere can never make this delete the wrong review.
+      const row = page.locator('li', { has: page.locator(`a[href="${SCRATCH_BOOK}"]`) }).first();
+      await expect(row).toBeVisible();
+
+      // Dismissing the confirmation must leave the review alone -- a delete that
+      // fires anyway is worse than no confirmation at all, because the prompt
+      // tells the user they still have a choice.
+      page.once('dialog', (d) => d.dismiss());
+      await row.getByTestId('delete-review').click();
+      await expect(page.getByTestId('my-reviews-total')).toHaveText(String(SEEDED_COUNT + 1));
+
+      page.once('dialog', (d) => {
+        expect(d.message()).toContain('cannot be undone');
+        d.accept();
+      });
+      await row.getByTestId('delete-review').click();
+
+      await expect(page.locator(`a[href="${SCRATCH_BOOK}"]`)).toHaveCount(0);
+      await expect(page.getByTestId('my-reviews-total')).toHaveText(String(SEEDED_COUNT));
+    });
+  });
 });

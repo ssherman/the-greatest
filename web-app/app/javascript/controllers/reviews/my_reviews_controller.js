@@ -44,9 +44,32 @@ export default class extends Controller {
   // successful search exactly as for the dialog's save. So a reload here has
   // to be scoped to submits that actually came from the dialog, or searching
   // reloads the pre-search URL and silently discards the query.
+  // Two submits legitimately reload: the dialog's own save/remove, and a row's
+  // Delete button. Everything else that bubbles here -- today the GET search
+  // form, tomorrow anything else added to this page -- must not, so this is an
+  // allowlist of two specific origins rather than a "not the search form" test.
+  // The difference matters: a negative test silently starts reloading the next
+  // form someone adds.
   submitted(event) {
     if (!event.detail?.success) return
-    if (!event.target.closest?.("#review_modal")) return
+
+    const form = event.target
+    const fromDialog = form.closest?.("#review_modal")
+    const fromRowDelete = form.matches?.("[data-my-reviews-delete]")
+    if (!fromDialog && !fromRowDelete) return
+
+    // Deleting the only row on a paged URL empties that page, and
+    // PathBasedPagination#pagy_path raises RecordNotFound past the last page --
+    // so reloading /my/reviews/page/4 after removing its last review would 404
+    // a user who just did something entirely valid. Drop the page segment and
+    // keep the filters instead.
+    if (fromRowDelete && form.dataset.myReviewsDeleteLast === "true") {
+      const url = new URL(window.location.href)
+      url.pathname = url.pathname.replace(/\/page\/\d+$/, "")
+      window.location.assign(url.toString())
+      return
+    }
+
     window.location.reload()
   }
 }
