@@ -51,12 +51,26 @@ export default class extends Controller {
   // The difference matters: a negative test silently starts reloading the next
   // form someone adds.
   submitted(event) {
-    if (!event.detail?.success) return
-
     const form = event.target
     const fromDialog = form.closest?.("#review_modal")
     const fromRowDelete = form.matches?.("[data-my-reviews-delete]")
     if (!fromDialog && !fromRowDelete) return
+
+    if (!event.detail?.success) {
+      // The dialog has its own inline error line and reports failures itself
+      // (reviews--modal#submitted), so leave those alone. A row's Delete has no
+      // such surface: ReviewsController answers every deliberate failure with an
+      // EMPTY turbo stream carrying only a status, so without this the page sits
+      // there unchanged and the button looks broken. The 429 is not theoretical
+      // -- the write limit is 20 a minute and DELETE counts against it, which a
+      // per-row button invites you to hit while clearing out old ratings.
+      if (fromRowDelete) {
+        window.dispatchEvent(new CustomEvent("toast:show", {
+          detail: { type: "error", message: this.deleteErrorMessage(event.detail) }
+        }))
+      }
+      return
+    }
 
     // Deleting the only row on a paged URL empties that page, and
     // PathBasedPagination#pagy_path raises RecordNotFound past the last page --
@@ -71,5 +85,24 @@ export default class extends Controller {
     }
 
     window.location.reload()
+  }
+
+  // Only statuses a reader can act on differently are named. Everything else
+  // collapses into one honest "it did not happen" rather than a guess that might
+  // be wrong -- and crucially it says the review was NOT deleted, because the row
+  // is still on screen and the ambiguous case is someone assuming it worked.
+  // fetchResponse is undefined for a plain network drop; turbo:submit-end still
+  // fires with success: false and carries detail.error instead.
+  deleteErrorMessage(detail) {
+    switch (detail?.fetchResponse?.statusCode) {
+      case 404:
+        return "That review was already removed."
+      case 429:
+        return "Too many changes at once. Wait a minute, then try again."
+      case 401:
+        return "Your session expired. Sign in again to delete this review."
+      default:
+        return "Something went wrong and the review was not deleted. Please try again."
+    }
   }
 }
