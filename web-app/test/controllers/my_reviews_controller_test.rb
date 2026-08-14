@@ -52,13 +52,22 @@ class MyReviewsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  # Both rendered books get a real, attached cover -- not just one. With only
+  # one image, batched and lazy-loaded preloads cost the same (the other
+  # row's primary_image is nil and short-circuits), so a single image cannot
+  # tell the pin apart from a broken preload. Two images is what makes a
+  # single batched active_storage_attachments/blobs lookup actually cheaper
+  # than one query per row.
   test "renders a page of rows without an N+1" do
     sign_in_as(@user, stub_auth: true)
+    attach_cover(books_books(:war_and_peace))
+    attach_cover(books_books(:crime_and_punishment))
+
     get my_reviews_path # warm any per-request memoization
     assert_response :success
 
     ActiveRecord::Base.connection.clear_query_cache
-    assert_queries_count(12) do
+    assert_queries_count(13) do
       get my_reviews_path
     end
     assert_response :success
@@ -109,6 +118,12 @@ class MyReviewsControllerTest < ActionDispatch::IntegrationTest
   end
 
   private
+
+  def attach_cover(book)
+    image = Image.new(parent: book, primary: true)
+    image.file.attach(io: StringIO.new("fake image data"), filename: "cover.jpg", content_type: "image/jpeg")
+    image.save!
+  end
 
   def seed_written_reviews(count)
     count.times do |i|

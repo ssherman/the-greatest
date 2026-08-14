@@ -290,16 +290,7 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     # notification counter below -- same pattern as books/lists_controller_test.rb.
     ActiveRecord::Base.connection.clear_query_cache
     stub_advanced(ids: ids, total: 2)
-    # 10, not 9: crime_and_punishment now has a fixture cover image (see
-    # test/fixtures/images.yml), and Books::SavedSearchQuery.hydrate already
-    # preloads `primary_image: {file_attachment: :blob}` in a single batched
-    # query -- confirmed constant, not per-row, by temporarily giving a
-    # SECOND book (war_and_peace) an image too and re-running: the count held
-    # at 10 (the active_storage_attachments query's WHERE went from
-    # `record_id = $3` to `record_id IN ($3, $4)`, same one query either way).
-    # If this ever needs to move again, re-derive it the same way rather than
-    # guessing.
-    assert_queries_count(10) { get saved_search_path(@public_search) }
+    assert_queries_count(9) { get saved_search_path(@public_search) }
   end
 
   # The owner-only branch in show.html.erb. A public search is the case that
