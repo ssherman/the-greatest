@@ -14,29 +14,46 @@ module Services
       API_VERSION = "2026-07-29.dahlia"
 
       class << self
+        # Returns true when Stripe is usable, false when it is not configured.
+        #
+        # A MISSING key is not fatal, on purpose. Nothing in this app serves a page
+        # from Stripe — there is no checkout, no membership page, no user-facing
+        # surface — so refusing to boot over an unconfigured optional subsystem takes
+        # four production sites down to protect a feature nobody is using yet. That
+        # trade is never worth it. Stripe calls fail loudly at the call site instead,
+        # and `configured?` lets callers check first.
+        #
+        # A WRONG key is still fatal, because that one is dangerous rather than
+        # merely absent: a live key with STRIPE_LIVEMODE unset would let the nightly
+        # sweep pull real customer data into a non-production database. Both prefixes
+        # matter — Stripe issues standard live keys as sk_live_ and restricted live
+        # keys as rk_live_, and a restricted key still reads real customers.
         def configure!
-          key = secret_key
+          key = ENV["STRIPE_SECRET_KEY"]
 
-          # Both prefixes matter: Stripe issues standard live keys as sk_live_ and
-          # restricted live keys as rk_live_, and a restricted key still reads real
-          # customers. The livemode interlock only guards the webhook path, so a
-          # live key here would let the nightly sweep pull production data into a
-          # non-production database.
           if key.to_s.start_with?("sk_live_", "rk_live_") && !livemode?
             raise ConfigurationError,
               "Refusing to boot: STRIPE_SECRET_KEY is a live key but STRIPE_LIVEMODE is not 'true'. " \
               "This guard exists so a misconfigured environment cannot touch real customers."
           end
 
-          # Touched here so a missing webhook secret surfaces at boot rather than on
-          # the first delivery, when the only symptom is a 400 Stripe eventually
-          # gives up on.
-          webhook_secret
+          if key.blank?
+            Rails.logger.warn(
+              "[stripe] STRIPE_SECRET_KEY is not set — Stripe is disabled. Webhook deliveries " \
+              "will be rejected and the reconcile sweep will fail until it is configured."
+            )
+            @configured = false
+            return false
+          end
 
           Stripe.api_key = key
           Stripe.api_version = API_VERSION
-          true
+          @configured = true
         end
+
+        # Whether configure! found a usable key. Callers that need Stripe should check
+        # this and fail with something better than a nil api_key deep in the gem.
+        def configured? = !!@configured
 
         def api_version = API_VERSION
 
@@ -45,26 +62,22 @@ module Services
         # production data.
         def livemode? = ENV["STRIPE_LIVEMODE"] == "true"
 
-        # Mirrors secret_key's guard. Without it, a production deploy missing this
-        # variable boots perfectly healthy and then fails signature verification on
-        # every delivery with a 400 — and Stripe disables an endpoint that keeps
-        # failing. Nothing in the app would look wrong while webhook ingestion was
-        # entirely dead, so this must be loud.
-        def webhook_secret
-          ENV.fetch("STRIPE_WEBHOOK_SECRET") do
-            raise ConfigurationError, "STRIPE_WEBHOOK_SECRET is not set" unless Rails.env.local?
-            "whsec_missing"
-          end
-        end
+        # Returns nil when unset. Never raises — see configure! for why an absent
+        # Stripe config must not take the site down.
+        #
+        # There is deliberately NO placeholder fallback. This repository is public, so
+        # any literal here is a published value, and verifying a signature against a
+        # published value is not verification: anyone can compute the HMAC and have a
+        # forged event accepted, creating StripeEvent rows and enqueuing jobs at will.
+        # An earlier version returned "whsec_missing" and was exactly that bypass.
+        #
+        # Callers must check webhook_configured? and refuse the request. Do not
+        # reintroduce a default.
+        def webhook_secret = ENV["STRIPE_WEBHOOK_SECRET"].presence
 
-        private
-
-        def secret_key
-          ENV.fetch("STRIPE_SECRET_KEY") do
-            raise ConfigurationError, "STRIPE_SECRET_KEY is not set" unless Rails.env.local?
-            "sk_test_missing"
-          end
-        end
+        # Whether deliveries can be verified at all. The webhook endpoint refuses
+        # before verification when this is false.
+        def webhook_configured? = webhook_secret.present?
       end
     end
   end
