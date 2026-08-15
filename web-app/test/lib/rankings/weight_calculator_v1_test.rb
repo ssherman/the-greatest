@@ -1187,7 +1187,7 @@ module Rankings
       calculator = western_canon_setup(percentage_western: 94.68)
       calculator.call
 
-      entry = calculator.ranked_list.calculated_weight_details["penalties"]
+      entry = calculator.ranked_list.reload.calculated_weight_details["penalties"]
         .find { |p| p["dynamic_type"] == "percentage_western" }
 
       assert_not_nil entry, "expected a percentage_western penalty entry"
@@ -1222,6 +1222,35 @@ module Rankings
 
     test "does not penalise a list with no items" do
       calculator = western_canon_setup(percentage_western: nil)
+
+      assert_equal 100, calculator.call
+    end
+
+    test "applies the configured penalty amount to a real books list" do
+      config = ::Books::RankingConfiguration.create!(name: "WC E2E #{SecureRandom.hex(4)}", global: true, min_list_weight: 1)
+      penalty = ::Books::Penalty.create!(name: "WC #{SecureRandom.hex(4)}", dynamic_type: :percentage_western)
+      PenaltyApplication.create!(penalty: penalty, ranking_configuration: config, value: 25)
+
+      list = ::Books::List.create!(name: "WC E2E List #{SecureRandom.hex(4)}", status: :approved, high_quality_source: false)
+      ListItem.create!(list: list, listable: books_books(:war_and_peace), position: 1)
+      ListItem.create!(list: list, listable: books_books(:got), position: 2)
+
+      calculator = WeightCalculatorV1.new(RankedList.create!(list: list, ranking_configuration: config))
+
+      assert_equal 75, calculator.call
+      entry = calculator.ranked_list.reload.calculated_weight_details["penalties"].find { |p| p["dynamic_type"] == "percentage_western" }
+      assert_in_delta 100.0, entry["attribute_value"], 0.001
+      assert_equal 25, entry["value"]
+    end
+
+    test "does not penalise a non-books list even when the configuration carries a percentage_western penalty" do
+      config = Music::Albums::RankingConfiguration.create!(name: "WC Music E2E #{SecureRandom.hex(4)}", global: true, min_list_weight: 1)
+      penalty = Music::Penalty.create!(name: "WC Music #{SecureRandom.hex(4)}", dynamic_type: :percentage_western)
+      PenaltyApplication.create!(penalty: penalty, ranking_configuration: config, value: 25)
+
+      list = Music::Albums::List.create!(name: "WC Music E2E List #{SecureRandom.hex(4)}", status: :approved, high_quality_source: false)
+
+      calculator = WeightCalculatorV1.new(RankedList.create!(list: list, ranking_configuration: config))
 
       assert_equal 100, calculator.call
     end

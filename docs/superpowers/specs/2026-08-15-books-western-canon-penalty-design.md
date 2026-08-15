@@ -40,9 +40,12 @@ list per run), and `ListsController#show` reads them back (`@ranked_list.list_co
 materialised rows with the jsonb audit trail. So there is nothing to migrate: `percentage_western`
 joins the five dynamic types already computed this way.
 
-One consequence worth stating plainly: the new app has **no public penalty breakdown** for any
-dynamic penalty. That is pre-existing and applies equally to the five dynamic types already
-implemented, so this spec neither creates nor fixes it.
+One consequence worth stating plainly: the new app has **no public penalty breakdown for books**.
+(`Lists::SimplePenaltySummaryComponent` does render one, but only on the music album and song list
+show pages -- `app/views/music/albums/lists/show.html.erb` and
+`app/views/music/songs/lists/show.html.erb`; books' `app/views/books/lists/show.html.erb` has no
+equivalent.) That gap is pre-existing and applies equally to the five dynamic types already
+implemented for books, so this spec neither creates nor fixes it.
 
 ## Scope
 
@@ -105,7 +108,16 @@ by importers or migrations, and the filter lets the query use
 `list.books` join excluded them implicitly. (Dev currently has zero such rows for books lists.)
 
 Books with no country row at all count toward the denominator as non-western, matching legacy's
-`Book#is_western_canon?`, which returns false for them. 300 of 126,303 books are in that state.
+`Book#is_western_canon?`, which returns false for them. Measured against the real development
+database (`bin/rails runner`, read-only): 300 of 126,303 books have no country row at all, and a
+further 34,124 have a country row but it is only the `Unknown` demonym (`Books::Country` slug
+`unknown`, `labels: []`) -- also non-western under `is_western_canon?`. Combined, 34,424 books
+(27.26% of all books) carry no usable recorded origin.
+
+**What the rule actually means in practice:** "at least 90% of the books whose origin is
+*recorded*" -- not 90% of the list. Because roughly a quarter of all books have no usable origin,
+backfilling country data for previously-unknown books can push a list across the hard 10-point
+cliff at 90% with no deploy behind it; the percentage moves purely from data entry.
 
 ### 2. The calculator branch
 
@@ -238,6 +250,21 @@ p&.penalty_applications&.pluck(:ranking_configuration_id, :value)
 `BulkCalculateWeightsJob` runs for the books ranking configurations, followed by
 `CalculateRankingsJob`.
 
+**The recalculation's blast radius is wider than just weights.** `CalculateRankingsJob`
+(`app/sidekiq/calculate_rankings_job.rb`) chains `Books::CalculateAuthorRankingsJob` on success for
+every books configuration, and additionally `Books::ReindexRankedFieldsJob` when the configuration
+is the default primary one. So the Greatest Authors rankings and the OpenSearch ranked fields both
+rebuild off the back of this change too. That needs no extra manual step -- it happens automatically
+-- but it's worth stating so a change on the authors page after this rollout isn't mistaken for a
+separate bug.
+
+**The reorder is not immediately publicly visible.** `Books::RankedItemsController` includes
+`Cacheable` and calls `cache_for_index_page` on `index`, which sets
+`expires_in 6.hours, public: true, stale_while_revalidate: 1.hour`
+(`app/controllers/concerns/cacheable.rb`). Cloudflare's edge cache can therefore keep serving the
+pre-recalculation order for up to roughly 7 hours after the jobs finish, unless the cache is
+purged.
+
 **Expected impact on the primary books configuration** (measured, development data):
 
 | | lists |
@@ -248,7 +275,7 @@ p&.penalty_applications&.pluck(:ranking_configuration_id, :value)
 | **penalised** | **308** |
 
 Each penalised list loses 10 points of weight before other penalties, so the public books rankings
-will shift visibly.
+will shift visibly -- once the edge cache above has expired or been purged.
 
 **One result will look wrong at a glance.** *Harold Bloom's The Western Canon* (91.32%) is
 penalised, because it is a canon list rather than a location-flagged one, and legacy penalises it

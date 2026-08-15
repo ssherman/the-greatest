@@ -29,6 +29,10 @@ class Penalty < ApplicationRecord
   has_many :lists, through: :list_penalties, inverse_of: :penalties
 
   # Enums
+  #
+  # percentage_western is only implemented for books lists (Books::List#percentage_western).
+  # ::List#percentage_western returns nil for every other media type, so applying this
+  # dynamic_type to a music/movies/games penalty has no effect -- no error, no penalty.
   enum :dynamic_type, {
     number_of_voters: 0,
     percentage_western: 1,

@@ -4,7 +4,7 @@
 
 **Goal:** Penalise a books list in the weight calculation when at least 90% of its books come from Western countries, unless the list declares a location focus.
 
-**Architecture:** `Books::List#percentage_western` computes the share of the list's books whose country of origin carries the `western` label, using two indexed count queries. `Rankings::WeightCalculatorV1` reads that value in a new private method and, when it is at or above 90.0, adds the value already configured on the existing `Books::Penalty` record. `::List#percentage_western` returns `nil` so non-books media skip the branch. No new tables, columns, migrations, jobs, or UI.
+**Architecture:** `Books::List#percentage_western` computes the share of the list's books whose country of origin carries the `western` label, using two count queries (`EXPLAIN ANALYZE` shows the western-book subquery scans `books_book_countries` into a hash, not an index lookup). `Rankings::WeightCalculatorV1` reads that value in a new private method and, when it is at or above 90.0, adds the value already configured on the existing `Books::Penalty` record. `::List#percentage_western` returns `nil` so non-books media skip the branch. No new tables, columns, migrations, jobs, or UI.
 
 **Tech Stack:** Rails 8, PostgreSQL, Minitest + fixtures + Mocha, standardrb.
 

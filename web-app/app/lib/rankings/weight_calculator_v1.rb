@@ -239,9 +239,10 @@ module Rankings
     # Lists that declare a location focus up front ("30 Best Australian Books")
     # are exempt: their western tilt is the stated premise, not unexamined bias.
     #
-    # Checks run cheapest-first. find_penalty_details_by_dynamic_type returns 0
-    # when the configuration carries no such penalty, so percentage_western --
-    # the only query-backed step -- never runs for music, games or movies.
+    # Checks run cheapest-first. The penalty lookup below runs for music, games
+    # and movies too whenever their configuration carries a percentage_western
+    # penalty (the fixtures show this happens) -- it's the base ::List#percentage_western
+    # answering nil that costs those domains nothing more than that one lookup.
     def calculate_percentage_western_penalty_with_details(details)
       return 0 if list.location_specific?
 

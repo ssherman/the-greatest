@@ -6,7 +6,7 @@ module Books
     # books_countries(:japanese) carries labels: [asian]
     # books_books(:crime_and_punishment) has no books_book_countries row at all
     def setup
-      @list = Books::List.create!(name: "Western Percentage Test List", status: :approved)
+      @list = ::Books::List.create!(name: "Western Percentage Test List", status: :approved)
     end
 
     def add_book(book, position)
