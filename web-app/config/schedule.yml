@@ -8,3 +8,8 @@ books_author_rankings:
   class: Books::CalculateAuthorRankingsJob
   cron: "0 4 * * *"
   description: "Recalculate The Greatest Authors from ranked books"
+
+billing_reconcile_all:
+  class: Billing::ReconcileAllCustomersJob
+  cron: "0 5 * * *"
+  description: "Reconcile every Stripe customer against local membership rows"
