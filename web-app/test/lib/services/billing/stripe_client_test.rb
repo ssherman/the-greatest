@@ -52,46 +52,40 @@ module Services
       # Without this guard a production deploy missing the variable boots healthy and
       # then 400s every delivery, and Stripe disables an endpoint that keeps failing.
       # Nothing would look wrong while webhook ingestion was entirely dead.
-      test "webhook_secret raises outside local environments when unset" do
+      test "webhook_secret falls back to a placeholder when unset" do
         with_env("STRIPE_WEBHOOK_SECRET" => nil) do
           Rails.env.stubs(:local?).returns(false)
-          error = assert_raises(StripeClient::ConfigurationError) { StripeClient.webhook_secret }
-          assert_match(/STRIPE_WEBHOOK_SECRET/, error.message)
-        end
-      end
-
-      test "webhook_secret falls back to a placeholder locally" do
-        with_env("STRIPE_WEBHOOK_SECRET" => nil) do
           assert_equal "whsec_missing", StripeClient.webhook_secret
         end
       end
 
-      # `assets:precompile` in the Docker build boots the app with
-      # RAILS_ENV=production and no runtime secrets — SOPS injects those at container
-      # start, not into the image. Raising there fails the image build and blocks
-      # every deploy, including unrelated ones. These two tests are the regression
-      # guard for that; without them the failure only appears in the deploy pipeline.
-      test "configure! tolerates missing secrets during a build-time precompile boot" do
+      # THE OUTAGE TEST. An earlier version raised here, which meant a missing key for
+      # an optional, not-yet-used subsystem refused to boot the app -- taking four
+      # production sites down. Nothing in this app serves a page from Stripe, so an
+      # absent config must degrade Stripe alone. Never make this raise again.
+      test "configure! does not raise when the key is missing, in any environment" do
         with_env("STRIPE_SECRET_KEY" => nil, "STRIPE_WEBHOOK_SECRET" => nil,
-          "SECRET_KEY_BASE_DUMMY" => "1") do
+          "SECRET_KEY_BASE_DUMMY" => nil) do
           Rails.env.stubs(:local?).returns(false)
-          StripeClient.configure!
-          assert_equal "sk_test_missing", Stripe.api_key
+
+          assert_nothing_raised { StripeClient.configure! }
+          refute StripeClient.configure!, "configure! must report false when unconfigured"
+          refute StripeClient.configured?
         end
       end
 
-      test "webhook_secret tolerates a build-time precompile boot" do
-        with_env("STRIPE_WEBHOOK_SECRET" => nil, "SECRET_KEY_BASE_DUMMY" => "1") do
-          Rails.env.stubs(:local?).returns(false)
-          assert_equal "whsec_missing", StripeClient.webhook_secret
+      test "configure! reports configured when a key is present" do
+        with_env("STRIPE_SECRET_KEY" => "sk_test_abc", "STRIPE_LIVEMODE" => "false") do
+          assert StripeClient.configure!
+          assert StripeClient.configured?
         end
       end
 
-      # The guard must stay fail-closed for a real container start, where
-      # SECRET_KEY_BASE_DUMMY is absent — the Dockerfile sets it inline on the
-      # precompile RUN line only, never in the image's ENV.
-      test "configure! still raises at runtime in production without the secret" do
-        with_env("STRIPE_SECRET_KEY" => nil, "SECRET_KEY_BASE_DUMMY" => nil) do
+      # The dangerous case stays fatal: absent config degrades Stripe, but a LIVE key
+      # in a non-live environment would let the nightly sweep pull real customer data
+      # into a non-production database.
+      test "a live key with livemode off is still fatal" do
+        with_env("STRIPE_SECRET_KEY" => "sk_live_abc", "STRIPE_LIVEMODE" => "false") do
           Rails.env.stubs(:local?).returns(false)
           assert_raises(StripeClient::ConfigurationError) { StripeClient.configure! }
         end

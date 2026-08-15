@@ -14,29 +14,46 @@ module Services
       API_VERSION = "2026-07-29.dahlia"
 
       class << self
+        # Returns true when Stripe is usable, false when it is not configured.
+        #
+        # A MISSING key is not fatal, on purpose. Nothing in this app serves a page
+        # from Stripe — there is no checkout, no membership page, no user-facing
+        # surface — so refusing to boot over an unconfigured optional subsystem takes
+        # four production sites down to protect a feature nobody is using yet. That
+        # trade is never worth it. Stripe calls fail loudly at the call site instead,
+        # and `configured?` lets callers check first.
+        #
+        # A WRONG key is still fatal, because that one is dangerous rather than
+        # merely absent: a live key with STRIPE_LIVEMODE unset would let the nightly
+        # sweep pull real customer data into a non-production database. Both prefixes
+        # matter — Stripe issues standard live keys as sk_live_ and restricted live
+        # keys as rk_live_, and a restricted key still reads real customers.
         def configure!
-          key = secret_key
+          key = ENV["STRIPE_SECRET_KEY"]
 
-          # Both prefixes matter: Stripe issues standard live keys as sk_live_ and
-          # restricted live keys as rk_live_, and a restricted key still reads real
-          # customers. The livemode interlock only guards the webhook path, so a
-          # live key here would let the nightly sweep pull production data into a
-          # non-production database.
           if key.to_s.start_with?("sk_live_", "rk_live_") && !livemode?
             raise ConfigurationError,
               "Refusing to boot: STRIPE_SECRET_KEY is a live key but STRIPE_LIVEMODE is not 'true'. " \
               "This guard exists so a misconfigured environment cannot touch real customers."
           end
 
-          # Touched here so a missing webhook secret surfaces at boot rather than on
-          # the first delivery, when the only symptom is a 400 Stripe eventually
-          # gives up on.
-          webhook_secret
+          if key.blank?
+            Rails.logger.warn(
+              "[stripe] STRIPE_SECRET_KEY is not set — Stripe is disabled. Webhook deliveries " \
+              "will be rejected and the reconcile sweep will fail until it is configured."
+            )
+            @configured = false
+            return false
+          end
 
           Stripe.api_key = key
           Stripe.api_version = API_VERSION
-          true
+          @configured = true
         end
+
+        # Whether configure! found a usable key. Callers that need Stripe should check
+        # this and fail with something better than a nil api_key deep in the gem.
+        def configured? = !!@configured
 
         def api_version = API_VERSION
 
@@ -45,38 +62,11 @@ module Services
         # production data.
         def livemode? = ENV["STRIPE_LIVEMODE"] == "true"
 
-        # Mirrors secret_key's guard. Without it, a production deploy missing this
-        # variable boots perfectly healthy and then fails signature verification on
-        # every delivery with a 400 — and Stripe disables an endpoint that keeps
-        # failing. Nothing in the app would look wrong while webhook ingestion was
-        # entirely dead, so this must be loud.
-        def webhook_secret
-          ENV.fetch("STRIPE_WEBHOOK_SECRET") do
-            raise ConfigurationError, "STRIPE_WEBHOOK_SECRET is not set" unless secrets_optional?
-            "whsec_missing"
-          end
-        end
-
-        # `assets:precompile` in the Docker build boots the entire app with
-        # RAILS_ENV=production and none of the runtime secrets — SOPS injects those on
-        # the server at container start, never into the image. Without this the boot
-        # guard fails the image build, which blocks every deploy including unrelated
-        # ones.
-        #
-        # SECRET_KEY_BASE_DUMMY is Rails' own signal for exactly this situation, and
-        # the Dockerfile sets it inline on the precompile RUN line only, so it is
-        # never present in the running container. That is what keeps the guard
-        # fail-closed where it matters while letting the image build.
-        def secrets_optional? = Rails.env.local? || ENV["SECRET_KEY_BASE_DUMMY"].present?
-
-        private
-
-        def secret_key
-          ENV.fetch("STRIPE_SECRET_KEY") do
-            raise ConfigurationError, "STRIPE_SECRET_KEY is not set" unless secrets_optional?
-            "sk_test_missing"
-          end
-        end
+        # Never raises. A missing webhook secret means signature verification fails
+        # and deliveries are rejected with a 400 — bad, but scoped to webhooks. The
+        # boot must not depend on it; see configure! for why an absent Stripe config
+        # is not allowed to take the site down.
+        def webhook_secret = ENV.fetch("STRIPE_WEBHOOK_SECRET", "whsec_missing")
       end
     end
   end
