@@ -49,13 +49,29 @@ module Services
         end
       end
 
-      # Without this guard a production deploy missing the variable boots healthy and
-      # then 400s every delivery, and Stripe disables an endpoint that keeps failing.
-      # Nothing would look wrong while webhook ingestion was entirely dead.
-      test "webhook_secret falls back to a placeholder when unset" do
+      # There must be NO placeholder fallback. This repository is public, so any
+      # literal here would be a published value — and verifying a signature against a
+      # published value is not verification. An earlier version returned
+      # "whsec_missing", which let anyone sign a forged event with it and have the
+      # webhook endpoint accept it. Returning nil is what forces the endpoint to
+      # refuse before verification.
+      test "webhook_secret is nil when unset, with no placeholder fallback" do
         with_env("STRIPE_WEBHOOK_SECRET" => nil) do
           Rails.env.stubs(:local?).returns(false)
-          assert_equal "whsec_missing", StripeClient.webhook_secret
+          assert_nil StripeClient.webhook_secret
+          refute StripeClient.webhook_configured?
+        end
+      end
+
+      test "webhook_configured? is false for a blank value, not just a missing one" do
+        with_env("STRIPE_WEBHOOK_SECRET" => "") do
+          refute StripeClient.webhook_configured?
+        end
+      end
+
+      test "webhook_configured? is true when a secret is present" do
+        with_env("STRIPE_WEBHOOK_SECRET" => "whsec_real") do
+          assert StripeClient.webhook_configured?
         end
       end
 

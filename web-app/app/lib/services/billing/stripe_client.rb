@@ -62,11 +62,22 @@ module Services
         # production data.
         def livemode? = ENV["STRIPE_LIVEMODE"] == "true"
 
-        # Never raises. A missing webhook secret means signature verification fails
-        # and deliveries are rejected with a 400 — bad, but scoped to webhooks. The
-        # boot must not depend on it; see configure! for why an absent Stripe config
-        # is not allowed to take the site down.
-        def webhook_secret = ENV.fetch("STRIPE_WEBHOOK_SECRET", "whsec_missing")
+        # Returns nil when unset. Never raises — see configure! for why an absent
+        # Stripe config must not take the site down.
+        #
+        # There is deliberately NO placeholder fallback. This repository is public, so
+        # any literal here is a published value, and verifying a signature against a
+        # published value is not verification: anyone can compute the HMAC and have a
+        # forged event accepted, creating StripeEvent rows and enqueuing jobs at will.
+        # An earlier version returned "whsec_missing" and was exactly that bypass.
+        #
+        # Callers must check webhook_configured? and refuse the request. Do not
+        # reintroduce a default.
+        def webhook_secret = ENV["STRIPE_WEBHOOK_SECRET"].presence
+
+        # Whether deliveries can be verified at all. The webhook endpoint refuses
+        # before verification when this is false.
+        def webhook_configured? = webhook_secret.present?
       end
     end
   end
