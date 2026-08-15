@@ -2,6 +2,28 @@
 # after_commit, so these numbers are maintained by hand -- keep them in step with
 # reviews.yml or SummaryRecalculator's tests will disagree with the fixtures.
 
+# == Schema Information
+#
+# Table name: review_summaries
+#
+#  id                 :bigint           not null, primary key
+#  rating_1_count     :integer          default(0), not null
+#  rating_2_count     :integer          default(0), not null
+#  rating_3_count     :integer          default(0), not null
+#  rating_4_count     :integer          default(0), not null
+#  rating_5_count     :integer          default(0), not null
+#  ratings_count      :integer          default(0), not null
+#  ratings_sum        :integer          default(0), not null
+#  reviewable_type    :string           not null
+#  text_reviews_count :integer          default(0), not null
+#  created_at         :datetime         not null
+#  updated_at         :datetime         not null
+#  reviewable_id      :bigint           not null
+#
+# Indexes
+#
+#  index_review_summaries_on_reviewable  (reviewable_type,reviewable_id) UNIQUE
+#
 war_and_peace:
   reviewable: war_and_peace (Books::Book)
   ratings_count: 3
