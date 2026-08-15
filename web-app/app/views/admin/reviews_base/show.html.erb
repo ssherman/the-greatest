@@ -1,0 +1,65 @@
+<% content_for :title, "Review ##{@review.id}" %>
+
+<div class="flex items-center justify-between mb-6">
+  <%= link_to "← Reviews", reviews_index_path, class: "btn btn-ghost btn-sm" %>
+  <%= button_to "Delete", review_detail_path(@review), method: :delete,
+        class: "btn btn-sm btn-error",
+        form: {data: {turbo_confirm: "Delete this review permanently?"}} %>
+</div>
+
+<div class="card bg-base-100 shadow-xl">
+  <div class="card-body">
+    <div class="flex flex-wrap items-center gap-3">
+      <%= render Reviews::StarsComponent.new(rating: @review.rating, size: "size-5",
+            label: "Rated #{@review.rating} out of 5 stars") %>
+      <span class="tabular-nums text-base-content/70"><%= @review.rating %> / 5</span>
+    </div>
+
+    <% if @review.title.present? %>
+      <h1 class="text-2xl font-bold mt-2 [overflow-wrap:anywhere]"><%= @review.title %></h1>
+    <% end %>
+
+    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 text-sm">
+      <div>
+        <dt class="font-semibold">Reviewer</dt>
+        <dd class="[overflow-wrap:anywhere]">
+          <%= link_to @review.user.email, admin_user_path(@review.user), class: "link" %>
+        </dd>
+      </div>
+      <div>
+        <dt class="font-semibold"><%= reviewable_label %></dt>
+        <dd class="[overflow-wrap:anywhere]">
+          <% reviewable_path = Admin::DomainRouting.path_for(@review.reviewable) %>
+          <% if reviewable_path %>
+            <%= link_to @review.reviewable.title, reviewable_path, class: "link" %>
+          <% else %>
+            <%= @review.reviewable.title %>
+          <% end %>
+        </dd>
+      </div>
+      <div>
+        <dt class="font-semibold">Written</dt>
+        <dd><%= @review.created_at.strftime("%B %d, %Y at %I:%M %p") %></dd>
+      </div>
+      <div>
+        <dt class="font-semibold">Last updated</dt>
+        <dd><%= @review.updated_at.strftime("%B %d, %Y at %I:%M %p") %></dd>
+      </div>
+    </dl>
+
+    <% body_html = Services::Reviews::BodySanitizer.render(@review.body) %>
+    <% if body_html %>
+      <%# data-controller is load-bearing, not decorative: books/reviews.css blurs
+          .review-spoiler unconditionally, and only Reviews__SpoilerController adds
+          the --revealed class. Drop this attribute and spoiler passages render
+          permanently unreadable with no way to unblur them. The controller is
+          registered in the shared app/javascript/controllers/index.js, which the
+          admin layout already loads -- no bundling change needed. %>
+      <div class="review-body mt-6 max-w-[68ch] leading-relaxed [overflow-wrap:anywhere]"
+           data-controller="reviews--spoiler"
+           data-testid="admin-review-body"><%= body_html %></div>
+    <% else %>
+      <p class="mt-6 text-base-content/60 italic">Rating only — no written review.</p>
+    <% end %>
+  </div>
+</div>

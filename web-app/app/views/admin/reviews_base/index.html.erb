@@ -29,7 +29,10 @@
             <td><%= review.user.email %></td>
             <td><%= review.reviewable.title %></td>
             <td class="tabular-nums"><%= review.rating %></td>
-            <td class="max-w-md truncate [overflow-wrap:anywhere]"><%= review.title.presence || review.body&.truncate(80) %></td>
+            <td class="max-w-md truncate [overflow-wrap:anywhere]">
+              <%= link_to review.title.presence || review.body&.truncate(80) || "Rating only",
+                    review_detail_path(review), class: "link" %>
+            </td>
             <td><%= review.created_at.to_date.iso8601 %></td>
             <td>
               <%= button_to "Delete", review_detail_path(review), method: :delete,

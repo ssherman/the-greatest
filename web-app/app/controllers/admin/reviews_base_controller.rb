@@ -47,6 +47,18 @@ class Admin::ReviewsBaseController < Admin::BaseController
     @pagy, @reviews = pagy(scope.order(created_at: :desc, id: :desc), limit: 50)
   end
 
+  # Scoped to this controller's reviewable_type for the same reason destroy is,
+  # one action below: require_domain_write! is absent here on purpose because a
+  # read-only domain viewer may read a review, but authenticate_admin! only ever
+  # proves access to the domain this controller is MOUNTED under -- it says
+  # nothing about which reviewable the id in the URL actually belongs to.
+  def show
+    @review = Review.where(reviewable_type: reviewable_class.name)
+      .includes(:user)
+      .preload(reviewable: reviewable_includes)
+      .find(params[:id])
+  end
+
   def destroy
     # Scoped to this controller's reviewable_type, exactly like index -- NOT a
     # bare Review.find. require_domain_write! only proves write access to the
