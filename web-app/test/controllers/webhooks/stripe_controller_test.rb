@@ -118,5 +118,33 @@ module Webhooks
       assert StripeEvent.find_by!(stripe_event_id: "evt_live").ignored?
       assert_equal 0, Membership.where(stripe_customer_id: "cus_live").count
     end
+
+    test "a non-duplicate validation failure is not silently swallowed" do
+      # Build a mock Stripe event object to pass to the controller.
+      # This avoids the HTTP request layer and tests record_event directly.
+      mock_event = Object.new
+      mock_event.stubs(:id).returns("evt_validation")
+      mock_event.stubs(:type).returns("customer.subscription.created")
+      mock_event.stubs(:livemode).returns(false)
+      mock_event.stubs(:api_version).returns("2024-04-10")
+      mock_event.stubs(:created).returns(Time.current.to_i)
+      mock_event.stubs(:to_hash).returns({
+        "id" => "evt_validation",
+        "type" => "customer.subscription.created",
+        "data" => {"object" => {"id" => "sub_validation", "customer" => "cus_validation"}}
+      })
+
+      # Stub create! to raise RecordInvalid with an error that is NOT stripe_event_id.
+      record = StripeEvent.new(stripe_event_id: "evt_validation")
+      record.errors.add(:event_type, :blank)
+      StripeEvent.stubs(:create!).raises(ActiveRecord::RecordInvalid.new(record))
+
+      controller = Webhooks::StripeController.new
+      # The record_event method should raise RecordInvalid because the error
+      # is NOT :stripe_event_id being :taken.
+      assert_raises(ActiveRecord::RecordInvalid) do
+        controller.send(:record_event, mock_event)
+      end
+    end
   end
 end
