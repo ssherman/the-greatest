@@ -16,7 +16,15 @@ module Billing
         return
       end
 
-      event.mark_processed!
+      result = Services::Billing::ReconcileCustomer.call(stripe_customer_id: customer_id)
+
+      if result.success?
+        event.mark_processed!
+      else
+        # A soft failure — usually Stripe being unavailable. Recorded rather than
+        # raised, because Sidekiq's retry and the nightly reconcile both cover it.
+        event.mark_failed!(result.errors.join("; "))
+      end
     rescue => e
       event&.mark_failed!(e)
       raise
