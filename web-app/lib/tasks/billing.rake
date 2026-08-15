@@ -20,6 +20,11 @@ namespace :billing do
   task replay_failed: :environment do
     events = StripeEvent.failed.order(:stripe_created_at)
     puts "Re-enqueuing #{events.count} failed events"
-    events.find_each { |event| Billing::ProcessStripeEventJob.perform_async(event.id) }
+    # .each, not .find_each: find_each silently ignores a custom .order and batches
+    # by primary key, so oldest-first would not actually be honoured. This is a
+    # bounded error queue, so loading it is fine. Order is not required for
+    # correctness -- reconciliation converges regardless of delivery order -- but
+    # oldest-first makes a replay far easier to follow.
+    events.each { |event| Billing::ProcessStripeEventJob.perform_async(event.id) }
   end
 end
