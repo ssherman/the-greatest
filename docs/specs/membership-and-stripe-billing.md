@@ -542,6 +542,46 @@ the shared account, so increment 10 must be live before it.
   but the coexistence guards should not be the only thing standing between that
   and a mis-attached subscription.
 
+## Carried forward from increments 1–3
+
+Found during implementation and review of the billing core. None blocks that work;
+each has a named owner among the later increments.
+
+- **`origin_domain` is never written by reconcile.** `upsert` deliberately omits it so
+  a value set at checkout survives, but that means every membership created *before* a
+  checkout exists — including every row from the initial account-wide migration — lands
+  with `origin_domain: nil`. Increment 8's mailers need a nil-domain fallback, since
+  they cannot read `Current` from inside Sidekiq.
+- **The welcome-mailer status diff has nothing to diff against.** This spec's reconcile
+  contract says a genuine status transition drives the mailer, guarded by
+  `welcome_email_sent_at`. `upsert` uses `assign_attributes` and discards the prior
+  status, so increment 8 must capture it before assignment.
+- **`Membership` repeats the validation shape that caused a Critical bug.** It pairs
+  `uniqueness: true, allow_nil: true` with a partial unique index — the same shape that
+  made `StripeEvent`'s duplicate raise `RecordInvalid` rather than `RecordNotUnique`,
+  silently swallowing unrelated validation failures. Admin comping and any
+  `ClaimUnattachedMemberships` service will hit it. Pair the fix with the next item.
+- **Make "structurally unreachable" true rather than aspirational.** This spec claims a
+  comped membership cannot be reached by a webhook. Today that rests on a defensive
+  guard in `ReconcileCustomer`, because nothing stops a comped row from carrying a
+  `stripe_subscription_id`. Adding
+  `validates :stripe_subscription_id, absence: true, unless: :source_stripe?` to
+  `Membership` would make it a real guarantee — best done with the comping write path,
+  where it can be tested against real code.
+- **Decide v2 event handling before enabling any v2 destination.** `construct_event`
+  raises a bare `ArgumentError` on a v2 "thin event" envelope, which would 500. It is
+  unreachable without a valid signature and nothing here subscribes to v2. Note that
+  returning 400 is *not* the fix — Stripe retries a 400 for 72 hours exactly as it does
+  a 500; the correct handling is to record the event as `ignored` and return 200.
+- **`ReconcileAllCustomers` reports `success?: true` even when every customer failed.**
+  The only signal is a per-customer `logger.error`. Worth a line in an ops runbook, or
+  an alert threshold, before this is relied on as the outage recovery path.
+- **Both Stripe calls happen inside the transaction holding the advisory lock.** Under a
+  Stripe slowdown each in-flight reconcile pins a database connection, and the nightly
+  sweep does this serially for every customer.
+- **`users.stripe_customer_id` has a non-unique index** (pre-existing), so
+  `User.find_by(stripe_customer_id:)` is nondeterministic if two users ever share one.
+
 ## Future Improvements
 
 - Stripe's Entitlements API, if multiple tiers with genuinely different feature

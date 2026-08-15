@@ -1868,7 +1868,7 @@ end
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `bin/rails test test/lib/services/billing/reconcile_customer_test.rb`
-Expected: PASS, 9 runs, 0 failures
+Expected: PASS, 8 runs, 0 failures
 
 - [ ] **Step 5: Lint and commit**
 
