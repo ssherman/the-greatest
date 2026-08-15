@@ -1,0 +1,26 @@
+subscription_created:
+  stripe_event_id: evt_subscription_created
+  event_type: customer.subscription.created
+  livemode: false
+  status: 0
+  stripe_created_at: <%= 1.hour.ago.to_fs(:db) %>
+  attempts: 0
+  payload: '{"id":"evt_subscription_created","type":"customer.subscription.created","livemode":false,"data":{"object":{"id":"sub_regular_monthly","object":"subscription","customer":"cus_regular","status":"active"}}}'
+
+customer_updated:
+  stripe_event_id: evt_customer_updated
+  event_type: customer.updated
+  livemode: false
+  status: 0
+  stripe_created_at: <%= 30.minutes.ago.to_fs(:db) %>
+  attempts: 0
+  payload: '{"id":"evt_customer_updated","type":"customer.updated","livemode":false,"data":{"object":{"id":"cus_regular","object":"customer","email":"regular@example.com"}}}'
+
+no_customer:
+  stripe_event_id: evt_no_customer
+  event_type: price.updated
+  livemode: false
+  status: 0
+  stripe_created_at: <%= 10.minutes.ago.to_fs(:db) %>
+  attempts: 0
+  payload: '{"id":"evt_no_customer","type":"price.updated","livemode":false,"data":{"object":{"id":"price_abc","object":"price"}}}'

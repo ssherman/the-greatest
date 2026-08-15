@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_15_005302) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_15_005848) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -860,6 +860,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_005302) do
     t.index ["created_at"], name: "index_search_index_requests_on_created_at"
     t.index ["parent_type", "parent_id"], name: "index_search_index_requests_on_parent"
     t.index ["parent_type", "parent_id"], name: "index_search_index_requests_on_parent_type_and_parent_id"
+  end
+
+  create_table "stripe_events", force: :cascade do |t|
+    t.string "api_version"
+    t.integer "attempts", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.text "error"
+    t.string "event_type", null: false
+    t.boolean "livemode", null: false
+    t.jsonb "payload", null: false
+    t.datetime "processed_at"
+    t.integer "status", default: 0, null: false
+    t.datetime "stripe_created_at", null: false
+    t.string "stripe_customer_id"
+    t.string "stripe_event_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["status", "created_at"], name: "index_stripe_events_on_status_and_created_at"
+    t.index ["stripe_customer_id"], name: "index_stripe_events_on_stripe_customer_id"
+    t.index ["stripe_event_id"], name: "index_stripe_events_on_stripe_event_id", unique: true
   end
 
   create_table "user_list_items", force: :cascade do |t|
