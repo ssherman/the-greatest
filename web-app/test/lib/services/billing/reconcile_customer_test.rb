@@ -87,6 +87,26 @@ module Services
         assert_equal original, comped.reload.attributes.slice("status", "current_period_end", "note")
       end
 
+      # The guard `return membership if membership.persisted? && !membership.stripe?`
+      # is what makes a comped membership safe from webhooks. Nothing in Membership's
+      # validations stops a comped row from carrying a stripe_subscription_id, so this
+      # collision is reachable -- and the existing comped test passes by non-interaction
+      # (no id to collide), never executing the guard at all.
+      test "does not modify a persisted non-stripe row whose id collides with an incoming subscription" do
+        guarded = ::Membership.create!(user: @user, source: :comped, status: :active,
+          stripe_subscription_id: "sub_guard", stripe_customer_id: "cus_reconcile",
+          note: "should never be touched")
+        stub_stripe_list([stripe_subscription(id: "sub_guard", customer: "cus_reconcile",
+          status: "canceled")])
+
+        ReconcileCustomer.call(stripe_customer_id: "cus_reconcile")
+
+        guarded.reload
+        assert guarded.source_comped?
+        assert guarded.active?, "reconcile overwrote a comped membership's status"
+        assert_equal "should never be touched", guarded.note
+      end
+
       test "stores an unattached membership when no user matches the customer" do
         # No user has stripe_customer_id "cus_unknown", and the Stripe customer
         # carries no app_user_id metadata, so both resolution paths miss.
@@ -129,6 +149,21 @@ module Services
 
         refute result.success?
         assert_match(/upstream down/, result.errors.join)
+      end
+
+      test "a transient Stripe error while resolving the user fails rather than orphaning the membership" do
+        # resolve_user raises here before subscriptions is ever reached (the
+        # local stripe_customer_id lookup misses, so it falls through to
+        # Stripe::Customer.retrieve) -- Subscription.list is never called, so
+        # it is deliberately left unstubbed rather than via stub_stripe_list.
+        @user.update!(stripe_customer_id: nil)
+        Stripe::Customer.expects(:retrieve).raises(Stripe::RateLimitError.new("slow down"))
+
+        result = ReconcileCustomer.call(stripe_customer_id: "cus_reconcile")
+
+        refute result.success?
+        assert_nil ::Membership.find_by(stripe_subscription_id: "sub_transient"),
+          "a transient error must not leave a half-reconciled membership behind"
       end
     end
   end

@@ -75,9 +75,15 @@ module Services
         ::User.find_by(id: metadata_user_id)
       end
 
+      # Only a genuine "no such customer" means we should fall through to an
+      # unattached membership. Every other StripeError -- rate limiting, auth,
+      # a connection blip -- must propagate to the outer rescue, which turns it
+      # into a failure Result so the job marks the event failed and Sidekiq
+      # retries. Swallowing those here would silently orphan a real user's
+      # membership on a transient error, with no signal that anything went wrong.
       def customer
         @customer ||= Stripe::Customer.retrieve(@stripe_customer_id)
-      rescue Stripe::StripeError
+      rescue Stripe::InvalidRequestError
         nil
       end
 
