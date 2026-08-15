@@ -1495,9 +1495,19 @@ Replace the `create` method and add the private methods in `app/controllers/webh
 
     private
 
-    # Returns nil when the event has already been recorded. The unique index on
-    # stripe_event_id IS the idempotency check — there is no lookup-then-insert
-    # race to lose.
+    # Returns nil when the event has already been recorded, and only then.
+    #
+    # Two rescues, because a duplicate can surface as either exception. StripeEvent
+    # validates stripe_event_id for uniqueness, so the ordinary redelivery fails
+    # that validation (a SELECT) and raises RecordInvalid. RecordNotUnique still
+    # happens when two concurrent deliveries both pass the SELECT before either
+    # INSERTs, and the database constraint catches the loser.
+    #
+    # The `of_kind?` guard is load-bearing: rescuing RecordInvalid broadly would
+    # also swallow an event that fails validation for some OTHER reason, returning
+    # 200 with nothing persisted. Stripe treats 200 as delivered and never retries,
+    # so that event would be lost permanently with no audit row. Anything that is
+    # not a taken id must raise, so Stripe retries and the failure is visible.
     def record_event(event)
       # stripe_customer_id is derived by StripeEvent's before_validation hook,
       # so the extraction rule lives in exactly one place.
@@ -1511,6 +1521,9 @@ Replace the `create` method and add the private methods in `app/controllers/webh
         stripe_created_at: Time.at(event.created)
       )
     rescue ActiveRecord::RecordNotUnique
+      nil
+    rescue ActiveRecord::RecordInvalid => e
+      raise unless e.record.errors.of_kind?(:stripe_event_id, :taken)
       nil
     end
 ```
