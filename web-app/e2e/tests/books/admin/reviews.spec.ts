@@ -9,6 +9,18 @@ test.describe("Books admin — reviews", () => {
     await page.goto("/admin/reviews");
     await expect(page.getByRole("heading", { name: "Reviews", level: 1 })).toBeVisible();
 
+    // Date is column 5 (Reviewer, Book, Rating, Review, Date, [Delete]) and
+    // renders as an ISO 8601 date, so lexicographic string order is
+    // chronological order. Comparing the page's own rows against a
+    // descending-sorted copy of themselves proves non-increasing order without
+    // needing to create any data -- the dev corpus already has plenty of rows.
+    // Scoped to <main> (app/views/layouts/admin.html.erb): rack-mini-profiler
+    // injects its own sql-count table straight into <body> in development, and
+    // an unscoped tbody selector picks up its cells too.
+    const dates = await page.locator("main table tbody tr td:nth-child(5)").allTextContents();
+    expect(dates.length).toBeGreaterThan(1);
+    expect(dates).toEqual([...dates].sort().reverse());
+
     const firstReviewLink = page.locator("tbody tr").first().getByRole("link").first();
     await firstReviewLink.click();
 
@@ -65,5 +77,40 @@ test.describe("Books admin — reviews", () => {
         page.locator("tbody tr", { hasText: "E2E admin scratch review" })
       ).toHaveCount(0);
     });
+  });
+
+  // The second Playwright flow the spec promises (docs/superpowers/specs/
+  // 2026-08-14-reviews-admin-design.md, Testing section). Purely read-only: it
+  // never deletes or mutates a review. The Playwright admin account itself
+  // always has reviews -- `bin/rails e2e:my_reviews` idempotently seeds it with
+  // 30 -- so this opens the admin's own user record rather than creating or
+  // guessing at another user's id. The one thing only a real browser proves
+  // here is that the card's link is reachable: Admin::UsersControllerTest only
+  // asserts the books host STRING appears in the response body, never that a
+  // click on it actually lands on the review.
+  test("an admin opens a user with reviews and sees the Reviews card", async ({ page }) => {
+    const adminEmail = process.env.PLAYWRIGHT_ADMIN_EMAIL!;
+
+    await page.goto(`/admin/users?q=${encodeURIComponent(adminEmail)}`);
+    await page.getByRole("link", { name: adminEmail, exact: true }).first().click();
+    await expect(page).toHaveURL(/\/admin\/users\/\d+$/);
+
+    const reviewsCard = page
+      .locator(".card")
+      .filter({ has: page.getByRole("heading", { name: "Reviews", level: 2 }) });
+    await expect(reviewsCard).toBeVisible();
+
+    const rows = reviewsCard.locator("tbody tr");
+    await expect(rows.first()).toBeVisible();
+
+    // Follow the first row's link all the way through -- this is the
+    // cross-host URL Admin::ReviewsHelper#cross_domain_review_url builds, and
+    // it lands here on the same books host only because reviews exist for
+    // books alone today (see the design's "Music and games wiring" scope
+    // note). Clicking it end to end is still what proves the link resolves at
+    // all, which the Minitest suite cannot.
+    await rows.first().getByRole("link").click();
+    await expect(page).toHaveURL(/\/admin\/reviews\/\d+$/);
+    await expect(page.getByRole("link", { name: "← Reviews" })).toBeVisible();
   });
 });

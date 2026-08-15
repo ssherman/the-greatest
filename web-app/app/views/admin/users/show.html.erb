@@ -196,7 +196,7 @@
                 </thead>
                 <tbody>
                   <% @reviews.each do |review| %>
-                    <% url = admin_review_url(review) %>
+                    <% url = cross_domain_review_url(review) %>
                     <tr>
                       <td class="[overflow-wrap:anywhere]">
                         <% if url %>

@@ -49,11 +49,23 @@
 
     <% body_html = Services::Reviews::BodySanitizer.render(@review.body) %>
     <% if body_html %>
-      <%# Both data-controller AND data-action are load-bearing, not decorative:
-          books/reviews.css blurs .review-spoiler unconditionally, and only
-          Reviews__SpoilerController#showSpoiler removes the --revealed class.
-          data-controller alone is not enough -- the controller is mounted here
-          and delegates DOWNWARD to the spans rather than binding its own
+      <%# STYLESHEET DEPENDENCY, easy to miss when wiring up a new domain: the blur on
+          .review-spoiler and this wrapper's own typography (.review-body) are defined in
+          <domain>/reviews.css (see app/assets/stylesheets/books/reviews.css), not in this
+          view or in admin.css. Only books/application.css imports that file today
+          (`@import "./reviews.css";`), and the admin layout picks its stylesheet per
+          domain (Admin::DomainNav::CONFIGS[domain][:stylesheet]). So the first domain
+          whose Admin::ReviewsController subclass goes live WITHOUT also importing
+          reviews.css into that domain's own application.css gets an admin review page
+          where every spoiler passage renders fully legible -- silently, no error, no test
+          failure. See "What a new domain must add" in
+          docs/features/admin-domain-registry.md.
+
+          Both data-controller AND data-action below are load-bearing, not decorative:
+          reviews.css blurs .review-spoiler unconditionally, and only
+          Reviews__SpoilerController#showSpoiler ADDS the --revealed class -- that add is
+          what removes the blur. data-controller alone is not enough -- the controller is
+          mounted here and delegates DOWNWARD to the spans rather than binding its own
           listeners, so the click/keydown binding has to be declared explicitly.
           It cannot live on the spans themselves either: BodySanitizer's
           render-time allowlist strips any data-action a span might carry, so

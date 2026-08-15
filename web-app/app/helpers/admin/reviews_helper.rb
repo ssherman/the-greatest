@@ -12,7 +12,17 @@ module Admin
     #
     # Returns nil for a reviewable type no domain claims, so the caller can render
     # the row unlinked. A user page must not 500 over one stray review.
-    def admin_review_url(review)
+    #
+    # Named cross_domain_review_url, NOT admin_review_url: this module is mixed
+    # into every admin view (it lives in app/helpers, not scoped to one
+    # controller), and the music admin namespace is declared with no `as:`
+    # prefix (config/routes.rb) -- unlike books and games. The day
+    # `resources :reviews` is added there, Rails generates a route helper
+    # ALSO named admin_review_url, and a helper method wins over a route helper
+    # on ancestor precedence, so the route helper would be silently shadowed.
+    # This is the identical trap Admin::ReviewsBaseController documents twice
+    # already, for reviews_path and review_path.
+    def cross_domain_review_url(review)
       path = ::Reviews::Registry.admin_path_for(review)
       return nil if path.nil?
 
