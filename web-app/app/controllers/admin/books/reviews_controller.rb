@@ -10,5 +10,9 @@ class Admin::Books::ReviewsController < Admin::ReviewsBaseController
   # Add it back if the view grows an author column.
   def reviewable_includes = []
 
-  def reviews_index_path = admin_books_reviews_path
+  def reviews_index_path(params = {}) = admin_books_reviews_path(params)
+
+  def review_detail_path(review) = admin_books_review_path(review)
+
+  def reviewable_label = "Book"
 end

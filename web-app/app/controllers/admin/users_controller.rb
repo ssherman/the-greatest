@@ -11,6 +11,10 @@ class Admin::UsersController < Admin::BaseController
   end
 
   def show
+    # includes(:reviewable) is load-bearing: the card renders reviewable.title in
+    # a loop, which is a query per row without it. Pinned by a test.
+    @reviews = @user.reviews.recent.includes(:reviewable).limit(10)
+    @reviews_count = @user.reviews.count
   end
 
   def edit

@@ -172,6 +172,44 @@ produces a half-wired admin:
    category search. `test/lib/admin/domain_nav_test.rb` asserts every `CONFIGS` entry has one, so
    forgetting it fails a test instead of silently serving music's categories.
 
+### Reviews
+
+Reviews is a domain-specific *feature*, not a prerequisite for a working admin at all — a domain
+needs the five steps above before this section even applies. It fails in the identical silent
+shape as the rest of this list, through its own registry (`Reviews::Registry`,
+`app/lib/reviews/registry.rb`) that a domain must separately satisfy once its base admin exists.
+Enabling the reviews admin surface for a domain (e.g. music) means:
+
+6. **`Reviews::Registry::DOMAIN_TYPES[domain]`** (`app/lib/reviews/registry.rb`) — the allowlist of
+   reviewable classes for that domain, e.g. `"music" => ["Music::Album"]`. This table is also the
+   allowlist the *public* write path checks (`reviewable_type` arrives from the browser, so an
+   unlisted class can never have a review attached to it) — without an entry here the domain's
+   reviews cannot be created at all, let alone administered.
+7. **`Reviews::Registry::ADMIN_PATHS[type]`** — a lambda resolving a review of that type to its
+   admin show path, e.g. `->(review) { Rails.application.routes.url_helpers.admin_music_review_path(review) }`.
+   Keyed by the same type as `DOMAIN_TYPES` but a genuinely separate hash, and easy to add one and
+   forget the other: missing this entry makes `Reviews::Registry.admin_path_for` return `nil`, which
+   makes `Admin::ReviewsHelper#cross_domain_review_url` return `nil`, which makes every review of
+   that domain on `/admin/users/:id` render as unlinked plain text. Silent — no error, no test
+   failure. `test/lib/reviews/registry_test.rb` asserts every `DOMAIN_TYPES` entry has a matching
+   `ADMIN_PATHS` entry, so forgetting it fails a test instead of degrading silently.
+8. **`Admin::<Domain>::ReviewsController < Admin::ReviewsBaseController`** — five lines filling in
+   the controller seams (`reviewable_class`, `reviewable_includes`, `reviews_index_path`,
+   `review_detail_path`, `reviewable_label`); see `app/controllers/admin/books/reviews_controller.rb`
+   for the shape.
+9. **`resources :reviews, only: [:index, :show, :destroy]`** inside that domain's admin routes
+   namespace.
+10. **A `{label: "Reviews", icon: :star, path: -> { URL_HELPERS.admin_<domain>_reviews_path } }`
+    entry** in `Admin::DomainNav::CONFIGS[domain][:items]` — without it the controller and route
+    both work but nothing in the sidebar links to them.
+11. **Import `reviews.css` (or an equivalent) into `<domain>/application.css`.**
+    `app/views/admin/reviews_base/show.html.erb` renders review bodies through `.review-spoiler` /
+    `.review-body` classes defined only in `app/assets/stylesheets/books/reviews.css`, and only
+    `books/application.css` imports that file today. The admin layout picks its stylesheet per
+    domain (`Admin::DomainNav::CONFIGS[domain][:stylesheet]`), so skipping this import renders every
+    spoiler passage on that domain's admin review pages fully legible — silently, no error, no test
+    failure.
+
 ## Related Documentation
 
 - `docs/features/domain-scoped-authorization.md` — the permission model these registries feed

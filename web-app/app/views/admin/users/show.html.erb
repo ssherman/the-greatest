@@ -185,6 +185,47 @@
         </div>
       </div>
 
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title">Reviews <span class="badge badge-lg"><%= @reviews_count %></span></h2>
+          <% if @reviews.any? %>
+            <div class="overflow-x-auto">
+              <table class="table table-sm">
+                <thead>
+                  <tr><th>Item</th><th>Rating</th><th>Review</th><th>Date</th></tr>
+                </thead>
+                <tbody>
+                  <% @reviews.each do |review| %>
+                    <% url = cross_domain_review_url(review) %>
+                    <tr>
+                      <td class="[overflow-wrap:anywhere]">
+                        <% if url %>
+                          <%= link_to review.reviewable.title, url, class: "link" %>
+                        <% else %>
+                          <%= review.reviewable.title %>
+                        <% end %>
+                      </td>
+                      <td class="tabular-nums"><%= review.rating %></td>
+                      <td class="max-w-xs truncate [overflow-wrap:anywhere]">
+                        <%= review.title.presence || review.body&.truncate(60) || "Rating only" %>
+                      </td>
+                      <td class="whitespace-nowrap"><%= review.created_at.to_date.iso8601 %></td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+            <% if @reviews_count > @reviews.size %>
+              <p class="text-sm text-base-content/60 mt-2">
+                Showing <%= @reviews.size %> of <%= @reviews_count %>, newest first.
+              </p>
+            <% end %>
+          <% else %>
+            <p class="text-base-content/70">No reviews.</p>
+          <% end %>
+        </div>
+      </div>
+
       <% if @user.stripe_customer_id.present? %>
         <div class="card bg-base-100 shadow-xl">
           <div class="card-body">
@@ -225,6 +266,10 @@
         <div class="card-body">
           <h2 class="card-title text-lg">Related Data</h2>
           <div class="space-y-3 text-sm">
+            <div class="flex justify-between items-center">
+              <span>Reviews</span>
+              <span class="badge badge-lg"><%= @reviews_count %></span>
+            </div>
             <div class="flex justify-between items-center">
               <span>Ranking Configurations</span>
               <span class="badge badge-lg"><%= @user.ranking_configurations.count %></span>
