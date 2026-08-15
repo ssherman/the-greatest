@@ -69,8 +69,7 @@ class StripeEvent < ApplicationRecord
   # `customer` attribute. Returns nil for events with no customer at all
   # (price.*, product.*), which the job treats as "ignore".
   def stripe_customer_id_from_payload
-    parsed_payload = payload.is_a?(String) ? JSON.parse(payload) : payload
-    object = parsed_payload.dig("data", "object") || {}
+    object = payload.dig("data", "object") || {}
     return object["id"] if object["object"] == "customer"
     object["customer"].presence
   end
