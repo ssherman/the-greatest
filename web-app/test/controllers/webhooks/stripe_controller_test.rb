@@ -79,7 +79,7 @@ module Webhooks
       assert_equal "customer.subscription.created", event.payload["type"]
     end
 
-    test "a redelivered event returns 200, writes no second row and enqueues nothing" do
+    test "a redelivered event returns 200 and writes no second row" do
       payload = stripe_event_payload(
         type: "customer.subscription.created",
         object: stripe_subscription_object(id: "sub_dup", customer: "cus_dup"),
@@ -93,6 +93,51 @@ module Webhooks
         assert_no_difference "StripeEvent.count" do
           post_stripe_webhook(payload)
         end
+      end
+
+      assert_response :ok
+    end
+
+    # A duplicate is not proof the event was handled. If the first delivery committed
+    # the row and perform_async then failed -- Redis unavailable, say -- the row is
+    # stranded at `received`. Answering 200 without enqueueing would tell Stripe the
+    # event was delivered, it would stop retrying, and the event would never be
+    # processed. The queue is cleared here to stand in for that failed enqueue.
+    test "a redelivery whose job never ran is enqueued rather than reported handled" do
+      payload = stripe_event_payload(
+        type: "customer.subscription.created",
+        object: stripe_subscription_object(id: "sub_stranded", customer: "cus_stranded"),
+        id: "evt_stranded"
+      )
+
+      Sidekiq::Testing.fake! do
+        post_stripe_webhook(payload)
+        ::Billing::ProcessStripeEventJob.jobs.clear
+        assert StripeEvent.find_by!(stripe_event_id: "evt_stranded").received?
+
+        post_stripe_webhook(payload)
+
+        assert_equal 1, ::Billing::ProcessStripeEventJob.jobs.size,
+          "a redelivery of a still-unprocessed event must be re-enqueued"
+      end
+
+      assert_response :ok
+    end
+
+    test "a redelivery of an already-processed event enqueues nothing" do
+      payload = stripe_event_payload(
+        type: "customer.subscription.created",
+        object: stripe_subscription_object(id: "sub_done", customer: "cus_done"),
+        id: "evt_done"
+      )
+
+      Sidekiq::Testing.fake! do
+        post_stripe_webhook(payload)
+        StripeEvent.find_by!(stripe_event_id: "evt_done").mark_processed!
+        ::Billing::ProcessStripeEventJob.jobs.clear
+
+        post_stripe_webhook(payload)
+
         assert_equal 0, ::Billing::ProcessStripeEventJob.jobs.size
       end
 

@@ -41,9 +41,39 @@ module Services
 
         result = ReconcileAllCustomers.call
 
-        assert result.success?
+        assert result.success?, "one failing customer must not fail the whole sweep"
         assert_equal 1, result.data[:reconciled]
         assert_equal ["cus_a"], result.data[:failed]
+      end
+
+      # The systemic case: nothing reconciled at all, which a Sidekiq retry can
+      # actually fix. Contrast with the test above -- failing whenever ANY customer
+      # failed would let one permanently broken subscription make every nightly sweep
+      # raise and exhaust its retries, which is the opposite of what the per-customer
+      # rescue exists to prevent.
+      test "fails when there were customers and none reconciled" do
+        Stripe::Subscription.expects(:list).returns(subscription_list(%w[cus_a cus_b]))
+        ReconcileCustomer.expects(:call).with(stripe_customer_id: "cus_a")
+          .returns(ReconcileCustomer::Result.new(success?: false, data: nil, errors: ["stripe down"]))
+        ReconcileCustomer.expects(:call).with(stripe_customer_id: "cus_b")
+          .returns(ReconcileCustomer::Result.new(success?: false, data: nil, errors: ["stripe down"]))
+
+        result = ReconcileAllCustomers.call
+
+        refute result.success?, "a sweep that reconciled nothing must fail so Sidekiq retries"
+        assert_equal 0, result.data[:reconciled]
+        assert_equal %w[cus_a cus_b], result.data[:failed]
+        assert_match(/0 of 2/, result.errors.join)
+      end
+
+      test "an account with no subscriptions succeeds rather than failing" do
+        Stripe::Subscription.expects(:list).returns(subscription_list([]))
+        ReconcileCustomer.expects(:call).never
+
+        result = ReconcileAllCustomers.call
+
+        assert result.success?, "an empty account is not a failed sweep"
+        assert_equal 0, result.data[:customers]
       end
 
       # ReconcileCustomer only rescues Stripe::StripeError. A subscription carrying a

@@ -49,6 +49,23 @@ module Services
         end
       end
 
+      # Without this guard a production deploy missing the variable boots healthy and
+      # then 400s every delivery, and Stripe disables an endpoint that keeps failing.
+      # Nothing would look wrong while webhook ingestion was entirely dead.
+      test "webhook_secret raises outside local environments when unset" do
+        with_env("STRIPE_WEBHOOK_SECRET" => nil) do
+          Rails.env.stubs(:local?).returns(false)
+          error = assert_raises(StripeClient::ConfigurationError) { StripeClient.webhook_secret }
+          assert_match(/STRIPE_WEBHOOK_SECRET/, error.message)
+        end
+      end
+
+      test "webhook_secret falls back to a placeholder locally" do
+        with_env("STRIPE_WEBHOOK_SECRET" => nil) do
+          assert_equal "whsec_missing", StripeClient.webhook_secret
+        end
+      end
+
       test "api_version returns the exact API version string" do
         assert_equal "2026-07-29.dahlia", StripeClient.api_version
       end

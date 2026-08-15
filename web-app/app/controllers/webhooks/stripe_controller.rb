@@ -21,22 +21,34 @@ module Webhooks
       return head :bad_request if event.nil?
 
       record = record_event(event)
-      return head :ok if record.nil? # redelivery; already handled
+      return head :ok if record.nil?
 
       if event.livemode != Rails.configuration.stripe_livemode
         # The interlock. A sandbox endpoint misconfigured to point at production
         # (or the reverse) writes nothing beyond this audit row.
-        record.mark_ignored!("livemode mismatch: event=#{event.livemode} app=#{Rails.configuration.stripe_livemode}")
+        record.mark_ignored!("livemode mismatch: event=#{event.livemode} app=#{Rails.configuration.stripe_livemode}") unless record.ignored?
         return head :ok
       end
 
-      ::Billing::ProcessStripeEventJob.perform_async(record.id)
+      # Enqueue for a new row, and ALSO for a redelivery still sitting at received
+      # or failed. A duplicate is not proof the event was handled: if the first
+      # delivery committed the row and then perform_async blew up (Redis down, say),
+      # the row is stranded at `received` and answering 200 here would tell Stripe
+      # it was delivered. It would then stop retrying and the event would never be
+      # processed. The job is idempotent, so a redundant enqueue costs nothing.
+      # Only `processed` and `ignored` mean genuinely finished.
+      ::Billing::ProcessStripeEventJob.perform_async(record.id) if record.received? || record.failed?
       head :ok
     end
 
     private
 
-    # Returns nil when the event has already been recorded, and only then.
+    # Returns the StripeEvent row for this event — the one just created, or the
+    # already-stored one on a redelivery. Returns nil only if the row cannot be
+    # found at all, which needs a delete racing this request.
+    #
+    # Returning the existing row rather than nil is what lets `create` tell a
+    # finished redelivery from one whose job never got enqueued.
     #
     # Two rescues, because a duplicate can surface as either exception. StripeEvent
     # validates stripe_event_id for uniqueness, so the ordinary redelivery fails
@@ -62,10 +74,10 @@ module Webhooks
         stripe_created_at: Time.at(event.created)
       )
     rescue ActiveRecord::RecordNotUnique
-      nil
+      StripeEvent.find_by(stripe_event_id: event.id)
     rescue ActiveRecord::RecordInvalid => e
       raise unless e.record.errors.of_kind?(:stripe_event_id, :taken)
-      nil
+      StripeEvent.find_by(stripe_event_id: event.id)
     end
 
     def verified_event

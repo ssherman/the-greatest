@@ -28,6 +28,11 @@ module Services
               "This guard exists so a misconfigured environment cannot touch real customers."
           end
 
+          # Touched here so a missing webhook secret surfaces at boot rather than on
+          # the first delivery, when the only symptom is a 400 Stripe eventually
+          # gives up on.
+          webhook_secret
+
           Stripe.api_key = key
           Stripe.api_version = API_VERSION
           true
@@ -40,7 +45,17 @@ module Services
         # production data.
         def livemode? = ENV["STRIPE_LIVEMODE"] == "true"
 
-        def webhook_secret = ENV.fetch("STRIPE_WEBHOOK_SECRET", "whsec_missing")
+        # Mirrors secret_key's guard. Without it, a production deploy missing this
+        # variable boots perfectly healthy and then fails signature verification on
+        # every delivery with a 400 — and Stripe disables an endpoint that keeps
+        # failing. Nothing in the app would look wrong while webhook ingestion was
+        # entirely dead, so this must be loud.
+        def webhook_secret
+          ENV.fetch("STRIPE_WEBHOOK_SECRET") do
+            raise ConfigurationError, "STRIPE_WEBHOOK_SECRET is not set" unless Rails.env.local?
+            "whsec_missing"
+          end
+        end
 
         private
 

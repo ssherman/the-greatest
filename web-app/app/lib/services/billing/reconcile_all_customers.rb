@@ -42,10 +42,22 @@ module Services
           Rails.logger.error("[billing] sweep could not reconcile #{customer_id}: #{e.class}: #{e.message}")
         end
 
+        # Fail only when there were customers and NONE reconciled — the signature of
+        # a systemic problem (Stripe down, credentials wrong) that a Sidekiq retry
+        # can actually fix. The job raises on a failure Result, so this is what
+        # decides whether the sweep is retried.
+        #
+        # Deliberately NOT "fail if anything failed": one permanently broken customer
+        # -- a subscription carrying a status this enum does not know, say -- would
+        # then make every nightly sweep raise and burn its retries forever, which is
+        # exactly the "one poisoned customer must not cost everyone else" property
+        # the per-customer rescue above exists to provide.
+        swept_nothing = customer_ids.any? && reconciled.zero?
+
         Result.new(
-          success?: true,
+          success?: !swept_nothing,
           data: {customers: customer_ids.size, reconciled: reconciled, failed: failed},
-          errors: []
+          errors: swept_nothing ? ["reconciled 0 of #{customer_ids.size} customers"] : []
         )
       rescue Stripe::StripeError => e
         Rails.logger.error("[billing] sweep aborted: #{e.class}")
