@@ -151,6 +151,15 @@ module Admin
         end
         assert_response :not_found
       end
+
+      # The entire multi-domain design rests on Rails resolving this controller's
+      # templates from the BASE controller's prefix, so one shared view serves
+      # every domain subclass. That prefix is derived from the base controller's
+      # class name -- rename Admin::ReviewsBaseController and every reviews view
+      # 500s with "missing template", far from the rename that caused it.
+      test "view lookup falls back to the shared reviews_base prefix" do
+        assert_includes Admin::Books::ReviewsController._prefixes, "admin/reviews_base"
+      end
     end
   end
 end

@@ -24,7 +24,7 @@ class Admin::ReviewsBaseController < Admin::BaseController
   # page 1, not carry a stale page number to a shorter result set.
   FILTER_KEYS = %w[q written].freeze
 
-  helper_method :filter_params
+  helper_method :filter_params, :reviews_index_path, :review_detail_path, :reviewable_label
 
   def index
     scope = Review.where(reviewable_type: reviewable_class.name)
@@ -104,8 +104,23 @@ class Admin::ReviewsBaseController < Admin::BaseController
     raise NotImplementedError, "Subclass must implement reviewable_includes"
   end
 
-  def reviews_index_path
+  def reviews_index_path(params = {})
     raise NotImplementedError, "Subclass must implement reviews_index_path"
+  end
+
+  # review_detail_path, not review_path: the global route helper `review_path`
+  # already names the public PATCH /reviews/:id endpoint (routes.rb), so a
+  # helper_method of that name would shadow it for every admin view. Same trap,
+  # and same reasoning, as reviews_index_path vs. the public reviews_path above.
+  def review_detail_path(review)
+    raise NotImplementedError, "Subclass must implement review_detail_path"
+  end
+
+  # Titles one column in one admin table. Deliberately a controller string and
+  # not a method on the reviewable model: what a books admin calls this column
+  # is not a property of a book.
+  def reviewable_label
+    raise NotImplementedError, "Subclass must implement reviewable_label"
   end
 
   def filter_params(overrides = {})
