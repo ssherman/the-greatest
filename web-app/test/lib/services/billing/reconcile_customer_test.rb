@@ -152,18 +152,34 @@ module Services
       end
 
       test "a transient Stripe error while resolving the user fails rather than orphaning the membership" do
-        # resolve_user raises here before subscriptions is ever reached (the
-        # local stripe_customer_id lookup misses, so it falls through to
-        # Stripe::Customer.retrieve) -- Subscription.list is never called, so
-        # it is deliberately left unstubbed rather than via stub_stripe_list.
         @user.update!(stripe_customer_id: nil)
+        # No stub_stripe_list here: resolve_user raises before `subscriptions` is
+        # ever called, so a list stub would be an unsatisfied Mocha expectation.
         Stripe::Customer.expects(:retrieve).raises(Stripe::RateLimitError.new("slow down"))
+
+        result = nil
+        assert_no_difference "::Membership.count" do
+          result = ReconcileCustomer.call(stripe_customer_id: "cus_reconcile")
+        end
+
+        refute result.success?
+      end
+
+      # Pins the OTHER direction of the narrowed rescue. A genuinely missing customer
+      # raises InvalidRequestError, which must still be swallowed so the subscription
+      # lands as an unattached membership -- that is how legacy- and dashboard-created
+      # subscriptions get recorded. The pre-existing unattached test stubs a successful
+      # return with empty metadata, so it never exercises this rescue at all.
+      test "a missing Stripe customer still yields an unattached membership" do
+        @user.update!(stripe_customer_id: nil)
+        Stripe::Customer.expects(:retrieve).raises(Stripe::InvalidRequestError.new("No such customer", "customer"))
+        stub_stripe_list([stripe_subscription(id: "sub_missing_customer", customer: "cus_reconcile")])
 
         result = ReconcileCustomer.call(stripe_customer_id: "cus_reconcile")
 
-        refute result.success?
-        assert_nil ::Membership.find_by(stripe_subscription_id: "sub_transient"),
-          "a transient error must not leave a half-reconciled membership behind"
+        assert result.success?
+        membership = ::Membership.find_by!(stripe_subscription_id: "sub_missing_customer")
+        assert_nil membership.user
       end
     end
   end
