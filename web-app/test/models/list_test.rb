@@ -350,4 +350,8 @@ class ListTest < ActiveSupport::TestCase
   ensure
     list&.destroy
   end
+
+  test "percentage_western is nil for media that carry no country data" do
+    assert_nil lists(:movies_list).percentage_western
+  end
 end

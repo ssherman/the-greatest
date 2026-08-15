@@ -43,6 +43,24 @@
 #
 module Books
   class List < ::List
-    # Books-specific logic can be added here
+    # Percentage of the list's books whose country of origin carries the
+    # "western" label, 0.0-100.0, or nil when the list has no resolved book
+    # items -- an empty list cannot be western-biased.
+    #
+    # The listable_type filter is redundant against ListItem's validation but
+    # not against rows written by importers and migrations, and it lets the
+    # query use index_list_items_on_listable.
+    def percentage_western
+      items = list_items.where(listable_type: "Books::Book").where.not(listable_id: nil)
+      total = items.count
+      return nil if total.zero?
+
+      western_book_ids = Books::BookCountry
+        .joins(:country)
+        .merge(Books::Country.with_label("western"))
+        .select(:book_id)
+
+      ((items.where(listable_id: western_book_ids).count.to_f / total) * 100).round(2)
+    end
   end
 end
