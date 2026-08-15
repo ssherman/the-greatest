@@ -1,0 +1,96 @@
+# frozen_string_literal: true
+
+require "test_helper"
+
+# == Schema Information
+#
+# Table name: memberships
+#
+#  id                     :bigint           not null, primary key
+#  cancel_at_period_end   :boolean          default(FALSE), not null
+#  canceled_at            :datetime
+#  current_period_end     :datetime
+#  ended_email_sent_at    :datetime
+#  interval               :integer
+#  note                   :text
+#  origin_domain          :string
+#  source                 :integer          default(0), not null
+#  status                 :integer          not null
+#  stripe_synced_at       :datetime
+#  welcome_email_sent_at  :datetime
+#  created_at             :datetime         not null
+#  updated_at             :datetime         not null
+#  granted_by_id          :bigint
+#  stripe_customer_id     :string
+#  stripe_subscription_id :string
+#  user_id                :bigint
+#
+# Indexes
+#
+#  index_memberships_on_granted_by_id           (granted_by_id)
+#  index_memberships_on_stripe_customer_id      (stripe_customer_id)
+#  index_memberships_on_stripe_subscription_id  (stripe_subscription_id) UNIQUE WHERE (stripe_subscription_id IS NOT NULL)
+#  index_memberships_on_user_id                 (user_id)
+#  index_memberships_on_user_id_and_status      (user_id,status)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (granted_by_id => users.id)
+#  fk_rails_...  (user_id => users.id)
+#
+class MembershipTest < ActiveSupport::TestCase
+  test "a stripe membership is valid" do
+    membership = Membership.new(
+      user: users(:regular_user), source: :stripe, status: :active, interval: :monthly,
+      stripe_subscription_id: "sub_new", stripe_customer_id: "cus_new",
+      current_period_end: 1.month.from_now
+    )
+    assert membership.valid?, membership.errors.full_messages.join(", ")
+  end
+
+  test "a comped membership needs no stripe ids and no end date" do
+    membership = Membership.new(
+      user: users(:regular_user), source: :comped, status: :active,
+      note: "Contributor", granted_by: users(:admin_user)
+    )
+    assert membership.valid?, membership.errors.full_messages.join(", ")
+  end
+
+  test "a membership may have no user" do
+    membership = Membership.new(
+      source: :stripe, status: :active, interval: :monthly,
+      stripe_subscription_id: "sub_orphan", stripe_customer_id: "cus_orphan"
+    )
+    assert membership.valid?, membership.errors.full_messages.join(", ")
+  end
+
+  test "stripe_subscription_id is unique" do
+    existing = memberships(:regular_user_monthly)
+    duplicate = Membership.new(
+      user: users(:editor_user), source: :stripe, status: :active, interval: :monthly,
+      stripe_subscription_id: existing.stripe_subscription_id
+    )
+    refute duplicate.valid?
+    assert_includes duplicate.errors[:stripe_subscription_id], "has already been taken"
+  end
+
+  test "many memberships may have a null stripe_subscription_id" do
+    2.times do |i|
+      Membership.create!(user: users(:regular_user), source: :comped, status: :active,
+        note: "comp #{i}")
+    end
+    assert_operator Membership.where(stripe_subscription_id: nil).count, :>=, 2
+  end
+
+  test "a stripe membership requires a subscription id" do
+    membership = Membership.new(user: users(:regular_user), source: :stripe, status: :active)
+    refute membership.valid?
+    assert_includes membership.errors[:stripe_subscription_id], "can't be blank"
+  end
+
+  test "stripe? distinguishes reconcilable rows from manual grants" do
+    assert memberships(:regular_user_monthly).stripe?
+    refute memberships(:editor_user_comped).stripe?
+    refute memberships(:password_user_legacy).stripe?
+  end
+end

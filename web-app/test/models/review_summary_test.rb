@@ -1,5 +1,27 @@
 require "test_helper"
 
+# == Schema Information
+#
+# Table name: review_summaries
+#
+#  id                 :bigint           not null, primary key
+#  rating_1_count     :integer          default(0), not null
+#  rating_2_count     :integer          default(0), not null
+#  rating_3_count     :integer          default(0), not null
+#  rating_4_count     :integer          default(0), not null
+#  rating_5_count     :integer          default(0), not null
+#  ratings_count      :integer          default(0), not null
+#  ratings_sum        :integer          default(0), not null
+#  reviewable_type    :string           not null
+#  text_reviews_count :integer          default(0), not null
+#  created_at         :datetime         not null
+#  updated_at         :datetime         not null
+#  reviewable_id      :bigint           not null
+#
+# Indexes
+#
+#  index_review_summaries_on_reviewable  (reviewable_type,reviewable_id) UNIQUE
+#
 class ReviewSummaryTest < ActiveSupport::TestCase
   test "belongs to a polymorphic reviewable" do
     assert_equal Books::Book, review_summaries(:war_and_peace).reviewable.class

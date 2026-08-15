@@ -1,0 +1,67 @@
+# == Schema Information
+#
+# Table name: billing_plans
+#
+#  id                :bigint           not null, primary key
+#  active            :boolean          default(TRUE), not null
+#  amount_cents      :integer
+#  currency          :string           default("usd"), not null
+#  interval          :integer
+#  key               :string           not null
+#  kind              :integer          not null
+#  name              :string           not null
+#  position          :integer          default(0), not null
+#  stripe_lookup_key :string
+#  created_at        :datetime         not null
+#  updated_at        :datetime         not null
+#  stripe_price_id   :string           not null
+#
+# Indexes
+#
+#  index_billing_plans_on_key              (key) UNIQUE
+#  index_billing_plans_on_stripe_price_id  (stripe_price_id) UNIQUE
+#
+monthly:
+  kind: 0            # membership
+  key: monthly
+  name: Monthly Membership
+  interval: 0        # monthly
+  amount_cents: 500
+  currency: usd
+  stripe_price_id: price_test_monthly
+  stripe_lookup_key: membership_monthly
+  active: true
+  position: 0
+
+yearly:
+  kind: 0            # membership
+  key: yearly
+  name: Yearly Membership
+  interval: 1        # yearly
+  amount_cents: 5000
+  currency: usd
+  stripe_price_id: price_test_yearly
+  stripe_lookup_key: membership_yearly
+  active: true
+  position: 1
+
+donation:
+  kind: 1            # donation
+  key: donation
+  name: One-time Donation
+  currency: usd
+  stripe_price_id: price_test_donation
+  stripe_lookup_key: donation_custom
+  active: true
+  position: 2
+
+retired_monthly:
+  kind: 0            # membership
+  key: monthly_2024
+  name: Monthly Membership (retired)
+  interval: 0
+  amount_cents: 400
+  currency: usd
+  stripe_price_id: price_test_monthly_2024
+  active: false
+  position: 3
