@@ -627,7 +627,15 @@ end
 
 - [ ] **Step 3: Write the fixtures**
 
-Create `test/fixtures/stripe_events.yml`:
+Create `test/fixtures/stripe_events.yml`.
+
+**Author `payload` as a native YAML mapping, never as a string containing JSON.**
+`ActiveRecord::Type::Json#serialize` encodes unconditionally without checking whether
+its input is already JSON, and fixture loading calls it on the raw YAML value. A
+folded block scalar (`>`) parses to a Ruby String, so it gets encoded a *second*
+time and the column ends up holding a JSON string containing JSON —
+`jsonb_typeof(payload)` returns `"string"` and `record.payload` comes back as a
+`String`. A nested mapping parses to a Hash and serialises exactly once.
 
 ```yaml
 subscription_created:
@@ -637,11 +645,16 @@ subscription_created:
   status: 0
   stripe_created_at: <%= 1.hour.ago.to_fs(:db) %>
   attempts: 0
-  payload: >
-    {"id":"evt_subscription_created","type":"customer.subscription.created",
-     "livemode":false,
-     "data":{"object":{"id":"sub_regular_monthly","object":"subscription",
-     "customer":"cus_regular","status":"active"}}}
+  payload:
+    id: evt_subscription_created
+    type: customer.subscription.created
+    livemode: false
+    data:
+      object:
+        id: sub_regular_monthly
+        object: subscription
+        customer: cus_regular
+        status: active
 
 customer_updated:
   stripe_event_id: evt_customer_updated
@@ -650,10 +663,15 @@ customer_updated:
   status: 0
   stripe_created_at: <%= 30.minutes.ago.to_fs(:db) %>
   attempts: 0
-  payload: >
-    {"id":"evt_customer_updated","type":"customer.updated","livemode":false,
-     "data":{"object":{"id":"cus_regular","object":"customer",
-     "email":"regular@example.com"}}}
+  payload:
+    id: evt_customer_updated
+    type: customer.updated
+    livemode: false
+    data:
+      object:
+        id: cus_regular
+        object: customer
+        email: regular@example.com
 
 no_customer:
   stripe_event_id: evt_no_customer
@@ -662,9 +680,14 @@ no_customer:
   status: 0
   stripe_created_at: <%= 10.minutes.ago.to_fs(:db) %>
   attempts: 0
-  payload: >
-    {"id":"evt_no_customer","type":"price.updated","livemode":false,
-     "data":{"object":{"id":"price_abc","object":"price"}}}
+  payload:
+    id: evt_no_customer
+    type: price.updated
+    livemode: false
+    data:
+      object:
+        id: price_abc
+        object: price
 ```
 
 - [ ] **Step 4: Run the test to verify it fails**
@@ -898,6 +921,20 @@ class DonationTest < ActiveSupport::TestCase
       stripe_payment_intent_id: donations(:regular_user_gift).stripe_payment_intent_id)
     refute duplicate.valid?
     assert_includes duplicate.errors[:stripe_payment_intent_id], "has already been taken"
+  end
+
+  # Guards `allow_nil: true` on the uniqueness validator. Rails' uniqueness check
+  # does NOT skip nil by default, so without allow_nil the second of these becomes
+  # invalid with "has already been taken". A pending donation legitimately has no
+  # payment intent id until Stripe creates one, so more than one must be able to
+  # sit in that state at once.
+  test "two donations may both have a nil stripe_payment_intent_id" do
+    first = Donation.new(amount_cents: 500, status: :pending, email: "first@example.com")
+    assert first.valid?, first.errors.full_messages.join(", ")
+    first.save!
+
+    second = Donation.new(amount_cents: 900, status: :pending, email: "second@example.com")
+    assert second.valid?, second.errors.full_messages.join(", ")
   end
 
   test "amount_in_dollars converts cents" do
