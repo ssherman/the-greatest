@@ -46,9 +46,16 @@ module Services
       # dependency. Transaction-scoped, so it releases on commit or rollback and
       # cannot leak. This replaces the legacy handler's RecordNotUnique rescue
       # and retry: the race is removed rather than recovered from.
+      #
+      # The subquery wrapper is not decoration. pg_advisory_xact_lock returns void
+      # (OID 2278), which the Postgres adapter has no type-map entry for, so calling
+      # it as the outer SELECT logs `unknown OID 2278: failed to recognize type of
+      # 'pg_advisory_xact_lock'` on every new connection. Harmless, but alarming
+      # noise in a billing log. Selecting a plain 1 from a subquery gives the result
+      # a known type while the lock is still taken exactly as before.
       def acquire_lock
         ActiveRecord::Base.connection.exec_query(
-          "SELECT pg_advisory_xact_lock(hashtext($1)::bigint)",
+          "SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtext($1)::bigint)) AS lock_taken",
           "billing-reconcile-lock",
           [@stripe_customer_id]
         )

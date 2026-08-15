@@ -17,6 +17,19 @@ module Webhooks
     wrap_parameters false
 
     def create
+      # Refuse before verification when there is nothing to verify against. Without
+      # this the endpoint would be wide open in an environment missing the secret:
+      # any fallback value would be a literal in this public repository, so an
+      # attacker could sign a forged event with it and have it accepted, writing
+      # StripeEvent rows and enqueuing jobs at will.
+      #
+      # 503 rather than 200 on purpose — a non-2xx keeps Stripe retrying, so genuine
+      # deliveries are not lost during the window before the secret is configured.
+      unless Services::Billing::StripeClient.webhook_configured?
+        Rails.logger.error("[stripe-webhook] refusing delivery: STRIPE_WEBHOOK_SECRET is not set")
+        return head :service_unavailable
+      end
+
       event = verified_event
       return head :bad_request if event.nil?
 

@@ -9,6 +9,34 @@ module Webhooks
         .returns(StripeWebhookHelper::TEST_WEBHOOK_SECRET)
     end
 
+    test "refuses delivery when no webhook secret is configured" do
+      # `whsec_missing` is a literal in this PUBLIC repo. Verifying against a published
+      # constant is not verification -- anyone can sign with it and be accepted. The
+      # endpoint must refuse before verification when there is no real secret.
+      Services::Billing::StripeClient.unstub(:webhook_secret)
+      previous = ENV["STRIPE_WEBHOOK_SECRET"]
+      ENV.delete("STRIPE_WEBHOOK_SECRET")
+
+      payload = stripe_event_payload(
+        type: "customer.subscription.created",
+        object: stripe_subscription_object(id: "sub_forged", customer: "cus_forged"),
+        id: "evt_forged"
+      )
+
+      Sidekiq::Testing.fake! do
+        ::Billing::ProcessStripeEventJob.jobs.clear
+        assert_no_difference "StripeEvent.count" do
+          post_stripe_webhook(payload, secret: "whsec_missing")
+        end
+        assert_equal 0, ::Billing::ProcessStripeEventJob.jobs.size
+      end
+
+      assert_response :service_unavailable
+      refute_equal 200, response.status, "a forged event signed with the published placeholder was ACCEPTED"
+    ensure
+      previous.nil? ? ENV.delete("STRIPE_WEBHOOK_SECRET") : (ENV["STRIPE_WEBHOOK_SECRET"] = previous)
+    end
+
     test "rejects a request with no signature header and writes nothing" do
       payload = stripe_event_payload(type: "customer.updated", object: {id: "cus_x", object: "customer"})
 
