@@ -37,6 +37,8 @@ module Services
 
         def webhook_secret = ENV.fetch("STRIPE_WEBHOOK_SECRET", "whsec_missing")
 
+        private
+
         def secret_key
           ENV.fetch("STRIPE_SECRET_KEY") do
             raise ConfigurationError, "STRIPE_SECRET_KEY is not set" unless Rails.env.local?

@@ -39,15 +39,25 @@ module Services
         end
       end
 
+      test "api_version returns the exact API version string" do
+        assert_equal "2026-07-29.dahlia", StripeClient.api_version
+      end
+
       private
 
       # Sets ENV keys for the block and restores prior values afterwards.
+      # Also saves and restores Stripe module globals to prevent test pollution.
       def with_env(pairs)
-        previous = pairs.keys.index_with { |key| ENV[key] }
+        previous_env = pairs.keys.index_with { |key| ENV[key] }
+        previous_stripe_key = Stripe.api_key
+        previous_stripe_version = Stripe.api_version
+
         pairs.each { |key, value| value.nil? ? ENV.delete(key) : ENV[key] = value }
         yield
       ensure
-        previous.each { |key, value| value.nil? ? ENV.delete(key) : ENV[key] = value }
+        previous_env.each { |key, value| value.nil? ? ENV.delete(key) : ENV[key] = value }
+        Stripe.api_key = previous_stripe_key
+        Stripe.api_version = previous_stripe_version
       end
     end
   end
