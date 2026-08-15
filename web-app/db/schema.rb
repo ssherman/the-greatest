@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_12_023806) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_15_005302) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -497,6 +497,31 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_12_023806) do
     t.index ["submitted_by_id"], name: "index_lists_on_submitted_by_id"
   end
 
+  create_table "memberships", force: :cascade do |t|
+    t.boolean "cancel_at_period_end", default: false, null: false
+    t.datetime "canceled_at"
+    t.datetime "created_at", null: false
+    t.datetime "current_period_end"
+    t.datetime "ended_email_sent_at"
+    t.bigint "granted_by_id"
+    t.integer "interval"
+    t.text "note"
+    t.string "origin_domain"
+    t.integer "source", default: 0, null: false
+    t.integer "status", null: false
+    t.string "stripe_customer_id"
+    t.string "stripe_subscription_id"
+    t.datetime "stripe_synced_at"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id"
+    t.datetime "welcome_email_sent_at"
+    t.index ["granted_by_id"], name: "index_memberships_on_granted_by_id"
+    t.index ["stripe_customer_id"], name: "index_memberships_on_stripe_customer_id"
+    t.index ["stripe_subscription_id"], name: "index_memberships_on_stripe_subscription_id", unique: true, where: "(stripe_subscription_id IS NOT NULL)"
+    t.index ["user_id", "status"], name: "index_memberships_on_user_id_and_status"
+    t.index ["user_id"], name: "index_memberships_on_user_id"
+  end
+
   create_table "movies_credits", force: :cascade do |t|
     t.string "character_name"
     t.datetime "created_at", null: false
@@ -932,6 +957,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_12_023806) do
   add_foreign_key "list_penalties", "lists"
   add_foreign_key "list_penalties", "penalties"
   add_foreign_key "lists", "users", column: "submitted_by_id"
+  add_foreign_key "memberships", "users"
+  add_foreign_key "memberships", "users", column: "granted_by_id"
   add_foreign_key "movies_credits", "movies_people", column: "person_id"
   add_foreign_key "movies_releases", "movies_movies", column: "movie_id"
   add_foreign_key "music_album_artists", "music_albums", column: "album_id"
