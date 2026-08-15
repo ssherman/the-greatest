@@ -1141,5 +1141,89 @@ module Rankings
       assert_equal true, penalty_detail["attribute_value"]
       assert_equal 10, penalty_detail["value"]
     end
+
+    # --- western canon penalty -------------------------------------------------
+
+    # Builds a books configuration carrying only the western-canon penalty, so the
+    # calculated weight is 100 minus that penalty and nothing else.
+    def western_canon_setup(percentage_western:, location_specific: false, apply_penalty: true)
+      config = Books::RankingConfiguration.create!(
+        name: "Western Canon Config #{SecureRandom.hex(4)}",
+        global: true,
+        min_list_weight: 1
+      )
+
+      if apply_penalty
+        penalty = Books::Penalty.create!(
+          name: "Western Canon #{SecureRandom.hex(4)}",
+          dynamic_type: :percentage_western
+        )
+        PenaltyApplication.create!(penalty: penalty, ranking_configuration: config, value: 10)
+      end
+
+      list = Books::List.create!(
+        name: "Western Canon List #{SecureRandom.hex(4)}",
+        status: :approved,
+        location_specific: location_specific,
+        high_quality_source: false
+      )
+      list.stubs(:percentage_western).returns(percentage_western)
+
+      ranked_list = RankedList.create!(list: list, ranking_configuration: config)
+      # The calculator memoises the list from the ranked_list, so hand it the
+      # stubbed instance rather than letting it load a fresh one.
+      ranked_list.stubs(:list).returns(list)
+
+      WeightCalculatorV1.new(ranked_list)
+    end
+
+    test "penalises a list at or above the western canon threshold" do
+      calculator = western_canon_setup(percentage_western: 94.68)
+
+      assert_equal 90, calculator.call
+    end
+
+    test "records the actual percentage in the calculated weight details" do
+      calculator = western_canon_setup(percentage_western: 94.68)
+      calculator.call
+
+      entry = calculator.ranked_list.calculated_weight_details["penalties"]
+        .find { |p| p["dynamic_type"] == "percentage_western" }
+
+      assert_not_nil entry, "expected a percentage_western penalty entry"
+      assert_equal "dynamic_attribute", entry["source"]
+      assert_in_delta 94.68, entry["attribute_value"], 0.001
+      assert_equal 10, entry["value"]
+    end
+
+    test "penalises a list exactly at the western canon threshold" do
+      calculator = western_canon_setup(percentage_western: 90.0)
+
+      assert_equal 90, calculator.call
+    end
+
+    test "does not penalise a list below the western canon threshold" do
+      calculator = western_canon_setup(percentage_western: 89.99)
+
+      assert_equal 100, calculator.call
+    end
+
+    test "exempts a location specific list from the western canon penalty" do
+      calculator = western_canon_setup(percentage_western: 100.0, location_specific: true)
+
+      assert_equal 100, calculator.call
+    end
+
+    test "does not penalise when the configuration has no western canon penalty" do
+      calculator = western_canon_setup(percentage_western: 100.0, apply_penalty: false)
+
+      assert_equal 100, calculator.call
+    end
+
+    test "does not penalise a list with no items" do
+      calculator = western_canon_setup(percentage_western: nil)
+
+      assert_equal 100, calculator.call
+    end
   end
 end
