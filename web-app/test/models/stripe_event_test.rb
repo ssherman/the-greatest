@@ -56,13 +56,22 @@ class StripeEventTest < ActiveSupport::TestCase
     assert_not_nil event.processed_at
   end
 
+  # The exception message deliberately carries a customer id of its own, so the
+  # two halves of the claim are separable: what the raiser wrote is kept verbatim
+  # (cus_from_exception survives), while nothing is pulled out of the stored
+  # payload (cus_regular and the event id, which appear ONLY there, must not).
+  # Asserting equality pins it exactly -- appending the payload for "context"
+  # would break this test rather than slip through a substring match.
   test "mark_failed! records the class and message but never the payload" do
     event = stripe_events(:subscription_created)
-    event.mark_failed!(ArgumentError.new("boom"))
+    assert_equal "cus_regular", event.payload.dig("data", "object", "customer")
+
+    event.mark_failed!(ArgumentError.new("no such customer: cus_from_exception"))
+
     assert event.failed?
-    assert_match "ArgumentError", event.error
-    assert_match "boom", event.error
-    refute_match "cus_", event.error
+    assert_equal "ArgumentError: no such customer: cus_from_exception", event.error
+    refute_match "cus_regular", event.error
+    refute_match "evt_subscription_created", event.error
   end
 
   test "mark_ignored! records the reason" do

@@ -19,6 +19,16 @@ module Services
         end
       end
 
+      # Stripe issues restricted live keys as rk_live_. They read real customers just
+      # as sk_live_ does, and the livemode interlock only guards the webhook path --
+      # the nightly sweep would happily pull production data into a dev database.
+      test "configure! raises when a restricted live key is used outside livemode" do
+        with_env("STRIPE_SECRET_KEY" => "rk_live_abc123", "STRIPE_LIVEMODE" => "false") do
+          error = assert_raises(StripeClient::ConfigurationError) { StripeClient.configure! }
+          assert_match(/live key/i, error.message)
+        end
+      end
+
       test "configure! accepts a live key when livemode is on" do
         with_env("STRIPE_SECRET_KEY" => "sk_live_abc123", "STRIPE_LIVEMODE" => "true") do
           StripeClient.configure!

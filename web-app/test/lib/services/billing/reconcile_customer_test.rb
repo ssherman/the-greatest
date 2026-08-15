@@ -34,7 +34,7 @@ module Services
         result = ReconcileCustomer.call(stripe_customer_id: "cus_reconcile")
 
         assert result.success?
-        membership = Membership.find_by!(stripe_subscription_id: "sub_r1")
+        membership = ::Membership.find_by!(stripe_subscription_id: "sub_r1")
         assert_equal @user, membership.user
         assert membership.source_stripe?
         assert membership.active?
@@ -50,7 +50,7 @@ module Services
 
         ReconcileCustomer.call(stripe_customer_id: "cus_reconcile")
 
-        membership = Membership.find_by!(stripe_subscription_id: "sub_r2")
+        membership = ::Membership.find_by!(stripe_subscription_id: "sub_r2")
         assert_in_delta period_end.to_i, membership.current_period_end.to_i, 1
       end
 
@@ -60,21 +60,21 @@ module Services
 
         ReconcileCustomer.call(stripe_customer_id: "cus_reconcile")
 
-        assert Membership.find_by!(stripe_subscription_id: "sub_r3").interval_yearly?
+        assert ::Membership.find_by!(stripe_subscription_id: "sub_r3").interval_yearly?
       end
 
       test "updates an existing membership rather than duplicating it" do
-        Membership.create!(user: @user, source: :stripe, status: :past_due,
+        ::Membership.create!(user: @user, source: :stripe, status: :past_due,
           interval: :monthly, stripe_subscription_id: "sub_r4",
           stripe_customer_id: "cus_reconcile")
         stub_stripe_list([stripe_subscription(id: "sub_r4", customer: "cus_reconcile",
           status: "active")])
 
-        assert_no_difference "Membership.count" do
+        assert_no_difference "::Membership.count" do
           ReconcileCustomer.call(stripe_customer_id: "cus_reconcile")
         end
 
-        assert Membership.find_by!(stripe_subscription_id: "sub_r4").active?
+        assert ::Membership.find_by!(stripe_subscription_id: "sub_r4").active?
       end
 
       test "never modifies a comped membership" do
@@ -122,9 +122,30 @@ module Services
 
         ReconcileCustomer.call(stripe_customer_id: "cus_unknown")
 
-        membership = Membership.find_by!(stripe_subscription_id: "sub_orphan")
+        membership = ::Membership.find_by!(stripe_subscription_id: "sub_orphan")
         assert_nil membership.user
         assert_equal "cus_unknown", membership.stripe_customer_id
+      end
+
+      # A Stripe subscription cannot change customer, so a link established by any
+      # other path must survive. The nightly sweep runs this over every subscription
+      # in the account, so an unconditional `user: user` would detach it within a day.
+      test "preserves an existing user attachment when the customer cannot be resolved" do
+        ::Membership.create!(user: @user, source: :stripe, status: :active, interval: :monthly,
+          stripe_subscription_id: "sub_attached", stripe_customer_id: "cus_unknown_owner")
+        Stripe::Customer.stubs(:retrieve).returns(
+          Stripe::Customer.construct_from({id: "cus_unknown_owner", object: "customer", metadata: {}})
+        )
+        Stripe::Subscription.expects(:list)
+          .with(has_entries(customer: "cus_unknown_owner", status: "all"))
+          .returns(Stripe::ListObject.construct_from({
+            object: "list", has_more: false,
+            data: [stripe_subscription(id: "sub_attached", customer: "cus_unknown_owner").to_hash]
+          }))
+
+        ReconcileCustomer.call(stripe_customer_id: "cus_unknown_owner")
+
+        assert_equal @user, ::Membership.find_by!(stripe_subscription_id: "sub_attached").user
       end
 
       test "recovers the user from customer metadata when the column is unset" do
@@ -139,7 +160,7 @@ module Services
 
         ReconcileCustomer.call(stripe_customer_id: "cus_reconcile")
 
-        assert_equal @user, Membership.find_by!(stripe_subscription_id: "sub_meta").user
+        assert_equal @user, ::Membership.find_by!(stripe_subscription_id: "sub_meta").user
       end
 
       test "returns a failure result when Stripe errors" do

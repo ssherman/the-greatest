@@ -12,6 +12,10 @@ module Webhooks
   class StripeController < ActionController::Base
     skip_forgery_protection
 
+    # Stripe posts a JSON body, and wrap_parameters would nest a second copy of it
+    # under a "stripe" key -- logging the whole payload twice on the hottest path.
+    wrap_parameters false
+
     def create
       event = verified_event
       return head :bad_request if event.nil?

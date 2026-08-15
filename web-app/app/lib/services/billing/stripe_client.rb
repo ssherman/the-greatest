@@ -17,7 +17,12 @@ module Services
         def configure!
           key = secret_key
 
-          if key.to_s.start_with?("sk_live_") && !livemode?
+          # Both prefixes matter: Stripe issues standard live keys as sk_live_ and
+          # restricted live keys as rk_live_, and a restricted key still reads real
+          # customers. The livemode interlock only guards the webhook path, so a
+          # live key here would let the nightly sweep pull production data into a
+          # non-production database.
+          if key.to_s.start_with?("sk_live_", "rk_live_") && !livemode?
             raise ConfigurationError,
               "Refusing to boot: STRIPE_SECRET_KEY is a live key but STRIPE_LIVEMODE is not 'true'. " \
               "This guard exists so a misconfigured environment cannot touch real customers."

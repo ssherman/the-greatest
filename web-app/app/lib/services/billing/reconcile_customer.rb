@@ -58,7 +58,7 @@ module Services
         list = Stripe::Subscription.list(
           customer: @stripe_customer_id, status: "all", limit: 100
         )
-        list.respond_to?(:auto_paging_each) ? list.auto_paging_each.to_a : list.data
+        list.auto_paging_each.to_a
       end
 
       # Two independent paths, tried in order. The first should almost always
@@ -100,7 +100,12 @@ module Services
         item = subscription.items.data.first
 
         membership.assign_attributes(
-          user: user,
+          # Never downgrade an existing attachment: a Stripe subscription cannot change
+          # customer, so a user link resolved by any other path (a future email match,
+          # or the unattached-membership claim service) must survive a reconcile. The
+          # nightly sweep runs this over every subscription in the account, so an
+          # unconditional assignment would silently detach those links within 24 hours.
+          user: user || membership.user,
           source: :stripe,
           status: subscription.status,
           interval: (item&.price&.recurring&.interval == "year") ? :yearly : :monthly,

@@ -120,31 +120,28 @@ module Webhooks
     end
 
     test "a non-duplicate validation failure is not silently swallowed" do
-      # Build a mock Stripe event object to pass to the controller.
-      # This avoids the HTTP request layer and tests record_event directly.
-      mock_event = Object.new
-      mock_event.stubs(:id).returns("evt_validation")
-      mock_event.stubs(:type).returns("customer.subscription.created")
-      mock_event.stubs(:livemode).returns(false)
-      mock_event.stubs(:api_version).returns("2024-04-10")
-      mock_event.stubs(:created).returns(Time.current.to_i)
-      mock_event.stubs(:to_hash).returns({
-        "id" => "evt_validation",
-        "type" => "customer.subscription.created",
-        "data" => {"object" => {"id" => "sub_validation", "customer" => "cus_validation"}}
-      })
+      payload = stripe_event_payload(
+        type: "customer.subscription.created",
+        object: stripe_subscription_object(id: "sub_validation", customer: "cus_validation"),
+        id: "evt_validation"
+      )
 
-      # Stub create! to raise RecordInvalid with an error that is NOT stripe_event_id.
+      # A validation failure that is NOT "stripe_event_id has already been taken".
+      # record_event's rescue must let it out: 200 tells Stripe the event was
+      # delivered and Stripe never retries a 200, so swallowing this would lose the
+      # event permanently with no audit row.
       record = StripeEvent.new(stripe_event_id: "evt_validation")
       record.errors.add(:event_type, :blank)
       StripeEvent.stubs(:create!).raises(ActiveRecord::RecordInvalid.new(record))
 
-      controller = Webhooks::StripeController.new
-      # The record_event method should raise RecordInvalid because the error
-      # is NOT :stripe_event_id being :taken.
-      assert_raises(ActiveRecord::RecordInvalid) do
-        controller.send(:record_event, mock_event)
+      Sidekiq::Testing.fake! do
+        ::Billing::ProcessStripeEventJob.jobs.clear
+        post_stripe_webhook(payload)
+        assert_equal 0, ::Billing::ProcessStripeEventJob.jobs.size
       end
+
+      refute_equal 200, response.status,
+        "a non-duplicate validation failure was reported to Stripe as delivered"
     end
   end
 end

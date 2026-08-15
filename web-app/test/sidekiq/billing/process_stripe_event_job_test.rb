@@ -66,7 +66,10 @@ module Billing
       assert_equal 1, event.attempts
     end
 
-    test "a failed reconcile result marks the event failed without raising" do
+    # A failure Result is the transient case -- Stripe unavailable, a rate limit --
+    # and Sidekiq only retries a job that raises. Returning normally would report
+    # success and leave the membership stale until the nightly sweep.
+    test "a failed reconcile result marks the event failed and raises so Sidekiq retries" do
       event = event_row(type: "customer.subscription.created",
         object: stripe_subscription_object(id: "sub_o4", customer: "cus_order"))
       Services::Billing::ReconcileCustomer.expects(:call)
@@ -74,7 +77,8 @@ module Billing
           success?: false, data: nil, errors: ["stripe unavailable"]
         ))
 
-      ProcessStripeEventJob.new.perform(event.id)
+      error = assert_raises(RuntimeError) { ProcessStripeEventJob.new.perform(event.id) }
+      assert_match(/stripe unavailable/, error.message)
 
       assert event.reload.failed?
       assert_match(/stripe unavailable/, event.error)

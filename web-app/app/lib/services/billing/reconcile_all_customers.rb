@@ -29,8 +29,17 @@ module Services
             reconciled += 1
           else
             failed << customer_id
-            Rails.logger.error("[billing] sweep could not reconcile #{customer_id}")
+            Rails.logger.error("[billing] sweep could not reconcile #{customer_id}: #{result.errors.join("; ")}")
           end
+        rescue => e
+          # ReconcileCustomer only rescues Stripe::StripeError, so anything else --
+          # an unknown subscription status Stripe added after this enum was written,
+          # a nil period end -- would propagate and abort the entire sweep. One
+          # poisoned customer must never cost every other customer their nightly
+          # reconcile, because this sweep is the recovery path when webhooks have
+          # been down past Stripe's 72-hour retry window.
+          failed << customer_id
+          Rails.logger.error("[billing] sweep could not reconcile #{customer_id}: #{e.class}: #{e.message}")
         end
 
         Result.new(
@@ -47,8 +56,7 @@ module Services
 
       def distinct_customer_ids
         list = Stripe::Subscription.list(status: "all", limit: 100)
-        rows = list.respond_to?(:auto_paging_each) ? list.auto_paging_each.to_a : list.data
-        rows.filter_map { |subscription| subscription.customer }.uniq
+        list.auto_paging_each.to_a.filter_map { |subscription| subscription.customer }.uniq
       end
     end
   end

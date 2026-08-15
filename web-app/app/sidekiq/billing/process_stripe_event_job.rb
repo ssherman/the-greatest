@@ -21,9 +21,13 @@ module Billing
       if result.success?
         event.mark_processed!
       else
-        # A soft failure — usually Stripe being unavailable. Recorded rather than
-        # raised, because Sidekiq's retry and the nightly reconcile both cover it.
+        # Raise so Sidekiq retries. mark_failed! has already recorded the reason and
+        # incremented attempts, and the `return unless received? || failed?` guard
+        # above lets a retried event re-run. Returning normally here would tell
+        # Sidekiq the job succeeded, leaving the membership stale until the nightly
+        # sweep -- up to 24 hours for what is usually a seconds-long blip.
         event.mark_failed!(result.errors.join("; "))
+        raise result.errors.join("; ")
       end
     rescue => e
       event&.mark_failed!(e)

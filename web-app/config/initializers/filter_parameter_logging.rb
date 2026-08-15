@@ -7,5 +7,12 @@ Rails.application.config.filter_parameters += [
   :passw, :email, :secret, :token, :_key, :crypt, :salt, :certificate, :otp, :ssn, :cvv, :cvc,
   # Stripe webhook payload fields. ParameterFilter matches at any depth, so
   # these cover the nested card and customer objects in an event body.
-  :last4, :exp_month, :exp_year, :postal_code, :address, :customer_details, :billing_details
+  :last4, :exp_month, :exp_year, :postal_code, :address, :customer_details, :billing_details,
+  # :data covers the entire Stripe webhook object (data.object.*), where customer
+  # name, phone and free-text description live -- Rails logs parsed params before
+  # the action runs, so filtering at the controller is not an option. Leaves the
+  # event envelope (id, type, livemode, created) legible for debugging. It also
+  # matches this app's auth_data/provider_data/old_user_data blobs, which should
+  # be filtered regardless.
+  :data
 ]

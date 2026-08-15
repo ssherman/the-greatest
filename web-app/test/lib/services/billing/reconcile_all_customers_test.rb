@@ -46,6 +46,22 @@ module Services
         assert_equal ["cus_a"], result.data[:failed]
       end
 
+      # ReconcileCustomer only rescues Stripe::StripeError. A subscription carrying a
+      # status Stripe added after Membership's enum was written raises ArgumentError,
+      # which would otherwise abort the sweep for every remaining customer.
+      test "a customer raising a non-Stripe error is recorded and the sweep continues" do
+        Stripe::Subscription.expects(:list).returns(subscription_list(%w[cus_a cus_b]))
+        ReconcileCustomer.expects(:call).with(stripe_customer_id: "cus_a")
+          .raises(ArgumentError, "'brand_new_status' is not a valid status")
+        ReconcileCustomer.expects(:call).with(stripe_customer_id: "cus_b").returns(ok_result)
+
+        result = ReconcileAllCustomers.call
+
+        assert result.success?
+        assert_equal 1, result.data[:reconciled]
+        assert_equal ["cus_a"], result.data[:failed]
+      end
+
       test "returns a failure result when the account listing itself fails" do
         Stripe::Subscription.expects(:list).raises(Stripe::APIError.new("account listing down"))
 
