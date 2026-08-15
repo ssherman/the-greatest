@@ -1,0 +1,54 @@
+# frozen_string_literal: true
+
+require "test_helper"
+
+module Services
+  module Billing
+    class StripeClientTest < ActiveSupport::TestCase
+      test "livemode? is true only for the exact string true" do
+        with_env("STRIPE_LIVEMODE" => "true") { assert StripeClient.livemode? }
+        with_env("STRIPE_LIVEMODE" => "false") { refute StripeClient.livemode? }
+        with_env("STRIPE_LIVEMODE" => "TRUE") { refute StripeClient.livemode? }
+        with_env("STRIPE_LIVEMODE" => nil) { refute StripeClient.livemode? }
+      end
+
+      test "configure! raises when a live key is used outside livemode" do
+        with_env("STRIPE_SECRET_KEY" => "sk_live_abc123", "STRIPE_LIVEMODE" => "false") do
+          error = assert_raises(StripeClient::ConfigurationError) { StripeClient.configure! }
+          assert_match(/live key/i, error.message)
+        end
+      end
+
+      test "configure! accepts a live key when livemode is on" do
+        with_env("STRIPE_SECRET_KEY" => "sk_live_abc123", "STRIPE_LIVEMODE" => "true") do
+          StripeClient.configure!
+          assert_equal "sk_live_abc123", Stripe.api_key
+        end
+      end
+
+      test "configure! pins the API version" do
+        with_env("STRIPE_SECRET_KEY" => "sk_test_abc", "STRIPE_LIVEMODE" => "false") do
+          StripeClient.configure!
+          assert_equal "2026-07-29.dahlia", Stripe.api_version
+        end
+      end
+
+      test "webhook_secret reads the environment variable" do
+        with_env("STRIPE_WEBHOOK_SECRET" => "whsec_xyz") do
+          assert_equal "whsec_xyz", StripeClient.webhook_secret
+        end
+      end
+
+      private
+
+      # Sets ENV keys for the block and restores prior values afterwards.
+      def with_env(pairs)
+        previous = pairs.keys.index_with { |key| ENV[key] }
+        pairs.each { |key, value| value.nil? ? ENV.delete(key) : ENV[key] = value }
+        yield
+      ensure
+        previous.each { |key, value| value.nil? ? ENV.delete(key) : ENV[key] = value }
+      end
+    end
+  end
+end

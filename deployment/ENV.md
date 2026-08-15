@@ -155,6 +155,30 @@ These variables are used by nginx's built-in template system for environment var
 - **Required**: Yes (if using Firebase Auth)
 - **Security**: Can be public (client-side)
 
+### Stripe Billing
+
+#### STRIPE_SECRET_KEY
+- **Description**: Stripe API secret key for server-side operations
+- **Required**: Yes (if using Stripe billing)
+- **Format**: Starts with `sk_live_` in production, `sk_test_` in development
+- **Used By**: web, worker
+- **Security**: Never commit this value; never use a live key in non-production environments
+
+#### STRIPE_WEBHOOK_SECRET
+- **Description**: Webhook signing secret for Stripe event verification
+- **Required**: Yes (if processing Stripe webhooks)
+- **Important**: This differs between a dashboard endpoint and the `stripe listen` CLI tool. Using the wrong one is the most common signature-verification failure. Use the value from your Stripe dashboard endpoint for production and staging.
+- **Used By**: web
+- **Security**: Never commit this value
+
+#### STRIPE_LIVEMODE
+- **Description**: Whether to use live Stripe keys and process real charges
+- **Required**: Yes
+- **Values**: `true` for production with live keys, `false` for test/sandbox keys
+- **Default**: `false`
+- **Used By**: web, worker
+- **Guard**: The application refuses to boot if a live key (`sk_live_*`) is provided with `STRIPE_LIVEMODE=false`
+
 ## Example .env File
 
 ```bash
@@ -189,6 +213,11 @@ KEY_PATH=/etc/letsencrypt/live
 # Firebase (if using Firebase Auth)
 FIREBASE_PROJECT_ID=thegreatestmusic-org
 FIREBASE_API_KEY=your_firebase_api_key_here
+
+# Stripe Billing
+STRIPE_SECRET_KEY=sk_live_your_stripe_secret_key_here
+STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_from_stripe_dashboard
+STRIPE_LIVEMODE=true
 
 # Performance Tuning (optional)
 RAILS_MAX_THREADS=50
