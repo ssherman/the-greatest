@@ -24,5 +24,22 @@ module Reviews
     def self.allowed?(type)
       DOMAIN_TYPES.each_value.any? { |types| types.include?(type.to_s) }
     end
+
+    # Where a review of each reviewable type is administered. Lives here rather
+    # than in Admin::DomainRouting::ENTITIES because those lambdas are keyed by,
+    # and receive, the ENTITY -- a Books::Book -- while this one is keyed by the
+    # entity's type but receives the REVIEW. This class is already the single
+    # source of truth for type-to-domain, so the routing belongs beside it.
+    ADMIN_PATHS = {
+      "Books::Book" => ->(review) { Rails.application.routes.url_helpers.admin_books_review_path(review) }
+    }.freeze
+
+    def self.domain_for_type(type)
+      DOMAIN_TYPES.find { |_domain, types| types.include?(type.to_s) }&.first
+    end
+
+    def self.admin_path_for(review)
+      ADMIN_PATHS[review.reviewable_type]&.call(review)
+    end
   end
 end

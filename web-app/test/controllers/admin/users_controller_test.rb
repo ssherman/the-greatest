@@ -187,4 +187,58 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
     assert_match %r{/assets/music-[^"]*\.css}, response.body
     assert_no_match %r{/assets/games-[^"]*\.css}, response.body
   end
+
+  test "show renders for a user with reviews" do
+    assert_operator @regular_user.reviews.count, :>, 0
+    get admin_user_url(@regular_user)
+    assert_response :success
+  end
+
+  test "show renders for a user with no reviews" do
+    user = users(:editor_user)
+    user.reviews.destroy_all
+    get admin_user_url(user)
+    assert_response :success
+  end
+
+  # The setup block puts this request on the MUSIC host, which is exactly the
+  # case a path-only link breaks in: /admin/reviews routes on the books host
+  # only. Asserts on the generated URL, not on markup -- this is a routing
+  # decision, not presentation, and it is invisible in development where every
+  # host resolves to localhost.
+  test "review links on the user page carry the books host" do
+    get admin_user_url(@regular_user)
+    assert_response :success
+    assert_includes response.body, Rails.application.config.domains[:books]
+  end
+
+  # Not a fixed query count -- that would break every time an unrelated panel is
+  # added to this page. Instead: adding four more reviews must not add any
+  # queries. Drop includes(:reviewable) from the controller and this fails by
+  # exactly four.
+  test "the reviews card does not issue a query per review" do
+    baseline = sql_query_count { get admin_user_url(@regular_user) }
+
+    [:combo_steinbeck, :got, :clash, :of_mice_and_men].each do |slug|
+      @regular_user.reviews.create!(reviewable: books_books(slug), rating: 3)
+    end
+
+    grown = sql_query_count { get admin_user_url(@regular_user) }
+
+    assert_equal baseline, grown,
+      "the reviews card N+1s: 4 extra reviews cost #{grown - baseline} extra queries"
+  end
+
+  private
+
+  def sql_query_count
+    count = 0
+    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_, _, _, _, payload|
+      count += 1 unless payload[:name].in?(["SCHEMA", "TRANSACTION"])
+    end
+    yield
+    count
+  ensure
+    ActiveSupport::Notifications.unsubscribe(subscriber)
+  end
 end
