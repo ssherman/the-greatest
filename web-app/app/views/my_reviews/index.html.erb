@@ -63,7 +63,7 @@
   <% if @reviews.any? %>
     <ul class="mb-6">
       <% @reviews.each do |review| %>
-        <%= render Reviews::My::RowComponent.new(review: review) %>
+        <%= render Reviews::My::RowComponent.new(review: review, last_on_page: @reviews.size == 1) %>
       <% end %>
     </ul>
     <%== @pagy.series_nav %>

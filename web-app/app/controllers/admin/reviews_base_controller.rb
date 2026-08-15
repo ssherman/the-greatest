@@ -24,7 +24,7 @@ class Admin::ReviewsBaseController < Admin::BaseController
   # page 1, not carry a stale page number to a shorter result set.
   FILTER_KEYS = %w[q written].freeze
 
-  helper_method :filter_params
+  helper_method :filter_params, :reviews_index_path, :review_detail_path, :reviewable_label
 
   def index
     scope = Review.where(reviewable_type: reviewable_class.name)
@@ -45,6 +45,18 @@ class Admin::ReviewsBaseController < Admin::BaseController
     scope = apply_search(scope, @search_query) if @search_query
 
     @pagy, @reviews = pagy(scope.order(created_at: :desc, id: :desc), limit: 50)
+  end
+
+  # Scoped to this controller's reviewable_type for the same reason destroy is,
+  # one action below: require_domain_write! is absent here on purpose because a
+  # read-only domain viewer may read a review, but authenticate_admin! only ever
+  # proves access to the domain this controller is MOUNTED under -- it says
+  # nothing about which reviewable the id in the URL actually belongs to.
+  def show
+    @review = Review.where(reviewable_type: reviewable_class.name)
+      .includes(:user)
+      .preload(reviewable: reviewable_includes)
+      .find(params[:id])
   end
 
   def destroy
@@ -104,8 +116,23 @@ class Admin::ReviewsBaseController < Admin::BaseController
     raise NotImplementedError, "Subclass must implement reviewable_includes"
   end
 
-  def reviews_index_path
+  def reviews_index_path(params = {})
     raise NotImplementedError, "Subclass must implement reviews_index_path"
+  end
+
+  # review_detail_path, not review_path: the global route helper `review_path`
+  # already names the public PATCH /reviews/:id endpoint (routes.rb), so a
+  # helper_method of that name would shadow it for every admin view. Same trap,
+  # and same reasoning, as reviews_index_path vs. the public reviews_path above.
+  def review_detail_path(review)
+    raise NotImplementedError, "Subclass must implement review_detail_path"
+  end
+
+  # Titles one column in one admin table. Deliberately a controller string and
+  # not a method on the reviewable model: what a books admin calls this column
+  # is not a property of a book.
+  def reviewable_label
+    raise NotImplementedError, "Subclass must implement reviewable_label"
   end
 
   def filter_params(overrides = {})
