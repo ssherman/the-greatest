@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_15_005848) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_15_011819) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -59,6 +59,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_005848) do
     t.bigint "user_id"
     t.index ["parent_type", "parent_id"], name: "index_ai_chats_on_parent"
     t.index ["user_id"], name: "index_ai_chats_on_user_id"
+  end
+
+  create_table "billing_plans", force: :cascade do |t|
+    t.boolean "active", default: true, null: false
+    t.integer "amount_cents"
+    t.datetime "created_at", null: false
+    t.string "currency", default: "usd", null: false
+    t.integer "interval"
+    t.string "key", null: false
+    t.integer "kind", null: false
+    t.string "name", null: false
+    t.integer "position", default: 0, null: false
+    t.string "stripe_lookup_key"
+    t.string "stripe_price_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["key"], name: "index_billing_plans_on_key", unique: true
+    t.index ["stripe_price_id"], name: "index_billing_plans_on_stripe_price_id", unique: true
   end
 
   create_table "books_author_relationships", force: :cascade do |t|
@@ -283,6 +300,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_005848) do
     t.index ["permission_level"], name: "index_domain_roles_on_permission_level"
     t.index ["user_id", "domain"], name: "index_domain_roles_on_user_id_and_domain", unique: true
     t.index ["user_id"], name: "index_domain_roles_on_user_id"
+  end
+
+  create_table "donations", force: :cascade do |t|
+    t.integer "amount_cents", null: false
+    t.datetime "created_at", null: false
+    t.string "currency", default: "usd", null: false
+    t.string "domain"
+    t.string "email"
+    t.integer "status", default: 0, null: false
+    t.string "stripe_checkout_session_id"
+    t.string "stripe_payment_intent_id"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id"
+    t.index ["stripe_payment_intent_id"], name: "index_donations_on_stripe_payment_intent_id", unique: true, where: "(stripe_payment_intent_id IS NOT NULL)"
+    t.index ["user_id"], name: "index_donations_on_user_id"
   end
 
   create_table "external_links", force: :cascade do |t|
@@ -965,6 +997,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_005848) do
   add_foreign_key "categories", "categories", column: "parent_id"
   add_foreign_key "category_items", "categories"
   add_foreign_key "domain_roles", "users"
+  add_foreign_key "donations", "users"
   add_foreign_key "external_links", "users", column: "submitted_by_id"
   add_foreign_key "games_game_companies", "games_companies", column: "company_id"
   add_foreign_key "games_game_companies", "games_games", column: "game_id"
