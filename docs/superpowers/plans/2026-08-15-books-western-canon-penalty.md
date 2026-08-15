@@ -160,8 +160,7 @@ module Books
     # items -- an empty list cannot be western-biased.
     #
     # The listable_type filter is redundant against ListItem's validation but
-    # not against rows written by importers and migrations, and it lets the
-    # query use index_list_items_on_listable.
+    # not against rows written by importers and migrations.
     def percentage_western
       items = list_items.where(listable_type: "Books::Book").where.not(listable_id: nil)
       total = items.count

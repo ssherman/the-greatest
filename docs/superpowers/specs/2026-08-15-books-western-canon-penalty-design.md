@@ -103,9 +103,11 @@ sidestepping the nested-namespace shadowing that has bitten this codebase repeat
 
 **Why the explicit `listable_type` filter** when `ListItem#listable_type_compatible_with_list_type`
 already restricts a `Books::List` to `Books::Book` items: validations do not constrain rows written
-by importers or migrations, and the filter lets the query use
-`index_list_items_on_listable`. `where.not(listable_id: nil)` excludes unresolved items — legacy's
-`list.books` join excluded them implicitly. (Dev currently has zero such rows for books lists.)
+by importers or migrations. It buys no index: `EXPLAIN ANALYZE` shows the planner using
+`index_list_items_on_list_id` and applying `listable_type` as a post-scan filter, because the
+`list_id` predicate is far more selective. Excluding unresolved items (`listable_id IS NULL`)
+matches legacy, whose `list.books` join excluded them implicitly. (Dev currently has zero such rows
+for books lists.)
 
 Books with no country row at all count toward the denominator as non-western, matching legacy's
 `Book#is_western_canon?`, which returns false for them. Measured against the real development
