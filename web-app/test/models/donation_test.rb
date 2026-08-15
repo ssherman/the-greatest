@@ -48,6 +48,20 @@ class DonationTest < ActiveSupport::TestCase
     assert_includes duplicate.errors[:stripe_payment_intent_id], "has already been taken"
   end
 
+  # Guards `allow_nil: true` on the uniqueness validator. Rails' uniqueness check
+  # does NOT skip nil by default, so without allow_nil the second of these becomes
+  # invalid with "has already been taken". A pending donation legitimately has no
+  # payment intent id until Stripe creates one, so more than one must be able to
+  # sit in that state at once.
+  test "two donations may both have a nil stripe_payment_intent_id" do
+    first = Donation.new(amount_cents: 500, status: :pending, email: "first@example.com")
+    assert first.valid?, first.errors.full_messages.join(", ")
+    first.save!
+
+    second = Donation.new(amount_cents: 900, status: :pending, email: "second@example.com")
+    assert second.valid?, second.errors.full_messages.join(", ")
+  end
+
   test "amount_in_dollars converts cents" do
     assert_equal 25.0, donations(:regular_user_gift).amount_in_dollars
   end
