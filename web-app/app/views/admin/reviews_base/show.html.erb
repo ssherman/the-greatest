@@ -49,14 +49,22 @@
 
     <% body_html = Services::Reviews::BodySanitizer.render(@review.body) %>
     <% if body_html %>
-      <%# data-controller is load-bearing, not decorative: books/reviews.css blurs
-          .review-spoiler unconditionally, and only Reviews__SpoilerController adds
-          the --revealed class. Drop this attribute and spoiler passages render
-          permanently unreadable with no way to unblur them. The controller is
-          registered in the shared app/javascript/controllers/index.js, which the
-          admin layout already loads -- no bundling change needed. %>
+      <%# Both data-controller AND data-action are load-bearing, not decorative:
+          books/reviews.css blurs .review-spoiler unconditionally, and only
+          Reviews__SpoilerController#showSpoiler removes the --revealed class.
+          data-controller alone is not enough -- the controller is mounted here
+          and delegates DOWNWARD to the spans rather than binding its own
+          listeners, so the click/keydown binding has to be declared explicitly.
+          It cannot live on the spans themselves either: BodySanitizer's
+          render-time allowlist strips any data-action a span might carry, so
+          the binding has to sit on this wrapper. Drop either attribute and
+          spoiler passages render permanently unreadable with no way to unblur
+          them. The controller is registered in the shared
+          app/javascript/controllers/index.js, which the admin layout already
+          loads -- no bundling change needed. %>
       <div class="review-body mt-6 max-w-[68ch] leading-relaxed [overflow-wrap:anywhere]"
            data-controller="reviews--spoiler"
+           data-action="click->reviews--spoiler#reveal keydown->reviews--spoiler#revealOnKey"
            data-testid="admin-review-body"><%= body_html %></div>
     <% else %>
       <p class="mt-6 text-base-content/60 italic">Rating only — no written review.</p>

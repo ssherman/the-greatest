@@ -194,6 +194,27 @@ module Admin
         assert_response :success
       end
 
+      # The spoiler reveal is delegated: Reviews__SpoilerController binds no
+      # listeners itself, so without the data-action binding on the wrapper a
+      # spoiler renders permanently blurred behind a focusable element that does
+      # nothing. Silent -- no error, no failure -- which is why this asserts on
+      # the attribute. It is a behaviour binding, not presentation: a designer
+      # cannot change it freely, and every other mount point in the app pairs
+      # these two attributes.
+      test "show wires the spoiler reveal action on the body wrapper" do
+        sign_in_as(@admin_user, stub_auth: true)
+        review = @regular_user.reviews.create!(
+          reviewable: books_books(:got), rating: 4,
+          body: "Everyone lives ||except the ones who don't|| in the end."
+        )
+
+        get admin_books_review_path(review)
+
+        assert_select "[data-testid=admin-review-body][data-controller=?][data-action=?]",
+          "reviews--spoiler",
+          "click->reviews--spoiler#reveal keydown->reviews--spoiler#revealOnKey"
+      end
+
       # The entire multi-domain design rests on Rails resolving this controller's
       # templates from the BASE controller's prefix, so one shared view serves
       # every domain subclass. That prefix is derived from the base controller's
