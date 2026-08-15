@@ -16,10 +16,40 @@ module Webhooks
       event = verified_event
       return head :bad_request if event.nil?
 
+      record = record_event(event)
+      return head :ok if record.nil? # redelivery; already handled
+
+      if event.livemode != Rails.configuration.stripe_livemode
+        # The interlock. A sandbox endpoint misconfigured to point at production
+        # (or the reverse) writes nothing beyond this audit row.
+        record.mark_ignored!("livemode mismatch: event=#{event.livemode} app=#{Rails.configuration.stripe_livemode}")
+        return head :ok
+      end
+
+      ::Billing::ProcessStripeEventJob.perform_async(record.id)
       head :ok
     end
 
     private
+
+    # Returns nil when the event has already been recorded. The unique index on
+    # stripe_event_id IS the idempotency check — there is no lookup-then-insert
+    # race to lose.
+    def record_event(event)
+      # stripe_customer_id is derived by StripeEvent's before_validation hook,
+      # so the extraction rule lives in exactly one place.
+      StripeEvent.create!(
+        stripe_event_id: event.id,
+        event_type: event.type,
+        payload: event.to_hash.deep_stringify_keys,
+        livemode: event.livemode,
+        api_version: event.api_version,
+        status: :received,
+        stripe_created_at: Time.at(event.created)
+      )
+    rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid
+      nil
+    end
 
     def verified_event
       Stripe::Webhook.construct_event(
