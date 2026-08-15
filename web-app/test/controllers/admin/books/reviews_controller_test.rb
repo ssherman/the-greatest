@@ -151,6 +151,78 @@ module Admin
         end
         assert_response :not_found
       end
+
+      test "show renders a books review for an admin" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_review_path(@review)
+        assert_response :success
+      end
+
+      test "show allows a books domain viewer" do
+        @regular_user.domain_roles.create!(domain: :books, permission_level: :viewer)
+        sign_in_as(@regular_user, stub_auth: true)
+        get admin_books_review_path(@review)
+        assert_response :success
+      end
+
+      test "show redirects a regular user" do
+        sign_in_as(@regular_user, stub_auth: true)
+        get admin_books_review_path(@review)
+        assert_redirected_to books_root_path
+      end
+
+      # Mirrors the destroy scoping test below it. authenticate_admin! proves
+      # access to the domain this controller is mounted under and nothing about
+      # which reviewable a given id belongs to, so without reviewable_type
+      # scoping a books-only user could READ a music review by guessing an id.
+      test "show 404s for a review whose reviewable is outside this domain" do
+        sign_in_as(@admin_user, stub_auth: true)
+        other_domain_review = @regular_user.reviews.create!(
+          reviewable: music_albums(:dark_side_of_the_moon), rating: 3
+        )
+
+        get admin_books_review_path(other_domain_review)
+        assert_response :not_found
+      end
+
+      # A rating-only review has a nil body. BodySanitizer.render must not be
+      # handed nil and the page must still render -- roughly 7 of every 8
+      # reviews in production carry no text at all.
+      test "show renders a review with no body" do
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_review_path(reviews(:admin_user_war_and_peace))
+        assert_response :success
+      end
+
+      # The spoiler reveal is delegated: Reviews__SpoilerController binds no
+      # listeners itself, so without the data-action binding on the wrapper a
+      # spoiler renders permanently blurred behind a focusable element that does
+      # nothing. Silent -- no error, no failure -- which is why this asserts on
+      # the attribute. It is a behaviour binding, not presentation: a designer
+      # cannot change it freely, and every other mount point in the app pairs
+      # these two attributes.
+      test "show wires the spoiler reveal action on the body wrapper" do
+        sign_in_as(@admin_user, stub_auth: true)
+        review = @regular_user.reviews.create!(
+          reviewable: books_books(:got), rating: 4,
+          body: "Everyone lives ||except the ones who don't|| in the end."
+        )
+
+        get admin_books_review_path(review)
+
+        assert_select "[data-testid=admin-review-body][data-controller=?][data-action=?]",
+          "reviews--spoiler",
+          "click->reviews--spoiler#reveal keydown->reviews--spoiler#revealOnKey"
+      end
+
+      # The entire multi-domain design rests on Rails resolving this controller's
+      # templates from the BASE controller's prefix, so one shared view serves
+      # every domain subclass. That prefix is derived from the base controller's
+      # class name -- rename Admin::ReviewsBaseController and every reviews view
+      # 500s with "missing template", far from the rename that caused it.
+      test "view lookup falls back to the shared reviews_base prefix" do
+        assert_includes Admin::Books::ReviewsController._prefixes, "admin/reviews_base"
+      end
     end
   end
 end

@@ -3,16 +3,16 @@
 <div class="flex items-center justify-between mb-6">
   <h1 class="text-2xl font-bold">Reviews</h1>
   <div class="flex gap-2">
-    <%= link_to "Written", admin_books_reviews_path(filter_params.except("written")),
+    <%= link_to "Written", reviews_index_path(filter_params.except("written")),
           class: "btn btn-sm #{"btn-active" if @written_only}" %>
-    <%= link_to "All", admin_books_reviews_path(filter_params(written: "all")),
+    <%= link_to "All", reviews_index_path(filter_params(written: "all")),
           class: "btn btn-sm #{"btn-active" unless @written_only}" %>
   </div>
 </div>
 
-<%= form_with url: admin_books_reviews_path, method: :get, class: "flex gap-2 mb-4" do |form| %>
+<%= form_with url: reviews_index_path, method: :get, class: "flex gap-2 mb-4" do |form| %>
   <%= hidden_field_tag :written, params[:written] if params[:written].present? %>
-  <%= form.search_field :q, value: @search_query, placeholder: "Reviewer or book",
+  <%= form.search_field :q, value: @search_query, placeholder: "Reviewer or #{reviewable_label.downcase}",
         class: "input w-72", "aria-label": "Search reviews" %>
   <%= form.submit "Search", class: "btn" %>
 <% end %>
@@ -20,7 +20,7 @@
 <div class="overflow-x-auto">
   <table class="table">
     <thead>
-      <tr><th>Reviewer</th><th>Book</th><th>Rating</th><th>Review</th><th>Date</th><th></th></tr>
+      <tr><th>Reviewer</th><th><%= reviewable_label %></th><th>Rating</th><th>Review</th><th>Date</th><th></th></tr>
     </thead>
     <tbody>
       <% if @reviews.any? %>
@@ -29,10 +29,13 @@
             <td><%= review.user.email %></td>
             <td><%= review.reviewable.title %></td>
             <td class="tabular-nums"><%= review.rating %></td>
-            <td class="max-w-md truncate [overflow-wrap:anywhere]"><%= review.title.presence || review.body&.truncate(80) %></td>
+            <td class="max-w-md truncate [overflow-wrap:anywhere]">
+              <%= link_to review.title.presence || review.body&.truncate(80) || "Rating only",
+                    review_detail_path(review), class: "link" %>
+            </td>
             <td><%= review.created_at.to_date.iso8601 %></td>
             <td>
-              <%= button_to "Delete", admin_books_review_path(review), method: :delete,
+              <%= button_to "Delete", review_detail_path(review), method: :delete,
                     class: "btn btn-sm btn-error",
                     form: {data: {turbo_confirm: "Delete this review permanently?"}} %>
             </td>

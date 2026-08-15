@@ -258,6 +258,10 @@ Rails.application.routes.draw do
   post "auth/sign_out"
   post "auth/check_provider"
 
+  # Stripe webhooks. Deliberately outside every domain constraint: Stripe posts to
+  # one URL and the host is whatever the endpoint was registered with.
+  post "webhooks/stripe", to: "webhooks/stripe#create"
+
   # User-list endpoints — global (non-domain-constrained), JSON-only.
   # The state endpoint is scoped to Current.domain via the controller.
   get "user_list_state", to: "user_list_state#show", as: :user_list_state
@@ -432,7 +436,7 @@ Rails.application.routes.draw do
 
       resources :lists
 
-      resources :reviews, only: [:index, :destroy]
+      resources :reviews, only: [:index, :show, :destroy]
 
       resources :ranking_configurations do
         member { post :execute_action }

@@ -5,6 +5,7 @@ require "mocha/minitest"
 require "sidekiq/testing"
 require "webmock/minitest"
 require_relative "support/turbo_frame_links"
+require_relative "support/stripe_webhook_helper"
 
 # Configure Sidekiq to run jobs inline during tests
 Sidekiq::Testing.inline!
@@ -33,6 +34,8 @@ end
 
 module ActionDispatch
   class IntegrationTest
+    include StripeWebhookHelper
+
     def sign_in_as(user, stub_auth: false)
       # Stub authentication service to bypass JWT validation if requested
       if stub_auth

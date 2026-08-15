@@ -1,0 +1,75 @@
+# Semantic names, matching the users.yml convention.
+# == Schema Information
+#
+# Table name: memberships
+#
+#  id                     :bigint           not null, primary key
+#  cancel_at_period_end   :boolean          default(FALSE), not null
+#  canceled_at            :datetime
+#  current_period_end     :datetime
+#  ended_email_sent_at    :datetime
+#  interval               :integer
+#  note                   :text
+#  origin_domain          :string
+#  source                 :integer          default(0), not null
+#  status                 :integer          not null
+#  stripe_synced_at       :datetime
+#  welcome_email_sent_at  :datetime
+#  created_at             :datetime         not null
+#  updated_at             :datetime         not null
+#  granted_by_id          :bigint
+#  stripe_customer_id     :string
+#  stripe_subscription_id :string
+#  user_id                :bigint
+#
+# Indexes
+#
+#  index_memberships_on_granted_by_id           (granted_by_id)
+#  index_memberships_on_stripe_customer_id      (stripe_customer_id)
+#  index_memberships_on_stripe_subscription_id  (stripe_subscription_id) UNIQUE WHERE (stripe_subscription_id IS NOT NULL)
+#  index_memberships_on_user_id                 (user_id)
+#  index_memberships_on_user_id_and_status      (user_id,status)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (granted_by_id => users.id)
+#  fk_rails_...  (user_id => users.id)
+#
+regular_user_monthly:
+  user: regular_user
+  source: 0          # stripe
+  status: 1          # active
+  interval: 0        # monthly
+  stripe_subscription_id: sub_regular_monthly
+  stripe_customer_id: cus_regular
+  current_period_end: <%= 20.days.from_now.to_fs(:db) %>
+  cancel_at_period_end: false
+  origin_domain: books
+  stripe_synced_at: <%= 1.hour.ago.to_fs(:db) %>
+
+google_user_canceled_in_grace:
+  user: google_user
+  source: 0          # stripe
+  status: 2          # canceled
+  interval: 1        # yearly
+  stripe_subscription_id: sub_google_yearly
+  stripe_customer_id: cus_google
+  current_period_end: <%= 10.days.from_now.to_fs(:db) %>
+  canceled_at: <%= 2.days.ago.to_fs(:db) %>
+  cancel_at_period_end: true
+  origin_domain: music
+
+editor_user_comped:
+  user: editor_user
+  source: 1          # comped
+  status: 1          # active
+  current_period_end:   # nil — never expires
+  note: Contributor comp
+  granted_by: admin_user
+
+password_user_legacy:
+  user: password_user
+  source: 2          # legacy
+  status: 1          # active
+  current_period_end:   # nil — legacy early supporters never expire
+  note: Legacy early supporter
