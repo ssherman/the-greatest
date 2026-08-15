@@ -87,15 +87,24 @@ module Billing
     # the job reads the event for a customer id and nothing else. If anyone
     # reintroduces payload-as-truth, this is the test that should fail.
     test "every permutation of subscribe-time events converges on the same state" do
-      subscription = stripe_subscription_object(id: "sub_perm", customer: "cus_order")
+      # The canonical truth the Stripe API returns, whatever the events say.
+      canonical = stripe_subscription_object(id: "sub_perm", customer: "cus_order", status: "active")
+
+      # Each event carries a DIFFERENT status snapshot, the way real Stripe events do:
+      # the subscription is created incomplete, checkout completes it, the invoice
+      # payment activates it. This is what makes the test discriminating -- an
+      # implementation that writes state from the payload records whichever event it
+      # happened to see last, so its final state depends on delivery order. Only an
+      # implementation that re-reads canonical state from the API converges.
       specs = [
-        {type: "customer.subscription.created", object: subscription},
+        {type: "customer.subscription.created",
+         object: stripe_subscription_object(id: "sub_perm", customer: "cus_order", status: "incomplete")},
         {type: "checkout.session.completed",
          object: {id: "cs_perm", object: "checkout_session", customer: "cus_order",
-                  mode: "subscription", subscription: "sub_perm"}},
+                  mode: "subscription", subscription: "sub_perm", status: "trialing"}},
         {type: "invoice.paid",
          object: {id: "in_perm", object: "invoice", customer: "cus_order",
-                  subscription: "sub_perm"}}
+                  subscription: "sub_perm", status: "active"}}
       ]
 
       states = specs.permutation.map do |ordering|
@@ -111,7 +120,7 @@ module Billing
           Stripe::Subscription.stubs(:list).returns(
             Stripe::ListObject.construct_from({
               object: "list", has_more: false,
-              data: [subscription.deep_symbolize_keys]
+              data: [canonical.deep_symbolize_keys]
             })
           )
 
@@ -120,7 +129,8 @@ module Billing
 
         Membership.order(:stripe_subscription_id).map do |m|
           m.attributes.slice("user_id", "source", "status", "interval",
-            "stripe_subscription_id", "stripe_customer_id", "cancel_at_period_end")
+            "stripe_subscription_id", "stripe_customer_id", "cancel_at_period_end",
+            "current_period_end", "canceled_at")
         end
       end
 
