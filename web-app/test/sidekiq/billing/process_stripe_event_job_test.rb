@@ -82,6 +82,11 @@ module Billing
 
       assert event.reload.failed?
       assert_match(/stripe unavailable/, event.error)
+      # Exactly one execution must count as exactly one attempt. The failure branch
+      # raises and lets the method's outer rescue do the mark_failed! bookkeeping; if
+      # it ever marks failed itself as well, this counter doubles and an admin view
+      # reading it reports twice the real retry count during an incident.
+      assert_equal 1, event.attempts
     end
 
     # ---- The design claim ----

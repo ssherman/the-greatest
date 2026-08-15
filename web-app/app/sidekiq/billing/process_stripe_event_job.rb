@@ -21,12 +21,11 @@ module Billing
       if result.success?
         event.mark_processed!
       else
-        # Raise so Sidekiq retries. mark_failed! has already recorded the reason and
-        # incremented attempts, and the `return unless received? || failed?` guard
-        # above lets a retried event re-run. Returning normally here would tell
-        # Sidekiq the job succeeded, leaving the membership stale until the nightly
-        # sweep -- up to 24 hours for what is usually a seconds-long blip.
-        event.mark_failed!(result.errors.join("; "))
+        # Raise rather than returning: returning would tell Sidekiq the job succeeded,
+        # leaving the membership stale until the nightly sweep -- up to 24 hours for
+        # what is usually a seconds-long blip. The method's outer rescue does the
+        # mark_failed! bookkeeping, so this branch must NOT call it too, or attempts
+        # would increment twice for one execution.
         raise result.errors.join("; ")
       end
     rescue => e
