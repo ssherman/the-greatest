@@ -52,16 +52,28 @@ module Services
         # entirely dead, so this must be loud.
         def webhook_secret
           ENV.fetch("STRIPE_WEBHOOK_SECRET") do
-            raise ConfigurationError, "STRIPE_WEBHOOK_SECRET is not set" unless Rails.env.local?
+            raise ConfigurationError, "STRIPE_WEBHOOK_SECRET is not set" unless secrets_optional?
             "whsec_missing"
           end
         end
+
+        # `assets:precompile` in the Docker build boots the entire app with
+        # RAILS_ENV=production and none of the runtime secrets — SOPS injects those on
+        # the server at container start, never into the image. Without this the boot
+        # guard fails the image build, which blocks every deploy including unrelated
+        # ones.
+        #
+        # SECRET_KEY_BASE_DUMMY is Rails' own signal for exactly this situation, and
+        # the Dockerfile sets it inline on the precompile RUN line only, so it is
+        # never present in the running container. That is what keeps the guard
+        # fail-closed where it matters while letting the image build.
+        def secrets_optional? = Rails.env.local? || ENV["SECRET_KEY_BASE_DUMMY"].present?
 
         private
 
         def secret_key
           ENV.fetch("STRIPE_SECRET_KEY") do
-            raise ConfigurationError, "STRIPE_SECRET_KEY is not set" unless Rails.env.local?
+            raise ConfigurationError, "STRIPE_SECRET_KEY is not set" unless secrets_optional?
             "sk_test_missing"
           end
         end

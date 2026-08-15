@@ -66,6 +66,37 @@ module Services
         end
       end
 
+      # `assets:precompile` in the Docker build boots the app with
+      # RAILS_ENV=production and no runtime secrets — SOPS injects those at container
+      # start, not into the image. Raising there fails the image build and blocks
+      # every deploy, including unrelated ones. These two tests are the regression
+      # guard for that; without them the failure only appears in the deploy pipeline.
+      test "configure! tolerates missing secrets during a build-time precompile boot" do
+        with_env("STRIPE_SECRET_KEY" => nil, "STRIPE_WEBHOOK_SECRET" => nil,
+          "SECRET_KEY_BASE_DUMMY" => "1") do
+          Rails.env.stubs(:local?).returns(false)
+          StripeClient.configure!
+          assert_equal "sk_test_missing", Stripe.api_key
+        end
+      end
+
+      test "webhook_secret tolerates a build-time precompile boot" do
+        with_env("STRIPE_WEBHOOK_SECRET" => nil, "SECRET_KEY_BASE_DUMMY" => "1") do
+          Rails.env.stubs(:local?).returns(false)
+          assert_equal "whsec_missing", StripeClient.webhook_secret
+        end
+      end
+
+      # The guard must stay fail-closed for a real container start, where
+      # SECRET_KEY_BASE_DUMMY is absent — the Dockerfile sets it inline on the
+      # precompile RUN line only, never in the image's ENV.
+      test "configure! still raises at runtime in production without the secret" do
+        with_env("STRIPE_SECRET_KEY" => nil, "SECRET_KEY_BASE_DUMMY" => nil) do
+          Rails.env.stubs(:local?).returns(false)
+          assert_raises(StripeClient::ConfigurationError) { StripeClient.configure! }
+        end
+      end
+
       test "api_version returns the exact API version string" do
         assert_equal "2026-07-29.dahlia", StripeClient.api_version
       end
