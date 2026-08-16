@@ -289,3 +289,9 @@ the spec:
   which of the two rows it returns is whatever Postgres happens to return first, and that could
   flip between reconciles. Nothing in the current code enforces or checks the uniqueness this
   implicitly relies on.
+- **`Membership.granting_access` is referenced by comments but does not exist yet.** Comments in
+  `Admin::MembershipsController#revoke` and `Services::BooksMigration::MembershipMigrator` refer
+  to it as the method that will grant or deny access based on status and expiry, but it ships with
+  the entitlements increment. Until it does, nothing in the application reads memberships to grant
+  or deny access. Consequently, `revoke`'s claim that it "ends access immediately" describes the
+  intended future behaviour, not today's — today it only changes rows that nothing yet consults.
