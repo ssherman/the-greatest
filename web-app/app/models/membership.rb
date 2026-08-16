@@ -23,11 +23,12 @@
 #
 # Indexes
 #
-#  index_memberships_on_granted_by_id           (granted_by_id)
-#  index_memberships_on_stripe_customer_id      (stripe_customer_id)
-#  index_memberships_on_stripe_subscription_id  (stripe_subscription_id) UNIQUE WHERE (stripe_subscription_id IS NOT NULL)
-#  index_memberships_on_user_id                 (user_id)
-#  index_memberships_on_user_id_and_status      (user_id,status)
+#  index_memberships_on_granted_by_id               (granted_by_id)
+#  index_memberships_on_stripe_customer_id          (stripe_customer_id)
+#  index_memberships_on_stripe_subscription_id      (stripe_subscription_id) UNIQUE WHERE (stripe_subscription_id IS NOT NULL)
+#  index_memberships_on_user_id                     (user_id)
+#  index_memberships_on_user_id_and_status          (user_id,status)
+#  index_memberships_one_grant_per_user_per_source  (user_id,source) UNIQUE WHERE ((source <> 0) AND (user_id IS NOT NULL))
 #
 # Foreign Keys
 #
