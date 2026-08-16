@@ -29,18 +29,28 @@ class Admin::MembershipsControllerTest < ActionDispatch::IntegrationTest
     sign_in_as(@admin, stub_auth: true)
     get admin_memberships_url(source: "comped")
     assert_response :success
+    assert_equal [memberships(:editor_user_comped).id],
+      @controller.view_assigns["memberships"].map(&:id)
   end
 
   test "filters by status" do
     sign_in_as(@admin, stub_auth: true)
     get admin_memberships_url(status: "canceled")
     assert_response :success
+    assert_equal [memberships(:google_user_canceled_in_grace).id],
+      @controller.view_assigns["memberships"].map(&:id)
   end
 
   test "filters to unattached rows" do
     sign_in_as(@admin, stub_auth: true)
+    orphan = ::Membership.create!(
+      user: nil, source: :stripe, status: :active,
+      stripe_subscription_id: "sub_filter_unattached", stripe_customer_id: "cus_filter_unattached"
+    )
+
     get admin_memberships_url(attached: "false")
     assert_response :success
+    assert_equal [orphan.id], @controller.view_assigns["memberships"].map(&:id)
   end
 
   test "ignores a source that is not a known enum value" do
@@ -61,12 +71,29 @@ class Admin::MembershipsControllerTest < ActionDispatch::IntegrationTest
     sign_in_as(@admin, stub_auth: true)
     get admin_memberships_url(q: "cus_regular")
     assert_response :success
+    assert_equal [memberships(:regular_user_monthly).id],
+      @controller.view_assigns["memberships"].map(&:id)
   end
 
   test "searches by user email" do
     sign_in_as(@admin, stub_auth: true)
-    get admin_memberships_url(q: users(:regular_user).email)
+    # editor_user's email, not regular_user's: "user@example.com" is itself a
+    # suffix of both "passworduser@example.com" and "googleuser@example.com",
+    # so searching on it would match three memberships instead of one and the
+    # assertion below would be asserting the wrong thing.
+    get admin_memberships_url(q: users(:editor_user).email)
     assert_response :success
+    assert_equal [memberships(:editor_user_comped).id],
+      @controller.view_assigns["memberships"].map(&:id)
+  end
+
+  test "a literal percent sign in the search term is escaped, not treated as a wildcard" do
+    sign_in_as(@admin, stub_auth: true)
+    # Unescaped, "%" ILIKE-matches every row -- sanitize_sql_like is what
+    # keeps a typed "%" a literal character instead of a wildcard.
+    get admin_memberships_url(q: "%")
+    assert_response :success
+    assert_equal [], @controller.view_assigns["memberships"].map(&:id)
   end
 
   test "an admin sees the detail page" do
@@ -173,6 +200,21 @@ class Admin::MembershipsControllerTest < ActionDispatch::IntegrationTest
     end
     assert_equal "Revised comp", memberships(:editor_user_comped).reload.note
     assert_equal 1, Membership.source_comped.where(user_id: users(:editor_user).id).count
+  end
+
+  test "re-comping a revoked user clears canceled_at" do
+    sign_in_as(@admin, stub_auth: true)
+    comped = memberships(:editor_user_comped)
+    post revoke_admin_membership_url(comped)
+    comped.reload
+    assert_equal "canceled", comped.status
+    assert_not_nil comped.canceled_at
+
+    post admin_memberships_url, params: {membership: {user_id: users(:editor_user).id}}
+
+    comped.reload
+    assert_equal "active", comped.status
+    assert_nil comped.canceled_at
   end
 
   test "a scalar-shaped comp body is a 400, not a 500" do
@@ -323,6 +365,21 @@ class Admin::MembershipsControllerTest < ActionDispatch::IntegrationTest
     post attach_admin_membership_url(orphan), params: {user_id: 999_999_999}
     assert_nil orphan.reload.user_id
     assert_response :redirect
+  end
+
+  test "attaching an unattached non-stripe row to a user who already holds that grant is refused, not a 500" do
+    sign_in_as(@admin, stub_auth: true)
+    # Nothing in app/ produces an unattached comped/legacy row today (the
+    # reachability note on attach's rescue) -- constructed by hand here to
+    # exercise the rescue at all.
+    orphan = ::Membership.create!(user: nil, source: :comped, status: :active)
+
+    assert_no_difference -> { ::Membership.count } do
+      post attach_admin_membership_url(orphan), params: {user_id: users(:editor_user).id}
+    end
+    assert_nil orphan.reload.user_id
+    assert_response :redirect
+    assert_equal "That user already has a grant of this type.", flash[:alert]
   end
 
   test "an editor may not attach" do

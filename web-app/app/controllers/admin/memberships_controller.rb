@@ -51,6 +51,11 @@ class Admin::MembershipsController < Admin::BaseController
     membership = ::Membership.find_or_initialize_by(user_id: user.id, source: :comped)
     membership.assign_attributes(
       status: :active,
+      # Mirrors Services::BooksMigration::MembershipMigrator#upsert_row: a
+      # revoke sets canceled_at, and find_or_initialize_by re-fetches that same
+      # row, so re-comping it must clear canceled_at explicitly or the row ends
+      # up active with a stale cancellation timestamp still on it.
+      canceled_at: nil,
       current_period_end: comp_params[:current_period_end].presence,
       note: comp_params[:note].presence,
       # From the session, never from params. An admin must not be able to
@@ -101,8 +106,12 @@ class Admin::MembershipsController < Admin::BaseController
 
     # Status and a passed end date, not destroy: the note and granted_by are the
     # audit trail for why access was given, and deleting the row throws that
-    # away. Membership.granting_access denies a non-Stripe row whose
-    # current_period_end has passed, so this ends access immediately.
+    # away. Membership.granting_access is designed to deny a non-Stripe row
+    # whose current_period_end has passed, which is what will make this end
+    # access immediately -- but that method ships with the entitlements
+    # increment and does not exist yet, so nothing in the app currently reads
+    # memberships to grant or deny access at all. See "Known limits" in
+    # docs/features/membership-billing.md.
     @membership.update!(status: :canceled, canceled_at: Time.current, current_period_end: Time.current)
     redirect_to admin_membership_path(@membership), notice: "Membership revoked."
   end
@@ -140,6 +149,13 @@ class Admin::MembershipsController < Admin::BaseController
     end
 
     redirect_to admin_membership_path(@membership), notice: "Attached to #{user.email}."
+  rescue ActiveRecord::RecordNotUnique
+    # Same shape as create's rescue: index_memberships_one_grant_per_user_per_source
+    # blocks attaching an unattached comped/legacy row to a user who already
+    # holds a grant of that source. Nothing in app/ currently produces an
+    # unattached non-stripe row, so this is a low-reachability belt-and-braces
+    # match for create's, not a path exercised in normal operation.
+    redirect_to admin_membership_path(@membership), alert: "That user already has a grant of this type."
   end
 
   private

@@ -45,7 +45,18 @@
             <td><%= membership.source.titleize %></td>
             <td><%= membership.status.titleize %><%= " (ends at period end)" if membership.cancel_at_period_end %></td>
             <td><%= membership.interval&.titleize || "—" %></td>
-            <td><%= membership.current_period_end&.to_date&.iso8601 || "Never expires" %></td>
+            <%# A nil period end on a stripe row is NOT "never expires" -- the reconciler can leave
+                an incomplete/incomplete_expired row without one. "Never expires" is only meaningful
+                for a non-Stripe grant, where nil genuinely encodes that. %>
+            <td>
+              <% if membership.current_period_end.present? %>
+                <%= membership.current_period_end.to_date.iso8601 %>
+              <% elsif membership.source_stripe? %>
+                &mdash;
+              <% else %>
+                Never expires
+              <% end %>
+            </td>
             <td><%= membership.created_at.to_date.iso8601 %></td>
           </tr>
         <% end %>

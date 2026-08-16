@@ -14,7 +14,7 @@ class Admin::StripeEventsController < Admin::BaseController
 
     @search_query = params[:q].to_s.presence
     if @search_query
-      pattern = "%#{::User.sanitize_sql_like(@search_query)}%"
+      pattern = "%#{::StripeEvent.sanitize_sql_like(@search_query)}%"
       scope = scope.where(
         "stripe_event_id ILIKE :p OR event_type ILIKE :p OR stripe_customer_id ILIKE :p",
         p: pattern

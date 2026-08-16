@@ -13,9 +13,12 @@ module Services
     # with two membership rows, and keeps access if the Stripe one lapses --
     # exactly what the live legacy site does today.
     #
-    # current_period_end stays nil on purpose: Membership.granting_access reads a
-    # non-Stripe row as "active AND (current_period_end IS NULL OR in the
-    # future)", so nil is what encodes "never expires".
+    # current_period_end stays nil on purpose: Membership.granting_access is
+    # designed to read a non-Stripe row as "active AND (current_period_end IS
+    # NULL OR in the future)", so nil is what will encode "never expires" --
+    # but that method ships with the entitlements increment and does not exist
+    # yet. Nothing in the app currently reads memberships to grant or deny
+    # access; see "Known limits" in docs/features/membership-billing.md.
     #
     # Timestamps are NOT copied from the legacy user. users.created_at is the
     # signup date, not the date the grant was made; there is no column recording

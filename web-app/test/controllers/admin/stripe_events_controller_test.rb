@@ -34,8 +34,28 @@ class Admin::StripeEventsControllerTest < ActionDispatch::IntegrationTest
 
   test "filters by status" do
     sign_in_as(@admin, stub_auth: true)
+    # The three stripe_events fixtures are all `received`; only this one is
+    # `failed`, so filtering proves the where clause, not just an empty table.
+    event = failed_event
+
     get admin_stripe_events_url(status: "failed")
     assert_response :success
+    assert_equal [event.id], @controller.view_assigns["events"].map(&:id)
+  end
+
+  test "searches by stripe event id" do
+    sign_in_as(@admin, stub_auth: true)
+    get admin_stripe_events_url(q: "evt_subscription_created")
+    assert_response :success
+    assert_equal [stripe_events(:subscription_created).id],
+      @controller.view_assigns["events"].map(&:id)
+  end
+
+  test "a literal percent sign in the search term is escaped, not treated as a wildcard" do
+    sign_in_as(@admin, stub_auth: true)
+    get admin_stripe_events_url(q: "%")
+    assert_response :success
+    assert_equal [], @controller.view_assigns["events"].map(&:id)
   end
 
   test "ignores a status that is not a known enum value" do

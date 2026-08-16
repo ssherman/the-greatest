@@ -12,9 +12,20 @@
       <div><dt class="text-sm text-base-content/70">Source</dt><dd><%= @membership.source.titleize %></dd></div>
       <div><dt class="text-sm text-base-content/70">Status</dt><dd><%= @membership.status.titleize %></dd></div>
       <div><dt class="text-sm text-base-content/70">Plan</dt><dd><%= @membership.interval&.titleize || "—" %></dd></div>
+      <% # A nil period end on a stripe row is NOT "never expires" -- the reconciler can leave an
+         # incomplete/incomplete_expired row without one. "Never expires" is only meaningful for a
+         # non-Stripe grant, where nil genuinely encodes that. %>
       <div>
         <dt class="text-sm text-base-content/70">Access through</dt>
-        <dd><%= @membership.current_period_end&.to_fs(:long) || "Never expires" %></dd>
+        <dd>
+          <% if @membership.current_period_end.present? %>
+            <%= @membership.current_period_end.to_fs(:long) %>
+          <% elsif @membership.source_stripe? %>
+            &mdash;
+          <% else %>
+            Never expires
+          <% end %>
+        </dd>
       </div>
       <div>
         <dt class="text-sm text-base-content/70">Cancels at period end</dt>

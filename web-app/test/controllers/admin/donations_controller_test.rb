@@ -28,6 +28,8 @@ class Admin::DonationsControllerTest < ActionDispatch::IntegrationTest
     sign_in_as(@admin, stub_auth: true)
     get admin_donations_url(status: "succeeded")
     assert_response :success
+    assert_equal [donations(:regular_user_gift).id, donations(:anonymous_gift).id].sort,
+      @controller.view_assigns["donations"].map(&:id).sort
   end
 
   test "ignores a status that is not a known enum value" do
@@ -46,6 +48,15 @@ class Admin::DonationsControllerTest < ActionDispatch::IntegrationTest
     sign_in_as(@admin, stub_auth: true)
     get admin_donations_url(q: "pi_regular_gift")
     assert_response :success
+    assert_equal [donations(:regular_user_gift).id],
+      @controller.view_assigns["donations"].map(&:id)
+  end
+
+  test "a literal percent sign in the search term is escaped, not treated as a wildcard" do
+    sign_in_as(@admin, stub_auth: true)
+    get admin_donations_url(q: "%")
+    assert_response :success
+    assert_equal [], @controller.view_assigns["donations"].map(&:id)
   end
 
   test "the index does not N+1 over donors" do

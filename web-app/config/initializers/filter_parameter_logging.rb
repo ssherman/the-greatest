@@ -15,9 +15,15 @@ Rails.application.config.filter_parameters += [
   # matches this app's auth_data/provider_data/old_user_data blobs, which should
   # be filtered regardless.
   :data,
-  # The admin memberships/stripe_events/billing_plans searches all take a free-text
-  # `q` and an admin routinely searches by a customer's email address -- filtering
-  # the key :email does nothing when the value arrives under :q instead. This app
-  # is open source; its production logs should not accumulate donor PII.
+  # :q is a free-text search param used app-wide, not only in admin billing.
+  # It's filtered here because the admin memberships/stripe_events/donations
+  # searches take a :q and an admin routinely searches by a customer's email
+  # address -- filtering the key :email does nothing when the value arrives
+  # under :q instead. The same key is also the search param for the books
+  # filters controller, the games searches controller, public lists, and the
+  # saved-search autocompletes, so this filters those too; that's an accepted
+  # side effect, not a mistake. This app is open source; its production logs
+  # should not accumulate donor PII (or, incidentally, anyone else's search
+  # terms).
   :q
 ]

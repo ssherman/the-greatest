@@ -10,7 +10,7 @@ class Admin::DonationsController < Admin::BaseController
 
     @search_query = params[:q].to_s.presence
     if @search_query
-      pattern = "%#{::User.sanitize_sql_like(@search_query)}%"
+      pattern = "%#{::Donation.sanitize_sql_like(@search_query)}%"
       scope = scope.where(
         "donations.stripe_payment_intent_id ILIKE :p OR donations.email ILIKE :p " \
         "OR donations.user_id IN (SELECT id FROM users WHERE email ILIKE :p)",

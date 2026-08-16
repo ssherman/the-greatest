@@ -193,10 +193,18 @@ namespace :data_migration do
     abort "memberships migration failed: #{result[:error]}" unless result[:success]
 
     granted = Membership.source_legacy.count
+    # NOT a gap count, despite the arithmetic looking like one. It goes
+    # positive for a legacy paid user with no `users` row yet -- expected
+    # drift MembershipMigrator skips by design, not a migration failure -- and
+    # goes NEGATIVE once a legacy `paid` flag is cleared after import, because
+    # the grant it produced is permanent and outlives the flag (see the class
+    # comment on MembershipMigrator). Read it as "how far the two raw counts
+    # currently differ," never as an error count. For the authoritative
+    # missing/expected breakdown, by id, run `bin/rails billing:verify_migration`.
     pp({
       legacy_paid_users: legacy_paid,
       legacy_memberships_now: granted,
-      unaccounted_for: legacy_paid - granted
+      legacy_paid_minus_legacy_memberships: legacy_paid - granted
     })
   end
 
