@@ -136,12 +136,16 @@ module Books
     test "the nav lists every registered collection" do
       get "/"
 
+      # The nav's <li> block is rendered from a shared partial in TWO places
+      # (the narrow-screen dropdown and the wide-screen bar), so a correctly
+      # rendered page has each link exactly twice. Asserting only minimum: 1
+      # would pass even if one of the two copies were missing the link.
       Collections::Registry.for(:books).each do |collection|
-        assert_select "a[href=?]", "/#{collection.slug}", {minimum: 1},
-          "nav is missing a link to /#{collection.slug}"
+        assert_select "a[href=?]", "/#{collection.slug}", {count: 2},
+          "nav is missing a link to /#{collection.slug} in one or both copies"
       end
-      assert_select "a[href=?]", "/the-greatest-books/since/2000"
-      assert_select "a[href=?]", "/lists/463"
+      assert_select "a[href=?]", "/the-greatest-books/since/2000", count: 2
+      assert_select "a[href=?]", "/lists/463", count: 2
     end
   end
 end
