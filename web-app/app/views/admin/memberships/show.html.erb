@@ -1,0 +1,53 @@
+<% content_for :title, "Membership" %>
+
+<%= link_to "← Memberships", admin_memberships_path, class: "link" %>
+
+<h1 class="text-2xl font-bold mt-2 mb-6">
+  <%= @membership.user&.email || "Unattached membership" %>
+</h1>
+
+<div class="card bg-base-100 mb-6">
+  <div class="card-body">
+    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div><dt class="text-sm text-base-content/70">Source</dt><dd><%= @membership.source.titleize %></dd></div>
+      <div><dt class="text-sm text-base-content/70">Status</dt><dd><%= @membership.status.titleize %></dd></div>
+      <div><dt class="text-sm text-base-content/70">Plan</dt><dd><%= @membership.interval&.titleize || "—" %></dd></div>
+      <div>
+        <dt class="text-sm text-base-content/70">Access through</dt>
+        <dd><%= @membership.current_period_end&.to_fs(:long) || "Never expires" %></dd>
+      </div>
+      <div>
+        <dt class="text-sm text-base-content/70">Cancels at period end</dt>
+        <dd><%= @membership.cancel_at_period_end ? "Yes" : "No" %></dd>
+      </div>
+      <div>
+        <dt class="text-sm text-base-content/70">Canceled at</dt>
+        <dd><%= @membership.canceled_at&.to_fs(:long) || "—" %></dd>
+      </div>
+      <div class="[overflow-wrap:anywhere]">
+        <dt class="text-sm text-base-content/70">Stripe customer</dt>
+        <dd><%= @membership.stripe_customer_id || "—" %></dd>
+      </div>
+      <div class="[overflow-wrap:anywhere]">
+        <dt class="text-sm text-base-content/70">Stripe subscription</dt>
+        <dd><%= @membership.stripe_subscription_id || "—" %></dd>
+      </div>
+      <div>
+        <dt class="text-sm text-base-content/70">Last synced from Stripe</dt>
+        <dd><%= @membership.stripe_synced_at&.to_fs(:long) || "Never" %></dd>
+      </div>
+      <div>
+        <dt class="text-sm text-base-content/70">Origin</dt>
+        <dd><%= @membership.origin_domain || "Unknown" %></dd>
+      </div>
+      <div class="sm:col-span-2">
+        <dt class="text-sm text-base-content/70">Note</dt>
+        <dd class="[overflow-wrap:anywhere]"><%= @membership.note.presence || "—" %></dd>
+      </div>
+      <div>
+        <dt class="text-sm text-base-content/70">Granted by</dt>
+        <dd><%= @membership.granted_by&.email || "—" %></dd>
+      </div>
+    </dl>
+  </div>
+</div>

@@ -765,6 +765,24 @@ Rails.application.routes.draw do
       resources :domain_roles, only: [:index, :create, :update, :destroy]
     end
 
+    # Billing. Global by design -- one membership covers books, music and games,
+    # so these belong outside every DomainConstraint, exactly like users.
+    resources :memberships, only: [:index, :show, :new, :create, :edit, :update] do
+      member do
+        post :revoke
+        post :attach
+      end
+    end
+    resources :donations, only: [:index]
+    # `reprocess`, not `retry`: `retry` is a Ruby keyword and `def retry` is a
+    # syntax error.
+    resources :stripe_events, only: [:index, :show] do
+      member do
+        post :reprocess
+      end
+    end
+    resources :billing_plans, only: [:index, :edit, :update]
+
     # Cloudflare cache management
     resource :cloudflare, only: [], controller: "cloudflare" do
       post :purge_cache

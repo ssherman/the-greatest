@@ -1,0 +1,65 @@
+<% content_for :title, "Memberships" %>
+
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-2xl font-bold">Memberships</h1>
+  <%= link_to "Comp a membership", new_admin_membership_path, class: "btn btn-primary btn-sm" %>
+</div>
+
+<% if @unattached_count > 0 %>
+  <div role="status" class="alert mb-4">
+    <span>
+      <%= pluralize(@unattached_count, "membership") %> could not be matched to a user.
+      <%= link_to "Review them", admin_memberships_path(attached: "false"), class: "link" %>
+    </span>
+  </div>
+<% end %>
+
+<%= form_with url: admin_memberships_path, method: :get, class: "flex flex-wrap gap-2 mb-4" do |form| %>
+  <%= form.search_field :q, value: @search_query,
+        placeholder: "Email, customer id or subscription id",
+        class: "input w-80", "aria-label": "Search memberships" %>
+  <%= form.select :source, options_for_select(Membership.sources.keys.map { |s| [s.titleize, s] }, params[:source]),
+        {include_blank: "Any source"}, class: "select" %>
+  <%= form.select :status, options_for_select(Membership.statuses.keys.map { |s| [s.titleize, s] }, params[:status]),
+        {include_blank: "Any status"}, class: "select" %>
+  <%= form.submit "Filter", class: "btn" %>
+  <%= link_to "Clear", admin_memberships_path, class: "btn btn-ghost" %>
+<% end %>
+
+<div class="overflow-x-auto">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>User</th><th>Source</th><th>Status</th><th>Plan</th>
+        <th>Access through</th><th>Started</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% if @memberships.any? %>
+        <% @memberships.each do |membership| %>
+          <tr>
+            <td class="[overflow-wrap:anywhere]">
+              <%= link_to membership.user&.email || "Unattached — #{membership.stripe_customer_id}",
+                    admin_membership_path(membership), class: "link" %>
+            </td>
+            <td><%= membership.source.titleize %></td>
+            <td><%= membership.status.titleize %><%= " (ends at period end)" if membership.cancel_at_period_end %></td>
+            <td><%= membership.interval&.titleize || "—" %></td>
+            <td><%= membership.current_period_end&.to_date&.iso8601 || "Never expires" %></td>
+            <td><%= membership.created_at.to_date.iso8601 %></td>
+          </tr>
+        <% end %>
+      <% else %>
+        <tr>
+          <td colspan="6" class="text-center text-base-content/70 py-8">No memberships match these filters.</td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>
+
+<% if @pagy.pages > 1 %>
+  <div class="mt-4 flex justify-center">
+    <%== @pagy.series_nav %>
+  </div>
+<% end %>
