@@ -680,9 +680,11 @@ module Books
   class CollectionsRoutesTest < ActionDispatch::IntegrationTest
     setup { host! "dev-new.thegreatestbooks.org" }
 
-    test "the routes.rb slug literal matches the registry" do
-      assert_equal Collections::Registry.slugs(:books).sort,
-        Books::RankedItemsController::ROUTED_COLLECTION_SLUGS.sort
+    test "every registered collection has a route" do
+      Collections::Registry.slugs(:books).each do |slug|
+        assert_recognizes({controller: "books/ranked_items", action: "index", collection: slug},
+          "/#{slug}")
+      end
     end
 
     test "a bare collection routes to the ranked index" do
@@ -785,7 +787,21 @@ module Books
     end
 
     test "a collection paginates on a path" do
+      # 100 per page, so page 2 needs more than 100 ranked western books.
+      120.times do |i|
+        book = Books::Book.create!(title: "Western Filler #{i}", first_published_year: 1950)
+        Books::BookCountry.create!(book: book, country: books_countries(:french))
+        RankedItem.create!(item: book, ranking_configuration: @rc, rank: 100 + i, score: 10)
+      end
+
       get "/western/page/2"
+
+      assert_response :success
+      assert_equal 2, @controller.view_assigns["pagy"].page
+    end
+
+    test "a page past the last raises not found" do
+      get "/western/page/99"
       assert_response :not_found
     end
 
@@ -831,19 +847,7 @@ bin/rails test test/routing/books_collections_routes_test.rb test/controllers/bo
 
 Expected: FAIL — routing errors on every collection path.
 
-- [ ] **Step 4: Declare the routed slug list on the controller**
-
-In `app/controllers/books/ranked_items_controller.rb`, above `def self.ranking_configuration_class`:
-
-```ruby
-# Spelled out here rather than read from the registry because config/routes.rb
-# is drawn at boot and autoloading in the router is a reloading hazard --
-# matching how filter_bases is already written there. A routing test asserts
-# this equals Collections::Registry.slugs(:books).
-ROUTED_COLLECTION_SLUGS = %w[women africa asia latin-america western non-western].freeze
-```
-
-- [ ] **Step 5: Draw the routes**
+- [ ] **Step 4: Draw the routes**
 
 In `config/routes.rb`, inside the books `DomainConstraint` block, immediately **after** the existing `filter_bases` / `filter_dates` loop, append:
 
@@ -852,7 +856,10 @@ In `config/routes.rb`, inside the books `DomainConstraint` block, immediately **
     # :collection segment rather than six copies of the grammar. The regex union
     # is LOAD-BEARING: an unconstrained :collection would match any single
     # segment and mint an unbounded space of indexable soft-duplicates.
-    collection_re = Regexp.union(Books::RankedItemsController::ROUTED_COLLECTION_SLUGS)
+    # Read straight from the registry -- no duplicated literal, so drift is
+    # impossible. Autoloading from routes.rb is already proven safe in this app:
+    # DomainConstraint lives in app/lib and is referenced at the top of this file.
+    collection_re = Regexp.union(Collections::Registry.slugs(:books))
     collection_bases = ["the-greatest-books", "the-greatest/:category_id/books"]
 
     ["", "rc/:ranking_configuration_id/"].each do |rc_prefix|
@@ -889,11 +896,11 @@ In `config/routes.rb`, inside the books `DomainConstraint` block, immediately **
       constraints: {collection: collection_re}
 ```
 
-`ROUTED_COLLECTION_SLUGS` is referenced from `routes.rb`, so require the controller is loaded.
-If this raises a `NameError` at boot, move the constant into `config/routes.rb` as a local
-array and change the routing test to compare against that literal instead.
+If `Collections::Registry` somehow cannot be reached when routes are drawn, boot fails loudly
+and immediately — fall back to a literal `%w[women africa asia latin-america western
+non-western]` in `routes.rb`. Do not paper over a boot error any other way.
 
-- [ ] **Step 6: Resolve the collection in the controller**
+- [ ] **Step 5: Resolve the collection in the controller**
 
 In `app/controllers/books/ranked_items_controller.rb`, add a `before_action` and use it:
 
@@ -944,7 +951,7 @@ end
 
 Leave `app/views/books/ranked_items/index.html.erb` **untouched** in this task. It already renders `@page_title` and honours `@show_hero`, which is everything this task needs. The filter components gain their `collection:` keyword in Task 5, and passing it from the view before then would raise `ArgumentError`.
 
-- [ ] **Step 7: Run the tests to verify they pass**
+- [ ] **Step 6: Run the tests to verify they pass**
 
 ```bash
 bin/rails test test/routing/books_collections_routes_test.rb test/controllers/books/collections_controller_test.rb
@@ -952,7 +959,7 @@ bin/rails test test/routing/books_collections_routes_test.rb test/controllers/bo
 
 Expected: PASS. Fix the `assert_queries_count` bound to the real number as noted in Step 2.
 
-- [ ] **Step 8: Run the full suite**
+- [ ] **Step 7: Run the full suite**
 
 Confirm no other session is using `the_greatest_test`, then:
 
@@ -964,11 +971,12 @@ Expected: green. A single `:collection` segment sits alongside existing single-s
 (`/lists`, `/authors`, `/genres`, `/countries`, `/searches`); the regex constraint should keep
 them apart, and this run is what proves it.
 
-- [ ] **Step 9: Lint and commit**
+- [ ] **Step 8: Lint and commit**
 
 ```bash
 bundle exec standardrb
 git add config/routes.rb app/controllers/books/ranked_items_controller.rb test/routing test/controllers/books/collections_controller_test.rb
+
 git commit -m "feat(books): serve the six curated collection pages on their legacy urls"
 ```
 
