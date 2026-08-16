@@ -35,26 +35,107 @@ class Admin::MembershipsController < Admin::BaseController
   def show
   end
 
-  # Placeholder actions. Task 6 replaces every one of these bodies with the real
-  # comp / edit / revoke / attach implementations; they exist now only because
-  # raise_on_missing_callback_actions validates set_membership's entire :only
-  # list on every request, not just the action being served.
-  #
-  # head :not_implemented, never a bare empty body: an empty non-GET action
-  # implicitly renders 204 No Content, which an admin hitting a billing write
-  # endpoint would read as success. A billing endpoint that silently does
-  # nothing is worse than one that plainly refuses.
-  def new = head(:not_implemented)
+  def new
+    @membership = ::Membership.new
+  end
 
-  def create = head(:not_implemented)
+  def create
+    user = ::User.find_by(id: comp_params[:user_id])
+    if user.nil?
+      @membership = ::Membership.new(comp_params)
+      flash.now[:alert] = "No user with that id."
+      render :new, status: :unprocessable_entity
+      return
+    end
 
-  def edit = head(:not_implemented)
+    membership = ::Membership.find_or_initialize_by(user_id: user.id, source: :comped)
+    membership.assign_attributes(
+      status: :active,
+      current_period_end: comp_params[:current_period_end].presence,
+      note: comp_params[:note].presence,
+      # From the session, never from params. An admin must not be able to
+      # record someone else as the person who authorised a comp.
+      granted_by_id: current_user.id
+    )
 
-  def update = head(:not_implemented)
+    if membership.save
+      redirect_to admin_membership_path(membership), notice: "Membership comped."
+    else
+      @membership = membership
+      render :new, status: :unprocessable_entity
+    end
+  rescue ActiveRecord::RecordNotUnique
+    # Only reachable if two admins comp the same user at the same moment --
+    # find_or_initialize_by handles the ordinary repeat. The (user_id, source)
+    # index is what turns the race into this instead of a duplicate row.
+    redirect_to admin_memberships_path, alert: "That user already has a comped membership."
+  end
 
-  def revoke = head(:not_implemented)
+  def edit
+    return if editable?
+    redirect_to admin_membership_path(@membership), alert: stripe_owned_message
+  end
 
-  def attach = head(:not_implemented)
+  def update
+    unless editable?
+      redirect_to admin_membership_path(@membership), alert: stripe_owned_message
+      return
+    end
+
+    attributes = edit_params.to_h.symbolize_keys
+    # An empty date field means "never expires", not "leave it alone".
+    attributes[:current_period_end] = attributes[:current_period_end].presence if attributes.key?(:current_period_end)
+
+    if @membership.update(attributes)
+      redirect_to admin_membership_path(@membership), notice: "Membership updated."
+    else
+      render :edit, status: :unprocessable_entity
+    end
+  end
+
+  def revoke
+    unless editable?
+      redirect_to admin_membership_path(@membership), alert: "Cancel a Stripe subscription in Stripe, not here."
+      return
+    end
+
+    # Status and a passed end date, not destroy: the note and granted_by are the
+    # audit trail for why access was given, and deleting the row throws that
+    # away. Membership.granting_access denies a non-Stripe row whose
+    # current_period_end has passed, so this ends access immediately.
+    @membership.update!(status: :canceled, canceled_at: Time.current, current_period_end: Time.current)
+    redirect_to admin_membership_path(@membership), notice: "Membership revoked."
+  end
+
+  def attach
+    if @membership.user_id.present?
+      redirect_to admin_membership_path(@membership), alert: "Already attached to a user."
+      return
+    end
+
+    # An explicit user id, never an email match. Inferring identity from an
+    # email address is how one person is handed another person's paid
+    # membership; an admin looking at both records makes the call instead.
+    user = ::User.find_by(id: params[:user_id])
+    if user.nil?
+      redirect_to admin_membership_path(@membership), alert: "No user with that id."
+      return
+    end
+
+    ::Membership.transaction do
+      @membership.update!(user: user)
+      # Makes the link durable: ReconcileCustomer resolves a user by
+      # users.stripe_customer_id first, so writing it means the next reconcile
+      # finds this customer without help. Only when blank -- users
+      # .stripe_customer_id has a non-unique index, and overwriting an existing
+      # value would silently repoint whichever customer was there before.
+      if user.stripe_customer_id.blank? && @membership.stripe_customer_id.present?
+        user.update!(stripe_customer_id: @membership.stripe_customer_id)
+      end
+    end
+
+    redirect_to admin_membership_path(@membership), notice: "Attached to #{user.email}."
+  end
 
   private
 
@@ -70,5 +151,29 @@ class Admin::MembershipsController < Admin::BaseController
 
   def set_membership
     @membership = ::Membership.find(params[:id])
+  end
+
+  # A Stripe membership is owned by the reconciler: the nightly sweep rewrites
+  # status, interval, period end and cancellation from Stripe, so an edit here
+  # would appear to work and then vanish. Refusing is the honest answer.
+  def editable?
+    !@membership.source_stripe?
+  end
+
+  def stripe_owned_message
+    "This membership is owned by Stripe. Change it in the Stripe dashboard — the nightly reconcile will pick it up."
+  end
+
+  def comp_params
+    # source and stripe_subscription_id are absent on purpose. source is
+    # hardcoded to :comped in create; a subscription id on a non-Stripe row is
+    # rejected by Membership's absence validation regardless.
+    params.require(:membership).permit(:user_id, :note, :current_period_end)
+  end
+
+  # No user_id: which person a membership belongs to is changed through
+  # `attach`, which has its own guards, never by editing a form field.
+  def edit_params
+    params.require(:membership).permit(:note, :current_period_end)
   end
 end

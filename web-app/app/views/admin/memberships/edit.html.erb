@@ -1,0 +1,29 @@
+<% content_for :title, "Edit membership" %>
+
+<%= link_to "← Membership", admin_membership_path(@membership), class: "link" %>
+<h1 class="text-2xl font-bold mt-2 mb-6">
+  Edit <%= @membership.source.titleize %> membership
+</h1>
+
+<%= form_with model: @membership, url: admin_membership_path(@membership), method: :patch, class: "max-w-lg" do |form| %>
+  <% if @membership.errors.any? %>
+    <div role="alert" class="alert mb-4">
+      <span><%= @membership.errors.full_messages.to_sentence %></span>
+    </div>
+  <% end %>
+
+  <fieldset class="fieldset">
+    <legend class="fieldset-legend">Terms</legend>
+    <label class="label" for="membership_current_period_end">Access through</label>
+    <%= form.date_field :current_period_end, value: @membership.current_period_end&.to_date, class: "input" %>
+    <p class="text-sm text-base-content/70">Leave blank for a membership that never expires.</p>
+
+    <label class="label" for="membership_note">Why</label>
+    <%= form.text_area :note, class: "textarea w-full", rows: 3 %>
+  </fieldset>
+
+  <div class="mt-6 flex gap-2">
+    <%= form.submit "Save", class: "btn btn-primary" %>
+    <%= link_to "Cancel", admin_membership_path(@membership), class: "btn btn-ghost" %>
+  </div>
+<% end %>

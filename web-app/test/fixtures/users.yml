@@ -52,6 +52,7 @@ regular_user:
   role: 0
   email_verified: false
   original_signup_domain: thegreatestmusic.org
+  stripe_customer_id: cus_regular
 
 editor_user:
   email: editor@example.com

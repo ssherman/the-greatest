@@ -51,3 +51,34 @@
     </dl>
   </div>
 </div>
+
+<% unless @membership.source_stripe? %>
+  <div class="flex gap-2 mb-6">
+    <%= link_to "Edit", edit_admin_membership_path(@membership), class: "btn btn-sm" %>
+    <% unless @membership.canceled? %>
+      <%= button_to "Revoke", revoke_admin_membership_path(@membership), method: :post,
+            class: "btn btn-sm btn-error",
+            form: {data: {turbo_confirm: "Revoke this membership? Access ends immediately."}} %>
+    <% end %>
+  </div>
+<% end %>
+
+<% if @membership.user_id.nil? %>
+  <div class="card bg-base-100">
+    <div class="card-body">
+      <h2 class="card-title text-lg">Attach to a user</h2>
+      <p class="text-sm text-base-content/70">
+        This Stripe customer could not be matched automatically. Confirm the person's
+        identity yourself and enter their user id — this is never guessed from an
+        email address.
+      </p>
+      <%= form_with url: attach_admin_membership_path(@membership), method: :post, class: "flex gap-2 items-end mt-2" do |form| %>
+        <div>
+          <label class="label" for="user_id">User id</label>
+          <%= form.number_field :user_id, id: "user_id", class: "input", required: true %>
+        </div>
+        <%= form.submit "Attach", class: "btn btn-primary" %>
+      <% end %>
+    </div>
+  </div>
+<% end %>

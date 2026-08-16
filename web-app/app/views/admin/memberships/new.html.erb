@@ -1,0 +1,36 @@
+<% content_for :title, "Comp a membership" %>
+
+<%= link_to "← Memberships", admin_memberships_path, class: "link" %>
+<h1 class="text-2xl font-bold mt-2 mb-6">Comp a membership</h1>
+
+<%= form_with model: @membership, url: admin_memberships_path, method: :post, class: "max-w-lg" do |form| %>
+  <% if @membership.errors.any? %>
+    <div role="alert" class="alert mb-4">
+      <span><%= @membership.errors.full_messages.to_sentence %></span>
+    </div>
+  <% end %>
+
+  <fieldset class="fieldset">
+    <legend class="fieldset-legend">Who</legend>
+    <label class="label" for="membership_user_id">User id</label>
+    <%= form.number_field :user_id, class: "input", required: true %>
+    <p class="text-sm text-base-content/70">
+      Find the id on the <%= link_to "users page", admin_users_path, class: "link" %>.
+    </p>
+  </fieldset>
+
+  <fieldset class="fieldset">
+    <legend class="fieldset-legend">Terms</legend>
+    <label class="label" for="membership_current_period_end">Access through</label>
+    <%= form.date_field :current_period_end, class: "input" %>
+    <p class="text-sm text-base-content/70">Leave blank for a membership that never expires.</p>
+
+    <label class="label" for="membership_note">Why</label>
+    <%= form.text_area :note, class: "textarea w-full", rows: 3 %>
+  </fieldset>
+
+  <div class="mt-6 flex gap-2">
+    <%= form.submit "Comp membership", class: "btn btn-primary" %>
+    <%= link_to "Cancel", admin_memberships_path, class: "btn btn-ghost" %>
+  </div>
+<% end %>
