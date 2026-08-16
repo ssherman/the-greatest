@@ -169,11 +169,17 @@ module Books
     end
 
     test "a collection composes with a year bound" do
+      # got -> french (western, 1996); war_and_peace -> french (western, 1869, too early);
+      # of_mice_and_men -> japanese (non-western, 1937, admitted by the year bound alone).
+      # Only got satisfies both the collection AND the year bound.
+      RankedItem.create!(item: books_books(:got), ranking_configuration: @rc, rank: 3, score: 80)
+      RankedItem.create!(item: books_books(:of_mice_and_men), ranking_configuration: @rc, rank: 4, score: 70)
+
       results = Books::RankedBooksQuery.call(
-        ranking_configuration: @rc, collection: collection("western"), year_start: 3000
+        ranking_configuration: @rc, collection: collection("western"), year_start: "1900"
       )
 
-      assert_empty results
+      assert_equal [books_books(:got).id], results.map(&:item_id)
     end
 
     test "a nil collection narrows nothing" do
