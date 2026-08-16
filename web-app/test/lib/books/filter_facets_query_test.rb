@@ -132,5 +132,23 @@ module Books
       assert_operator Books::FilterFacetsQuery.genres(ranking_configuration: @rc, limit: 1).size, :<=, 1
       assert_operator Books::FilterFacetsQuery.countries(ranking_configuration: @rc, limit: 1).size, :<=, 1
     end
+
+    test "genre facet counts are narrowed by the collection" do
+      # crime_and_punishment has no country, so it drops out of the western
+      # collection; giving it a genre here (instead of in the shared fixture)
+      # is what makes that drop visible in the genre facet without perturbing
+      # crime_and_punishment's category state for every other test.
+      CategoryItem.create!(category: categories(:books_fiction_genre), item: books_books(:crime_and_punishment))
+      collection = ::Collections::Registry.find(:books, "western")
+
+      scoped = Books::FilterFacetsQuery.genres(ranking_configuration: @rc, collection: collection)
+      unscoped = Books::FilterFacetsQuery.genres(ranking_configuration: @rc)
+
+      scoped_total = scoped.sum { |row| row[:count] }
+      unscoped_total = unscoped.sum { |row| row[:count] }
+
+      assert_operator scoped_total, :>, 0, "western should still count some genres"
+      assert_operator scoped_total, :<, unscoped_total
+    end
   end
 end

@@ -4,20 +4,23 @@ module Books
       new(**options).call
     end
 
-    def initialize(categories: [], countries: [], year_start: nil, year_end: nil)
+    def initialize(categories: [], countries: [], year_start: nil, year_end: nil, collection: nil)
       @categories = categories || []
       @countries = countries || []
       @year_start = year_start.presence
       @year_end = year_end.presence
+      @collection = collection
     end
 
     def call
       parts = ["The Greatest"]
+      parts << @collection.title_prefix if @collection&.title_prefix
       parts << @countries.map { |country| country.name.titlecase }.join(", ") if @countries.any?
       parts.concat(genre_parts)
       parts << date_phrase
       parts << "on #{format_list(names_for(:subject))}" if names_for(:subject).any?
       parts << "Set in #{format_list(names_for(:location))}" if names_for(:location).any?
+      parts << @collection.title_suffix if @collection&.title_suffix
       parts.join(" ")
     end
 

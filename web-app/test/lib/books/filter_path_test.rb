@@ -147,5 +147,36 @@ module Books
         assert_equal !path.include?(","), Books::FilterPath.indexable?(categories: cats, countries: countries)
       end
     end
+
+    def collection(slug) = ::Collections::Registry.find(:books, slug)
+
+    test "an unfiltered collection is its bare slug" do
+      assert_equal "/africa", Books::FilterPath.call(collection: collection("africa"))
+    end
+
+    test "an unfiltered collection with a page" do
+      assert_equal "/africa/page/3", Books::FilterPath.call(collection: collection("africa"), page: 3)
+    end
+
+    test "a collection with a category" do
+      path = Books::FilterPath.call(collection: collection("africa"), categories: [category("fiction")])
+
+      assert_equal "/africa/the-greatest/fiction/books", path
+    end
+
+    test "a collection with a date but no category keeps the the-greatest-books base" do
+      path = Books::FilterPath.call(collection: collection("africa"), year_start: "2000")
+
+      assert_equal "/africa/the-greatest-books/since/2000", path
+    end
+
+    test "a collection composes category, date, and page" do
+      path = Books::FilterPath.call(
+        collection: collection("africa"), categories: [category("fiction")],
+        year_start: "2000", year_end: "2010", page: 2
+      )
+
+      assert_equal "/africa/the-greatest/fiction/books/from/2000/to/2010/page/2", path
+    end
   end
 end

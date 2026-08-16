@@ -79,5 +79,26 @@ module Books
 
       assert_equal "The Greatest Novels of All Time on Politics Set in France", title
     end
+
+    def collection(slug) = ::Collections::Registry.find(:books, slug)
+
+    test "a title_prefix collection lands right after The Greatest" do
+      assert_equal "The Greatest African Books of All Time",
+        Books::FilterTitle.call(collection: collection("africa"))
+    end
+
+    test "a title_suffix collection lands last" do
+      assert_equal "The Greatest Books of All Time Written by Women",
+        Books::FilterTitle.call(collection: collection("women"))
+    end
+
+    test "a collection composes with genre and date" do
+      assert_equal "The Greatest African Fiction Books Since 2000",
+        Books::FilterTitle.call(
+          collection: collection("africa"),
+          categories: [Books::Category.new(slug: "fiction", name: "Fiction", category_type: :genre)],
+          year_start: "2000"
+        )
+    end
   end
 end

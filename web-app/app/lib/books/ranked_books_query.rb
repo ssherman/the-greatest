@@ -3,7 +3,7 @@ module Books
   # paginatable RankedItem relation, so a later filtering increment can swap the
   # engine here (OpenSearch id-set, materialized view) without touching views.
   class RankedBooksQuery
-    def self.call(ranking_configuration:, categories: [], countries: [], year_start: nil, year_end: nil)
+    def self.call(ranking_configuration:, categories: [], countries: [], year_start: nil, year_end: nil, collection: nil)
       relation = RankedItem
         .where(ranking_configuration_id: ranking_configuration.id, item_type: "Books::Book")
         .where.not(rank: nil)
@@ -21,12 +21,34 @@ module Books
         )
       end
 
+      relation = with_collection(relation, collection)
       relation = with_year_bounds(relation, year_start, year_end)
 
       relation
         .includes(item: [{book_authors: :author}, {primary_image: {file_attachment: :blob}}])
         .order(:rank)
     end
+
+    # A collection's `filter` is opaque to the shared registry -- this is the only
+    # place in the app that knows what its keys mean.
+    def self.with_collection(relation, collection)
+      filter = collection&.filter
+      return relation if filter.nil?
+
+      if filter[:author_gender]
+        relation.where(item_id: Books::BookAuthor
+          .where(author_id: Books::Author.where(gender: filter[:author_gender]).select(:id))
+          .select(:book_id))
+      else
+        countries = if filter[:exclude]
+          Books::Country.without_label(filter[:country_label])
+        else
+          Books::Country.with_label(filter[:country_label])
+        end
+        relation.where(item_id: Books::BookCountry.where(country_id: countries.select(:id)).select(:book_id))
+      end
+    end
+    private_class_method :with_collection
 
     def self.with_year_bounds(relation, year_start, year_end)
       return relation if year_start.blank? && year_end.blank?

@@ -127,5 +127,57 @@ module Books
 
       assert_equal [@first], results.to_a
     end
+
+    def collection(slug) = ::Collections::Registry.find(:books, slug)
+
+    test "a country-label collection keeps only books from labelled countries" do
+      # war_and_peace -> french (western); of_mice_and_men -> japanese (asian)
+      RankedItem.create!(item: books_books(:of_mice_and_men), ranking_configuration: @rc, rank: 3, score: 80)
+
+      results = Books::RankedBooksQuery.call(ranking_configuration: @rc, collection: collection("western"))
+
+      assert_includes results.map(&:item_id), books_books(:war_and_peace).id
+      refute_includes results.map(&:item_id), books_books(:of_mice_and_men).id
+    end
+
+    test "a negated country-label collection keeps only books outside the label" do
+      RankedItem.create!(item: books_books(:of_mice_and_men), ranking_configuration: @rc, rank: 3, score: 80)
+
+      results = Books::RankedBooksQuery.call(ranking_configuration: @rc, collection: collection("non-western"))
+
+      assert_includes results.map(&:item_id), books_books(:of_mice_and_men).id
+      refute_includes results.map(&:item_id), books_books(:war_and_peace).id
+    end
+
+    test "an asia collection keeps only books from asian-labelled countries" do
+      # war_and_peace -> french (western); of_mice_and_men -> japanese (asian)
+      RankedItem.create!(item: books_books(:of_mice_and_men), ranking_configuration: @rc, rank: 3, score: 80)
+
+      results = Books::RankedBooksQuery.call(ranking_configuration: @rc, collection: collection("asia"))
+
+      assert_equal [books_books(:of_mice_and_men).id], results.map(&:item_id)
+    end
+
+    test "an author-gender collection keeps books with any author of that gender" do
+      books_authors(:garnett).update!(gender: :female)
+      Books::BookAuthor.create!(book: books_books(:crime_and_punishment),
+        author: books_authors(:garnett), position: 2, role: 0)
+
+      results = Books::RankedBooksQuery.call(ranking_configuration: @rc, collection: collection("women"))
+
+      assert_equal [books_books(:crime_and_punishment).id], results.map(&:item_id)
+    end
+
+    test "a collection composes with a year bound" do
+      results = Books::RankedBooksQuery.call(
+        ranking_configuration: @rc, collection: collection("western"), year_start: 3000
+      )
+
+      assert_empty results
+    end
+
+    test "a nil collection narrows nothing" do
+      assert_equal 2, Books::RankedBooksQuery.call(ranking_configuration: @rc, collection: nil).count
+    end
   end
 end
