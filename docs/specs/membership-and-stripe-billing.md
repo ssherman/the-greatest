@@ -458,6 +458,13 @@ Two things can only come from the legacy database:
   the run — the same books/users drift that makes `data_migration:reviews` fail
   standalone against the live legacy database.
 
+**All 28 legacy `paid: true` users are imported, including the 6 who also hold a
+live Stripe subscription.** This reproduces the legacy app's own `member?`, which
+is `paid? || active_membership?` — nobody's access changes as a result of the
+migration. Consequence: those 6 users legitimately hold two membership rows (one
+`legacy`, one `stripe`), and the admin memberships list showing two rows for one
+person is expected, not a bug.
+
 **Verification invariant:** not a count match — a legacy-vs-new count always
 drifts against a live database — but *every `stripe_subscription_id` present in
 legacy exists in `memberships`*, and unattached rows equal the set deliberately
@@ -486,23 +493,31 @@ verification.
 
 ## Increments
 
-| # | Increment | Depends on |
-|---|---|---|
-| 1 | Stripe foundation — gem, `StripeClient`, four tables, models, fixtures | — |
-| 2 | Webhook ingest — endpoint, signature verification, livemode guard, idempotent insert, job stub | 1 |
-| 3 | Reconciliation engine — `ReconcileCustomer`, advisory lock, `ReconcileAllCustomers`, nightly cron | 2 |
-| 4 | Data migration — legacy comps, legacy donations, Stripe rebuild, verification report | 3 |
-| 5 | Mail foundation — ActionMailer + SendGrid, domain-aware `ApplicationMailer`, previews | — |
-| 6 | Checkout — `billing_plans`, rake tasks, `EnsureCustomer`, checkout/portal/donate, `/membership`, thanks page | 3, 10 |
-| 7 | Entitlements — `member?`, access scope, `MembershipGate`, `/membership_state`, members-only area | 3 |
-| 8 | Membership emails — the eight | 5, 6 |
-| 9 | Admin UI — memberships incl. comping, donations, stripe events, billing plans | 3 |
-| 10 | **Legacy guard patch** (separate repo) | — |
-| 11 | E2E tests | 6, 7 |
+| # | Increment | Depends on | Done |
+|---|---|---|---|
+| 1 | Stripe foundation — gem, `StripeClient`, four tables, models, fixtures | — | |
+| 2 | Webhook ingest — endpoint, signature verification, livemode guard, idempotent insert, job stub | 1 | |
+| 3 | Reconciliation engine — `ReconcileCustomer`, advisory lock, `ReconcileAllCustomers`, nightly cron | 2 | |
+| 4 | Data migration — legacy comps, legacy donations, Stripe rebuild, verification report | 3 | ✅ |
+| 5 | Mail foundation — ActionMailer + SendGrid, domain-aware `ApplicationMailer`, previews | — | |
+| 6 | Checkout — `billing_plans`, rake tasks, `EnsureCustomer`, checkout/portal/donate, `/membership`, thanks page | 3, 10 | |
+| 7 | Entitlements — `member?`, access scope, `MembershipGate`, `/membership_state`, members-only area | 3 | |
+| 8 | Membership emails — the eight | 5, 6 | |
+| 9 | Admin UI — memberships incl. comping, donations, stripe events, billing plans | 3 | ✅ |
+| 10 | **Legacy guard patch** (separate repo) | — | |
+| 11 | E2E tests | 6, 7 | |
 
 Increments 1–5 only read from Stripe and are safe to ship in any order relative
 to legacy. Increment 6 is the moment the new app first creates subscriptions in
 the shared account, so increment 10 must be live before it.
+
+**Increment 4 shipped in two halves, at different times.** The Stripe-rebuild
+half — every `source: :stripe` membership row, built by paging the whole
+account — was completed separately and earlier, in production, by
+`billing:reconcile_all` (127 of 127 customers). This branch delivered the two
+halves that only the legacy database can supply — early-supporter comps and
+donation history — plus `billing:verify_migration`, the report that checks all
+three against it.
 
 ## Acceptance Criteria
 
@@ -520,8 +535,11 @@ the shared account, so increment 10 must be live before it.
 - [ ] `/membership` renders with zero Stripe API calls
 - [ ] `stripe:bootstrap` refuses to run with `STRIPE_LIVEMODE=true`
 - [ ] `StripeClient` raises at boot on an `sk_live_` key with `STRIPE_LIVEMODE` unset
-- [ ] Every legacy `stripe_subscription_id` exists in `memberships` after migration
-- [ ] Every legacy `paid: true` user has a `source: :legacy` membership
+- [x] Every legacy `stripe_subscription_id` exists in `memberships` after migration —
+      verified by `billing:verify_migration` against live data, not asserted in a test:
+      this is a cross-database fact about a legacy database that is still taking writes
+- [x] Every legacy `paid: true` user has a `source: :legacy` membership — same caveat,
+      same task: verified against live data rather than a test, for the same reason
 - [ ] The welcome email sends exactly once across repeated reconciles
 - [ ] A membership email uses the branding of `origin_domain`, not a `Current` lookup
 - [ ] `bin/rails test` and `bundle exec standardrb` pass; Playwright covers `/membership`
@@ -542,10 +560,11 @@ the shared account, so increment 10 must be live before it.
   but the coexistence guards should not be the only thing standing between that
   and a mis-attached subscription.
 
-## Carried forward from increments 1–3
+## Carried forward from increments 1–3, 4 and 9
 
-Found during implementation and review of the billing core. None blocks that work;
-each has a named owner among the later increments.
+Found during implementation and review of the billing core, the data migration and
+the admin UI. None blocks that work; each has a named owner among the later
+increments, or is deferred with a stated reason.
 
 - **`origin_domain` is never written by reconcile.** `upsert` deliberately omits it so
   a value set at checkout survives, but that means every membership created *before* a
@@ -556,18 +575,6 @@ each has a named owner among the later increments.
   contract says a genuine status transition drives the mailer, guarded by
   `welcome_email_sent_at`. `upsert` uses `assign_attributes` and discards the prior
   status, so increment 8 must capture it before assignment.
-- **`Membership` repeats the validation shape that caused a Critical bug.** It pairs
-  `uniqueness: true, allow_nil: true` with a partial unique index — the same shape that
-  made `StripeEvent`'s duplicate raise `RecordInvalid` rather than `RecordNotUnique`,
-  silently swallowing unrelated validation failures. Admin comping and any
-  `ClaimUnattachedMemberships` service will hit it. Pair the fix with the next item.
-- **Make "structurally unreachable" true rather than aspirational.** This spec claims a
-  comped membership cannot be reached by a webhook. Today that rests on a defensive
-  guard in `ReconcileCustomer`, because nothing stops a comped row from carrying a
-  `stripe_subscription_id`. Adding
-  `validates :stripe_subscription_id, absence: true, unless: :source_stripe?` to
-  `Membership` would make it a real guarantee — best done with the comping write path,
-  where it can be tested against real code.
 - **Decide v2 event handling before enabling any v2 destination.** `construct_event`
   raises a bare `ArgumentError` on a v2 "thin event" envelope, which would 500. It is
   unreachable without a valid signature and nothing here subscribes to v2. Note that
@@ -581,6 +588,36 @@ each has a named owner among the later increments.
   sweep does this serially for every customer.
 - **`users.stripe_customer_id` has a non-unique index** (pre-existing), so
   `User.find_by(stripe_customer_id:)` is nondeterministic if two users ever share one.
+- **No database `CHECK` behind the `stripe_subscription_id` absence validation.** The
+  "a webhook can never touch a comped membership" invariant is now structurally true at
+  the model layer — every write path was traced and no `update_column` / `insert_all` /
+  `upsert` against `Membership` exists anywhere in `app/` — but it is validation-only.
+  Raw SQL or a future `update_column` would bypass it silently. A partial
+  `CHECK (source = 0 OR stripe_subscription_id IS NULL)` would close it; deferred
+  because a constraint-adding migration carries the same deploy risk as the next item.
+- **A migration that fails leaves the site down, not just un-migrated.**
+  `bin/docker-entrypoint` is `#!/bin/bash -e` and runs `db:prepare` before `exec`ing the
+  server, so a raising migration means the web container never starts and
+  `restart: unless-stopped` crash-loops it — nginx then 502s all four sites. This
+  branch's index migration carries a read-only pre-flight check that makes the cause
+  legible in the crash-loop log, but it cannot avert the outage. Any future migration
+  that could fail against real data should be validated with a read-only query against
+  production before merge.
+- **The worker container never migrates.** `bin/docker-entrypoint` runs `db:prepare`
+  only when the command contains `rails server`; the `worker` service runs
+  `bundle exec sidekiq`, and its `depends_on` carries no health-check condition. So
+  `docker compose up -d` opens a window where Sidekiq processes jobs against an
+  un-migrated schema. Harmless for this branch (an index, no new column), but any
+  future increment adding a column a job reads inherits the hazard.
+- **The membership admin search is a full sequential scan.** Leading-wildcard `ILIKE`
+  against `users.email` / `display_name` with no trigram index — measured at 92.9ms
+  across 69,495 development rows, so roughly 200ms at production scale. One
+  uncorrelated scan per request, not per row: a slow page, not a denial-of-service risk.
+- **`billing:verify_migration`'s subscription and donation checks can still drift.** The
+  `missing_grants` check now separates a genuine gap from expected user-migration drift,
+  but `missing_subscriptions` can list a legacy subscription whose Stripe customer was
+  deleted, or one from another Stripe account, and those will never clear. If that
+  starts firing routinely, the same expected-drift split should be applied there.
 
 ## Future Improvements
 
