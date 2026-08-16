@@ -200,6 +200,21 @@ namespace :data_migration do
     })
   end
 
+  desc "Import legacy donation history into donations"
+  task donations: :environment do
+    legacy_count = LegacyBooks::Donation.count
+
+    result = Services::BooksMigration::DonationMigrator.call
+    pp result
+    abort "donations migration failed: #{result[:error]}" unless result[:success]
+
+    pp({
+      legacy_donations: legacy_count,
+      donations_now: Donation.count,
+      unattached: Donation.where(user_id: nil).count
+    })
+  end
+
   desc "Run all Phase-1 migrators in dependency order"
   task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers,
     :categories, :category_items, :book_attributes, :book_type_categories, :countries,
