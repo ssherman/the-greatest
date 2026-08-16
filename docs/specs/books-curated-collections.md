@@ -289,16 +289,34 @@ to clobber — the new app's author rows are test data until cutover.
 
 ### Test Seed / Fixtures
 
-Existing books author fixtures: `tolstoy`, `king`, `bachman`, `garnett`,
-`excluded_placeholder`. Existing country fixtures: `french` (western), `japanese` (asian),
-`unknown` (`[]`), `algerian` (**no labels**).
+**No fixture-file edits are needed.** Existing fixtures already cover three of the six
+collections, and the remaining three are set up inline per test — the same style the existing
+`RankedItemsControllerTest` already uses for `RankedItem.create!`. This keeps blast radius at
+zero, which matters because mutating `algerian`'s labels in the shared YAML would silently
+change what `without_label("western")` returns for every other test.
 
-- `garnett` takes `gender: female`.
-- `algerian` takes `labels: [african]` — factually correct and unlocks `/africa` tests, **but
-  it silently changes what `without_label("western")` returns.** Re-check every existing test
-  that leans on that scope; do not assume it is safe.
-- A `latin_american` country fixture does not exist and must be added.
-- `ActiveRecord::FixtureSet.create_fixtures` TRUNCATES — read fixture YAML, never load it.
+Covered by existing fixtures:
+
+| Collection | Path through fixtures |
+|---|---|
+| `/western` | `french` (`labels: [western]`) ← `war_and_peace`, `got` |
+| `/asia` | `japanese` (`labels: [asian]`) ← `of_mice_and_men` |
+| `/non-western` | `japanese`, `unknown`, `algerian` are all non-western ← `of_mice_and_men` |
+
+Set up inline in the test that needs it:
+
+| Collection | Inline setup |
+|---|---|
+| `/africa` | `books_countries(:algerian).update!(labels: ["african"])` + a `Books::BookCountry` link |
+| `/latin-america` | `Books::Country.create!(name: "Argentine", labels: ["latin_american"])` + a link |
+| `/women` | `books_authors(:garnett).update!(gender: :female)` + a `Books::BookAuthor` link |
+
+Other relevant fixture names — books: `war_and_peace`, `crime_and_punishment`,
+`combo_steinbeck`, `got`, `clash`, `of_mice_and_men`, `cannery_row`. Authors: `tolstoy`,
+`king`, `bachman`, `garnett`, `excluded_placeholder`. `ranking_configurations(:books_global)`
+is `primary: true`, so `FilterPath` emits no `/rc/` prefix for it.
+
+`ActiveRecord::FixtureSet.create_fixtures` TRUNCATES — read fixture YAML, never load it.
 
 ### Environment hazards
 
