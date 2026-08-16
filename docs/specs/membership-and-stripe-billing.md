@@ -1,7 +1,8 @@
 # Membership & Stripe Billing
 
 ## Status
-- **Status**: Not Started
+- **Status**: In Progress — increments 1–4 and 9 shipped (Stripe foundation, webhook ingest,
+  reconciliation engine, data migration, admin UI); increments 5–8, 10 and 11 remain
 - **Priority**: High
 - **Created**: 2026-08-14
 - **Developer**: Shane Sherman
@@ -495,9 +496,9 @@ verification.
 
 | # | Increment | Depends on | Done |
 |---|---|---|---|
-| 1 | Stripe foundation — gem, `StripeClient`, four tables, models, fixtures | — | |
-| 2 | Webhook ingest — endpoint, signature verification, livemode guard, idempotent insert, job stub | 1 | |
-| 3 | Reconciliation engine — `ReconcileCustomer`, advisory lock, `ReconcileAllCustomers`, nightly cron | 2 | |
+| 1 | Stripe foundation — gem, `StripeClient`, four tables, models, fixtures | — | ✅ |
+| 2 | Webhook ingest — endpoint, signature verification, livemode guard, idempotent insert, job stub | 1 | ✅ |
+| 3 | Reconciliation engine — `ReconcileCustomer`, advisory lock, `ReconcileAllCustomers`, nightly cron | 2 | ✅ |
 | 4 | Data migration — legacy comps, legacy donations, Stripe rebuild, verification report | 3 | ✅ |
 | 5 | Mail foundation — ActionMailer + SendGrid, domain-aware `ApplicationMailer`, previews | — | |
 | 6 | Checkout — `billing_plans`, rake tasks, `EnsureCustomer`, checkout/portal/donate, `/membership`, thanks page | 3, 10 | |

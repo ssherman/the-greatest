@@ -95,8 +95,9 @@ regression back to "write state from the payload."
   (the model's `absence` validation enforces this for any non-`stripe` row), which is what makes a
   comped membership *structurally* unreachable from the reconciler: `ReconcileCustomer#upsert` finds
   rows by `stripe_subscription_id`, so a row that can never hold one can never be found there. This
-  is a database-enforced guarantee, not just a code convention — see the comment above the
-  `absence` validation in `app/models/membership.rb`.
+  is enforced by a model validation on every write path in `app/` — **not** a database `CHECK`
+  constraint — see the comment above the `absence` validation in `app/models/membership.rb`, and
+  "Known limits" (§8) below for what that means for a write path outside `app/`, such as raw SQL.
 - **`legacy`** — imported early supporters (`users.paid == true` in the legacy books database, none
   with a Stripe row of their own at the time of import). Never expires — a legacy grant is
   permanent by design, distinct from a comp's optional expiry date.
@@ -115,7 +116,8 @@ is always visible rather than something you have to go looking for.
 |---|---|---|
 | `billing:reconcile_all` | Runs `Services::Billing::ReconcileAllCustomers` — lists every subscription in the Stripe account, dedupes to distinct customer ids, and reconciles each one. One customer failing never aborts the rest; failures are collected and printed. | The initial build of every `source: :stripe` membership row, and the manual recovery path if the webhook endpoint was down long enough that Stripe stopped retrying (>72 hours). Safe to re-run any time — it's the same idempotent reconcile the nightly sweep runs. |
 | `billing:replay_failed` | Re-enqueues `Billing::ProcessStripeEventJob` for every `stripe_events` row currently in the `failed` state, oldest first. | After you've fixed whatever made a batch of events fail (a Stripe outage, a bad deploy) and want to clear the backlog in bulk instead of re-running events one at a time from the admin UI. |
-| `billing:verify_migration` | Runs `Services::Billing::VerifyMigration` — checks four invariants between the legacy books database and the new one: every legacy `stripe_subscription_id` has a matching `Membership`, every legacy `paid: true` user has a `source: :legacy` grant, every legacy donation was imported, and reports (never fails on) unattached memberships and stripe+legacy overlap users. **Exits non-zero if any of the first three invariants has a gap.** | After running the two `data_migration:` tasks below, and any time you want to sanity-check that the legacy and new data agree. Read below for what a non-zero exit means. |
+| `billing:verify_migration` | Runs `Services::Billing::VerifyMigration` — checks four invariants between the legacy books database and the new one: every legacy `stripe_subscription_id` has a matching `Membership`, every legacy `paid: true` user with a row in the new `users` table has a `source: :legacy` grant, every legacy donation was imported, and reports (never fails on) unattached memberships and stripe+legacy overlap users. **Exits non-zero if any of the first three invariants has a gap.** | After running the two `data_migration:` tasks below, and any time you want to sanity-check that the legacy and new data agree. Read below for what a non-zero exit means. |
+| `billing:verify_migration` (`unmigrated_users`) | The separate, never-failing category: a legacy `paid: true` user with **no row at all** in the new `users` table yet. This is expected drift from the live legacy database, not a migration gap — `MembershipMigrator` skips these users by design, so counting them against `missing_grants` would make the task cry wolf on every run. | Reported every run; remedy is `data_migration:users`, then re-run `billing:verify_migration` to confirm the gap closed. |
 | `data_migration:memberships` | Runs `Services::BooksMigration::MembershipMigrator` — imports every legacy `users.paid: true` row as a `source: :legacy` Membership. `find_or_initialize_by`-based, so it never creates a duplicate row — but re-running is **not** consequence-free: every run converges the row onto the current legacy `paid` flag, so if an admin revoked a legacy grant in `/admin/memberships` and the legacy flag is still `true`, re-running restores it. See §5 for the remedy. | Once, as part of the legacy-history import (§5). |
 | `data_migration:donations` | Runs `Services::BooksMigration::DonationMigrator` — imports the legacy `donations`-equivalent table into `donations`. Idempotent, safe to re-run. | Once, as part of the legacy-history import (§5), immediately after `data_migration:memberships`. |
 
@@ -154,24 +156,32 @@ docker compose -f docker-compose.prod.yml exec web bin/rails billing:verify_migr
 Order matters: `verify_migration` reports on both memberships and donations, so running it before
 the imports just tells you what you already knew was missing.
 
-On a first, clean run, expect roughly 28 legacy memberships imported and 21 donations, with
-`unaccounted_for: 0` printed by `data_migration:memberships`.
+On a first, clean run, expect roughly 28 legacy memberships imported and 21 donations. Note that
+`data_migration:memberships` also prints `legacy_paid_minus_legacy_memberships`, which is
+informational, not a gap count: it goes positive for a legacy paid user with no `users` row yet
+(expected drift, not an error) and goes negative once a legacy `paid` flag is later cleared after
+import. Don't chase it toward zero — `billing:verify_migration` below is the authoritative,
+by-id breakdown of what's actually missing, if anything.
 
 **`billing:verify_migration` exits non-zero if any legacy record has no counterpart.** Do not treat
 a non-zero exit as "run it again and hope." The task prints the actual list of offending ids under
 each failing category (`missing_subscriptions`, `missing_grants`, `missing_donations`) — the
-signal is to **read those ids** and find out why each one didn't migrate (a user that doesn't
-exist in the new `users` table yet is the most likely cause), not to re-run the importer blindly.
-Re-running never creates a duplicate row (both importers are `find_or_initialize_by`-based) and
-will reproduce the exact same gap if the underlying cause hasn't changed. For
-`data_migration:memberships` specifically, re-running is not otherwise consequence-free: see the
-table above — it also restores any legacy grant an admin revoked in `/admin/memberships`, as long
-as the legacy `paid` flag is still `true`. The remedy for a revoke that must survive a re-run is to
-clear `paid` on the legacy user, not to run the importer again.
+signal is to **read those ids** and find out why each one didn't migrate. For `missing_grants`
+specifically, a user missing from the new `users` table is **not** the cause — that case is split
+out into `unmigrated_users`, which is reported separately and never fails the run (§4). A non-zero
+exit on `missing_grants` means the opposite: the user **does** exist in `users`, but the importer
+still created no `source: :legacy` row for them — a genuine migration gap worth investigating, not
+expected drift. Re-running never creates a duplicate row (both importers are
+`find_or_initialize_by`-based) and will reproduce the exact same gap if the underlying cause hasn't
+changed. For `data_migration:memberships` specifically, re-running is not otherwise
+consequence-free: see the table above — it also restores any legacy grant an admin revoked in
+`/admin/memberships`, as long as the legacy `paid` flag is still `true`. The remedy for a revoke
+that must survive a re-run is to clear `paid` on the legacy user, not to run the importer again.
 
-Unattached memberships and the legacy/Stripe overlap are reported by the same task but never cause
-the non-zero exit — they're expected outcomes, not errors. Work through unattached ones with the
-runbook in §6; the overlap list is informational only (§3).
+Unattached memberships, `unmigrated_users`, and the legacy/Stripe overlap are reported by the same
+task but never cause the non-zero exit — they're expected outcomes, not errors. Work through
+unattached ones with the runbook in §6; `unmigrated_users`' remedy is `data_migration:users` (§4);
+the overlap list is informational only (§3).
 
 ## 6. Runbook: an unattached membership
 
@@ -264,6 +274,15 @@ the spec:
   network calls to Stripe's API. A slow or hanging Stripe response pins an open database connection
   and the advisory lock for that entire time. Under normal conditions this is milliseconds; under a
   Stripe-side slowdown, it can exhaust the Postgres connection pool.
+- **The `stripe_subscription_id` absence rule is a model validation, not a database constraint.**
+  `validates :stripe_subscription_id, absence: true, unless: :source_stripe?` in `app/models/membership.rb`
+  runs on every ordinary `app/` write path, but it does not apply to `update_column`, `insert_all`,
+  or `save(validate: false)`, and it does not retroactively clean up rows written before the
+  validation shipped (127 of them in production, predating this branch). `ReconcileCustomer#upsert`'s
+  defensive `return unless membership.stripe?` guard — see the comment on
+  `test/lib/services/billing/reconcile_customer_test.rb`'s "does not modify a persisted non-stripe
+  row whose id collides with an incoming subscription" test — is what actually stops a webhook from
+  touching one of those legacy-shaped rows; the validation alone does not.
 - **`users.stripe_customer_id` has a non-unique index, not a unique constraint.** If two user rows
   were ever given the same `stripe_customer_id` (by a bug, a bad manual edit, or a race), then
   `ReconcileCustomer#resolve_user`'s `User.find_by(stripe_customer_id:)` becomes nondeterministic —
