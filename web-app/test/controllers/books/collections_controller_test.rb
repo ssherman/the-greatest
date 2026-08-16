@@ -59,6 +59,21 @@ module Books
       assert_equal "The Greatest African Books of All Time", @controller.view_assigns["page_title"]
     end
 
+    test "a country_id query string does not scope a collection page" do
+      books_countries(:algerian).update!(labels: ["african"])
+      Books::BookCountry.create!(book: books_books(:of_mice_and_men), country: books_countries(:algerian))
+
+      # french is western, not african, and of_mice_and_men has no french
+      # link -- if country_id leaked into the collection query, this would
+      # filter of_mice_and_men out and leave the collection empty.
+      get "/africa?country_id=french"
+
+      assert_response :success
+      assert_equal "/africa", @controller.view_assigns["canonical_path"]
+      assert_equal [books_books(:of_mice_and_men).id],
+        @controller.view_assigns["ranked_books"].map(&:item_id)
+    end
+
     test "the canonical path is the bare collection" do
       get "/africa"
       assert_equal "/africa", @controller.view_assigns["canonical_path"]
@@ -103,6 +118,12 @@ module Books
     test "the legacy the-greatest/books form redirects to the bare slug" do
       get "/africa/the-greatest/books"
       assert_redirected_to "/africa"
+      assert_response :moved_permanently
+    end
+
+    test "the legacy the-greatest/books/page form redirects preserving the page number" do
+      get "/africa/the-greatest/books/page/3"
+      assert_redirected_to "/africa/page/3"
       assert_response :moved_permanently
     end
 

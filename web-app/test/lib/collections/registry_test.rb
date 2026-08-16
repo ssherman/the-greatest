@@ -16,6 +16,16 @@ module Collections
       assert_equal({country_label: "african"}, collection.filter)
     end
 
+    test "find returns the collection for latin-america" do
+      collection = Collections::Registry.find(:books, "latin-america")
+
+      assert_equal "latin-america", collection.slug
+      assert_equal :books, collection.domain
+      assert_equal "Greatest Latin American Books", collection.name
+      assert_equal "Latin American", collection.title_prefix
+      assert_equal({country_label: "latin_american"}, collection.filter)
+    end
+
     test "find returns nil for an unknown slug" do
       assert_nil Collections::Registry.find(:books, "antarctica")
     end

@@ -18,7 +18,13 @@ class Books::RankedItemsController < RankedItemsController
     filters = Books::FilterParams.call(params)
 
     @categories = filters.categories
-    @countries = filters.countries
+    # Country filtering has no place in the collection URL grammar (see
+    # collection_bases in routes.rb -- there is no "written-by" base under a
+    # collection), so a ?country_id= query string must not silently apply on
+    # a collection page: it would compose a canonical the app can't route to,
+    # and that canonical would get indexed (mirrors the fix at 6d75c0ad for
+    # ?collection= leaking into the homepage).
+    @countries = @collection ? [] : filters.countries
     @year_start = filters.year_start
     @year_end = filters.year_end
     @filtered = @categories.any? || @countries.any? || @year_start.present? || @year_end.present?

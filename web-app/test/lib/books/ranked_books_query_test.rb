@@ -158,6 +158,18 @@ module Books
       assert_equal [books_books(:of_mice_and_men).id], results.map(&:item_id)
     end
 
+    test "a latin-america collection keeps only books from latin-american-labelled countries" do
+      # got -> french (western); adding an argentine link makes it ALSO
+      # latin-american, so it -- and only it -- should survive the filter.
+      argentina = Books::Country.create!(name: "Argentine", labels: ["latin_american"])
+      Books::BookCountry.create!(book: books_books(:got), country: argentina)
+      RankedItem.create!(item: books_books(:got), ranking_configuration: @rc, rank: 3, score: 80)
+
+      results = Books::RankedBooksQuery.call(ranking_configuration: @rc, collection: collection("latin-america"))
+
+      assert_equal [books_books(:got).id], results.map(&:item_id)
+    end
+
     test "an author-gender collection keeps books with any author of that gender" do
       books_authors(:garnett).update!(gender: :female)
       Books::BookAuthor.create!(book: books_books(:crime_and_punishment),

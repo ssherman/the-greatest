@@ -36,6 +36,6 @@ test.describe('Books curated collections', () => {
 
     await page.getByRole('button', { name: 'Apply' }).click();
 
-    await expect(page).toHaveURL(/^\/western\/the-greatest\/[^/]+\/books$/);
+    await expect(page).toHaveURL(/\/western\/the-greatest\/[^/]+\/books$/);
   });
 });

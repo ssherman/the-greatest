@@ -632,7 +632,7 @@ Rails.application.routes.draw do
       constraints: {collection: collection_re, page: /\d+/}
     get ":collection/the-greatest/books", to: redirect("/%{collection}", status: 301),
       constraints: {collection: collection_re}
-    get ":collection/the-greatest/books/page/:page", to: redirect("/%{collection}", status: 301),
+    get ":collection/the-greatest/books/page/:page", to: redirect("/%{collection}/page/%{page}", status: 301),
       constraints: {collection: collection_re, page: /\d+/}
     get "v/:view_type/:collection", to: redirect("/%{collection}", status: 301),
       constraints: {collection: collection_re}
