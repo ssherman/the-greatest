@@ -38,6 +38,10 @@ class BooksFiltersRoutingTest < ActionDispatch::IntegrationTest
 
   test "the loop generates the expected number of routes" do
     count = Rails.application.routes.routes.count { |r| r.defaults[:controller] == "books/ranked_items" }
-    assert_equal 84, count
+    # 84 from this file's filter_bases/filter_dates loop, plus 40 from the
+    # curated-collections loop in config/routes.rb (2 bases x 5 dates - 1
+    # skipped duplicate = 9 combos x 2 page forms x 2 rc prefixes = 36, plus
+    # 2 bare :collection forms x 2 rc prefixes = 4).
+    assert_equal 124, count
   end
 end

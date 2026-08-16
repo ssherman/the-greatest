@@ -7,6 +7,7 @@ class Books::RankedItemsController < RankedItemsController
 
   before_action :find_ranking_configuration
   before_action :validate_ranking_configuration_type, if: -> { @ranking_configuration.present? }
+  before_action :find_collection
   before_action :cache_for_index_page, only: [:index]
 
   def self.ranking_configuration_class
@@ -22,13 +23,14 @@ class Books::RankedItemsController < RankedItemsController
     @year_end = filters.year_end
     @filtered = @categories.any? || @countries.any? || @year_start.present? || @year_end.present?
 
-    @show_hero = !@filtered && params[:page].blank? && params[:ranking_configuration_id].blank?
+    @show_hero = !@filtered && params[:page].blank? && params[:ranking_configuration_id].blank? && @collection.nil?
 
     @page_title = Books::FilterTitle.call(
       categories: @categories,
       countries: @countries,
       year_start: @year_start,
-      year_end: @year_end
+      year_end: @year_end,
+      collection: @collection
     )
     # An /rc/ URL is noindex per the books public-UI spec's D4, so it gets no
     # canonical at all: emitting one that carries /rc/ would break D4, and one
@@ -40,7 +42,8 @@ class Books::RankedItemsController < RankedItemsController
         countries: @countries,
         year_start: @year_start,
         year_end: @year_end,
-        page: params[:page]
+        page: params[:page],
+        collection: @collection
       )
     end
 
@@ -50,12 +53,25 @@ class Books::RankedItemsController < RankedItemsController
         categories: @categories,
         countries: @countries,
         year_start: @year_start,
-        year_end: @year_end
+        year_end: @year_end,
+        collection: @collection
       ),
       limit: 100
     )
 
     @indexable = Books::FilterPath.indexable?(categories: @categories, countries: @countries) &&
       (!@filtered || @ranked_books.any?)
+  end
+
+  private
+
+  # The route regex already restricts :collection to known slugs; this is the
+  # defensive half, and the only thing standing between a future loosened
+  # constraint and a 500.
+  def find_collection
+    return if params[:collection].blank?
+
+    @collection = Collections::Registry.find(:books, params[:collection])
+    raise ActiveRecord::RecordNotFound if @collection.nil?
   end
 end
