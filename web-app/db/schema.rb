@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_15_011819) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_16_034810) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -550,6 +550,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_011819) do
     t.index ["granted_by_id"], name: "index_memberships_on_granted_by_id"
     t.index ["stripe_customer_id"], name: "index_memberships_on_stripe_customer_id"
     t.index ["stripe_subscription_id"], name: "index_memberships_on_stripe_subscription_id", unique: true, where: "(stripe_subscription_id IS NOT NULL)"
+    t.index ["user_id", "source"], name: "index_memberships_one_grant_per_user_per_source", unique: true, where: "((source <> 0) AND (user_id IS NOT NULL))"
     t.index ["user_id", "status"], name: "index_memberships_on_user_id_and_status"
     t.index ["user_id"], name: "index_memberships_on_user_id"
   end

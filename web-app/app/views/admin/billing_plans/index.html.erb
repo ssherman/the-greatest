@@ -1,0 +1,31 @@
+<% content_for :title, "Billing Plans" %>
+
+<h1 class="text-2xl font-bold mb-2">Billing Plans</h1>
+<p class="text-sm text-base-content/70 mb-6">
+  Price ids and amounts come from Stripe. Run <code>rake stripe:sync_plans</code> to refresh them —
+  they are not editable here.
+</p>
+
+<div class="overflow-x-auto">
+  <table class="table">
+    <thead>
+      <tr><th>Name</th><th>Key</th><th>Kind</th><th>Interval</th><th>Amount</th><th>Stripe price</th><th>Lookup key</th><th>Active</th><th>Position</th><th></th></tr>
+    </thead>
+    <tbody>
+      <% @plans.each do |plan| %>
+        <tr>
+          <td><%= plan.name %></td>
+          <td><%= plan.key %></td>
+          <td><%= plan.kind.titleize %></td>
+          <td><%= plan.interval&.titleize || "—" %></td>
+          <td class="tabular-nums"><%= plan.amount_in_dollars ? number_to_currency(plan.amount_in_dollars) : "Any amount" %></td>
+          <td class="[overflow-wrap:anywhere] text-xs"><%= plan.stripe_price_id %></td>
+          <td class="[overflow-wrap:anywhere] text-xs"><%= plan.stripe_lookup_key || "—" %></td>
+          <td><%= plan.active? ? "Active" : "Retired" %></td>
+          <td class="tabular-nums"><%= plan.position %></td>
+          <td><%= link_to "Edit", edit_admin_billing_plan_path(plan), class: "btn btn-sm" %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>

@@ -83,10 +83,15 @@ module Webhooks
     end
 
     test "records an accepted event and enqueues processing" do
+      # livemode must MATCH Rails.configuration.stripe_livemode for this event to be
+      # processed rather than ignored. Deriving it (instead of hardcoding false) keeps
+      # the test correct regardless of STRIPE_LIVEMODE -- .env is loaded in test too,
+      # so a hardcoded boolean would pass or fail by accident of the developer's
+      # local environment rather than by what this test actually checks.
       payload = stripe_event_payload(
         type: "customer.subscription.created",
         object: stripe_subscription_object(id: "sub_brand_new", customer: "cus_brand_new"),
-        id: "evt_brand_new"
+        id: "evt_brand_new", livemode: Rails.configuration.stripe_livemode
       )
 
       Sidekiq::Testing.fake! do
@@ -132,10 +137,13 @@ module Webhooks
     # event was delivered, it would stop retrying, and the event would never be
     # processed. The queue is cleared here to stand in for that failed enqueue.
     test "a redelivery whose job never ran is enqueued rather than reported handled" do
+      # livemode must MATCH the app's, or the first delivery is ignored (not
+      # received) and the assertion below fails regardless of the redelivery logic
+      # this test exists to cover. See the comment on "records an accepted event...".
       payload = stripe_event_payload(
         type: "customer.subscription.created",
         object: stripe_subscription_object(id: "sub_stranded", customer: "cus_stranded"),
-        id: "evt_stranded"
+        id: "evt_stranded", livemode: Rails.configuration.stripe_livemode
       )
 
       Sidekiq::Testing.fake! do
@@ -173,10 +181,16 @@ module Webhooks
     end
 
     test "ignores an event whose livemode does not match and writes nothing else" do
+      # livemode must MISMATCH the app's for this to exercise the ignore path.
+      # `!Rails.configuration.stripe_livemode` (not a hardcoded `true`) is what makes
+      # that hold whatever STRIPE_LIVEMODE happens to be locally -- .env is loaded in
+      # test too, and a hardcoded boolean here previously coincided with a MATCH
+      # once the developer's .env set STRIPE_LIVEMODE=true, turning this into an
+      # accidental "processed" test.
       payload = stripe_event_payload(
         type: "customer.subscription.created",
         object: stripe_subscription_object(id: "sub_live", customer: "cus_live"),
-        id: "evt_live", livemode: true
+        id: "evt_live", livemode: !Rails.configuration.stripe_livemode
       )
 
       Sidekiq::Testing.fake! do

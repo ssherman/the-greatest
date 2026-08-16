@@ -88,14 +88,22 @@ module Services
       end
 
       # The guard `return membership if membership.persisted? && !membership.stripe?`
-      # is what makes a comped membership safe from webhooks. Nothing in Membership's
-      # validations stops a comped row from carrying a stripe_subscription_id, so this
-      # collision is reachable -- and the existing comped test passes by non-interaction
-      # (no id to collide), never executing the guard at all.
+      # is what makes a comped membership safe from webhooks. Membership's
+      # `absence: true, unless: :source_stripe?` validation blocks a comped row
+      # from picking up a stripe_subscription_id through the normal AR write path,
+      # but it is a validation, not a database constraint: it does not apply to
+      # update_column, insert_all, or save(validate: false), and it does not
+      # retroactively clean up rows written before the validation shipped (127 of
+      # them in production). So the collision this test sets up is still reachable
+      # in practice -- the setup below bypasses validation deliberately, to
+      # reproduce that legacy-shaped row, not because the guard is dead code. The
+      # existing comped test passes by non-interaction (no id to collide), never
+      # executing the guard at all.
       test "does not modify a persisted non-stripe row whose id collides with an incoming subscription" do
-        guarded = ::Membership.create!(user: @user, source: :comped, status: :active,
+        guarded = ::Membership.new(user: @user, source: :comped, status: :active,
           stripe_subscription_id: "sub_guard", stripe_customer_id: "cus_reconcile",
           note: "should never be touched")
+        guarded.save!(validate: false)
         stub_stripe_list([stripe_subscription(id: "sub_guard", customer: "cus_reconcile",
           status: "canceled")])
 
