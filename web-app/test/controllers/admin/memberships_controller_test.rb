@@ -83,8 +83,15 @@ class Admin::MembershipsControllerTest < ActionDispatch::IntegrationTest
 
   test "the index does not N+1 over users" do
     sign_in_as(@admin, stub_auth: true)
+    # An extra row owned by a user setup never references, so the margin between
+    # "preloaded" and "not preloaded" comes from real uncached SELECTs rather
+    # than from which fixtures setup happened to warm the query cache with.
+    Membership.create!(user: users(:contractor_user), source: :comped, status: :active)
+
     # includes(:user, :granted_by) is load-bearing: the table renders both in a
-    # loop. Replace PIN_ME with the real number in Step 8 -- do not guess it.
-    assert_queries_count(6) { get admin_memberships_url }
+    # loop. Pinned at 7 with .includes present; deleting it raises this to 10
+    # (a real margin of 3 uncached SELECTs, not the incidental margin of 1 an
+    # earlier version of this test had from setup's own fixture-cache warming).
+    assert_queries_count(7) { get admin_memberships_url }
   end
 end

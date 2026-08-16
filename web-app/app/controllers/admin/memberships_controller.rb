@@ -35,30 +35,26 @@ class Admin::MembershipsController < Admin::BaseController
   def show
   end
 
-  # Stub actions -- Task 6 implements these for real. They exist as bare
-  # public methods only so Rails' raise_on_missing_callback_actions (the 7.1
-  # default, and explicitly on in both test.rb and development.rb here) does
-  # not reject the :set_membership before_action's :only list above: that
-  # check validates every action named in :only on every request to this
-  # controller, not just the one being dispatched, regardless of which action
-  # is currently running.
-  def new
-  end
+  # Placeholder actions. Task 6 replaces every one of these bodies with the real
+  # comp / edit / revoke / attach implementations; they exist now only because
+  # raise_on_missing_callback_actions validates set_membership's entire :only
+  # list on every request, not just the action being served.
+  #
+  # head :not_implemented, never a bare empty body: an empty non-GET action
+  # implicitly renders 204 No Content, which an admin hitting a billing write
+  # endpoint would read as success. A billing endpoint that silently does
+  # nothing is worse than one that plainly refuses.
+  def new = head(:not_implemented)
 
-  def edit
-  end
+  def create = head(:not_implemented)
 
-  def create
-  end
+  def edit = head(:not_implemented)
 
-  def update
-  end
+  def update = head(:not_implemented)
 
-  def revoke
-  end
+  def revoke = head(:not_implemented)
 
-  def attach
-  end
+  def attach = head(:not_implemented)
 
   private
 
