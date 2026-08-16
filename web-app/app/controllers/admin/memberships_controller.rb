@@ -56,7 +56,7 @@ class Admin::MembershipsController < Admin::BaseController
       # row, so re-comping it must clear canceled_at explicitly or the row ends
       # up active with a stale cancellation timestamp still on it.
       canceled_at: nil,
-      current_period_end: comp_params[:current_period_end].presence,
+      current_period_end: end_of_selected_day(comp_params[:current_period_end]),
       note: comp_params[:note].presence,
       # From the session, never from params. An admin must not be able to
       # record someone else as the person who authorised a comp.
@@ -89,7 +89,7 @@ class Admin::MembershipsController < Admin::BaseController
 
     attributes = edit_params.to_h.symbolize_keys
     # An empty date field means "never expires", not "leave it alone".
-    attributes[:current_period_end] = attributes[:current_period_end].presence if attributes.key?(:current_period_end)
+    attributes[:current_period_end] = end_of_selected_day(attributes[:current_period_end]) if attributes.key?(:current_period_end)
 
     if @membership.update(attributes)
       redirect_to admin_membership_path(@membership), notice: "Membership updated."
@@ -183,6 +183,20 @@ class Admin::MembershipsController < Admin::BaseController
 
   def stripe_owned_message
     "This membership is owned by Stripe. Change it in the Stripe dashboard — the nightly reconcile will pick it up."
+  end
+
+  # date_field submits a bare "YYYY-MM-DD"; assigned straight to the datetime
+  # column current_period_end, Rails casts that to midnight at the *start* of
+  # the day, so an admin's "access through 2026-06-30" starts denying access
+  # as the 30th begins instead of at its end -- a full day short of what was
+  # granted. Shared by create and update so the conversion only lives once.
+  #
+  # Time.zone.parse returns nil for blank or unparseable input rather than
+  # raising, which matches how AR's own datetime cast already treated garbage
+  # here before this method existed -- nil ("never expires") is the honest
+  # outcome for a value that isn't a real date, not a 500.
+  def end_of_selected_day(value)
+    Time.zone.parse(value.to_s)&.end_of_day
   end
 
   def comp_params

@@ -1,6 +1,8 @@
 require "test_helper"
 
 class Admin::MembershipsControllerTest < ActionDispatch::IntegrationTest
+  include ActiveSupport::Testing::TimeHelpers
+
   setup do
     @admin = users(:admin_user)
     @editor = users(:editor_user)
@@ -180,13 +182,43 @@ class Admin::MembershipsControllerTest < ActionDispatch::IntegrationTest
     assert_nil membership.stripe_subscription_id
   end
 
-  test "comping accepts an end date" do
+  test "comping accepts an end date and stores end-of-day, not midnight" do
     sign_in_as(@admin, stub_auth: true)
     post admin_memberships_url, params: {
       membership: {user_id: users(:contractor_user).id, current_period_end: "2027-01-01"}
     }
     membership = Membership.source_comped.find_by(user_id: users(:contractor_user).id)
-    assert_equal Date.new(2027, 1, 1), membership.current_period_end.to_date
+    # Asserting only .to_date is exactly what let a midnight-truncation bug
+    # through before: midnight and end-of-day are the same calendar date but
+    # very different instants for entitlement checks.
+    # .floor(6): Postgres timestamp columns are microsecond precision, so the
+    # nanosecond-precision Ruby Time this computes gets truncated on the round
+    # trip through the database.
+    assert_equal Time.zone.parse("2027-01-01").end_of_day.floor(6), membership.current_period_end
+  end
+
+  test "an end date comped through midday of its own last day still grants access" do
+    # The property the admin actually meant by "access through 2027-01-01":
+    # current_period_end must still be in the future at midday on that date,
+    # not already passed the moment the date begins.
+    sign_in_as(@admin, stub_auth: true)
+    post admin_memberships_url, params: {
+      membership: {user_id: users(:contractor_user).id, current_period_end: "2027-01-01"}
+    }
+    membership = Membership.source_comped.find_by(user_id: users(:contractor_user).id)
+
+    travel_to Time.zone.parse("2027-01-01 12:00") do
+      assert membership.current_period_end > Time.current
+    end
+  end
+
+  test "comping with a blank end date stores nil, not a truncated blank" do
+    sign_in_as(@admin, stub_auth: true)
+    post admin_memberships_url, params: {
+      membership: {user_id: users(:contractor_user).id, current_period_end: ""}
+    }
+    membership = Membership.source_comped.find_by(user_id: users(:contractor_user).id)
+    assert_nil membership.current_period_end
   end
 
   test "comping a user who already has a comp updates it rather than adding a second" do
@@ -236,7 +268,7 @@ class Admin::MembershipsControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
   end
 
-  test "an admin edits a comped membership's note and end date" do
+  test "an admin edits a comped membership's note and end date, storing end-of-day" do
     sign_in_as(@admin, stub_auth: true)
     comped = memberships(:editor_user_comped)
     patch admin_membership_url(comped), params: {
@@ -244,7 +276,32 @@ class Admin::MembershipsControllerTest < ActionDispatch::IntegrationTest
     }
     comped.reload
     assert_equal "Renewed for another year", comped.note
-    assert_equal Date.new(2027, 6, 30), comped.current_period_end.to_date
+    # Same weak-assertion trap as the create test: .to_date alone would pass
+    # even if the bug re-truncated this to midnight.
+    # .floor(6): see the comment on the equivalent create-path assertion above.
+    assert_equal Time.zone.parse("2027-06-30").end_of_day.floor(6), comped.current_period_end
+  end
+
+  test "an end date updated through midday of its own last day still grants access" do
+    sign_in_as(@admin, stub_auth: true)
+    comped = memberships(:editor_user_comped)
+    patch admin_membership_url(comped), params: {
+      membership: {current_period_end: "2027-01-01"}
+    }
+    comped.reload
+
+    travel_to Time.zone.parse("2027-01-01 12:00") do
+      assert comped.current_period_end > Time.current
+    end
+  end
+
+  test "updating with a blank end date stores nil" do
+    sign_in_as(@admin, stub_auth: true)
+    comped = memberships(:editor_user_comped)
+    patch admin_membership_url(comped), params: {
+      membership: {current_period_end: ""}
+    }
+    assert_nil comped.reload.current_period_end
   end
 
   test "a scalar-shaped update body is a 400, not a 500" do
