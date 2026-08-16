@@ -27,4 +27,35 @@ namespace :billing do
     # oldest-first makes a replay far easier to follow.
     events.each { |event| Billing::ProcessStripeEventJob.perform_async(event.id) }
   end
+
+  desc "Report the legacy -> new billing migration invariants"
+  task verify_migration: :environment do
+    result = Services::Billing::VerifyMigration.call
+    data = result.data
+
+    puts "Legacy subscriptions with no membership: #{data[:missing_subscriptions].size}"
+    data[:missing_subscriptions].each { |id| puts "  #{id}" }
+
+    puts "Paid users with no legacy grant: #{data[:missing_grants].size}"
+    data[:missing_grants].each { |id| puts "  user #{id}" }
+
+    puts "Legacy donations not imported: #{data[:missing_donations].size}"
+    data[:missing_donations].each { |id| puts "  #{id}" }
+
+    puts "Early supporters who also pay through Stripe: #{data[:overlap_user_ids].size}"
+    puts "  #{data[:overlap_user_ids].join(", ")}" if data[:overlap_user_ids].any?
+
+    # Informational, never a failure: an unmappable customer is an outcome the
+    # design expects. Attach these by hand at /admin/memberships?attached=false.
+    puts "Unattached memberships: #{data[:unattached].size}"
+    data[:unattached].each do |row|
+      puts "  ##{row[:id]} #{row[:stripe_customer_id]} #{row[:stripe_subscription_id]} #{row[:status]}"
+    end
+
+    unless result.success?
+      warn "FAILED: #{result.errors.join("; ")}"
+      exit 1
+    end
+    puts "All invariants hold."
+  end
 end
