@@ -1,11 +1,11 @@
 # Books Curated Collections (Lists nav menu)
 
 ## Status
-- **Status**: Not Started
+- **Status**: Completed
 - **Priority**: Medium
 - **Created**: 2026-08-16
-- **Started**:
-- **Completed**:
+- **Started**: 2026-08-16
+- **Completed**: 2026-08-16
 - **Developer**: Shane Sherman
 
 ## Overview
@@ -126,9 +126,14 @@ six slugs is what stops `/:collection` from matching arbitrary single segments a
 unbounded space of indexable soft-duplicates — the same reasoning already documented in
 `routes.rb` for `/genres/sorted-by/:sort`.
 
-The slug list stays a **literal in `routes.rb`** (matching how `filter_bases` is already
+~~The slug list stays a **literal in `routes.rb`** (matching how `filter_bases` is already
 written there) rather than being read from the registry — autoloading in the router is a
-reloading hazard. A test asserts the literal equals the registry.
+reloading hazard. A test asserts the literal equals the registry.~~
+
+**NOT IMPLEMENTED — this paragraph is wrong.** The reloading-hazard premise was disproven:
+`DomainConstraint` lives in `app/lib/` and is already referenced at the top of
+`config/routes.rb`. Routes read `Collections::Registry.slugs(:books)` directly, so there is no
+duplicate literal and no drift to test for. See **Deviations From Spec**.
 
 #### Redirects (301)
 
@@ -180,9 +185,13 @@ end
 **Edge cases & failure modes.**
 - `/women` matches books where **any** author is female, mirroring legacy's
   `included_author_ids`. Co-authored works count.
-- **27% of books have no usable origin** (`Unknown` or no country row), so they appear in
-  neither `/western` nor `/non-western`. The two pages do not sum to the whole list. This is
-  legacy behavior, not a regression — do not "fix" it.
+- ~~**27% of books have no usable origin** (`Unknown` or no country row), so they appear in
+  neither `/western` nor `/non-western`.~~ **WRONG — corrected during implementation.** A book
+  with an `Unknown` or unlabelled country **does** appear in `/non-western`:
+  `Books::Country.without_label` is a verbatim port of the legacy scope and includes its
+  `.or(where(labels: []))` clause, so unlabelled countries count as non-western. This matches the
+  live legacy site exactly. Only a book with **no country row at all** falls out of both pages.
+  Do not "fix" either behaviour. See **Deviations From Spec**.
 - `indexable?` needs no change: countries are always empty on a collection page, so the
   existing `≤1 category && ≤1 country` rule already covers it.
 - `/rc/` URLs stay noindex with no canonical at all (existing D4 rule).
@@ -199,22 +208,25 @@ end
 
 ## Acceptance Criteria
 
-- [ ] `books_authors.gender` exists, enum ordinals match legacy, `AuthorTransformer` carries
+- [x] `books_authors.gender` exists, enum ordinals match legacy, `AuthorTransformer` carries
       gender, and re-running `data_migration:authors` sets 17,532 female authors in development.
-- [ ] All six collection pages return 200 on their bare slug and render collection-scoped books.
-- [ ] Legacy filtered URLs resolve without redirect, e.g.
+- [x] All six collection pages return 200 on their bare slug and render collection-scoped books.
+- [x] Legacy filtered URLs resolve without redirect, e.g.
       `/africa/the-greatest/fiction/books/since/2000/page/2`.
-- [ ] The three 301 families redirect as tabled above.
-- [ ] `/africa/page/2` paginates; page past the last raises `RecordNotFound`.
-- [ ] Page titles match legacy exactly (see Golden Examples).
-- [ ] Canonical tag present on non-rc pages; absent on `/rc/` pages; noindex rules hold.
-- [ ] The filter bar on a collection page offers genre + year only — no Origin pane.
-- [ ] Apply from the filter modal returns to a collection-scoped path.
-- [ ] The routes.rb slug literal equals `Collections::Registry.for(:books).map(&:slug)`.
-- [ ] Nav "Lists" menu renders 9 items — "All Lists", a divider, then the 8 collections — in
+- [x] The three 301 families redirect as tabled above.
+- [x] `/africa/page/2` paginates; page past the last raises `RecordNotFound`.
+- [x] Page titles match legacy exactly (see Golden Examples).
+- [x] Canonical tag present on non-rc pages; absent on `/rc/` pages; noindex rules hold.
+- [x] The filter bar on a collection page offers genre + year only — no Origin pane.
+- [x] Apply from the filter modal returns to a collection-scoped path.
+- [~] ~~The routes.rb slug literal equals `Collections::Registry.for(:books).map(&:slug)`.~~
+      **Void by design** — there is no literal to compare; routes read the registry directly, so
+      this test would compare a value to itself. Replaced by assertions that every registered slug
+      recognizes. See **Deviations From Spec**.
+- [x] Nav "Lists" menu renders 9 items — "All Lists", a divider, then the 8 collections — in
       both the desktop and narrow-screen copies.
-- [ ] `assert_queries_count` pins the index query count; `assert_no_frame_trapped_links` passes.
-- [ ] `bin/rails test` and `bundle exec standardrb` green; Playwright spec added.
+- [x] `assert_queries_count` pins the index query count; `assert_no_frame_trapped_links` passes.
+- [x] `bin/rails test` and `bundle exec standardrb` green; Playwright spec added.
 
 ### Golden Examples
 
@@ -331,8 +343,54 @@ is `primary: true`, so `FilterPath` emits no `/rc/` prefix for it.
 ---
 
 ## Implementation Notes (living)
-- Approach taken:
-- Important decisions:
+
+- **Approach taken:** six increments, each TDD'd and independently reviewed, on branch
+  `worktree-books-collections`. A collection is one more *narrowing* alongside genre and year —
+  no new controller, no new view.
+- **The seam works.** `filter` is interpreted in exactly one place in the whole application
+  (`Books::RankedBooksQuery.with_collection`). A second domain really is one registry file plus
+  one routes line; the final review verified this rather than taking it on faith.
+- **`assert_empty` is this project's most dangerous assertion.** Seven assertions written during
+  this work passed against code with the feature deleted — an empty expectation, a bare
+  `assert_response :success`, and a `^`-anchored Playwright regex among them. Every one was caught
+  by a reviewer or by execution, none by the author. Prefer
+  `assert_equal [expected_id], actual` and prove a new test can fail before trusting it.
+
+## Deviations From Spec
+
+Two statements in this spec turned out to be **wrong** and were deliberately not implemented.
+Do not "restore" them later.
+
+1. **The `/non-western` Unknown-origin note (above) is incorrect.** It claims books with `Unknown`
+   or no origin "appear in neither `/western` nor `/non-western`". In fact `Books::Country.without_label`
+   is a verbatim port of the legacy scope, including its `.or(where(labels: []))` clause, so
+   unlabelled countries **are** non-western — matching the live legacy site exactly. The
+   implementation is right; this spec's prose was wrong. The test-seed table further down the spec
+   contradicts the prose and is the accurate half.
+
+2. **The routes.rb slug list is NOT a literal, and the route-consistency test does not exist.**
+   The spec prescribed duplicating the six slugs into `config/routes.rb` plus a test asserting the
+   literal matches the registry, on the assumption that autoloading from the router was unsafe.
+   That assumption was disproven during pre-flight: `DomainConstraint` lives in `app/lib/` and is
+   already referenced at the top of `config/routes.rb`. Routes now read
+   `Collections::Registry.slugs(:books)` directly, so no duplicate exists and drift is structurally
+   impossible — which also means the prescribed test would have compared a value to itself, the
+   vacuous-assertion defect the review rubric flags. Acceptance criterion "the routes.rb slug
+   literal equals the registry" is therefore **void by design**, replaced with assertions that every
+   registered slug actually recognizes.
+
+Smaller, intentional departures:
+
+3. **No bespoke gender backfill migrator.** The spec's caution about `AuthorMigrator` overwriting
+   edited fields is moot: the owner confirmed there are no post-migration author edits and that
+   cutover truncates and re-runs `data_migration:all` from scratch. `AuthorTransformer` gained one
+   line; the existing migrator did the rest.
+4. **No fixture-file edits, as specced** — but the mechanism differs. Collections not covered by
+   existing fixtures are seeded inline per test rather than via new YAML, which held blast radius
+   at zero. An attempt to add a category to shared fixture YAML during increment 3 broke an
+   unrelated `Books::BookTest`, confirming the spec's reasoning the hard way.
+5. **The nav "divider" is a `menu-title` group label**, not a visible rule — better for screen
+   readers, visually different from what was specced.
 
 ### Key Files Touched (paths only)
 - `app/lib/collections/collection.rb`
@@ -351,10 +409,28 @@ is `primary: true`, so `FilterPath` emits no `/rc/` prefix for it.
 - …
 
 ### Deviations From Plan
-- …
+- See **Deviations From Spec** above — the substantive ones are recorded there.
+- Two defects originated in the plan's own test code and were fixed during review: a pagination
+  test that asserted a 404, and a "composes with a year bound" test that asserted an empty result
+  a broken implementation would also produce.
 
 ## Acceptance Results
-- Date, verifier, artifacts:
+
+Verified 2026-08-16 on branch `worktree-books-collections`.
+
+- **Minitest:** 6647 runs, 159,641 assertions, 0 errors. 3 failures, all pre-existing
+  `Webhooks::StripeControllerTest` (Stripe webhook signing) and unrelated to this branch.
+- **`bundle exec standardrb`:** clean.
+- **Playwright:** `e2e/tests/books/collections.spec.ts` 3/3; `e2e/tests/books/lists.spec.ts` 9/9
+  (the latter regressed on the nav rewrite and was fixed — "Lists" is now a `<summary>`, and the
+  link inside is "All Lists").
+- **Manual, against real backfilled data:** `/women` renders "The Greatest Books of All Time
+  Written by Women" with a full page of 100 books.
+- **Development database migrated and backfilled:** 58,193 authors; gender now
+  male 36,437 / female 17,532 / non_binary 143 / unspecified 284 — an exact match to the legacy
+  counts. Snapshot taken first: `tmp/db-snapshots/dev-20260816-180830-pre-author-gender.dump`.
+- **Not yet run:** the production author-gender backfill. Cutover re-runs `data_migration:all`
+  from scratch, so no separate production step is required.
 
 ## Future Improvements
 - Origin filtering scoped to a collection (`/africa/…/written-by/nigerian/authors`) — a new
