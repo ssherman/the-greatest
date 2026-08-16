@@ -62,6 +62,11 @@ female / 143 non_binary / 284 unspecified / 3,797 null out of 58,193 authors.
 **No other schema change.** `Books::Country#labels` is already populated (african 53,
 asian 33, western 24, latin_american 23) with `with_label` / `without_label` scopes.
 
+**Migration durability is a non-concern here.** At cutover the legacy site goes offline, the
+data is truncated, and `data_migration:all` runs from scratch. There are no post-migration
+author edits to preserve and there never will be — the new app's author rows are test data
+until then. Pick the simplest correct thing.
+
 ### New classes
 
 | Path | Purpose |
@@ -69,7 +74,6 @@ asian 33, western 24, latin_american 23) with `with_label` / `without_label` sco
 | `app/lib/collections/collection.rb` | Domain-neutral value object |
 | `app/lib/collections/registry.rb` | `Registry.for(domain)`, `Registry.find(domain, slug)` |
 | `app/lib/books/collections_registry.rb` | The six books entries |
-| `app/lib/services/books_migration/author_gender_migrator.rb` | Gender-only backfill |
 
 `Collection` is `Struct.new(..., keyword_init: true)` — house style; there is no
 `Data.define` anywhere in this codebase.
@@ -195,8 +199,8 @@ end
 
 ## Acceptance Criteria
 
-- [ ] `books_authors.gender` exists, enum ordinals match legacy, and the backfill sets 17,532
-      female authors in development.
+- [ ] `books_authors.gender` exists, enum ordinals match legacy, `AuthorTransformer` carries
+      gender, and re-running `data_migration:authors` sets 17,532 female authors in development.
 - [ ] All six collection pages return 200 on their bare slug and render collection-scoped books.
 - [ ] Legacy filtered URLs resolve without redirect, e.g.
       `/africa/the-greatest/fiction/books/since/2000/page/2`.
@@ -246,7 +250,7 @@ GET /v/grid/africa             ->  301  /africa
 
 | # | Scope |
 |---|---|
-| 1 | Gender column + enum + `AuthorGenderMigrator` + `AuthorTransformer` + rake task |
+| 1 | Gender column + enum + `AuthorTransformer` gains `gender:` (re-run `data_migration:authors` in dev) |
 | 2 | `Collections::Collection` + `Registry` + `Books::CollectionsRegistry` |
 | 3 | `collection:` through `RankedBooksQuery`, `FilterPath`, `FilterTitle`, `FilterFacetsQuery` |
 | 4 | Routes, redirects, controller, view, filter bar/modal/Apply |
@@ -272,16 +276,16 @@ exactly as legacy. Both copies in the layout (desktop and narrow-screen) need it
 That is 9 items (the divider is not an entry). Spec B inserts The Global Canon at position 3,
 making 10 — matching legacy exactly.
 
-### Backfill: a gender-only migrator, NOT a re-run of AuthorMigrator
+### Backfill: add gender to AuthorTransformer and re-run `data_migration:authors`
 
-`AuthorMigrator` is idempotent, but re-running it rewrites `description`, `sort_name`, and
-`alternate_names` from legacy values — reverting anything edited in the new app since the
-original migration. Instead, `AuthorGenderMigrator` streams legacy `(id, gender)` in batches
-of 1000, groups each batch by gender, and issues one `update_all` per group (~232 queries,
-seconds). It touches exactly one column.
+No bespoke migrator. `AuthorTransformer` gains `gender: attrs["gender"]` — that single line
+is the whole production path, because the real cutover truncates and re-runs
+`data_migration:all` from scratch against an offline legacy site.
 
-`AuthorTransformer` **also** gains `gender: attrs["gender"]` so a future full
-`data_migration:all` carries it forward.
+Re-running `data_migration:authors` on the current development database is then just a
+convenience so `/women` can be built and eyeballed. `AuthorMigrator` is idempotent
+(`find_or_initialize_by(id:)` + `save!`), and there have been no post-migration author edits
+to clobber — the new app's author rows are test data until cutover.
 
 ### Test Seed / Fixtures
 
@@ -317,7 +321,7 @@ Existing books author fixtures: `tolstoy`, `king`, `bachman`, `garnett`,
 - `app/lib/collections/registry.rb`
 - `app/lib/books/collections_registry.rb`
 - `app/lib/books/{filter_path,filter_title,ranked_books_query,filter_facets_query}.rb`
-- `app/lib/services/books_migration/{author_gender_migrator,author_transformer}.rb`
+- `app/lib/services/books_migration/author_transformer.rb`
 - `app/controllers/books/{ranked_items_controller,filters_controller}.rb`
 - `app/components/books/{filter_bar_component,filter_modal_component}.rb`
 - `app/views/books/ranked_items/index.html.erb`
