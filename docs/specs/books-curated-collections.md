@@ -1,0 +1,347 @@
+# Books Curated Collections (Lists nav menu)
+
+## Status
+- **Status**: Not Started
+- **Priority**: Medium
+- **Created**: 2026-08-16
+- **Started**:
+- **Completed**:
+- **Developer**: Shane Sherman
+
+## Overview
+
+Migrate the legacy site's curated "Lists" nav menu to the new app: six filtered collection
+pages (`/women`, `/africa`, `/asia`, `/latin-america`, `/western`, `/non-western`) on their
+legacy URLs, plus the nav menu itself. The collection machinery is built domain-neutral so
+music can adopt it later, but **books is the only domain that registers collections here**.
+
+**Non-goals.** The Global Canon (`/global-canon`) is a separate spec — different query,
+different filters, its own page. Country/Origin filtering on collection pages is out of
+scope (genre + year only, matching legacy). Movies is not in scope.
+
+## Context & Links
+
+- Legacy source: `/home/shane/dev/the-greatest-books/admin`
+  - `app/controllers/default_controller.rb` — the six collection actions
+  - `app/views/shared/_navbar.html.erb` — the nav menu being migrated
+  - `app/lib/default_title_generator.rb` — title grammar (already ported as `Books::FilterTitle`)
+  - `app/services/book_list_query.rb` — gender semantics (`included_author_ids`)
+- New app (authoritative):
+  - `web-app/app/controllers/books/ranked_items_controller.rb`
+  - `web-app/app/lib/books/{filter_path,filter_title,filter_params,ranked_books_query,filter_facets_query}.rb`
+  - `web-app/config/routes.rb` — existing `filter_bases` / `filter_dates` loop
+  - `web-app/app/views/layouts/books/application.html.erb` — nav (two copies)
+- Related: `docs/features/books-public-filters`, `books-western-canon-penalty` (source of the
+  `Books::Country#labels` data this spec consumes)
+
+### Two nav entries need no backend work
+
+| Nav entry | URL | Status |
+|---|---|---|
+| The Greatest Books of the 21st Century | `/the-greatest-books/since/2000` | **Already routes** — legacy filter grammar is ported verbatim |
+| Our Users' Favorite Books of All Time | `/lists/463` | **Already routes** — list 463 migrated with its id intact |
+
+## Interfaces & Contracts
+
+### Domain Model (diffs only)
+
+**`books_authors`** — add gender. Legacy `authors.gender` was never migrated; `/women`
+cannot be built without it.
+
+- `add_column :books_authors, :gender, :integer`
+- `add_index :books_authors, :gender`
+- Migration: `bin/rails generate migration AddGenderToBooksAuthors gender:integer:index`
+- `Books::Author`: `enum :gender, {male: 0, female: 1, non_binary: 2, unspecified: 3}`
+
+Ordinals match legacy exactly — legacy's `enum :gender, [:male, :female, :non_binary,
+:unspecified]` is a positional array, so raw integers copy across unchanged.
+
+Legacy coverage (verified 2026-08-16 against the live legacy DB): 36,437 male / 17,532
+female / 143 non_binary / 284 unspecified / 3,797 null out of 58,193 authors.
+
+**No other schema change.** `Books::Country#labels` is already populated (african 53,
+asian 33, western 24, latin_american 23) with `with_label` / `without_label` scopes.
+
+### New classes
+
+| Path | Purpose |
+|---|---|
+| `app/lib/collections/collection.rb` | Domain-neutral value object |
+| `app/lib/collections/registry.rb` | `Registry.for(domain)`, `Registry.find(domain, slug)` |
+| `app/lib/books/collections_registry.rb` | The six books entries |
+| `app/lib/services/books_migration/author_gender_migrator.rb` | Gender-only backfill |
+
+`Collection` is `Struct.new(..., keyword_init: true)` — house style; there is no
+`Data.define` anywhere in this codebase.
+
+```ruby
+Collection = Struct.new(:domain, :slug, :name, :title_prefix, :title_suffix, :filter,
+                        keyword_init: true)
+```
+
+**Naming constraint (load-bearing):** the books file defines `Books::CollectionsRegistry`,
+**not** `Books::Collections`. A nested `Collections` module inside `Books::` would shadow
+the shared top-level `::Collections` and produce the confusing `NameError` this codebase has
+hit repeatedly. Any reference to `::Books::` from inside `Collections::` must be
+root-anchored for the same reason.
+
+### The seam
+
+`filter` is an **opaque hash the shared layer never reads**. Only the owning domain's query
+object interprets it. This is what lets music register collections later with a completely
+different vocabulary and no changes to shared code.
+
+| slug | nav name | title_prefix | title_suffix | filter |
+|---|---|---|---|---|
+| `women` | Greatest Books Written by Women | — | `Written by Women` | `{author_gender: :female}` |
+| `africa` | Greatest African Books | `African` | — | `{country_label: "african"}` |
+| `asia` | Greatest Asian Books | `Asian` | — | `{country_label: "asian"}` |
+| `latin-america` | Greatest Latin American Books | `Latin American` | — | `{country_label: "latin_american"}` |
+| `western` | Greatest Western Canon Books | `Western` | — | `{country_label: "western"}` |
+| `non-western` | Greatest Non-Western Canon Books | `Non-Western` | — | `{country_label: "western", exclude: true}` |
+
+### Endpoints
+
+Generated by one constrained `:collection` segment rather than six copies of the grammar —
+roughly 48 routes instead of 288. Source of truth: `config/routes.rb`.
+
+| Verb | Path | Purpose |
+|---|---|---|
+| GET | `/:collection` | Canonical collection page |
+| GET | `/:collection/page/:page` | Pagination |
+| GET | `/:collection/the-greatest-books/<date>` | Date-filtered |
+| GET | `/:collection/the-greatest/:category_id/books<date>` | Genre (+ date) filtered |
+| GET | `/rc/:ranking_configuration_id/:collection…` | Same set under an rc prefix (noindex) |
+
+`<date>` reuses the existing `filter_dates` array verbatim: `""`, `/of/:year`,
+`/since/:published_start`, `/to/:published_end`, `/from/:published_start/to/:published_end`.
+Every form also has a `/page/:page` variant.
+
+**The `collection` regex constraint is load-bearing, not cosmetic.** `Regexp.union` of the
+six slugs is what stops `/:collection` from matching arbitrary single segments and minting an
+unbounded space of indexable soft-duplicates — the same reasoning already documented in
+`routes.rb` for `/genres/sorted-by/:sort`.
+
+The slug list stays a **literal in `routes.rb`** (matching how `filter_bases` is already
+written there) rather than being read from the registry — autoloading in the router is a
+reloading hazard. A test asserts the literal equals the registry.
+
+#### Redirects (301)
+
+| From | To |
+|---|---|
+| `/:collection/the-greatest-books` | `/:collection` |
+| `/:collection/the-greatest/books` (legacy oddity) | `/:collection` |
+| `/v/:view_type/:collection(/*rest)` | `/:collection` |
+
+Precedent: `get "the-greatest-books", to: redirect("/", status: 301)` and the existing
+`v/:view_type` handling for `/lists` and `/searches`.
+
+### Behaviors (pre/postconditions)
+
+**Preconditions.** `params[:collection]` is regex-constrained to a known slug;
+`Collections::Registry.find(:books, slug)` returning nil raises `RecordNotFound` (defensive —
+the constraint should make it unreachable).
+
+**Postconditions.**
+- `Books::RankedBooksQuery.call(..., collection:)` narrows the relation by `collection.filter`:
+
+```ruby
+case collection&.filter
+in {country_label:, exclude: true}
+  relation.where(item_id: Books::BookCountry.where(
+    country_id: Books::Country.without_label(country_label).select(:id)).select(:book_id))
+in {country_label:}
+  relation.where(item_id: Books::BookCountry.where(
+    country_id: Books::Country.with_label(country_label).select(:id)).select(:book_id))
+in {author_gender:}
+  relation.where(item_id: Books::BookAuthor.where(
+    author_id: Books::Author.where(gender: author_gender).select(:id)).select(:book_id))
+else
+  relation
+end
+```
+
+- `Books::FilterPath.call(..., collection:)` prefixes `/:slug`; `unfiltered_path` returns
+  `/:slug` (or `/:slug/page/N`) instead of `/`.
+- `Books::FilterTitle` inserts `title_prefix` directly after `"The Greatest"` (legacy order,
+  before countries) and appends `title_suffix` last.
+- `Books::FilterFacetsQuery.genres` narrows by the collection, so the genre pane shows
+  collection-scoped counts.
+- `Books::FiltersController#show` (the Apply endpoint) resolves `params[:collection]` and
+  passes it to `FilterPath`, so Apply redirects back **into** the collection.
+- `@show_hero` gains `&& @collection.nil?` — the hero is site-level marketing copy.
+- Meta description needs no new field: `index.html.erb` already derives it from `@page_title`.
+
+**Edge cases & failure modes.**
+- `/women` matches books where **any** author is female, mirroring legacy's
+  `included_author_ids`. Co-authored works count.
+- **27% of books have no usable origin** (`Unknown` or no country row), so they appear in
+  neither `/western` nor `/non-western`. The two pages do not sum to the whole list. This is
+  legacy behavior, not a regression — do not "fix" it.
+- `indexable?` needs no change: countries are always empty on a collection page, so the
+  existing `≤1 category && ≤1 country` rule already covers it.
+- `/rc/` URLs stay noindex with no canonical at all (existing D4 rule).
+- Filtered-with-zero-results stays noindex (existing rule).
+
+### Non-Functionals
+
+- No N+1 on the collection index — it renders books in a loop. Pin with
+  `assert_queries_count`.
+- Collection pages are edge-cached by the existing `cache_for_index_page` (6h).
+- Path-based pagination is inherited free: `Pagination::PathBuilder.from_request` is fully
+  generic, so `/africa` → `/africa/page/2` with no new code.
+- Public, unauthenticated; no role changes.
+
+## Acceptance Criteria
+
+- [ ] `books_authors.gender` exists, enum ordinals match legacy, and the backfill sets 17,532
+      female authors in development.
+- [ ] All six collection pages return 200 on their bare slug and render collection-scoped books.
+- [ ] Legacy filtered URLs resolve without redirect, e.g.
+      `/africa/the-greatest/fiction/books/since/2000/page/2`.
+- [ ] The three 301 families redirect as tabled above.
+- [ ] `/africa/page/2` paginates; page past the last raises `RecordNotFound`.
+- [ ] Page titles match legacy exactly (see Golden Examples).
+- [ ] Canonical tag present on non-rc pages; absent on `/rc/` pages; noindex rules hold.
+- [ ] The filter bar on a collection page offers genre + year only — no Origin pane.
+- [ ] Apply from the filter modal returns to a collection-scoped path.
+- [ ] The routes.rb slug literal equals `Collections::Registry.for(:books).map(&:slug)`.
+- [ ] Nav "Lists" menu renders 9 items — "All Lists", a divider, then the 8 collections — in
+      both the desktop and narrow-screen copies.
+- [ ] `assert_queries_count` pins the index query count; `assert_no_frame_trapped_links` passes.
+- [ ] `bin/rails test` and `bundle exec standardrb` green; Playwright spec added.
+
+### Golden Examples
+
+```text
+GET /africa
+  title: The Greatest African Books of All Time
+  canonical: /africa
+
+GET /women
+  title: The Greatest Books of All Time Written by Women
+
+GET /africa/the-greatest/fiction/books/since/2000
+  title: The Greatest African Fiction Books Since 2000
+  canonical: /africa/the-greatest/fiction/books/since/2000
+
+GET /africa/the-greatest-books  ->  301  /africa
+GET /v/grid/africa             ->  301  /africa
+```
+
+---
+
+## Agent Hand-Off
+
+### Constraints
+
+- Follow existing project patterns; the collection is **one more narrowing alongside genre
+  and year**, not a new subsystem. No new controller, no new view.
+- Rails generators for the migration. Rails 8 enum syntax (`enum :gender, {...}`).
+- `standardrb`, not rubocop. Do not run brakeman.
+- daisyUI 5: the nav menu must avoid the ten removed v4 classes; the lint test guards it.
+
+### Increments
+
+| # | Scope |
+|---|---|
+| 1 | Gender column + enum + `AuthorGenderMigrator` + `AuthorTransformer` + rake task |
+| 2 | `Collections::Collection` + `Registry` + `Books::CollectionsRegistry` |
+| 3 | `collection:` through `RankedBooksQuery`, `FilterPath`, `FilterTitle`, `FilterFacetsQuery` |
+| 4 | Routes, redirects, controller, view, filter bar/modal/Apply |
+| 5 | Nav menu (9 items) + Playwright |
+
+### Nav menu contents
+
+`<li><details><summary>Lists</summary><ul>…</ul></details></li>` — the documented daisyUI 5
+nested-menu pattern, no JS. `<summary>` does not navigate, so "All Lists" is the first item,
+exactly as legacy. Both copies in the layout (desktop and narrow-screen) need it.
+
+1. All Lists → `/lists`
+2. *(divider)*
+3. The Greatest Books of the 21st Century → `/the-greatest-books/since/2000`
+4. Greatest Books Written by Women → `/women`
+5. Greatest African Books → `/africa`
+6. Greatest Asian Books → `/asia`
+7. Greatest Latin American Books → `/latin-america`
+8. Greatest Non-Western Canon Books → `/non-western`
+9. Greatest Western Canon Books → `/western`
+10. Our Users' Favorite Books of All Time → `/lists/463`
+
+That is 9 items (the divider is not an entry). Spec B inserts The Global Canon at position 3,
+making 10 — matching legacy exactly.
+
+### Backfill: a gender-only migrator, NOT a re-run of AuthorMigrator
+
+`AuthorMigrator` is idempotent, but re-running it rewrites `description`, `sort_name`, and
+`alternate_names` from legacy values — reverting anything edited in the new app since the
+original migration. Instead, `AuthorGenderMigrator` streams legacy `(id, gender)` in batches
+of 1000, groups each batch by gender, and issues one `update_all` per group (~232 queries,
+seconds). It touches exactly one column.
+
+`AuthorTransformer` **also** gains `gender: attrs["gender"]` so a future full
+`data_migration:all` carries it forward.
+
+### Test Seed / Fixtures
+
+Existing books author fixtures: `tolstoy`, `king`, `bachman`, `garnett`,
+`excluded_placeholder`. Existing country fixtures: `french` (western), `japanese` (asian),
+`unknown` (`[]`), `algerian` (**no labels**).
+
+- `garnett` takes `gender: female`.
+- `algerian` takes `labels: [african]` — factually correct and unlocks `/africa` tests, **but
+  it silently changes what `without_label("western")` returns.** Re-check every existing test
+  that leans on that scope; do not assume it is safe.
+- A `latin_american` country fixture does not exist and must be added.
+- `ActiveRecord::FixtureSet.create_fixtures` TRUNCATES — read fixture YAML, never load it.
+
+### Environment hazards
+
+- **The worktree shares `the_greatest_test` with the main checkout.** This spec adds a column
+  to `books_authors`; if anything runs from the main checkout mid-run, the column vanishes.
+  Coordinate before running the suite.
+- A fresh worktree is missing gitignored `web-app/.env` and `web-app/config/master.key` —
+  symlink them from the main checkout.
+- The development database is not disposable. Books data exists **only** in development and
+  takes hours to rebuild. Snapshot with `bin/snapshot-dev-db.sh` before the backfill.
+
+---
+
+## Implementation Notes (living)
+- Approach taken:
+- Important decisions:
+
+### Key Files Touched (paths only)
+- `app/lib/collections/collection.rb`
+- `app/lib/collections/registry.rb`
+- `app/lib/books/collections_registry.rb`
+- `app/lib/books/{filter_path,filter_title,ranked_books_query,filter_facets_query}.rb`
+- `app/lib/services/books_migration/{author_gender_migrator,author_transformer}.rb`
+- `app/controllers/books/{ranked_items_controller,filters_controller}.rb`
+- `app/components/books/{filter_bar_component,filter_modal_component}.rb`
+- `app/views/books/ranked_items/index.html.erb`
+- `app/views/layouts/books/application.html.erb`
+- `config/routes.rb`
+- `db/migrate/*_add_gender_to_books_authors.rb`
+
+### Challenges & Resolutions
+- …
+
+### Deviations From Plan
+- …
+
+## Acceptance Results
+- Date, verifier, artifacts:
+
+## Future Improvements
+- Origin filtering scoped to a collection (`/africa/…/written-by/nigerian/authors`) — a new
+  URL shape legacy never had. Deliberately deferred.
+- Music collections: one `Music::CollectionsRegistry` + one routes line, no shared changes.
+
+## Related PRs
+- #…
+
+## Documentation Updated
+- [ ] `documentation.md`
+- [ ] Class docs
