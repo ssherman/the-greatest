@@ -181,6 +181,25 @@ namespace :data_migration do
     pp({review_summaries: Services::Reviews::SummaryRecalculator.backfill_all!})
   end
 
+  desc "Import legacy users.paid early supporters as source: :legacy memberships"
+  task memberships: :environment do
+    # Print the arithmetic rather than trusting the count: upsert_row skips
+    # silently for a user missing from the new users table, and a silent skip in
+    # a billing migration is exactly the thing worth surfacing.
+    legacy_paid = LegacyBooks::User.where(paid: true).count
+
+    result = Services::BooksMigration::MembershipMigrator.call
+    pp result
+    abort "memberships migration failed: #{result[:error]}" unless result[:success]
+
+    granted = Membership.source_legacy.count
+    pp({
+      legacy_paid_users: legacy_paid,
+      legacy_memberships_now: granted,
+      unaccounted_for: legacy_paid - granted
+    })
+  end
+
   desc "Run all Phase-1 migrators in dependency order"
   task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers,
     :categories, :category_items, :book_attributes, :book_type_categories, :countries,
