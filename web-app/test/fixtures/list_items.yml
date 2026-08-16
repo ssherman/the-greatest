@@ -48,6 +48,14 @@ high_quality_item:
   listable: shawshank (Movies::Movie)
   position: 1
 
+# listable points at "one (Books::Book)", a label with NO corresponding book
+# fixture. Rails hashes the label into an id anyway, so this row loads with a
+# dangling listable_id -- percentage_western can never resolve it to a book.
+# That's why lists(:books_list) computes 0.0% western and why the books tests
+# in weight_calculator_v1_test.rb stay green even though books_penalty is
+# applied to books_global at value 20. Repointing this at a real book would
+# push books_list to 100% western and quietly add a 20-point penalty across
+# that whole test file. Do not "fix" this fixture without auditing that file.
 books_item:
   list: books_list
   listable: one (Books::Book)

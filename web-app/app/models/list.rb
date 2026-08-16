@@ -106,6 +106,12 @@ class List < ApplicationRecord
     @wizard_manager ||= Services::Lists::Wizard::StateManager.for(self)
   end
 
+  # Only books carry country-of-origin data, so every other media type answers
+  # nil and the weight calculator skips the western-canon penalty.
+  def percentage_western
+    nil
+  end
+
   def self.median_list_count(type: nil)
     # Get lists of the specified type, or all lists if no type specified
     scope = type ? where(type: type) : all

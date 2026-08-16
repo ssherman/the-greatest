@@ -2,6 +2,8 @@
 
 module Rankings
   class WeightCalculatorV1 < WeightCalculator
+    PERCENTAGE_WESTERN_THRESHOLD = 90.0
+
     private
 
     def calculate_weight
@@ -229,7 +231,34 @@ module Rankings
         end
       end
 
+      penalty += calculate_percentage_western_penalty_with_details(details)
+
       penalty
+    end
+
+    # Lists that declare a location focus up front ("30 Best Australian Books")
+    # are exempt: their western tilt is the stated premise, not unexamined bias.
+    #
+    # Checks run cheapest-first. The penalty lookup below runs for music, games
+    # and movies too whenever their configuration carries a percentage_western
+    # penalty (the fixtures show this happens) -- it's the base ::List#percentage_western
+    # answering nil that costs those domains nothing more than that one lookup.
+    def calculate_percentage_western_penalty_with_details(details)
+      return 0 if list.location_specific?
+
+      penalty_value, penalty_info = find_penalty_details_by_dynamic_type(:percentage_western)
+      return 0 unless penalty_value > 0
+
+      percentage = list.percentage_western
+      return 0 if percentage.nil? || percentage < PERCENTAGE_WESTERN_THRESHOLD
+
+      details["penalties"] << penalty_info.merge(
+        "source" => "dynamic_attribute",
+        "dynamic_type" => "percentage_western",
+        "attribute_value" => percentage,
+        "value" => penalty_value
+      )
+      penalty_value
     end
 
     def calculate_creator_penalties_with_details(details)
