@@ -65,13 +65,22 @@ class Books::RankedItemsController < RankedItemsController
 
   private
 
+  # request.path_parameters, not params: params also picks up the query
+  # string, and on a non-collection route (e.g. plain "/") there is no
+  # :collection path segment, so params[:collection] would fall through to
+  # ?collection=africa and let a query string reach the exact soft-duplicate
+  # URL space the route's Regexp.union constraint exists to prevent.
+  # path_parameters only contains what a route that passed the regex
+  # populated.
+  #
   # The route regex already restricts :collection to known slugs; this is the
   # defensive half, and the only thing standing between a future loosened
   # constraint and a 500.
   def find_collection
-    return if params[:collection].blank?
+    slug = request.path_parameters[:collection]
+    return if slug.blank?
 
-    @collection = Collections::Registry.find(:books, params[:collection])
+    @collection = Collections::Registry.find(:books, slug)
     raise ActiveRecord::RecordNotFound if @collection.nil?
   end
 end

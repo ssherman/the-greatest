@@ -34,6 +34,15 @@ module Books
         @controller.view_assigns["ranked_books"].map(&:item_id)
     end
 
+    test "a collection slug in the query string does not scope the homepage" do
+      get "/?collection=africa"
+
+      assert_response :success
+      assert_equal "The Greatest Books of All Time", @controller.view_assigns["page_title"]
+      ids = @controller.view_assigns["ranked_books"].map(&:item_id)
+      assert_includes ids, books_books(:of_mice_and_men).id
+    end
+
     test "women shows books with any female author" do
       books_authors(:garnett).update!(gender: :female)
       Books::BookAuthor.create!(book: books_books(:war_and_peace),
@@ -104,6 +113,19 @@ module Books
     end
 
     test "a collection index does not N+1 over its books" do
+      # A bound checked against the default setup's single rendered book can't
+      # tell a fixed preload from a per-row N+1 -- both look like "8 queries"
+      # at n=1. Render at the scale the pagination test already establishes
+      # (100+ books per page), each with its own distinct author, so a query
+      # that scales with the row count would actually show up here.
+      120.times do |i|
+        book = Books::Book.create!(title: "Western Filler #{i}", first_published_year: 1950)
+        author = Books::Author.create!(name: "Filler Author #{i}", slug: "filler-author-#{i}", kind: 0)
+        Books::BookCountry.create!(book: book, country: books_countries(:french))
+        Books::BookAuthor.create!(book: book, author: author, position: 1, role: 0)
+        RankedItem.create!(item: book, ranking_configuration: @rc, rank: 100 + i, score: 10)
+      end
+
       assert_queries_count(8) { get "/western" }
     end
 
