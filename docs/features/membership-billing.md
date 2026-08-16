@@ -119,13 +119,29 @@ is always visible rather than something you have to go looking for.
 | `data_migration:memberships` | Runs `Services::BooksMigration::MembershipMigrator` — imports every legacy `users.paid: true` row as a `source: :legacy` Membership. Idempotent (`find_or_initialize_by`-based), safe to re-run. | Once, as part of the legacy-history import (§5). |
 | `data_migration:donations` | Runs `Services::BooksMigration::DonationMigrator` — imports the legacy `donations`-equivalent table into `donations`. Idempotent, safe to re-run. | Once, as part of the legacy-history import (§5), immediately after `data_migration:memberships`. |
 
+**`rake stripe:sync_plans` and `stripe:bootstrap` are not implemented yet.** The billing plans
+admin screen (`/admin/billing_plans` and its edit form) already tells the operator to run `rake
+stripe:sync_plans` to refresh price ids and amounts, and the project spec names both tasks as the
+eventual owners of those fields — but neither task exists in this codebase today. They arrive with
+the checkout increment. Until then, `billing_plans` rows hold whatever seeded them, and running
+either command gets `Don't know how to build task`.
+
 ## 5. Runbook: importing legacy history
 
 This is a one-time operation, run once in production after the code is deployed.
 
-**Schema migrates itself.** `bin/docker-entrypoint` runs `db:prepare` whenever the command it's
-given contains `rails server`, so the `web` container migrates the schema (including the
-`memberships` uniqueness index) automatically on every deploy. No manual migration step.
+**Schema migrates itself — for the `web` container only.** `bin/docker-entrypoint` runs
+`db:prepare` whenever the command it's given contains `rails server`, so the `web` container
+migrates the schema (including the `memberships` uniqueness index) automatically on every deploy.
+The `worker` container runs `bundle exec sidekiq`, which does not match that check, so it never
+runs `db:prepare` itself. `docker-compose.prod.yml` gives `worker` a plain `depends_on: [redis,
+web]` with no health-check condition, so `docker compose up -d` starts both containers at roughly
+the same time with nothing guaranteeing the web container's `db:prepare` has finished before
+Sidekiq starts pulling jobs off the queue. In practice this means there is a window during every
+deploy where a Sidekiq job can run against a schema mid-migration. For this feature set the
+exposure is small — the only migration in play adds an index and no new column, and
+`ReconcileCustomer` does not depend on that index existing — but any future change that adds a
+column a job reads inherits this same window, and is worth remembering when planning a deploy.
 
 **The three data tasks are manual.** Run them by hand, in the web container, in this exact order:
 
