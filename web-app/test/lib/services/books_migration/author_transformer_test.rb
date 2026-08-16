@@ -22,4 +22,18 @@ class Services::BooksMigration::AuthorTransformerTest < ActiveSupport::TestCase
     assert_equal "Homer", attrs[:sort_name]
     assert_equal [], attrs[:alternate_names]
   end
+
+  test "carries gender straight across as the raw legacy integer" do
+    attrs = Services::BooksMigration::AuthorTransformer.call(
+      {"id" => 7, "name" => "Virginia Woolf", "gender" => 1}
+    )
+    assert_equal 1, attrs[:gender]
+  end
+
+  test "a null legacy gender stays nil" do
+    attrs = Services::BooksMigration::AuthorTransformer.call(
+      {"id" => 8, "name" => "Anon", "gender" => nil}
+    )
+    assert_nil attrs[:gender]
+  end
 end

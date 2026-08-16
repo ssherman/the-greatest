@@ -10,6 +10,7 @@ require "test_helper"
 #  death_year            :integer
 #  description           :text
 #  exclude_from_rankings :boolean          default(FALSE), not null
+#  gender                :integer
 #  kind                  :integer          default(0), not null
 #  name                  :string           not null
 #  slug                  :string           not null
@@ -20,6 +21,7 @@ require "test_helper"
 # Indexes
 #
 #  index_books_authors_on_alternate_names  (alternate_names) USING gin
+#  index_books_authors_on_gender           (gender)
 #  index_books_authors_on_kind             (kind)
 #  index_books_authors_on_slug             (slug) UNIQUE
 #
@@ -105,6 +107,24 @@ module Books
 
     test "exclude_from_rankings can be set" do
       assert books_authors(:excluded_placeholder).exclude_from_rankings
+    end
+
+    test "gender enum ordinals match the legacy authors.gender enum" do
+      assert_equal({"male" => 0, "female" => 1, "non_binary" => 2, "unspecified" => 3},
+        Books::Author.genders)
+    end
+
+    test "gender is optional" do
+      author = Books::Author.new(name: "Anon")
+      assert author.valid?
+      assert_nil author.gender
+    end
+
+    test "authors can be scoped by gender" do
+      garnett = books_authors(:garnett)
+      garnett.update!(gender: :female)
+
+      assert_includes Books::Author.where(gender: :female), garnett
     end
   end
 end
