@@ -132,5 +132,16 @@ module Books
     test "collection pages have no turbo-frame trapped links" do
       assert_no_frame_trapped_links "/africa"
     end
+
+    test "the nav lists every registered collection" do
+      get "/"
+
+      Collections::Registry.for(:books).each do |collection|
+        assert_select "a[href=?]", "/#{collection.slug}", {minimum: 1},
+          "nav is missing a link to /#{collection.slug}"
+      end
+      assert_select "a[href=?]", "/the-greatest-books/since/2000"
+      assert_select "a[href=?]", "/lists/463"
+    end
   end
 end

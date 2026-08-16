@@ -33,13 +33,7 @@
             </svg>
           </div>
           <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
-            <li><%= link_to "Books", books_root_path %></li>
-            <li><%= link_to "Lists", books_lists_path %></li>
-            <li><%= link_to "Authors", books_authors_path %></li>
-            <%# Revealed client-side by user_list_state_controller when signed in. %>
-            <li id="navbar_my_lists" class="hidden"><a href="/my/lists">My Lists</a></li>
-            <li id="navbar_my_searches" class="hidden"><a href="/searches">My Searches</a></li>
-            <li id="navbar_my_reviews" class="hidden"><a href="/my/reviews">My Reviews</a></li>
+            <%= render "books/shared/nav_links" %>
           </ul>
         </div>
         <%= link_to "/", class: "btn btn-ghost text-xl" do %>
@@ -49,13 +43,7 @@
       </div>
       <div class="navbar-center hidden lg:flex">
         <ul class="menu menu-horizontal px-1">
-          <li><%= link_to "Books", books_root_path %></li>
-          <li><%= link_to "Lists", books_lists_path %></li>
-          <li><%= link_to "Authors", books_authors_path %></li>
-          <%# Revealed client-side by user_list_state_controller when signed in. %>
-          <li id="navbar_my_lists" class="hidden"><a href="/my/lists">My Lists</a></li>
-          <li id="navbar_my_searches" class="hidden"><a href="/searches">My Searches</a></li>
-          <li id="navbar_my_reviews" class="hidden"><a href="/my/reviews">My Reviews</a></li>
+          <%= render "books/shared/nav_links" %>
         </ul>
       </div>
       <div class="navbar-end">
