@@ -74,6 +74,16 @@ class Services::Billing::VerifyMigrationTest < ActiveSupport::TestCase
     assert_equal [users(:regular_user).id], result.data[:overlap_user_ids]
   end
 
+  test "reports an overlap whose legacy paid flag has since been cleared" do
+    # The legacy grant is permanent, so it outlives the flag. This user is NOT in
+    # paid_user_ids, which is exactly the case the gated query used to drop.
+    ::Membership.create!(user: users(:regular_user), source: :legacy, status: :active)
+
+    result = verify(paid_user_ids: [])
+
+    assert_equal [users(:regular_user).id], result.data[:overlap_user_ids]
+  end
+
   test "an unattached membership alone does not fail the run" do
     Membership.create!(
       user: nil, source: :stripe, status: :active,

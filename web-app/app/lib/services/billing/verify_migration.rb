@@ -33,11 +33,18 @@ module Services
         missing_donations = donation_intent_ids -
           ::Donation.where(stripe_payment_intent_id: donation_intent_ids).pluck(:stripe_payment_intent_id)
 
-        # The 6 early supporters who also pay. Not a problem -- legacy
-        # `paid? || active_membership?` gives them both today -- but two rows
-        # for one person reads as a bug unless it is named up front.
+        # Users holding BOTH a legacy grant and a Stripe subscription -- the 6 early
+        # supporters who also pay. Not a problem (legacy `paid? || active_membership?`
+        # gives them both today), but two rows for one person reads as a bug unless the
+        # report names it.
+        #
+        # Deliberately NOT gated on paid_user_ids. A legacy grant is permanent and
+        # outlives the flag that created it, so a supporter whose legacy `paid` flag is
+        # later cleared still holds the row and still shows two memberships in the
+        # admin. Gating on the live scan would drop exactly that person from the report
+        # -- reintroducing the live-drift dependency this whole service exists to avoid.
         overlap_user_ids = ::Membership.source_stripe
-          .where(user_id: ::Membership.source_legacy.where(user_id: paid_user_ids).select(:user_id))
+          .where(user_id: ::Membership.source_legacy.where.not(user_id: nil).select(:user_id))
           .distinct.pluck(:user_id).sort
 
         unattached = ::Membership.where(user_id: nil).order(:stripe_customer_id).map do |membership|
