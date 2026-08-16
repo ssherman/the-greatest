@@ -2,17 +2,18 @@ module Books
   class FilterBarComponent < ViewComponent::Base
     MODAL_ID = "books_filter_modal"
 
-    def initialize(categories: [], countries: [], year_start: nil, year_end: nil, ranking_configuration: nil)
+    def initialize(categories: [], countries: [], year_start: nil, year_end: nil, ranking_configuration: nil, collection: nil)
       @categories = categories || []
       @countries = countries || []
       @year_start = year_start
       @year_end = year_end
       @ranking_configuration = ranking_configuration
+      @collection = collection
     end
 
     private
 
-    attr_reader :categories, :countries, :year_start, :year_end, :ranking_configuration
+    attr_reader :categories, :countries, :year_start, :year_end, :ranking_configuration, :collection
 
     def modal_id
       MODAL_ID
@@ -54,7 +55,8 @@ module Books
         countries: countries,
         year_start: year_start,
         year_end: year_end,
-        ranking_configuration: ranking_configuration
+        ranking_configuration: ranking_configuration,
+        collection: collection
       )
     end
   end

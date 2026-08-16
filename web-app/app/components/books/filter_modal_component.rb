@@ -6,17 +6,18 @@ module Books
       {axis: "year", label: "Published", hint: nil}
     ].freeze
 
-    def initialize(categories: [], countries: [], year_start: nil, year_end: nil, ranking_configuration: nil)
+    def initialize(categories: [], countries: [], year_start: nil, year_end: nil, ranking_configuration: nil, collection: nil)
       @categories = categories || []
       @countries = countries || []
       @year_start = year_start
       @year_end = year_end
       @ranking_configuration = ranking_configuration
+      @collection = collection
     end
 
     private
 
-    attr_reader :categories, :countries, :year_start, :year_end, :ranking_configuration
+    attr_reader :categories, :countries, :year_start, :year_end, :ranking_configuration, :collection
 
     def modal_id
       Books::FilterBarComponent::MODAL_ID
@@ -32,6 +33,17 @@ module Books
 
     def rc_param
       ranking_configuration&.primary? ? nil : ranking_configuration&.id
+    end
+
+    # Origin is the collection's own axis -- offering it would let a reader pick a
+    # country the collection cannot contain and land on an empty page. Legacy had no
+    # such URL either.
+    def axes
+      collection ? AXES.reject { |row| row[:axis] == "country" } : AXES
+    end
+
+    def drill_axes
+      axes.map { |row| row[:axis] } - ["year"]
     end
 
     def applied_for(axis)
@@ -50,7 +62,8 @@ module Books
         country_slugs: countries.map(&:slug),
         year_start: year_start,
         year_end: year_end,
-        ranking_configuration_id: rc_param
+        ranking_configuration_id: rc_param,
+        collection: collection&.slug
       }.compact_blank.to_query
     end
 
@@ -76,7 +89,7 @@ module Books
     end
 
     def clear_path
-      Books::FilterPath.call(ranking_configuration: ranking_configuration)
+      Books::FilterPath.call(ranking_configuration: ranking_configuration, collection: collection)
     end
   end
 end

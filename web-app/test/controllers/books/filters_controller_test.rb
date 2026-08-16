@@ -190,5 +190,30 @@ module Books
 
       assert_response :not_found
     end
+
+    test "apply redirects back into the collection" do
+      get "/filters", params: {collection: "africa", category_slugs: ["fiction"]}
+
+      assert_redirected_to "/africa/the-greatest/fiction/books"
+      assert_response :see_other
+    end
+
+    test "apply with no filters returns to the bare collection" do
+      get "/filters", params: {collection: "africa"}
+
+      assert_redirected_to "/africa"
+    end
+
+    test "an unknown collection on apply is not found" do
+      get "/filters", params: {collection: "antarctica"}
+
+      assert_response :not_found
+    end
+
+    test "the category pane accepts a collection" do
+      get "/filters/categories", params: {collection: "africa"}
+
+      assert_response :success
+    end
   end
 end

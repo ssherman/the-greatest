@@ -8,11 +8,14 @@
       <% if rc_param %>
         <%= hidden_field_tag :ranking_configuration_id, rc_param %>
       <% end %>
+      <% if collection %>
+        <%= hidden_field_tag :collection, collection.slug %>
+      <% end %>
 
       <div data-books--filter-target="level" data-level="root">
         <h3 id="books_filter_modal_heading_root" class="font-bold text-lg mb-4">Filters</h3>
         <ul class="menu w-full p-0">
-          <% AXES.each do |row| %>
+          <% axes.each do |row| %>
             <li>
               <button type="button" class="flex justify-between items-center w-full"
                       data-action="books--filter#open" data-level-target="<%= row[:axis] %>">
@@ -33,7 +36,7 @@
         </ul>
       </div>
 
-      <% ["category", "country"].each do |axis| %>
+      <% drill_axes.each do |axis| %>
         <div class="hidden" data-books--filter-target="level" data-level="<%= axis %>">
           <h3 id="books_filter_modal_heading_<%= axis %>" class="sr-only"><%= AXES.find { |row| row[:axis] == axis }[:label] %></h3>
           <button type="button" class="btn btn-ghost btn-sm mb-3" data-action="books--filter#back">
