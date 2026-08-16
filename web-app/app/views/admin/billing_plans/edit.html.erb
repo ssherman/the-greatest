@@ -1,0 +1,36 @@
+<% content_for :title, "Edit plan" %>
+
+<%= link_to "← Billing Plans", admin_billing_plans_path, class: "link" %>
+<h1 class="text-2xl font-bold mt-2 mb-6">Edit <%= @plan.key %></h1>
+
+<%= form_with model: @plan, url: admin_billing_plan_path(@plan), method: :patch, class: "max-w-lg" do |form| %>
+  <% if @plan.errors.any? %>
+    <div role="alert" class="alert mb-4">
+      <span><%= @plan.errors.full_messages.to_sentence %></span>
+    </div>
+  <% end %>
+
+  <fieldset class="fieldset">
+    <legend class="fieldset-legend">Display</legend>
+    <label class="label" for="billing_plan_name">Name shown to visitors</label>
+    <%= form.text_field :name, class: "input w-full", required: true %>
+
+    <label class="label" for="billing_plan_position">Sort position</label>
+    <%= form.number_field :position, class: "input" %>
+
+    <label class="label cursor-pointer justify-start gap-2">
+      <%= form.check_box :active, class: "checkbox" %>
+      <span>Offer this plan</span>
+    </label>
+  </fieldset>
+
+  <div class="mt-6 flex gap-2">
+    <%= form.submit "Save", class: "btn btn-primary" %>
+    <%= link_to "Cancel", admin_billing_plans_path, class: "btn btn-ghost" %>
+  </div>
+<% end %>
+
+<p class="text-sm text-base-content/70 mt-6">
+  Stripe price <code class="[overflow-wrap:anywhere]"><%= @plan.stripe_price_id %></code>
+  and the amount are set by <code>rake stripe:sync_plans</code>.
+</p>
