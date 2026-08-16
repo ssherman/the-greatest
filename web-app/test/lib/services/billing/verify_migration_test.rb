@@ -43,6 +43,25 @@ class Services::Billing::VerifyMigrationTest < ActiveSupport::TestCase
     assert_equal [users(:contractor_user).id], result.data[:missing_grants]
   end
 
+  test "reports a legacy paid user with no row in the new users table as expected drift, not a failure" do
+    # MembershipMigrator deliberately skips a legacy user with no row here --
+    # the user migration is a separate, occasional task. verify_migration must
+    # not fail the run over that gap alone.
+    result = verify(paid_user_ids: [users(:password_user).id, 999_999_999])
+
+    assert result.success?
+    assert_empty result.data[:missing_grants]
+    assert_equal [999_999_999], result.data[:unmigrated_users]
+  end
+
+  test "still fails when a genuine gap and expected drift are both present" do
+    result = verify(paid_user_ids: [users(:password_user).id, users(:contractor_user).id, 999_999_999])
+
+    assert_not result.success?
+    assert_equal [users(:contractor_user).id], result.data[:missing_grants]
+    assert_equal [999_999_999], result.data[:unmigrated_users]
+  end
+
   test "reports a legacy donation with no counterpart" do
     result = verify(donation_intent_ids: ["pi_regular_gift", "pi_never_imported"])
 

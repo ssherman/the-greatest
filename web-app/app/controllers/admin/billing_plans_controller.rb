@@ -31,6 +31,11 @@ class Admin::BillingPlansController < Admin::BaseController
   end
 
   def plan_params
-    params.require(:billing_plan).permit(:name, :position, :active)
+    # .expect, not .require(...).permit(...): a scalar body (billing_plan=x)
+    # makes params[:billing_plan] a String, and .permit on a String is a
+    # NoMethodError -> 500. .expect raises ParameterMissing for the wrong
+    # shape too, which Rails renders as 400. Permitted-key behaviour is
+    # unchanged; verified in the forgery tests below.
+    params.expect(billing_plan: [:name, :position, :active])
   end
 end

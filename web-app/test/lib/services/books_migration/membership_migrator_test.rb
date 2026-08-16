@@ -72,11 +72,14 @@ class Services::BooksMigration::MembershipMigratorTest < ActiveSupport::TestCase
   test "reactivates a legacy grant an admin previously revoked" do
     run_migrator([legacy_attrs])
     membership = Membership.source_legacy.find_by(user_id: users(:contractor_user).id)
-    membership.update!(status: :canceled, current_period_end: 1.day.ago)
+    membership.update!(status: :canceled, canceled_at: Time.current, current_period_end: 1.day.ago)
 
     run_migrator([legacy_attrs])
     membership.reload
     assert_equal "active", membership.status
     assert_nil membership.current_period_end
+    # Otherwise the row comes back active while still claiming to have been
+    # cancelled -- the incoherence this fix closes.
+    assert_nil membership.canceled_at
   end
 end

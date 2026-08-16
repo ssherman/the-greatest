@@ -81,6 +81,11 @@ class Admin::MembershipsControllerTest < ActionDispatch::IntegrationTest
     assert_response :redirect
   end
 
+  test "a signed-out visitor is denied the detail page" do
+    get admin_membership_url(@membership)
+    assert_response :redirect
+  end
+
   test "the index does not N+1 over users" do
     sign_in_as(@admin, stub_auth: true)
     # An extra row owned by a user setup never references, so the margin between
@@ -170,6 +175,14 @@ class Admin::MembershipsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 1, Membership.source_comped.where(user_id: users(:editor_user).id).count
   end
 
+  test "a scalar-shaped comp body is a 400, not a 500" do
+    sign_in_as(@admin, stub_auth: true)
+    assert_no_difference -> { Membership.count } do
+      post admin_memberships_url, params: {membership: "x"}
+    end
+    assert_response :bad_request
+  end
+
   test "comping an unknown user id re-renders the form" do
     sign_in_as(@admin, stub_auth: true)
     assert_no_difference -> { Membership.count } do
@@ -190,6 +203,29 @@ class Admin::MembershipsControllerTest < ActionDispatch::IntegrationTest
     comped.reload
     assert_equal "Renewed for another year", comped.note
     assert_equal Date.new(2027, 6, 30), comped.current_period_end.to_date
+  end
+
+  test "a scalar-shaped update body is a 400, not a 500" do
+    sign_in_as(@admin, stub_auth: true)
+    comped = memberships(:editor_user_comped)
+    patch admin_membership_url(comped), params: {membership: "x"}
+    assert_equal "Contributor comp", comped.reload.note
+    assert_response :bad_request
+  end
+
+  test "an editor may not update a comp" do
+    sign_in_as(@editor, stub_auth: true)
+    comped = memberships(:editor_user_comped)
+    patch admin_membership_url(comped), params: {membership: {note: "Should not stick"}}
+    assert_equal "Contributor comp", comped.reload.note
+    assert_response :redirect
+  end
+
+  test "a signed-out visitor may not update a comp" do
+    comped = memberships(:editor_user_comped)
+    patch admin_membership_url(comped), params: {membership: {note: "Should not stick"}}
+    assert_equal "Contributor comp", comped.reload.note
+    assert_response :redirect
   end
 
   test "editing a stripe membership is refused" do
@@ -221,6 +257,13 @@ class Admin::MembershipsControllerTest < ActionDispatch::IntegrationTest
     comped = memberships(:editor_user_comped)
     post revoke_admin_membership_url(comped)
     assert_equal "active", comped.reload.status
+  end
+
+  test "a signed-out visitor may not revoke" do
+    comped = memberships(:editor_user_comped)
+    post revoke_admin_membership_url(comped)
+    assert_equal "active", comped.reload.status
+    assert_response :redirect
   end
 
   test "an admin attaches an unattached membership to a user" do
@@ -256,6 +299,20 @@ class Admin::MembershipsControllerTest < ActionDispatch::IntegrationTest
     assert_response :redirect
   end
 
+  test "survives an array-valued user_id on attach" do
+    # user_id[]=42&user_id[]=99 must not become a Postgres `IN (...) LIMIT 1`
+    # that attaches to whichever row Postgres returns first.
+    sign_in_as(@admin, stub_auth: true)
+    orphan = Membership.create!(
+      user: nil, source: :stripe, status: :active,
+      stripe_subscription_id: "sub_orphan_array", stripe_customer_id: "cus_orphan_array"
+    )
+
+    post attach_admin_membership_url(orphan), params: {user_id: [users(:contractor_user).id, users(:regular_user).id]}
+    assert_nil orphan.reload.user_id
+    assert_response :redirect
+  end
+
   test "attaching to an unknown user id is refused" do
     sign_in_as(@admin, stub_auth: true)
     orphan = Membership.create!(
@@ -279,6 +336,17 @@ class Admin::MembershipsControllerTest < ActionDispatch::IntegrationTest
     assert_nil orphan.reload.user_id
   end
 
+  test "a signed-out visitor may not attach" do
+    orphan = Membership.create!(
+      user: nil, source: :stripe, status: :active,
+      stripe_subscription_id: "sub_orphan_five", stripe_customer_id: "cus_orphan_five"
+    )
+
+    post attach_admin_membership_url(orphan), params: {user_id: users(:contractor_user).id}
+    assert_nil orphan.reload.user_id
+    assert_response :redirect
+  end
+
   test "an admin sees the comp form" do
     sign_in_as(@admin, stub_auth: true)
     get new_admin_membership_url
@@ -291,9 +359,25 @@ class Admin::MembershipsControllerTest < ActionDispatch::IntegrationTest
     assert_response :redirect
   end
 
+  test "a signed-out visitor is denied the comp form" do
+    get new_admin_membership_url
+    assert_response :redirect
+  end
+
   test "an admin sees the edit form for a comp" do
     sign_in_as(@admin, stub_auth: true)
     get edit_admin_membership_url(memberships(:editor_user_comped))
     assert_response :success
+  end
+
+  test "an editor is denied the edit form for a comp" do
+    sign_in_as(@editor, stub_auth: true)
+    get edit_admin_membership_url(memberships(:editor_user_comped))
+    assert_response :redirect
+  end
+
+  test "a signed-out visitor is denied the edit form for a comp" do
+    get edit_admin_membership_url(memberships(:editor_user_comped))
+    assert_response :redirect
   end
 end

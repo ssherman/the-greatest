@@ -14,5 +14,10 @@ Rails.application.config.filter_parameters += [
   # event envelope (id, type, livemode, created) legible for debugging. It also
   # matches this app's auth_data/provider_data/old_user_data blobs, which should
   # be filtered regardless.
-  :data
+  :data,
+  # The admin memberships/stripe_events/billing_plans searches all take a free-text
+  # `q` and an admin routinely searches by a customer's email address -- filtering
+  # the key :email does nothing when the value arrives under :q instead. This app
+  # is open source; its production logs should not accumulate donor PII.
+  :q
 ]

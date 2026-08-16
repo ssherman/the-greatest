@@ -39,6 +39,16 @@ namespace :billing do
     puts "Paid users with no legacy grant: #{data[:missing_grants].size}"
     data[:missing_grants].each { |id| puts "  user #{id}" }
 
+    # Never fails the run: these legacy users have no row in the new `users`
+    # table at all, which is exactly what MembershipMigrator is designed to
+    # skip. This is expected drift from the live legacy database, not a
+    # billing problem -- do not investigate it as one.
+    puts "Legacy paid users not yet migrated to the new users table (expected drift, not a billing problem): #{data[:unmigrated_users].size}"
+    if data[:unmigrated_users].any?
+      puts "  Remedy: run data_migration:users, then re-run this task."
+      data[:unmigrated_users].each { |id| puts "  legacy user #{id}" }
+    end
+
     puts "Legacy donations not imported: #{data[:missing_donations].size}"
     data[:missing_donations].each { |id| puts "  #{id}" }
 

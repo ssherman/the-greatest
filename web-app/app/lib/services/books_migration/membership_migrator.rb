@@ -20,6 +20,15 @@ module Services
     # Timestamps are NOT copied from the legacy user. users.created_at is the
     # signup date, not the date the grant was made; there is no column recording
     # the latter, so these rows get today's.
+    #
+    # Re-running converges every row onto the legacy `paid` flag -- it is NOT
+    # idempotent in the sense of "safe to re-run without consequence". If an
+    # admin has revoked a legacy grant in /admin/memberships (status:
+    # :canceled), and the legacy `paid` flag is still true, the next run flips
+    # that row back to :active and clears canceled_at. This is intentional:
+    # the importer mirrors the legacy database, and that database is where a
+    # revoke is meant to stick. The remedy for a revoke that must survive a
+    # re-run is to clear `paid` on the legacy user, not to edit the row here.
     class MembershipMigrator < Migrator
       NOTE = "Legacy early supporter"
 
@@ -48,6 +57,10 @@ module Services
         membership = ::Membership.find_or_initialize_by(user_id: attrs["id"], source: :legacy)
         membership.status = :active
         membership.current_period_end = nil
+        # Cleared alongside status: without this, re-running after an admin
+        # revoke (which sets canceled_at) produced an active row that still
+        # claimed to have been cancelled. See the class comment.
+        membership.canceled_at = nil
         # ||= so a note an admin has edited survives a re-run.
         membership.note ||= NOTE
         membership.save!

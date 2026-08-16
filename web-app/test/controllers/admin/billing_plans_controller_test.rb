@@ -25,6 +25,23 @@ class Admin::BillingPlansControllerTest < ActionDispatch::IntegrationTest
     assert_response :redirect
   end
 
+  test "an editor is denied the edit form" do
+    sign_in_as(@editor, stub_auth: true)
+    get edit_admin_billing_plan_url(@plan)
+    assert_response :redirect
+  end
+
+  test "a signed-out visitor is denied the edit form" do
+    get edit_admin_billing_plan_url(@plan)
+    assert_response :redirect
+  end
+
+  test "a signed-out visitor may not edit a plan" do
+    patch admin_billing_plan_url(@plan), params: {billing_plan: {name: "Nope"}}
+    assert_equal "Monthly Membership", @plan.reload.name
+    assert_response :redirect
+  end
+
   test "an admin edits the display fields" do
     sign_in_as(@admin, stub_auth: true)
     patch admin_billing_plan_url(@plan), params: {
@@ -67,5 +84,12 @@ class Admin::BillingPlansControllerTest < ActionDispatch::IntegrationTest
     patch admin_billing_plan_url(@plan), params: {billing_plan: {name: ""}}
     assert_response :unprocessable_entity
     assert_equal "Monthly Membership", @plan.reload.name
+  end
+
+  test "a scalar-shaped body is a 400, not a 500" do
+    sign_in_as(@admin, stub_auth: true)
+    patch admin_billing_plan_url(@plan), params: {billing_plan: "x"}
+    assert_equal "Monthly Membership", @plan.reload.name
+    assert_response :bad_request
   end
 end

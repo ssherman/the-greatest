@@ -62,6 +62,11 @@ class Admin::StripeEventsControllerTest < ActionDispatch::IntegrationTest
     assert_response :redirect
   end
 
+  test "a signed-out visitor is denied the detail page" do
+    get admin_stripe_event_url(failed_event)
+    assert_response :redirect
+  end
+
   test "an admin re-enqueues a failed event" do
     sign_in_as(@admin, stub_auth: true)
     event = failed_event
@@ -69,6 +74,14 @@ class Admin::StripeEventsControllerTest < ActionDispatch::IntegrationTest
 
     post reprocess_admin_stripe_event_url(event)
     assert_redirected_to admin_stripe_event_url(event)
+  end
+
+  test "a signed-out visitor may not re-enqueue" do
+    event = failed_event
+    ::Billing::ProcessStripeEventJob.expects(:perform_async).never
+
+    post reprocess_admin_stripe_event_url(event)
+    assert_response :redirect
   end
 
   test "an editor may not re-enqueue" do

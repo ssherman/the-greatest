@@ -116,7 +116,7 @@ is always visible rather than something you have to go looking for.
 | `billing:reconcile_all` | Runs `Services::Billing::ReconcileAllCustomers` — lists every subscription in the Stripe account, dedupes to distinct customer ids, and reconciles each one. One customer failing never aborts the rest; failures are collected and printed. | The initial build of every `source: :stripe` membership row, and the manual recovery path if the webhook endpoint was down long enough that Stripe stopped retrying (>72 hours). Safe to re-run any time — it's the same idempotent reconcile the nightly sweep runs. |
 | `billing:replay_failed` | Re-enqueues `Billing::ProcessStripeEventJob` for every `stripe_events` row currently in the `failed` state, oldest first. | After you've fixed whatever made a batch of events fail (a Stripe outage, a bad deploy) and want to clear the backlog in bulk instead of re-running events one at a time from the admin UI. |
 | `billing:verify_migration` | Runs `Services::Billing::VerifyMigration` — checks four invariants between the legacy books database and the new one: every legacy `stripe_subscription_id` has a matching `Membership`, every legacy `paid: true` user has a `source: :legacy` grant, every legacy donation was imported, and reports (never fails on) unattached memberships and stripe+legacy overlap users. **Exits non-zero if any of the first three invariants has a gap.** | After running the two `data_migration:` tasks below, and any time you want to sanity-check that the legacy and new data agree. Read below for what a non-zero exit means. |
-| `data_migration:memberships` | Runs `Services::BooksMigration::MembershipMigrator` — imports every legacy `users.paid: true` row as a `source: :legacy` Membership. Idempotent (`find_or_initialize_by`-based), safe to re-run. | Once, as part of the legacy-history import (§5). |
+| `data_migration:memberships` | Runs `Services::BooksMigration::MembershipMigrator` — imports every legacy `users.paid: true` row as a `source: :legacy` Membership. `find_or_initialize_by`-based, so it never creates a duplicate row — but re-running is **not** consequence-free: every run converges the row onto the current legacy `paid` flag, so if an admin revoked a legacy grant in `/admin/memberships` and the legacy flag is still `true`, re-running restores it. See §5 for the remedy. | Once, as part of the legacy-history import (§5). |
 | `data_migration:donations` | Runs `Services::BooksMigration::DonationMigrator` — imports the legacy `donations`-equivalent table into `donations`. Idempotent, safe to re-run. | Once, as part of the legacy-history import (§5), immediately after `data_migration:memberships`. |
 
 **`rake stripe:sync_plans` and `stripe:bootstrap` are not implemented yet.** The billing plans
@@ -162,8 +162,12 @@ a non-zero exit as "run it again and hope." The task prints the actual list of o
 each failing category (`missing_subscriptions`, `missing_grants`, `missing_donations`) — the
 signal is to **read those ids** and find out why each one didn't migrate (a user that doesn't
 exist in the new `users` table yet is the most likely cause), not to re-run the importer blindly.
-Re-running is safe (both importers are idempotent) but will reproduce the exact same gap if the
-underlying cause hasn't changed.
+Re-running never creates a duplicate row (both importers are `find_or_initialize_by`-based) and
+will reproduce the exact same gap if the underlying cause hasn't changed. For
+`data_migration:memberships` specifically, re-running is not otherwise consequence-free: see the
+table above — it also restores any legacy grant an admin revoked in `/admin/memberships`, as long
+as the legacy `paid` flag is still `true`. The remedy for a revoke that must survive a re-run is to
+clear `paid` on the legacy user, not to run the importer again.
 
 Unattached memberships and the legacy/Stripe overlap are reported by the same task but never cause
 the non-zero exit — they're expected outcomes, not errors. Work through unattached ones with the

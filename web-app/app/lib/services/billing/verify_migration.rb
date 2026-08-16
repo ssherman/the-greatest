@@ -14,6 +14,23 @@ module Services
     # Unattached memberships are reported but never fail the run -- an
     # unmappable Stripe customer is an expected outcome the spec designs for,
     # and whether the set is the one deliberately expected is a human judgement.
+    #
+    # `missing_grants` is split into two categories, because a naive "every
+    # paid: true legacy user has a legacy grant" check has a permanent false
+    # positive built in. MembershipMigrator deliberately SKIPS a legacy user
+    # who has no row in the new `users` table yet -- the user migration is a
+    # separate, occasional task, and the legacy database is live, so a brand
+    # new legacy signup who pays shows up here before the next user import
+    # ever runs. Reporting that as a failure trains the operator to ignore
+    # `verify_migration`'s exit code, which defeats the point of it.
+    #
+    # - `missing_grants` (fails the run) -- the legacy user DOES exist in the
+    #   new `users` table but has no `source: :legacy` membership. The importer
+    #   should have created one and did not: a genuine migration gap.
+    # - `unmigrated_users` (reported, never fails) -- the legacy user does not
+    #   exist in the new `users` table at all. Expected drift, not a billing
+    #   problem; the remedy is `data_migration:users`, not re-running this
+    #   task or investigating the importer.
     class VerifyMigration
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -26,8 +43,14 @@ module Services
         missing_subscriptions = subscription_ids -
           ::Membership.where(stripe_subscription_id: subscription_ids).pluck(:stripe_subscription_id)
 
-        missing_grants = paid_user_ids -
+        ungranted_user_ids = paid_user_ids -
           ::Membership.source_legacy.where(user_id: paid_user_ids).pluck(:user_id)
+        # Split by whether the new `users` table even has the row.
+        # MembershipMigrator's own skip condition, mirrored here so the two
+        # never drift apart.
+        existing_user_ids = ::User.where(id: ungranted_user_ids).pluck(:id).to_set
+        missing_grants = ungranted_user_ids.select { |id| existing_user_ids.include?(id) }
+        unmigrated_users = ungranted_user_ids - missing_grants
 
         donation_intent_ids = legacy_donation_intent_ids
         missing_donations = donation_intent_ids -
@@ -68,7 +91,8 @@ module Services
             missing_grants: missing_grants,
             missing_donations: missing_donations,
             unattached: unattached,
-            overlap_user_ids: overlap_user_ids
+            overlap_user_ids: overlap_user_ids,
+            unmigrated_users: unmigrated_users
           },
           errors: errors
         )

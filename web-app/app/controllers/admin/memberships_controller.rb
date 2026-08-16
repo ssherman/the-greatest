@@ -116,7 +116,12 @@ class Admin::MembershipsController < Admin::BaseController
     # An explicit user id, never an email match. Inferring identity from an
     # email address is how one person is handed another person's paid
     # membership; an admin looking at both records makes the call instead.
-    user = ::User.find_by(id: params[:user_id])
+    #
+    # to_s first: user_id[]=42&user_id[]=99 arrives as an Array, and without
+    # coercion find_by(id: [...]) becomes a WHERE id IN (...) LIMIT 1 --
+    # attaching to whichever row Postgres happens to return first. Same shape
+    # as params[:q].to_s elsewhere in this controller.
+    user = ::User.find_by(id: params[:user_id].to_s)
     if user.nil?
       redirect_to admin_membership_path(@membership), alert: "No user with that id."
       return
@@ -168,12 +173,19 @@ class Admin::MembershipsController < Admin::BaseController
     # source and stripe_subscription_id are absent on purpose. source is
     # hardcoded to :comped in create; a subscription id on a non-Stripe row is
     # rejected by Membership's absence validation regardless.
-    params.require(:membership).permit(:user_id, :note, :current_period_end)
+    #
+    # .expect, not .require(...).permit(...): a scalar body (membership=x)
+    # makes params[:membership] a String, and .permit on a String is a
+    # NoMethodError -> 500. .expect raises ParameterMissing for the wrong
+    # shape too, which Rails renders as 400 -- the correct response to a
+    # malformed request. Permitted-key behaviour is unchanged; verified in
+    # the forgery tests below.
+    params.expect(membership: [:user_id, :note, :current_period_end])
   end
 
   # No user_id: which person a membership belongs to is changed through
   # `attach`, which has its own guards, never by editing a form field.
   def edit_params
-    params.require(:membership).permit(:note, :current_period_end)
+    params.expect(membership: [:note, :current_period_end])
   end
 end
