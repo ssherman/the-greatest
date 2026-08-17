@@ -1,8 +1,8 @@
 # Membership & Stripe Billing
 
 ## Status
-- **Status**: In Progress — increments 1–4 and 9 shipped (Stripe foundation, webhook ingest,
-  reconciliation engine, data migration, admin UI); increments 5–8, 10 and 11 remain
+- **Status**: In Progress — increments 1–4, 9 and 10 shipped (Stripe foundation, webhook ingest,
+  reconciliation engine, data migration, admin UI, legacy guard patch); increments 5–8 and 11 remain
 - **Priority**: High
 - **Created**: 2026-08-14
 - **Developer**: Shane Sherman
@@ -418,16 +418,57 @@ calls `subscription.update!(user: nil, …)`. Legacy runs `load_defaults 7.0`, s
 `belongs_to :user` is required and this raises. Stripe then retries the same
 event for 72 hours and can disable the endpoint.
 
-The patch:
+**Shipped 2026-08-16** on the legacy repo branch `stripe-coexistence-guard`
+(`/home/shane/dev/the-greatest-books/admin`), documented there in
+`docs/features/stripe_coexistence_guard.md`. Five changes:
 
-1. Skip events whose subscription carries `metadata[origin_app] == "the-greatest"`,
-   logging and returning 200. Backstop: when no user can be resolved, log and
-   return 200 rather than raising.
-2. Scope `rake stripe:delete_webhooks` to legacy's own URL. It currently
-   iterates `Stripe::WebhookEndpoint.list` and deletes **every endpoint in the
-   account**, which after this ships includes the new app's — silently stopping
-   event delivery with no error anywhere. Same account-wide shape in
-   `deactivate_all_payment_links`, harmless to us but worth scoping too.
+1. Events whose subscription, session or invoice carries
+   `metadata[origin_app] == "the-greatest"` are skipped before any row is
+   written, logging the event id and type only, and returning 200.
+2. `checkout.session.completed` for a session with a blank `payment_link` is
+   skipped for the same reason. Legacy has never called
+   `Checkout::Session.create` — it sells only through Payment Links, and Stripe
+   stamps `payment_link` on every session those produce — so this is a
+   structural test that does not depend on the new app tagging anything. It
+   exists because legacy's `Donation` allows a nil user: an untagged donation
+   would not have 422'd, it would have written a books donation row and emailed
+   the donor a books-branded receipt.
+3. A subscription with no resolvable user is recorded as `ignored` with the
+   reason and returns 200, rather than raising `RecordInvalid`. This is the
+   backstop if increment 6 ships without the metadata tag.
+4. The classifier itself has a `rescue StandardError` that logs the exception
+   class and returns nil, treating the event as legacy's. All of the above runs
+   in a `before_action`, outside the handler's own `rescue` clauses, so an
+   exception there would be an unhandled 500 on *every* delivery — including
+   legacy's own traffic, and strictly worse than not having shipped the guard.
+   It logs the class and never the message, because a `rescue StandardError`
+   catches anything and some exception messages embed the values they choked on.
+5. `rake stripe:delete_webhooks` deletes only the endpoint whose URL legacy
+   registers, and `setup_webhook` now reads that URL from the same method so
+   the two cannot drift.
+
+**`deactivate_all_payment_links` was deliberately left account-wide** — the new
+app creates no payment links, so there is nothing there to damage, and changing
+a legacy path that still runs is the larger risk.
+
+**What increment 6 must do to hold up its end:**
+
+- Set `subscription_data: {metadata: {app_user_id:, origin_app: "the-greatest"}}`
+  on every subscription-mode Checkout Session, as the spec's checkout snippet
+  already shows.
+- **Also set top-level `metadata: {origin_app: "the-greatest"}` on every
+  Checkout Session it creates, both modes.** A donation has no subscription to
+  carry the tag, so without this the donation path relies on legacy's
+  payment-link backstop alone. Guard 2 covers it either way; guard 1 makes the
+  legacy log line say why, which is the difference between a five-minute and a
+  two-hour diagnosis.
+- **Create Checkout Sessions with the API, never with Payment Links.** The
+  spec already says the new app never calls the PaymentLink API, justified as
+  leaving legacy's link lifecycle alone. It is now load-bearing for a second
+  reason: legacy's structural guard is "this session carries no
+  `payment_link`, so it is not mine". A new-app session created *through* a
+  payment link would carry one, the guard would never fire, and the donation
+  defect it closes would silently re-open with nothing to catch it.
 
 **This must be deployed before increment 6 reaches production.**
 
@@ -505,7 +546,7 @@ verification.
 | 7 | Entitlements — `member?`, access scope, `MembershipGate`, `/membership_state`, members-only area | 3 | |
 | 8 | Membership emails — the eight | 5, 6 | |
 | 9 | Admin UI — memberships incl. comping, donations, stripe events, billing plans | 3 | ✅ |
-| 10 | **Legacy guard patch** (separate repo) | — | |
+| 10 | **Legacy guard patch** (separate repo) | — | ✅ |
 | 11 | E2E tests | 6, 7 | |
 
 Increments 1–5 only read from Stripe and are safe to ship in any order relative
@@ -561,11 +602,11 @@ three against it.
   but the coexistence guards should not be the only thing standing between that
   and a mis-attached subscription.
 
-## Carried forward from increments 1–3, 4 and 9
+## Carried forward from increments 1–3, 4, 9 and 10
 
-Found during implementation and review of the billing core, the data migration and
-the admin UI. None blocks that work; each has a named owner among the later
-increments, or is deferred with a stated reason.
+Found during implementation and review of the billing core, the data migration, the
+admin UI and the legacy guard patch. None blocks that work; each has a named owner
+among the later increments, or is deferred with a stated reason.
 
 - **`origin_domain` is never written by reconcile.** `upsert` deliberately omits it so
   a value set at checkout survives, but that means every membership created *before* a
@@ -619,6 +660,28 @@ increments, or is deferred with a stated reason.
   but `missing_subscriptions` can list a legacy subscription whose Stripe customer was
   deleted, or one from another Stripe account, and those will never clear. If that
   starts firing routinely, the same expected-drift split should be applied there.
+- **Legacy is deployed by pushing to `main`, with no test or lint gate anywhere.**
+  `deploy-image.yaml` builds and pushes the image on push to `main` and dispatches an
+  SSH deploy. Its `bin/docker-entrypoint` is `bash -e` and runs `db:prepare` before
+  `exec`ing the server, with `restart: unless-stopped` — the same crash-loop shape as
+  this app, and production eager-loads, so a constant error in a changed file takes
+  thegreatestbooks.org down. The guard patch adds no migration, and Task 6 of its plan
+  gates on `zeitwerk:check` plus an explicit `eager_load!`.
+- **Legacy's `db/schema.rb` had never been dumped** after its 2026-04 subscriptions
+  unique-index migration, so a fresh test database refused to run at all. Fixed in the
+  guard-patch branch. Its test harness has two more traps worth knowing if anyone
+  returns to it: `shoulda-context` crashes the runner on the first failure, and
+  `db/seeds.rb` inserts `User.create(id: 1)` without advancing the sequence, so
+  `create(:user)` raises `PG::UniqueViolation` on a clean database.
+- **Legacy's webhook endpoint API version was never confirmed.** The `payment_link`
+  field appeared on the Checkout Session object when Stripe launched Payment Links in
+  2021. If legacy's endpoint were pinned older, the field would be absent from every
+  session and the guard would skip legacy's *own* donations, silently, with a 200. Two
+  things argue against it — Stripe ships additive response fields to all API versions,
+  and legacy's Stripe integration dates to February 2025 with `setup_webhook` passing no
+  `api_version` — but neither is a check. It cannot be verified from a repository: it is
+  one look at Stripe Dashboard → Developers → Webhooks → the endpoint → API version, and
+  it belongs in the pre-deploy runbook rather than in code.
 
 ## Future Improvements
 
