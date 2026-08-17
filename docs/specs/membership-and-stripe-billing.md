@@ -251,6 +251,7 @@ Stripe::Checkout::Session.create(
   mode: "subscription", customer: customer_id,
   line_items: [{price: plan.stripe_price_id, quantity: 1}],
   client_reference_id: current_user.id,
+  metadata: {origin_app: "the-greatest"},
   subscription_data: {metadata: {app_user_id: current_user.id, origin_app: "the-greatest"}},
   success_url: membership_thanks_url(host: request.host),
   cancel_url:  membership_url(host: request.host)
@@ -272,6 +273,8 @@ with `custom_unit_amount: {enabled: true, minimum: 100, preset: 2500}`. Checkout
 Session in `mode: "payment"` with `submit_type: "donate"`. Stripe's documented
 limits (single line item, quantity 1, no promo codes, no recurring) are all
 acceptable here. Signed-out donations are allowed; Stripe collects the email.
+The session carries `metadata[origin_app]` too — a donation has no subscription
+to hold the tag, and legacy's guard reads it to say *why* it skipped.
 
 **Entitlement.** `User#member?` is one `exists?` against
 `Membership.granting_access`, which encodes three distinct rules:

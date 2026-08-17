@@ -1274,21 +1274,32 @@ Deploying = merging to `main`. Before that:
 
 1. Re-run `scratchpad/t6-verify.sh` on the final branch. Everything green.
 2. Confirm the diff touches no migration: `git diff main...HEAD --stat -- db/migrate` is empty.
+3. Confirm the payment-link guard's premise against a real payload, because its failure is
+   silent. Stripe Dashboard → Developers → Webhooks → legacy's endpoint → recent deliveries:
+   open a `checkout.session.completed` produced by one of legacy's own payment links and
+   confirm `payment_link` holds a non-null `plink_…` id. Do not try to answer this from the
+   endpoint's API version — Stripe ships additive fields to all versions, so the version
+   decides nothing here.
 
 After the deploy lands:
 
-3. Confirm the container came up rather than crash-looping:
+4. Confirm the container came up rather than crash-looping:
    `docker compose -f docker-compose.prod.yml ps web` and
    `docker compose -f docker-compose.prod.yml logs --tail=200 web`.
-4. Prove legacy's own path still works, without waiting for a real customer: in the
+5. Prove legacy's own path still works, without waiting for a real customer: in the
    Stripe Dashboard, find a recent `customer.subscription.updated` for an existing
    legacy subscriber and use **Resend**. Legacy's admin webhook-events list should show
    it `processed`, exactly as before.
-5. Once increment 6 is live in the new app, buy a membership in a Stripe **sandbox**
+6. Once increment 6 is live in the new app, buy a membership in a Stripe **sandbox**
    from the new app, then check legacy's logs for
    `Skipping Stripe event evt_… (customer.subscription.created): metadata origin_app=the-greatest`
    and confirm legacy's `subscriptions` table gained no row.
-6. Keep an eye on the Stripe Dashboard's webhook endpoint page for legacy: the
+7. Keep an eye on the Stripe Dashboard's webhook endpoint page for legacy: the
    failure-rate graph going to zero for new-app events is the real signal.
+8. Read legacy's Admin → Webhook Events for `ignored` rows, then again after a week. An
+   `ignored` `customer.subscription.created` belonging to a Greatest Books customer means the
+   no-user backstop dropped a real legacy purchase: it has no membership row and its welcome
+   email will never send. Create the subscription manually. This is the one failure the patch
+   introduces rather than removes, and nothing alerts on it.
 
 **Rollback** is `git revert` on `main`, which re-triggers the same build-and-deploy. There is no state to unwind — the patch writes nothing new and adds no schema.
