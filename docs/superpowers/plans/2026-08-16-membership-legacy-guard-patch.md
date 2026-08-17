@@ -1103,6 +1103,12 @@ Production eager-loads. A constant or syntax error in a changed file means the w
 ```bash
 # scratchpad/t6-verify.sh
 #!/bin/bash
+# set -e is load-bearing, not hygiene. This script IS the deploy gate — there is no
+# CI behind it — and without it a failing zeitwerk, eager-load, rubocop or test run
+# is printed and then walked past, leaving the script to exit with the status of the
+# LAST command. A green exit code would then mean "the final test file passed",
+# not "everything passed".
+set -e
 export PATH=/home/shane/.local/share/mise/installs/ruby/3.4.7/bin:$PATH
 export RAILS_ENV=test
 export PARALLEL_WORKERS=1
@@ -1121,9 +1127,12 @@ echo "===== tests ====="
 bundle exec ruby -Itest test/controllers/webhooks_controller_test.rb
 bundle exec ruby -Itest test/models/webhook_event_test.rb
 bundle exec ruby -Itest test/services/stripe_service_test.rb
+echo "===== ALL CHECKS PASSED ====="
 ```
 
-Expected: every file "Syntax OK"; `zeitwerk:check` reports "All is good!"; "eager load OK"; rubocop clean on the changed files (**fix offences in the changed files only** — do not reformat neighbouring code); 10 + 1 + 4 runs, 0 failures, 0 errors.
+Expected: every file "Syntax OK"; `zeitwerk:check` reports "All is good!"; "eager load OK"; rubocop clean on the changed files (**fix offences in the changed files only** — do not reformat neighbouring code); 13 + 1 + 4 runs, 0 failures, 0 errors; and the final `ALL CHECKS PASSED` line.
+
+With `set -e`, reaching that last line is itself the verdict — do not read the earlier sections and conclude success without it. (The test counts assume the branch as delivered; Task 2's review round added three tests and Task 3 added two, which is why this is 13 rather than the 10 an earlier draft predicted.)
 
 - [ ] **Step 3: Review the full branch diff**
 
@@ -1290,10 +1299,32 @@ After the deploy lands:
    Stripe Dashboard, find a recent `customer.subscription.updated` for an existing
    legacy subscriber and use **Resend**. Legacy's admin webhook-events list should show
    it `processed`, exactly as before.
-6. Once increment 6 is live in the new app, buy a membership in a Stripe **sandbox**
-   from the new app, then check legacy's logs for
-   `Skipping Stripe event evt_… (customer.subscription.created): metadata origin_app=the-greatest`
-   and confirm legacy's `subscriptions` table gained no row.
+6. Once increment 6 is live, exercise the guard with a **live-mode** purchase — a monthly
+   membership bought through the new app in production, refunded and cancelled straight
+   after. **A sandbox cannot test this.** Sandboxes have isolated keys, webhooks, data and
+   configuration, so a sandbox subscription is never delivered to legacy's production
+   endpoint and never touches its database — which makes "legacy gained no row" true whether
+   the guard works or not. That is a check that cannot fail, and a check that cannot fail is
+   not a check.
+
+   Verify in this order, because the first step is what makes the rest mean anything:
+
+   a. **Confirm the event reached legacy at all.** Stripe Dashboard → Developers → Webhooks →
+      *legacy's* endpoint → event deliveries: find that `evt_` id and confirm a 200. If it is
+      not listed, nothing below tells you anything.
+   b. Confirm legacy logged the skip:
+      `Skipping Stripe event evt_… (customer.subscription.created): metadata origin_app=the-greatest`
+   c. Confirm legacy's `subscriptions` table gained no row, and that legacy's admin
+      webhook-events list has no row for that event id either.
+
+   Registering legacy's URL as an endpoint inside a sandbox is not a workaround: that
+   endpoint would carry its own signing secret, so deliveries would fail legacy's signature
+   check with a 400 and be retried — testing the signature path, not the guard, while
+   inflating legacy's production error rate.
+
+   If you would rather not spend real money, the fallback is to watch the **first real
+   new-app subscription** through the same three checks, and treat a legacy `subscriptions`
+   row appearing as the trigger to roll back.
 7. Keep an eye on the Stripe Dashboard's webhook endpoint page for legacy: the
    failure-rate graph going to zero for new-app events is the real signal.
 8. Read legacy's Admin → Webhook Events for `ignored` rows, then again after a week. An
