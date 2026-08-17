@@ -682,9 +682,14 @@ among the later increments, or is deferred with a stated reason.
   session and the guard would skip legacy's *own* donations, silently, with a 200. Two
   things argue against it — Stripe ships additive response fields to all API versions,
   and legacy's Stripe integration dates to February 2025 with `setup_webhook` passing no
-  `api_version` — but neither is a check. It cannot be verified from a repository: it is
-  one look at Stripe Dashboard → Developers → Webhooks → the endpoint → API version, and
-  it belongs in the pre-deploy runbook rather than in code.
+  `api_version` — but neither is a check. **Do not check it by reading the endpoint's API
+  version**: additive fields ship to every version, so the version answers nothing, and
+  `2021-08-27` is not a Stripe API version at all — there is none between `2020-08-27` and
+  `2022-08-01`, so that comparison fails accounts that are fine. Check a real payload
+  instead: Stripe Dashboard → Developers → Webhooks → legacy's endpoint → recent
+  deliveries, open a `checkout.session.completed` from one of legacy's own payment links,
+  and confirm `payment_link` holds a non-null `plink_…` id. It belongs in the pre-deploy
+  runbook rather than in code.
 
 ## Future Improvements
 

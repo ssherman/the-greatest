@@ -1298,8 +1298,10 @@ After the deploy lands:
    failure-rate graph going to zero for new-app events is the real signal.
 8. Read legacy's Admin → Webhook Events for `ignored` rows, then again after a week. An
    `ignored` `customer.subscription.created` belonging to a Greatest Books customer means the
-   no-user backstop dropped a real legacy purchase: it has no membership row and its welcome
-   email will never send. Create the subscription manually. This is the one failure the patch
-   introduces rather than removes, and nothing alerts on it.
+   no-user backstop dropped a real legacy purchase. Its welcome email will never send. Its
+   membership row may or may not exist: a later `customer.subscription.updated` that resolves
+   a user creates it silently, and for a payment-link subscription that may not arrive until
+   the renewal — so check for the row before creating one by hand. This is the one failure the
+   patch introduces rather than removes, and nothing alerts on it.
 
 **Rollback** is `git revert` on `main`, which re-triggers the same build-and-deploy. There is no state to unwind — the patch writes nothing new and adds no schema.
