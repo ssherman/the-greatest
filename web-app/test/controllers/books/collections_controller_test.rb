@@ -127,6 +127,12 @@ module Books
       assert_response :moved_permanently
     end
 
+    test "the the-greatest-books/page form also preserves the page number" do
+      get "/africa/the-greatest-books/page/3"
+      assert_redirected_to "/africa/page/3"
+      assert_response :moved_permanently
+    end
+
     test "a legacy view-type url redirects to the bare slug" do
       get "/v/grid/africa"
       assert_redirected_to "/africa"

@@ -1,0 +1,95 @@
+<% content_for :title, "Membership" %>
+
+<%= link_to "← Memberships", admin_memberships_path, class: "link" %>
+
+<h1 class="text-2xl font-bold mt-2 mb-6">
+  <%= @membership.user&.email || "Unattached membership" %>
+</h1>
+
+<div class="card bg-base-100 mb-6">
+  <div class="card-body">
+    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div><dt class="text-sm text-base-content/70">Source</dt><dd><%= @membership.source.titleize %></dd></div>
+      <div><dt class="text-sm text-base-content/70">Status</dt><dd><%= @membership.status.titleize %></dd></div>
+      <div><dt class="text-sm text-base-content/70">Plan</dt><dd><%= @membership.interval&.titleize || "—" %></dd></div>
+      <% # A nil period end on a stripe row is NOT "never expires" -- the reconciler can leave an
+         # incomplete/incomplete_expired row without one. "Never expires" is only meaningful for a
+         # non-Stripe grant, where nil genuinely encodes that. %>
+      <div>
+        <dt class="text-sm text-base-content/70">Access through</dt>
+        <dd>
+          <% if @membership.current_period_end.present? %>
+            <%= @membership.current_period_end.to_fs(:long) %>
+          <% elsif @membership.source_stripe? %>
+            &mdash;
+          <% else %>
+            Never expires
+          <% end %>
+        </dd>
+      </div>
+      <div>
+        <dt class="text-sm text-base-content/70">Cancels at period end</dt>
+        <dd><%= @membership.cancel_at_period_end ? "Yes" : "No" %></dd>
+      </div>
+      <div>
+        <dt class="text-sm text-base-content/70">Canceled at</dt>
+        <dd><%= @membership.canceled_at&.to_fs(:long) || "—" %></dd>
+      </div>
+      <div class="[overflow-wrap:anywhere]">
+        <dt class="text-sm text-base-content/70">Stripe customer</dt>
+        <dd><%= @membership.stripe_customer_id || "—" %></dd>
+      </div>
+      <div class="[overflow-wrap:anywhere]">
+        <dt class="text-sm text-base-content/70">Stripe subscription</dt>
+        <dd><%= @membership.stripe_subscription_id || "—" %></dd>
+      </div>
+      <div>
+        <dt class="text-sm text-base-content/70">Last synced from Stripe</dt>
+        <dd><%= @membership.stripe_synced_at&.to_fs(:long) || "Never" %></dd>
+      </div>
+      <div>
+        <dt class="text-sm text-base-content/70">Origin</dt>
+        <dd><%= @membership.origin_domain || "Unknown" %></dd>
+      </div>
+      <div class="sm:col-span-2">
+        <dt class="text-sm text-base-content/70">Note</dt>
+        <dd class="[overflow-wrap:anywhere]"><%= @membership.note.presence || "—" %></dd>
+      </div>
+      <div>
+        <dt class="text-sm text-base-content/70">Granted by</dt>
+        <dd><%= @membership.granted_by&.email || "—" %></dd>
+      </div>
+    </dl>
+  </div>
+</div>
+
+<% unless @membership.source_stripe? %>
+  <div class="flex gap-2 mb-6">
+    <%= link_to "Edit", edit_admin_membership_path(@membership), class: "btn btn-sm" %>
+    <% unless @membership.canceled? %>
+      <%= button_to "Revoke", revoke_admin_membership_path(@membership), method: :post,
+            class: "btn btn-sm btn-error",
+            form: {data: {turbo_confirm: "Revoke this membership? Access ends immediately."}} %>
+    <% end %>
+  </div>
+<% end %>
+
+<% if @membership.user_id.nil? %>
+  <div class="card bg-base-100">
+    <div class="card-body">
+      <h2 class="card-title text-lg">Attach to a user</h2>
+      <p class="text-sm text-base-content/70">
+        This Stripe customer could not be matched automatically. Confirm the person's
+        identity yourself and enter their user id — this is never guessed from an
+        email address.
+      </p>
+      <%= form_with url: attach_admin_membership_path(@membership), method: :post, class: "flex gap-2 items-end mt-2" do |form| %>
+        <div>
+          <label class="label" for="user_id">User id</label>
+          <%= form.number_field :user_id, id: "user_id", class: "input", required: true %>
+        </div>
+        <%= form.submit "Attach", class: "btn btn-primary" %>
+      <% end %>
+    </div>
+  </div>
+<% end %>

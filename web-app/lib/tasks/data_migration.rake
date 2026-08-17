@@ -181,6 +181,48 @@ namespace :data_migration do
     pp({review_summaries: Services::Reviews::SummaryRecalculator.backfill_all!})
   end
 
+  desc "Import legacy users.paid early supporters as source: :legacy memberships"
+  task memberships: :environment do
+    # Print the arithmetic rather than trusting the count: upsert_row skips
+    # silently for a user missing from the new users table, and a silent skip in
+    # a billing migration is exactly the thing worth surfacing.
+    legacy_paid = LegacyBooks::User.where(paid: true).count
+
+    result = Services::BooksMigration::MembershipMigrator.call
+    pp result
+    abort "memberships migration failed: #{result[:error]}" unless result[:success]
+
+    granted = Membership.source_legacy.count
+    # NOT a gap count, despite the arithmetic looking like one. It goes
+    # positive for a legacy paid user with no `users` row yet -- expected
+    # drift MembershipMigrator skips by design, not a migration failure -- and
+    # goes NEGATIVE once a legacy `paid` flag is cleared after import, because
+    # the grant it produced is permanent and outlives the flag (see the class
+    # comment on MembershipMigrator). Read it as "how far the two raw counts
+    # currently differ," never as an error count. For the authoritative
+    # missing/expected breakdown, by id, run `bin/rails billing:verify_migration`.
+    pp({
+      legacy_paid_users: legacy_paid,
+      legacy_memberships_now: granted,
+      legacy_paid_minus_legacy_memberships: legacy_paid - granted
+    })
+  end
+
+  desc "Import legacy donation history into donations"
+  task donations: :environment do
+    legacy_count = LegacyBooks::Donation.count
+
+    result = Services::BooksMigration::DonationMigrator.call
+    pp result
+    abort "donations migration failed: #{result[:error]}" unless result[:success]
+
+    pp({
+      legacy_donations: legacy_count,
+      donations_now: Donation.count,
+      unattached: Donation.where(user_id: nil).count
+    })
+  end
+
   desc "Run all Phase-1 migrators in dependency order"
   task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers,
     :categories, :category_items, :book_attributes, :book_type_categories, :countries,

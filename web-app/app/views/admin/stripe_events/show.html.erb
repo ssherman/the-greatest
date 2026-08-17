@@ -1,0 +1,51 @@
+<% content_for :title, "Stripe Event" %>
+
+<%= link_to "← Stripe Events", admin_stripe_events_path, class: "link" %>
+<h1 class="text-2xl font-bold mt-2 mb-6 [overflow-wrap:anywhere]"><%= @event.event_type %></h1>
+
+<div class="card bg-base-100 mb-6">
+  <div class="card-body">
+    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div class="[overflow-wrap:anywhere]">
+        <dt class="text-sm text-base-content/70">Event id</dt><dd><%= @event.stripe_event_id %></dd>
+      </div>
+      <div><dt class="text-sm text-base-content/70">Status</dt><dd><%= @event.status.titleize %></dd></div>
+      <div class="[overflow-wrap:anywhere]">
+        <dt class="text-sm text-base-content/70">Customer</dt><dd><%= @event.stripe_customer_id || "—" %></dd>
+      </div>
+      <div><dt class="text-sm text-base-content/70">Mode</dt><dd><%= @event.livemode ? "Live" : "Test" %></dd></div>
+      <div><dt class="text-sm text-base-content/70">API version</dt><dd><%= @event.api_version || "—" %></dd></div>
+      <div><dt class="text-sm text-base-content/70">Attempts</dt><dd class="tabular-nums"><%= @event.attempts %></dd></div>
+      <div>
+        <dt class="text-sm text-base-content/70">Received from Stripe</dt>
+        <dd><%= @event.stripe_created_at.to_fs(:long) %></dd>
+      </div>
+      <div>
+        <dt class="text-sm text-base-content/70">Processed</dt>
+        <dd><%= @event.processed_at&.to_fs(:long) || "—" %></dd>
+      </div>
+      <% if @event.error.present? %>
+        <div class="sm:col-span-2">
+          <dt class="text-sm text-base-content/70">Error</dt>
+          <dd class="[overflow-wrap:anywhere]"><%= @event.error %></dd>
+        </div>
+      <% end %>
+    </dl>
+
+    <% if @event.received? || @event.failed? %>
+      <div class="card-actions mt-4">
+        <%= button_to "Re-run this event", reprocess_admin_stripe_event_path(@event), method: :post,
+              class: "btn btn-sm btn-primary",
+              form: {data: {turbo_confirm: "Re-read this customer from Stripe and rewrite their membership rows?"}} %>
+      </div>
+    <% end %>
+  </div>
+</div>
+
+<h2 class="text-lg font-semibold mb-2">Payload</h2>
+<p class="text-sm text-base-content/70 mb-2">
+  Contains customer contact details. Do not paste it anywhere outside this admin.
+</p>
+<div class="overflow-x-auto">
+  <pre class="text-xs bg-base-200 p-4 rounded"><%= JSON.pretty_generate(@event.payload) %></pre>
+</div>

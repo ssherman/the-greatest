@@ -1,0 +1,51 @@
+<% content_for :title, "Donations" %>
+
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-2xl font-bold">Donations</h1>
+  <p class="text-sm text-base-content/70">
+    Total received: <span class="font-semibold tabular-nums"><%= number_to_currency(@succeeded_total_cents / 100.0) %></span>
+  </p>
+</div>
+
+<%= form_with url: admin_donations_path, method: :get, class: "flex flex-wrap gap-2 mb-4" do |form| %>
+  <%= form.search_field :q, value: @search_query, placeholder: "Email or payment intent id",
+        class: "input w-80", "aria-label": "Search donations" %>
+  <%= form.select :status, options_for_select(Donation.statuses.keys.map { |s| [s.titleize, s] }, params[:status]),
+        {include_blank: "Any status"}, class: "select" %>
+  <%= form.submit "Filter", class: "btn" %>
+  <%= link_to "Clear", admin_donations_path, class: "btn btn-ghost" %>
+<% end %>
+
+<div class="overflow-x-auto">
+  <table class="table">
+    <thead>
+      <tr><th>Date</th><th>Donor</th><th>Amount</th><th>Status</th><th>Site</th><th>Payment intent</th></tr>
+    </thead>
+    <tbody>
+      <% if @donations.any? %>
+        <% @donations.each do |donation| %>
+          <tr>
+            <td><%= donation.created_at.to_date.iso8601 %></td>
+            <td class="[overflow-wrap:anywhere]">
+              <%= donation.user&.email || donation.email.presence || "Anonymous" %>
+            </td>
+            <td class="tabular-nums"><%= number_to_currency(donation.amount_in_dollars) %></td>
+            <td><%= donation.status.titleize %></td>
+            <td><%= donation.domain || "—" %></td>
+            <td class="[overflow-wrap:anywhere] text-xs"><%= donation.stripe_payment_intent_id || "—" %></td>
+          </tr>
+        <% end %>
+      <% else %>
+        <tr>
+          <td colspan="6" class="text-center text-base-content/70 py-8">No donations match these filters.</td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>
+
+<% if @pagy.pages > 1 %>
+  <div class="mt-4 flex justify-center">
+    <%== @pagy.series_nav %>
+  </div>
+<% end %>

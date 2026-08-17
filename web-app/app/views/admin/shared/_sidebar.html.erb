@@ -82,6 +82,26 @@
           </ul>
         </details>
       </li>
+
+      <!-- Billing Section (admin only — billing is money, and editors do not get it) -->
+      <% if current_user&.admin? %>
+        <li>
+          <details open>
+            <summary class="font-semibold">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+              </svg>
+              Billing
+            </summary>
+            <ul>
+              <li><%= link_to "Memberships", admin_memberships_path, class: "flex items-center gap-2" %></li>
+              <li><%= link_to "Donations", admin_donations_path, class: "flex items-center gap-2" %></li>
+              <li><%= link_to "Stripe Events", admin_stripe_events_path, class: "flex items-center gap-2" %></li>
+              <li><%= link_to "Billing Plans", admin_billing_plans_path, class: "flex items-center gap-2" %></li>
+            </ul>
+          </details>
+        </li>
+      <% end %>
     </ul>
   </div>
 
