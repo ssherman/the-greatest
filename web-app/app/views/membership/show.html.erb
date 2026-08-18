@@ -1,6 +1,76 @@
 <% content_for :title, "Support #{domain_settings[:name]}" %>
 
 <div class="container mx-auto max-w-4xl px-4 py-10">
-  <h1 class="text-3xl font-bold mb-4">Support <%= domain_settings[:name] %></h1>
-  <p><%= membership_status_sentence(@membership) %></p>
+  <%= render "flash" if flash[:alert] || flash[:notice] %>
+
+  <h1 class="text-3xl font-bold text-center mb-6">Support <%= domain_settings[:name] %></h1>
+
+  <div class="prose max-w-none mb-12 [overflow-wrap:anywhere]">
+    <%= render membership_story_partial %>
+  </div>
+
+  <h2 class="text-2xl font-semibold text-center mb-2">Membership</h2>
+
+  <% if @membership %>
+    <p class="text-center text-base-content/70 mb-8"><%= membership_status_sentence(@membership) %></p>
+
+    <div class="flex flex-wrap justify-center gap-3 mb-16">
+      <%= link_to "Members' area", members_path, class: "btn btn-primary" %>
+      <% if @membership.source_stripe? %>
+        <%= button_to "Manage billing", membership_portal_path, class: "btn btn-outline" %>
+      <% end %>
+    </div>
+  <% else %>
+    <p class="text-center text-base-content/70 mb-8">
+      One membership covers The Greatest Books, Music and Games.
+    </p>
+
+    <div class="grid gap-6 md:grid-cols-2 mb-16">
+      <% @plans.each do |plan| %>
+        <div class="card bg-base-200 h-full">
+          <div class="card-body">
+            <h3 class="card-title justify-center"><%= plan.name %></h3>
+
+            <p class="text-center my-4">
+              <span class="text-4xl font-bold">$<%= number_with_precision(plan.amount_in_dollars, precision: plan.amount_cents.to_i % 100 == 0 ? 0 : 2) %></span>
+              <span class="text-base-content/70">/<%= plan.interval %></span>
+            </p>
+
+            <ul class="space-y-2 mb-6">
+              <li>Access to the members' area</li>
+              <li>Every site — books, music and games</li>
+              <li>You fund the site directly: no ads, no data selling, no investors</li>
+              <li>More members' features as they ship</li>
+            </ul>
+
+            <div class="card-actions justify-center mt-auto">
+              <% if signed_in? %>
+                <%= button_to "Join #{plan.interval}", membership_checkout_path,
+                      params: {plan: plan.key},
+                      class: "btn btn-primary btn-lg",
+                      data: {testid: "join-#{plan.key}"} %>
+              <% else %>
+                <button class="btn btn-primary btn-lg"
+                        data-testid="join-<%= plan.key %>"
+                        onclick="login_modal.showModal()">Join <%= plan.interval %></button>
+              <% end %>
+            </div>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+
+  <% if @donation_plan %>
+    <div class="text-center">
+      <h2 class="text-2xl font-semibold mb-3">Make a one-time donation</h2>
+      <p class="mb-6 text-base-content/80">
+        Prefer to give once rather than subscribe? Any amount helps, and you do
+        not need an account.
+      </p>
+      <%= button_to "Donate", membership_donate_path,
+            class: "btn btn-outline btn-lg",
+            data: {testid: "donate"} %>
+    </div>
+  <% end %>
 </div>

@@ -353,4 +353,97 @@ class MembershipControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to "https://checkout.stripe.com/c/pay/cs_donate"
   end
+
+  # These three assert that the right STORY renders per host, not that the copy
+  # says anything in particular. Each matches one short distinctive phrase; if
+  # the copy is rewritten, update the phrase here and nothing else.
+  test "the books host renders the books story" do
+    host! Rails.application.config.domains[:books]
+
+    get membership_url
+
+    assert_match "In 2009", response.body
+  end
+
+  test "the music host renders the music story" do
+    host! Rails.application.config.domains[:music]
+
+    get membership_url
+
+    assert_match "greatest albums", response.body
+    assert_no_match(/In 2009/, response.body)
+  end
+
+  test "the games host renders the games story" do
+    host! Rails.application.config.domains[:games]
+
+    get membership_url
+
+    assert_match "spreadsheet", response.body
+    assert_no_match(/In 2009/, response.body)
+  end
+
+  test "an unrecognised host still renders the page" do
+    # detect_current_domain (ApplicationController) falls back to :books for a
+    # Host it does not recognise -- a pre-existing, app-wide default that
+    # predates this feature and is out of scope to change here -- so this host
+    # renders the books story, not the site-neutral one. That fallback branch
+    # of membership_story_partial has no HTTP-reachable host to exercise it
+    # from (config.domains has exactly four keys, and detect_current_domain
+    # only ever returns one of them), so it is covered directly at the helper
+    # level instead -- see "falls back to the site-neutral story for a domain
+    # with no story of its own" in test/helpers/membership_helper_test.rb.
+    host! "unknown.example.com"
+
+    get membership_url
+
+    assert_response :success
+  end
+
+  test "plan prices come from the database" do
+    billing_plans(:monthly).update!(amount_cents: 700)
+
+    get membership_url
+
+    assert_match "$7", response.body
+  end
+
+  test "an inactive plan is not offered" do
+    get membership_url
+
+    assert_no_match(/#{Regexp.escape(billing_plans(:retired_monthly).name)}/, response.body)
+  end
+
+  test "the page still renders when no plans are configured" do
+    # Production reaches this state between the deploy and stripe:sync_plans, and
+    # a 500 on /membership would be the first thing a visitor sees.
+    BillingPlan.delete_all
+
+    get membership_url
+
+    assert_response :success
+  end
+
+  test "a flash alert reaches the page after a failing action redirects and is followed" do
+    user = users(:admin_user)
+    user.memberships.destroy_all
+    sign_in_as(user, stub_auth: true)
+
+    post membership_checkout_url, params: {plan: "free_forever"}
+    follow_redirect!
+
+    assert_match "That membership option is not available.", response.body
+  end
+
+  test "a flash notice reaches the page after a redirect and is followed" do
+    user = users(:editor_user) # comped: a member, but never billed -- no stripe_customer_id
+    sign_in_as(user, stub_auth: true)
+
+    post membership_checkout_url, params: {plan: "monthly"}
+    follow_redirect!
+
+    # Not "You're already a member": ERB auto-escapes the apostrophe to
+    # &#39;, so a literal one in the assertion would never match the body.
+    assert_match "already a member -- thank you for your support", response.body
+  end
 end

@@ -6,6 +6,16 @@ module MembershipHelper
   # viewer; pair it with current_user&.member? when deciding what to show.
   def members_only?(feature) = MembershipGate.members_only?(feature)
 
+  # Each site tells its own story on the membership page. Falls back to a
+  # site-neutral version rather than to any one site's story, so a new host
+  # never renders someone else's history.
+  STORY_DOMAINS = %w[books music games].freeze
+
+  def membership_story_partial
+    domain = Current.domain.to_s
+    STORY_DOMAINS.include?(domain) ? "membership/story_#{domain}" : "membership/story_default"
+  end
+
   # Membership status in words. Never colour alone, and never green-versus-red:
   # a red-green colour-blind reader must get the same information from the text.
   #

@@ -1,0 +1,29 @@
+<%#
+  This page's own flash region -- the shared layouts render no flash at all
+  (see app/views/layouts/admin.html.erb and app/views/my_lists/show.html.erb
+  for the only two other places this app does), so every redirect_to
+  membership_path, alert:/notice: in MembershipController would otherwise be
+  invisible.
+
+  Alert and notice never lean on colour alone, and never pair green against
+  red: each carries its own word ("Problem"/"Note") ahead of the message, and
+  the two use alert-error (red) against alert-info (blue) rather than
+  alert-success, which stays green on the default daisyUI theme music and
+  games use -- pairing it with alert-error there would be exactly the
+  green-versus-red the owner can't tell apart. role="alert"/role="status" get
+  each one announced by assistive tech as soon as the redirected page loads,
+  not just drawn.
+%>
+<% if flash[:alert] %>
+  <div class="alert alert-error mb-4" role="alert">
+    <span class="font-bold">Problem:</span>
+    <span><%= flash[:alert] %></span>
+  </div>
+<% end %>
+
+<% if flash[:notice] %>
+  <div class="alert alert-info mb-4" role="status" aria-live="polite">
+    <span class="font-bold">Note:</span>
+    <span><%= flash[:notice] %></span>
+  </div>
+<% end %>
