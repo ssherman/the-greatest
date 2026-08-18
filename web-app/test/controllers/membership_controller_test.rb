@@ -386,18 +386,35 @@ class MembershipControllerTest < ActionDispatch::IntegrationTest
   test "an unrecognised host still renders the page" do
     # detect_current_domain (ApplicationController) falls back to :books for a
     # Host it does not recognise -- a pre-existing, app-wide default that
-    # predates this feature and is out of scope to change here -- so this host
-    # renders the books story, not the site-neutral one. That fallback branch
-    # of membership_story_partial has no HTTP-reachable host to exercise it
-    # from (config.domains has exactly four keys, and detect_current_domain
-    # only ever returns one of them), so it is covered directly at the helper
-    # level instead -- see "falls back to the site-neutral story for a domain
-    # with no story of its own" in test/helpers/membership_helper_test.rb.
+    # predates this feature and is out of scope to change here -- so this
+    # particular host renders the books story, not the site-neutral one. See
+    # the next test for a host that genuinely reaches the site-neutral path.
     host! "unknown.example.com"
 
     get membership_url
 
     assert_response :success
+  end
+
+  test "the configured domain with no story of its own renders the site-neutral story, not another site's" do
+    # The membership route is deliberately global -- "one membership covers
+    # every site, so there is one set of URLs served on every host" (see
+    # config/routes.rb) -- and config.domains has one more entry than
+    # STORY_DOMAINS covers, so a real request with that domain's own
+    # configured Host reaches membership_story_partial's fallback branch over
+    # HTTP today, live in production. Derived rather than named so this stays
+    # correct if the set of configured domains ever changes -- what's under
+    # test is "whatever isn't books/music/games gets the neutral story", not
+    # any one specific host.
+    extra_domain = (Rails.application.config.domains.keys - MembershipHelper::STORY_DOMAINS.map(&:to_sym)).first
+    host! Rails.application.config.domains[extra_domain]
+
+    get membership_url
+
+    assert_response :success
+    assert_no_match(/In 2009/, response.body)
+    assert_no_match(/greatest albums/, response.body)
+    assert_no_match(/spreadsheet/, response.body)
   end
 
   test "plan prices come from the database" do

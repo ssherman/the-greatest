@@ -106,14 +106,14 @@ class MembershipHelperTest < ActionView::TestCase
     assert_equal "membership/story_games", membership_story_partial
   end
 
-  test "membership_story_partial falls back to the site-neutral story for a domain with no story of its own" do
-    # Set directly rather than via a host: STORY_DOMAINS deliberately excludes
-    # one of the app's real domains (out of scope for this feature), and no
-    # HTTP request can otherwise produce a Current.domain outside the three
-    # story-bearing sites -- see the controller-level comment on "an
-    # unrecognised host still renders the page" in
-    # test/controllers/membership_controller_test.rb.
-    Current.domain = :some_future_site
+  test "membership_story_partial falls back to the site-neutral story for the domain with no story of its own" do
+    # The real configured domain STORY_DOMAINS excludes, not a fabricated one:
+    # see "the configured domain with no story of its own renders the
+    # site-neutral story, not another site's" in
+    # test/controllers/membership_controller_test.rb for why that domain
+    # genuinely reaches this branch over HTTP, live, today.
+    extra_domain = (Rails.application.config.domains.keys - MembershipHelper::STORY_DOMAINS.map(&:to_sym)).first
+    Current.domain = extra_domain
 
     assert_equal "membership/story_default", membership_story_partial
   end
