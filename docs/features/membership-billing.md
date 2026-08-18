@@ -461,12 +461,19 @@ first.
 **Both endpoints receive every event on the shared account — legacy's traffic included.** That is
 Stripe's delivery model, not a targeting choice: there's no way to scope a delivery to "only events
 this app created." Concretely, one subscription change delivers to *both* production endpoints,
-and `Billing::ProcessStripeEventJob` runs twice for the same event id. The unique index on
-`stripe_events.stripe_event_id` is what makes the second delivery a `200` with nothing re-processed
-— see §2's core design. Legacy's own coexistence guard is the mirror image: it receives this app's
-events too, on its own endpoint, and skips them by `metadata[origin_app]`/`payment_link` checks
-documented in the spec's "Legacy coexistence" and in legacy's own
-`docs/features/stripe_coexistence_guard.md`.
+and both deliveries land within moments of each other. The unique index on
+`stripe_events.stripe_event_id` makes the second delivery reuse the same row rather than inserting
+a duplicate — see §2's core design — but `Webhooks::StripeController#create` re-enqueues
+`Billing::ProcessStripeEventJob` whenever that row is still `received` or `failed`, deliberately: a
+duplicate row is not proof the first delivery was ever processed, and one stranded at `received`
+because `perform_async` failed must not be reported to Stripe as delivered. Since the two endpoints
+fire together, the second delivery normally finds the row still `received` — **two concurrent jobs
+processing the same event is the norm, not an edge case**, and every service the job calls has to
+converge under that, not merely tolerate an occasional race. `ReconcileCustomer` does it with a
+per-customer Postgres advisory lock (§2); `RecordDonation` does it below. Legacy's own coexistence
+guard is the mirror image: it receives this app's events too, on its own endpoint, and skips them by
+`metadata[origin_app]`/`payment_link` checks documented in the spec's "Legacy coexistence" and in
+legacy's own `docs/features/stripe_coexistence_guard.md`.
 
 **Donations are recorded from the same event stream, not a separate path.**
 `Billing::ProcessStripeEventJob#record_donation` (`app/sidekiq/billing/process_stripe_event_job.rb`)
@@ -479,6 +486,23 @@ the full session from the Stripe API — mirroring `ReconcileCustomer`'s "re-rea
 payload" design — and `find_or_initialize_by(stripe_payment_intent_id:)`s a `Donation` row. That
 same unique index is what makes a webhook-recorded donation and a legacy-history-imported one
 converge instead of duplicating if the same payment ever shows up both ways.
+
+Unlike `ReconcileCustomer`, `RecordDonation` takes no lock: a donation session may carry no
+customer at all (an anonymous donor), so there is nothing to lock on. Instead it rescues the two
+shapes a genuine two-jobs-same-payment-intent race can surface as —
+`ActiveRecord::RecordNotUnique` when both INSERTs reach the partial unique index before either
+commits, `ActiveRecord::RecordInvalid` when the loser's own uniqueness validation SELECT runs after
+the winner has already committed — and re-reads the winner's row instead of raising. The
+`RecordInvalid` rescue is scoped to `errors.of_kind?(:stripe_payment_intent_id, :taken)` on purpose:
+a donation invalid for any other reason still raises, the same `stripe_events` row still flips to
+`failed`, and Sidekiq still retries — silently swallowing a genuinely broken donation is the failure
+mode `Webhooks::StripeController#record_event`'s identical guard exists to avoid, and this mirrors
+it. Without this, the loser's exception was not rescued by `RecordDonation`'s
+`rescue ::Stripe::StripeError`, so it propagated, flipped the row to `failed`, and Sidekiq retried —
+the retry self-heals in ~30s since the row already exists by then, so this was noise rather than
+data loss, but an operator following the verification table below would see `failed` rows on real,
+successful donations and reasonably suspect something was broken. Subscription events never hit
+this: `ReconcileCustomer`'s advisory lock serialises them before either job reaches a write.
 
 This is also how **legacy's own donations get written here**, since both endpoints see every
 event: `RecordDonation#resolve_user` tries `metadata[app_user_id]` first (this app's own tag),

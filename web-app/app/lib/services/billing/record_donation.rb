@@ -58,6 +58,32 @@ module Services
         donation.save!
 
         success(donation)
+      rescue ActiveRecord::RecordNotUnique
+        # Stripe fans out one event to both webhook endpoints simultaneously (see
+        # Webhooks::StripeController), so two jobs racing find_or_initialize_by
+        # on the same brand-new payment_intent_id is the normal case, not a
+        # bug -- both find nothing, both build a new row, and the database's
+        # partial unique index on stripe_payment_intent_id catches the loser
+        # here (a true race: both INSERTs reached the constraint before either
+        # committed).
+        #
+        # Re-reading and returning the winner's row is what makes the loser
+        # converge quietly instead of raising -- which would flip its
+        # stripe_events row to `failed` and have Sidekiq retry noise a real,
+        # successful donation as if something were broken.
+        success(::Donation.find_by(stripe_payment_intent_id: payment_intent_id))
+      rescue ActiveRecord::RecordInvalid => e
+        # Same race, the other way it can surface: the loser's own uniqueness
+        # validation SELECT runs after the winner has already committed, so
+        # save! never reaches the INSERT and raises RecordInvalid instead of
+        # RecordNotUnique.
+        #
+        # The of_kind? guard is load-bearing, same as
+        # Webhooks::StripeController#record_event: a donation invalid for any
+        # OTHER reason (a future validation, a data bug) must still raise and
+        # surface as a failed stripe_events row, not be swallowed here.
+        raise unless e.record.errors.of_kind?(:stripe_payment_intent_id, :taken)
+        success(::Donation.find_by(stripe_payment_intent_id: payment_intent_id))
       rescue ::Stripe::StripeError => e
         Rails.logger.error("[billing] donation record failed for #{@checkout_session_id}: #{e.class}")
         failure(e.message)

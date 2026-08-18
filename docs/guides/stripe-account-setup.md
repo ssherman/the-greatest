@@ -96,11 +96,18 @@ invoice.payment_failed
 legacy's included.** That is by design, not a targeting mistake: Stripe delivers every subscribed
 event type to every endpoint, with no way to scope a delivery to "only events this app created."
 Concretely, a single subscription change delivers to both `thegreatestmusic.org` and
-`thegreatest.games`, and `Billing::ProcessStripeEventJob` reconciles the same customer twice. The
-unique index on `stripe_events.stripe_event_id` (`app/models/stripe_event.rb`) turns the second
-delivery into "already have this row, return 200, enqueue nothing new" — see
-`Webhooks::StripeController#record_event`. Nothing double-processes and nothing needs
-deduplicating by hand.
+`thegreatest.games`, and both deliveries land within moments of each other. The unique index on
+`stripe_events.stripe_event_id` (`app/models/stripe_event.rb`) makes the second delivery
+`find_by`-and-reuse the same row rather than inserting a duplicate — see
+`Webhooks::StripeController#record_event` — but it does **not** mean the second delivery is a
+no-op. `#create` re-enqueues `Billing::ProcessStripeEventJob` whenever that row is still `received`
+or `failed`, deliberately: a duplicate is not proof the first delivery was ever processed, and a row
+stranded at `received` because `perform_async` failed must not be reported to Stripe as delivered.
+Since the two endpoints fire together, the second delivery normally finds the row still `received`
+— **two concurrent jobs processing the same event is the norm, not an edge case.** The job and the
+services it calls (`ReconcileCustomer`'s advisory lock, `RecordDonation`'s race-recovery rescue) are
+what make that converge quietly instead of double-processing; see `docs/features/membership-billing.md`
+§12 for how each one does it.
 
 **Copy both endpoints' signing secrets into `STRIPE_WEBHOOK_SECRET` as one comma-separated
 value.** Each endpoint gets its own secret from Stripe, and a delivery is only ever signed with

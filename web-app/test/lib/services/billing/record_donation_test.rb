@@ -95,6 +95,70 @@ module Services
         end
       end
 
+      # Stripe fans out one event to both webhook endpoints simultaneously, so
+      # two ProcessStripeEventJob runs racing find_or_initialize_by on the same
+      # brand-new payment_intent_id is the normal case. Simulate the loser by
+      # stubbing save! to raise what the database raises when two INSERTs both
+      # reach the partial unique index before either commits, with the winner's
+      # row already there for the re-read to find.
+      test "a RecordNotUnique race on the same payment intent converges on the winner's row instead of raising" do
+        winner = Donation.create!(
+          amount_cents: 2500, currency: "usd", status: :succeeded,
+          stripe_payment_intent_id: "pi_test_1", stripe_checkout_session_id: "cs_other",
+          email: "donor@example.com"
+        )
+        ::Stripe::Checkout::Session.expects(:retrieve).returns(session_stub)
+        ::Donation.any_instance.expects(:save!).raises(ActiveRecord::RecordNotUnique.new("duplicate key"))
+
+        result = nil
+        assert_no_difference "Donation.count" do
+          result = RecordDonation.call(checkout_session_id: "cs_test_1")
+        end
+
+        assert result.success?
+        assert_equal winner, result.data
+      end
+
+      # The other shape the same race can take: the loser's own uniqueness
+      # validation SELECT runs after the winner has already committed, so
+      # save! raises RecordInvalid instead of reaching the database constraint.
+      test "a RecordInvalid race on stripe_payment_intent_id converges on the winner's row instead of raising" do
+        winner = Donation.create!(
+          amount_cents: 2500, currency: "usd", status: :succeeded,
+          stripe_payment_intent_id: "pi_test_1", stripe_checkout_session_id: "cs_other",
+          email: "donor@example.com"
+        )
+        ::Stripe::Checkout::Session.expects(:retrieve).returns(session_stub)
+        invalid_donation = Donation.new
+        invalid_donation.errors.add(:stripe_payment_intent_id, :taken)
+        ::Donation.any_instance.expects(:save!)
+          .raises(ActiveRecord::RecordInvalid.new(invalid_donation))
+
+        result = nil
+        assert_no_difference "Donation.count" do
+          result = RecordDonation.call(checkout_session_id: "cs_test_1")
+        end
+
+        assert result.success?
+        assert_equal winner, result.data
+      end
+
+      # The of_kind? guard must not swallow a donation that is invalid for some
+      # OTHER reason -- that would return success with nothing recorded and no
+      # audit trail, which is exactly the defect class this codebase has been
+      # bitten by before (see the sanitizer/idempotent-write-paths lessons).
+      test "a RecordInvalid for a reason other than the intent-id race still raises" do
+        ::Stripe::Checkout::Session.expects(:retrieve).returns(session_stub)
+        invalid_donation = Donation.new
+        invalid_donation.errors.add(:amount_cents, :greater_than, count: 0)
+        ::Donation.any_instance.expects(:save!)
+          .raises(ActiveRecord::RecordInvalid.new(invalid_donation))
+
+        assert_raises(ActiveRecord::RecordInvalid) do
+          RecordDonation.call(checkout_session_id: "cs_test_1")
+        end
+      end
+
       test "a Stripe failure is a failed Result" do
         ::Stripe::Checkout::Session.expects(:retrieve).raises(::Stripe::APIConnectionError.new("down"))
 
