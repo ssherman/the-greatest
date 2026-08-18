@@ -7,10 +7,13 @@ module Services
     class BootstrapPlans
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
+      # No "donation" entry: CreateDonationPrice sets its own lookup key
+      # (CreateDonationPrice::LOOKUP_KEY) and nothing here ever reads one for
+      # the donation price -- a third entry would be documentation
+      # masquerading as configuration.
       LOOKUP_KEYS = {
         "monthly" => "membership_monthly",
-        "yearly" => "membership_yearly",
-        "donation" => CreateDonationPrice::LOOKUP_KEY
+        "yearly" => "membership_yearly"
       }.freeze
 
       def self.call = new.call

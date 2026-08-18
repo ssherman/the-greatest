@@ -21,9 +21,14 @@ namespace :stripe do
     result.data[:resolved].each { |key| puts "resolved #{key}" }
 
     unless result.success?
-      warn "FAILED to resolve: #{result.data[:failures].join(", ")}"
-      warn "Each membership plan needs its lookup_key written onto the live price first:"
-      warn "  CONFIRM=label-price bin/rails 'stripe:label_price[price_xxx,membership_monthly]'"
+      warn "FAILED: #{result.errors.join("; ")}"
+      # Only when there is an actual unresolvable lookup key -- not for a row
+      # that failed to save locally (result.data[:invalid]), which writing a
+      # lookup key onto a live Stripe price cannot fix.
+      if result.data[:failures].any?
+        warn "Each membership plan needs its lookup_key written onto the live price first:"
+        warn "  CONFIRM=label-price bin/rails 'stripe:label_price[price_xxx,membership_monthly]'"
+      end
       exit 1
     end
 

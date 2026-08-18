@@ -51,11 +51,20 @@ module Services
       test "running twice does not duplicate plan rows" do
         Rails.application.config.stubs(:stripe_livemode).returns(false)
         ::Stripe::Product.stubs(:create).returns(stub(id: "prod_test"))
-        ::Stripe::Price.stubs(:create).returns(stub(id: "price_any", unit_amount: 500, currency: "usd", lookup_key: "membership_monthly"))
+        # Distinct ids per lookup key, same as the other sandbox tests: a
+        # single shared stub id would collide with stripe_price_id's
+        # uniqueness validation on the SECOND plan upserted within one run,
+        # which has nothing to do with what "running twice" is meant to prove.
+        ::Stripe::Price.stubs(:create).with(has_entry(lookup_key: "membership_monthly"))
+          .returns(stub(id: "price_m", unit_amount: 500, currency: "usd", lookup_key: "membership_monthly"))
+        ::Stripe::Price.stubs(:create).with(has_entry(lookup_key: "membership_yearly"))
+          .returns(stub(id: "price_y", unit_amount: 5000, currency: "usd", lookup_key: "membership_yearly"))
+        ::Stripe::Price.stubs(:create).with(has_entry(lookup_key: "donation_custom"))
+          .returns(stub(id: "price_d", unit_amount: nil, currency: "usd", lookup_key: "donation_custom"))
 
         assert_no_difference "BillingPlan.where(key: %w[monthly yearly donation]).count" do
-          BootstrapPlans.call
-          BootstrapPlans.call
+          assert BootstrapPlans.call.success?
+          assert BootstrapPlans.call.success?
         end
       end
     end

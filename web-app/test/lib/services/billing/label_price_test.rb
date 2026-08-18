@@ -8,7 +8,11 @@ module Services
         # operator can SEE, not something the plan asserts.
         ::Stripe::Price.expects(:retrieve).with("price_live_x")
           .returns(stub(id: "price_live_x", lookup_key: nil, unit_amount: 500, currency: "usd", active: true))
-        ::Stripe::Price.expects(:update).with("price_live_x", has_entry(lookup_key: "membership_monthly"))
+        # An EXACT hash, not has_entry: has_entry would still match a call that
+        # also carried transfer_lookup_key: true, which is exactly the flag
+        # that must never be sent (see the "refuses when the key is already on
+        # a different price" test below for why).
+        ::Stripe::Price.expects(:update).with("price_live_x", {lookup_key: "membership_monthly"})
           .returns(stub(id: "price_live_x", lookup_key: "membership_monthly", unit_amount: 500, currency: "usd", active: true))
 
         result = LabelPrice.call(price_id: "price_live_x", lookup_key: "membership_monthly")
