@@ -45,6 +45,19 @@ class MembersControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to membership_path
   end
 
+  # Turbo Drive hijacks button_to submissions via fetch(), and a fetch cannot
+  # follow the 303 this action issues to billing.stripe.com cross-origin -- see
+  # the equivalent test in membership_controller_test.rb for the full mechanism.
+  # button_to puts html_options (including data:) on the <button>, not the
+  # <form>, so assert against the actual element.
+  test "the manage billing button submits natively, not through Turbo" do
+    sign_in_as(users(:regular_user), stub_auth: true)
+
+    get members_url
+
+    assert_select "form[action=?] button[data-turbo='false']", membership_portal_path
+  end
+
   test "the page is never cached" do
     sign_in_as(users(:regular_user), stub_auth: true)
 

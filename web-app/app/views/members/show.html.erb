@@ -14,7 +14,9 @@
 
       <% if @membership&.source_stripe? %>
         <div class="card-actions mt-4">
-          <%= button_to "Manage billing", membership_portal_path, class: "btn btn-primary" %>
+          <%= button_to "Manage billing", membership_portal_path,
+                class: "btn btn-primary",
+                data: {turbo: false} %>
         </div>
       <% else %>
         <p class="text-sm text-base-content/70 mt-2">

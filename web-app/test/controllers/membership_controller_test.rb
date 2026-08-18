@@ -425,6 +425,39 @@ class MembershipControllerTest < ActionDispatch::IntegrationTest
     assert_match "$7", response.body
   end
 
+  # Turbo Drive hijacks button_to submissions via fetch(), and a fetch cannot
+  # follow the 303 these actions issue to checkout.stripe.com/billing.stripe.com
+  # cross-origin -- the browser rejects it as a CORS request and the button just
+  # goes idle. data-turbo="false" on the submitter is what makes the browser
+  # submit the form natively instead, so it follows the redirect itself. Rails'
+  # button_to puts html_options (including data:) on the <button>, not the
+  # <form> -- assert against the actual element, not merely "somewhere in the
+  # response body", so a future edit that moves the attribute to the wrong tag
+  # (or drops it) is caught.
+  test "the donate button submits natively, not through Turbo" do
+    get membership_url
+
+    assert_select "form[action=?] button[data-turbo='false']", membership_donate_path
+  end
+
+  test "the join buttons submit natively, not through Turbo" do
+    user = users(:admin_user)
+    user.memberships.destroy_all
+    sign_in_as(user, stub_auth: true)
+
+    get membership_url
+
+    assert_select "form[action=?] button[data-turbo='false']", membership_checkout_path, minimum: 1
+  end
+
+  test "the manage billing button submits natively, not through Turbo" do
+    sign_in_as(users(:regular_user), stub_auth: true)
+
+    get membership_url
+
+    assert_select "form[action=?] button[data-turbo='false']", membership_portal_path
+  end
+
   test "an inactive plan is not offered" do
     get membership_url
 

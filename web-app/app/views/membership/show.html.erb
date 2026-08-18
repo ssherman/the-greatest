@@ -17,7 +17,9 @@
     <div class="flex flex-wrap justify-center gap-3 mb-16">
       <%= link_to "Members' area", members_path, class: "btn btn-primary" %>
       <% if @membership.source_stripe? %>
-        <%= button_to "Manage billing", membership_portal_path, class: "btn btn-outline" %>
+        <%= button_to "Manage billing", membership_portal_path,
+              class: "btn btn-outline",
+              data: {turbo: false} %>
       <% end %>
     </div>
   <% else %>
@@ -48,7 +50,7 @@
                 <%= button_to "Join #{plan.interval}", membership_checkout_path,
                       params: {plan: plan.key},
                       class: "btn btn-primary btn-lg",
-                      data: {testid: "join-#{plan.key}"} %>
+                      data: {testid: "join-#{plan.key}", turbo: false} %>
               <% else %>
                 <button class="btn btn-primary btn-lg"
                         data-testid="join-<%= plan.key %>"
@@ -70,7 +72,7 @@
       </p>
       <%= button_to "Donate", membership_donate_path,
             class: "btn btn-outline btn-lg",
-            data: {testid: "donate"} %>
+            data: {testid: "donate", turbo: false} %>
     </div>
   <% end %>
 </div>
