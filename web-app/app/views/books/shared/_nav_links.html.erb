@@ -24,3 +24,6 @@
 <li id="navbar_my_lists" class="hidden"><a href="/my/lists">My Lists</a></li>
 <li id="navbar_my_searches" class="hidden"><a href="/searches">My Searches</a></li>
 <li id="navbar_my_reviews" class="hidden"><a href="/my/reviews">My Reviews</a></li>
+<%# Revealed client-side by membership_state_controller when the visitor is a member. %>
+<li id="navbar_members" class="hidden"><a href="/members">Members</a></li>
+<li><%= link_to "Support", membership_path %></li>

@@ -358,7 +358,7 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     get my_lists_path
     assert_response :success
 
-    assert_includes response.body, 'data-controller="user-list-state"'
+    assert_includes response.body, 'data-controller="user-list-state membership-state"'
     assert_includes response.body, 'id="navbar_my_lists"'
     assert_includes response.body, 'id="user_list_modal"'
     assert_includes response.body, 'id="user-list-icons"'

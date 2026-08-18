@@ -22,6 +22,9 @@ application.register("clipboard-copy", ClipboardCopyController)
 import ConditionalFieldController from "./conditional_field_controller"
 application.register("conditional-field", ConditionalFieldController)
 
+import MembershipStateController from "./membership_state_controller"
+application.register("membership-state", MembershipStateController)
+
 import MetadataEditorController from "./metadata_editor_controller"
 application.register("metadata-editor", MetadataEditorController)
 
