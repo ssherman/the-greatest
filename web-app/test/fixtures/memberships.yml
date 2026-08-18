@@ -74,3 +74,42 @@ password_user_legacy:
   status: 1          # active
   current_period_end:   # nil — legacy early supporters never expire
   note: Legacy early supporter
+
+regular_user_past_due:
+  user: admin_user
+  source: 0          # stripe
+  status: 5          # past_due
+  interval: 0        # monthly
+  stripe_subscription_id: sub_admin_past_due
+  stripe_customer_id: cus_admin
+  current_period_end: <%= 20.days.from_now.to_fs(:db) %>
+  origin_domain: books
+
+canceled_and_expired:
+  user: user_with_expired_membership
+  source: 0          # stripe
+  status: 2          # canceled
+  interval: 0        # monthly
+  stripe_subscription_id: sub_expired_grace
+  stripe_customer_id: cus_expired
+  current_period_end: <%= 3.days.ago.to_fs(:db) %>
+  canceled_at: <%= 35.days.ago.to_fs(:db) %>
+  cancel_at_period_end: true
+  origin_domain: books
+
+comped_expired:
+  user: user_with_expired_comp
+  source: 1          # comped
+  status: 1          # active
+  current_period_end: <%= 1.day.ago.to_fs(:db) %>
+  note: Expired conference comp
+  granted_by: admin_user
+
+unattached_active:
+  user:              # nil — an unmappable Stripe customer, stored not dropped
+  source: 0          # stripe
+  status: 1          # active
+  interval: 1        # yearly
+  stripe_subscription_id: sub_unattached
+  stripe_customer_id: cus_unattached
+  current_period_end: <%= 200.days.from_now.to_fs(:db) %>

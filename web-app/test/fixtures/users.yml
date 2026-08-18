@@ -92,3 +92,21 @@ contractor_user:
   role: 0
   email_verified: true
   original_signup_domain: thegreatestmusic.org
+
+# Holds canceled_and_expired -- a stripe membership past its grace period
+user_with_expired_membership:
+  email: expired_membership@example.com
+  display_name: User With Expired Membership
+  name: User With Expired Membership Full Name
+  role: 0
+  email_verified: false
+  original_signup_domain: thegreatestmusic.org
+
+# Holds comped_expired -- needs its own user because of the one-grant-per-source index
+user_with_expired_comp:
+  email: expired_comp@example.com
+  display_name: User With Expired Comp
+  name: User With Expired Comp Full Name
+  role: 0
+  email_verified: false
+  original_signup_domain: thegreatestmusic.org

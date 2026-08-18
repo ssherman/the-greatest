@@ -204,4 +204,33 @@ class UserTest < ActiveSupport::TestCase
     assert_includes User.column_names, "legacy_migrated"
     assert_includes User.column_names, "legacy_v1_data"
   end
+
+  test "member? is true for a user with an active stripe membership" do
+    assert users(:regular_user).member?
+  end
+
+  test "member? is true for a comped user" do
+    assert users(:editor_user).member?
+  end
+
+  test "member? is false for a user whose comp has expired" do
+    refute users(:user_with_expired_comp).member?
+  end
+
+  test "member? is false for a user with no membership at all" do
+    user = users(:admin_user)
+    user.memberships.destroy_all
+
+    refute user.member?
+  end
+
+  test "granting_membership returns the row that grants access, not merely the newest" do
+    user = users(:regular_user)
+    user.memberships.create!(
+      source: :stripe, status: :incomplete_expired,
+      stripe_subscription_id: "sub_abandoned_attempt", stripe_customer_id: "cus_regular"
+    )
+
+    assert_equal memberships(:regular_user_monthly), user.granting_membership
+  end
 end

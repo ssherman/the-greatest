@@ -49,6 +49,7 @@ class User < ApplicationRecord
   has_many :user_list_items, through: :user_lists
   has_many :saved_searches, dependent: :destroy
   has_many :reviews, dependent: :destroy
+  has_many :memberships, dependent: :nullify
 
   enum :role, [:user, :admin, :editor]
   enum :external_provider, [:facebook, :twitter, :google, :apple, :password]
@@ -62,6 +63,18 @@ class User < ApplicationRecord
 
   def default_user_list_for(user_list_class, list_type)
     user_list_class.where(user: self).find_by(list_type: list_type)
+  end
+
+  # One indexed exists? against one table. This is the whole entitlement check --
+  # there is deliberately no caching layer, no cookie, and no denormalised
+  # boolean on users, because every one of those is a second source of truth.
+  def member? = memberships.granting_access.exists?
+
+  # The row a member's status is displayed from. Ordered so a Stripe row wins
+  # over a comp when someone has both -- the Stripe row is the one with a
+  # renewal date and a portal to manage.
+  def granting_membership
+    memberships.granting_access.order(:source, current_period_end: :desc).first
   end
 
   # Email confirmation methods

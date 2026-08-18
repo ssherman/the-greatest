@@ -86,4 +86,23 @@ class Membership < ApplicationRecord
   # True when the reconciler owns this row. Reads better at call sites than
   # source_stripe? and gives a single place to change the rule.
   def stripe? = source_stripe?
+
+  # The single definition of "this row grants access". Three rules that look
+  # similar but exist for different reasons -- see the spec's Entitlement
+  # section before changing any of them.
+  #
+  # A Stripe row that is active or trialing grants WITHOUT a date check: Stripe's
+  # status is authoritative and our copy of current_period_end can be stale, so
+  # checking it could only ever produce a false denial for someone who is paying.
+  # A canceled Stripe row grants until its paid-through date -- the grace period.
+  # A comped or legacy grant has no Stripe status to trust, so it must be active
+  # AND unexpired, with a null end date meaning "never expires".
+  scope :granting_access, -> {
+    now = Time.current
+
+    where(source: :stripe, status: [:active, :trialing])
+      .or(where(source: :stripe, status: :canceled).where(current_period_end: now..))
+      .or(where(source: [:comped, :legacy], status: :active).where(current_period_end: nil))
+      .or(where(source: [:comped, :legacy], status: :active).where(current_period_end: now..))
+  }
 end
