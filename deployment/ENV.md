@@ -225,7 +225,7 @@ FIREBASE_API_KEY=your_firebase_api_key_here
 
 # Stripe Billing
 STRIPE_SECRET_KEY=sk_live_your_stripe_secret_key_here
-STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_from_stripe_dashboard
+STRIPE_WEBHOOK_SECRET=whsec_music_endpoint_secret,whsec_games_endpoint_secret  # one per registered endpoint
 STRIPE_LIVEMODE=true
 
 # Performance Tuning (optional)

@@ -85,8 +85,10 @@ module Services
           ENV["STRIPE_WEBHOOK_SECRET"].to_s.split(",").map(&:strip).reject(&:empty?)
         end
 
-        # Kept for callers that only need "a" secret (and for the local
-        # `stripe listen` case, which only ever has one).
+        # Retained as compatible API surface: existing callers that only ever
+        # needed "a" secret still work unchanged. There is currently no caller
+        # in app/ or lib/ -- verified_event and webhook_configured? both go
+        # through webhook_secrets (plural), and so does local `stripe listen`.
         def webhook_secret = webhook_secrets.first
 
         # Whether deliveries can be verified at all. The webhook endpoint

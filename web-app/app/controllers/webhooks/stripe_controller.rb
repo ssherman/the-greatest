@@ -107,8 +107,11 @@ module Webhooks
           request.raw_post, request.env["HTTP_STRIPE_SIGNATURE"], secret
         )
       rescue JSON::ParserError, Stripe::SignatureVerificationError => e
-        # A parse failure is not secret-specific -- the body is simply not JSON,
-        # so no other secret will help. Stop rather than re-parsing it N times.
+        # In the pinned stripe gem, construct_event verifies the signature before
+        # parsing the body, so a JSON::ParserError here can only happen once a
+        # secret has already verified -- trying the rest would just fail earlier,
+        # at verify_header, without reaching the parser. Breaking is defensive
+        # against a future gem version that reorders this to parse-then-verify.
         last_error = e
         break if e.is_a?(JSON::ParserError)
       end

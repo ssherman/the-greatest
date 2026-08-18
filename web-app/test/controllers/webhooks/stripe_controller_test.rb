@@ -17,8 +17,6 @@ module Webhooks
       # constant is not verification -- anyone can sign with it and be accepted. The
       # endpoint must refuse before verification when there is no real secret.
       Services::Billing::StripeClient.unstub(:webhook_secrets)
-      previous = ENV["STRIPE_WEBHOOK_SECRET"]
-      ENV.delete("STRIPE_WEBHOOK_SECRET")
 
       payload = stripe_event_payload(
         type: "customer.subscription.created",
@@ -26,18 +24,18 @@ module Webhooks
         id: "evt_forged"
       )
 
-      Sidekiq::Testing.fake! do
-        ::Billing::ProcessStripeEventJob.jobs.clear
-        assert_no_difference "StripeEvent.count" do
-          post_stripe_webhook(payload, secret: "whsec_missing")
+      with_stripe_webhook_secrets(nil) do
+        Sidekiq::Testing.fake! do
+          ::Billing::ProcessStripeEventJob.jobs.clear
+          assert_no_difference "StripeEvent.count" do
+            post_stripe_webhook(payload, secret: "whsec_missing")
+          end
+          assert_equal 0, ::Billing::ProcessStripeEventJob.jobs.size
         end
-        assert_equal 0, ::Billing::ProcessStripeEventJob.jobs.size
-      end
 
-      assert_response :service_unavailable
-      refute_equal 200, response.status, "a forged event signed with the published placeholder was ACCEPTED"
-    ensure
-      previous.nil? ? ENV.delete("STRIPE_WEBHOOK_SECRET") : (ENV["STRIPE_WEBHOOK_SECRET"] = previous)
+        assert_response :service_unavailable
+        refute_equal 200, response.status, "a forged event signed with the published placeholder was ACCEPTED"
+      end
     end
 
     test "rejects a request with no signature header and writes nothing" do
@@ -255,10 +253,37 @@ module Webhooks
             headers: {"HTTP_STRIPE_SIGNATURE" => stripe_signature_header(payload),
                       "CONTENT_TYPE" => "application/json"}
         end
+        ::Billing::ProcessStripeEventJob.jobs.clear
       end
 
       assert_response :ok
       assert StripeEvent.exists?(stripe_event_id: "evt_two_secret")
+    end
+
+    test "an event signed with the first configured secret is accepted" do
+      # Mirror of "...second configured secret..." above, but signed with position
+      # 1 of a two-secret list instead of position 2. The loop returns on its first
+      # verifying secret, so this guards against a future refactor that reverses or
+      # filters webhook_secrets and silently stops trying the first entry.
+      Services::Billing::StripeClient.unstub(:webhook_secrets)
+      payload = stripe_event_payload(
+        type: "customer.subscription.created",
+        object: stripe_subscription_object(id: "sub_first_secret", customer: "cus_first_secret"),
+        id: "evt_first_secret",
+        livemode: Rails.configuration.stripe_livemode
+      )
+
+      Sidekiq::Testing.fake! do
+        with_stripe_webhook_secrets("#{StripeWebhookHelper::TEST_WEBHOOK_SECRET},whsec_other_endpoint") do
+          post webhooks_stripe_url, params: payload,
+            headers: {"HTTP_STRIPE_SIGNATURE" => stripe_signature_header(payload),
+                      "CONTENT_TYPE" => "application/json"}
+        end
+        ::Billing::ProcessStripeEventJob.jobs.clear
+      end
+
+      assert_response :ok
+      assert StripeEvent.exists?(stripe_event_id: "evt_first_secret")
     end
 
     test "an event signed with none of the configured secrets is rejected" do
@@ -283,9 +308,11 @@ module Webhooks
 
     private
 
+    # value: nil clears STRIPE_WEBHOOK_SECRET entirely (the "unconfigured" case);
+    # any other value sets it verbatim, comma-separated list or not.
     def with_stripe_webhook_secrets(value)
       previous = ENV["STRIPE_WEBHOOK_SECRET"]
-      ENV["STRIPE_WEBHOOK_SECRET"] = value
+      value.nil? ? ENV.delete("STRIPE_WEBHOOK_SECRET") : (ENV["STRIPE_WEBHOOK_SECRET"] = value)
       yield
     ensure
       previous.nil? ? ENV.delete("STRIPE_WEBHOOK_SECRET") : (ENV["STRIPE_WEBHOOK_SECRET"] = previous)
