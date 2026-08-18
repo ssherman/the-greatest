@@ -5,15 +5,18 @@ require "test_helper"
 module Webhooks
   class StripeControllerTest < ActionDispatch::IntegrationTest
     setup do
-      Services::Billing::StripeClient.stubs(:webhook_secret)
-        .returns(StripeWebhookHelper::TEST_WEBHOOK_SECRET)
+      # verified_event and webhook_configured? both go through webhook_secrets
+      # (plural) now -- stubbing the singular here would be inert and every
+      # other test in this file would fall through to the real ENV value.
+      Services::Billing::StripeClient.stubs(:webhook_secrets)
+        .returns([StripeWebhookHelper::TEST_WEBHOOK_SECRET])
     end
 
     test "refuses delivery when no webhook secret is configured" do
       # `whsec_missing` is a literal in this PUBLIC repo. Verifying against a published
       # constant is not verification -- anyone can sign with it and be accepted. The
       # endpoint must refuse before verification when there is no real secret.
-      Services::Billing::StripeClient.unstub(:webhook_secret)
+      Services::Billing::StripeClient.unstub(:webhook_secrets)
       previous = ENV["STRIPE_WEBHOOK_SECRET"]
       ENV.delete("STRIPE_WEBHOOK_SECRET")
 
@@ -229,6 +232,63 @@ module Webhooks
 
       refute_equal 200, response.status,
         "a non-duplicate validation failure was reported to Stripe as delivered"
+    end
+
+    test "an event signed with the second configured secret is accepted" do
+      # The setup block stub is on webhook_secrets (plural) and would shadow the
+      # ENV variable set below -- this test's whole point is exercising the real
+      # comma-separated parsing, so it must go.
+      Services::Billing::StripeClient.unstub(:webhook_secrets)
+      payload = stripe_event_payload(
+        type: "customer.subscription.created",
+        object: stripe_subscription_object(id: "sub_two_secret", customer: "cus_two_secret"),
+        id: "evt_two_secret",
+        livemode: Rails.configuration.stripe_livemode
+      )
+
+      # Fake, not inline: a verified event enqueues ProcessStripeEventJob, and the
+      # suite runs Sidekiq inline by default. This test asserts the endpoint's
+      # signature-verification contract, not what a real reconcile sweep does.
+      Sidekiq::Testing.fake! do
+        with_stripe_webhook_secrets("whsec_other_endpoint,#{StripeWebhookHelper::TEST_WEBHOOK_SECRET}") do
+          post webhooks_stripe_url, params: payload,
+            headers: {"HTTP_STRIPE_SIGNATURE" => stripe_signature_header(payload),
+                      "CONTENT_TYPE" => "application/json"}
+        end
+      end
+
+      assert_response :ok
+      assert StripeEvent.exists?(stripe_event_id: "evt_two_secret")
+    end
+
+    test "an event signed with none of the configured secrets is rejected" do
+      Services::Billing::StripeClient.unstub(:webhook_secrets)
+      payload = stripe_event_payload(
+        type: "customer.subscription.created",
+        object: stripe_subscription_object(id: "sub_bad_sig", customer: "cus_bad_sig"),
+        id: "evt_bad_sig",
+        livemode: Rails.configuration.stripe_livemode
+      )
+
+      assert_no_difference "StripeEvent.count" do
+        with_stripe_webhook_secrets("whsec_first,whsec_second") do
+          post webhooks_stripe_url, params: payload,
+            headers: {"HTTP_STRIPE_SIGNATURE" => stripe_signature_header(payload, secret: "whsec_not_configured"),
+                      "CONTENT_TYPE" => "application/json"}
+        end
+      end
+
+      assert_response :bad_request
+    end
+
+    private
+
+    def with_stripe_webhook_secrets(value)
+      previous = ENV["STRIPE_WEBHOOK_SECRET"]
+      ENV["STRIPE_WEBHOOK_SECRET"] = value
+      yield
+    ensure
+      previous.nil? ? ENV.delete("STRIPE_WEBHOOK_SECRET") : (ENV["STRIPE_WEBHOOK_SECRET"] = previous)
     end
   end
 end

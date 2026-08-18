@@ -93,16 +93,29 @@ module Webhooks
       StripeEvent.find_by(stripe_event_id: event.id)
     end
 
+    # Tries every configured signing secret and returns the first event that
+    # verifies. Two endpoints (one per production host) means two secrets, and a
+    # delivery is only ever signed with the secret of the endpoint it went to.
+    #
+    # Note this is also exactly the shape Stripe documents for rotating a
+    # secret: run with old and new configured until the rotation completes.
     def verified_event
-      Stripe::Webhook.construct_event(
-        request.raw_post,
-        request.env["HTTP_STRIPE_SIGNATURE"],
-        Services::Billing::StripeClient.webhook_secret
-      )
-    rescue JSON::ParserError, Stripe::SignatureVerificationError => e
+      last_error = nil
+
+      Services::Billing::StripeClient.webhook_secrets.each do |secret|
+        return Stripe::Webhook.construct_event(
+          request.raw_post, request.env["HTTP_STRIPE_SIGNATURE"], secret
+        )
+      rescue JSON::ParserError, Stripe::SignatureVerificationError => e
+        # A parse failure is not secret-specific -- the body is simply not JSON,
+        # so no other secret will help. Stop rather than re-parsing it N times.
+        last_error = e
+        break if e.is_a?(JSON::ParserError)
+      end
+
       # Never log the payload: it carries customer email, name, address and card
-      # last-four. The error class and message are enough to diagnose.
-      Rails.logger.warn("[stripe-webhook] rejected: #{e.class}")
+      # last-four. The error class alone is enough to diagnose.
+      Rails.logger.warn("[stripe-webhook] rejected: #{last_error&.class}")
       nil
     end
   end

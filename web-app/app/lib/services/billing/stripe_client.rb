@@ -13,6 +13,12 @@ module Services
 
       API_VERSION = "2026-07-29.dahlia"
 
+      # Stamped onto every Stripe object this application creates -- customers,
+      # checkout sessions, subscriptions, payment intents. The legacy books app
+      # shares this Stripe account and reads this tag to decide "not mine, skip".
+      # See docs/specs/membership-and-stripe-billing.md, "Legacy coexistence".
+      ORIGIN_APP = "the-greatest"
+
       class << self
         # Returns true when Stripe is usable, false when it is not configured.
         #
@@ -62,22 +68,30 @@ module Services
         # production data.
         def livemode? = ENV["STRIPE_LIVEMODE"] == "true"
 
-        # Returns nil when unset. Never raises — see configure! for why an absent
-        # Stripe config must not take the site down.
+        # Every signing secret this deployment will accept.
         #
-        # There is deliberately NO placeholder fallback. This repository is public, so
-        # any literal here is a published value, and verifying a signature against a
-        # published value is not verification: anyone can compute the HMAC and have a
-        # forged event accepted, creating StripeEvent rows and enqueuing jobs at will.
-        # An earlier version returned "whsec_missing" and was exactly that bypass.
+        # Plural because the account registers one endpoint per production host
+        # (music and games), and Stripe issues a SEPARATE signing secret per
+        # endpoint. Verifying against only one would 400 every delivery to the
+        # other, and Stripe disables an endpoint that keeps failing. Set
+        # STRIPE_WEBHOOK_SECRET to a comma-separated list.
         #
-        # Callers must check webhook_configured? and refuse the request. Do not
-        # reintroduce a default.
-        def webhook_secret = ENV["STRIPE_WEBHOOK_SECRET"].presence
+        # There is deliberately NO placeholder fallback. This repository is
+        # public, so any literal here is a published value, and verifying a
+        # signature against a published value is not verification. An earlier
+        # version returned "whsec_missing" and was exactly that bypass. Callers
+        # must check webhook_configured? and refuse the request instead.
+        def webhook_secrets
+          ENV["STRIPE_WEBHOOK_SECRET"].to_s.split(",").map(&:strip).reject(&:empty?)
+        end
 
-        # Whether deliveries can be verified at all. The webhook endpoint refuses
-        # before verification when this is false.
-        def webhook_configured? = webhook_secret.present?
+        # Kept for callers that only need "a" secret (and for the local
+        # `stripe listen` case, which only ever has one).
+        def webhook_secret = webhook_secrets.first
+
+        # Whether deliveries can be verified at all. The webhook endpoint
+        # refuses before verification when this is false.
+        def webhook_configured? = webhook_secrets.any?
       end
     end
   end

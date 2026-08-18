@@ -165,11 +165,20 @@ These variables are used by nginx's built-in template system for environment var
 - **Security**: Never commit this value; never use a live key in non-production environments
 
 #### STRIPE_WEBHOOK_SECRET
-- **Description**: Webhook signing secret for Stripe event verification
+- **Description**: Webhook signing secret(s) for Stripe event verification
 - **Required**: Yes (if processing Stripe webhooks)
 - **Important**: This differs between a dashboard endpoint and the `stripe listen` CLI tool. Using the wrong one is the most common signature-verification failure. Use the value from your Stripe dashboard endpoint for production and staging.
 - **Used By**: web
 - **Security**: Never commit this value
+
+Accepts a **comma-separated list** of signing secrets. Stripe issues one secret
+per registered endpoint, and production registers two — one per host
+(`thegreatestmusic.org` and `thegreatest.games`) — so both must be present or
+every delivery to the second endpoint returns 400 and Stripe eventually disables
+it. Local development uses a single secret, the one `stripe listen` prints.
+
+Rotating a secret uses the same mechanism: run with old and new configured
+together until the rotation completes, then drop the old one.
 
 #### STRIPE_LIVEMODE
 - **Description**: Whether to use live Stripe keys and process real charges
