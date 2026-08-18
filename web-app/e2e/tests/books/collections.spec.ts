@@ -38,4 +38,37 @@ test.describe('Books curated collections', () => {
 
     await expect(page).toHaveURL(/\/western\/the-greatest\/[^/]+\/books$/);
   });
+
+  // Guards a real bug: the submenu shipped at a fixed w-64 and the longer labels
+  // ran outside the panel. Asserts no label wraps or overflows rather than a pixel
+  // width, so relabelling a collection cannot silently break the menu again.
+  test('every Lists menu label fits on one line', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/');
+    await page.locator('.navbar-center summary', { hasText: 'Lists' }).click();
+
+    const menu = page.locator('.navbar-center details ul');
+    await expect(menu).toBeVisible();
+
+    const report = await menu.evaluate((ul) => {
+      const box = ul.getBoundingClientRect();
+      let wrapped = 0;
+      let overflowed = 0;
+      const bad: string[] = [];
+      ul.querySelectorAll('a').forEach((a) => {
+        const r = a.getBoundingClientRect();
+        const lineHeight = parseFloat(getComputedStyle(a).lineHeight) || 0;
+        const isWrapped = lineHeight > 0 && r.height > lineHeight * 1.6;
+        const isOverflow = r.right > box.right + 0.5 || a.scrollWidth > a.clientWidth + 1;
+        if (isWrapped || isOverflow) bad.push((a.textContent || '').trim());
+        if (isWrapped) wrapped++;
+        if (isOverflow) overflowed++;
+      });
+      return { count: ul.querySelectorAll('a').length, wrapped, overflowed, bad };
+    });
+
+    expect(report.count).toBe(9);
+    expect(report.bad, 'labels that wrap or overflow the panel').toEqual([]);
+    expect(report.wrapped + report.overflowed).toBe(0);
+  });
 });
