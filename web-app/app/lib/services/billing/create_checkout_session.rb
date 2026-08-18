@@ -46,6 +46,7 @@ module Services
       def call
         return failure("plan is required") if @plan.nil?
         return failure("a membership requires a signed-in user") if @plan.kind_membership? && @user.nil?
+        return failure("a membership requires a customer_id") if @plan.kind_membership? && @customer_id.blank?
 
         session = ::Stripe::Checkout::Session.create(session_params)
         success(session.url)

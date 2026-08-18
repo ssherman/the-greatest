@@ -31,8 +31,14 @@ module Services
       end
 
       test "a donation session also carries top-level origin_app metadata" do
+        # Also covers payment_intent_data[metadata][origin_app]: legacy processing
+        # payment_intent.* or charge.* events reads the tag there, since a
+        # donation's PaymentIntent has no subscription to carry it either.
         ::Stripe::Checkout::Session.expects(:create).with(
-          has_entry(metadata: has_entry(origin_app: "the-greatest"))
+          has_entries(
+            metadata: has_entry(origin_app: "the-greatest"),
+            payment_intent_data: has_entry(metadata: has_entry(origin_app: "the-greatest"))
+          )
         ).returns(stub(url: "https://checkout.stripe.com/x"))
 
         CreateCheckoutSession.call(plan: @donation, domain: :music, **@urls)
@@ -86,6 +92,17 @@ module Services
         ::Stripe::Checkout::Session.expects(:create).never
 
         refute CreateCheckoutSession.call(plan: @monthly, domain: :books, **@urls).success?
+      end
+
+      test "a subscription plan without a customer_id fails before calling Stripe" do
+        # The donation path guards on customer_id.present? before adding the key,
+        # so an omitted customer_id there simply skips :customer. A subscription
+        # session with no customer would instead send customer: nil to Stripe --
+        # not a coexistence bug, but an opaque Stripe error where a clear
+        # precondition failure belongs, exactly like the missing-user guard above.
+        ::Stripe::Checkout::Session.expects(:create).never
+
+        refute CreateCheckoutSession.call(plan: @monthly, user: @user, domain: :books, **@urls).success?
       end
 
       test "a Stripe failure is a failed Result, not an exception" do
