@@ -73,3 +73,34 @@ no_customer:
       object:
         id: price_abc
         object: price
+
+checkout_session_completed_donation:
+  stripe_event_id: evt_donation_1
+  event_type: checkout.session.completed
+  livemode: false
+  status: 0
+  stripe_created_at: <%= 1.hour.ago.to_fs(:db) %>
+  attempts: 0
+  payload:
+    id: evt_donation_1
+    type: checkout.session.completed
+    data:
+      object:
+        id: cs_donation_1
+        object: checkout.session
+        mode: payment
+
+price_updated_no_customer:
+  stripe_event_id: evt_price_1
+  event_type: price.updated
+  livemode: false
+  status: 0
+  stripe_created_at: <%= 1.hour.ago.to_fs(:db) %>
+  attempts: 0
+  payload:
+    id: evt_price_1
+    type: price.updated
+    data:
+      object:
+        id: price_abc
+        object: price

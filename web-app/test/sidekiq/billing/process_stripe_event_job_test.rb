@@ -132,6 +132,15 @@ module Billing
               data: [canonical.deep_symbolize_keys]
             })
           )
+          # checkout.session.completed now also triggers RecordDonation, which
+          # re-reads the session. A subscription-mode, already-paid session is
+          # what a real membership checkout produces, so RecordDonation records
+          # nothing and this permutation test still measures only the reconciler.
+          ::Stripe::Checkout::Session.stubs(:retrieve).returns(
+            stub(id: "cs_membership_1", mode: "subscription", payment_status: "no_payment_required",
+              payment_intent: nil, amount_total: 500, currency: "usd", customer: "cus_test",
+              customer_details: stub(email: "member@example.com"), client_reference_id: nil, metadata: {})
+          )
 
           ProcessStripeEventJob.new.perform(event.id)
         end
@@ -148,6 +157,29 @@ module Billing
         "delivery order changed the final state: #{states.uniq.inspect}"
       assert_equal 1, states.first.size
       assert_equal @user.id, states.first.first["user_id"]
+    end
+
+    test "a completed donation session is recorded even with no customer on the event" do
+      event = stripe_events(:checkout_session_completed_donation)
+      ::Stripe::Checkout::Session.expects(:retrieve).returns(
+        stub(id: "cs_donation_1", mode: "payment", payment_status: "paid",
+          payment_intent: "pi_donation_1", amount_total: 5000, currency: "usd",
+          customer: nil, customer_details: stub(email: "anon@example.com"),
+          client_reference_id: nil, metadata: {"origin_domain" => "books"})
+      )
+
+      Billing::ProcessStripeEventJob.new.perform(event.id)
+
+      assert_equal "processed", event.reload.status
+      assert Donation.exists?(stripe_payment_intent_id: "pi_donation_1")
+    end
+
+    test "an event with neither a donation nor a customer is still ignored" do
+      event = stripe_events(:price_updated_no_customer)
+
+      Billing::ProcessStripeEventJob.new.perform(event.id)
+
+      assert_equal "ignored", event.reload.status
     end
   end
 end
