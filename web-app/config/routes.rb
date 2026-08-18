@@ -595,6 +595,53 @@ Rails.application.routes.draw do
         end
       end
     end
+
+    # Curated collections (the legacy Lists nav menu). One constrained
+    # :collection segment rather than six copies of the grammar. The regex union
+    # is LOAD-BEARING: an unconstrained :collection would match any single
+    # segment and mint an unbounded space of indexable soft-duplicates.
+    # Read straight from the registry -- no duplicated literal, so drift is
+    # impossible. Autoloading from routes.rb is already proven safe in this app:
+    # DomainConstraint lives in app/lib and is referenced at the top of this file.
+    collection_re = Regexp.union(Collections::Registry.slugs(:books))
+    collection_bases = ["the-greatest-books", "the-greatest/:category_id/books"]
+
+    ["", "rc/:ranking_configuration_id/"].each do |rc_prefix|
+      get "#{rc_prefix}:collection", to: "books/ranked_items#index",
+        constraints: {collection: collection_re}
+      get "#{rc_prefix}:collection/page/:page", to: "books/ranked_items#index",
+        constraints: {collection: collection_re, page: /\d+/}
+
+      collection_bases.each do |base|
+        filter_dates.each do |date|
+          # The bare the-greatest-books form is the canonical slug's duplicate.
+          next if base == "the-greatest-books" && date == ""
+
+          get "#{rc_prefix}:collection/#{base}#{date}", to: "books/ranked_items#index",
+            constraints: {collection: collection_re}
+          get "#{rc_prefix}:collection/#{base}#{date}/page/:page", to: "books/ranked_items#index",
+            constraints: {collection: collection_re, page: /\d+/}
+        end
+      end
+    end
+
+    # Legacy duplicates of the canonical bare slug.
+    get ":collection/the-greatest-books", to: redirect("/%{collection}", status: 301),
+      constraints: {collection: collection_re}
+    # Legacy never declared this paginated form -- only `the-greatest/books/page/:page`
+    # below and the dated variants carried a page. It is kept lossless anyway: a
+    # redirect that silently drops :page is worse than one that preserves it, and
+    # the target routes either way.
+    get ":collection/the-greatest-books/page/:page", to: redirect("/%{collection}/page/%{page}", status: 301),
+      constraints: {collection: collection_re, page: /\d+/}
+    get ":collection/the-greatest/books", to: redirect("/%{collection}", status: 301),
+      constraints: {collection: collection_re}
+    get ":collection/the-greatest/books/page/:page", to: redirect("/%{collection}/page/%{page}", status: 301),
+      constraints: {collection: collection_re, page: /\d+/}
+    get "v/:view_type/:collection", to: redirect("/%{collection}", status: 301),
+      constraints: {collection: collection_re}
+    get "v/:view_type/:collection/*rest", to: redirect("/%{collection}", status: 301),
+      constraints: {collection: collection_re}
   end
 
   constraints DomainConstraint.new(Rails.application.config.domains[:games]) do

@@ -11,38 +11,40 @@ module Books
 
     Result = Struct.new(:genres, :countries, keyword_init: true)
 
-    def self.call(ranking_configuration:, categories: [], countries: [], year_start: nil, year_end: nil, limit: DEFAULT_LIMIT)
-      query = build(ranking_configuration, categories, countries, year_start, year_end, limit)
+    def self.call(ranking_configuration:, categories: [], countries: [], year_start: nil, year_end: nil, limit: DEFAULT_LIMIT, collection: nil)
+      query = build(ranking_configuration, categories, countries, year_start, year_end, limit, collection)
       Result.new(genres: query.genre_facet, countries: query.country_facet)
     end
 
-    def self.genres(ranking_configuration:, categories: [], countries: [], year_start: nil, year_end: nil, limit: DEFAULT_LIMIT)
-      build(ranking_configuration, categories, countries, year_start, year_end, limit).genre_facet
+    def self.genres(ranking_configuration:, categories: [], countries: [], year_start: nil, year_end: nil, limit: DEFAULT_LIMIT, collection: nil)
+      build(ranking_configuration, categories, countries, year_start, year_end, limit, collection).genre_facet
     end
 
-    def self.countries(ranking_configuration:, categories: [], countries: [], year_start: nil, year_end: nil, limit: DEFAULT_LIMIT)
-      build(ranking_configuration, categories, countries, year_start, year_end, limit).country_facet
+    def self.countries(ranking_configuration:, categories: [], countries: [], year_start: nil, year_end: nil, limit: DEFAULT_LIMIT, collection: nil)
+      build(ranking_configuration, categories, countries, year_start, year_end, limit, collection).country_facet
     end
 
-    def self.build(ranking_configuration, categories, countries, year_start, year_end, limit)
+    def self.build(ranking_configuration, categories, countries, year_start, year_end, limit, collection)
       new(
         ranking_configuration: ranking_configuration,
         categories: Array(categories),
         countries: Array(countries),
         year_start: year_start,
         year_end: year_end,
-        limit: limit
+        limit: limit,
+        collection: collection
       )
     end
     private_class_method :build
 
-    def initialize(ranking_configuration:, categories:, countries:, year_start:, year_end:, limit:)
+    def initialize(ranking_configuration:, categories:, countries:, year_start:, year_end:, limit:, collection: nil)
       @ranking_configuration = ranking_configuration
       @categories = categories
       @countries = countries
       @year_start = year_start
       @year_end = year_end
       @limit = limit
+      @collection = collection
     end
 
     def genre_facet
@@ -83,7 +85,8 @@ module Books
         categories: categories,
         countries: countries,
         year_start: @year_start,
-        year_end: @year_end
+        year_end: @year_end,
+        collection: @collection
       ).except(:includes).reorder(nil).reselect(:item_id)
     end
 

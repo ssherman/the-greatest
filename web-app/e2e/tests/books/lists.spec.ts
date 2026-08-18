@@ -11,7 +11,8 @@ test.describe('Books lists index', () => {
   test('is reachable from the nav', async ({ page }) => {
     await page.goto('/');
 
-    await page.locator('.menu-horizontal').getByRole('link', { name: 'Lists', exact: true }).click();
+    await page.locator('.menu-horizontal summary', { hasText: 'Lists' }).click();
+    await page.locator('.menu-horizontal').getByRole('link', { name: 'All Lists', exact: true }).click();
 
     await expect(page).toHaveURL(/\/lists$/);
   });

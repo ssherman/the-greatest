@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_16_034810) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_16_211600) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -96,12 +96,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_16_034810) do
     t.integer "death_year"
     t.text "description"
     t.boolean "exclude_from_rankings", default: false, null: false
+    t.integer "gender"
     t.integer "kind", default: 0, null: false
     t.string "name", null: false
     t.string "slug", null: false
     t.string "sort_name"
     t.datetime "updated_at", null: false
     t.index ["alternate_names"], name: "index_books_authors_on_alternate_names", using: :gin
+    t.index ["gender"], name: "index_books_authors_on_gender"
     t.index ["kind"], name: "index_books_authors_on_kind"
     t.index ["slug"], name: "index_books_authors_on_slug", unique: true
   end

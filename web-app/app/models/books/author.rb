@@ -8,6 +8,7 @@
 #  death_year            :integer
 #  description           :text
 #  exclude_from_rankings :boolean          default(FALSE), not null
+#  gender                :integer
 #  kind                  :integer          default(0), not null
 #  name                  :string           not null
 #  slug                  :string           not null
@@ -18,6 +19,7 @@
 # Indexes
 #
 #  index_books_authors_on_alternate_names  (alternate_names) USING gin
+#  index_books_authors_on_gender           (gender)
 #  index_books_authors_on_kind             (kind)
 #  index_books_authors_on_slug             (slug) UNIQUE
 #
@@ -32,6 +34,7 @@ class Books::Author < ApplicationRecord
   friendly_id :name, use: [:slugged, :finders]
 
   enum :kind, {person: 0, organization: 1, pseudonym: 2, collective: 3}
+  enum :gender, {male: 0, female: 1, non_binary: 2, unspecified: 3}
 
   has_many :author_relationships, class_name: "Books::AuthorRelationship", foreign_key: :from_author_id, dependent: :destroy
   has_many :inverse_author_relationships, class_name: "Books::AuthorRelationship", foreign_key: :to_author_id, dependent: :destroy

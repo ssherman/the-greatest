@@ -8,27 +8,33 @@ module Books
       Array(categories).size <= 1 && Array(countries).size <= 1
     end
 
-    def initialize(categories: [], countries: [], year_start: nil, year_end: nil, page: nil, ranking_configuration: nil)
+    def initialize(categories: [], countries: [], year_start: nil, year_end: nil, page: nil, ranking_configuration: nil, collection: nil)
       @categories = categories || []
       @countries = countries || []
       @year_start = year_start.presence
       @year_end = year_end.presence
       @page = page.to_i
       @ranking_configuration = ranking_configuration
+      @collection = collection
     end
 
     def call
       return unfiltered_path if @categories.empty? && @countries.empty? && @year_start.nil? && @year_end.nil?
 
-      "#{prefix}#{base_segment}#{country_segment}#{date_segment}#{page_segment}"
+      "#{prefix}#{collection_segment}#{base_segment}#{country_segment}#{date_segment}#{page_segment}"
     end
 
     private
 
-    def unfiltered_path
-      return "#{prefix}/page/#{@page}" if @page > 1
+    def collection_segment
+      @collection ? "/#{@collection.slug}" : ""
+    end
 
-      prefix.presence || "/"
+    def unfiltered_path
+      base = "#{prefix}#{collection_segment}"
+      return "#{base}/page/#{@page}" if @page > 1
+
+      base.presence || "/"
     end
 
     def prefix

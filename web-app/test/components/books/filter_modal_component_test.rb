@@ -148,5 +148,37 @@ module Books
       assert_selector "input[data-axis='category'][aria-label]"
       assert_selector "input[data-axis='country'][aria-label]"
     end
+
+    test "the origin axis is offered on the unscoped list" do
+      render_inline(Books::FilterModalComponent.new)
+
+      assert_selector "[data-level-target='country']"
+    end
+
+    test "the origin axis is dropped on a collection page" do
+      render_inline(Books::FilterModalComponent.new(
+        collection: Collections::Registry.find(:books, "africa")
+      ))
+
+      assert_no_selector "[data-level-target='country']"
+      assert_selector "[data-level-target='category']"
+      assert_selector "[data-level-target='year']"
+    end
+
+    test "a collection page carries its slug through apply" do
+      render_inline(Books::FilterModalComponent.new(
+        collection: Collections::Registry.find(:books, "africa")
+      ))
+
+      assert_selector "input[name='collection'][value='africa']", visible: :all
+    end
+
+    test "clear returns to the bare collection" do
+      render_inline(Books::FilterModalComponent.new(
+        collection: Collections::Registry.find(:books, "africa")
+      ))
+
+      assert_selector "a[href='/africa']", text: "Clear"
+    end
   end
 end

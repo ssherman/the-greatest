@@ -8,6 +8,7 @@
 #  death_year            :integer
 #  description           :text
 #  exclude_from_rankings :boolean          default(FALSE), not null
+#  gender                :integer
 #  kind                  :integer          default(0), not null
 #  name                  :string           not null
 #  slug                  :string           not null
@@ -18,6 +19,7 @@
 # Indexes
 #
 #  index_books_authors_on_alternate_names  (alternate_names) USING gin
+#  index_books_authors_on_gender           (gender)
 #  index_books_authors_on_kind             (kind)
 #  index_books_authors_on_slug             (slug) UNIQUE
 #

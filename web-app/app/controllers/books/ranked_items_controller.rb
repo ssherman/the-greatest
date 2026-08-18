@@ -7,6 +7,7 @@ class Books::RankedItemsController < RankedItemsController
 
   before_action :find_ranking_configuration
   before_action :validate_ranking_configuration_type, if: -> { @ranking_configuration.present? }
+  before_action :find_collection
   before_action :cache_for_index_page, only: [:index]
 
   def self.ranking_configuration_class
@@ -17,18 +18,25 @@ class Books::RankedItemsController < RankedItemsController
     filters = Books::FilterParams.call(params)
 
     @categories = filters.categories
-    @countries = filters.countries
+    # Country filtering has no place in the collection URL grammar (see
+    # collection_bases in routes.rb -- there is no "written-by" base under a
+    # collection), so a ?country_id= query string must not silently apply on
+    # a collection page: it would compose a canonical the app can't route to,
+    # and that canonical would get indexed (mirrors the fix at 6d75c0ad for
+    # ?collection= leaking into the homepage).
+    @countries = @collection ? [] : filters.countries
     @year_start = filters.year_start
     @year_end = filters.year_end
     @filtered = @categories.any? || @countries.any? || @year_start.present? || @year_end.present?
 
-    @show_hero = !@filtered && params[:page].blank? && params[:ranking_configuration_id].blank?
+    @show_hero = !@filtered && params[:page].blank? && params[:ranking_configuration_id].blank? && @collection.nil?
 
     @page_title = Books::FilterTitle.call(
       categories: @categories,
       countries: @countries,
       year_start: @year_start,
-      year_end: @year_end
+      year_end: @year_end,
+      collection: @collection
     )
     # An /rc/ URL is noindex per the books public-UI spec's D4, so it gets no
     # canonical at all: emitting one that carries /rc/ would break D4, and one
@@ -40,7 +48,8 @@ class Books::RankedItemsController < RankedItemsController
         countries: @countries,
         year_start: @year_start,
         year_end: @year_end,
-        page: params[:page]
+        page: params[:page],
+        collection: @collection
       )
     end
 
@@ -50,12 +59,34 @@ class Books::RankedItemsController < RankedItemsController
         categories: @categories,
         countries: @countries,
         year_start: @year_start,
-        year_end: @year_end
+        year_end: @year_end,
+        collection: @collection
       ),
       limit: 100
     )
 
     @indexable = Books::FilterPath.indexable?(categories: @categories, countries: @countries) &&
       (!@filtered || @ranked_books.any?)
+  end
+
+  private
+
+  # request.path_parameters, not params: params also picks up the query
+  # string, and on a non-collection route (e.g. plain "/") there is no
+  # :collection path segment, so params[:collection] would fall through to
+  # ?collection=africa and let a query string reach the exact soft-duplicate
+  # URL space the route's Regexp.union constraint exists to prevent.
+  # path_parameters only contains what a route that passed the regex
+  # populated.
+  #
+  # The route regex already restricts :collection to known slugs; this is the
+  # defensive half, and the only thing standing between a future loosened
+  # constraint and a 500.
+  def find_collection
+    slug = request.path_parameters[:collection]
+    return if slug.blank?
+
+    @collection = Collections::Registry.find(:books, slug)
+    raise ActiveRecord::RecordNotFound if @collection.nil?
   end
 end

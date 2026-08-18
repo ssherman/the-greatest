@@ -190,5 +190,47 @@ module Books
 
       assert_response :not_found
     end
+
+    test "apply redirects back into the collection" do
+      get "/filters", params: {collection: "africa", category_slugs: ["fiction"]}
+
+      assert_redirected_to "/africa/the-greatest/fiction/books"
+      assert_response :see_other
+    end
+
+    test "apply with no filters returns to the bare collection" do
+      get "/filters", params: {collection: "africa"}
+
+      assert_redirected_to "/africa"
+    end
+
+    test "an unknown collection on apply is not found" do
+      get "/filters", params: {collection: "antarctica"}
+
+      assert_response :not_found
+    end
+
+    test "the category pane's facet counts are scoped to the collection" do
+      # war_and_peace -> french (western), categorized novels + classics.
+      # of_mice_and_men -> made african here, categorized classics only.
+      # Under collection: "africa" only of_mice_and_men's books count, so the
+      # facet should offer classics but not novels; unscoped, both show up.
+      RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: @rc, rank: 1, score: 100)
+      books_countries(:algerian).update!(labels: ["african"])
+      Books::BookCountry.create!(book: books_books(:of_mice_and_men), country: books_countries(:algerian))
+      CategoryItem.create!(category: categories(:books_classics_genre), item: books_books(:of_mice_and_men))
+      RankedItem.create!(item: books_books(:of_mice_and_men), ranking_configuration: @rc, rank: 2, score: 90)
+
+      get "/filters/categories", params: {collection: "africa"}
+
+      assert_response :success
+      assert_select "input[name='category_slugs[]'][value=classics]"
+      assert_select "input[name='category_slugs[]'][value=novels]", false
+
+      get "/filters/categories"
+
+      assert_response :success
+      assert_select "input[name='category_slugs[]'][value=novels]"
+    end
   end
 end

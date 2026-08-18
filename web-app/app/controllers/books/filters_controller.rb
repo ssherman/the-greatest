@@ -5,6 +5,7 @@ class Books::FiltersController < ApplicationController
 
   before_action :prevent_caching
   before_action :find_ranking_configuration
+  before_action :find_collection
 
   def show
     filters = resolved_filters
@@ -14,7 +15,8 @@ class Books::FiltersController < ApplicationController
       countries: filters.countries,
       year_start: filters.year_start,
       year_end: filters.year_end,
-      ranking_configuration: @ranking_configuration
+      ranking_configuration: @ranking_configuration,
+      collection: @collection
     ), status: :see_other
   end
 
@@ -75,7 +77,8 @@ class Books::FiltersController < ApplicationController
       categories: filters.categories,
       countries: filters.countries,
       year_start: filters.year_start,
-      year_end: filters.year_end
+      year_end: filters.year_end,
+      collection: @collection
     }
   end
 
@@ -98,5 +101,15 @@ class Books::FiltersController < ApplicationController
     return if params[:ranking_configuration_id].blank?
 
     @ranking_configuration = Books::RankingConfiguration.find(params[:ranking_configuration_id])
+  end
+
+  # params, not request.path_parameters: this endpoint is reached as
+  # GET /filters?collection=africa&... from the filter modal's form -- the
+  # query string is its only source, since /filters is not a collection route.
+  def find_collection
+    return if params[:collection].blank?
+
+    @collection = Collections::Registry.find(:books, params[:collection])
+    raise ActiveRecord::RecordNotFound if @collection.nil?
   end
 end

@@ -22,4 +22,21 @@ class Services::BooksMigration::AuthorTransformerTest < ActiveSupport::TestCase
     assert_equal "Homer", attrs[:sort_name]
     assert_equal [], attrs[:alternate_names]
   end
+
+  test "carries gender straight across as the raw legacy integer" do
+    attrs = Services::BooksMigration::AuthorTransformer.call(
+      {"id" => 7, "name" => "Virginia Woolf", "gender" => 1}
+    )
+    assert_equal 1, attrs[:gender]
+  end
+
+  test "a null legacy gender stays nil" do
+    attrs = Services::BooksMigration::AuthorTransformer.call(
+      {"id" => 8, "name" => "Anon", "gender" => nil}
+    )
+    # assert_nil alone can't tell an explicit nil value from a missing key --
+    # both read as nil through attrs[:gender] -- so pin key presence too.
+    assert attrs.key?(:gender), "expected :gender key to be present even when the legacy value is nil"
+    assert_nil attrs[:gender]
+  end
 end

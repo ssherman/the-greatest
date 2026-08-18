@@ -12,6 +12,7 @@ module Services
           birth_year: attrs["birth_year"],
           death_year: attrs["death_year"],
           description: attrs["description"],
+          gender: attrs["gender"],
           alternate_names: Array(attrs["alternative_names"])
         }
       end

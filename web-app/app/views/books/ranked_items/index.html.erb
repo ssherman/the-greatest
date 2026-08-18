@@ -24,7 +24,8 @@
         countries: @countries,
         year_start: @year_start,
         year_end: @year_end,
-        ranking_configuration: @ranking_configuration
+        ranking_configuration: @ranking_configuration,
+        collection: @collection
       ) %>
 
   <% if @ranked_books.any? %>
@@ -60,5 +61,6 @@
       countries: @countries,
       year_start: @year_start,
       year_end: @year_end,
-      ranking_configuration: @ranking_configuration
+      ranking_configuration: @ranking_configuration,
+      collection: @collection
     ) %>
