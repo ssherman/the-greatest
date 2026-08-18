@@ -12,7 +12,7 @@ human. Follow it in order; several steps depend on the ones before them.
 
 ## 0. Before you start: the legacy guard must already be live
 
-**The legacy guard patch must already be live.** It shipped 2026-08-16 on the legacy repo
+**The legacy guard patch must already be live.** It shipped 2026-08-17 on the legacy repo
 (`the-greatest-books#7`, branch `stripe-coexistence-guard`, documented in that repo's
 `docs/features/stripe_coexistence_guard.md`). Without it, the moment this app creates its first
 live subscription, legacy 422s on the matching webhook delivery and Stripe can disable legacy's
@@ -317,6 +317,16 @@ scoping only protects on a checkout of the patched branch. On any unpatched chec
 repo, or if the patch is ever reverted, that task deletes **every** endpoint on the shared account,
 including both of this app's. There is no legitimate reason to run it from this side of the
 account at all.
+
+**This danger does not end once the guard patch is deployed — it changes shape at books cutover.**
+Legacy's own `docs/features/stripe_coexistence_guard.md` documents a second landmine in the same
+task, for whoever eventually writes the books-cutover runbook: the scoped version resolves "my
+endpoint" by URL, and legacy's URL is `https://thegreatestbooks.org/webhooks/stripe` — the exact
+path this app also serves. Once `thegreatestbooks.org` is repointed at this app during cutover,
+"delete only my own endpoint" resolves to **this app's** endpoint, not legacy's, at precisely the
+moment someone on the legacy side is likely to run it to clean up. Legacy's doc's own remedy is to
+never run `stripe:delete_webhooks` at or after cutover, and to remove legacy's endpoint from the
+Stripe Dashboard by hand instead — the cutover runbook should carry that instruction forward.
 
 ## See also
 

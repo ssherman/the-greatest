@@ -424,7 +424,7 @@ calls `subscription.update!(user: nil, …)`. Legacy runs `load_defaults 7.0`, s
 `belongs_to :user` is required and this raises. Stripe then retries the same
 event for 72 hours and can disable the endpoint.
 
-**Shipped 2026-08-16** on the legacy repo branch `stripe-coexistence-guard`
+**Shipped 2026-08-17** on the legacy repo branch `stripe-coexistence-guard`
 (`/home/shane/dev/the-greatest-books/admin`), documented there in
 `docs/features/stripe_coexistence_guard.md`. Five changes:
 
