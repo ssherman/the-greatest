@@ -33,11 +33,30 @@ module Services
       end
 
       test "attaches the donation to a signed-in donor" do
+        # This app's own donation flow always stamps origin_app alongside
+        # app_user_id (see CreateCheckoutSession#donation_params) -- this is
+        # what a session THIS app created actually looks like.
+        user = users(:regular_user)
+        ::Stripe::Checkout::Session.expects(:retrieve)
+          .returns(session_stub(metadata: {
+            "origin_domain" => "books", "app_user_id" => user.id.to_s,
+            "origin_app" => ::Services::Billing::StripeClient::ORIGIN_APP
+          }))
+
+        assert_equal user, RecordDonation.call(checkout_session_id: "cs_test_1").data.user
+      end
+
+      test "does not trust an app_user_id on a session not tagged as this app's own" do
+        # Hardening against the shared Stripe account, mirroring the existing
+        # client_reference_id gate below: an app_user_id-shaped metadata key on
+        # a session this app did not create must not be trusted, even though
+        # legacy does not currently set one. Costs our own traffic nothing --
+        # see the test above.
         user = users(:regular_user)
         ::Stripe::Checkout::Session.expects(:retrieve)
           .returns(session_stub(metadata: {"origin_domain" => "books", "app_user_id" => user.id.to_s}))
 
-        assert_equal user, RecordDonation.call(checkout_session_id: "cs_test_1").data.user
+        assert_nil RecordDonation.call(checkout_session_id: "cs_test_1").data.user
       end
 
       test "ignores a subscription-mode session" do

@@ -94,19 +94,27 @@ module Services
       # Anonymous donations are allowed and stay unattached. Three paths, tried
       # in order.
       def resolve_user(session)
-        app_user_id = session.metadata&.[]("app_user_id").presence
-        return ::User.find_by(id: app_user_id) if app_user_id
-
-        # client_reference_id is only trustworthy on a session THIS app created.
-        # Our own donation flow never sets it (only the metadata path above
-        # does; see CreateCheckoutSession#donation_params). Legacy's checkout
-        # links do set it, but legacy ids only coincide with ours for users who
-        # existed at migration time -- both apps are live simultaneously and now
-        # allocate ids from the same number line independently, so an ungated
-        # lookup here would attach a legacy donor's row (and their email) to an
-        # unrelated new-app user. Every session this app creates carries
-        # origin_app, so gating on it costs our own traffic nothing.
+        # Both app_user_id and client_reference_id are only trustworthy on a
+        # session THIS app created -- gated on the same origin_app check.
+        # metadata[app_user_id] is the one our own flow actually sets (see
+        # CreateCheckoutSession#donation_params), so in practice this app's own
+        # sessions always carry origin_app alongside it and this gate changes
+        # nothing for our own traffic. The account is shared with the legacy
+        # books app, though, and this is a *shared* Stripe account: any session
+        # on it, from any source, can carry an app_user_id-shaped metadata key.
+        # Legacy does not currently set one, so this closes a hypothetical
+        # rather than an observed hole -- but it costs our own traffic nothing,
+        # so there is no reason to leave it open. client_reference_id needs the
+        # same gate for a concrete reason: legacy's checkout links DO set it,
+        # and legacy ids only coincide with ours for users who existed at
+        # migration time -- both apps are live simultaneously and now allocate
+        # ids from the same number line independently, so an ungated lookup
+        # would attach a legacy donor's row (and their email) to an unrelated
+        # new-app user.
         if session.metadata&.[]("origin_app") == StripeClient::ORIGIN_APP
+          app_user_id = session.metadata&.[]("app_user_id").presence
+          return ::User.find_by(id: app_user_id) if app_user_id
+
           client_reference_id = session.client_reference_id.presence
           return ::User.find_by(id: client_reference_id) if client_reference_id
         end
