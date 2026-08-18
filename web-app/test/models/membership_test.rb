@@ -150,6 +150,14 @@ class MembershipTest < ActiveSupport::TestCase
     assert_includes Membership.granting_access, memberships(:regular_user_monthly)
   end
 
+  test "granting_access includes a trialing stripe membership" do
+    # The load-bearing line: granting_access's WHERE lists status: [:active,
+    # :trialing]. Deleting :trialing from that array leaves the rest of the
+    # suite green with no other fixture at status: 0 (trialing) -- this
+    # fixture and assertion exist specifically to make that deletion visible.
+    assert_includes Membership.granting_access, memberships(:contractor_user_trialing)
+  end
+
   test "granting_access includes a canceled stripe membership still inside its paid period" do
     assert_includes Membership.granting_access, memberships(:google_user_canceled_in_grace)
   end

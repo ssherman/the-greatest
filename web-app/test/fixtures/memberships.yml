@@ -105,6 +105,23 @@ comped_expired:
   note: Expired conference comp
   granted_by: admin_user
 
+# A brand-new Stripe subscription still in its trial period. The
+# (user_id, source) partial unique index only applies WHERE source <> 0, so a
+# stripe-source row is exempt -- attached to a user with no other membership
+# fixture here so this row's presence can't be confused with any other test's
+# setup.
+contractor_user_trialing:
+  user: contractor_user
+  source: 0          # stripe
+  status: 0          # trialing
+  interval: 0        # monthly
+  stripe_subscription_id: sub_contractor_trialing
+  stripe_customer_id: cus_contractor
+  current_period_end: <%= 14.days.from_now.to_fs(:db) %>
+  cancel_at_period_end: false
+  origin_domain: books
+  stripe_synced_at: <%= 1.hour.ago.to_fs(:db) %>
+
 unattached_active:
   user:              # nil — an unmappable Stripe customer, stored not dropped
   source: 0          # stripe
