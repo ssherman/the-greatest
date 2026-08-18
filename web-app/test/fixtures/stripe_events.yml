@@ -88,7 +88,11 @@ checkout_session_completed_donation:
       object:
         id: cs_donation_1
         object: checkout.session
-        mode: payment
+        # Deliberately WRONG: the stub in the covering test returns mode:
+        # "payment". If RecordDonation ever started reading mode from the
+        # stored payload instead of the re-read API response, this event would
+        # stop being recorded and the test would catch it.
+        mode: subscription
 
 price_updated_no_customer:
   stripe_event_id: evt_price_1

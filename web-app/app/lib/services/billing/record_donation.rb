@@ -38,6 +38,13 @@ module Services
         # -- an imported legacy donation -- and overwrite it.
         return success(nil) if payment_intent_id.blank?
 
+        # Donation requires amount_cents > 0. A paid session can only report 0
+        # here in some Stripe edge case (e.g. a fully-discounted checkout); treat
+        # it as nothing to record rather than letting save! raise RecordInvalid,
+        # which the rescue below does not catch and would land this event in the
+        # dead set on a permanent, unretryable "failure".
+        return success(nil) if session.amount_total.to_i <= 0
+
         donation = ::Donation.find_or_initialize_by(stripe_payment_intent_id: payment_intent_id)
         donation.assign_attributes(
           user: resolve_user(session),
@@ -58,12 +65,28 @@ module Services
 
       private
 
-      # Anonymous donations are allowed and stay unattached. Two paths, in the
-      # same order the reconciler uses.
+      # Anonymous donations are allowed and stay unattached. Three paths, tried
+      # in order.
       def resolve_user(session)
-        app_user_id = session.metadata&.[]("app_user_id").presence || session.client_reference_id.presence
+        app_user_id = session.metadata&.[]("app_user_id").presence
         return ::User.find_by(id: app_user_id) if app_user_id
 
+        # client_reference_id is only trustworthy on a session THIS app created.
+        # Our own donation flow never sets it (only the metadata path above
+        # does; see CreateCheckoutSession#donation_params). Legacy's checkout
+        # links do set it, but legacy ids only coincide with ours for users who
+        # existed at migration time -- both apps are live simultaneously and now
+        # allocate ids from the same number line independently, so an ungated
+        # lookup here would attach a legacy donor's row (and their email) to an
+        # unrelated new-app user. Every session this app creates carries
+        # origin_app, so gating on it costs our own traffic nothing.
+        if session.metadata&.[]("origin_app") == StripeClient::ORIGIN_APP
+          client_reference_id = session.client_reference_id.presence
+          return ::User.find_by(id: client_reference_id) if client_reference_id
+        end
+
+        # A Stripe customer id is globally unique and genuinely identifies a
+        # person, so this match is safe even for a legacy-originated session.
         ::User.find_by(stripe_customer_id: session.customer) if session.customer.present?
       end
 

@@ -56,14 +56,34 @@ module Services
         end
       end
 
+      test "ignores a zero-amount paid session rather than raising RecordInvalid" do
+        # Donation validates amount_cents > 0. Without this guard, save! would
+        # raise on a fully-discounted checkout and the job's rescue would treat
+        # a one-off Stripe oddity as a permanent failure headed for the dead set.
+        ::Stripe::Checkout::Session.expects(:retrieve).returns(session_stub(amount_total: 0))
+
+        result = nil
+        assert_no_difference "Donation.count" do
+          result = RecordDonation.call(checkout_session_id: "cs_test_1")
+        end
+
+        assert result.success?
+        assert_nil result.data
+      end
+
       test "ignores a paid session with no payment intent rather than matching every nil row" do
         # find_or_initialize_by(stripe_payment_intent_id: nil) would match the
-        # first legacy-imported row with a null intent and overwrite it.
+        # first legacy-imported row with a null intent and overwrite it. Prove it
+        # by constructing exactly that row and asserting it is untouched.
+        legacy_row = donations(:legacy_imported_no_intent)
         ::Stripe::Checkout::Session.expects(:retrieve).returns(session_stub(payment_intent: nil))
 
         assert_no_difference "Donation.count" do
           assert_nil RecordDonation.call(checkout_session_id: "cs_test_1").data
         end
+
+        assert_equal 750, legacy_row.reload.amount_cents
+        assert_equal "legacy_donor@example.com", legacy_row.email
       end
 
       test "recording the same session twice writes one row" do
@@ -79,6 +99,32 @@ module Services
         ::Stripe::Checkout::Session.expects(:retrieve).raises(::Stripe::APIConnectionError.new("down"))
 
         refute RecordDonation.call(checkout_session_id: "cs_test_1").success?
+      end
+
+      test "trusts client_reference_id when the session is this app's own" do
+        user = users(:regular_user)
+        ::Stripe::Checkout::Session.expects(:retrieve).returns(
+          session_stub(client_reference_id: user.id.to_s,
+            metadata: {"origin_domain" => "books", "app_user_id" => nil,
+                       "origin_app" => ::Services::Billing::StripeClient::ORIGIN_APP})
+        )
+
+        assert_equal user, RecordDonation.call(checkout_session_id: "cs_test_1").data.user
+      end
+
+      test "does not attach a legacy session's client_reference_id to an unrelated new-app user" do
+        # Legacy's checkout links set client_reference_id to a legacy user id.
+        # Post-cutover the two apps allocate ids from the same number line
+        # independently, so an id that happens to match one of ours may belong
+        # to a different person. Only trust it when origin_app marks the
+        # session as ours -- this session carries no such tag.
+        user = users(:regular_user)
+        ::Stripe::Checkout::Session.expects(:retrieve).returns(
+          session_stub(client_reference_id: user.id.to_s,
+            metadata: {"origin_domain" => "books", "app_user_id" => nil})
+        )
+
+        assert_nil RecordDonation.call(checkout_session_id: "cs_test_1").data.user
       end
     end
   end

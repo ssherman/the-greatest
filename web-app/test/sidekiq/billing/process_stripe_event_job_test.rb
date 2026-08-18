@@ -168,7 +168,7 @@ module Billing
           client_reference_id: nil, metadata: {"origin_domain" => "books"})
       )
 
-      Billing::ProcessStripeEventJob.new.perform(event.id)
+      ProcessStripeEventJob.new.perform(event.id)
 
       assert_equal "processed", event.reload.status
       assert Donation.exists?(stripe_payment_intent_id: "pi_donation_1")
@@ -177,7 +177,7 @@ module Billing
     test "an event with neither a donation nor a customer is still ignored" do
       event = stripe_events(:price_updated_no_customer)
 
-      Billing::ProcessStripeEventJob.new.perform(event.id)
+      ProcessStripeEventJob.new.perform(event.id)
 
       assert_equal "ignored", event.reload.status
     end
