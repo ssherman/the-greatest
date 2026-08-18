@@ -79,11 +79,13 @@ class StripeCheckoutSessionCallSitesTest < ActiveSupport::TestCase
 
   # Only app/ and lib/ -- Stripe calls are backend Ruby code, never views,
   # components, JS, or helpers, so this deliberately does not mirror the
-  # daisyUI lint test's broader target set. Restricting to *.rb also keeps
-  # this test itself, under test/lint/, structurally out of scope: it lives
-  # outside both globbed trees.
+  # daisyUI lint test's broader target set. *.rb AND *.rake: lib/tasks/*.rake
+  # is exactly the kind of file where someone reaches for the Stripe SDK
+  # directly, and a plain *.rb glob would miss it entirely. Restricting to
+  # these extensions also keeps this test itself, under test/lint/,
+  # structurally out of scope: it lives outside both globbed trees.
   def target_files
-    Dir.glob(Rails.root.join("{app,lib}/**/*.rb"))
+    Dir.glob(Rails.root.join("{app,lib}/**/*.{rb,rake}"))
       .select { |path| File.file?(path) }
       .map { |path| Pathname.new(path).relative_path_from(Rails.root).to_s }
       .sort

@@ -396,7 +396,8 @@ The flow, `POST /membership/checkout` for a signed-in visitor:
 3. **`Services::Billing::CreateCheckoutSession.call(plan:, user:, customer_id:, domain:, ...)`**
    (`app/lib/services/billing/create_checkout_session.rb`) — the **only** call site in the app
    allowed to call `Stripe::Checkout::Session.create`. `test/lint/stripe_checkout_session_call_sites_test.rb`
-   scans every file under `app/` and `lib/` and fails the build on a second
+   scans every `.rb` and `.rake` file under `app/` and `lib/` (so `lib/tasks/*.rake` is covered, not
+   just app code) and fails the build on a second
    `Stripe::Checkout::Session.create` call site anywhere, *and* on any reference at all to
    `Stripe::PaymentLink` — this app must never create one, because legacy's coexistence guard
    structurally assumes it never does (see the spec's "Legacy coexistence"). It stamps
