@@ -7,7 +7,13 @@ test.describe('Games membership page', () => {
     await page.goto('/membership');
 
     await expect(page.getByRole('heading', { level: 1, name: /Support The Greatest Games/i })).toBeVisible();
-    await expect(page.getByText(/spreadsheet/i)).toBeVisible();
+    // NOT /spreadsheet/i: that word appears in two separate <p> elements in
+    // _story_games.html.erb ("began as a spreadsheet" and, in the next
+    // paragraph, "That spreadsheet became this site"), so it is a guaranteed
+    // strict-mode violation -- getByText resolves to 2 elements and
+    // toBeVisible() throws rather than passing or failing meaningfully. This
+    // longer phrase occurs exactly once in the partial.
+    await expect(page.getByText(/began as a spreadsheet/i)).toBeVisible();
     await expect(page.getByTestId('join-monthly')).toBeVisible();
     await expect(page.getByTestId('join-yearly')).toBeVisible();
   });
