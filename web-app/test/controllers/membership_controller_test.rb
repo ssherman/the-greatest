@@ -72,7 +72,7 @@ class MembershipControllerTest < ActionDispatch::IntegrationTest
     assert_equal "cus_brand_new", user.reload.stripe_customer_id
   end
 
-  test "checkout ignores a price id, customer id and user id supplied by the client" do
+  test "checkout ignores a price id, customer id, user id, success url and cancel url supplied by the client" do
     user = users(:admin_user)
     user.memberships.destroy_all
     user.update!(stripe_customer_id: "cus_existing")
@@ -82,7 +82,8 @@ class MembershipControllerTest < ActionDispatch::IntegrationTest
       has_entries(
         line_items: [{price: billing_plans(:monthly).stripe_price_id, quantity: 1}],
         # customer comes from the signed-in user's own record via EnsureCustomer,
-        # never from the customer_id param below.
+        # never from the customer_id param below. success_url/cancel_url come
+        # from canonical_host, never from the params of the same name below.
         customer: "cus_existing",
         success_url: "http://#{canonical_host}/membership/thanks",
         cancel_url: "http://#{canonical_host}/membership"
@@ -94,7 +95,9 @@ class MembershipControllerTest < ActionDispatch::IntegrationTest
         plan: "monthly",
         stripe_price_id: "price_one_cent",
         user_id: users(:regular_user).id,
-        customer_id: "cus_attacker_supplied"
+        customer_id: "cus_attacker_supplied",
+        success_url: "https://attacker.example/success",
+        cancel_url: "https://attacker.example/cancel"
       }
 
     assert_response :redirect
@@ -126,7 +129,30 @@ class MembershipControllerTest < ActionDispatch::IntegrationTest
     assert_response :redirect
   end
 
-  test "the portal builds its return url from the canonical domain, not a forged Host header" do
+  test "checkout urls carry no port, even when the request's Host does" do
+    canonical_host = Rails.application.config.domains[:books]
+    host! "#{canonical_host}:9999"
+    user = users(:admin_user)
+    user.memberships.destroy_all
+    user.update!(stripe_customer_id: "cus_existing")
+    sign_in_as(user, stub_auth: true)
+    Services::Billing::CreateCheckoutSession.expects(:call).with(
+      has_entries(
+        success_url: "http://#{canonical_host}/membership/thanks",
+        cancel_url: "http://#{canonical_host}/membership"
+      )
+    ).returns(
+      Services::Billing::CreateCheckoutSession::Result.new(
+        success?: true, data: "https://checkout.stripe.com/c/pay/cs_1", errors: []
+      )
+    )
+
+    post membership_checkout_url, params: {plan: "monthly"}
+
+    assert_response :redirect
+  end
+
+  test "the portal builds its return url from the canonical domain, ignoring a forged Host header and a return_url param" do
     host! "attacker.example"
     sign_in_as(users(:regular_user), stub_auth: true)
     canonical_host = Rails.application.config.domains[:books]
@@ -138,7 +164,7 @@ class MembershipControllerTest < ActionDispatch::IntegrationTest
       )
     )
 
-    post membership_portal_url
+    post membership_portal_url, params: {return_url: "https://attacker.example/return"}
 
     assert_response :redirect
   end

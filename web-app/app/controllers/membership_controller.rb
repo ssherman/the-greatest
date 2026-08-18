@@ -90,8 +90,8 @@ class MembershipController < ApplicationController
       user: current_user,
       customer_id: customer.data,
       domain: Current.domain,
-      success_url: membership_thanks_url(host: canonical_host),
-      cancel_url: membership_url(host: canonical_host)
+      success_url: membership_thanks_url(host: canonical_host, port: nil),
+      cancel_url: membership_url(host: canonical_host, port: nil)
     )
     return redirect_to(membership_path, alert: checkout_error) unless result.success?
 
@@ -116,8 +116,8 @@ class MembershipController < ApplicationController
       user: current_user,
       customer_id: customer_id,
       domain: Current.domain,
-      success_url: membership_thanks_url(host: canonical_host),
-      cancel_url: membership_url(host: canonical_host)
+      success_url: membership_thanks_url(host: canonical_host, port: nil),
+      cancel_url: membership_url(host: canonical_host, port: nil)
     )
     return redirect_to(membership_path, alert: checkout_error) unless result.success?
 
@@ -133,7 +133,7 @@ class MembershipController < ApplicationController
     end
 
     result = Services::Billing::CreatePortalSession.call(
-      customer_id: customer_id, return_url: membership_url(host: canonical_host)
+      customer_id: customer_id, return_url: membership_url(host: canonical_host, port: nil)
     )
     return redirect_to(membership_path, alert: checkout_error) unless result.success?
 
@@ -180,16 +180,27 @@ class MembershipController < ApplicationController
   #
   # config.domains values can be a comma-separated list (see DomainConstraint);
   # any one of them is a legitimate host for this domain, so the first is fine.
+  #
+  # Every call site also passes port: nil alongside this. The hostname alone
+  # being canonical is not enough: url_for still inherits port and protocol
+  # from url_options, and request.optional_port derives from the same raw Host
+  # header this method exists to stop trusting, so a forged "Host: <host>:8443"
+  # could otherwise append a port to an already-canonical URL. port: nil closes
+  # that off outright rather than relying on it being unreachable today.
   def canonical_host
     Rails.application.config.domains[Current.domain].to_s.split(",").first
   end
 
-  # Prefers the IP Cloudflare recorded for the visitor. Trustworthy only for
+  # Prefers the IP Cloudflare recorded for the visitor over the shared edge IP
+  # every other visitor at that PoP appears to have. This is correct ONLY for
   # traffic that actually came through Cloudflare: nginx has no real_ip module
   # configured with Cloudflare's ranges (a deployment change, not a code one --
-  # see the ops runbook), so a request straight to the origin could forge this
-  # header. request.remote_ip is the fallback for that case, and for this test
-  # suite, which never sends the header.
+  # see the ops runbook), so nothing here verifies the request came through
+  # Cloudflare at all. A request straight to the origin can set this header to
+  # anything and evade the rate limit entirely -- it does not merely fall back
+  # to request.remote_ip, which alone was at least accurate for that traffic.
+  # request.remote_ip is only the fallback when the header is absent, and this
+  # test suite never sends it.
   def visitor_ip
     request.headers["CF-Connecting-IP"].presence || request.remote_ip
   end
