@@ -484,7 +484,7 @@ module MembershipHelper
 
     if membership.source_stripe? && membership.cancel_at_period_end? && ends_on
       "Your membership is cancelled and stays active until #{ends_on.to_fs(:long)}."
-    elsif membership.source_stripe? && membership.status_canceled? && ends_on
+    elsif membership.source_stripe? && membership.canceled? && ends_on
       "Your membership has ended and access runs until #{ends_on.to_fs(:long)}."
     elsif membership.source_stripe? && ends_on
       "Your #{membership.interval} membership renews on #{ends_on.to_fs(:long)}."
@@ -497,7 +497,7 @@ module MembershipHelper
 end
 ```
 
-Check `Membership`'s enum prefixes before writing this: `source` and `interval` use `prefix: true` (so `source_stripe?`, `interval_monthly?`), but `status` does **not** — it is declared `enum :status, {...}` with no prefix, so the predicate is `canceled?`, not `status_canceled?`. Read `app/models/membership.rb` and use whichever the model actually defines; the test in Step 6 will catch it if you guess wrong.
+The enum predicates above are verified against the model, and they are deliberately inconsistent because the model is: `source` and `interval` are declared `prefix: true` (so `source_stripe?`, `interval_monthly?`), but `status` is **not**, so it is `canceled?` and `active?` with no prefix. `app/views/admin/memberships/show.html.erb:69` already uses `@membership.canceled?`. Do not "tidy" this by adding a prefix — that is a model change with an admin view depending on it.
 
 - [ ] **Step 6: Test the helper**
 
