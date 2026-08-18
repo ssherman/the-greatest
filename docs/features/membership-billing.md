@@ -1,5 +1,10 @@
 # Membership & Stripe Billing
 
+**Setting up the live Stripe account is a separate document:** `docs/guides/stripe-account-setup.md`
+covers the by-hand Dashboard and Cloudflare steps — registering the two webhook endpoints,
+labelling the live prices, activating the Billing Portal, and the post-deploy verification and
+rollback plan. This document covers how the shipped subsystem itself works.
+
 ## 1. What it is
 
 One membership, sold through Stripe, that unlocks paid features across all three active domains
@@ -120,13 +125,14 @@ is always visible rather than something you have to go looking for.
 | `billing:verify_migration` (`unmigrated_users`) | The separate, never-failing category: a legacy `paid: true` user with **no row at all** in the new `users` table yet. This is expected drift from the live legacy database, not a migration gap — `MembershipMigrator` skips these users by design, so counting them against `missing_grants` would make the task cry wolf on every run. | Reported every run; remedy is `data_migration:users`, then re-run `billing:verify_migration` to confirm the gap closed. |
 | `data_migration:memberships` | Runs `Services::BooksMigration::MembershipMigrator` — imports every legacy `users.paid: true` row as a `source: :legacy` Membership. `find_or_initialize_by`-based, so it never creates a duplicate row — but re-running is **not** consequence-free: every run converges the row onto the current legacy `paid` flag, so if an admin revoked a legacy grant in `/admin/memberships` and the legacy flag is still `true`, re-running restores it. See §5 for the remedy. | Once, as part of the legacy-history import (§5). |
 | `data_migration:donations` | Runs `Services::BooksMigration::DonationMigrator` — imports the legacy `donations`-equivalent table into `donations`. Idempotent, safe to re-run. | Once, as part of the legacy-history import (§5), immediately after `data_migration:memberships`. |
+| `stripe:bootstrap` | Runs `Services::Billing::BootstrapPlans` — creates a sandbox membership product with monthly/yearly prices plus a donation price, and seeds/updates the matching `billing_plans` rows. **Refuses hard when `STRIPE_LIVEMODE=true`** — production sells through legacy's existing prices, never products this task would create. | Local dev and disaster recovery in a **sandbox** only. Never run against the live account — see §11. |
+| `stripe:sync_plans` | Runs `Services::Billing::SyncPlans` — re-resolves every `billing_plans` row's `stripe_price_id`/`amount_cents`/`currency`/`interval` from its `stripe_lookup_key`, against whichever Stripe account this environment's keys point at. Fails loudly (and leaves the existing id alone) for a lookup key that resolves to nothing. | After bootstrapping a sandbox, after labelling a live price (`stripe:label_price`) or creating the donation price (`stripe:create_donation_price`), or any time you want to confirm the catalogue still resolves. |
+| `stripe:label_price[price_id,lookup_key]` | Runs `Services::Billing::LabelPrice` — writes a `lookup_key` onto an **existing** Stripe price via `Stripe::Price.update`, without `transfer_lookup_key`, so it refuses rather than silently moving a key already in use elsewhere. Requires `CONFIRM=label-price` — it writes to whatever account the keys point at, live included. Prints the amount/currency/active state before and after so the "label-only, nothing else changed" claim is verifiable, not asserted. | Once per live membership price, as part of `docs/guides/stripe-account-setup.md`. Safe to re-run (idempotent on the same key). |
+| `stripe:create_donation_price` | Runs `Services::Billing::CreateDonationPrice` — creates a **new** product and a custom-amount price (`donation_custom`), purely additive. Requires `CONFIRM=create-donation-price`. | Once, live and in the sandbox, as part of `docs/guides/stripe-account-setup.md`. Running it again creates a second product+price — it is not idempotent, unlike the tasks above. |
 
-**`rake stripe:sync_plans` and `stripe:bootstrap` are not implemented yet.** The billing plans
-admin screen (`/admin/billing_plans` and its edit form) already tells the operator to run `rake
-stripe:sync_plans` to refresh price ids and amounts, and the project spec names both tasks as the
-eventual owners of those fields — but neither task exists in this codebase today. They arrive with
-the checkout increment. Until then, `billing_plans` rows hold whatever seeded them, and running
-either command gets `Don't know how to build task`.
+See `docs/guides/stripe-account-setup.md` for the full, in-order production runbook these four
+tasks are part of — including why `stripe:bootstrap` must never run against the live account, and
+what the two live-price and one live-donation-price writes actually change.
 
 ## 5. Runbook: importing legacy history
 
@@ -289,9 +295,197 @@ the spec:
   which of the two rows it returns is whatever Postgres happens to return first, and that could
   flip between reconciles. Nothing in the current code enforces or checks the uniqueness this
   implicitly relies on.
-- **`Membership.granting_access` is referenced by comments but does not exist yet.** Comments in
-  `Admin::MembershipsController#revoke` and `Services::BooksMigration::MembershipMigrator` refer
-  to it as the method that will grant or deny access based on status and expiry, but it ships with
-  the entitlements increment. Until it does, nothing in the application reads memberships to grant
-  or deny access. Consequently, `revoke`'s claim that it "ends access immediately" describes the
-  intended future behaviour, not today's — today it only changes rows that nothing yet consults.
+- ~~`Membership.granting_access` is referenced by comments but does not exist yet.~~ **Resolved.**
+  It shipped with the entitlements increment — see §9. `Admin::MembershipsController#revoke`'s
+  claim that it "ends access immediately" is now accurate: `User#member?` and every paywall check
+  read `Membership.granting_access` live, so revoking a row (or letting a comp's
+  `current_period_end` pass) changes what the very next request sees.
+
+## 9. Entitlements: who counts as a member
+
+`User#member? = memberships.granting_access.exists?` (`app/models/user.rb`) is the one method
+every paywall check ultimately calls. It is a single `exists?` query against one scope,
+`Membership.granting_access` (`app/models/membership.rb`), which encodes three rules that look
+similar but exist for different reasons — see the spec's "Entitlement" section before changing any
+of them:
+
+1. **`source: :stripe`, status `active` or `trialing`** — grants **without checking the date**.
+   Stripe's status is authoritative and this app's copy of `current_period_end` can be stale, so
+   checking it here could only ever produce a false denial for someone who is actually paying.
+2. **`source: :stripe`, status `canceled`, `current_period_end` in the future** — the paid-through
+   grace period. A cancelled subscription still grants access until the period it was already paid
+   for runs out.
+3. **`source: :comped`/`:legacy`, status `active`, `current_period_end` null or in the future** — a
+   comp or legacy grant has no Stripe status to trust, so it must be both `active` *and* unexpired.
+   `nil` means "never expires" (every `:legacy` row, and a comp with no expiry set); a comp with a
+   past `current_period_end` does **not** grant access, even though its `status` column still reads
+   `active` — nothing flips that column when a comp lapses, `granting_access`'s date filter is what
+   actually denies it.
+
+`User#granting_membership` (`app/models/user.rb`) returns the actual row —
+`memberships.granting_access.order(:source, current_period_end: :desc).first` — for anywhere the
+UI needs to *show* the membership (plan, renewal date), not just gate on its existence. Both
+`/membership` and `/members` call it; `GET /membership_state` (§12) returns its `interval` and
+`current_period_end` as JSON for edge-cached pages.
+
+**A user can hold more than one granting row** (§3's Stripe+legacy overlap is the production
+example) — `member?` only cares whether *any* row grants, and `granting_membership` picks the most
+relevant one to display, not "the" membership, because there can legitimately be more than one.
+
+## 10. `MembershipGate`: putting a feature behind the paywall
+
+`MembershipGate` (`app/lib/membership_gate.rb`) is a plain module holding one frozen hash,
+`FEATURES`, mapping a feature key to a human-readable description:
+
+```ruby
+FEATURES = {
+  members_area: "The members' area at /members"
+}.freeze
+```
+
+It is deliberately a registry, not an abstraction layer — its entire value is that a reviewer can
+read one small file and know the complete answer to "what is behind the paywall?" Two entry
+points:
+
+- `MembershipGate.members_only?(:some_feature)` — a boolean, for view-level checks (e.g. showing or
+  hiding a nav link).
+- The `MembershipGated` concern (`app/controllers/concerns/membership_gated.rb`) — include it in a
+  controller and add `before_action -> { require_membership!(:some_feature) }`. A non-member gets
+  redirected to `/membership` (never a bare 403) with a message tailored to whether they're signed
+  in at all; a member falls through untouched.
+
+**To put a new page or action behind the paywall:**
+
+1. Add its key to `MembershipGate::FEATURES` with a short description.
+2. `include MembershipGated` in the controller, and add the `before_action` calling
+   `require_membership!(:your_key)`.
+
+`require_membership!` calls `MembershipGate.validate!` first, which **raises `UnknownFeature`** for
+any key not in the hash. That's deliberate: a typo'd feature key becomes a loud exception in
+development and in test, never a page that silently gates nothing (a typo resolving to a falsy
+`members_only?` check) or silently gates everything (a stray `before_action` with no matching
+entry). `MembersController` (`app/controllers/members_controller.rb`) is the reference
+implementation — the first and, as of this writing, only gated surface.
+
+Both nested under `Membership`/`MembershipGate` at the top level rather than
+`Membership::Gate` on purpose: inside a `Membership` namespace a bare `Membership` constant
+resolves to the *module*, not the model — the same constant-shadowing trap that has bitten
+`Search::`, `Services::BooksMigration`, and `ItemRankings::` in this codebase before.
+
+## 11. Checkout and donations: the write path to Stripe
+
+**Nothing here accepts a price, an amount, or a user id from the client — only a plan `key`.**
+`MembershipController#checkout` (`app/controllers/membership_controller.rb`) looks the key up
+against `BillingPlan.membership.active`; a request that also supplies `stripe_price_id`,
+`customer_id`, `user_id`, `success_url` or `cancel_url` has every one of those ignored — see the
+controller test `"checkout ignores a price id, customer id, user id, success url and cancel url
+supplied by the client"`. A client that could name a price could name a one-cent one.
+
+The flow, `POST /membership/checkout` for a signed-in visitor:
+
+1. **Already a member?** Redirected — to the portal (below) if they have a `stripe_customer_id`
+   (an existing Stripe subscriber trying to buy a second one), or back to `/membership` with a
+   thank-you notice if they don't (a comped/legacy member, who has no billing account to manage
+   here and shouldn't see "there is no billing account attached" as if it were an error).
+2. **`Services::Billing::EnsureCustomer.call(user:)`** (`app/lib/services/billing/ensure_customer.rb`)
+   — finds the user's existing `stripe_customer_id`, or creates a Stripe Customer and **writes the
+   id back to the user in this same request**. That write is the point of the service: it makes the
+   user↔customer link exist *before* any webhook for the coming subscription can possibly arrive,
+   which is why `ReconcileCustomer` needs no "recover the user from the checkout session" fallback
+   the way legacy's handler does.
+3. **`Services::Billing::CreateCheckoutSession.call(plan:, user:, customer_id:, domain:, ...)`**
+   (`app/lib/services/billing/create_checkout_session.rb`) — the **only** call site in the app
+   allowed to call `Stripe::Checkout::Session.create`. `test/lint/stripe_checkout_session_call_sites_test.rb`
+   scans every file under `app/` and `lib/` and fails the build on a second
+   `Stripe::Checkout::Session.create` call site anywhere, *and* on any reference at all to
+   `Stripe::PaymentLink` — this app must never create one, because legacy's coexistence guard
+   structurally assumes it never does (see the spec's "Legacy coexistence"). It stamps
+   `metadata[origin_app] = "the-greatest"` on **every** session it creates, both membership and
+   donation, plus `subscription_data[metadata][origin_app]` on membership sessions specifically —
+   both are load-bearing for legacy's webhook guard, not just informational.
+4. The controller redirects (`303 see_other`, `allow_other_host: true`) straight to the returned
+   `checkout.stripe.com` URL.
+
+**`success_url`/`cancel_url` are never built from `request.host`.** `canonical_host` in
+`MembershipController` reads `Rails.application.config.domains[Current.domain]` instead, because
+nginx forwards the client's raw `Host` header verbatim and `config.hosts` is unset in production —
+see `docs/guides/stripe-account-setup.md`'s "Ops follow-ups" for why that's still worth fixing
+separately. A forged `Host` header cannot make this app mint a real Stripe-branded checkout link
+pointing anywhere but a real site.
+
+**Donations** (`POST /membership/donate`) reuse the same `CreateCheckoutSession` service in
+`mode: "payment"` with `submit_type: "donate"`, against the single `kind: :donation` plan (a
+`custom_unit_amount` price: $1 minimum, $25 preset — see `Services::Billing::CreateDonationPrice`).
+Donations are open to signed-out visitors; Stripe collects the email at checkout, and no Stripe
+Customer is created for an anonymous one-off donor (creating one would just be a row the nightly
+reconcile sweep pages through forever for someone who's never coming back).
+
+**The Billing Portal** (`POST /membership/portal`, `Services::Billing::CreatePortalSession`)
+requires a **portal configuration activated on the Stripe account** — this is dashboard setup, not
+code, and it's step 6 of `docs/guides/stripe-account-setup.md`. Without it, `Stripe::BillingPortal::
+Session.create` raises and "Manage billing" fails for every member with the same generic error
+message checkout failures show.
+
+**`GET /membership/thanks`** — where Stripe redirects a successful payer — **grants nothing.** It
+calls `Services::Billing::ReconcileCustomer` synchronously on the signed-in visitor's own customer
+id (so the page is truthful before the async webhook lands), then re-reads
+`current_user.granting_membership`. Hitting the URL directly, with no real purchase behind it,
+shows no membership — `MembershipControllerTest#"thanks grants nothing when hit directly by a
+non-member"` pins this. `/membership` itself makes **zero Stripe API calls** to render — it only
+reads `BillingPlan` rows — so it degrades gracefully (empty plan list, no crash) in the window
+between a fresh deploy and running `stripe:sync_plans`.
+
+**Why the new app sells through legacy's existing prices, never products of its own:** one
+membership covers every site, and a subscription bought on music has to be the identical Stripe
+object as one bought through legacy books — see the spec's "Legacy coexistence". This is also
+exactly why `stripe:bootstrap` (§4) refuses outright when `STRIPE_LIVEMODE=true`: running it live
+would create a *second* membership product, silently splitting subscribers across two products
+with no way to tell them apart afterward.
+
+## 12. Webhooks: two endpoints, one signing-secret list, and where donations get recorded
+
+**Two endpoints are registered in the live Stripe account, one per production host currently
+selling membership** — `https://thegreatestmusic.org/webhooks/stripe` and
+`https://thegreatest.games/webhooks/stripe` (books hasn't cut over from legacy yet). **Stripe
+issues a separate signing secret per endpoint**, and a delivery is only ever signed with the secret
+of the endpoint it was sent to. `Services::Billing::StripeClient.webhook_secrets`
+(`app/lib/services/billing/stripe_client.rb`) reads `STRIPE_WEBHOOK_SECRET` as a **comma-separated
+list**, and `Webhooks::StripeController#verified_event` tries each configured secret in turn until
+one verifies. Configuring only one secret means every delivery to the *other* endpoint fails
+verification, returns 400, and Stripe eventually disables that endpoint after enough consecutive
+failures — a slow, silent loss of every event from one production host. See
+`deployment/ENV.md`'s `STRIPE_WEBHOOK_SECRET` entry and `docs/guides/stripe-account-setup.md` §§1–2
+for the full registration walkthrough, including the Cloudflare WAF exclusion both endpoints need
+first.
+
+**Both endpoints receive every event on the shared account — legacy's traffic included.** That is
+Stripe's delivery model, not a targeting choice: there's no way to scope a delivery to "only events
+this app created." Concretely, one subscription change delivers to *both* production endpoints,
+and `Billing::ProcessStripeEventJob` runs twice for the same event id. The unique index on
+`stripe_events.stripe_event_id` is what makes the second delivery a `200` with nothing re-processed
+— see §2's core design. Legacy's own coexistence guard is the mirror image: it receives this app's
+events too, on its own endpoint, and skips them by `metadata[origin_app]`/`payment_link` checks
+documented in the spec's "Legacy coexistence" and in legacy's own
+`docs/features/stripe_coexistence_guard.md`.
+
+**Donations are recorded from the same event stream, not a separate path.**
+`Billing::ProcessStripeEventJob#record_donation` (`app/sidekiq/billing/process_stripe_event_job.rb`)
+runs on every `checkout.session.completed` event, *before* the customer-id check that drives
+subscription reconciliation — a donation, especially an anonymous one, may carry no customer at
+all, so it has to be handled first or every anonymous donation would be marked `ignored` and never
+recorded. It hands the session id (an identifier, never state) to
+`Services::Billing::RecordDonation` (`app/lib/services/billing/record_donation.rb`), which re-reads
+the full session from the Stripe API — mirroring `ReconcileCustomer`'s "re-read, don't trust the
+payload" design — and `find_or_initialize_by(stripe_payment_intent_id:)`s a `Donation` row. That
+same unique index is what makes a webhook-recorded donation and a legacy-history-imported one
+converge instead of duplicating if the same payment ever shows up both ways.
+
+This is also how **legacy's own donations get written here**, since both endpoints see every
+event: `RecordDonation#resolve_user` tries `metadata[app_user_id]` first (this app's own tag),
+falls back to `client_reference_id` **only when `metadata[origin_app]` matches this app** (legacy
+sets `client_reference_id` too, but on a legacy-originated session it points at a legacy user id
+that may coincidentally collide with an unrelated new-app user, since both apps allocate ids
+independently now), and finally `stripe_customer_id` (safe unconditionally — a Stripe customer id
+genuinely identifies one person regardless of which app created the session). A donation
+attributable to neither path is recorded with `user_id: nil` and whatever `email` Stripe collected
+— an anonymous donation, same as one made by a signed-out visitor on this app.

@@ -157,6 +157,10 @@ These variables are used by nginx's built-in template system for environment var
 
 ### Stripe Billing
 
+For the full production setup sequence these variables are part of — registering webhook
+endpoints, excluding them from Cloudflare's managed challenge, labelling the live prices, and
+verifying each step — see `docs/guides/stripe-account-setup.md`.
+
 #### STRIPE_SECRET_KEY
 - **Description**: Stripe API secret key for server-side operations
 - **Required**: Yes (if using Stripe billing)
