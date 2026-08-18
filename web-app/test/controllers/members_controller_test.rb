@@ -58,6 +58,15 @@ class MembersControllerTest < ActionDispatch::IntegrationTest
     assert_select "form[action=?] button[data-turbo='false']", membership_portal_path
   end
 
+  # The public layouts read content_for?(:page_title), not :title.
+  test "the page sets its own page title, not the generic site title" do
+    sign_in_as(users(:regular_user), stub_auth: true)
+
+    get members_url
+
+    assert_select "title", "Members"
+  end
+
   test "the page is never cached" do
     sign_in_as(users(:regular_user), stub_auth: true)
 

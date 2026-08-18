@@ -20,6 +20,22 @@ class MembershipControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  # The public layouts read content_for?(:page_title), not :title -- only
+  # layouts/admin.html.erb reads :title. /membership is the target of a
+  # permanent redirect from /support, which has years of inbound links, so a
+  # wrong content_for key here silently ships the generic site-wide title.
+  test "the page sets its own page title, not the generic site title" do
+    get membership_url
+
+    assert_select "title", "Support The Greatest Books"
+  end
+
+  test "thanks sets its own page title" do
+    get membership_thanks_url
+
+    assert_select "title", "Thank you"
+  end
+
   test "the page is never cached" do
     get membership_url
 
