@@ -12,6 +12,21 @@ export default class extends Controller {
   }
 
   connect() {
+    // Same event this app's login modal dispatches on sign-out — see
+    // user_list_state_controller.js. Without this, a member who signs out
+    // in-page (no navigation) would keep seeing the revealed link until the
+    // next Turbo visit re-runs connect(), which on a shared browser discloses
+    // the previous user's membership the same way the tg_uid cookie gate
+    // below is meant to prevent.
+    //
+    // auth:success is deliberately NOT handled here: every place in this app
+    // that renders the sign-in modal passes reload_after_auth: true, so a
+    // successful sign-in always triggers a full page reload (see
+    // authentication_controller.js#handleAuthSuccess), which re-runs connect()
+    // on a fresh page anyway. A listener here would just duplicate that fetch.
+    this._onAuthSignout = this._onAuthSignout.bind(this)
+    window.addEventListener("auth:signout", this._onAuthSignout)
+
     // Gated on the tg_uid cookie set by AuthController at sign-in. Without a
     // signed-in marker the endpoint would just 401, so skip the request.
     if (!this.cookieUid()) {
@@ -20,6 +35,10 @@ export default class extends Controller {
     }
 
     this.refresh()
+  }
+
+  disconnect() {
+    window.removeEventListener("auth:signout", this._onAuthSignout)
   }
 
   async refresh() {
@@ -53,5 +72,9 @@ export default class extends Controller {
   cookieUid() {
     const m = document.cookie.match(/(?:^|;\s*)tg_uid=([^;]+)/)
     return m ? decodeURIComponent(m[1]) : null
+  }
+
+  _onAuthSignout() {
+    this.reveal(false)
   }
 }
