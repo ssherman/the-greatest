@@ -72,17 +72,73 @@ class MembershipControllerTest < ActionDispatch::IntegrationTest
     assert_equal "cus_brand_new", user.reload.stripe_customer_id
   end
 
-  test "checkout ignores a price id supplied by the client" do
+  test "checkout ignores a price id, customer id and user id supplied by the client" do
     user = users(:admin_user)
     user.memberships.destroy_all
     user.update!(stripe_customer_id: "cus_existing")
     sign_in_as(user, stub_auth: true)
+    canonical_host = Rails.application.config.domains[:books]
     Stripe::Checkout::Session.expects(:create).with(
-      has_entry(line_items: [{price: billing_plans(:monthly).stripe_price_id, quantity: 1}])
+      has_entries(
+        line_items: [{price: billing_plans(:monthly).stripe_price_id, quantity: 1}],
+        # customer comes from the signed-in user's own record via EnsureCustomer,
+        # never from the customer_id param below.
+        customer: "cus_existing",
+        success_url: "http://#{canonical_host}/membership/thanks",
+        cancel_url: "http://#{canonical_host}/membership"
+      )
     ).returns(stub(url: "https://checkout.stripe.com/c/pay/cs_1"))
 
     post membership_checkout_url,
-      params: {plan: "monthly", stripe_price_id: "price_one_cent", user_id: users(:regular_user).id}
+      params: {
+        plan: "monthly",
+        stripe_price_id: "price_one_cent",
+        user_id: users(:regular_user).id,
+        customer_id: "cus_attacker_supplied"
+      }
+
+    assert_response :redirect
+  end
+
+  test "checkout builds success and cancel urls from the canonical domain, not a forged Host header" do
+    host! "attacker.example"
+    user = users(:admin_user)
+    user.memberships.destroy_all
+    user.update!(stripe_customer_id: "cus_existing")
+    sign_in_as(user, stub_auth: true)
+    # detect_current_domain falls back to :books for a Host it does not
+    # recognise (see ApplicationController), so :books is the correct
+    # expectation here, not the forged "attacker.example".
+    canonical_host = Rails.application.config.domains[:books]
+    Services::Billing::CreateCheckoutSession.expects(:call).with(
+      has_entries(
+        success_url: "http://#{canonical_host}/membership/thanks",
+        cancel_url: "http://#{canonical_host}/membership"
+      )
+    ).returns(
+      Services::Billing::CreateCheckoutSession::Result.new(
+        success?: true, data: "https://checkout.stripe.com/c/pay/cs_1", errors: []
+      )
+    )
+
+    post membership_checkout_url, params: {plan: "monthly"}
+
+    assert_response :redirect
+  end
+
+  test "the portal builds its return url from the canonical domain, not a forged Host header" do
+    host! "attacker.example"
+    sign_in_as(users(:regular_user), stub_auth: true)
+    canonical_host = Rails.application.config.domains[:books]
+    Services::Billing::CreatePortalSession.expects(:call).with(
+      customer_id: "cus_regular", return_url: "http://#{canonical_host}/membership"
+    ).returns(
+      Services::Billing::CreatePortalSession::Result.new(
+        success?: true, data: "https://billing.stripe.com/p/session/x", errors: []
+      )
+    )
+
+    post membership_portal_url
 
     assert_response :redirect
   end
@@ -129,6 +185,19 @@ class MembershipControllerTest < ActionDispatch::IntegrationTest
     post membership_checkout_url, params: {plan: "monthly"}
 
     assert_redirected_to "https://billing.stripe.com/p/session/x"
+  end
+
+  test "a comped member who clicks Join is told they are already a member, not sent to a billing error" do
+    user = users(:editor_user) # comped: a member, but never billed -- no stripe_customer_id
+    sign_in_as(user, stub_auth: true)
+    Stripe::Checkout::Session.expects(:create).never
+    Stripe::BillingPortal::Session.expects(:create).never
+
+    post membership_checkout_url, params: {plan: "monthly"}
+
+    assert_redirected_to membership_path
+    assert flash[:notice].present?
+    refute_match(/billing account/, flash[:notice].to_s)
   end
 
   test "checkout requires sign in" do
@@ -213,6 +282,11 @@ class MembershipControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to membership_path
     assert flash[:alert].present?
+    # The visitor must never see the raw Stripe exception message: Stripe
+    # echoes request parameters in some error strings, and that is exactly the
+    # customer PII the "log the class, never the message" rule exists to
+    # contain. checkout_error is the only string this path may flash.
+    refute_match(/down/, flash[:alert])
   end
 
   test "checkout is rate limited" do
@@ -226,5 +300,31 @@ class MembershipControllerTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to membership_path
     assert_match(/Too many attempts/, flash[:alert])
+  end
+
+  test "thanks and donate have independent rate limit buckets" do
+    Stripe::Checkout::Session.stubs(:create).returns(stub(url: "https://checkout.stripe.com/c/pay/cs_donate"))
+
+    # Exhausts :thanks' own (larger) budget -- this is the traffic every
+    # successful payer generates landing back from Stripe, all sharing one
+    # apparent IP at a busy Cloudflare edge.
+    31.times { get membership_thanks_url }
+    # A real donor at the same edge, hitting :donate for the first time this
+    # minute, must not inherit :thanks' count.
+    post membership_donate_url
+
+    assert_redirected_to "https://checkout.stripe.com/c/pay/cs_donate"
+  end
+
+  test "the donate rate limit keys on CF-Connecting-IP, not the shared edge ip" do
+    Stripe::Checkout::Session.stubs(:create).returns(stub(url: "https://checkout.stripe.com/c/pay/cs_donate"))
+
+    11.times { post membership_donate_url, headers: {"CF-Connecting-IP" => "203.0.113.5"} }
+    # A different real visitor, arriving through the same Cloudflare PoP (so the
+    # same request.remote_ip in this environment) but with their own
+    # CF-Connecting-IP, must not inherit the first visitor's count.
+    post membership_donate_url, headers: {"CF-Connecting-IP" => "203.0.113.9"}
+
+    assert_redirected_to "https://checkout.stripe.com/c/pay/cs_donate"
   end
 end

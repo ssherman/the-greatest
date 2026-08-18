@@ -20,16 +20,39 @@ class MembershipController < ApplicationController
 
   # Declared AFTER require_signed_in! -- filters run in declaration order and
   # rate_limit installs its own before_action, so an anonymous request to
-  # :checkout is already turned away before by: runs. Donations are deliberately
-  # open to anonymous visitors, so they are bucketed by IP.
+  # :checkout is already turned away before by: runs. Its own named bucket, keyed
+  # by user id, means a compromised or careless account can only hurt itself.
   #
   # The webhook endpoint is NOT rate limited anywhere: throttling it would mean
   # dropping legitimate Stripe deliveries.
   rate_limit to: 10, within: 1.minute,
-    by: -> { current_user&.id || request.remote_ip },
+    by: -> { current_user.id },
     with: -> { redirect_to membership_path, alert: "Too many attempts just now. Please try again in a minute." },
     store: Rails.application.config.x.rate_limit_store,
-    only: [:checkout, :donate, :portal, :thanks]
+    name: "membership-account",
+    only: [:checkout, :portal]
+
+  # :donate is reachable by anyone and creates a real Stripe Checkout Session on
+  # every hit -- the most expensive anonymous action here. It gets its own named
+  # bucket (rather than sharing the default, action-less scope with :thanks) so
+  # a burst of :thanks traffic can never eat into the budget a real donor needs.
+  rate_limit to: 10, within: 1.minute,
+    by: -> { current_user&.id || visitor_ip },
+    with: -> { redirect_to membership_path, alert: "Too many attempts just now. Please try again in a minute." },
+    store: Rails.application.config.x.rate_limit_store,
+    name: "membership-donate",
+    only: [:donate]
+
+  # :thanks is where Stripe redirects every successful payer, and it is the one
+  # action here an anonymous visitor can hit that does NO Stripe work at all --
+  # see #thanks. A much larger budget than :donate reflects that asymmetry, and
+  # its own name keeps it from competing with :donate for the same reason.
+  rate_limit to: 30, within: 1.minute,
+    by: -> { current_user&.id || visitor_ip },
+    with: -> { redirect_to membership_path, alert: "Too many attempts just now. Please try again in a minute." },
+    store: Rails.application.config.x.rate_limit_store,
+    name: "membership-thanks",
+    only: [:thanks]
 
   # GET /membership
   def show
@@ -40,10 +63,21 @@ class MembershipController < ApplicationController
 
   # POST /membership/checkout
   def checkout
-    # An existing member buying a second subscription would be billed twice and
-    # would need both cancelling by hand. Send them where they can manage the
-    # one they have.
-    return portal if current_user.member?
+    if current_user.member?
+      # A comped or legacy member has no Stripe customer at all (see
+      # editor_user_comped), so routing them into #portal produced "there is no
+      # billing account attached to your membership" -- true, but it reads as an
+      # error for someone who did nothing wrong and cannot buy a subscription
+      # here anyway. Tell them what actually happened instead.
+      if current_user.stripe_customer_id.blank?
+        return redirect_to membership_path, notice: "You're already a member -- thank you for your support!"
+      end
+
+      # An existing Stripe member buying a second subscription would be billed
+      # twice and would need both cancelling by hand. Send them where they can
+      # manage the one they have.
+      return portal
+    end
 
     plan = BillingPlan.membership.active.find_by(key: params[:plan])
     return redirect_to(membership_path, alert: "That membership option is not available.") if plan.nil?
@@ -56,8 +90,8 @@ class MembershipController < ApplicationController
       user: current_user,
       customer_id: customer.data,
       domain: Current.domain,
-      success_url: membership_thanks_url(host: request.host),
-      cancel_url: membership_url(host: request.host)
+      success_url: membership_thanks_url(host: canonical_host),
+      cancel_url: membership_url(host: canonical_host)
     )
     return redirect_to(membership_path, alert: checkout_error) unless result.success?
 
@@ -82,8 +116,8 @@ class MembershipController < ApplicationController
       user: current_user,
       customer_id: customer_id,
       domain: Current.domain,
-      success_url: membership_thanks_url(host: request.host),
-      cancel_url: membership_url(host: request.host)
+      success_url: membership_thanks_url(host: canonical_host),
+      cancel_url: membership_url(host: canonical_host)
     )
     return redirect_to(membership_path, alert: checkout_error) unless result.success?
 
@@ -99,7 +133,7 @@ class MembershipController < ApplicationController
     end
 
     result = Services::Billing::CreatePortalSession.call(
-      customer_id: customer_id, return_url: membership_url(host: request.host)
+      customer_id: customer_id, return_url: membership_url(host: canonical_host)
     )
     return redirect_to(membership_path, alert: checkout_error) unless result.success?
 
@@ -127,5 +161,36 @@ class MembershipController < ApplicationController
   # Stripe echoes back in some error strings.
   def checkout_error
     "Something went wrong starting that payment. Please try again, and let us know if it keeps happening."
+  end
+
+  # The one host this controller will ever hand to Stripe.
+  #
+  # NOT request.host: config.hosts is unset in production (see
+  # config/environments/production.rb), and nginx forwards the raw client Host
+  # header verbatim (proxy_set_header Host $http_host), so request.host is
+  # attacker-controlled. A forged Host would otherwise let a visitor mint a real,
+  # Stripe-branded Checkout Session whose success_url points anywhere they like,
+  # then hand that checkout.stripe.com link to a victim.
+  #
+  # Current.domain is already resolved once per request by
+  # ApplicationController#set_current_domain, which falls back to :books for a
+  # Host it does not recognise rather than trusting it -- so reading the
+  # canonical hostname back out of config.domains, instead of out of the
+  # request, turns a forged Host into a legitimate site host automatically.
+  #
+  # config.domains values can be a comma-separated list (see DomainConstraint);
+  # any one of them is a legitimate host for this domain, so the first is fine.
+  def canonical_host
+    Rails.application.config.domains[Current.domain].to_s.split(",").first
+  end
+
+  # Prefers the IP Cloudflare recorded for the visitor. Trustworthy only for
+  # traffic that actually came through Cloudflare: nginx has no real_ip module
+  # configured with Cloudflare's ranges (a deployment change, not a code one --
+  # see the ops runbook), so a request straight to the origin could forge this
+  # header. request.remote_ip is the fallback for that case, and for this test
+  # suite, which never sends the header.
+  def visitor_ip
+    request.headers["CF-Connecting-IP"].presence || request.remote_ip
   end
 end
