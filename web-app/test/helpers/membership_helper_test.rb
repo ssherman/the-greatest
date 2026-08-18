@@ -16,6 +16,23 @@ class MembershipHelperTest < ActionView::TestCase
     assert_match(membership.current_period_end.to_fs(:long), sentence)
   end
 
+  test "an active stripe membership with a stale past-dated current_period_end does not claim a future renewal" do
+    # Membership.granting_access grants active/trialing Stripe rows regardless
+    # of current_period_end (see "granting_access ignores the date for an
+    # active stripe membership" in test/models/membership_test.rb), so this is
+    # a real, reachable case: our stored date can be stale even though Stripe
+    # still considers the subscription active. The sentence must not describe
+    # a renewal date that has already passed, and must not claim access has
+    # ended -- the member showing this sentence still has access.
+    membership = memberships(:regular_user_monthly)
+    membership.current_period_end = 5.days.ago
+
+    assert_equal(
+      "Your #{membership.interval} membership is active; we don't have an up-to-date renewal date for it.",
+      membership_status_sentence(membership)
+    )
+  end
+
   test "a cancelled membership in its grace period says it stays active until the paid-through date" do
     membership = memberships(:google_user_canceled_in_grace)
 

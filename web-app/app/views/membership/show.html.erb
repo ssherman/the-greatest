@@ -1,0 +1,6 @@
+<% content_for :title, "Support #{domain_settings[:name]}" %>
+
+<div class="container mx-auto max-w-4xl px-4 py-10">
+  <h1 class="text-3xl font-bold mb-4">Support <%= domain_settings[:name] %></h1>
+  <p><%= membership_status_sentence(@membership) %></p>
+</div>

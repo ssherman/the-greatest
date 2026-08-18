@@ -299,6 +299,25 @@ Rails.application.routes.draw do
   get "my/reviews", to: "my_reviews#index", as: :my_reviews
   get "my/reviews/page/:page", to: "my_reviews#index", as: :my_reviews_page, constraints: {page: /\d+/}
 
+  # Membership -- global (non-domain-constrained) like /my/lists and /searches:
+  # one membership covers every site, so there is one set of URLs served on
+  # every host, with the layout resolved from Current.domain in the controller.
+  get "membership", to: "membership#show", as: :membership
+  get "membership/thanks", to: "membership#thanks", as: :membership_thanks
+  post "membership/checkout", to: "membership#checkout", as: :membership_checkout
+  post "membership/donate", to: "membership#donate", as: :membership_donate
+  post "membership/portal", to: "membership#portal", as: :membership_portal
+
+  # Per-user membership state for edge-cached pages, following
+  # UserListStateController: never cached, JSON only.
+  get "membership_state", to: "membership_state#show", as: :membership_state
+
+  # The members' area -- the first thing behind the paywall.
+  get "members", to: "members#show", as: :members
+
+  # Legacy books URL. ~15 years of inbound links point at /support.
+  get "support", to: redirect("/membership", status: 301)
+
   # Compatibility alias: the books site (and earlier Greatest sites) link to a
   # user list at /user_lists/:id. Point it at the same show action — owner or
   # any viewer when the list is public, per UserList.visible_to — so those URLs
