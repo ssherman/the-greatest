@@ -110,3 +110,34 @@ user_with_expired_comp:
   role: 0
   email_verified: false
   original_signup_domain: thegreatestmusic.org
+
+# Holds canceled_no_grace_flag -- a canceled stripe row without cancel_at_period_end
+# set, still within its paid-through window
+user_with_unflagged_cancellation:
+  email: unflagged_cancellation@example.com
+  display_name: User With Unflagged Cancellation
+  name: User With Unflagged Cancellation Full Name
+  role: 0
+  email_verified: false
+  original_signup_domain: thegreatestmusic.org
+
+# Holds comped_with_future_end -- needs its own user because of the
+# one-grant-per-source index
+user_with_dated_comp:
+  email: dated_comp@example.com
+  display_name: User With Dated Comp
+  name: User With Dated Comp Full Name
+  role: 0
+  email_verified: false
+  original_signup_domain: thegreatestmusic.org
+
+# Holds canceled_no_grace_flag_and_expired -- same shape as
+# canceled_no_grace_flag (see user_with_unflagged_cancellation above), but the
+# paid-through date has already passed
+user_with_stale_cancellation:
+  email: stale_cancellation@example.com
+  display_name: User With Stale Cancellation
+  name: User With Stale Cancellation Full Name
+  role: 0
+  email_verified: false
+  original_signup_domain: thegreatestmusic.org

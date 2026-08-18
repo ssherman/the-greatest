@@ -113,3 +113,43 @@ unattached_active:
   stripe_subscription_id: sub_unattached
   stripe_customer_id: cus_unattached
   current_period_end: <%= 200.days.from_now.to_fs(:db) %>
+
+# Canceled outright (not scheduled-to-cancel), but our copy of the paid-through
+# date is still in the future -- exercises the branch of
+# MembershipHelper#membership_status_sentence that checks `canceled?` without
+# `cancel_at_period_end?`, distinct from google_user_canceled_in_grace above.
+canceled_no_grace_flag:
+  user: user_with_unflagged_cancellation
+  source: 0          # stripe
+  status: 2          # canceled
+  interval: 0        # monthly
+  stripe_subscription_id: sub_unflagged_cancel
+  stripe_customer_id: cus_unflagged_cancel
+  current_period_end: <%= 15.days.from_now.to_fs(:db) %>
+  cancel_at_period_end: false
+  origin_domain: books
+
+# A comp with a set (future) expiry -- exercises the non-stripe,
+# not-yet-expired branch of MembershipHelper#membership_status_sentence,
+# distinct from editor_user_comped (never expires) and comped_expired (past).
+comped_with_future_end:
+  user: user_with_dated_comp
+  source: 1          # comped
+  status: 1          # active
+  current_period_end: <%= 30.days.from_now.to_fs(:db) %>
+  note: Time-limited comp
+  granted_by: admin_user
+
+# Same shape as canceled_no_grace_flag, but past its paid-through date --
+# exercises the past-dated half of the `canceled?` (not `cancel_at_period_end?`)
+# branch of MembershipHelper#membership_status_sentence.
+canceled_no_grace_flag_and_expired:
+  user: user_with_stale_cancellation
+  source: 0          # stripe
+  status: 2          # canceled
+  interval: 0        # monthly
+  stripe_subscription_id: sub_unflagged_cancel_expired
+  stripe_customer_id: cus_unflagged_cancel_expired
+  current_period_end: <%= 5.days.ago.to_fs(:db) %>
+  cancel_at_period_end: false
+  origin_domain: books
