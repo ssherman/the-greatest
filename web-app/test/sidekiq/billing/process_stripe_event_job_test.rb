@@ -174,6 +174,27 @@ module Billing
       assert Donation.exists?(stripe_payment_intent_id: "pi_donation_1")
     end
 
+    # The defect this guards: a donation paid with a delayed-notification method
+    # (ACH, SEPA, Bacs, OXXO, Konbini, ...) gets checkout.session.completed with
+    # payment_status still "unpaid" -- RecordDonation correctly writes nothing --
+    # and the actual settlement arrives later as this separate event instead.
+    # Without DONATION_COMPLETION_EVENT_TYPES including it, this event type is
+    # never handed to RecordDonation at all and the donation is lost silently.
+    test "an async_payment_succeeded event records the donation once it settles" do
+      event = stripe_events(:checkout_session_async_payment_succeeded_donation)
+      ::Stripe::Checkout::Session.expects(:retrieve).returns(
+        stub(id: "cs_donation_async_1", mode: "payment", payment_status: "paid",
+          payment_intent: "pi_donation_async_1", amount_total: 2500, currency: "usd",
+          customer: nil, customer_details: stub(email: "delayed@example.com"),
+          client_reference_id: nil, metadata: {"origin_domain" => "music"})
+      )
+
+      ProcessStripeEventJob.new.perform(event.id)
+
+      assert_equal "processed", event.reload.status
+      assert Donation.exists?(stripe_payment_intent_id: "pi_donation_async_1")
+    end
+
     test "an event with neither a donation nor a customer is still ignored" do
       event = stripe_events(:price_updated_no_customer)
 

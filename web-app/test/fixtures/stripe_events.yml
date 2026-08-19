@@ -94,6 +94,32 @@ checkout_session_completed_donation:
         # stop being recorded and the test would catch it.
         mode: subscription
 
+# The event Stripe sends when a delayed-notification payment method (ACH,
+# SEPA, Bacs, OXXO, Konbini, ...) actually settles -- checkout.session.completed
+# already fired for this same session with payment_status still "unpaid", so
+# this second event is the only place the donation gets recorded.
+checkout_session_async_payment_succeeded_donation:
+  stripe_event_id: evt_donation_async_1
+  event_type: checkout.session.async_payment_succeeded
+  # Derived rather than hardcoded so this fixture stays correct regardless of
+  # STRIPE_LIVEMODE locally -- see stripe_controller_test.rb's identical
+  # reasoning. ProcessStripeEventJob itself never reads livemode, but the
+  # column is NOT NULL and every other row here follows the same convention.
+  livemode: <%= Rails.configuration.stripe_livemode %>
+  status: 0
+  stripe_created_at: <%= 1.hour.ago.to_fs(:db) %>
+  attempts: 0
+  payload:
+    id: evt_donation_async_1
+    type: checkout.session.async_payment_succeeded
+    data:
+      object:
+        id: cs_donation_async_1
+        object: checkout.session
+        # Deliberately WRONG, same as checkout_session_completed_donation
+        # above: the covering test's stub is what supplies mode: "payment".
+        mode: subscription
+
 price_updated_no_customer:
   stripe_event_id: evt_price_1
   event_type: price.updated

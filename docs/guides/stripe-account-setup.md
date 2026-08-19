@@ -83,6 +83,7 @@ Subscribe both endpoints to exactly these events:
 
 ```
 checkout.session.completed
+checkout.session.async_payment_succeeded
 customer.subscription.created
 customer.subscription.updated
 customer.subscription.deleted
@@ -91,6 +92,17 @@ customer.subscription.resumed
 invoice.paid
 invoice.payment_failed
 ```
+
+**`checkout.session.async_payment_succeeded` matters for donations paid with a
+delayed-notification method** (ACH Direct Debit, SEPA Direct Debit, Bacs, Boleto, OXXO, Konbini,
+...), which this app's Checkout Sessions allow since `Services::Billing::CreateCheckoutSession`
+sets no `payment_method_types` restriction. For one of those methods, Stripe fires
+`checkout.session.completed` immediately with `payment_status` still `unpaid` — `RecordDonation`
+correctly writes nothing on that delivery — and reports the eventual settlement, sometimes days
+later, as this separate event instead. Without subscribing to it, a delayed-method donation
+settles and is never recorded anywhere: no error, no failed row, just a `Donation` that should
+exist and doesn't. `checkout.session.async_payment_failed` is deliberately not in this list —
+there is nothing to record on a failed delayed payment.
 
 **Both endpoints receive every one of these events, for every subscription on the account —
 legacy's included.** That is by design, not a targeting mistake: Stripe delivers every subscribed

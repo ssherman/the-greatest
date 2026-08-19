@@ -19,7 +19,7 @@ Four tables carry the whole feature:
 | `memberships` | The single source of truth for "is this person a member?" — one row per grant, `source` = `stripe` / `comped` / `legacy`. Replaces the legacy app's `Subscription` model and its `users.paid` boolean. |
 | `stripe_events` | The raw webhook inbox. Forensic evidence only — see the core idea below. Never read to decide state. |
 | `billing_plans` | The price catalogue (`key`, `stripe_price_id`, `amount_cents`, `interval`, `kind`: `membership` or `donation`). Replaces the legacy app's hand-edited `config/stripe_products.yml`. |
-| `donations` | One-time payments, recorded from `checkout.session.completed` in payment mode or imported from the legacy database. |
+| `donations` | One-time payments, recorded from `checkout.session.completed` / `checkout.session.async_payment_succeeded` in payment mode or imported from the legacy database. |
 
 Admin screens for all four live under `/admin` (books-admin-only in the sidebar's Billing
 section, gated on `current_user.admin?` — editors do not see it):
@@ -478,10 +478,18 @@ legacy's own `docs/features/stripe_coexistence_guard.md`.
 
 **Donations are recorded from the same event stream, not a separate path.**
 `Billing::ProcessStripeEventJob#record_donation` (`app/sidekiq/billing/process_stripe_event_job.rb`)
-runs on every `checkout.session.completed` event, *before* the customer-id check that drives
+runs on every event in `DONATION_COMPLETION_EVENT_TYPES` — `checkout.session.completed` and
+`checkout.session.async_payment_succeeded` — *before* the customer-id check that drives
 subscription reconciliation — a donation, especially an anonymous one, may carry no customer at
 all, so it has to be handled first or every anonymous donation would be marked `ignored` and never
-recorded. It hands the session id (an identifier, never state) to
+recorded. The second event type exists because `CreateCheckoutSession` places no restriction on
+`payment_method_types`, so Stripe's automatic payment methods can offer a delayed-notification one
+(ACH Direct Debit, SEPA Direct Debit, Bacs, Boleto, OXXO, Konbini, ...): for those,
+`checkout.session.completed` fires immediately with `payment_status` still `unpaid` — the
+`payment_status == "paid"` check in `RecordDonation` below correctly no-ops on that delivery — and
+the eventual settlement, sometimes days later, arrives as `checkout.session.async_payment_succeeded`
+instead. Both event types deliver a Checkout Session as `data.object`, so `record_donation` needs
+no per-type branching: it hands the session id (an identifier, never state) to
 `Services::Billing::RecordDonation` (`app/lib/services/billing/record_donation.rb`), which re-reads
 the full session from the Stripe API — mirroring `ReconcileCustomer`'s "re-read, don't trust the
 payload" design — and `find_or_initialize_by(stripe_payment_intent_id:)`s a `Donation` row. That
