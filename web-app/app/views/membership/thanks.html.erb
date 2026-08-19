@@ -1,0 +1,16 @@
+<% content_for :page_title, "Thank you" %>
+
+<div class="container mx-auto max-w-2xl px-4 py-16 text-center">
+  <h1 class="text-3xl font-bold mb-4">Thank you</h1>
+
+  <% if @membership %>
+    <p class="mb-6"><%= membership_status_sentence(@membership) %></p>
+    <%= link_to "Go to the members' area", members_path, class: "btn btn-primary" %>
+  <% else %>
+    <p class="mb-6">
+      Your payment is being confirmed. This can take a few seconds — reload this
+      page, or check back shortly, and your membership will appear.
+    </p>
+    <%= link_to "Back to membership", membership_path, class: "btn btn-primary" %>
+  <% end %>
+</div>

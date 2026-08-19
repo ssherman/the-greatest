@@ -111,6 +111,32 @@ module Services
         assert_equal "2026-07-29.dahlia", StripeClient.api_version
       end
 
+      test "webhook_secrets splits a comma-separated list" do
+        with_env("STRIPE_WEBHOOK_SECRET" => "whsec_one,whsec_two") do
+          assert_equal ["whsec_one", "whsec_two"], StripeClient.webhook_secrets
+        end
+      end
+
+      test "webhook_secrets trims whitespace and drops empties" do
+        with_env("STRIPE_WEBHOOK_SECRET" => " whsec_one , , whsec_two ") do
+          assert_equal ["whsec_one", "whsec_two"], StripeClient.webhook_secrets
+        end
+      end
+
+      test "webhook_secrets is empty when the variable is unset" do
+        with_env("STRIPE_WEBHOOK_SECRET" => nil) do
+          assert_empty StripeClient.webhook_secrets
+          refute StripeClient.webhook_configured?
+        end
+      end
+
+      test "a single secret still works unchanged" do
+        with_env("STRIPE_WEBHOOK_SECRET" => "whsec_only") do
+          assert_equal ["whsec_only"], StripeClient.webhook_secrets
+          assert StripeClient.webhook_configured?
+        end
+      end
+
       private
 
       # Sets ENV keys for the block and restores prior values afterwards.

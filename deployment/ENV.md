@@ -157,6 +157,10 @@ These variables are used by nginx's built-in template system for environment var
 
 ### Stripe Billing
 
+For the full production setup sequence these variables are part of — registering webhook
+endpoints, excluding them from Cloudflare's managed challenge, labelling the live prices, and
+verifying each step — see `docs/guides/stripe-account-setup.md`.
+
 #### STRIPE_SECRET_KEY
 - **Description**: Stripe API secret key for server-side operations
 - **Required**: Yes (if using Stripe billing)
@@ -165,11 +169,20 @@ These variables are used by nginx's built-in template system for environment var
 - **Security**: Never commit this value; never use a live key in non-production environments
 
 #### STRIPE_WEBHOOK_SECRET
-- **Description**: Webhook signing secret for Stripe event verification
+- **Description**: Webhook signing secret(s) for Stripe event verification
 - **Required**: Yes (if processing Stripe webhooks)
 - **Important**: This differs between a dashboard endpoint and the `stripe listen` CLI tool. Using the wrong one is the most common signature-verification failure. Use the value from your Stripe dashboard endpoint for production and staging.
 - **Used By**: web
 - **Security**: Never commit this value
+
+Accepts a **comma-separated list** of signing secrets. Stripe issues one secret
+per registered endpoint, and production registers two — one per host
+(`thegreatestmusic.org` and `thegreatest.games`) — so both must be present or
+every delivery to the second endpoint returns 400 and Stripe eventually disables
+it. Local development uses a single secret, the one `stripe listen` prints.
+
+Rotating a secret uses the same mechanism: run with old and new configured
+together until the rotation completes, then drop the old one.
 
 #### STRIPE_LIVEMODE
 - **Description**: Whether to use live Stripe keys and process real charges
@@ -216,7 +229,7 @@ FIREBASE_API_KEY=your_firebase_api_key_here
 
 # Stripe Billing
 STRIPE_SECRET_KEY=sk_live_your_stripe_secret_key_here
-STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_from_stripe_dashboard
+STRIPE_WEBHOOK_SECRET=whsec_music_endpoint_secret,whsec_games_endpoint_secret  # one per registered endpoint
 STRIPE_LIVEMODE=true
 
 # Performance Tuning (optional)

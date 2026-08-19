@@ -28,7 +28,8 @@ class Admin::DonationsControllerTest < ActionDispatch::IntegrationTest
     sign_in_as(@admin, stub_auth: true)
     get admin_donations_url(status: "succeeded")
     assert_response :success
-    assert_equal [donations(:regular_user_gift).id, donations(:anonymous_gift).id].sort,
+    assert_equal [donations(:regular_user_gift).id, donations(:anonymous_gift).id,
+      donations(:legacy_imported_no_intent).id].sort,
       @controller.view_assigns["donations"].map(&:id).sort
   end
 

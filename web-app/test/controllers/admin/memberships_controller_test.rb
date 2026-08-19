@@ -31,16 +31,25 @@ class Admin::MembershipsControllerTest < ActionDispatch::IntegrationTest
     sign_in_as(@admin, stub_auth: true)
     get admin_memberships_url(source: "comped")
     assert_response :success
-    assert_equal [memberships(:editor_user_comped).id],
-      @controller.view_assigns["memberships"].map(&:id)
+    # Three comped fixtures now exist (editor_user_comped, comped_expired,
+    # comped_with_future_end) -- sorted comparison so this doesn't depend on
+    # fixture id order.
+    assert_equal [memberships(:comped_expired).id, memberships(:comped_with_future_end).id,
+      memberships(:editor_user_comped).id].sort,
+      @controller.view_assigns["memberships"].map(&:id).sort
   end
 
   test "filters by status" do
     sign_in_as(@admin, stub_auth: true)
     get admin_memberships_url(status: "canceled")
     assert_response :success
-    assert_equal [memberships(:google_user_canceled_in_grace).id],
-      @controller.view_assigns["memberships"].map(&:id)
+    # Four canceled fixtures now exist (google_user_canceled_in_grace,
+    # canceled_and_expired, canceled_no_grace_flag,
+    # canceled_no_grace_flag_and_expired) -- sorted comparison so this doesn't
+    # depend on fixture id order.
+    assert_equal [memberships(:canceled_and_expired).id, memberships(:canceled_no_grace_flag).id,
+      memberships(:canceled_no_grace_flag_and_expired).id, memberships(:google_user_canceled_in_grace).id].sort,
+      @controller.view_assigns["memberships"].map(&:id).sort
   end
 
   test "filters to unattached rows" do
@@ -52,7 +61,10 @@ class Admin::MembershipsControllerTest < ActionDispatch::IntegrationTest
 
     get admin_memberships_url(attached: "false")
     assert_response :success
-    assert_equal [orphan.id], @controller.view_assigns["memberships"].map(&:id)
+    # unattached_active is a fixture with no user, so it now shows up here too
+    # -- sorted comparison so this doesn't depend on fixture id order.
+    assert_equal [orphan.id, memberships(:unattached_active).id].sort,
+      @controller.view_assigns["memberships"].map(&:id).sort
   end
 
   test "ignores a source that is not a known enum value" do

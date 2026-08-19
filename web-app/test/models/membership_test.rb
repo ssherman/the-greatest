@@ -145,4 +145,52 @@ class MembershipTest < ActiveSupport::TestCase
     membership = Membership.new(user: nil, source: :comped, status: :active)
     assert membership.save, membership.errors.full_messages.to_sentence
   end
+
+  test "granting_access includes an active stripe membership" do
+    assert_includes Membership.granting_access, memberships(:regular_user_monthly)
+  end
+
+  test "granting_access includes a trialing stripe membership" do
+    # The load-bearing line: granting_access's WHERE lists status: [:active,
+    # :trialing]. Deleting :trialing from that array leaves the rest of the
+    # suite green with no other fixture at status: 0 (trialing) -- this
+    # fixture and assertion exist specifically to make that deletion visible.
+    assert_includes Membership.granting_access, memberships(:contractor_user_trialing)
+  end
+
+  test "granting_access includes a canceled stripe membership still inside its paid period" do
+    assert_includes Membership.granting_access, memberships(:google_user_canceled_in_grace)
+  end
+
+  test "granting_access excludes a canceled stripe membership past its paid period" do
+    refute_includes Membership.granting_access, memberships(:canceled_and_expired)
+  end
+
+  test "granting_access excludes a past_due stripe membership even with a future period end" do
+    # The date is deliberately in the future: this asserts the STATUS is what
+    # denies access, not the date. A scope that only checked the date would pass
+    # every other test in this file and fail this one.
+    refute_includes Membership.granting_access, memberships(:regular_user_past_due)
+  end
+
+  test "granting_access includes a comped membership with no end date" do
+    assert_includes Membership.granting_access, memberships(:editor_user_comped)
+  end
+
+  test "granting_access includes a legacy early-supporter membership" do
+    assert_includes Membership.granting_access, memberships(:password_user_legacy)
+  end
+
+  test "granting_access excludes a comped membership whose end date has passed" do
+    refute_includes Membership.granting_access, memberships(:comped_expired)
+  end
+
+  test "granting_access ignores the date for an active stripe membership" do
+    # Trust Stripe's status over our copy of the date: a stale current_period_end
+    # must not deny a subscriber who is currently paying.
+    membership = memberships(:regular_user_monthly)
+    membership.update!(current_period_end: 5.days.ago)
+
+    assert_includes Membership.granting_access, membership
+  end
 end

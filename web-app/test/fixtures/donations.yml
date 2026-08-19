@@ -46,3 +46,10 @@ failed_attempt:
   status: 2          # failed
   stripe_payment_intent_id: pi_failed
   domain: games
+
+legacy_imported_no_intent:
+  amount_cents: 750
+  currency: usd
+  status: 1          # succeeded
+  stripe_payment_intent_id: ~
+  email: legacy_donor@example.com

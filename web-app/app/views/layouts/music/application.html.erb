@@ -27,7 +27,7 @@
     gtag('config', 'G-ZMR7L9F20R');
   </script>
 
-  <body data-controller="user-list-state"
+  <body data-controller="user-list-state membership-state"
         data-domain="<%= Current.domain %>"
         data-signed-in="<%= signed_in? %>">
     <div class="navbar bg-base-200">
@@ -73,6 +73,9 @@
             <li><%= link_to "Lists", music_lists_path %></li>
             <%# Revealed client-side by user_list_state_controller when signed in. %>
             <li id="navbar_my_lists" class="hidden"><a href="/my/lists">My Lists</a></li>
+            <%# Revealed client-side by membership_state_controller when the visitor is a member. %>
+            <li id="navbar_members" class="hidden"><a href="/members">Members</a></li>
+            <li><%= link_to "Support", membership_path %></li>
           </ul>
         </div>
         <%= link_to "/", class: "btn btn-ghost text-xl" do %>
@@ -116,6 +119,9 @@
           <li><%= link_to "Lists", music_lists_path %></li>
           <%# Revealed client-side by user_list_state_controller when signed in. %>
           <li id="navbar_my_lists" class="hidden"><a href="/my/lists">My Lists</a></li>
+          <%# Revealed client-side by membership_state_controller when the visitor is a member. %>
+          <li id="navbar_members" class="hidden"><a href="/members">Members</a></li>
+          <li><%= link_to "Support", membership_path %></li>
         </ul>
       </div>
       <div class="navbar-end">

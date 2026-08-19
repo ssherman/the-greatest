@@ -1,8 +1,11 @@
 # Membership & Stripe Billing
 
 ## Status
-- **Status**: In Progress — increments 1–4, 9 and 10 shipped (Stripe foundation, webhook ingest,
-  reconciliation engine, data migration, admin UI, legacy guard patch); increments 5–8 and 11 remain
+- **Status**: In Progress — increments 1–4, 6, 7, 9 and 10 shipped (Stripe foundation, webhook
+  ingest, reconciliation engine, data migration, checkout, entitlements, admin UI, legacy guard
+  patch); increments 5, 8 and 11 remain. The Stripe-side production setup this all depends on
+  (registering webhook endpoints, labelling live prices, activating the Billing Portal) is a
+  separate by-hand runbook, not code — see `docs/guides/stripe-account-setup.md`
 - **Priority**: High
 - **Created**: 2026-08-14
 - **Developer**: Shane Sherman
@@ -421,7 +424,7 @@ calls `subscription.update!(user: nil, …)`. Legacy runs `load_defaults 7.0`, s
 `belongs_to :user` is required and this raises. Stripe then retries the same
 event for 72 hours and can disable the endpoint.
 
-**Shipped 2026-08-16** on the legacy repo branch `stripe-coexistence-guard`
+**Shipped 2026-08-17** on the legacy repo branch `stripe-coexistence-guard`
 (`/home/shane/dev/the-greatest-books/admin`), documented there in
 `docs/features/stripe_coexistence_guard.md`. Five changes:
 
@@ -545,8 +548,8 @@ verification.
 | 3 | Reconciliation engine — `ReconcileCustomer`, advisory lock, `ReconcileAllCustomers`, nightly cron | 2 | ✅ |
 | 4 | Data migration — legacy comps, legacy donations, Stripe rebuild, verification report | 3 | ✅ |
 | 5 | Mail foundation — ActionMailer + SendGrid, domain-aware `ApplicationMailer`, previews | — | |
-| 6 | Checkout — `billing_plans`, rake tasks, `EnsureCustomer`, checkout/portal/donate, `/membership`, thanks page | 3, 10 | |
-| 7 | Entitlements — `member?`, access scope, `MembershipGate`, `/membership_state`, members-only area | 3 | |
+| 6 | Checkout — `billing_plans`, rake tasks, `EnsureCustomer`, checkout/portal/donate, `/membership`, thanks page | 3, 10 | ✅ |
+| 7 | Entitlements — `member?`, access scope, `MembershipGate`, `/membership_state`, members-only area | 3 | ✅ |
 | 8 | Membership emails — the eight | 5, 6 | |
 | 9 | Admin UI — memberships incl. comping, donations, stripe events, billing plans | 3 | ✅ |
 | 10 | **Legacy guard patch** (separate repo) | — | ✅ |
@@ -566,28 +569,61 @@ three against it.
 
 ## Acceptance Criteria
 
-- [ ] An unsigned or wrongly-signed webhook request returns 400 and writes zero rows
-- [ ] A redelivered event returns 200 and does not reprocess
-- [ ] An event whose `livemode` mismatches is recorded `ignored` and writes nothing else
-- [ ] Delivering `customer.subscription.created`, `checkout.session.completed` and
-      `invoice.paid` in every permutation produces identical final state
-- [ ] A comped membership is unchanged by any webhook for the same user
-- [ ] A comped membership with a passed `current_period_end` does not grant access
-- [ ] A cancelled Stripe subscription grants access until `current_period_end`
-- [ ] Checkout rejects a request carrying a `stripe_price_id` or `user_id` param
-- [ ] `stripe_customer_id` is persisted before the checkout redirect is issued
-- [ ] `/membership/thanks` grants nothing when hit directly
-- [ ] `/membership` renders with zero Stripe API calls
-- [ ] `stripe:bootstrap` refuses to run with `STRIPE_LIVEMODE=true`
-- [ ] `StripeClient` raises at boot on an `sk_live_` key with `STRIPE_LIVEMODE` unset
+- [x] An unsigned or wrongly-signed webhook request returns 400 and writes zero rows —
+      `test/controllers/webhooks/stripe_controller_test.rb`, `"rejects a request with no
+      signature header and writes nothing"` / `"rejects a signature made with the wrong
+      secret and writes nothing"`
+- [x] A redelivered event returns 200 and does not reprocess —
+      `stripe_controller_test.rb`, `"a redelivered event returns 200 and writes no second
+      row"` / `"a redelivery of an already-processed event enqueues nothing"`
+- [x] An event whose `livemode` mismatches is recorded `ignored` and writes nothing else —
+      `stripe_controller_test.rb`, `"ignores an event whose livemode does not match and
+      writes nothing else"`
+- [x] Delivering `customer.subscription.created`, `checkout.session.completed` and
+      `invoice.paid` in every permutation produces identical final state —
+      `test/sidekiq/billing/process_stripe_event_job_test.rb`, `"every permutation of
+      subscribe-time events converges on the same state"` (all six orderings of exactly
+      these three event types)
+- [x] A comped membership is unchanged by any webhook for the same user —
+      `test/lib/services/billing/reconcile_customer_test.rb`, `"never modifies a comped
+      membership"`
+- [x] A comped membership with a passed `current_period_end` does not grant access —
+      `test/models/membership_test.rb`, `"granting_access excludes a comped membership
+      whose end date has passed"`
+- [x] A cancelled Stripe subscription grants access until `current_period_end` —
+      `membership_test.rb`, `"granting_access includes a canceled stripe membership still
+      inside its paid period"`
+- [x] Checkout rejects a request carrying a `stripe_price_id` or `user_id` param —
+      `test/controllers/membership_controller_test.rb`, `"checkout ignores a price id,
+      customer id, user id, success url and cancel url supplied by the client"`
+- [x] `stripe_customer_id` is persisted before the checkout redirect is issued —
+      `membership_controller_test.rb`, `"checkout persists the stripe customer id before
+      redirecting"`
+- [x] `/membership/thanks` grants nothing when hit directly —
+      `membership_controller_test.rb`, `"thanks grants nothing when hit directly by a
+      non-member"`
+- [x] `/membership` renders with zero Stripe API calls —
+      `membership_controller_test.rb`, `"the page makes no Stripe api calls"`
+- [x] `stripe:bootstrap` refuses to run with `STRIPE_LIVEMODE=true` —
+      `test/lib/services/billing/bootstrap_plans_test.rb`, `"refuses to run in livemode and
+      touches nothing"`
+- [x] `StripeClient` raises at boot on an `sk_live_` key with `STRIPE_LIVEMODE` unset —
+      `test/lib/services/billing/stripe_client_test.rb`, `"configure! raises when a live key
+      is used outside livemode"` (and its restricted-key and livemode-off variants)
 - [x] Every legacy `stripe_subscription_id` exists in `memberships` after migration —
       verified by `billing:verify_migration` against live data, not asserted in a test:
       this is a cross-database fact about a legacy database that is still taking writes
 - [x] Every legacy `paid: true` user has a `source: :legacy` membership — same caveat,
       same task: verified against live data rather than a test, for the same reason
-- [ ] The welcome email sends exactly once across repeated reconciles
-- [ ] A membership email uses the branding of `origin_domain`, not a `Current` lookup
-- [ ] `bin/rails test` and `bundle exec standardrb` pass; Playwright covers `/membership`
+- [ ] The welcome email sends exactly once across repeated reconciles — increment 8, not shipped
+- [ ] A membership email uses the branding of `origin_domain`, not a `Current` lookup — increment 8, not shipped
+- [ ] `bin/rails test` and `bundle exec standardrb` pass; Playwright covers `/membership` —
+      left unchecked as a whole criterion even though its first half already holds (`bin/rails
+      test` and `standardrb` were both clean as of increment 6/7/9/10: see each task's report
+      under `.superpowers/sdd/2026-08-18-membership-entitlements-and-checkout/`). No Playwright
+      spec exercises `/membership` yet — increment 11 (E2E) is still open, and its brief
+      (Phase C, appended to this task's own brief file) is written to depend on the live-account
+      writes in increment 6, which is why it wasn't picked up as part of this documentation task
 
 ## Risks
 
@@ -605,11 +641,12 @@ three against it.
   but the coexistence guards should not be the only thing standing between that
   and a mis-attached subscription.
 
-## Carried forward from increments 1–3, 4, 9 and 10
+## Carried forward from increments 1–3, 4, 6, 7, 9, 10 and documentation
 
-Found during implementation and review of the billing core, the data migration, the
-admin UI and the legacy guard patch. None blocks that work; each has a named owner
-among the later increments, or is deferred with a stated reason.
+Found during implementation and review of the billing core, the data migration, checkout,
+entitlements, the admin UI, the legacy guard patch, and writing the account-setup runbook.
+None blocks that work; each has a named owner among the later increments, or is deferred
+with a stated reason.
 
 - **`origin_domain` is never written by reconcile.** `upsert` deliberately omits it so
   a value set at checkout survives, but that means every membership created *before* a
@@ -690,6 +727,18 @@ among the later increments, or is deferred with a stated reason.
   deliveries, open a `checkout.session.completed` from one of legacy's own payment links,
   and confirm `payment_link` holds a non-null `plink_…` id. It belongs in the pre-deploy
   runbook rather than in code.
+- **`billing_plans` has no production seed task.** `stripe:bootstrap` deliberately refuses in
+  livemode (it would create a second membership product), and there's no equivalent "insert
+  these three rows against the live account's known ids" task. `docs/guides/stripe-account-setup.md`
+  §5 seeds them with `bin/rails runner` instead, using a placeholder-but-real `stripe_price_id`
+  (required and unique on `BillingPlan`) that `stripe:sync_plans` immediately overwrites from each
+  row's `stripe_lookup_key`. Fine for a one-time production install; if this needs to happen more
+  than once (a second environment, a rebuild), a real `db:seed`-style task would be worth adding.
+- **Increment 11 (E2E) was not picked up by the documentation task.** This spec's own "Increments"
+  table now shows 6 and 7 done; 11 (E2E, depends on 6 and 7) remains open. No Playwright spec
+  exercises `/membership` yet — only `web-app/e2e/tests/books/admin/billing.spec.ts` (the admin
+  side, covering increment 9). The acceptance criterion covering this (last line, above) is
+  deliberately left unchecked rather than partially credited.
 
 ## Future Improvements
 
