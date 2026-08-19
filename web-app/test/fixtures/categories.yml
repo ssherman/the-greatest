@@ -105,7 +105,19 @@ books_fiction_genre:
   alternative_names: []
   item_count: 500
   deleted: false
-  parent: 
+  parent:
+
+books_nonfiction_genre:
+  type: "Books::Category"
+  name: "Nonfiction"
+  slug: "nonfiction"
+  description: "Nonfiction books"
+  category_type: 0  # genre
+  import_source: 1  # open_library
+  alternative_names: []
+  item_count: 0
+  deleted: false
+  parent:
 
 books_novels_genre:
   type: "Books::Category"
