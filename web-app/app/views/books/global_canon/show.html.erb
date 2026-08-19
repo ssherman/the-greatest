@@ -28,7 +28,7 @@
         <legend class="fieldset-legend">Total books</legend>
         <%= select_tag :total_books,
               options_for_select(Books::GlobalCanonParams::TOTALS, @settings.total_books),
-              class: "select w-full" %>
+              class: "select w-full", "aria-label": "Total books" %>
       </fieldset>
 
       <fieldset class="fieldset">
@@ -40,14 +40,14 @@
                 (0..100).step(5).map { |p| ["#{p}%", p] },
                 @settings.nonfiction_percentage
               ),
-              class: "select w-full" %>
+              class: "select w-full", "aria-label": "Non-fiction" %>
       </fieldset>
 
       <fieldset class="fieldset">
         <legend class="fieldset-legend">Max books per country</legend>
         <%= select_tag :max_books_per_country,
               options_for_select((1..10).to_a, @settings.max_books_per_country),
-              class: "select w-full" %>
+              class: "select w-full", "aria-label": "Max books per country" %>
       </fieldset>
     </div>
 
