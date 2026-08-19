@@ -3,11 +3,14 @@ class Books::GlobalCanonController < ApplicationController
 
   layout "books/application"
 
-  before_action :find_ranking_configuration
   # Above the cache filter on purpose: a 301 must not be decorated with 6-hour
-  # public edge-cache headers.
+  # public edge-cache headers. find_ranking_configuration runs LAST (mirrors
+  # Books::BrowseController): a request headed for a 301 should not pay an
+  # uncached default_primary query, and should not risk that lookup turning a
+  # clean redirect into a 404 if it ever comes back nil.
   before_action :redirect_to_canonical_form, only: [:show]
   before_action :cache_for_index_page, only: [:show]
+  before_action :find_ranking_configuration
   before_action :prevent_caching, only: [:settings]
 
   def show

@@ -58,7 +58,9 @@
     <div role="status" class="alert" data-testid="canon-short-list-note">
       <span>
         Showing <strong><%= @result.delivered %></strong> of the <%= @result.requested %> requested.
-        <% if @result.blocked_by_country >= @result.blocked_by_author %>
+        <% if @result.blocked_by_country.zero? && @result.blocked_by_author.zero? %>
+          There aren't enough ranked books to fill a canon this size — try a smaller total.
+        <% elsif @result.blocked_by_country >= @result.blocked_by_author %>
           The limit of <%= @settings.max_books_per_country %>
           <%= "book".pluralize(@settings.max_books_per_country) %> per country is the binding
           constraint — raise it to get more.

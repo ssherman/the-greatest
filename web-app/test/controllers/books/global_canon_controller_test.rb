@@ -83,6 +83,16 @@ module Books
       assert_response :not_found
     end
 
+    test "an invalid settings submission 404s rather than 500ing" do
+      # #settings has no route-regex constraint the way #show does -- the
+      # request reaches Books::GlobalCanonParams.call directly, which is the
+      # only guard standing between a hand-edited query string and a 500 on a
+      # public form target.
+      get "/global-canon/settings", params: {total_books: "999"}
+
+      assert_response :not_found
+    end
+
     test "show carries public edge-cache headers" do
       get "/global-canon"
 
@@ -104,6 +114,20 @@ module Books
 
       assert_response :success
       assert_select "[data-testid=canon-short-list-note]", /of the 250 requested/
+    end
+
+    test "the short-list note explains an undersized pool without naming either cap" do
+      # Setup's 3 books share no country (nil bucket) and have 3 distinct
+      # authors, so neither cap ever binds against them -- delivered falls
+      # short of requested purely because the candidate pool is smaller than
+      # the request. blocked_by_country and blocked_by_author are both 0.
+      get "/global-canon/total_books/250/nonfiction/0/max_per_country/10"
+
+      assert_response :success
+      note = css_select("[data-testid=canon-short-list-note]").first.text
+      assert_match(/aren't enough ranked books to fill a canon this size/, note)
+      assert_no_match(/per country/, note)
+      assert_no_match(/per author/, note)
     end
 
     test "no note is shown when the canon is filled" do
