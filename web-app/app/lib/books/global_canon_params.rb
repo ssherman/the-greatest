@@ -48,11 +48,30 @@ module Books
         total_books: integer(@params[:total_books], DEFAULT_TOTAL) { |v| TOTALS.include?(v) },
         nonfiction_percentage: integer(@params[:nonfiction_percentage], DEFAULT_PERCENTAGE) { |v| PERCENTAGES.cover?(v) },
         max_books_per_country: integer(@params[:max_books_per_country], DEFAULT_COUNTRY_CAP) { |v| COUNTRY_CAPS.cover?(v) },
-        excluded_genres: []
+        excluded_genres: genres(@params[:excluded_genres])
       )
     end
 
     private
+
+    # Accepts BOTH shapes the two entry points produce: a comma-joined string
+    # from the path segment, and an array from the picker's `name="...[]"`
+    # hidden inputs. Resolution semantics match Books::FilterParams#resolve --
+    # a count mismatch 404s rather than silently dropping a slug, because a URL
+    # promising two exclusions must not quietly apply one.
+    #
+    # Genres only. A subject or setting slug 404s rather than filtering, so the
+    # URL space stays exactly what the picker can produce.
+    def genres(raw)
+      slugs = Array(raw).flat_map { |value| value.to_s.split(",") }.map(&:strip).reject(&:blank?).uniq
+      return [] if slugs.empty?
+      raise ActiveRecord::RecordNotFound if slugs.size > MAX_EXCLUDED_GENRES
+
+      records = ::Books::Category.active.where(category_type: :genre, slug: slugs).sort_by(&:slug)
+      raise ActiveRecord::RecordNotFound if records.size != slugs.size
+
+      records
+    end
 
     def integer(raw, default)
       return default if raw.blank?
