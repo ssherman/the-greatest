@@ -51,8 +51,8 @@ module Books
       nonfiction_quota = (@settings.total_books * @settings.nonfiction_percentage / 100.0).round
       fiction_quota = @settings.total_books - nonfiction_quota
 
-      selected = select_pass(candidates_in(FICTION_SLUG), fiction_quota)
-      selected += select_pass(candidates_in(NONFICTION_SLUG), nonfiction_quota)
+      selected = select_pass(FICTION_SLUG, fiction_quota)
+      selected += select_pass(NONFICTION_SLUG, nonfiction_quota)
 
       Result.new(
         ranked_items: ranked_items_for(selected),
@@ -65,11 +65,19 @@ module Books
 
     private
 
-    def select_pass(candidate_ids, quota)
+    # `quota <= 0` returns before `candidates_in` runs, so e.g. a
+    # 100%-non-fiction request never builds (and discards) the fiction
+    # candidate set. Legacy guarded the same way, before it built its query.
+    def select_pass(slug, quota)
       return [] if quota <= 0
 
       picked = []
-      candidate_ids.each do |id|
+      candidates_in(slug).each do |id|
+        # Country is checked first, so a book that is both over its country
+        # cap and by an already-used author is attributed to country only and
+        # never reaches the author check below. Legacy skipped on
+        # `country || author` in a single check and never separated the two --
+        # this attribution is new information legacy never produced.
         if @country_used[country_by_book[id]] >= @settings.max_books_per_country
           @blocked_by_country += 1
           next
@@ -87,43 +95,43 @@ module Books
       picked
     end
 
-    # Rank-ordered book ids carrying the given genre. Legacy loaded every ranked
-    # book as an AR object with two associations preloaded to answer a question
-    # about integers; measured against production data that costs ~0.4s where
-    # plucking costs a fraction of it, and most settings scan nearly the whole
-    # ranked set anyway (250 books at 50% non-fiction reaches position 21,374 of
-    # 24,242), so there is nothing to gain from batching with an early exit.
+    # Rank-ordered book ids carrying the given genre. Genre membership is
+    # applied as a subquery on `ranked_scope`, not a materialised member-id
+    # array -- see `ranked_scope` for why that matters.
     def candidates_in(slug)
       category = ::Books::Category.active.find_by(slug: slug)
       return [] if category.nil?
 
-      member_ids = ::CategoryItem
-        .where(category_id: category.id, item_type: "Books::Book")
+      ranked_scope
+        .where(item_id: ::CategoryItem.where(category_id: category.id, item_type: "Books::Book").select(:item_id))
+        .order(:rank)
         .pluck(:item_id)
-        .to_set
-
-      ranked_ids.select { |id| member_ids.include?(id) }
     end
 
-    def ranked_ids
-      @ranked_ids ||= begin
-        ids = ::RankedItem
+    # The ranked, unblocked, un-excluded `RankedItem` relation -- kept as a
+    # relation, never plucked into a Ruby array here, so every downstream use
+    # composes it as a SQL subquery instead of a bind-parameter IN list.
+    # PostgreSQL caps a statement at 65,535 bind parameters; a ranking
+    # configuration with more ranked items than that would turn a plucked
+    # array passed back in as literal ids into a silent 500 on a public page.
+    # 24,242 books are ranked today; 126,303 exist.
+    def ranked_scope
+      @ranked_scope ||= begin
+        scope = ::RankedItem
           .where(ranking_configuration_id: @ranking_configuration.id, item_type: "Books::Book")
           .where.not(rank: nil)
           .where.not(item_id: BLOCKED_BOOK_IDS)
-          .order(:rank)
-          .pluck(:item_id)
 
-        ids - excluded_book_ids
+        if @settings.excluded_genres.present?
+          scope = scope.where.not(
+            item_id: ::CategoryItem
+              .where(category_id: @settings.excluded_genres.map(&:id), item_type: "Books::Book")
+              .select(:item_id)
+          )
+        end
+
+        scope
       end
-    end
-
-    def excluded_book_ids
-      return [] if @settings.excluded_genres.blank?
-
-      ::CategoryItem
-        .where(category_id: @settings.excluded_genres.map(&:id), item_type: "Books::Book")
-        .pluck(:item_id)
     end
 
     # `order(:id)` reproduces legacy's `book.countries.first`, which had no
@@ -132,7 +140,7 @@ module Books
     # so it is pinned by a test.
     def country_by_book
       @country_by_book ||= first_per_book(
-        ::Books::BookCountry.where(book_id: ranked_ids).order(:id).pluck(:book_id, :country_id)
+        ::Books::BookCountry.where(book_id: ranked_scope.select(:item_id)).order(:id).pluck(:book_id, :country_id)
       )
     end
 
@@ -140,7 +148,7 @@ module Books
     # `has_many :book_authors, -> { order(:position) }` association order.
     def author_by_book
       @author_by_book ||= first_per_book(
-        ::Books::BookAuthor.where(book_id: ranked_ids).order(:position, :id).pluck(:book_id, :author_id)
+        ::Books::BookAuthor.where(book_id: ranked_scope.select(:item_id)).order(:position, :id).pluck(:book_id, :author_id)
       )
     end
 

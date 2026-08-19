@@ -12,10 +12,32 @@ module Books
     test "orders the result by rank" do
       a = rank_book(kind: :fiction)
       b = rank_book(kind: :fiction)
+      # a is created first, so it has the lower id, but it is given the worse
+      # rank here -- id/creation order and rank order disagree. Only sorting
+      # by the actual rank column, not id or insertion order, produces
+      # [b, a].
+      set_rank(a, rank: 2)
+      set_rank(b, rank: 1)
 
       result = call(total_books: 10, nonfiction_percentage: 0)
 
-      assert_equal [a.id, b.id], result.ranked_items.map(&:item_id)
+      assert_equal [b.id, a.id], result.ranked_items.map(&:item_id)
+    end
+
+    test "interleaves fiction and non-fiction picks by rank, not by pass order" do
+      # The fiction pass runs before the non-fiction pass and so would select
+      # fiction_book first -- but nonfiction_book is given the better rank. If
+      # the result were the raw concatenation of the two passes rather than
+      # the selection re-sorted by rank, fiction_book would still come out
+      # first.
+      fiction_book = rank_book(kind: :fiction)
+      nonfiction_book = rank_book(kind: :nonfiction)
+      set_rank(fiction_book, rank: 2)
+      set_rank(nonfiction_book, rank: 1)
+
+      result = call(total_books: 10, nonfiction_percentage: 50)
+
+      assert_equal [nonfiction_book.id, fiction_book.id], result.ranked_items.map(&:item_id)
     end
 
     test "takes at most max_books_per_country from one country" do
@@ -38,6 +60,21 @@ module Books
       assert_equal 2, result.blocked_by_author
     end
 
+    test "attributes a book blocked by both country and author to country only" do
+      # Country is checked first in the selection loop, so a book that fails
+      # both checks is charged to blocked_by_country and never reaches the
+      # author check -- this pins that attribution.
+      shared_country = country("Shared Country")
+      shared_author = author("Shared Author")
+      rank_book(kind: :fiction, country: shared_country, author: shared_author)
+      rank_book(kind: :fiction, country: shared_country, author: shared_author)
+
+      result = call(total_books: 10, nonfiction_percentage: 0, max_books_per_country: 1)
+
+      assert_equal 1, result.blocked_by_country
+      assert_equal 0, result.blocked_by_author
+    end
+
     test "caps books with no country in a single bucket, as legacy does" do
       4.times { rank_book(kind: :fiction, country: nil) }
 
@@ -47,11 +84,12 @@ module Books
     end
 
     test "fiction consumes country slots before the non-fiction pass runs" do
-      # Both fiction books outrank both non-fiction books, and all four share a
-      # country whose cap is 1. Fiction-first means the fiction book wins the
-      # slot and the non-fiction quota goes unfilled. If the passes were
-      # reordered, the non-fiction book would take it instead -- so this test
-      # fails against a flipped implementation rather than passing either way.
+      # One fiction book and one non-fiction book share a country whose cap is
+      # 1, and the fiction book outranks the non-fiction one. Fiction-first
+      # means the fiction book wins the slot and the non-fiction quota goes
+      # unfilled. If the passes were reordered, the non-fiction book would
+      # take it instead -- so this test fails against a flipped
+      # implementation rather than passing either way.
       japan = country("Japan")
       fiction_book = rank_book(kind: :fiction, country: japan)
       rank_book(kind: :nonfiction, country: japan)
@@ -194,6 +232,12 @@ module Books
 
       ::RankedItem.create!(item: book, ranking_configuration: @rc, rank: @next_rank, score: 10_000 - @next_rank)
       book
+    end
+
+    # Overrides the rank (and matching score) a `rank_book` book was created
+    # with, so a test can make rank order disagree with creation/id order.
+    def set_rank(book, rank:)
+      book.ranked_items.find_by!(ranking_configuration: @rc).update!(rank: rank, score: 10_000 - rank)
     end
 
     def country(name)
