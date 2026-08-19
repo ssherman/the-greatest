@@ -36,6 +36,12 @@ test.describe('The Global Canon', () => {
     expect(twoFifty).toBeGreaterThan(fifty);
   });
 
+  // This only holds because the top-ranked fiction candidate and the
+  // top-ranked non-fiction candidate are different books -- today Ulysses
+  // (rank 1) versus Essays (rank 82), a wide margin. 1,633 books in the
+  // development database carry BOTH the `fiction` and `nonfiction` category
+  // tags, so if a re-tag ever made the single top-ranked book dual-tagged,
+  // this test would fail for a data reason rather than a real regression.
   test('an all-fiction canon and an all-nonfiction canon differ', async ({ page }) => {
     await page.goto('/global-canon/total_books/50/nonfiction/0/max_per_country/3');
     const fictionFirst = await page.locator('[data-listable-type="Books::Book"]').first().innerText();
@@ -50,5 +56,29 @@ test.describe('The Global Canon', () => {
     await page.goto('/global-canon/total_books/150/nonfiction/20/max_per_country/3');
 
     await expect(page).toHaveURL('/global-canon');
+  });
+
+  test('excluding a genre adds it to the URL and drops its books', async ({ page }) => {
+    await page.goto('/global-canon/total_books/50/nonfiction/20/max_per_country/3');
+    const before = await page.locator('[data-listable-type="Books::Book"]').allInnerTexts();
+
+    await page.getByTestId('canon-genre-search').fill('literary fiction');
+    await page.getByRole('button', { name: /Literary Fiction/ }).first().click();
+    await page.getByTestId('canon-update').click();
+
+    await expect(page).toHaveURL(/\/excluding\/[a-z0-9,-]+$/);
+
+    const after = await page.locator('[data-listable-type="Books::Book"]').allInnerTexts();
+    expect(after).not.toEqual(before);
+  });
+
+  test('an active exclusion is shown back on the page', async ({ page }) => {
+    await page.goto('/global-canon/total_books/50/nonfiction/20/max_per_country/3');
+
+    await page.getByTestId('canon-genre-search').fill('literary fiction');
+    await page.getByRole('button', { name: /Literary Fiction/ }).first().click();
+    await page.getByTestId('canon-update').click();
+
+    await expect(page.locator('[data-chip]')).toHaveCount(1);
   });
 });

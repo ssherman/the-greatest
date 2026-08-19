@@ -233,11 +233,20 @@ module Books
 
     test "the genres endpoint excludes subjects and settings" do
       subject = categories(:books_politics_subject)
+      location = categories(:books_france_location)
 
       get "/global-canon/genres", params: {q: subject.name}, as: :json
 
       assert_response :success
       refute_includes response.parsed_body.map { |row| row["value"] }, subject.slug
+
+      # A location (setting) slug must be excluded too: GlobalCanonParams 404s
+      # a location slug, so if this endpoint ever offered one, the picker
+      # could hand the visitor a choice that breaks the page.
+      get "/global-canon/genres", params: {q: location.name}, as: :json
+
+      assert_response :success
+      refute_includes response.parsed_body.map { |row| row["value"] }, location.slug
     end
 
     test "the genres endpoint is never cached" do
