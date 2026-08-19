@@ -37,10 +37,13 @@
       <fieldset class="fieldset">
         <legend class="fieldset-legend">Non-fiction</legend>
         <%# The menu offers multiples of five; the route accepts any integer
-            0..100, so a hand-typed value still resolves and is preselected. %>
+            0..100, so a hand-typed or legacy-bookmarked value still resolves
+            and is preselected -- the current value is unioned into the
+            option list below so options_for_select always has it to select,
+            rather than silently falling back to the first option (0%). %>
         <%= select_tag :nonfiction_percentage,
               options_for_select(
-                (0..100).step(5).map { |p| ["#{p}%", p] },
+                ((0..100).step(5).to_a + [@settings.nonfiction_percentage]).uniq.sort.map { |p| ["#{p}%", p] },
                 @settings.nonfiction_percentage
               ),
               class: "select w-full", "aria-label": "Non-fiction" %>
@@ -61,7 +64,9 @@
         single row. %>
     <fieldset class="fieldset" data-controller="saved-search-picker"
               data-saved-search-picker-url-value="<%= books_global_canon_genres_path %>"
-              data-saved-search-picker-name-value="excluded_genres[]">
+              data-saved-search-picker-name-value="excluded_genres[]"
+              data-saved-search-picker-max-value="<%= Books::GlobalCanonParams::MAX_EXCLUDED_GENRES %>"
+              data-testid="canon-genre-picker">
       <legend class="fieldset-legend">Genres to exclude</legend>
       <div class="relative">
         <input type="search"
@@ -89,6 +94,13 @@
           </span>
         <% end %>
       </div>
+      <%# Hidden until MAX_EXCLUDED_GENRES is reached -- a 7th chip that just
+          silently fails to add would be its own bug. Same visual language as
+          the filter pane's own cap notice (Books::FilterPaneComponent). %>
+      <p class="text-sm text-warning hidden mt-1" role="status" aria-live="polite"
+         data-saved-search-picker-target="limit" data-testid="canon-genre-limit">
+        You can exclude up to <%= Books::GlobalCanonParams::MAX_EXCLUDED_GENRES %>. Remove one to add another.
+      </p>
     </fieldset>
 
     <%= submit_tag "Update list", class: "btn btn-primary", data: {testid: "canon-update"} %>

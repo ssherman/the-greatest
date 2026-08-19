@@ -81,4 +81,42 @@ test.describe('The Global Canon', () => {
 
     await expect(page.locator('[data-chip]')).toHaveCount(1);
   });
+
+  // Books::GlobalCanonParams::MAX_EXCLUDED_GENRES is 6 -- a 7th selection
+  // used to 404 the moment "Update list" was pressed, with no explanation.
+  // Seven distinct, unambiguous genre queries, each verified to resolve to
+  // exactly the genre it names.
+  test('a 7th genre exclusion is blocked in the picker, with an explanation', async ({ page }) => {
+    await page.goto('/global-canon');
+
+    const search = page.getByTestId('canon-genre-search');
+    const addFirstResult = () => page.locator('[data-action="saved-search-picker#add"]').first().click();
+    const genreQueries = ['21st cent', 'aapi', 'absurdist', 'americana', 'ancient', 'anthologies'];
+
+    for (const query of genreQueries) {
+      await search.fill(query);
+      await addFirstResult();
+    }
+    await expect(page.locator('[data-chip]')).toHaveCount(6);
+
+    // The limit notice is not shown until the cap is actually hit.
+    await expect(page.getByTestId('canon-genre-limit')).toBeHidden();
+
+    // The 7th chip must not be added -- the picker silently accepting it
+    // (only to 404 on submit) is exactly the bug being fixed.
+    await search.fill('apocalyptic');
+    await addFirstResult();
+    await expect(page.locator('[data-chip]')).toHaveCount(6);
+
+    // The visitor is told why, not left with a silent no-op.
+    await expect(page.getByTestId('canon-genre-limit')).toBeVisible();
+    await expect(page.getByTestId('canon-genre-limit')).toContainText('up to 6');
+
+    // Update list still succeeds with exactly the 6 chips that made it in --
+    // no 404, the page it lands on is the real canon page.
+    await page.getByTestId('canon-update').click();
+    await expect(page.getByRole('heading', { name: 'The Global Literary Canon', level: 1 })).toBeVisible();
+    await expect(page).toHaveURL(/\/excluding\/[a-z0-9,-]+$/);
+    await expect(page.locator('[data-chip]')).toHaveCount(6);
+  });
 });

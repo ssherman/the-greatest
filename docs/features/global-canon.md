@@ -133,6 +133,13 @@ a request that's about to redirect anyway doesn't pay for an uncached
 `Books::RankingConfiguration.default_primary` lookup, and so that lookup coming back `nil` can
 never turn a clean redirect into an unrelated 404.
 
+`find_ranking_configuration` is also scoped `only: [:show]` — it's the only action that reads
+`@ranking_configuration`. `#settings` never touches it, and `#genres` is the exclusion picker's
+search-as-you-type source: it fires on every keystroke, so running an uncached `default_primary`
+lookup there was a wasted query per keystroke, and a `nil` RC would 404 the JSON endpoint for a
+reason unrelated to the search itself. With the lookup scoped away, `prevent_caching` is the only
+filter left on `#genres`, so its `no-store` header can never be skipped by an earlier 404.
+
 ## The selection algorithm
 
 `Books::GlobalCanonQuery` ports `GlobalCanonGenerator.generate_global_canon` from the legacy site.

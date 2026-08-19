@@ -8,9 +8,19 @@ class Books::GlobalCanonController < ApplicationController
   # Books::BrowseController): a request headed for a 301 should not pay an
   # uncached default_primary query, and should not risk that lookup turning a
   # clean redirect into a 404 if it ever comes back nil.
+  #
+  # find_ranking_configuration is scoped to :show ONLY -- it is the only
+  # action that reads @ranking_configuration. #settings never touches it
+  # (Books::GlobalCanonPath/Params are all it needs), and #genres is the
+  # exclusion picker's search-as-you-type source, firing on every keystroke:
+  # running an uncached default_primary lookup there was a wasted query per
+  # keystroke, and a nil RC would 404 the JSON endpoint for a reason that has
+  # nothing to do with it. Scoping it away from :genres also means
+  # prevent_caching is the only filter left on that action, so its no-store
+  # header can never be skipped by a 404 raised earlier in the chain.
   before_action :redirect_to_canonical_form, only: [:show]
   before_action :cache_for_index_page, only: [:show]
-  before_action :find_ranking_configuration
+  before_action :find_ranking_configuration, only: [:show]
   before_action :prevent_caching, only: [:settings, :genres]
 
   def show

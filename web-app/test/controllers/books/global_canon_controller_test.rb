@@ -255,6 +255,89 @@ module Books
       assert_match "no-store", response.headers["Cache-Control"]
     end
 
+    test "the genres endpoint never looks up a ranking configuration" do
+      # find_ranking_configuration is scoped to :show only -- #genres is the
+      # exclusion picker's search-as-you-type source and fires on every
+      # keystroke, so an uncached default_primary lookup there would be a
+      # wasted query per keystroke (and a nil RC would 404 the JSON endpoint
+      # for an unrelated reason).
+      Books::RankingConfiguration.expects(:default_primary).never
+
+      get "/global-canon/genres", params: {q: "poet"}, as: :json
+
+      assert_response :success
+    end
+
+    test "the genre picker renders MAX_EXCLUDED_GENRES as its cap for the JS controller to read" do
+      # Books::GlobalCanonParams 404s past MAX_EXCLUDED_GENRES, but the picker
+      # JS (saved_search_picker_controller.js) has no way to know that number
+      # except by reading it off the DOM -- this pins that the view actually
+      # renders it, rather than hardcoding 6 in the template.
+      get "/global-canon"
+
+      assert_response :success
+      assert_select "[data-testid=canon-genre-picker][data-saved-search-picker-max-value=?]",
+        Books::GlobalCanonParams::MAX_EXCLUDED_GENRES.to_s
+    end
+
+    test "an off-menu non-fiction percentage is preselected, not silently defaulted to 0%" do
+      # options_for_select emits no `selected` attribute for a value absent
+      # from the option list, so the browser falls back to displaying the
+      # FIRST option (0%) -- even though the page body correctly says 37%.
+      get "/global-canon/total_books/250/nonfiction/37/max_per_country/2"
+
+      assert_response :success
+      assert_select "select#nonfiction_percentage option[selected][value=?]", "37"
+    end
+
+    test "cards are numbered by canon position, not the book's own global rank" do
+      # Excluding "Canon Book 1" (global rank 1) via genre makes the first
+      # DELIVERED book "Canon Book 2" (global rank 2) -- so canon position 1
+      # and global rank 1 point at different books, and only the position
+      # numbering (index + 1) can be correct for both.
+      poetry = ::Books::Category.create!(name: "Poetry", slug: "poetry", category_type: :genre)
+      rank_one_book = ::Books::Book.where(title: "Canon Book 1").first
+      ::CategoryItem.create!(category: poetry, item: rank_one_book)
+
+      get "/global-canon/total_books/50/nonfiction/0/max_per_country/10/excluding/poetry"
+
+      assert_response :success
+      ranked_items = @controller.view_assigns["result"].ranked_items
+      # Sanity check on the scenario itself: the first delivered book's own
+      # rank is 2, not 1 -- proving this test can actually distinguish
+      # canon position from global rank.
+      assert_equal 2, ranked_items.first.rank
+
+      first_card_badge = css_select(".card").first.css(".badge-primary").first.text.squish
+      assert_equal "Rank #1", first_card_badge
+    end
+
+    test "the aggregated-lists count scopes to Books::List, not the shared List model" do
+      # List (root namespace) spans all four sites this app serves. Creating
+      # an extra ACTIVE Books::List and asserting the page renders exactly
+      # Books::List.active.count -- not the (necessarily larger) List.active.count
+      # -- is what a `Books::List.active` -> `List.active` substitution breaks.
+      ::Books::List.create!(name: "Extra Active Books List", status: :active)
+
+      expected = ::Books::List.active.count
+      assert_operator expected, :<, ::List.active.count
+
+      get "/global-canon"
+
+      assert_response :success
+      assert_select "p", /built from #{expected} aggregated lists/
+    end
+
+    test "an excluded genre is echoed back as a chip and named in the exclusion sentence" do
+      poetry = ::Books::Category.create!(name: "Poetry", slug: "poetry", category_type: :genre)
+
+      get "/global-canon/total_books/150/nonfiction/20/max_per_country/3/excluding/poetry"
+
+      assert_response :success
+      assert_select "[data-chip=?]", poetry.slug
+      assert_select "p", /Excluding Poetry\./
+    end
+
     private
 
     def query_count_for(path)
