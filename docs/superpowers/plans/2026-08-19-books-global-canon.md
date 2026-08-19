@@ -954,9 +954,15 @@ module Books
     end
 
     test "no note is shown when the canon is filled" do
+      # 50 is the smallest selectable total, so the canon can only be "filled"
+      # with at least 50 eligible books. Each gets its own country so the cap of
+      # 10 never binds; setup's three country-less books share the nil bucket.
+      seed_canon_books(50)
+
       get "/global-canon/total_books/50/nonfiction/0/max_per_country/10"
 
       assert_response :success
+      assert_equal 50, @controller.view_assigns["result"].delivered
       assert_select "[data-testid=canon-short-list-note]", false
     end
 
@@ -986,6 +992,14 @@ module Books
       counter = ->(*, payload) { count += 1 unless payload[:name].in?(%w[SCHEMA TRANSACTION]) }
       ActiveSupport::Notifications.subscribed(counter, "sql.active_record") { get path }
       count
+    end
+
+    def seed_canon_books(count)
+      count.times do |i|
+        rank_fiction_book(country: ::Books::Country.create!(
+          name: "Seed Country #{i}", slug: "seed-country-#{i}", labels: []
+        ))
+      end
     end
 
     def rank_fiction_book(country: nil)
