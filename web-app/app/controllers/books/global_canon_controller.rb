@@ -1,0 +1,54 @@
+class Books::GlobalCanonController < ApplicationController
+  include Cacheable
+
+  layout "books/application"
+
+  before_action :find_ranking_configuration
+  # Above the cache filter on purpose: a 301 must not be decorated with 6-hour
+  # public edge-cache headers.
+  before_action :redirect_to_canonical_form, only: [:show]
+  before_action :cache_for_index_page, only: [:show]
+  before_action :prevent_caching, only: [:settings]
+
+  def show
+    @settings = Books::GlobalCanonParams.call(params)
+    @result = Books::GlobalCanonQuery.call(
+      ranking_configuration: @ranking_configuration,
+      settings: @settings
+    )
+    @page_title = "The Global Literary Canon"
+    @indexable = @settings.default?
+    # No canonical at all on a customised variant. One pointing back at
+    # /global-canon would pair noindex with a canonical whose noindex can
+    # propagate to the real page -- the rule Books::RankedItemsController
+    # states for /rc/ URLs.
+    @canonical_path = Books::GlobalCanonPath.call(@settings) if @indexable
+  end
+
+  # The settings form's target. Resolves the submitted values and sends the
+  # visitor to the canonical path, so the URL grammar lives only in
+  # Books::GlobalCanonPath. Mirrors Books::FiltersController#show.
+  def settings
+    redirect_to Books::GlobalCanonPath.call(Books::GlobalCanonParams.call(params)),
+      status: :see_other
+  end
+
+  private
+
+  # One rule collapses two non-canonical shapes: a spelled-out set of defaults,
+  # and a query string reaching #show. Both compute a canonical path that differs
+  # from the request path, so both 301. Comparing against the COMPUTED path
+  # rather than testing for query keys means a shape added later is covered for
+  # free.
+  def redirect_to_canonical_form
+    canonical = Books::GlobalCanonPath.call(Books::GlobalCanonParams.call(params))
+    return if canonical == request.path
+
+    redirect_to canonical, status: :moved_permanently
+  end
+
+  def find_ranking_configuration
+    @ranking_configuration = Books::RankingConfiguration.default_primary
+    raise ActiveRecord::RecordNotFound if @ranking_configuration.nil?
+  end
+end

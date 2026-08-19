@@ -1,0 +1,79 @@
+<%
+  content_for :page_title, "#{@page_title} | The Greatest Books"
+  content_for :meta_description, "Discover 'The Global Literary Canon,' a balanced and inclusive collection of global literary masterpieces, with a fair representation of the world's finest literature."
+  content_for :canonical_url, request.base_url + @canonical_path if @canonical_path
+%>
+
+<div class="space-y-8">
+  <h1 class="text-3xl sm:text-4xl font-bold text-center text-balance"><%= @page_title %></h1>
+
+  <div class="bg-base-100 border border-base-300 rounded-xl p-6 md:p-10">
+    <div class="max-w-3xl mx-auto space-y-4 text-base sm:text-lg leading-relaxed text-base-content/80">
+      <p>
+        An algorithmically generated collection that brings balance and inclusivity to the world of
+        literature, built from <%= number_with_delimiter(Books::List.active.count) %> aggregated lists.
+      </p>
+      <p>
+        To keep the selection balanced this list is <%= @settings.nonfiction_percentage %>% non-fiction,
+        takes no more than <%= @settings.max_books_per_country %>
+        <%= "book".pluralize(@settings.max_books_per_country) %> from any single country, and includes
+        only one book per author.
+      </p>
+    </div>
+  </div>
+
+  <%= form_with url: books_global_canon_settings_path, method: :get, class: "space-y-4" do %>
+    <div class="grid gap-4 sm:grid-cols-3">
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Total books</legend>
+        <%= select_tag :total_books,
+              options_for_select(Books::GlobalCanonParams::TOTALS, @settings.total_books),
+              class: "select w-full" %>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Non-fiction</legend>
+        <%# The menu offers multiples of five; the route accepts any integer
+            0..100, so a hand-typed value still resolves and is preselected. %>
+        <%= select_tag :nonfiction_percentage,
+              options_for_select(
+                (0..100).step(5).map { |p| ["#{p}%", p] },
+                @settings.nonfiction_percentage
+              ),
+              class: "select w-full" %>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Max books per country</legend>
+        <%= select_tag :max_books_per_country,
+              options_for_select((1..10).to_a, @settings.max_books_per_country),
+              class: "select w-full" %>
+      </fieldset>
+    </div>
+
+    <%= submit_tag "Update list", class: "btn btn-primary", data: {testid: "canon-update"} %>
+  <% end %>
+
+  <% if @result.delivered < @result.requested %>
+    <div role="status" class="alert" data-testid="canon-short-list-note">
+      <span>
+        Showing <strong><%= @result.delivered %></strong> of the <%= @result.requested %> requested.
+        <% if @result.blocked_by_country >= @result.blocked_by_author %>
+          The limit of <%= @settings.max_books_per_country %>
+          <%= "book".pluralize(@settings.max_books_per_country) %> per country is the binding
+          constraint — raise it to get more.
+        <% else %>
+          The limit of one book per author is the binding constraint.
+        <% end %>
+      </span>
+    </div>
+  <% end %>
+
+  <%# Numbered by canon position, not global rank: showing #1, #3, #9, #14 makes
+      the diversity filter's gaps look like errors. %>
+  <div class="<%= Books::CardComponent::GRID_CONTAINER_CLASS %>">
+    <% @result.ranked_items.each_with_index do |ranked_item, index| %>
+      <%= render Books::CardComponent.new(book: ranked_item.item, rank: index + 1, index: index) %>
+    <% end %>
+  </div>
+</div>
