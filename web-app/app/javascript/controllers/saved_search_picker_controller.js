@@ -8,8 +8,11 @@ const DEBOUNCE_MS = 250
 // rendered into the chips target on edit, so this controller must read the
 // existing hidden inputs rather than assume it starts empty.
 export default class extends Controller {
-  static targets = ["query", "results", "chips"]
-  static values = { url: String, name: String }
+  static targets = ["query", "results", "chips", "limit"]
+  // maxValue is opt-in: instances that don't set data-*-max-value get the
+  // Number default of 0, which add() treats as "no cap" so the three
+  // saved-search pickers (_criteria_fields.html.erb) are unaffected.
+  static values = { url: String, name: String, max: Number }
 
   connect() {
     this.timer = null
@@ -84,6 +87,15 @@ export default class extends Controller {
 
     if (this.selectedValues().includes(value)) return
 
+    // maxValue === 0 means uncapped (the default for every instance that
+    // doesn't opt in). A capped picker silently ignoring the click would be
+    // its own bug, so the limit target -- if present -- gets an explicit
+    // message instead of the chip being dropped without a word.
+    if (this.maxValue > 0 && this.selectedValues().length >= this.maxValue) {
+      this.showLimit()
+      return
+    }
+
     this.abortController?.abort()
     this.chipsTarget.appendChild(this.chip(value, label))
     this.queryTarget.value = ""
@@ -92,6 +104,17 @@ export default class extends Controller {
 
   remove(event) {
     event.currentTarget.closest("[data-chip]").remove()
+    this.hideLimit()
+  }
+
+  showLimit() {
+    if (!this.hasLimitTarget) return
+    this.limitTarget.textContent = `You can exclude up to ${this.maxValue}. Remove one to add another.`
+    this.limitTarget.classList.remove("hidden")
+  }
+
+  hideLimit() {
+    if (this.hasLimitTarget) this.limitTarget.classList.add("hidden")
   }
 
   selectedValues() {

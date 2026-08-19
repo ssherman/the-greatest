@@ -524,6 +524,44 @@ Rails.application.routes.draw do
     get "filters/categories", to: "books/filters#categories", as: :books_filters_categories
     get "filters/countries", to: "books/filters#countries", as: :books_filters_countries
 
+    # The Global Canon. Settings live in the PATH, never a query string, so each
+    # variant is its own Cloudflare edge-cache entry.
+    #
+    # The segment constraints are LOAD-BEARING for the same reason collection_re
+    # is: an unconstrained segment mints an unbounded space of soft-duplicates of
+    # a page that ranks. Anchors (\A, \z) raise ArgumentError in a segment
+    # constraint -- Rails anchors them itself.
+    #
+    # canon_pct admits any integer 0..100 even though the menu offers only
+    # multiples of five, so a hand-typed or bookmarked value still resolves.
+    #
+    # `settings` is declared FIRST: the day a shorter canon shape is added, a
+    # route above this one could otherwise swallow it.
+    canon_total = /(?:50|100|150|200|250)/
+    canon_pct = /(?:100|[1-9]?\d)/
+    canon_country = /(?:10|[1-9])/
+    # Up to MAX_EXCLUDED_GENRES slugs. The cap lives here as well as in
+    # GlobalCanonParams so an over-long list never reaches the app at all.
+    canon_genres = /[a-z0-9-]+(?:,[a-z0-9-]+){0,5}/
+
+    get "global-canon/settings", to: "books/global_canon#settings", as: :books_global_canon_settings
+    get "global-canon/genres", to: "books/global_canon#genres", as: :books_global_canon_genres
+    get "global-canon", to: "books/global_canon#show", as: :books_global_canon
+    get "global-canon/total_books/:total_books",
+      to: "books/global_canon#show", constraints: {total_books: canon_total}
+    get "global-canon/total_books/:total_books/nonfiction/:nonfiction_percentage",
+      to: "books/global_canon#show",
+      constraints: {total_books: canon_total, nonfiction_percentage: canon_pct}
+    get "global-canon/total_books/:total_books/nonfiction/:nonfiction_percentage/max_per_country/:max_books_per_country",
+      to: "books/global_canon#show",
+      constraints: {total_books: canon_total, nonfiction_percentage: canon_pct, max_books_per_country: canon_country}
+    get "global-canon/total_books/:total_books/nonfiction/:nonfiction_percentage/max_per_country/:max_books_per_country/excluding/:excluded_genres",
+      to: "books/global_canon#show",
+      constraints: {
+        total_books: canon_total, nonfiction_percentage: canon_pct,
+        max_books_per_country: canon_country, excluded_genres: canon_genres
+      }
+
     # Legacy browse grammar, ported verbatim so no /genres or /countries URL needs
     # a redirect: BrowseController already reads params[:filter] and params[:sort],
     # and route segments populate params exactly as query parameters do. Only the
