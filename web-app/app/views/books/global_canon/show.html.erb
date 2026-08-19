@@ -18,6 +18,9 @@
         takes no more than <%= @settings.max_books_per_country %>
         <%= "book".pluralize(@settings.max_books_per_country) %> from any single country, and includes
         only one book per author.
+        <% if @settings.excluded_genres.any? %>
+          Excluding <%= @settings.excluded_genres.map(&:name).to_sentence %>.
+        <% end %>
       </p>
     </div>
   </div>
@@ -50,6 +53,43 @@
               class: "select w-full", "aria-label": "Max books per country" %>
       </fieldset>
     </div>
+
+    <%# Same picker shape as the saved-search form: type-to-search against a JSON
+        endpoint, chosen genres held as hidden inputs. Progressive enhancement --
+        without JavaScript the three menus above still submit. There is no
+        <select multiple> fallback: daisyUI 5 renders one as an unreadable
+        single row. %>
+    <fieldset class="fieldset" data-controller="saved-search-picker"
+              data-saved-search-picker-url-value="<%= books_global_canon_genres_path %>"
+              data-saved-search-picker-name-value="excluded_genres[]">
+      <legend class="fieldset-legend">Genres to exclude</legend>
+      <div class="relative">
+        <input type="search"
+               class="input w-full"
+               placeholder="Search genres"
+               aria-label="Genres to exclude"
+               autocomplete="off"
+               data-testid="canon-genre-search"
+               data-saved-search-picker-target="query"
+               data-action="input->saved-search-picker#search keydown->saved-search-picker#suppressEnter">
+        <%# Hidden until the controller has at least one result to show -- an
+            empty absolutely-positioned panel would float over the page as a
+            small blank box. %>
+        <div class="hidden absolute dropdown-content p-2 shadow-lg bg-base-100 rounded-box w-full mt-1 max-h-80 overflow-y-auto z-[9999] left-0 top-full flex flex-col gap-1"
+             data-saved-search-picker-target="results"></div>
+      </div>
+      <div class="flex flex-wrap gap-2 mt-2" data-saved-search-picker-target="chips">
+        <% @settings.excluded_genres.each do |genre| %>
+          <span class="badge badge-outline gap-1" data-chip="<%= genre.slug %>">
+            <%= hidden_field_tag "excluded_genres[]", genre.slug, id: nil %>
+            <span><%= genre.name %></span>
+            <button type="button" class="btn btn-ghost btn-xs px-1"
+                    aria-label="Remove <%= genre.name %>"
+                    data-action="saved-search-picker#remove">×</button>
+          </span>
+        <% end %>
+      </div>
+    </fieldset>
 
     <%= submit_tag "Update list", class: "btn btn-primary", data: {testid: "canon-update"} %>
   <% end %>

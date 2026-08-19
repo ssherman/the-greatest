@@ -162,6 +162,90 @@ module Books
       assert_equal baseline, query_count_for("/global-canon")
     end
 
+    test "an excluded genre removes its books from the canon" do
+      poetry = ::Books::Category.create!(name: "Poetry", slug: "poetry", category_type: :genre)
+      excluded_book = ::Books::Book.where(title: "Canon Book 1").first
+      ::CategoryItem.create!(category: poetry, item: excluded_book)
+
+      get "/global-canon/total_books/50/nonfiction/0/max_per_country/10/excluding/poetry"
+
+      assert_response :success
+      ids = @controller.view_assigns["result"].ranked_items.map(&:item_id)
+      refute_includes ids, excluded_book.id
+      assert_equal 2, ids.size
+    end
+
+    test "an excluded genre path is noindex" do
+      Books::PublicIndexing.stubs(:enabled?).returns(true)
+      ::Books::Category.create!(name: "Poetry", slug: "poetry", category_type: :genre)
+
+      get "/global-canon/total_books/150/nonfiction/20/max_per_country/3/excluding/poetry"
+
+      assert_select "meta[name=robots][content=?]", "noindex, follow"
+    end
+
+    test "an unsorted exclusion list 301s to the sorted one" do
+      ::Books::Category.create!(name: "Poetry", slug: "poetry", category_type: :genre)
+      ::Books::Category.create!(name: "Fantasy", slug: "fantasy", category_type: :genre)
+
+      get "/global-canon/total_books/150/nonfiction/20/max_per_country/3/excluding/poetry,fantasy"
+
+      assert_redirected_to "/global-canon/total_books/150/nonfiction/20/max_per_country/3/excluding/fantasy,poetry"
+      assert_equal 301, response.status
+    end
+
+    test "the settings form carries exclusions into the canonical path" do
+      ::Books::Category.create!(name: "Poetry", slug: "poetry", category_type: :genre)
+
+      get "/global-canon/settings", params: {
+        total_books: "150", nonfiction_percentage: "20",
+        max_books_per_country: "3", excluded_genres: ["poetry"]
+      }
+
+      assert_redirected_to "/global-canon/total_books/150/nonfiction/20/max_per_country/3/excluding/poetry"
+    end
+
+    test "an unknown genre slug 404s" do
+      # The route regex admits any lowercase slug, so this reaches the app and
+      # GlobalCanonParams is what rejects it. That is the whole reason the
+      # validator duplicates the constraint.
+      get "/global-canon/total_books/150/nonfiction/20/max_per_country/3/excluding/not-a-genre"
+
+      assert_response :not_found
+    end
+
+    test "more than six exclusions never reaches the app" do
+      slugs = (1..7).map { |i| ::Books::Category.create!(name: "Genre #{i}", slug: "genre-#{i}", category_type: :genre).slug }
+
+      get "/global-canon/total_books/150/nonfiction/20/max_per_country/3/excluding/#{slugs.join(",")}"
+
+      assert_response :not_found
+    end
+
+    test "the genres endpoint returns matching genres as slug and name" do
+      ::Books::Category.create!(name: "Poetry", slug: "poetry", category_type: :genre)
+
+      get "/global-canon/genres", params: {q: "poet"}, as: :json
+
+      assert_response :success
+      assert_equal [{"value" => "poetry", "text" => "Poetry"}], response.parsed_body
+    end
+
+    test "the genres endpoint excludes subjects and settings" do
+      subject = categories(:books_politics_subject)
+
+      get "/global-canon/genres", params: {q: subject.name}, as: :json
+
+      assert_response :success
+      refute_includes response.parsed_body.map { |row| row["value"] }, subject.slug
+    end
+
+    test "the genres endpoint is never cached" do
+      get "/global-canon/genres", params: {q: "poet"}, as: :json
+
+      assert_match "no-store", response.headers["Cache-Control"]
+    end
+
     private
 
     def query_count_for(path)
