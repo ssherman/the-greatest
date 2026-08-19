@@ -5,6 +5,7 @@
     <ul class="bg-base-100 rounded-box z-[1] w-max max-w-[calc(100vw-2rem)] p-2 shadow">
       <li><%= link_to "All Lists", books_lists_path %></li>
       <li class="menu-title"><span class="sr-only">Curated collections</span></li>
+      <li><%= link_to "The Global Canon", books_global_canon_path %></li>
       <li><%= link_to "The Greatest Books of the 21st Century", "/the-greatest-books/since/2000" %></li>
       <%# Legacy menu order (women, africa, asia, latin-america, non-western, western) --
           NOT the registry's order. See Books::CollectionsRegistry / Collections::Registry

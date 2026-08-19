@@ -1,0 +1,142 @@
+<%
+  content_for :page_title, "#{@page_title} | The Greatest Books"
+  content_for :meta_description, "Discover 'The Global Literary Canon,' a balanced and inclusive collection of global literary masterpieces, with a fair representation of the world's finest literature."
+  content_for :canonical_url, request.base_url + @canonical_path if @canonical_path
+%>
+
+<div class="space-y-8">
+  <h1 class="text-3xl sm:text-4xl font-bold text-center text-balance"><%= @page_title %></h1>
+
+  <div class="bg-base-100 border border-base-300 rounded-xl p-6 md:p-10">
+    <div class="max-w-3xl mx-auto space-y-4 text-base sm:text-lg leading-relaxed text-base-content/80">
+      <p>
+        An algorithmically generated collection that brings balance and inclusivity to the world of
+        literature, built from <%= number_with_delimiter(Books::List.active.count) %> aggregated lists.
+      </p>
+      <p>
+        To keep the selection balanced this list is <%= @settings.nonfiction_percentage %>% non-fiction,
+        takes no more than <%= @settings.max_books_per_country %>
+        <%= "book".pluralize(@settings.max_books_per_country) %> from any single country, and includes
+        only one book per author.
+        <% if @settings.excluded_genres.any? %>
+          Excluding <%= @settings.excluded_genres.map(&:name).to_sentence %>.
+        <% end %>
+      </p>
+    </div>
+  </div>
+
+  <%= form_with url: books_global_canon_settings_path, method: :get, class: "space-y-4" do %>
+    <div class="grid gap-4 sm:grid-cols-3">
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Total books</legend>
+        <%= select_tag :total_books,
+              options_for_select(Books::GlobalCanonParams::TOTALS, @settings.total_books),
+              class: "select w-full", "aria-label": "Total books" %>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Non-fiction</legend>
+        <%# The menu offers multiples of five; the route accepts any integer
+            0..100, so a hand-typed or legacy-bookmarked value still resolves
+            and is preselected -- the current value is unioned into the
+            option list below so options_for_select always has it to select,
+            rather than silently falling back to the first option (0%). %>
+        <%= select_tag :nonfiction_percentage,
+              options_for_select(
+                ((0..100).step(5).to_a + [@settings.nonfiction_percentage]).uniq.sort.map { |p| ["#{p}%", p] },
+                @settings.nonfiction_percentage
+              ),
+              class: "select w-full", "aria-label": "Non-fiction" %>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Max books per country</legend>
+        <%= select_tag :max_books_per_country,
+              options_for_select((1..10).to_a, @settings.max_books_per_country),
+              class: "select w-full", "aria-label": "Max books per country" %>
+      </fieldset>
+    </div>
+
+    <%# Same picker shape as the saved-search form: type-to-search against a JSON
+        endpoint, chosen genres held as hidden inputs. Progressive enhancement --
+        without JavaScript the three menus above still submit. There is no
+        <select multiple> fallback: daisyUI 5 renders one as an unreadable
+        single row. %>
+    <fieldset class="fieldset" data-controller="saved-search-picker"
+              data-saved-search-picker-url-value="<%= books_global_canon_genres_path %>"
+              data-saved-search-picker-name-value="excluded_genres[]"
+              data-saved-search-picker-max-value="<%= Books::GlobalCanonParams::MAX_EXCLUDED_GENRES %>"
+              data-testid="canon-genre-picker">
+      <legend class="fieldset-legend">Genres to exclude</legend>
+      <div class="relative">
+        <input type="search"
+               class="input w-full"
+               placeholder="Search genres"
+               aria-label="Genres to exclude"
+               autocomplete="off"
+               data-testid="canon-genre-search"
+               data-saved-search-picker-target="query"
+               data-action="input->saved-search-picker#search keydown->saved-search-picker#suppressEnter">
+        <%# Hidden until the controller has at least one result to show -- an
+            empty absolutely-positioned panel would float over the page as a
+            small blank box. %>
+        <div class="hidden absolute dropdown-content p-2 shadow-lg bg-base-100 rounded-box w-full mt-1 max-h-80 overflow-y-auto z-[9999] left-0 top-full flex flex-col gap-1"
+             data-saved-search-picker-target="results"></div>
+      </div>
+      <div class="flex flex-wrap gap-2 mt-2" data-saved-search-picker-target="chips">
+        <% @settings.excluded_genres.each do |genre| %>
+          <span class="badge badge-outline gap-1" data-chip="<%= genre.slug %>">
+            <%= hidden_field_tag "excluded_genres[]", genre.slug, id: nil %>
+            <span><%= genre.name %></span>
+            <button type="button" class="btn btn-ghost btn-xs px-1"
+                    aria-label="Remove <%= genre.name %>"
+                    data-action="saved-search-picker#remove">×</button>
+          </span>
+        <% end %>
+      </div>
+      <%# Hidden until MAX_EXCLUDED_GENRES is reached -- a 7th chip that just
+          silently fails to add would be its own bug. Same visual language as
+          the filter pane's own cap notice (Books::FilterPaneComponent). %>
+      <p class="text-sm text-warning hidden mt-1" role="status" aria-live="polite"
+         data-saved-search-picker-target="limit" data-testid="canon-genre-limit">
+        You can exclude up to <%= Books::GlobalCanonParams::MAX_EXCLUDED_GENRES %>. Remove one to add another.
+      </p>
+    </fieldset>
+
+    <%= submit_tag "Update list", class: "btn btn-primary", data: {testid: "canon-update"} %>
+  <% end %>
+
+  <% if @result.delivered < @result.requested %>
+    <div role="status" class="alert" data-testid="canon-short-list-note">
+      <span>
+        Showing <strong><%= @result.delivered %></strong> of the <%= @result.requested %> requested.
+        <%# blocked_by_country only ever counts a book whose author was still
+            free -- Books::GlobalCanonQuery#select_pass charges a book to
+            blocked_by_author, never blocked_by_country, whenever its author
+            is already used, regardless of country. So "raise it to get more"
+            is true by construction the moment blocked_by_country is
+            positive; a magnitude comparison against blocked_by_author (the
+            old branch here) is neither necessary nor correct -- a book can
+            easily be blocked-by-author more often while a smaller
+            blocked_by_country count still names a real, actionable lever. %>
+        <% if @result.blocked_by_country.zero? && @result.blocked_by_author.zero? %>
+          There aren't enough ranked books to fill a canon this size — try a smaller total.
+        <% elsif @result.blocked_by_country.positive? %>
+          The limit of <%= @settings.max_books_per_country %>
+          <%= "book".pluralize(@settings.max_books_per_country) %> per country is the binding
+          constraint — raise it to get more.
+        <% else %>
+          The limit of one book per author is the binding constraint.
+        <% end %>
+      </span>
+    </div>
+  <% end %>
+
+  <%# Numbered by canon position, not global rank: showing #1, #3, #9, #14 makes
+      the diversity filter's gaps look like errors. %>
+  <div class="<%= Books::CardComponent::GRID_CONTAINER_CLASS %>">
+    <% @result.ranked_items.each_with_index do |ranked_item, index| %>
+      <%= render Books::CardComponent.new(book: ranked_item.item, rank: index + 1, index: index) %>
+    <% end %>
+  </div>
+</div>
