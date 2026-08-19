@@ -110,9 +110,18 @@
     <div role="status" class="alert" data-testid="canon-short-list-note">
       <span>
         Showing <strong><%= @result.delivered %></strong> of the <%= @result.requested %> requested.
+        <%# blocked_by_country only ever counts a book whose author was still
+            free -- Books::GlobalCanonQuery#select_pass charges a book to
+            blocked_by_author, never blocked_by_country, whenever its author
+            is already used, regardless of country. So "raise it to get more"
+            is true by construction the moment blocked_by_country is
+            positive; a magnitude comparison against blocked_by_author (the
+            old branch here) is neither necessary nor correct -- a book can
+            easily be blocked-by-author more often while a smaller
+            blocked_by_country count still names a real, actionable lever. %>
         <% if @result.blocked_by_country.zero? && @result.blocked_by_author.zero? %>
           There aren't enough ranked books to fill a canon this size — try a smaller total.
-        <% elsif @result.blocked_by_country >= @result.blocked_by_author %>
+        <% elsif @result.blocked_by_country.positive? %>
           The limit of <%= @settings.max_books_per_country %>
           <%= "book".pluralize(@settings.max_books_per_country) %> per country is the binding
           constraint — raise it to get more.

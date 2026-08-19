@@ -23,6 +23,12 @@ class Books::GlobalCanonController < ApplicationController
   before_action :find_ranking_configuration, only: [:show]
   before_action :prevent_caching, only: [:settings, :genres]
 
+  # Mirrors Books::BrowseController::QUERY_FORM_KEYS. These are the only
+  # query keys #show ever resolves into a Settings; a query carrying none of
+  # them (utm_source, fbclid, ...) must stay a 200 -- redirecting those away
+  # destroys campaign attribution.
+  QUERY_FORM_KEYS = %w[total_books nonfiction_percentage max_books_per_country excluded_genres].freeze
+
   def show
     @settings = Books::GlobalCanonParams.call(params)
     @result = Books::GlobalCanonQuery.call(
@@ -63,14 +69,38 @@ class Books::GlobalCanonController < ApplicationController
 
   private
 
-  # One rule collapses two non-canonical shapes: a spelled-out set of defaults,
-  # and a query string reaching #show. Both compute a canonical path that differs
-  # from the request path, so both 301. Comparing against the COMPUTED path
-  # rather than testing for query keys means a shape added later is covered for
-  # free.
+  # Comparing the COMPUTED path against the request path catches a
+  # spelled-out set of defaults and a query string that resolves to
+  # NON-default settings -- both compute a canonical path that differs from
+  # request.path, which excludes the query string entirely. It does NOT catch
+  # a query string that resolves to the DEFAULT settings (e.g.
+  # ?total_books=150): the computed canonical is the bare path, which is
+  # already request.path, so the comparison alone sees no difference and would
+  # serve a publicly-cacheable 200 under a URL Cloudflare mints a fresh cache
+  # entry for on every distinct query string.
+  #
+  # The QUERY_FORM_KEYS check closes that gap, mirroring
+  # Books::BrowseController: any RECOGNIZED key present in the query string
+  # forces the redirect regardless of what it resolves to. Only recognized
+  # keys count -- utm_source, fbclid and friends must keep returning 200, so
+  # this checks for specific keys, never bare query-string presence.
+  #
+  # request.query_parameters, NOT params, for that check -- same reasoning as
+  # Books::BrowseController: on a routed path like
+  # /global-canon/total_books/250/... the same values arrive as PATH
+  # parameters (in params), and triggering off params would make every such
+  # request redirect to itself forever. request.query_parameters only ever
+  # holds the literal `?...` query string, so a routed path with no query
+  # string never trips this check.
+  #
+  # Termination: /global-canon?total_books=150 has "total_books" in
+  # query_parameters, so it redirects to the computed canonical ("/global-canon",
+  # since 150 is the default). That target carries no query string, so on the
+  # next request query_parameters.slice(...) is empty and canonical ==
+  # request.path -- no redirect, a plain 200.
   def redirect_to_canonical_form
     canonical = Books::GlobalCanonPath.call(Books::GlobalCanonParams.call(params))
-    return if canonical == request.path
+    return if canonical == request.path && request.query_parameters.slice(*QUERY_FORM_KEYS).empty?
 
     redirect_to canonical, status: :moved_permanently
   end

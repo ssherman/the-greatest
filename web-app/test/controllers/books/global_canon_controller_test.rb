@@ -62,6 +62,40 @@ module Books
       assert_equal 301, response.status
     end
 
+    test "a recognized query key resolving to the default settings still 301s" do
+      # Comparing the computed canonical path against request.path alone
+      # misses this: request.path excludes the query string, so
+      # ?total_books=150 (150 is the default) computes the same bare canonical
+      # path the request already appears to be at, and the redirect would be
+      # skipped -- serving a publicly-cacheable 200 under a URL that mints its
+      # own Cloudflare cache entry. The QUERY_FORM_KEYS check exists precisely
+      # to force this redirect anyway.
+      get "/global-canon?total_books=150"
+
+      assert_redirected_to "/global-canon"
+      assert_equal 301, response.status
+    end
+
+    test "the redirect target for a default-resolving query is terminal" do
+      # Proves the fix doesn't loop: following the 301 must land on a plain
+      # 200, not another redirect.
+      get "/global-canon?total_books=150"
+      assert_redirected_to "/global-canon"
+
+      get "/global-canon"
+
+      assert_response :success
+    end
+
+    test "an unrecognized query parameter does not trigger a redirect" do
+      # utm_source, fbclid and friends must survive -- redirecting those away
+      # destroys campaign attribution. Mirrors
+      # Books::BrowseController's equivalent test.
+      get "/global-canon", params: {utm_source: "newsletter"}
+
+      assert_response :success
+    end
+
     test "the settings form 303s to the canonical path" do
       get "/global-canon/settings", params: {
         total_books: "250", nonfiction_percentage: "40", max_books_per_country: "2"
@@ -114,6 +148,77 @@ module Books
 
       assert_response :success
       assert_select "[data-testid=canon-short-list-note]", /of the 250 requested/
+    end
+
+    test "the short-list note does not offer the country lever when raising it would not help" do
+      # Two NON-FICTION books share both a country and an author, and the
+      # request is 100% non-fiction so the fiction pass never runs -- setup's
+      # 3 fiction books are never scanned and cannot contaminate the
+      # attribution. Under a country cap of 1, the second book fails BOTH
+      # checks: its country is full AND its author is already used. If it
+      # were still attributed to blocked_by_country (the pre-fix behaviour),
+      # this note would incorrectly tell the visitor raising the country cap
+      # gets them more books -- it would not, since the author check would
+      # still reject the very same book.
+      nonfiction = categories(:books_nonfiction_genre)
+      shared_country = ::Books::Country.create!(name: "Shared Country", slug: "shared-country", labels: [])
+      shared_author = ::Books::Author.create!(name: "Shared Author")
+      2.times do
+        @next_rank += 1
+        book = ::Books::Book.create!(title: "Canon NF Book #{@next_rank}")
+        ::Books::BookCountry.create!(book: book, country: shared_country)
+        ::Books::BookAuthor.create!(book: book, author: shared_author, position: 1, role: :author)
+        ::CategoryItem.create!(category: nonfiction, item: book)
+        ::RankedItem.create!(item: book, ranking_configuration: @rc, rank: @next_rank, score: 10_000 - @next_rank)
+      end
+
+      get "/global-canon/total_books/50/nonfiction/100/max_per_country/1"
+
+      assert_response :success
+      note = css_select("[data-testid=canon-short-list-note]").first.text
+      assert_no_match(/per country/, note)
+      assert_match(/one book per author/, note)
+    end
+
+    test "the short-list note offers the country lever even when author-blocked books outnumber it" do
+      # blocked_by_country ends up 1 (one country-only rejection) and
+      # blocked_by_author ends up 2 (two author-only rejections) -- fewer,
+      # but each of the 1 is a genuine "raise the cap and get one more."
+      # The OLD branch condition (blocked_by_country >= blocked_by_author)
+      # would suppress the country message here since 1 < 2, even though
+      # raising the country cap demonstrably would help. The new `.positive?`
+      # check is what the task calls "simpler and provably correct": ANY
+      # positive blocked_by_country is actionable under the new attribution
+      # semantics, regardless of how it compares to blocked_by_author.
+      nonfiction = categories(:books_nonfiction_genre)
+      country_a = ::Books::Country.create!(name: "Country A", slug: "country-a", labels: [])
+      2.times do |i|
+        @next_rank += 1
+        book = ::Books::Book.create!(title: "Canon NF Book #{@next_rank}")
+        ::Books::BookCountry.create!(book: book, country: country_a)
+        ::Books::BookAuthor.create!(book: book, author: ::Books::Author.create!(name: "NF Author #{@next_rank}"), position: 1, role: :author)
+        ::CategoryItem.create!(category: nonfiction, item: book)
+        ::RankedItem.create!(item: book, ranking_configuration: @rc, rank: @next_rank, score: 10_000 - @next_rank)
+      end
+
+      shared_author = ::Books::Author.create!(name: "Popular NF Author")
+      3.times do |i|
+        @next_rank += 1
+        book = ::Books::Book.create!(title: "Canon NF Author Book #{@next_rank}")
+        ::Books::BookCountry.create!(book: book, country: ::Books::Country.create!(name: "Solo Country #{i}", slug: "solo-country-#{i}", labels: []))
+        ::Books::BookAuthor.create!(book: book, author: shared_author, position: 1, role: :author)
+        ::CategoryItem.create!(category: nonfiction, item: book)
+        ::RankedItem.create!(item: book, ranking_configuration: @rc, rank: @next_rank, score: 10_000 - @next_rank)
+      end
+
+      get "/global-canon/total_books/50/nonfiction/100/max_per_country/1"
+
+      assert_response :success
+      result = @controller.view_assigns["result"]
+      assert_equal 1, result.blocked_by_country
+      assert_equal 2, result.blocked_by_author
+      note = css_select("[data-testid=canon-short-list-note]").first.text
+      assert_match(/per country/, note)
     end
 
     test "the short-list note explains an undersized pool without naming either cap" do
@@ -355,12 +460,12 @@ module Books
       end
     end
 
-    def rank_fiction_book(country: nil)
+    def rank_fiction_book(country: nil, author: nil)
       @next_rank += 1
       book = ::Books::Book.create!(title: "Canon Book #{@next_rank}")
       ::Books::BookCountry.create!(book: book, country: country) if country
       ::Books::BookAuthor.create!(
-        book: book, author: ::Books::Author.create!(name: "Author #{@next_rank}"),
+        book: book, author: author || ::Books::Author.create!(name: "Author #{@next_rank}"),
         position: 1, role: :author
       )
       ::CategoryItem.create!(category: @fiction, item: book)

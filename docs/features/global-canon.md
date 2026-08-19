@@ -32,7 +32,7 @@ exclusion picker.
 GET /global-canon(/total_books/:t/nonfiction/:p/max_per_country/:c(/excluding/:genres))
   |
   v
-redirect_to_canonical_form   # 301 if the computed canonical path != request.path
+redirect_to_canonical_form   # 301 if computed path != request.path, or a recognised query key is present
   |
   v
 Books::GlobalCanonParams.call(params)      -> Settings (total_books, nonfiction_percentage,
@@ -191,9 +191,24 @@ under-fill even though plenty of eligible books exist, because they're all compe
 `nil` slot.
 
 When a book fails both checks — its country is at cap *and* its author is already used — it's
-charged to `blocked_by_country` only, never both, because the country check runs first and the
-loop `next`s before reaching the author check. This attribution is new information the legacy
-implementation never produced (it skipped on a single combined `country || author` check).
+charged to `blocked_by_author` only, never both. `select_pass` computes `country_at_cap` and
+`author_taken` up front, then checks `author_taken` first: **`blocked_by_country` means "this book
+would be admitted if the country cap were raised."** A book whose author is already used would
+still be rejected even with a higher cap, so it can never be the reason `blocked_by_country`
+mentions to a visitor — it's charged to `blocked_by_author` instead, regardless of its country.
+Only a book whose author is still free, and which is rejected purely because its country is full,
+increments `blocked_by_country`. This is why `show.html.erb`'s short-list note can use a plain
+`blocked_by_country.positive?` check (see "The short-list note's branch order matters" below) to
+decide whether to tell a visitor to raise the country cap — under this attribution, *any* positive
+count is a real, actionable one. This attribution is new information the legacy implementation
+never produced (it skipped on a single combined `country || author` check).
+
+This is a deliberate reversal of the order the algorithm originally shipped with — country checked
+first, author second — which charged a book failing both checks to `blocked_by_country`. That
+attribution was actionably *wrong*: it could tell a visitor raising the country cap would get them
+more books when it would not have admitted the very book being counted (its author would still
+reject it). `Books::GlobalCanonQueryTest#"attributes a book blocked by both country and author to
+author only"` pins the corrected attribution and explains why.
 
 ### The four blocked books
 
@@ -238,7 +253,7 @@ implementation detail, not a behavioural gap.
 | `GET /global-canon/total_books/:t/nonfiction/:p` | Partial form. Same 301 behaviour. |
 | `GET /global-canon/total_books/:t/nonfiction/:p/max_per_country/:c` | The full form. Canonical unless it equals the defaults (in which case it 301s to the bare path) or its genre list isn't sorted. |
 | `GET /global-canon/total_books/:t/nonfiction/:p/max_per_country/:c/excluding/:genres` | The full form plus exclusions. `:genres` is a comma-joined, sorted list of up to 6 genre slugs. |
-| `GET /global-canon?total_books=250...` | A query string reaching `show` at all. 301s into the equivalent path form — the same guard `Books::BrowseController` uses, so a crawler can never mint `/global-canon?total_books=250` as a distinct, cacheable URL. |
+| `GET /global-canon?total_books=250...` | A recognised query key (`QUERY_FORM_KEYS`) reaching `show` at all — including one that resolves to the *default* settings, e.g. `?total_books=150`. 301s into the equivalent path form — the same guard `Books::BrowseController` uses, so a crawler can never mint `/global-canon?total_books=250` (or `?total_books=150`) as a distinct, cacheable URL. An *unrecognised* key, e.g. `?utm_source=newsletter`, is left alone and still 200s — the whole point being that campaign-tracking query strings must not be redirected away. |
 | `GET /global-canon/settings?...` | The form's GET target. Resolves params through `GlobalCanonParams`, 303s to `GlobalCanonPath.call(settings)`. Never cached (`prevent_caching`). 404s on an invalid value, same as `show` — this is the only guard standing between a hand-edited query string here and a 500, since this route carries no regex constraint of its own. |
 | `GET /global-canon/genres?q=...` | JSON search source for the exclusion picker. Never cached. |
 
@@ -258,12 +273,43 @@ the URL, for free.
 ### Canonicalisation
 
 `redirect_to_canonical_form` computes `Books::GlobalCanonPath.call(GlobalCanonParams.call(params))`
-and 301s whenever that differs from `request.path`. This single rule covers both non-canonical
-shapes at once: a partial form or a spelled-out set of defaults (whose *computed* path differs from
-the *requested* path), and a query string reaching `show` (whose computed path — built from path
-segments that don't exist — is the bare or full path form, which never equals a request path that
-has a `?...`). Comparing against the *computed* path rather than testing for specific query keys or
-specific segment combinations means a new non-canonical shape added later is covered automatically.
+and 301s whenever that differs from `request.path`, **or** the request carries a recognised query
+key. Two rules, because one alone doesn't cover every non-canonical shape:
+
+Comparing the *computed* path against `request.path` (which excludes the query string entirely)
+catches a partial form, a spelled-out set of defaults, and a query string that resolves to
+**non-default** settings — all of these compute a canonical path that differs from the request
+path. It does **not** catch a query string that resolves to the **default** settings (e.g.
+`?total_books=150`, 150 being the default): the computed canonical is the bare path, which is
+already `request.path`, so the comparison alone sees no difference and would serve a
+publicly-cacheable 200 — Cloudflare mints a fresh cache entry per distinct query string regardless
+of what it resolves to.
+
+`QUERY_FORM_KEYS = %w[total_books nonfiction_percentage max_books_per_country excluded_genres]`
+closes that gap, mirroring `Books::BrowseController::QUERY_FORM_KEYS`: any of *these* keys present
+in `request.query_parameters` forces the redirect regardless of what it resolves to. Only
+recognised keys count — `?utm_source=`, `?fbclid=` and friends must keep returning 200, since
+redirecting those away destroys campaign attribution, so this checks for specific keys, never bare
+query-string presence.
+
+`request.query_parameters`, not `params`, for that check — same reasoning as
+`Books::BrowseController`: on a routed path like `/global-canon/total_books/250/...` the same
+values arrive as *path* parameters (in `params`), and triggering off `params` would make every such
+request redirect to itself forever. `request.query_parameters` only ever holds the literal `?...`
+query string, so a routed path with no query string never trips this check.
+
+Comparing against the *computed* path rather than testing for specific segment combinations still
+means a new non-canonical *path* shape added later is covered automatically; only the query-string
+half of canonicalisation needs an explicit key list, because "does this query resolve to something
+different from what's already showing" isn't decidable from `request.path` alone once the answer
+can be "no, and that's exactly the bug."
+
+Termination: `/global-canon?total_books=150` has `"total_books"` in `query_parameters`, so it
+redirects to the computed canonical (`/global-canon`, since 150 is the default). That target
+carries no query string, so on the next request `query_parameters.slice(*QUERY_FORM_KEYS)` is empty
+and `canonical == request.path` — no redirect, a plain 200.
+`global_canon_controller_test.rb`'s `"the redirect target for a default-resolving query is
+terminal"` pins this.
 
 ### Indexability
 
@@ -337,13 +383,29 @@ or the picker could hand a visitor a chip that 404s the moment they click "Updat
 - **The short-list note's branch order matters — the both-zero branch must come first.**
   `show.html.erb` renders the note only when `@result.delivered < @result.requested`, then checks,
   in this order: (1) `blocked_by_country.zero? && blocked_by_author.zero?` → "there aren't enough
-  ranked books to fill a canon this size"; (2) `blocked_by_country >= blocked_by_author` → names
-  the country cap; (3) else → names the one-book-per-author cap. If the both-zero branch were
-  moved after the country check, `blocked_by_country >= blocked_by_author` would evaluate `0 >= 0`
-  — true — and a short list caused purely by too small a candidate pool (nothing actually hit
-  either cap) would incorrectly tell the visitor to raise a country limit that was never the
-  reason. `global_canon_controller_test.rb`'s `"the short-list note explains an undersized pool
-  without naming either cap"` pins this branch specifically.
+  ranked books to fill a canon this size"; (2) `blocked_by_country.positive?` → names the country
+  cap; (3) else → names the one-book-per-author cap. If the both-zero branch were moved after the
+  country check, a short list caused purely by too small a candidate pool (`blocked_by_country: 0,
+  blocked_by_author: 0` — nothing actually hit either cap) would evaluate `blocked_by_country.
+  positive?` as `0.positive?` — false — and fall through to the *else* branch, wrongly blaming the
+  one-book-per-author rule instead. (Under the old `blocked_by_country >= blocked_by_author`
+  comparison this same reordering produced a different wrong answer — `0 >= 0` is true, so it
+  wrongly blamed the country cap instead. Which cap gets blamed changed with the attribution fix;
+  that the both-zero branch has to run first did not.) `global_canon_controller_test.rb`'s
+  `"the short-list note explains an undersized pool without naming either cap"` pins this branch
+  specifically.
+
+  The middle branch is a plain `blocked_by_country.positive?`, not the `blocked_by_country >=
+  blocked_by_author` comparison it shipped with initially. Under the corrected attribution above
+  (`blocked_by_country` only ever counts a book that *would* be admitted by a higher cap), a
+  magnitude comparison against `blocked_by_author` is neither necessary nor correct: a book can
+  easily be blocked-by-author more often while a smaller-but-positive `blocked_by_country` count
+  still names a real, actionable lever — raising the cap would deliver those books regardless of
+  how many other books are stuck on the author rule. `.positive?` is simpler *and* provably
+  correct under the new semantics, which `>=` was not: `global_canon_controller_test.rb`'s
+  `"the short-list note offers the country lever even when author-blocked books outnumber it"`
+  pins a scenario (`blocked_by_country: 1`, `blocked_by_author: 2`) where the old `>=` comparison
+  would have wrongly suppressed the country message.
 
 ## Related documentation
 

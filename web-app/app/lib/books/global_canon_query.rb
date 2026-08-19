@@ -73,17 +73,27 @@ module Books
 
       picked = []
       candidates_in(slug).each do |id|
-        # Country is checked first, so a book that is both over its country
-        # cap and by an already-used author is attributed to country only and
-        # never reaches the author check below. Legacy skipped on
-        # `country || author` in a single check and never separated the two --
-        # this attribution is new information legacy never produced.
-        if @country_used[country_by_book[id]] >= @settings.max_books_per_country
-          @blocked_by_country += 1
+        # Both conditions are computed before branching so attribution reflects
+        # what raising a limit would actually do, not which check happens to
+        # run first. Legacy skipped on a single combined `country || author`
+        # check and never separated the two -- this attribution is new
+        # information legacy never produced.
+        country_at_cap = @country_used[country_by_book[id]] >= @settings.max_books_per_country
+        author_taken = @author_used[author_by_book[id]] >= 1
+
+        # blocked_by_author is charged whenever the author is already used,
+        # REGARDLESS of country: even a free country slot would not admit
+        # this book, so the country cap is never the (sole) reason it's out.
+        # blocked_by_country is charged only when the country cap is full AND
+        # the author is still free -- i.e. only when raising the country cap
+        # would actually admit the book. This makes blocked_by_country mean
+        # something actionable to a visitor: "raise this limit and get more."
+        if author_taken
+          @blocked_by_author += 1
           next
         end
-        if @author_used[author_by_book[id]] >= 1
-          @blocked_by_author += 1
+        if country_at_cap
+          @blocked_by_country += 1
           next
         end
 

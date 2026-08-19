@@ -60,10 +60,18 @@ module Books
       assert_equal 2, result.blocked_by_author
     end
 
-    test "attributes a book blocked by both country and author to country only" do
-      # Country is checked first in the selection loop, so a book that fails
-      # both checks is charged to blocked_by_country and never reaches the
-      # author check -- this pins that attribution.
+    test "attributes a book blocked by both country and author to author only" do
+      # blocked_by_country is meant to answer "would raising the country cap
+      # admit this book?" -- so a book whose author is ALSO already used must
+      # not count there: raising the country cap would not admit it, since
+      # the author check would still reject it. It's charged to
+      # blocked_by_author instead, which is charged whenever the author is
+      # already used, regardless of country. This is the opposite of the
+      # attribution the selection loop used to produce (country checked
+      # first, so a book failing both was charged to blocked_by_country) --
+      # that attribution was actionably wrong: the short-list note would tell
+      # a visitor raising the country cap gets them more books, when it would
+      # not have delivered either of these two.
       shared_country = country("Shared Country")
       shared_author = author("Shared Author")
       rank_book(kind: :fiction, country: shared_country, author: shared_author)
@@ -71,8 +79,8 @@ module Books
 
       result = call(total_books: 10, nonfiction_percentage: 0, max_books_per_country: 1)
 
-      assert_equal 1, result.blocked_by_country
-      assert_equal 0, result.blocked_by_author
+      assert_equal 0, result.blocked_by_country
+      assert_equal 1, result.blocked_by_author
     end
 
     test "caps books with no country in a single bucket, as legacy does" do
