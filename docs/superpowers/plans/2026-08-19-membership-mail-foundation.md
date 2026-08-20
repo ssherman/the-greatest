@@ -968,8 +968,15 @@ Create `web-app/app/views/system_mailer/smoke_test.html.erb`:
 <p>This is a test email from <strong><%= @branding.site_name %></strong>.</p>
 
 <p>
-  If you are reading this, SMTP delivery, domain authentication and the mailer
-  queue are all working in <strong><%= Rails.env %></strong>.
+  If you are reading this, SMTP delivery and domain authentication are working
+  in <strong><%= Rails.env %></strong>.
+</p>
+
+<p>
+  It does <strong>not</strong> prove the background queue works. <code>mail:smoke</code>
+  calls <code>deliver_now</code>, so this message bypassed ActiveJob and Sidekiq
+  entirely. Membership emails send with <code>deliver_later</code> and additionally
+  need a Sidekiq worker consuming the <code>default</code> queue.
 </p>
 
 <p>Sent at <%= @sent_at.utc.iso8601 %>.</p>
@@ -980,8 +987,13 @@ Create `web-app/app/views/system_mailer/smoke_test.text.erb`:
 ```erb
 This is a test email from <%= @branding.site_name %>.
 
-If you are reading this, SMTP delivery, domain authentication and the mailer
-queue are all working in <%= Rails.env %>.
+If you are reading this, SMTP delivery and domain authentication are working
+in <%= Rails.env %>.
+
+It does NOT prove the background queue works. `mail:smoke` calls deliver_now,
+so this message bypassed ActiveJob and Sidekiq entirely. Membership emails send
+with deliver_later and additionally need a Sidekiq worker consuming the
+"default" queue.
 
 Sent at <%= @sent_at.utc.iso8601 %>.
 ```

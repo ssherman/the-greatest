@@ -365,6 +365,14 @@ authentication is working; only a delivered message in the inbox is. If it lands
 that the domain shows as verified in SendGrid's Sender Authentication screen before assuming
 anything on the app's side is wrong.
 
+**What this step does NOT prove.** `mail:smoke` uses `deliver_now`, so it exercises SMTP and domain
+authentication only — the message never touches ActiveJob or Sidekiq. Increment 8's membership
+emails send with `deliver_later`, which additionally requires a Sidekiq worker running and consuming
+the `default` queue. A green smoke test with a stopped worker means real membership emails enqueue,
+report success, and are never delivered. Before relying on queued mail, confirm the worker container
+is up and processing `default` (`config/sidekiq.yml` lists `critical` and `default`), and check the
+Sidekiq web UI for a growing `default` backlog.
+
 ## 9. Post-deploy verification
 
 After the app is deployed with `STRIPE_LIVEMODE=true`, the live `STRIPE_SECRET_KEY`, and the

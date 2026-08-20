@@ -78,15 +78,16 @@ mailer class after branded_mail runs"` is the regression guard for exactly this.
 |---|---|---|
 | Production | `:smtp`, configured from `MailDeliverySettings.sendgrid_smtp` | SendGrid, over SMTP on port 587, authenticating with the literal username `apikey` and `SENDGRID_API_KEY` as the password |
 | Development | `:file` | `tmp/mails/<recipient>` — one file per recipient address, plain-text MIME source, both the text and HTML parts inline. Nothing leaves the machine. |
-| Test | (ActionMailer's test delivery method) | `ActionMailer::Base.deliveries`, the normal Rails/Minitest array |
+| Test | `:test`, set explicitly in `config/environments/test.rb` | `ActionMailer::Base.deliveries`, the normal Rails/Minitest array |
 
-That test row is Rails' own default, not something this branch's `config/environments/test.rb`
-sets — grepping that file for `delivery_method` finds nothing. Mail lands in
-`ActionMailer::Base.deliveries` only because every mailer test here subclasses
-`ActionMailer::TestCase`, which forces the `:test` delivery method per test. An integration or
-service test that triggers `deliver_now`/`deliver_later` from outside that base class would not
-get this for free — worth remembering once increment 8's membership emails start being triggered
-from controller or service code rather than from mailer tests directly.
+That test row is set explicitly, and deliberately so. `ActionMailer::TestCase` forces `:test`
+delivery per test, so mailer tests would land in `ActionMailer::Base.deliveries` either way — but a
+test that triggers a send from *outside* that base class gets no such help. Without the explicit
+setting, ActionMailer falls through to the `mail` gem's own default of `localhost:25`: an
+integration test for one of increment 8's membership emails would fail with a connection error on
+CI, or, on any machine running a local MTA, genuinely relay mail to a fixture address. Two lines in
+`test.rb` remove that whole class of surprise, so an increment 8 controller or service test can
+trigger a real send and assert on `ActionMailer::Base.deliveries` without ceremony.
 
 Production's SMTP settings are guarded, and the guard changes what actually goes wrong when the
 key is missing — not just whether the app boots. `config/environments/production.rb` only calls
