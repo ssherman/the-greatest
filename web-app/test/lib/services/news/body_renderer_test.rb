@@ -68,9 +68,12 @@ module Services
       end
 
       test ".call does not render raw HTML from the source" do
-        # unsafe: false replaces raw HTML with an "omitted" comment, which the
-        # sanitizer then strips. The script's TEXT survives as inert content -- that
-        # is correct and harmless. What must never survive is the tag.
+        # Pins that a dangerous tag never reaches the output -- by whichever
+        # layer catches it. This alone does NOT discriminate unsafe: false from
+        # unsafe: true, because commonmarker's tagfilter extension escapes
+        # "script" and "iframe" independently of unsafe:. See ".call does not
+        # honour raw HTML even when the tag is on the allowlist" below for the
+        # test that actually pins unsafe: false.
         html = BodyRenderer.call("before <script>alert('x')</script> after")
 
         assert_not_includes html, "<script"
@@ -79,8 +82,13 @@ module Services
       end
 
       test ".call strips a disallowed inline tag but keeps its text" do
-        # The realistic case: an author hand-types an HTML tag in a Markdown field.
-        # The tag must not render; their words must survive.
+        # The realistic case: an author hand-types an HTML tag in a Markdown
+        # field. Pins that a disallowed tag never renders and its text
+        # survives -- by whichever layer catches it. This does NOT discriminate
+        # unsafe: false from unsafe: true either: <b> is not in ALLOWED_TAGS,
+        # so layer 2 (the sanitizer) strips it regardless of what layer 1 did.
+        # See ".call does not honour raw HTML even when the tag is on the
+        # allowlist" below for the test that actually pins unsafe: false.
         html = BodyRenderer.call("an <b>emphasised</b> word")
 
         assert_not_includes html, "<b>"
@@ -88,14 +96,30 @@ module Services
       end
 
       test ".call drops a raw HTML block entirely" do
-        # A line STARTING with raw HTML is a CommonMark HTML block and is dropped
-        # whole, including text trailing it on the same line -- which is why the
-        # original version of this test, asserting a trailing word survived, was
-        # wrong. Pathological input for a Markdown field; the security property is
-        # what matters.
+        # A line STARTING with raw HTML is a CommonMark HTML block and is
+        # dropped whole, including text trailing it on the same line -- which
+        # is why the original version of this test, asserting a trailing word
+        # survived, was wrong. Pathological input for a Markdown field; the
+        # security property is what matters. Like the two tests above, this
+        # does not discriminate unsafe: false from unsafe: true (tagfilter
+        # neutralises "iframe" either way).
         html = BodyRenderer.call("<iframe src='https://evil.test'></iframe>")
 
         assert_not_includes html, "<iframe"
+      end
+
+      test ".call does not honour raw HTML even when the tag is on the allowlist" do
+        # This is the ONE case that discriminates the two layers. `strong` is in
+        # ALLOWED_TAGS, so the sanitizer would wave author-typed <strong> straight
+        # through -- only commonmarker's unsafe: false stops raw HTML being honoured
+        # at all. Flip unsafe: to true and this renders <strong>html</strong>.
+        #
+        # Tests built on DISALLOWED tags (<b>, <script>, <iframe>) cannot pin this:
+        # layer 2 strips those whatever layer 1 does.
+        html = BodyRenderer.call("an <strong>html</strong> tag")
+
+        assert_not_includes html, "<strong>"
+        assert_includes html, "html"
       end
 
       test ".call strips a javascript href" do
