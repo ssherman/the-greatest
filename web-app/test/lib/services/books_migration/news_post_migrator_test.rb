@@ -9,7 +9,10 @@ module Services
           title: title,
           slug: slug,
           created_at: created_at,
-          updated_at: created_at,
+          # Deliberately NOT equal to created_at. published_at maps from created_at;
+          # if these two were identical, no test here could tell a correct migrator
+          # from one that mapped published_at off updated_at instead.
+          updated_at: created_at + 1.day,
           user_id: users(:admin_user).id,
           body_html: "<div>Body of #{title}</div>"
         )
@@ -40,7 +43,7 @@ module Services
         assert ::NewsPost.books.exists?(slug: weird)
       end
 
-      test "sets published_at from the legacy created_at" do
+      test "sets published_at from the legacy created_at, preserving both timestamps" do
         created = Time.zone.parse("2024-05-09 03:48:34")
         ::LegacyBooks::BlogPost.stubs(:order).returns([
           legacy_post(id: 11, title: "300 Lists!", slug: "300-lists", created_at: created)
@@ -48,7 +51,10 @@ module Services
 
         NewsPostMigrator.call
 
-        assert_equal created, ::NewsPost.books.find_by(slug: "300-lists").published_at
+        post = ::NewsPost.books.find_by(slug: "300-lists")
+        assert_equal created, post.published_at
+        assert_equal created, post.created_at
+        assert_equal created + 1.day, post.updated_at
       end
 
       test "stores Markdown, not HTML" do
