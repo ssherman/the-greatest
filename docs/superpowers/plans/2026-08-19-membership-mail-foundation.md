@@ -586,10 +586,12 @@ Stage `app/lib/mail_branding.rb` and `test/lib/mail_branding_test.rb`, then comm
 - Create (via generator): `web-app/app/mailers/application_mailer.rb`,
   `web-app/app/views/layouts/mailer.html.erb`, `web-app/app/views/layouts/mailer.text.erb`
 - Create: `web-app/test/mailers/application_mailer_test.rb`
+- Modify: `web-app/app/lib/mail_branding.rb` (add `ROOT_HELPERS` and `#root_url`)
+- Modify: `web-app/test/lib/mail_branding_test.rb` (two tests for `#root_url`)
 
 **Interfaces:**
 - Consumes: `MailBranding.for(domain)` → responds to `site_name`, `from`, `brand_color`,
-  `url_options`.
+  `url_options`. This task adds `#root_url` to it (Step 5).
 - Produces: `ApplicationMailer#branded_mail(domain:, **mail_options, &block)` — sets `from`,
   `default_url_options` and the `@branding` instance variable the layout reads, then calls `mail`.
   Subclasses call `branded_mail`, never `mail`.
@@ -724,7 +726,65 @@ end
 `default_url_options` is set per-send rather than once at boot because the correct host depends on
 which site the mail concerns.
 
-- [ ] **Step 5: Write the shared layout**
+- [ ] **Step 5: Add `root_url` to `MailBranding`**
+
+This app has **no** `root_url` helper — verified, it raises `NoMethodError`. Each domain has its own
+named root route (`books_root`, `music_root`, `games_root`), because four sites share one route file.
+Per-domain knowledge belongs in `MailBranding`, not scattered through email templates, so add it
+there.
+
+In `web-app/app/lib/mail_branding.rb`, add the constant beside `BRAND_COLORS`:
+
+```ruby
+  # There is no bare `root_url` in this app -- four sites share one route file,
+  # so each domain's root is separately named. Verified: calling root_url
+  # raises NoMethodError.
+  ROOT_HELPERS = {
+    books: :books_root_url,
+    music: :music_root_url,
+    games: :games_root_url
+  }.freeze
+```
+
+and the public method beside `url_options`:
+
+```ruby
+  def root_url
+    Rails.application.routes.url_helpers.public_send(ROOT_HELPERS.fetch(key), **url_options)
+  end
+```
+
+Add this test to `web-app/test/lib/mail_branding_test.rb`:
+
+```ruby
+  # NOTE: which helper ROOT_HELPERS picks is deliberately NOT asserted. All three
+  # root routes map to "/", and the host comes from url_options, so a wrong
+  # mapping (books -> :music_root_url) produces a byte-identical URL and no
+  # behavioural test can distinguish it. Asserting the constant's contents would
+  # test the implementation, not the behaviour. This becomes testable the day any
+  # domain's root moves off "/" -- add the assertion then.
+  test "builds a root URL on the right host for each domain" do
+    [:books, :music, :games].each do |domain|
+      branding = MailBranding.for(domain)
+      expected_host = Rails.application.config.domains[domain].to_s.split(",").first
+
+      assert_includes branding.root_url, expected_host
+    end
+  end
+```
+
+Run it and confirm it passes:
+
+```bash
+bin/rails test test/lib/mail_branding_test.rb
+```
+
+Do NOT add a test asserting that two domains produce different root URLs. One was drafted and
+deleted during execution: it cannot fail, for the reason the comment above states. A test that
+cannot fail manufactures confidence, and this repo has three separate recorded incidents of exactly
+that.
+
+- [ ] **Step 6: Write the shared layout**
 
 Email clients strip `<style>` blocks and support neither flexbox nor CSS custom properties, so this
 cannot reuse the site's Tailwind. Table layout and inline styles only.
@@ -755,7 +815,7 @@ Replace `web-app/app/views/layouts/mailer.html.erb`:
             </tr>
             <tr>
               <td style="padding: 0 28px 28px; font-size: 13px; line-height: 1.5; color: #71717A;">
-                <%= link_to @branding.site_name, root_url, style: "color: #71717A;" %>
+                <%= link_to @branding.site_name, @branding.root_url, style: "color: #71717A;" %>
               </td>
             </tr>
           </table>
@@ -780,22 +840,21 @@ Replace `web-app/app/views/layouts/mailer.text.erb`:
 
 --
 <%= @branding.site_name %>
-<%= root_url %>
+<%= @branding.root_url %>
 ```
 
-- [ ] **Step 6: Run the test to verify it passes**
+- [ ] **Step 7: Run the test to verify it passes**
 
 ```bash
 bin/rails test test/mailers/application_mailer_test.rb
 ```
 
-Expected: 5 runs, 0 failures. If `root_url` raises because no route named `root` exists for that
-host, check `config/routes.rb` for the per-domain root helper and substitute it, recording the change
-in your report.
+Expected: 5 runs, 0 failures.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
-Stage `app/mailers/application_mailer.rb`, both `app/views/layouts/mailer.*` templates and
+Stage `app/mailers/application_mailer.rb`, `app/lib/mail_branding.rb`, both
+`app/views/layouts/mailer.*` templates, `test/lib/mail_branding_test.rb` and
 `test/mailers/application_mailer_test.rb`, then commit with the message
 `feat(mail): add domain-aware ApplicationMailer and shared email layout`.
 
