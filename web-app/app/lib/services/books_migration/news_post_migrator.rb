@@ -15,6 +15,14 @@ module Services
     # Idempotent by slug: re-running skips posts already present. Deliberately
     # NOT a re-sync -- it will not update a post whose body has been edited in
     # admin since the last run.
+    #
+    # Deliberately NOT a Migrator subclass, unlike its ~37 siblings. Migrator's
+    # legacy_each yields record.attributes (a String-keyed hash) and upsert_row is
+    # written against that; this migrator needs legacy.body_html, which reads the
+    # has_one :rich_text_content association on a separate table and is not an
+    # attribute. Inheriting would mean overriding legacy_each to yield records and
+    # breaking the base's contract. The one thing worth borrowing -- a per-row
+    # rescue naming the legacy id -- is reproduced below.
     class NewsPostMigrator
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
@@ -48,6 +56,13 @@ module Services
             user_id: legacy.user_id
           )
           created += 1
+        rescue => e
+          # Mirrors Migrator's per-row rescue: a failure names the legacy row that
+          # caused it and how far the run got, rather than surfacing a bare
+          # ActiveRecord error with no context. Re-raised, not swallowed -- the run
+          # is idempotent by slug, so re-running after a fix skips what already
+          # landed.
+          raise "NewsPost migration failed at legacy id=#{legacy.id} (#{created} created, #{skipped} skipped): #{e.message}"
         end
 
         Result.new(
