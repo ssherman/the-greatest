@@ -18,6 +18,11 @@ Rails.application.configure do
 
   # Mail
   config.action_mailer.delivery_method = :smtp
+  # The boot-time warning for a missing SENDGRID_API_KEY lives in
+  # config/initializers/mail_delivery_check.rb, not here -- Rails.logger isn't
+  # installed yet while this file is still loading (config.logger below is only
+  # *recorded*; the initialize_logger framework initializer applies it later),
+  # so calling Rails.logger.warn from this file raises NoMethodError on nil.
   config.action_mailer.smtp_settings = ENV["SENDGRID_API_KEY"].present? ? MailDeliverySettings.sendgrid_smtp : {}
   config.action_mailer.raise_delivery_errors = true
   config.action_mailer.perform_caching = false

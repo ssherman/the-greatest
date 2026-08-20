@@ -10,10 +10,13 @@ section for how it fits alongside checkout (6), entitlements (7) and the eight m
 
 - **`MailDeliverySettings`** (`web-app/app/lib/mail_delivery_settings.rb`) — builds the SMTP
   settings hash ActionMailer needs to talk to SendGrid, reading `SENDGRID_API_KEY` from `ENV`. It
-  is the *only* place that reads that variable; everything else gets delivery settings through it.
-  It raises `MailDeliverySettings::MissingApiKey` rather than falling back to a placeholder key —
-  a placeholder would let the app boot and then fail every send with an opaque SMTP error, or worse,
-  if the placeholder ever happened to be a real key, send mail from the wrong account.
+  raises `MailDeliverySettings::MissingApiKey` rather than falling back to a placeholder key — a
+  placeholder would let the app boot and then fail every send with an opaque SMTP error, or worse,
+  if the placeholder ever happened to be a real key, send mail from the wrong account. It is not
+  the only reader of `SENDGRID_API_KEY`, though: `config/environments/production.rb` checks the
+  variable itself before deciding whether to call this class at all (see "Delivery per
+  environment" below), and `lib/tasks/mail.rake` checks it separately to give `mail:smoke` its own
+  clear abort message.
 - **`MailBranding`** (`web-app/app/lib/mail_branding.rb`) — resolves a domain (`:books`, `:music`,
   `:games`, a string, or `nil`) into the identity an email should wear: which site it claims to be
   from (`site_name`, read from `Rails.application.config.domain_settings` — not duplicated here),
@@ -28,7 +31,9 @@ section for how it fits alongside checkout (6), entitlements (7) and the eight m
   `from` address in before delegating to `mail`.
 - **`SystemMailer#smoke_test`** (`web-app/app/mailers/system_mailer.rb`) — the first real mailer
   built on this foundation, and a delivery-pipeline diagnostic in its own right, not customer-facing
-  mail. Sends a short branded email to `ADMIN_NOTIFICATION_EMAIL`.
+  mail. `smoke_test(domain:, to:)` takes an arbitrary recipient; it doesn't hardcode one. It's
+  `mail:smoke` that supplies `ADMIN_NOTIFICATION_EMAIL` as `to:`, and the previews (below) send to
+  a hardcoded `preview@example.org` instead.
 - **`mail:smoke`** (`web-app/lib/tasks/mail.rake`) — `bin/rails mail:smoke[domain]` (domain defaults
   to `books`). Calls `SystemMailer.smoke_test(...).deliver_now`, not `deliver_later` — the point is
   to see a failure in the terminal that ran the task, not in a Sidekiq retry nobody is watching.
@@ -56,6 +61,17 @@ exactly why `MailBranding.for(nil)` falling back to books is a supported case, n
 padding added just in case. Those members really do have no recorded origin, and books is this
 app's original site, so it is the correct default rather than an arbitrary one.
 
+`branded_mail` also sets `self.default_url_options = @branding.url_options` — deliberately on the
+*instance* (`self.`), never on the *class* (`self.class.`). `default_url_options` is an
+ActiveSupport `class_attribute`, so a class-level write mutates a slot shared by every instance of
+that mailer subclass, across every thread, for the life of the process. This was not a hypothetical
+concern: `self.class.default_url_options =` was this code's first shipped form, and review
+reproduced it as a real cross-thread bug under this app's `concurrency: 5` Sidekiq config
+(`config/sidekiq.yml`) — a books email rendering with the music host. Anyone "tidying" that line
+back to `self.class.` reintroduces it silently, since it still passes a naive smoke test.
+`test/mailers/application_mailer_test.rb`'s `"does not leave default_url_options mutated on the
+mailer class after branded_mail runs"` is the regression guard for exactly this.
+
 ## Delivery per environment
 
 | Environment | `delivery_method` | Where mail goes |
@@ -64,14 +80,32 @@ app's original site, so it is the correct default rather than an arbitrary one.
 | Development | `:file` | `tmp/mails/<recipient>` — one file per recipient address, plain-text MIME source, both the text and HTML parts inline. Nothing leaves the machine. |
 | Test | (ActionMailer's test delivery method) | `ActionMailer::Base.deliveries`, the normal Rails/Minitest array |
 
-Production's SMTP settings are built lazily and guarded: `config/environments/production.rb` only
-calls `MailDeliverySettings.sendgrid_smtp` when `SENDGRID_API_KEY` is present, and uses an empty
-hash otherwise. Without that guard, a missing key would raise `MissingApiKey` while
-`config/environments/production.rb` itself is loading — before Rails has finished booting — which
-would crash-loop the web container under `bin/docker-entrypoint`'s `bash -e` and 502 all four
-sites, the same failure mode described in this repo's "a failing migration is an outage" lesson,
-just triggered by a config file instead of a migration. Deferring the raise to actual send time
-(`raise_delivery_errors = true`) turns a missing key into a failed request instead of a down app.
+That test row is Rails' own default, not something this branch's `config/environments/test.rb`
+sets — grepping that file for `delivery_method` finds nothing. Mail lands in
+`ActionMailer::Base.deliveries` only because every mailer test here subclasses
+`ActionMailer::TestCase`, which forces the `:test` delivery method per test. An integration or
+service test that triggers `deliver_now`/`deliver_later` from outside that base class would not
+get this for free — worth remembering once increment 8's membership emails start being triggered
+from controller or service code rather than from mailer tests directly.
+
+Production's SMTP settings are guarded, and the guard changes what actually goes wrong when the
+key is missing — not just whether the app boots. `config/environments/production.rb` only calls
+`MailDeliverySettings.sendgrid_smtp` when `SENDGRID_API_KEY` is present. **When the key is absent,
+`sendgrid_smtp` is never called at all, so its `raise MissingApiKey` never runs either.**
+`smtp_settings` becomes `{}`, and the `mail` gem quietly falls back to its own built-in default
+(`localhost:25`). The app boots — which is the point: a raise here, while
+`config/environments/production.rb` is still loading and before Rails has finished booting, would
+crash-loop the web container under `bin/docker-entrypoint`'s `bash -e` and 502 all four sites, the
+same failure mode described in this repo's "a failing migration is an outage" lesson, just
+triggered by a config file instead of a migration. But the resulting *send-time* error is a bare
+SMTP connection failure to `localhost:25` — it never mentions `SENDGRID_API_KEY` or `MissingApiKey`
+anywhere, so grepping logs for either string finds nothing. A separate initializer
+(`config/initializers/mail_delivery_check.rb`) logs
+`Rails.logger.warn("SENDGRID_API_KEY is not set; outbound mail will fail at send time")` at boot
+when the key is absent in production — it has to live in an initializer rather than in
+`production.rb` itself, because `Rails.logger` isn't installed until after environment files
+finish loading. That boot-time warning, not the eventual delivery error, is what an operator should
+actually grep for.
 
 ## The queue trap — that didn't materialize
 
@@ -122,7 +156,7 @@ follow email-client rules, not this app's normal frontend rules:
 
 | Variable | What breaks if it's missing |
 |---|---|
-| `SENDGRID_API_KEY` | `MailDeliverySettings.sendgrid_smtp` raises `MailDeliverySettings::MissingApiKey`. In production this is deferred to send time by the guard in `production.rb` (see "Delivery per environment" above), so the app still boots — but every send fails until it's set. `mail:smoke` also aborts up front if it's missing in production. |
+| `SENDGRID_API_KEY` | `MailDeliverySettings.sendgrid_smtp` raises `MailDeliverySettings::MissingApiKey` — but only when something actually calls it. In production, `production.rb`'s guard (see "Delivery per environment" above) skips that call entirely when the key is absent, so the app boots; `config/initializers/mail_delivery_check.rb` logs a `Rails.logger.warn` naming the variable instead, and every send then fails later with a bare `localhost:25` connection error that names neither the variable nor the exception. `mail:smoke` aborts up front with a clear message if it's missing in production, independent of the above. |
 | `MAIL_FROM_ADDRESS` | `MailBranding#from` raises `MailBranding::MissingFromAddress` the moment any mailer tries to build a `from` address — which means every `branded_mail` call fails, in every environment, development and previews included. There is no fallback address; the code refuses rather than sending from something malformed. |
 | `ADMIN_NOTIFICATION_EMAIL` | `mail:smoke` aborts immediately with "ADMIN_NOTIFICATION_EMAIL is not set" — nothing to send the smoke test to. Not read anywhere else yet; a future membership-email increment may add more operational recipients that reuse it. |
 
