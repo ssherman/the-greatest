@@ -1,9 +1,9 @@
 # Membership & Stripe Billing
 
 ## Status
-- **Status**: In Progress — increments 1–4, 6, 7, 9 and 10 shipped (Stripe foundation, webhook
-  ingest, reconciliation engine, data migration, checkout, entitlements, admin UI, legacy guard
-  patch); increments 5, 8 and 11 remain. The Stripe-side production setup this all depends on
+- **Status**: In Progress — increments 1–7, 9 and 10 shipped (Stripe foundation, webhook ingest,
+  reconciliation engine, data migration, mail foundation, checkout, entitlements, admin UI, legacy
+  guard patch); increments 8 and 11 remain. The Stripe-side production setup this all depends on
   (registering webhook endpoints, labelling live prices, activating the Billing Portal) is a
   separate by-hand runbook, not code — see `docs/guides/stripe-account-setup.md`
 - **Priority**: High
@@ -547,7 +547,7 @@ verification.
 | 2 | Webhook ingest — endpoint, signature verification, livemode guard, idempotent insert, job stub | 1 | ✅ |
 | 3 | Reconciliation engine — `ReconcileCustomer`, advisory lock, `ReconcileAllCustomers`, nightly cron | 2 | ✅ |
 | 4 | Data migration — legacy comps, legacy donations, Stripe rebuild, verification report | 3 | ✅ |
-| 5 | Mail foundation — ActionMailer + SendGrid, domain-aware `ApplicationMailer`, previews | — | |
+| 5 | Mail foundation — ActionMailer + SendGrid, domain-aware `ApplicationMailer`, previews | — | ✅ |
 | 6 | Checkout — `billing_plans`, rake tasks, `EnsureCustomer`, checkout/portal/donate, `/membership`, thanks page | 3, 10 | ✅ |
 | 7 | Entitlements — `member?`, access scope, `MembershipGate`, `/membership_state`, members-only area | 3 | ✅ |
 | 8 | Membership emails — the eight | 5, 6 | |

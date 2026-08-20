@@ -1,0 +1,11 @@
+This is a test email from <%= @branding.site_name %>.
+
+If you are reading this, SMTP delivery and domain authentication are working
+in <%= Rails.env %>.
+
+It does NOT prove the background queue works. `mail:smoke` calls deliver_now,
+so this message bypassed ActiveJob and Sidekiq entirely. Membership emails send
+with deliver_later and additionally need a Sidekiq worker consuming the
+"default" queue.
+
+Sent at <%= @sent_at.utc.iso8601 %>.
