@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_16_211600) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_20_035628) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -751,6 +751,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_16_211600) do
     t.index ["release_id", "medium_number", "position"], name: "index_music_tracks_on_release_medium_position", unique: true
     t.index ["release_id"], name: "index_music_tracks_on_release_id"
     t.index ["song_id"], name: "index_music_tracks_on_song_id"
+  end
+
+  create_table "news_topics", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "domain", null: false
+    t.string "name", null: false
+    t.string "slug", null: false
+    t.datetime "updated_at", null: false
+    t.index ["domain", "slug"], name: "index_news_topics_on_domain_and_slug", unique: true
   end
 
   create_table "penalties", force: :cascade do |t|

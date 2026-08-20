@@ -1,0 +1,29 @@
+# Slugs are set explicitly: fixtures INSERT directly and never run friendly_id's
+# callbacks, so an omitted slug violates the NOT NULL constraint.
+#
+# These name/slug values are load-bearing for later tasks (e.g. a later task
+# renames news_topics(:books_rankings) and expects the slug back at
+# "rankings"; another does `get news_topic_path(topic_slug: "rankings")` /
+# "site-news" directly). Do NOT change them. Tests in this file must not
+# create a NewsTopic that reuses one of these (domain, name) pairs -- that
+# collides under `fixtures :all` and FriendlyId's scoped conflict resolution
+# falls back to a UUID-suffixed slug instead of the clean one a test expects.
+books_rankings:
+  domain: 2
+  name: Rankings
+  slug: rankings
+
+books_new_lists:
+  domain: 2
+  name: New Lists
+  slug: new-lists
+
+books_feature_launch:
+  domain: 2
+  name: Feature Launch
+  slug: feature-launch
+
+music_site_news:
+  domain: 0
+  name: Site News
+  slug: site-news
