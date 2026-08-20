@@ -223,6 +223,30 @@ namespace :data_migration do
     })
   end
 
+  desc "Migrate legacy blog_posts into news_posts (domain :books; preserves slugs + dates)"
+  task news_posts: :environment do
+    pp Services::BooksMigration::NewsPostMigrator.call
+  end
+
+  desc "Dump legacy blog HTML next to its converted Markdown for hand review"
+  task news_posts_diff: :environment do
+    path = Rails.root.join("tmp", "news_posts_conversion.txt")
+    File.open(path, "w") do |f|
+      LegacyBooks::BlogPost.order(:id).each do |p|
+        html = p.body_html
+        f.puts "=" * 78
+        f.puts "##{p.id}  #{p.title}  (#{p.slug})"
+        f.puts "round-trips: #{Services::BooksMigration::NewsBodyConverter.round_trips?(html)}"
+        f.puts "-" * 30 + " LEGACY HTML " + "-" * 30
+        f.puts html
+        f.puts "-" * 30 + " MARKDOWN " + "-" * 33
+        f.puts Services::BooksMigration::NewsBodyConverter.call(html)
+        f.puts
+      end
+    end
+    puts "wrote #{path}"
+  end
+
   desc "Run all Phase-1 migrators in dependency order"
   task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers,
     :categories, :category_items, :book_attributes, :book_type_categories, :countries,
