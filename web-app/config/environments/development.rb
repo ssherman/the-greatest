@@ -32,6 +32,15 @@ Rails.application.configure do
   config.active_storage.service = :cloudflare
   # config.active_record.strict_loading_by_default = true
 
+  # Mail: write to tmp/mails instead of sending. No gem needed, and nothing can
+  # accidentally email a real person from a developer's machine.
+  config.action_mailer.delivery_method = :file
+  config.action_mailer.file_settings = {location: Rails.root.join("tmp/mails")}
+  config.action_mailer.perform_deliveries = true
+  config.action_mailer.raise_delivery_errors = true
+  config.action_mailer.perform_caching = false
+  config.active_job.queue_adapter = :sidekiq
+
   # Print deprecation notices to the Rails logger.
   config.active_support.deprecation = :log
 
