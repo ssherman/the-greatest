@@ -192,6 +192,31 @@ together until the rotation completes, then drop the old one.
 - **Used By**: web, worker
 - **Guard**: The application refuses to boot if a live key (`sk_live_*`) is provided with `STRIPE_LIVEMODE=false`
 
+### Email Configuration
+
+#### SENDGRID_API_KEY
+- **Description**: SendGrid API key, used as the SMTP password. The SMTP *username* is the literal
+  string `apikey` and is not configurable.
+- **Required**: Yes
+- **Used By**: web, worker
+- **Security**: Never commit this value. Managed via SOPS — see `deployment/SECRETS.md`.
+- **Note**: The app raises `MailDeliverySettings::MissingApiKey` rather than falling back to a
+  placeholder, so a missing key fails loudly instead of sending from the wrong identity.
+
+#### MAIL_FROM_ADDRESS
+- **Description**: The envelope from-address for all outbound mail, e.g. `noreply@thegreatestbooks.org`.
+  Must be an address on a domain authenticated in SendGrid, or delivery fails SPF/DKIM and lands in
+  spam.
+- **Required**: Yes
+- **Used By**: web, worker
+- **Note**: One address serves every site. The *display name* varies per site ("The Greatest Books",
+  "The Greatest Music", ...) — see `app/lib/mail_branding.rb`.
+
+#### ADMIN_NOTIFICATION_EMAIL
+- **Description**: Recipient for administrative notifications and the `mail:smoke` test email.
+- **Required**: Yes
+- **Used By**: web, worker
+
 ## Example .env File
 
 ```bash
@@ -231,6 +256,11 @@ FIREBASE_API_KEY=your_firebase_api_key_here
 STRIPE_SECRET_KEY=sk_live_your_stripe_secret_key_here
 STRIPE_WEBHOOK_SECRET=whsec_music_endpoint_secret,whsec_games_endpoint_secret  # one per registered endpoint
 STRIPE_LIVEMODE=true
+
+# Email Configuration
+SENDGRID_API_KEY=SG.your_sendgrid_api_key_here
+MAIL_FROM_ADDRESS=noreply@thegreatestbooks.org
+ADMIN_NOTIFICATION_EMAIL=you@example.com
 
 # Performance Tuning (optional)
 RAILS_MAX_THREADS=50

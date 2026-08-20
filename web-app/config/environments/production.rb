@@ -1,4 +1,5 @@
 require "active_support/core_ext/integer/time"
+require Rails.root.join("app/lib/mail_delivery_settings")
 
 Rails.application.configure do
   # Settings specified here will take precedence over those in config/application.rb.
@@ -14,6 +15,16 @@ Rails.application.configure do
 
   # Turn on fragment caching in view templates.
   config.action_controller.perform_caching = true
+
+  # Mail
+  config.action_mailer.delivery_method = :smtp
+  config.action_mailer.smtp_settings = ENV["SENDGRID_API_KEY"].present? ? MailDeliverySettings.sendgrid_smtp : {}
+  config.action_mailer.raise_delivery_errors = true
+  config.action_mailer.perform_caching = false
+  # Each mailer sets its own host from MailBranding, because the right host
+  # depends on which site the mail is about. This default only backstops a
+  # mailer that forgets.
+  config.action_mailer.default_url_options = {host: ENV.fetch("BOOKS_DOMAIN", "thegreatestbooks.org"), protocol: "https"}
 
   # Cache assets for far-future expiry since they are all digest stamped.
   config.public_file_server.headers = {"cache-control" => "public, max-age=#{1.year.to_i}"}
@@ -49,8 +60,11 @@ Rails.application.configure do
   # Replace the default in-process memory cache store with a durable alternative.
   # config.cache_store = :mem_cache_store
 
-  # Replace the default in-process and non-durable queuing backend for Active Job.
-  # config.active_job.queue_adapter = :resque
+  # Sidekiq is already this app's job backend (app/sidekiq/), but ActiveJob was
+  # never pointed at it because nothing used ActiveJob. deliver_later does, so
+  # it must be -- otherwise mail queues into the in-process async adapter and is
+  # lost on every deploy.
+  config.active_job.queue_adapter = :sidekiq
 
   # Enable locale fallbacks for I18n (makes lookups for any locale fall back to
   # the I18n.default_locale when a translation cannot be found).
