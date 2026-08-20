@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_20_045129) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_20_051154) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -753,6 +753,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_20_045129) do
     t.index ["song_id"], name: "index_music_tracks_on_song_id"
   end
 
+  create_table "news_post_topics", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.bigint "news_post_id", null: false
+    t.bigint "news_topic_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["news_post_id", "news_topic_id"], name: "index_news_post_topics_on_news_post_id_and_news_topic_id", unique: true
+    t.index ["news_post_id"], name: "index_news_post_topics_on_news_post_id"
+    t.index ["news_topic_id"], name: "index_news_post_topics_on_news_topic_id"
+  end
+
   create_table "news_posts", force: :cascade do |t|
     t.text "body", null: false
     t.datetime "created_at", null: false
@@ -1053,6 +1063,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_20_045129) do
   add_foreign_key "music_song_relationships", "music_songs", column: "song_id"
   add_foreign_key "music_tracks", "music_releases", column: "release_id"
   add_foreign_key "music_tracks", "music_songs", column: "song_id"
+  add_foreign_key "news_post_topics", "news_posts"
+  add_foreign_key "news_post_topics", "news_topics"
   add_foreign_key "news_posts", "users"
   add_foreign_key "penalties", "users"
   add_foreign_key "penalty_applications", "penalties"
