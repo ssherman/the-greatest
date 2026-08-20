@@ -1,11 +1,12 @@
 # Membership & Stripe Billing
 
 ## Status
-- **Status**: In Progress — increments 1–4, 6, 7, 9 and 10 shipped (Stripe foundation, webhook
-  ingest, reconciliation engine, data migration, checkout, entitlements, admin UI, legacy guard
-  patch); increments 5, 8 and 11 remain. The Stripe-side production setup this all depends on
-  (registering webhook endpoints, labelling live prices, activating the Billing Portal) is a
-  separate by-hand runbook, not code — see `docs/guides/stripe-account-setup.md`
+- **Status**: In Progress — increments 1–4, 6, 7, 9, 10 and 11 shipped (Stripe foundation,
+  webhook ingest, reconciliation engine, data migration, checkout, entitlements, admin UI,
+  legacy guard patch, E2E); increments 5 and 8 — the mail foundation and the eight membership
+  emails — remain. The Stripe-side production setup this all depends on (registering webhook
+  endpoints, labelling live prices, activating the Billing Portal) is a separate by-hand
+  runbook, not code — see `docs/guides/stripe-account-setup.md`
 - **Priority**: High
 - **Created**: 2026-08-14
 - **Developer**: Shane Sherman
@@ -553,7 +554,7 @@ verification.
 | 8 | Membership emails — the eight | 5, 6 | |
 | 9 | Admin UI — memberships incl. comping, donations, stripe events, billing plans | 3 | ✅ |
 | 10 | **Legacy guard patch** (separate repo) | — | ✅ |
-| 11 | E2E tests | 6, 7 | |
+| 11 | E2E tests | 6, 7 | ✅ |
 
 Increments 1–5 only read from Stripe and are safe to ship in any order relative
 to legacy. Increment 6 is the moment the new app first creates subscriptions in
@@ -617,13 +618,14 @@ three against it.
       same task: verified against live data rather than a test, for the same reason
 - [ ] The welcome email sends exactly once across repeated reconciles — increment 8, not shipped
 - [ ] A membership email uses the branding of `origin_domain`, not a `Current` lookup — increment 8, not shipped
-- [ ] `bin/rails test` and `bundle exec standardrb` pass; Playwright covers `/membership` —
-      left unchecked as a whole criterion even though its first half already holds (`bin/rails
-      test` and `standardrb` were both clean as of increment 6/7/9/10: see each task's report
-      under `.superpowers/sdd/2026-08-18-membership-entitlements-and-checkout/`). No Playwright
-      spec exercises `/membership` yet — increment 11 (E2E) is still open, and its brief
-      (Phase C, appended to this task's own brief file) is written to depend on the live-account
-      writes in increment 6, which is why it wasn't picked up as part of this documentation task
+- [x] `bin/rails test` and `bundle exec standardrb` pass; Playwright covers `/membership` —
+      the suite, standardrb and `zeitwerk:check` were all clean when increment 11 merged, and 13
+      Playwright tests cover `/membership` across four spec files:
+      `e2e/tests/books/membership.spec.ts` (6), `e2e/tests/books/account/membership.spec.ts` (3),
+      `e2e/tests/music/public/membership.spec.ts` (2) and
+      `e2e/tests/games/public/membership.spec.ts` (2). They run against the Stripe sandbox, and
+      they were the only harness that could catch the Turbo defect recorded below — a Rails
+      controller test cannot see it
 
 ## Risks
 
@@ -734,11 +736,12 @@ with a stated reason.
   (required and unique on `BillingPlan`) that `stripe:sync_plans` immediately overwrites from each
   row's `stripe_lookup_key`. Fine for a one-time production install; if this needs to happen more
   than once (a second environment, a rebuild), a real `db:seed`-style task would be worth adding.
-- **Increment 11 (E2E) was not picked up by the documentation task.** This spec's own "Increments"
-  table now shows 6 and 7 done; 11 (E2E, depends on 6 and 7) remains open. No Playwright spec
-  exercises `/membership` yet — only `web-app/e2e/tests/books/admin/billing.spec.ts` (the admin
-  side, covering increment 9). The acceptance criterion covering this (last line, above) is
-  deliberately left unchecked rather than partially credited.
+- **Playwright is the only harness that can see a broken checkout button.** Increment 11 shipped
+  alongside 6 and 7, and earned its place immediately: every `button_to` on `/membership` was
+  inert in a real browser because Turbo intercepts the submission and discards the cross-origin
+  redirect to Stripe, logging a bare `console.error`. `assert_redirected_to` passes against that
+  code. The fix is `data: {turbo: false}` on the submitter. Any future control that redirects
+  off-origin inherits the same hazard and needs E2E coverage, not a controller test.
 
 ## Future Improvements
 
