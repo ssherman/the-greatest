@@ -30,6 +30,15 @@ class MailBranding
     games: "#006757"
   }.freeze
 
+  # There is no bare `root_url` in this app -- four sites share one route file,
+  # so each domain's root is separately named. Verified: calling root_url
+  # raises NoMethodError.
+  ROOT_HELPERS = {
+    books: :books_root_url,
+    music: :music_root_url,
+    games: :games_root_url
+  }.freeze
+
   attr_reader :key
 
   def self.for(domain)
@@ -60,6 +69,10 @@ class MailBranding
     options = {host: host, protocol: Rails.env.production? ? "https" : "http"}
     options[:port] = 3000 unless Rails.env.production?
     options
+  end
+
+  def root_url
+    Rails.application.routes.url_helpers.public_send(ROOT_HELPERS.fetch(key), **url_options)
   end
 
   private

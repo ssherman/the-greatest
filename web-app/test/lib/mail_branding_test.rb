@@ -70,4 +70,22 @@ class MailBrandingTest < ActiveSupport::TestCase
     assert_equal colors.uniq.length, colors.length, "brand colours must be distinguishable"
     colors.each { |color| assert_match(/\A#[0-9A-F]{6}\z/, color, "email clients cannot parse oklch()") }
   end
+
+  # There is no bare root_url helper in this app -- each domain's root route is
+  # separately named, because four sites share one route file.
+  #
+  # NOTE: which helper ROOT_HELPERS picks is deliberately NOT asserted here.
+  # All three root routes map to "/", and the host comes from url_options, so a
+  # wrong mapping (books -> :music_root_url) produces a byte-identical URL and
+  # no behavioural test can distinguish it. Asserting the constant's contents
+  # would test the implementation, not the behaviour. This becomes testable the
+  # day any domain's root moves off "/" -- add the assertion then.
+  test "builds a root URL on the right host for each domain" do
+    [:books, :music, :games].each do |domain|
+      branding = MailBranding.for(domain)
+      expected_host = Rails.application.config.domains[domain].to_s.split(",").first
+
+      assert_includes branding.root_url, expected_host
+    end
+  end
 end
