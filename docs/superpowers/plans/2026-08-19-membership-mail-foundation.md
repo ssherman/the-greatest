@@ -868,7 +868,7 @@ class SystemMailerTest < ActionMailer::TestCase
       SystemMailer.smoke_test(domain: :books, to: "ops@example.org").deliver_later
     end
 
-    queue = enqueued_jobs.first[:queue] || enqueued_jobs.first["queue_name"]
+    queue = enqueued_jobs.first[:queue]
     assert_includes processed_queues, queue,
       "deliver_later enqueued onto #{queue.inspect}, which is not in config/sidekiq.yml " \
       "(#{processed_queues.inspect}). Mail would be accepted and never delivered. " \
