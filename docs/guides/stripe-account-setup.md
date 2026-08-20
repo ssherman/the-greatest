@@ -347,19 +347,31 @@ since you first confirmed them:
 ## 8. SendGrid: sending domain and API key
 
 Membership emails (increment 5 of the spec, `docs/features/email.md`) go out through SendGrid.
-This app never had a mail account before this branch — none of the steps below are a re-check of
-something already configured.
+
+**As of 2026-08-20, `thegreatestbooks.org` is already authenticated in SendGrid and its DNS is in
+place**, so substep 2 below is a verification, not new work. Substeps 1, 3 and 4 still apply: this
+app has never had a SendGrid API key of its own, and none of the three mail variables are set in
+production yet.
+
+**All four sites send from one address — `contact@thegreatestbooks.org` — on purpose**, so a music
+or games email arrives from a `thegreatestbooks.org` address. That is not an oversight. SendGrid
+authenticates a *sending domain*; using a per-site address would need each domain separately
+authenticated, and any one that isn't lands its mail in spam silently. The recipient still sees the
+right site in the sender's display name ("The Greatest Music <contact@thegreatestbooks.org>"),
+because `MailBranding` resolves that per domain. Note that replies land in that mailbox — which for
+membership and donation mail is useful rather than a problem.
 
 1. **Create the API key.** In the SendGrid dashboard: Settings → API Keys → Create API Key. Give it
    **Restricted Access** with **Mail Send** permission only — nothing else. This key becomes the
    SMTP password `MailDeliverySettings.sendgrid_smtp` (`app/lib/mail_delivery_settings.rb`) sends on
    every outbound connection; a key with any broader scope is unnecessary risk for no benefit, since
    nothing in this app ever calls another SendGrid API.
-2. **Authenticate the sending domain.** Settings → Sender Authentication → Authenticate Your Domain,
-   for the domain `MAIL_FROM_ADDRESS` will send from (`thegreatestbooks.org`, matching the address
-   already used elsewhere in this runbook and in `deployment/ENV.md`'s example `.env` block). Add
-   the CNAME records SendGrid gives you to that domain's DNS and wait for SendGrid to show the
-   domain as verified — this can take up to the DNS provider's own propagation time, not just a few
+2. **Confirm the sending domain is authenticated.** Settings → Sender Authentication → Authenticate
+   Your Domain, for the domain `MAIL_FROM_ADDRESS` sends from — `thegreatestbooks.org`. This was
+   already done for the legacy site, so the expected outcome here is simply seeing it listed as
+   **verified**. If it is, move on. If a future change ever sends from a *different* domain, that
+   domain needs its own authentication: add the CNAME records SendGrid gives you to its DNS and wait
+   for SendGrid to show it verified — up to the DNS provider's own propagation time, not just a few
    minutes.
 
    **This step is not optional, and skipping it fails silently.** An unauthenticated sending domain
@@ -376,7 +388,7 @@ something already configured.
 
    ```
    SENDGRID_API_KEY=SG.your_sendgrid_api_key_here
-   MAIL_FROM_ADDRESS=noreply@thegreatestbooks.org
+   MAIL_FROM_ADDRESS=contact@thegreatestbooks.org
    ADMIN_NOTIFICATION_EMAIL=you@example.com
    ```
 

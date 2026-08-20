@@ -185,7 +185,7 @@ is running in — the code has no preview-mode exception to the "no default addr
 server with the variable set:
 
 ```bash
-MAIL_FROM_ADDRESS=noreply@thegreatestbooks.org bin/rails server
+MAIL_FROM_ADDRESS=contact@thegreatestbooks.org bin/rails server
 ```
 
 then visit `/rails/mailers`. For everyday local work, add `MAIL_FROM_ADDRESS` (and

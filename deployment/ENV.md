@@ -211,12 +211,16 @@ together until the rotation completes, then drop the old one.
   `"SENDGRID_API_KEY is not set; outbound mail will fail at send time"`.
 
 #### MAIL_FROM_ADDRESS
-- **Description**: The envelope from-address for all outbound mail, e.g. `noreply@thegreatestbooks.org`.
+- **Description**: The envelope from-address for all outbound mail. Currently `contact@thegreatestbooks.org`.
   Must be an address on a domain authenticated in SendGrid, or delivery fails SPF/DKIM and lands in
   spam.
 - **Required**: Yes
 - **Used By**: web, worker
-- **Note**: One address serves every site. The *display name* varies per site ("The Greatest Books",
+- **Note**: One address serves every site, deliberately — including music and games mail, which
+  therefore sends from a `thegreatestbooks.org` address. SendGrid authenticates a *sending domain*,
+  and only that one is set up; sending from an unauthenticated domain fails SPF/DKIM and lands in
+  spam rather than erroring, which is indistinguishable from success on the app's side. The
+  *display name* varies per site ("The Greatest Books",
   "The Greatest Music", ...) — see `app/lib/mail_branding.rb`.
 
 #### ADMIN_NOTIFICATION_EMAIL
@@ -266,7 +270,7 @@ STRIPE_LIVEMODE=true
 
 # Email Configuration
 SENDGRID_API_KEY=SG.your_sendgrid_api_key_here
-MAIL_FROM_ADDRESS=noreply@thegreatestbooks.org
+MAIL_FROM_ADDRESS=contact@thegreatestbooks.org
 ADMIN_NOTIFICATION_EMAIL=you@example.com
 
 # Performance Tuning (optional)
