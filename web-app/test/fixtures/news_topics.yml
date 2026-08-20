@@ -8,6 +8,21 @@
 # create a NewsTopic that reuses one of these (domain, name) pairs -- that
 # collides under `fixtures :all` and FriendlyId's scoped conflict resolution
 # falls back to a UUID-suffixed slug instead of the clean one a test expects.
+# == Schema Information
+#
+# Table name: news_topics
+#
+#  id         :bigint           not null, primary key
+#  domain     :integer          not null
+#  name       :string           not null
+#  slug       :string           not null
+#  created_at :datetime         not null
+#  updated_at :datetime         not null
+#
+# Indexes
+#
+#  index_news_topics_on_domain_and_slug  (domain,slug) UNIQUE
+#
 books_rankings:
   domain: 2
   name: Rankings

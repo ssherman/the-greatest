@@ -84,10 +84,9 @@ class NewsPostTest < ActiveSupport::TestCase
     assert_not news_posts(:books_december_update).draft?
   end
 
-  test "topics are reachable through the join" do
-    assert_equal [news_topics(:books_rankings).id],
-      news_posts(:books_december_update).news_topics.pluck(:id)
-  end
+  # The has_many :through from NewsPost to NewsTopic is exercised in
+  # test/models/news_post_topic_test.rb, which is where the join model and its
+  # fixtures are created.
 
   test "excerpt uses the summary when present" do
     assert_equal "The December update.", news_posts(:books_december_update).excerpt
