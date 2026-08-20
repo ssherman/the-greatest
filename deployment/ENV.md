@@ -200,8 +200,15 @@ together until the rotation completes, then drop the old one.
 - **Required**: Yes
 - **Used By**: web, worker
 - **Security**: Never commit this value. Managed via SOPS — see `deployment/SECRETS.md`.
-- **Note**: The app raises `MailDeliverySettings::MissingApiKey` rather than falling back to a
-  placeholder, so a missing key fails loudly instead of sending from the wrong identity.
+- **Note**: A missing key does **not** fail loudly. The app boots normally — deliberately, since
+  raising while `config/environments/production.rb` is still loading would crash-loop the web
+  container under `bin/docker-entrypoint`'s `bash -e` and take all four sites down. Instead,
+  `production.rb`'s guard skips calling `MailDeliverySettings.sendgrid_smtp` entirely when the key
+  is absent, so its `MissingApiKey` raise never runs; `smtp_settings` becomes `{}` and the `mail`
+  gem falls back to its own default of `localhost:25`, so every send then fails with a bare SMTP
+  connection error that names neither `SENDGRID_API_KEY` nor `MissingApiKey`. The signal to look
+  for instead is the boot-time warning from `config/initializers/mail_delivery_check.rb`:
+  `"SENDGRID_API_KEY is not set; outbound mail will fail at send time"`.
 
 #### MAIL_FROM_ADDRESS
 - **Description**: The envelope from-address for all outbound mail, e.g. `noreply@thegreatestbooks.org`.

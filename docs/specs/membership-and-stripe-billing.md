@@ -3,7 +3,7 @@
 ## Status
 - **Status**: In Progress — increments 1–7, 9 and 10 shipped (Stripe foundation, webhook ingest,
   reconciliation engine, data migration, mail foundation, checkout, entitlements, admin UI, legacy
-  guard patch); increment 8 remains. The Stripe-side production setup this all depends on
+  guard patch); increments 8 and 11 remain. The Stripe-side production setup this all depends on
   (registering webhook endpoints, labelling live prices, activating the Billing Portal) is a
   separate by-hand runbook, not code — see `docs/guides/stripe-account-setup.md`
 - **Priority**: High

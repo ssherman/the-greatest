@@ -12,6 +12,9 @@ namespace :mail do
     # this terminal, rather than in a Sidekiq retry nobody is watching.
     SystemMailer.smoke_test(domain: domain, to: recipient).deliver_now
 
-    puts "Sent a #{domain} smoke test to #{recipient} via #{ActionMailer::Base.delivery_method}."
+    # MailBranding.for falls back silently for an unrecognized domain, so print
+    # what was actually resolved and sent, not the raw argument the operator typed.
+    resolved_domain = MailBranding.for(domain).key
+    puts "Sent a #{resolved_domain} smoke test to #{recipient} via #{ActionMailer::Base.delivery_method}."
   end
 end

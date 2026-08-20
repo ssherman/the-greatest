@@ -6,6 +6,13 @@
 # It raises rather than falling back to a default. A placeholder key would let
 # the app boot and then fail every send with an opaque 535 from SendGrid -- or,
 # if the placeholder were ever a real key, send mail from the wrong account.
+#
+# Loaded by a plain `require` from config/environments/production.rb, long
+# before Zeitwerk is set up. That's safe today, but this file must not
+# reference any other application constant at load time -- doing so would be a
+# boot-time NameError, and this app's bin/docker-entrypoint is `bash -e` with
+# `restart: unless-stopped`, so that's a crash-loop and a 502 on all four
+# sites, not a one-time error.
 class MailDeliverySettings
   class MissingApiKey < StandardError; end
 

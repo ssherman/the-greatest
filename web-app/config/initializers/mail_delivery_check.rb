@@ -20,3 +20,8 @@
 if Rails.env.production? && ENV["SENDGRID_API_KEY"].blank?
   Rails.logger.warn("SENDGRID_API_KEY is not set; outbound mail will fail at send time")
 end
+
+# ActiveJob logs a job's arguments at INFO, and config.filter_parameters does not
+# reach them -- so every deliver_later would print the recipient's address, twice.
+# This repo is public and its logs must not accumulate donor PII.
+ActionMailer::MailDeliveryJob.log_arguments = false

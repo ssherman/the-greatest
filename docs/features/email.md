@@ -107,10 +107,17 @@ when the key is absent in production — it has to live in an initializer rather
 finish loading. That boot-time warning, not the eventual delivery error, is what an operator should
 actually grep for.
 
+Two other framework log paths matter here, independent of the above. `ActionMailer::LogSubscriber`
+logs a delivery error message at INFO — a rejected-recipient SMTP 5xx can echo the recipient's
+address back into the log — and at DEBUG it dumps the entire encoded message, including the body.
+`config/environments/production.rb` makes the log level switchable via `RAILS_LOG_LEVEL`, so
+flipping it to `debug` during an incident starts writing full email bodies to the container logs;
+know that before reaching for it, not after.
+
 ## The queue trap — that didn't materialize
 
 `deliver_later` doesn't send mail directly; it enqueues `ActionMailer::MailDeliveryJob` through
-ActiveJob, and Sidekiq — this app's queue adapter in every environment, including development —
+ActiveJob, and Sidekiq — this app's queue adapter in production and development —
 only pulls jobs from the queues listed in `config/sidekiq.yml`
 (`critical`, `default`). If `deliver_later` ever enqueued onto a queue absent from that list, mail
 would be accepted, reported as sent, and never actually delivered, with nothing in the app raising

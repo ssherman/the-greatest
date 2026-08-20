@@ -13,44 +13,51 @@ class ApplicationMailerTest < ActionMailer::TestCase
     end
   end
 
-  setup { ENV["MAIL_FROM_ADDRESS"] = "noreply@example.org" }
-  teardown { ENV.delete("MAIL_FROM_ADDRESS") }
-
   test "sets the from-address from the domain it was given" do
-    mail = ProbeMailer.probe(domain: :music)
+    with_env("MAIL_FROM_ADDRESS" => "noreply@example.org") do
+      mail = ProbeMailer.probe(domain: :music)
 
-    assert_equal ["noreply@example.org"], mail.from
-    assert_equal "The Greatest Music <noreply@example.org>", mail[:from].value
+      assert_equal ["noreply@example.org"], mail.from
+      assert_equal "The Greatest Music <noreply@example.org>", mail[:from].value
+    end
   end
 
   test "brands the mail for the domain it was given, not for Current.domain" do
-    Current.domain = :books
-    mail = ProbeMailer.probe(domain: :games)
+    with_env("MAIL_FROM_ADDRESS" => "noreply@example.org") do
+      Current.domain = :books
+      mail = ProbeMailer.probe(domain: :games)
 
-    assert_match "The Greatest Games", mail.body.encoded
-    assert_no_match(/The Greatest Books/, mail.body.encoded)
+      assert_match "The Greatest Games", mail.body.encoded
+      assert_no_match(/The Greatest Books/, mail.body.encoded)
+    end
   ensure
     Current.domain = nil
   end
 
   test "brands the mail even when Current.domain is unset, as it is inside Sidekiq" do
-    Current.domain = nil
-    mail = ProbeMailer.probe(domain: :music)
+    with_env("MAIL_FROM_ADDRESS" => "noreply@example.org") do
+      Current.domain = nil
+      mail = ProbeMailer.probe(domain: :music)
 
-    assert_match "The Greatest Music", mail.body.encoded
+      assert_match "The Greatest Music", mail.body.encoded
+    end
   end
 
   test "renders both an HTML and a plain-text part" do
-    mail = ProbeMailer.probe(domain: :books)
+    with_env("MAIL_FROM_ADDRESS" => "noreply@example.org") do
+      mail = ProbeMailer.probe(domain: :books)
 
-    assert_equal ["text/html", "text/plain"], mail.parts.map(&:mime_type).sort
+      assert_equal ["text/html", "text/plain"], mail.parts.map(&:mime_type).sort
+    end
   end
 
   test "points link URLs at the host for that domain" do
-    mail = ProbeMailer.probe(domain: :games)
-    expected_host = Rails.application.config.domains[:games].to_s.split(",").first
+    with_env("MAIL_FROM_ADDRESS" => "noreply@example.org") do
+      mail = ProbeMailer.probe(domain: :games)
+      expected_host = Rails.application.config.domains[:games].to_s.split(",").first
 
-    assert_match expected_host, mail.body.encoded
+      assert_match expected_host, mail.body.encoded
+    end
   end
 
   # Guards against `self.class.default_url_options =`: that form mutates a
@@ -66,11 +73,13 @@ class ApplicationMailerTest < ActionMailer::TestCase
   # instantiated) passes against both the buggy and the fixed code and proves
   # nothing. This asserts directly on the class the buggy assignment mutates.
   test "does not leave default_url_options mutated on the mailer class after branded_mail runs" do
-    ProbeMailer.probe(domain: :books).message
-    before = ProbeMailer.default_url_options
+    with_env("MAIL_FROM_ADDRESS" => "noreply@example.org") do
+      ProbeMailer.probe(domain: :books).message
+      before = ProbeMailer.default_url_options
 
-    ProbeMailer.probe(domain: :music).message
+      ProbeMailer.probe(domain: :music).message
 
-    assert_equal before, ProbeMailer.default_url_options
+      assert_equal before, ProbeMailer.default_url_options
+    end
   end
 end
