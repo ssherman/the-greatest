@@ -1,0 +1,8 @@
+<p>This is a test email from <strong><%= @branding.site_name %></strong>.</p>
+
+<p>
+  If you are reading this, SMTP delivery, domain authentication and the mailer
+  queue are all working in <strong><%= Rails.env %></strong>.
+</p>
+
+<p>Sent at <%= @sent_at.utc.iso8601 %>.</p>
