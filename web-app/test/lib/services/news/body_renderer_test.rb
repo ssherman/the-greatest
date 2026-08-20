@@ -67,18 +67,35 @@ module Services
         assert_not_includes html, 'href="#'
       end
 
-      test ".call escapes raw HTML in the source" do
+      test ".call does not render raw HTML from the source" do
+        # unsafe: false replaces raw HTML with an "omitted" comment, which the
+        # sanitizer then strips. The script's TEXT survives as inert content -- that
+        # is correct and harmless. What must never survive is the tag.
         html = BodyRenderer.call("before <script>alert('x')</script> after")
 
         assert_not_includes html, "<script"
-        assert_not_includes html, "alert('x')"
+        assert_includes html, "before"
+        assert_includes html, "after"
       end
 
-      test ".call strips a disallowed tag but keeps its text" do
-        html = BodyRenderer.call("<iframe src='https://evil.test'></iframe>kept")
+      test ".call strips a disallowed inline tag but keeps its text" do
+        # The realistic case: an author hand-types an HTML tag in a Markdown field.
+        # The tag must not render; their words must survive.
+        html = BodyRenderer.call("an <b>emphasised</b> word")
+
+        assert_not_includes html, "<b>"
+        assert_includes html, "emphasised"
+      end
+
+      test ".call drops a raw HTML block entirely" do
+        # A line STARTING with raw HTML is a CommonMark HTML block and is dropped
+        # whole, including text trailing it on the same line -- which is why the
+        # original version of this test, asserting a trailing word survived, was
+        # wrong. Pathological input for a Markdown field; the security property is
+        # what matters.
+        html = BodyRenderer.call("<iframe src='https://evil.test'></iframe>")
 
         assert_not_includes html, "<iframe"
-        assert_includes html, "kept"
       end
 
       test ".call strips a javascript href" do
