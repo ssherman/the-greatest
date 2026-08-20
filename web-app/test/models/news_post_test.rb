@@ -63,11 +63,23 @@ class NewsPostTest < ActiveSupport::TestCase
   end
 
   test "recent orders by published_at descending" do
-    older = news_posts(:books_december_update)
-    newer = NewsPost.create!(domain: :books, title: "Newer", body: "hi",
+    # Ids and publish dates are deliberately inverted. Rails resets the pk
+    # sequence above every hashed fixture id after loading fixtures, so anything
+    # created in a test outranks all of them on id -- which is why a test built
+    # from one created record plus one fixture cannot tell order(published_at:)
+    # from order(id:). Here the FIRST-created row (lower id) is published LATEST,
+    # so the two orderings disagree and only the correct one passes.
+    newer = NewsPost.create!(domain: :books, title: "Published Later", body: "hi",
       user: users(:admin_user), published_at: 1.hour.ago)
+    older = NewsPost.create!(domain: :books, title: "Published Earlier", body: "hi",
+      user: users(:admin_user), published_at: 5.hours.ago)
 
-    assert_equal [newer.id, older.id], NewsPost.books.published.recent.pluck(:id)
+    # Pins the premise that makes this test discriminating -- if a future Rails
+    # changes id allocation, this fails loudly rather than the test going quiet.
+    assert_operator newer.id, :<, older.id
+
+    assert_equal [newer.id, older.id, news_posts(:books_december_update).id],
+      NewsPost.books.published.recent.pluck(:id)
   end
 
   test "published? is false for a draft" do
