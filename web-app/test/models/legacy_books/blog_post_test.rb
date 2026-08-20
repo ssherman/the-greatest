@@ -34,5 +34,28 @@ module LegacyBooks
       assert_equal "record_type", reflection.type
       assert_equal "BlogPost", BlogPost.polymorphic_name
     end
+
+    # The scope is inspected rather than executed: instance_exec'ing it against a
+    # bare object that only responds to :where records the filter without ever
+    # touching ActiveRecord's query builder or the schema cache -- which is what
+    # makes this safe in an environment where LegacyBooks models have no usable
+    # connection (see the comment on the readonly? test above).
+    #
+    # ActionText's unique index is (record_type, record_id, name), so more than
+    # one named field per record is representable; this filter is what keeps
+    # rich_text_content reading the right row.
+    test "rich_text_content is filtered to the content field" do
+      captured = nil
+      recorder = Object.new
+      recorder.define_singleton_method(:where) { |*args| captured = args }
+
+      recorder.instance_exec(&BlogPost.reflect_on_association(:rich_text_content).scope)
+
+      assert_equal [{name: "content"}], captured
+    end
+
+    test "rich_text_content reads the legacy ActionText table" do
+      assert_equal "action_text_rich_texts", RichText.table_name
+    end
   end
 end
