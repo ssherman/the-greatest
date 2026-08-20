@@ -110,3 +110,7 @@ gem "pundit"
 
 # Icon library (Lucide-backed via rails_icons)
 gem "rails_icons", "~> 1.8"
+
+# HTML -> Markdown, needed only for the one-time legacy blog migration.
+# Removable once the production run is done.
+gem "reverse_markdown", "~> 3.0"
