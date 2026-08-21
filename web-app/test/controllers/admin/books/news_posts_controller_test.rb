@@ -255,6 +255,29 @@ module Admin
         assert_not_includes response.body, "<script>alert"
       end
 
+      # The standalone-input test above pins the security property (the tag
+      # never renders) but, per task-12-report.md finding 1, cannot also pin
+      # the authoring property for that same input -- CommonMark's HTML-block
+      # rule elides a line that STARTS with raw HTML whole, tags and enclosed
+      # text together, so "alert('x')" does not survive
+      # "<script>alert('x')</script>" alone. Placing the same tag inline
+      # inside ordinary prose exercises CommonMark's OTHER raw-HTML rule
+      # instead (inline raw HTML spans), where only the tags themselves are
+      # elided and surrounding text is untouched -- so this is the input that
+      # actually lets the security and authoring properties be asserted
+      # separately, which is the established shape on this branch (ledger
+      # R11: an earlier implementer reconfigured the sanitizer to prune text
+      # and made a test pass by destroying content).
+      test "preview escapes an inline script tag while keeping the surrounding words" do
+        post preview_admin_books_news_posts_path,
+          params: {news_post: {body: "before <script>alert('x')</script> after"}},
+          as: :turbo_stream
+
+        assert_response :success
+        assert_not_includes response.body, "<script"
+        assert_includes response.body, "alert('x')"
+      end
+
       test "preview replaces the preview frame" do
         post preview_admin_books_news_posts_path,
           params: {news_post: {body: "hi"}},
