@@ -102,7 +102,14 @@ module Services
         # Belt and braces. A comped row has no stripe_subscription_id so it can
         # never be found here, but the design promise is that a webhook cannot
         # touch a manual grant, and that promise deserves an explicit guard.
-        return membership if membership.persisted? && !membership.stripe?
+        #
+        # A comped row is one the reconciler must not touch, so report it as a
+        # no-op transition rather than a bare Membership: callers get a uniform
+        # return type, and status_changed?/became_active?/became_canceled? are
+        # all false, which is exactly right for a row nothing changed about.
+        if membership.persisted? && !membership.stripe?
+          return MembershipTransition.new(membership: membership, previous_status: membership.status)
+        end
 
         item = subscription.items.data.first
 

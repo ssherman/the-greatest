@@ -322,6 +322,30 @@ module Services
 
         assert_not transition.became_active?
       end
+
+      # The comped-row guard in `upsert` used to return a bare Membership on this
+      # path, while every other path returned a MembershipTransition -- a
+      # heterogeneous return type that would raise NoMethodError the moment a
+      # caller (the welcome-email dispatcher) calls #became_active? on whatever
+      # this returns. A real comped fixture validates absence of
+      # stripe_subscription_id, so update_column (which skips validations) is
+      # used to reproduce the legacy-shaped collision, exactly as the
+      # hand-built guarded row above does for the same reason.
+      test "a comped collision returns a no-op transition, not a bare Membership" do
+        comped = memberships(:editor_user_comped)
+        comped.update_column(:stripe_subscription_id, "sub_comped_collision")
+        original = comped.attributes.slice("status", "current_period_end", "note")
+
+        transition = reconcile_and_transition(
+          stripe_subscription(id: "sub_comped_collision", status: "canceled")
+        )
+
+        assert_instance_of MembershipTransition, transition
+        assert_not transition.status_changed?
+        assert_not transition.became_active?
+        assert_not transition.became_canceled?
+        assert_equal original, comped.reload.attributes.slice("status", "current_period_end", "note")
+      end
     end
   end
 end
