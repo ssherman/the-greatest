@@ -28,13 +28,13 @@ module Services
       def call
         return failure("stripe_customer_id is required") if @stripe_customer_id.blank?
 
-        memberships = ActiveRecord::Base.transaction do
+        transitions = ActiveRecord::Base.transaction do
           acquire_lock
           user = resolve_user
           subscriptions.map { |subscription| upsert(subscription, user) }
         end
 
-        Result.new(success?: true, data: memberships, errors: [])
+        Result.new(success?: true, data: transitions, errors: [])
       rescue Stripe::StripeError => e
         Rails.logger.error("[billing] reconcile failed for #{@stripe_customer_id}: #{e.class}")
         failure(e.message)
@@ -106,6 +106,10 @@ module Services
 
         item = subscription.items.data.first
 
+        # Captured BEFORE assign_attributes, which overwrites it. nil for a new
+        # row. This is the whole reason MembershipTransition exists.
+        previous_status = membership.persisted? ? membership.status : nil
+
         membership.assign_attributes(
           # Never downgrade an existing attachment: a Stripe subscription cannot change
           # customer, so a user link resolved by any other path (a future email match,
@@ -132,7 +136,7 @@ module Services
           stripe_synced_at: Time.current
         )
         membership.save!
-        membership
+        MembershipTransition.new(membership: membership, previous_status: previous_status)
       end
 
       def failure(message)

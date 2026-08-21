@@ -42,6 +42,17 @@ module Services
         ::Membership.find_by(stripe_subscription_id: subscription.id)
       end
 
+      # Runs the reconcile for one subscription and returns the resulting
+      # MembershipTransition. Unlike reconcile_and_fetch, this cannot be
+      # re-derived from the database -- previous_status only ever exists for
+      # the duration of one reconcile -- so it reads the service's own return
+      # value instead.
+      def reconcile_and_transition(subscription)
+        stub_stripe_list([subscription])
+        result = ReconcileCustomer.call(stripe_customer_id: subscription.customer)
+        result.data.first
+      end
+
       test "creates a membership from a stripe subscription" do
         stub_stripe_list([stripe_subscription(id: "sub_r1", customer: "cus_reconcile")])
 
@@ -263,6 +274,53 @@ module Services
         membership = reconcile_and_fetch(subscription)
 
         assert_nil membership.origin_domain
+      end
+
+      test "reports a brand-new active membership as having become active" do
+        subscription = stripe_subscription(status: "active")
+
+        transition = reconcile_and_transition(subscription)
+
+        assert_nil transition.previous_status
+        assert transition.became_active?
+        assert_not transition.became_canceled?
+      end
+
+      # The nightly sweep re-reconciles everything. An unchanged active membership
+      # must NOT look like a new activation, or every member gets a welcome email
+      # every night.
+      test "an unchanged active membership has not become active" do
+        subscription = stripe_subscription(status: "active")
+        reconcile_and_transition(subscription)
+
+        transition = reconcile_and_transition(subscription)
+
+        assert_equal "active", transition.previous_status
+        assert_not transition.became_active?
+        assert_not transition.status_changed?
+      end
+
+      test "reports the move from active to canceled as having become canceled" do
+        subscription = stripe_subscription(status: "active")
+        reconcile_and_transition(subscription)
+
+        transition = reconcile_and_transition(stripe_subscription(id: subscription.id, status: "canceled"))
+
+        assert_equal "active", transition.previous_status
+        assert transition.became_canceled?
+        assert transition.status_changed?
+      end
+
+      # trialing -> active is a real transition but not a new membership. The
+      # welcome email already went out when the trial started; sending a second on
+      # conversion would be a duplicate.
+      test "trialing counts as active, so converting a trial is not a new activation" do
+        subscription = stripe_subscription(status: "trialing")
+        reconcile_and_transition(subscription)
+
+        transition = reconcile_and_transition(stripe_subscription(id: subscription.id, status: "active"))
+
+        assert_not transition.became_active?
       end
     end
   end
