@@ -101,6 +101,36 @@
       </fieldset>
 
       <div>
+        <%= f.label :share_image, class: "label" do %>
+          <span class="font-semibold">Share image</span>
+        <% end %>
+        <p class="text-sm text-base-content/70 mb-1">
+          Shown when someone posts a link to this article on social media. Wide images work
+          best — around 1200 by 630 pixels.
+        </p>
+        <% if @news_post.share_image.attached? %>
+          <div class="mb-2">
+            <%= image_tag @news_post.share_image.variant(:card), class: "max-w-xs rounded-box" %>
+          </div>
+        <% end %>
+        <%= f.file_field :share_image, accept: "image/png,image/jpeg,image/webp", class: "file-input w-full" %>
+      </div>
+
+      <div>
+        <%= label_tag "news_post_body_images", class: "label" do %>
+          <span class="font-semibold">Images for the body</span>
+        <% end %>
+        <p class="text-sm text-base-content/70 mb-1">
+          Upload a screenshot here, then copy the snippet it gives you into the body text
+          where you want the picture to appear.
+        </p>
+        <%= file_field_tag "news_post[body_images][]", multiple: true,
+              accept: "image/png,image/jpeg,image/webp,image/gif",
+              id: "news_post_body_images", class: "file-input w-full" %>
+        <%= render "body_images", news_post: @news_post %>
+      </div>
+
+      <div>
         <%= f.label :published_at, class: "label" do %>
           <span class="font-semibold">Publish date</span>
         <% end %>

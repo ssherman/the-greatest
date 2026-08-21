@@ -312,6 +312,52 @@ module Admin
 
         assert_redirected_to books_root_path
       end
+
+      test "create attaches a share image" do
+        post admin_books_news_posts_path, params: {
+          news_post: {
+            title: "With Image", body: "x",
+            share_image: fixture_file_upload("test_image.png", "image/png")
+          }
+        }
+
+        assert_predicate NewsPost.books.find_by(slug: "with-image").share_image, :attached?
+      end
+
+      test "create attaches body images" do
+        post admin_books_news_posts_path, params: {
+          news_post: {
+            title: "With Body Images", body: "x",
+            body_images: [fixture_file_upload("test_image.png", "image/png")]
+          }
+        }
+
+        assert_equal 1, NewsPost.books.find_by(slug: "with-body-images").body_images.count
+      end
+
+      test "update adds a body image without replacing the existing ones" do
+        post_record = news_posts(:books_december_update)
+        post_record.body_images.attach(io: File.open(file_fixture("test_image.png")), filename: "a.png")
+
+        patch admin_books_news_post_path(post_record), params: {
+          news_post: {
+            title: post_record.title, body: post_record.body,
+            body_images: [fixture_file_upload("test_image.png", "image/png")]
+          }
+        }
+
+        assert_equal 2, post_record.reload.body_images.count
+      end
+
+      test "the edit form shows the Markdown snippet for each body image" do
+        post_record = news_posts(:books_december_update)
+        post_record.body_images.attach(io: File.open(file_fixture("test_image.png")), filename: "cover.png")
+
+        get edit_admin_books_news_post_path(post_record)
+
+        assert_response :success
+        assert_includes response.body, "![cover.png]("
+      end
     end
   end
 end

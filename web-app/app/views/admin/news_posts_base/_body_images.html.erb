@@ -1,0 +1,19 @@
+<% if news_post.persisted? && news_post.body_images.attached? %>
+  <div class="mt-4 space-y-2">
+    <% news_post.body_images.each do |image| %>
+      <div class="flex items-center gap-3 p-2 border border-base-300 rounded-box" data-controller="clipboard-copy">
+        <%= image_tag url_for(image), class: "w-16 h-16 object-cover rounded" %>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm font-semibold truncate"><%= image.filename %></div>
+          <div class="flex items-center gap-2">
+            <code class="text-xs flex-1 min-w-0 [overflow-wrap:anywhere]"
+                  data-clipboard-copy-target="source">![<%= image.filename %>](<%= url_for(image) %>)</code>
+            <button type="button" class="btn btn-xs btn-primary"
+                    data-action="clipboard-copy#copy"
+                    data-clipboard-copy-target="button">Copy</button>
+          </div>
+        </div>
+      </div>
+    <% end %>
+  </div>
+<% end %>

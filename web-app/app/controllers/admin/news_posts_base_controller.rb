@@ -39,6 +39,7 @@ class Admin::NewsPostsBaseController < Admin::BaseController
     @news_post = NewsPost.new(news_post_params)
     @news_post.domain = news_domain
     @news_post.user = current_user
+    attach_body_images
 
     if @news_post.save
       redirect_to news_post_path_for(@news_post), notice: "Post created."
@@ -51,6 +52,8 @@ class Admin::NewsPostsBaseController < Admin::BaseController
   end
 
   def update
+    attach_body_images
+
     if @news_post.update(news_post_params)
       redirect_to news_post_path_for(@news_post), notice: "Post updated."
     else
@@ -87,10 +90,20 @@ class Admin::NewsPostsBaseController < Admin::BaseController
   def available_topics = NewsTopic.where(domain: news_domain).sorted_by_name
   helper_method :available_topics
 
+  # Attached rather than mass-assigned: assigning to a has_many_attached replaces
+  # the whole collection, so editing a post to add one screenshot would silently
+  # drop every image already on it.
+  def attach_body_images
+    uploads = params.dig(:news_post, :body_images)
+    return if uploads.blank?
+
+    @news_post.body_images.attach(uploads.compact_blank)
+  end
+
   def news_post_params
     permitted = params.require(:news_post).permit(
       :title, :body, :summary, :published_at, :share_image,
-      news_topic_ids: [], body_images: []
+      news_topic_ids: []
     )
 
     # Topic ids arrive from a checkbox list, so a hand-crafted request could
