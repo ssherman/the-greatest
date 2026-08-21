@@ -29,8 +29,10 @@ module StripeWebhookHelper
 
   # Minimal subscription object, shaped like the API version we pin. Note
   # current_period_end lives on the ITEM, not the subscription — Basil moved it.
+  # metadata defaults to {} to match a subscription with no metadata at all,
+  # which is what legacy's Payment Links produce.
   def stripe_subscription_object(id:, customer:, status: "active", interval: "month",
-    period_end: 30.days.from_now, cancel_at_period_end: false, canceled_at: nil)
+    period_end: 30.days.from_now, cancel_at_period_end: false, canceled_at: nil, metadata: {})
     {
       id: id,
       object: "subscription",
@@ -38,6 +40,7 @@ module StripeWebhookHelper
       status: status,
       cancel_at_period_end: cancel_at_period_end,
       canceled_at: canceled_at&.to_i,
+      metadata: metadata,
       items: {
         object: "list",
         data: [{

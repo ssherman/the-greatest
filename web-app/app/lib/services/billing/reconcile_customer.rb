@@ -117,6 +117,12 @@ module Services
           status: subscription.status,
           interval: (item&.price&.recurring&.interval == "year") ? :yearly : :monthly,
           stripe_customer_id: subscription.customer,
+          # Stripe is the source of truth for this like everything else here.
+          # CreateCheckoutSession stamps origin_domain into subscription
+          # metadata; legacy's subscriptions have none, and that absence is the
+          # signal Membership#sold_by_this_app? reads. Assign unconditionally --
+          # a value that vanished upstream must vanish here too.
+          origin_domain: subscription.metadata&.[]("origin_domain"),
           # Basil (2025-03-31) moved this off the subscription onto the item.
           # Reading subscription.current_period_end works today via a deprecated
           # accessor and will stop working without warning.

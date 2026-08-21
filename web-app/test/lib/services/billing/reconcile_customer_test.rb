@@ -13,10 +13,14 @@ module Services
       end
 
       # Builds a Stripe::Subscription from the helper's hash so the service sees
-      # the same object shape the real API returns.
-      def stripe_subscription(**opts)
+      # the same object shape the real API returns. id and customer default so a
+      # test that only cares about one attribute (e.g. metadata) doesn't have to
+      # restate the rest -- customer defaults to the fixture user's
+      # stripe_customer_id set up in `setup`, so resolving it never falls through
+      # to a real Stripe::Customer.retrieve call.
+      def stripe_subscription(id: "sub_#{SecureRandom.hex(6)}", customer: "cus_reconcile", **opts)
         Stripe::Subscription.construct_from(
-          stripe_subscription_object(**opts).deep_symbolize_keys
+          stripe_subscription_object(id: id, customer: customer, **opts).deep_symbolize_keys
         )
       end
 
@@ -26,6 +30,16 @@ module Services
           .returns(Stripe::ListObject.construct_from(
             {object: "list", data: subscriptions.map(&:to_hash), has_more: false}
           ))
+      end
+
+      # Runs the reconcile for one subscription and re-queries the resulting row
+      # from the database, rather than trusting whatever ReconcileCustomer.call
+      # returns -- a later task changes that return shape, and re-querying keeps
+      # these tests indifferent to it.
+      def reconcile_and_fetch(subscription)
+        stub_stripe_list([subscription])
+        ReconcileCustomer.call(stripe_customer_id: subscription.customer)
+        ::Membership.find_by(stripe_subscription_id: subscription.id)
       end
 
       test "creates a membership from a stripe subscription" do
@@ -209,6 +223,41 @@ module Services
         assert result.success?
         membership = ::Membership.find_by!(stripe_subscription_id: "sub_missing_customer")
         assert_nil membership.user
+      end
+
+      # THE GAP. origin_domain is stamped into subscription metadata at checkout,
+      # but upsert never read it back, so every membership row had origin_domain
+      # nil. That breaks two things at once: MailBranding.for(nil) falls back to
+      # books, so a music subscriber gets books-branded mail; and with no value
+      # there is no way to tell this app's memberships from legacy's, which is the
+      # ownership signal the email gate depends on.
+      test "writes origin_domain from the subscription's Stripe metadata" do
+        subscription = stripe_subscription(metadata: {"origin_domain" => "music"})
+
+        membership = reconcile_and_fetch(subscription)
+
+        assert_equal "music", membership.origin_domain
+      end
+
+      # Legacy sells through Stripe Payment Links and sets no metadata at all.
+      test "leaves origin_domain nil for a subscription with no metadata" do
+        subscription = stripe_subscription(metadata: {})
+
+        membership = reconcile_and_fetch(subscription)
+
+        assert_nil membership.origin_domain
+      end
+
+      # The nightly sweep re-reconciles every subscription on the account. Stripe is
+      # the source of truth, so a value that disappeared upstream must disappear
+      # here -- but a real value must never be clobbered by a later sync.
+      test "keeps origin_domain across a second reconcile of the same subscription" do
+        subscription = stripe_subscription(metadata: {"origin_domain" => "games"})
+
+        reconcile_and_fetch(subscription)
+        membership = reconcile_and_fetch(subscription)
+
+        assert_equal "games", membership.origin_domain
       end
     end
   end

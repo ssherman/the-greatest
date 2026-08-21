@@ -43,4 +43,8 @@ class Donation < ApplicationRecord
   scope :recent, -> { order(created_at: :desc) }
 
   def amount_in_dollars = amount_cents / 100.0
+
+  # See Membership#sold_by_this_app?. RecordDonation already writes `domain`
+  # from the same Stripe metadata, so donations needed no backfill.
+  def sold_by_this_app? = domain.present?
 end
