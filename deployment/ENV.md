@@ -211,13 +211,23 @@ together until the rotation completes, then drop the old one.
   `"SENDGRID_API_KEY is not set; outbound mail will fail at send time"`.
 
 #### MAIL_FROM_ADDRESS
-- **Description**: The envelope from-address for all outbound mail, e.g. `noreply@thegreatestbooks.org`.
-  Must be an address on a domain authenticated in SendGrid, or delivery fails SPF/DKIM and lands in
-  spam.
+- **Description**: The envelope from-address for all outbound mail. Currently
+  `contact@thegreatestbooks.org`. Must be an address SendGrid recognises as a verified Sender
+  Identity: if it is not, SendGrid rejects the send outright with an SMTP error, rather than
+  delivering it anywhere.
 - **Required**: Yes
 - **Used By**: web, worker
-- **Note**: One address serves every site. The *display name* varies per site ("The Greatest Books",
-  "The Greatest Music", ...) — see `app/lib/mail_branding.rb`.
+- **Note**: One address serves every site the membership covers — books, music and games —
+  deliberately. Music and games mail therefore sends from a `thegreatestbooks.org` address. SendGrid
+  authenticates a *sending domain*, and only that one is set up; a per-site address would mean
+  maintaining authentication and DNS for each domain, for no gain the recipient can see. The
+  *display name* varies per site ("The Greatest Books", "The Greatest Music", ...) — see
+  `app/lib/mail_branding.rb`.
+- **Two failure modes, and they look nothing alike**: an address with no verified Sender Identity is
+  **rejected** by SendGrid with a visible SMTP error. An address that *is* verified but whose domain
+  authentication is incomplete or whose DNS has not propagated sends successfully and is likely
+  filed as **spam** — silently, with nothing in the app reporting it. Only the second one requires
+  checking the recipient's spam folder to detect.
 
 #### ADMIN_NOTIFICATION_EMAIL
 - **Description**: Recipient for administrative notifications and the `mail:smoke` test email.
@@ -266,7 +276,7 @@ STRIPE_LIVEMODE=true
 
 # Email Configuration
 SENDGRID_API_KEY=SG.your_sendgrid_api_key_here
-MAIL_FROM_ADDRESS=noreply@thegreatestbooks.org
+MAIL_FROM_ADDRESS=contact@thegreatestbooks.org
 ADMIN_NOTIFICATION_EMAIL=you@example.com
 
 # Performance Tuning (optional)
