@@ -86,6 +86,8 @@ module Admin
           {label: "Categories", icon: :category, path: -> { URL_HELPERS.admin_books_categories_path }},
           {label: "Lists", icon: :list, path: -> { URL_HELPERS.admin_books_lists_path }},
           {label: "Reviews", icon: :star, path: -> { URL_HELPERS.admin_books_reviews_path }},
+          {label: "News", icon: :chat, path: -> { URL_HELPERS.admin_books_news_posts_path }},
+          {label: "News Topics", icon: :category, path: -> { URL_HELPERS.admin_books_news_topics_path }},
           {label: "Rankings", icon: :chart, path: -> { URL_HELPERS.admin_books_ranking_configurations_path }}
         ]
       }
