@@ -347,25 +347,46 @@ since you first confirmed them:
 ## 8. SendGrid: sending domain and API key
 
 Membership emails (increment 5 of the spec, `docs/features/email.md`) go out through SendGrid.
-This app never had a mail account before this branch — none of the steps below are a re-check of
-something already configured.
+
+**As of 2026-08-20, `thegreatestbooks.org` is already authenticated in SendGrid and its DNS is in
+place**, so substep 2 below is a verification, not new work. Substeps 1, 3 and 4 still apply: this
+app has never had a SendGrid API key of its own, and none of the three mail variables are set in
+production yet.
+
+**Every site the membership covers — books, music and games — sends from one address,
+`contact@thegreatestbooks.org`, on purpose**, so a music or games email arrives from a
+`thegreatestbooks.org` address. That is not an oversight. SendGrid authenticates a *sending domain*;
+a per-site address would need each domain separately authenticated and each one's DNS maintained,
+for no gain the recipient can see. They still see the right site in the sender's display name
+("The Greatest Music <contact@thegreatestbooks.org>"), because `MailBranding` resolves that per
+domain. Those three are the only keys `MailBranding` brands — anything else falls back to books, by
+design, because `memberships.origin_domain` is `nil` for every membership predating checkout.
+
+Note that replies land in that mailbox, which for membership and donation mail is useful rather
+than a problem.
 
 1. **Create the API key.** In the SendGrid dashboard: Settings → API Keys → Create API Key. Give it
    **Restricted Access** with **Mail Send** permission only — nothing else. This key becomes the
    SMTP password `MailDeliverySettings.sendgrid_smtp` (`app/lib/mail_delivery_settings.rb`) sends on
    every outbound connection; a key with any broader scope is unnecessary risk for no benefit, since
    nothing in this app ever calls another SendGrid API.
-2. **Authenticate the sending domain.** Settings → Sender Authentication → Authenticate Your Domain,
-   for the domain `MAIL_FROM_ADDRESS` will send from (`thegreatestbooks.org`, matching the address
-   already used elsewhere in this runbook and in `deployment/ENV.md`'s example `.env` block). Add
-   the CNAME records SendGrid gives you to that domain's DNS and wait for SendGrid to show the
-   domain as verified — this can take up to the DNS provider's own propagation time, not just a few
+2. **Confirm the sending domain is authenticated.** Settings → Sender Authentication → Authenticate
+   Your Domain, for the domain `MAIL_FROM_ADDRESS` sends from — `thegreatestbooks.org`. This was
+   already done for the legacy site, so the expected outcome here is simply seeing it listed as
+   **verified**. If it is, move on. If a future change ever sends from a *different* domain, that
+   domain needs its own authentication: add the CNAME records SendGrid gives you to its DNS and wait
+   for SendGrid to show it verified — up to the DNS provider's own propagation time, not just a few
    minutes.
 
-   **This step is not optional, and skipping it fails silently.** An unauthenticated sending domain
-   doesn't bounce or error — SendGrid still accepts and sends the message, but SPF/DKIM checks fail
-   on the receiving side and the message lands in spam. `bin/rails mail:smoke` (below) would print
-   "Sent," and nothing about the app's own behavior would say anything was wrong.
+   **Two different failures live here, and they look nothing alike.** If the `From` address has no
+   verified Sender Identity at all — neither domain authentication nor Single Sender Verification —
+   SendGrid **rejects** the send outright rather than accepting it, so `bin/rails mail:smoke` fails
+   in the terminal with an SMTP error naming the unverified sender. That one is loud and easy.
+
+   The quiet one is the near-miss: a sender that *is* verified, but whose domain authentication is
+   incomplete or whose DNS records have not fully propagated. SendGrid accepts and sends those, but
+   SPF/DKIM alignment is weak on the receiving side and the message is likely to be filed as spam.
+   Nothing in the app's own behaviour reports this — `mail:smoke` prints "Sent" either way.
 3. **Set the three ENV vars in production**, via SOPS:
 
    ```bash
@@ -376,7 +397,7 @@ something already configured.
 
    ```
    SENDGRID_API_KEY=SG.your_sendgrid_api_key_here
-   MAIL_FROM_ADDRESS=noreply@thegreatestbooks.org
+   MAIL_FROM_ADDRESS=contact@thegreatestbooks.org
    ADMIN_NOTIFICATION_EMAIL=you@example.com
    ```
 
@@ -396,11 +417,13 @@ something already configured.
    variables above is still unset.
 
 **Verify:** the email actually arrives at `ADMIN_NOTIFICATION_EMAIL` — **check the spam folder, not
-just the inbox.** Because an unauthenticated sending domain (step 2, skipped or not yet propagated)
-delivers to spam rather than failing outright, "the task printed `Sent`" is not proof the domain
-authentication is working; only a delivered message in the inbox is. If it lands in spam, re-check
-that the domain shows as verified in SendGrid's Sender Authentication screen before assuming
-anything on the app's side is wrong.
+just the inbox.** A completely unverified sender would have failed the task outright with an SMTP
+rejection, so reaching this point means the sender is verified. What "the task printed `Sent`" does
+*not* prove is placement: if domain authentication is incomplete or its DNS has not fully
+propagated, SendGrid still sends and the message is filed as spam. Only a message delivered to the
+inbox proves the authentication is doing its job. If it lands in spam, re-check that the domain
+shows as verified in SendGrid's Sender Authentication screen before assuming anything on the app's
+side is wrong.
 
 **What this step does NOT prove.** `mail:smoke` uses `deliver_now`, so it exercises SMTP and domain
 authentication only — the message never touches ActiveJob or Sidekiq. Increment 8's membership
