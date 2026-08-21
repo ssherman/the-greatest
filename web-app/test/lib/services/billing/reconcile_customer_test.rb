@@ -346,6 +346,24 @@ module Services
         assert_not transition.became_canceled?
         assert_equal original, comped.reload.attributes.slice("status", "current_period_end", "note")
       end
+
+      # The account-wide migration produced already-cancelled memberships in
+      # bulk. Without the `!previous_status.nil?` clause in became_canceled?,
+      # every one of those brand-new-but-already-cancelled rows would look
+      # like a fresh cancellation and get emailed a cancellation notice for a
+      # subscription they cancelled long ago. previous_status is nil here
+      # specifically because there is no prior membership row -- a random,
+      # never-seen-before subscription id (the stripe_subscription helper's
+      # default) is deliberate, not incidental: it guarantees no row exists to
+      # find.
+      test "a membership that arrives already cancelled is not a cancellation event" do
+        subscription = stripe_subscription(status: "canceled")
+
+        transition = reconcile_and_transition(subscription)
+
+        assert_nil transition.previous_status
+        assert_not transition.became_canceled?
+      end
     end
   end
 end
