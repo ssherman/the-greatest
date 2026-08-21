@@ -2,7 +2,9 @@
 
 <div class="flex items-center justify-between mb-6">
   <h1 class="text-2xl font-bold">News Topics</h1>
-  <%= link_to "New Topic", new_news_topic_path_for, class: "btn btn-primary" %>
+  <% if current_user_can_write? %>
+    <%= link_to "New Topic", new_news_topic_path_for, class: "btn btn-primary" %>
+  <% end %>
 </div>
 
 <div class="card bg-base-100 shadow-xl">
@@ -25,7 +27,16 @@
                 <td class="font-mono text-sm"><%= topic.slug %></td>
                 <td><%= topic.news_posts.size %></td>
                 <td class="text-right">
-                  <%= link_to "Edit", edit_news_topic_path_for(topic), class: "btn btn-sm btn-ghost" %>
+                  <div class="flex items-center justify-end gap-1">
+                    <% if current_user_can_write? %>
+                      <%= link_to "Edit", edit_news_topic_path_for(topic), class: "btn btn-sm btn-ghost" %>
+                    <% end %>
+                    <% if current_user_can_delete? %>
+                      <%= button_to "Delete", news_topic_path_for(topic), method: :delete,
+                            class: "btn btn-sm btn-outline btn-error",
+                            form: {class: "inline", data: {turbo_confirm: "Delete “#{topic.name}”? This cannot be undone."}} %>
+                    <% end %>
+                  </div>
                 </td>
               </tr>
             <% end %>

@@ -358,6 +358,110 @@ module Admin
         assert_response :success
         assert_includes response.body, "![cover.png]("
       end
+
+      # Defect 1 (task-13b-brief.md): _form.html.erb guarded the share_image
+      # preview on `attached?`, which is true for a pending, unsaved
+      # attachment. On a validation failure the view then called url_for on a
+      # variant of a blob with no id, raising instead of re-rendering the
+      # form. Measured before the fix:
+      #   ActionView::Template::Error: Cannot get a signed_id for a new record
+      test "create re-renders the form instead of raising when an invalid submission carries a share image" do
+        post admin_books_news_posts_path, params: {
+          news_post: {
+            title: "", body: "x",
+            share_image: fixture_file_upload("test_image.png", "image/png")
+          }
+        }
+
+        assert_response :unprocessable_entity
+      end
+
+      test "update re-renders the form instead of raising when a replacement share image fails validation on a post that already has one" do
+        post_record = news_posts(:books_december_update)
+        post_record.share_image.attach(io: File.open(file_fixture("test_image.png")), filename: "existing.png")
+
+        patch admin_books_news_post_path(post_record), params: {
+          news_post: {
+            title: "", body: post_record.body,
+            share_image: fixture_file_upload("test_image.png", "image/png")
+          }
+        }
+
+        assert_response :unprocessable_entity
+      end
+
+      # Defect 2 (task-13b-brief.md): update called attach_body_images BEFORE
+      # @news_post.update(news_post_params). At that point the record is
+      # freshly loaded with no dirty attributes, so
+      # has_many_attached#attach's "persisted and unchanged" branch saves the
+      # attachment immediately -- ahead of, and regardless of, the validated
+      # save that follows. Measured before the fix:
+      #   status=422  images_before=0  images_after=1  title="December Update"
+      # The status alone does not catch this -- assert the count.
+      test "update rejects an invalid submission without persisting the uploaded body image" do
+        post_record = news_posts(:books_december_update)
+        images_before = post_record.body_images.count
+
+        patch admin_books_news_post_path(post_record), params: {
+          news_post: {
+            title: "", body: post_record.body,
+            body_images: [fixture_file_upload("test_image.png", "image/png")]
+          }
+        }
+
+        assert_response :unprocessable_entity
+        assert_equal images_before, post_record.reload.body_images.count
+      end
+
+      # Defect 3: destroy is implemented, routed and tested, but no view
+      # renders a control that hits it.
+      test "index renders a delete control for a user who can delete" do
+        get admin_books_news_posts_path
+
+        assert_select "form[action=?]", admin_books_news_post_path(news_posts(:books_december_update))
+      end
+
+      test "index hides the delete control for a domain user without delete access" do
+        regular_user = users(:regular_user)
+        regular_user.domain_roles.create!(domain: :books, permission_level: :viewer)
+        sign_in_as(regular_user, stub_auth: true)
+
+        get admin_books_news_posts_path
+
+        assert_select "form[action=?]", admin_books_news_post_path(news_posts(:books_december_update)), count: 0
+      end
+
+      # Defect 4: require_domain_write!'s :only list omitted :new and :edit,
+      # so a read-only domain viewer could open the full authoring form.
+      test "new redirects a domain user without write access" do
+        regular_user = users(:regular_user)
+        regular_user.domain_roles.create!(domain: :books, permission_level: :viewer)
+        sign_in_as(regular_user, stub_auth: true)
+
+        get new_admin_books_news_post_path
+
+        assert_redirected_to books_root_path
+      end
+
+      test "edit redirects a domain user without write access" do
+        regular_user = users(:regular_user)
+        regular_user.domain_roles.create!(domain: :books, permission_level: :viewer)
+        sign_in_as(regular_user, stub_auth: true)
+
+        get edit_admin_books_news_post_path(news_posts(:books_december_update))
+
+        assert_redirected_to books_root_path
+      end
+
+      test "index does not render the New Post link for a domain user without write access" do
+        regular_user = users(:regular_user)
+        regular_user.domain_roles.create!(domain: :books, permission_level: :viewer)
+        sign_in_as(regular_user, stub_auth: true)
+
+        get admin_books_news_posts_path
+
+        assert_select "a", text: "New Post", count: 0
+      end
     end
   end
 end

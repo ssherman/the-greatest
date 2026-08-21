@@ -7,7 +7,7 @@
 # names: a private method named admin_books_news_topics_path would shadow the
 # real helper in the views this controller renders.
 class Admin::NewsTopicsBaseController < Admin::BaseController
-  before_action :require_domain_write!, only: [:create, :update, :destroy]
+  before_action :require_domain_write!, only: [:new, :create, :edit, :update, :destroy]
   before_action :set_news_topic, only: [:edit, :update, :destroy]
 
   helper_method :news_topics_path_for, :news_topic_path_for, :new_news_topic_path_for,

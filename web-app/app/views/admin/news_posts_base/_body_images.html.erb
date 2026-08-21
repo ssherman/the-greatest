@@ -1,6 +1,13 @@
-<% if news_post.persisted? && news_post.body_images.attached? %>
+<%# Same underlying hazard as the share_image guard in _form.html.erb: after a
+    validation failure on update, a freshly-uploaded body image sits as a
+    pending, unsaved attachment -- unlike share_image's has_one, a has_many
+    pending change does not shadow the existing ones, so filtering to
+    persisted? here keeps the already-saved images visible and simply skips
+    the one that did not make it in, rather than raising trying to render it. %>
+<% persisted_images = news_post.persisted? ? news_post.body_images.select(&:persisted?) : [] %>
+<% if persisted_images.any? %>
   <div class="mt-4 space-y-2">
-    <% news_post.body_images.each do |image| %>
+    <% persisted_images.each do |image| %>
       <div class="flex items-center gap-3 p-2 border border-base-300 rounded-box" data-controller="clipboard-copy">
         <%= image_tag url_for(image), class: "w-16 h-16 object-cover rounded" %>
         <div class="flex-1 min-w-0">

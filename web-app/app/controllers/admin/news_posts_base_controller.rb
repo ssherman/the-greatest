@@ -11,7 +11,7 @@ class Admin::NewsPostsBaseController < Admin::BaseController
   # Verified against this app: listing an action here before the controller
   # defines it 404s every other action too. Any future action must be added to
   # these lists at the same time it is defined below.
-  before_action :require_domain_write!, only: [:create, :update, :destroy, :preview]
+  before_action :require_domain_write!, only: [:new, :create, :edit, :update, :destroy, :preview]
   before_action :set_news_post, only: [:show, :edit, :update, :destroy]
 
   helper_method :news_posts_path_for, :news_post_path_for, :new_news_post_path_for,
@@ -39,6 +39,10 @@ class Admin::NewsPostsBaseController < Admin::BaseController
     @news_post = NewsPost.new(news_post_params)
     @news_post.domain = news_domain
     @news_post.user = current_user
+    # Does NOT share update's ordering bug: has_many_attached#attach only
+    # saves eagerly for a persisted record (`record.persisted? && !record.changed?`);
+    # @news_post here is a NEW record, so that branch never runs and the
+    # attachment always waits for the @news_post.save below, valid or not.
     attach_body_images
 
     if @news_post.save
@@ -52,9 +56,18 @@ class Admin::NewsPostsBaseController < Admin::BaseController
   end
 
   def update
+    # assign_attributes before attach_body_images, one save after both: calling
+    # attach_body_images on a persisted, NOT-YET-dirtied record makes
+    # has_many_attached#attach save the attachment immediately (Rails saves
+    # eagerly for a persisted, unchanged record), ahead of and regardless of
+    # whether news_post_params turns out to be valid. Assigning first dirties
+    # the record, so attach only queues the change, and the one @news_post.save
+    # below either persists attributes and attachment together or persists
+    # neither.
+    @news_post.assign_attributes(news_post_params)
     attach_body_images
 
-    if @news_post.update(news_post_params)
+    if @news_post.save
       redirect_to news_post_path_for(@news_post), notice: "Post updated."
     else
       render :edit, status: :unprocessable_entity

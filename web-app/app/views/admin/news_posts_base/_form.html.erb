@@ -108,7 +108,18 @@
           Shown when someone posts a link to this article on social media. Wide images work
           best — around 1200 by 630 pixels.
         </p>
-        <% if @news_post.share_image.attached? %>
+        <%# attached? is true for a pending, unsaved attachment too (assigned
+            via params on a record that then failed validation) -- its blob
+            has no id yet, so url_for/variant raise "Cannot get a signed_id
+            for a new record". persisted? excludes that case. On a failed
+            update where a replacement was uploaded, this also means the
+            still-good previous image is not shown for that one re-render:
+            the pending replacement shadows it (Attached::One#attachment
+            resolves to the pending change, not the DB row) and reaching
+            behind that proxy for the old attachment is more machinery than
+            this preview is worth. The upload was rejected, not lost -- the
+            saved image is intact and reappears once the form is reloaded. %>
+        <% if @news_post.share_image.attached? && @news_post.share_image.persisted? %>
           <div class="mb-2">
             <%= image_tag @news_post.share_image.variant(:card), class: "max-w-xs rounded-box" %>
           </div>
