@@ -413,6 +413,37 @@ module Admin
         assert_equal images_before, post_record.reload.body_images.count
       end
 
+      # Fix round 1 finding: the fix above works today, but only because it
+      # relies on assign_attributes leaving the record dirty whenever the
+      # submission is invalid -- true only because NewsPost currently
+      # validates presence on title/body alone. A plain HTTP-level test
+      # cannot construct "invalid but not dirtying title/body" against
+      # today's validations, so it cannot distinguish "checks valid? before
+      # attaching" from "happens to skip the eager-attach save because
+      # assign_attributes left the record dirty." Forcing valid? to false
+      # via a stub, independent of what was actually submitted, stands in
+      # for a hypothetical future validation (e.g. body_images content-type)
+      # that would NOT dirty any column and so would NOT be caught by a
+      # changed?-based ordering. This pins the actual guarantee: attach is
+      # never reached once the record is known invalid, regardless of why.
+      test "update never attempts to attach body images once the record is known invalid, independent of which validation trips (pinned via stub)" do
+        post_record = news_posts(:books_december_update)
+        images_before = post_record.body_images.count
+
+        NewsPost.any_instance.stubs(:valid?).returns(false)
+        ActiveStorage::Attached::Many.any_instance.expects(:attach).never
+
+        patch admin_books_news_post_path(post_record), params: {
+          news_post: {
+            title: post_record.title, body: post_record.body,
+            body_images: [fixture_file_upload("test_image.png", "image/png")]
+          }
+        }
+
+        assert_response :unprocessable_entity
+        assert_equal images_before, post_record.reload.body_images.count
+      end
+
       # Defect 3: destroy is implemented, routed and tested, but no view
       # renders a control that hits it.
       test "index renders a delete control for a user who can delete" do

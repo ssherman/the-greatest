@@ -56,16 +56,21 @@ class Admin::NewsPostsBaseController < Admin::BaseController
   end
 
   def update
-    # assign_attributes before attach_body_images, one save after both: calling
-    # attach_body_images on a persisted, NOT-YET-dirtied record makes
-    # has_many_attached#attach save the attachment immediately (Rails saves
-    # eagerly for a persisted, unchanged record), ahead of and regardless of
-    # whether news_post_params turns out to be valid. Assigning first dirties
-    # the record, so attach only queues the change, and the one @news_post.save
-    # below either persists attributes and attachment together or persists
-    # neither.
+    # assign_attributes, THEN check valid? BEFORE attach_body_images, and only
+    # attach once known valid: has_many_attached#attach saves eagerly for a
+    # persisted, unchanged record (`record.persisted? && !record.changed?`).
+    # An earlier version of this method relied on assign_attributes always
+    # leaving the record dirty when news_post_params was invalid -- true only
+    # because NewsPost currently validates presence on title/body alone, so
+    # any failing submission necessarily changes one of them. That is a
+    # coupling to today's validation set, not a guarantee: a future
+    # content-type or size validation on body_images itself would not dirty
+    # any column, and changed? would stay false regardless of ordering. Gating
+    # attach_body_images on valid? removes the dependency on changed? entirely
+    # -- nothing is ever attached until the assigned record has already been
+    # found valid, no matter which validation is the one that fails.
     @news_post.assign_attributes(news_post_params)
-    attach_body_images
+    attach_body_images if @news_post.valid?
 
     if @news_post.save
       redirect_to news_post_path_for(@news_post), notice: "Post updated."
