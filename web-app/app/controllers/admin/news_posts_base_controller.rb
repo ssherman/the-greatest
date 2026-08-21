@@ -3,18 +3,18 @@
 # mixing in Admin::DomainScopedAuth itself. Mirrors Admin::ReviewsBaseController.
 class Admin::NewsPostsBaseController < Admin::BaseController
   # :only lists here name only the actions this controller implements so far
-  # (index, show) -- NOT the full set the finished controller will eventually
-  # have. This app's test and development environments both set
+  # (index, show, new, create, edit, update, destroy) -- NOT the full set the
+  # finished controller will eventually have (preview is still to come). This
+  # app's test and development environments both set
   # config.action_controller.raise_on_missing_callback_actions = true (Rails
   # 7.1 default), which raises AbstractController::ActionNotFound on EVERY
   # request -- not just a request to the missing action -- the moment a
   # before_action's :only names an action the controller does not define.
-  # Verified against this app: listing :create, :update, :destroy, :preview
-  # and :edit here (as the plan's task text does, since it was written against
-  # the FINISHED controller) 404s index and show too. Later tasks that add
-  # those actions must add their names to these lists at the same time.
-  before_action :require_domain_write!, only: []
-  before_action :set_news_post, only: [:show]
+  # Verified against this app: listing an action here before the controller
+  # defines it 404s every other action too. Later tasks that add more actions
+  # (preview) must add their names to these lists at the same time.
+  before_action :require_domain_write!, only: [:create, :update, :destroy]
+  before_action :set_news_post, only: [:show, :edit, :update, :destroy]
 
   helper_method :news_posts_path_for, :news_post_path_for, :new_news_post_path_for,
     :edit_news_post_path_for, :preview_news_posts_path_for
@@ -33,6 +33,38 @@ class Admin::NewsPostsBaseController < Admin::BaseController
   def show
   end
 
+  def new
+    @news_post = NewsPost.new(domain: news_domain)
+  end
+
+  def create
+    @news_post = NewsPost.new(news_post_params)
+    @news_post.domain = news_domain
+    @news_post.user = current_user
+
+    if @news_post.save
+      redirect_to news_post_path_for(@news_post), notice: "Post created."
+    else
+      render :new, status: :unprocessable_entity
+    end
+  end
+
+  def edit
+  end
+
+  def update
+    if @news_post.update(news_post_params)
+      redirect_to news_post_path_for(@news_post), notice: "Post updated."
+    else
+      render :edit, status: :unprocessable_entity
+    end
+  end
+
+  def destroy
+    @news_post.destroy!
+    redirect_to news_posts_path_for, notice: "Post deleted."
+  end
+
   private
 
   # Always scoped, never a bare NewsPost.find: authenticate_admin! proves access
@@ -42,5 +74,27 @@ class Admin::NewsPostsBaseController < Admin::BaseController
 
   def set_news_post
     @news_post = scope.friendly.find(params[:id])
+  end
+
+  def available_topics = NewsTopic.where(domain: news_domain).sorted_by_name
+  helper_method :available_topics
+
+  def news_post_params
+    permitted = params.require(:news_post).permit(
+      :title, :body, :summary, :published_at, :share_image,
+      news_topic_ids: [], body_images: []
+    )
+
+    # Topic ids arrive from a checkbox list, so a hand-crafted request could
+    # name another domain's topic. Intersect with this domain's own rather
+    # than trusting the submitted ids -- the join carries no domain of its
+    # own to validate against.
+    if permitted.key?(:news_topic_ids)
+      permitted[:news_topic_ids] = available_topics
+        .where(id: permitted[:news_topic_ids].compact_blank)
+        .pluck(:id)
+    end
+
+    permitted
   end
 end

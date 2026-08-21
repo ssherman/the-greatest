@@ -1,0 +1,101 @@
+<%= form_with model: @news_post,
+      url: (@news_post.persisted? ? news_post_path_for(@news_post) : news_posts_path_for),
+      class: "space-y-6" do |f| %>
+  <% if @news_post.errors.any? %>
+    <div class="alert alert-error">
+      <div>
+        <h3 class="font-bold"><%= pluralize(@news_post.errors.count, "error") %> prohibited this post from being saved:</h3>
+        <ul class="list-disc list-inside mt-2">
+          <% @news_post.errors.full_messages.each do |message| %>
+            <li><%= message %></li>
+          <% end %>
+        </ul>
+      </div>
+    </div>
+  <% end %>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body space-y-4">
+      <div>
+        <%= f.label :title, class: "label" do %>
+          <span class="font-semibold">Title <span class="text-error">*</span></span>
+        <% end %>
+        <%= f.text_field :title,
+              class: "input w-full #{"input-error" if @news_post.errors[:title].any?}",
+              required: true, autofocus: true %>
+        <% if @news_post.persisted? %>
+          <p class="text-sm text-base-content/70 mt-1">
+            URL stays <span class="font-mono">/news/<%= @news_post.slug %></span> — retitling does not move it.
+          </p>
+        <% end %>
+      </div>
+
+      <div>
+        <%= f.label :body, class: "label" do %>
+          <span class="font-semibold">Body <span class="text-error">*</span></span>
+        <% end %>
+        <p class="text-sm text-base-content/70 mb-1">
+          Markdown. <code>**bold**</code>, <code>_italic_</code>, <code>[text](url)</code>,
+          <code>- bullets</code>, <code>## Heading</code>. Headings are shown one level
+          smaller than you write them, because the post title is already the page heading.
+        </p>
+        <%= f.text_area :body,
+              rows: 20,
+              class: "textarea w-full font-mono #{"textarea-error" if @news_post.errors[:body].any?}",
+              required: true %>
+      </div>
+
+      <div>
+        <%= f.label :summary, class: "label" do %>
+          <span class="font-semibold">Summary</span>
+        <% end %>
+        <p class="text-sm text-base-content/70 mb-1">
+          Optional. Shown on the news index, in search results and on shared links.
+          Left empty, the opening of the post is used.
+        </p>
+        <%= f.text_area :summary, rows: 3, class: "textarea w-full" %>
+      </div>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body space-y-4">
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend font-semibold">Topics</legend>
+        <% if available_topics.any? %>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <% available_topics.each do |topic| %>
+              <label class="label cursor-pointer justify-start gap-2">
+                <%= check_box_tag "news_post[news_topic_ids][]", topic.id,
+                      @news_post.news_topic_ids.include?(topic.id),
+                      id: "news_post_news_topic_ids_#{topic.id}",
+                      class: "checkbox" %>
+                <span><%= topic.name %></span>
+              </label>
+            <% end %>
+          </div>
+        <% else %>
+          <p class="text-base-content/70">No topics yet. Create one first.</p>
+        <% end %>
+        <%# Ensures an all-unticked submission clears the topics rather than
+            omitting the key entirely. %>
+        <%= hidden_field_tag "news_post[news_topic_ids][]", "" %>
+      </fieldset>
+
+      <div>
+        <%= f.label :published_at, class: "label" do %>
+          <span class="font-semibold">Publish date</span>
+        <% end %>
+        <p class="text-sm text-base-content/70 mb-1">
+          Leave empty to keep this a draft. A draft is not reachable at its public URL.
+        </p>
+        <%= f.datetime_field :published_at, class: "input w-full" %>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex gap-2">
+    <%= f.submit(@news_post.persisted? ? "Save Post" : "Create Post", class: "btn btn-primary") %>
+    <%= link_to "Cancel", news_posts_path_for, class: "btn btn-ghost" %>
+  </div>
+<% end %>
