@@ -105,6 +105,7 @@ All measured on 2026-08-19 in this worktree. Do not re-derive; do not contradict
 | `app/javascript/controllers/admin/markdown_preview_controller.js` | debounced preview refresh |
 | `app/lib/admin/domain_nav.rb` (modify) | "News" sidebar entry |
 | `config/routes.rb` (modify) | books admin routes |
+| `e2e/tests/books/admin/news.spec.ts` | Playwright for the admin flows — **deferred to Task 17b**, added after increment 3 shipped without it |
 
 **Increment 4 — books public**
 
@@ -3723,6 +3724,81 @@ Note this in the PR description. Do not run it yourself without asking.
 ---
 
 # Increment 5 — RSS
+
+### Task 17b: Playwright E2E for the books news admin
+
+Added after increment 3 shipped. An automated reviewer on PR #242 flagged that the admin screens
+introduced in Tasks 9-13 have **no** Playwright coverage, and that Task 17's spec is entirely
+public-facing — index, card links, Open Graph, legacy redirect. Checking Task 17 rather than assuming
+it covered admin confirmed the gap: nothing in this plan gives the admin flows E2E coverage.
+
+This matters more than usual here because the controller tests cannot see the parts most likely to
+break: the Stimulus-driven live Markdown preview, the clipboard copy button on body images, and the
+`turbo_confirm` on the delete controls. A defect in exactly that layer already shipped and was caught
+only by review — the body-image Copy button was wired with a `data-clipboard-copy-value` attribute
+that the real Stimulus controller never reads, so it silently did nothing, with no test failing.
+
+**Files:**
+- Create: `e2e/tests/books/admin/news.spec.ts`
+
+**Interfaces:**
+- Consumes: the running dev server on the books host, and the saved admin `storageState`.
+- Produces: nothing consumed by later tasks.
+
+- [ ] **Step 1: Confirm what is actually serving port 3000**
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000/admin/news_posts -H "Host: dev-new.thegreatestbooks.org"
+```
+A worktree isolates files only — port 3000 may be serving a **different** worktree, which silently
+invalidates every E2E result. If it is not this branch, start this one with `yarn build:all` +
+`bin/rails server` (not `bin/dev` — foreman self-terminates without a TTY).
+
+If admin specs time out on the public homepage, the e2e admin user has lost its role. Fix with
+`bin/rails e2e:admin`.
+
+- [ ] **Step 2: Read the existing admin specs before writing anything**
+
+`e2e/tests/games/admin/lists-crud.spec.ts` is the closest precedent — an admin CRUD flow end to end.
+`e2e/tests/books/admin/categories.spec.ts` and `e2e/tests/books/admin/sidebar-nav.spec.ts` show the
+books-side conventions and how admin auth is picked up from `storageState`
+(`e2e/auth/books-auth.setup.ts`). Follow those; do not invent a new harness.
+
+- [ ] **Step 3: Write the spec**
+
+Cover, at minimum:
+
+1. The sidebar shows **News** and **News Topics**, and each navigates to its index.
+2. Creating a topic from the form, and seeing it listed.
+3. Creating a post with a title, body and at least one topic, then seeing it on the index.
+4. **The live Markdown preview updates** — type Markdown into the body field and assert the preview
+   panel renders the corresponding HTML. This is the single highest-value assertion in the file: it
+   is the only automated check that the Stimulus controller, the debounce, the turbo-stream response
+   and `BodyRenderer` are all wired to each other.
+5. Editing a post and seeing the change persist.
+6. Deleting a post through the delete control, including the confirmation dialog.
+7. A draft (no publish date) is visible in the admin list and marked as a draft **in words**, not by
+   colour alone.
+
+Add `data-testid` (kebab-case) only where role, text or label genuinely cannot target an element.
+
+- [ ] **Step 4: Run the specs**
+
+```bash
+yarn test:e2e
+```
+
+CI does **not** run Playwright, so these are a local gate only. A spec that fails here is still a
+real failure — do not skip it.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add e2e/tests/books/admin/news.spec.ts
+git commit -m "test(news): add Playwright coverage for the books news admin"
+```
+
+---
 
 ### Task 18: RSS feed
 
