@@ -43,32 +43,69 @@ endpoint after enough retries. Confirm before doing anything below:
 If any of these fail, stop. Fix the legacy deploy before touching anything below — everything from
 here on makes this app start selling on the shared account.
 
-## 1. Cloudflare: exclude `/webhooks/stripe` from managed challenges
+## 1. Cloudflare: check whether `/webhooks/stripe` is challenged (today: it is not)
 
-Do this **before** registering any webhook endpoint (step 2) — otherwise the endpoint's own
-"Send test webhook" check fails on Cloudflare, not on the app, and looks like a signature problem
-when it isn't one.
+**No action is needed on `thegreatestmusic.org` or `thegreatest.games` as things stand.** Verified
+against production on 2026-08-19 — see the check below. Read this section anyway: it tells you the
+one change that will silently break webhook delivery later.
 
-Both production hosts sit behind Cloudflare. A managed challenge (or any interactive challenge)
-answers a POST with a bare `403` — not JSON, not anything Stripe's client library retries past —
-and Stripe records that as a failed delivery indistinguishable from a real outage.
+A managed challenge answers a POST with a bare `403` — not JSON, not anything Stripe's client
+retries past — and Stripe records it as a failed delivery indistinguishable from a real outage.
+That is worth guarding against, but only where something is actually challenging.
 
-In the Cloudflare dashboard, for **both** `thegreatestmusic.org` and `thegreatest.games`:
+**Why the three zones differ.** `thegreatestbooks.org` is on a **paid** Cloudflare plan, so the
+full managed WAF is deployed to it (OWASP Core, Exposed Credentials Check, Cloudflare Managed
+Ruleset). That is why it carries a skip rule — `(http.request.uri.path wildcard "/webhooks/*")`,
+action `skip`, in its `http_request_firewall_managed` entrypoint ruleset — for legacy's webhook.
 
-1. Security → WAF → Custom rules (or the equivalent "Configuration Rules" / bot-fight-mode
-   exception surface, depending on what's already active on the zone).
-2. Add a rule matching the path `/webhooks/stripe`, action **Skip** — skip managed challenge, skip
-   bot fight mode, skip rate limiting. Stripe's servers are not a browser and cannot solve a
-   challenge; they also don't need this app's own rate limiting, since the webhook endpoint is
-   deliberately unthrottled (`MembershipController`'s `rate_limit` calls are scoped to
-   `:checkout`/`:donate`/`:portal`/`:thanks`, never to the webhook controller — throttling Stripe's
-   deliveries would just mean dropping legitimate events).
-3. Repeat for the second hostname. Cloudflare rules are per-zone; there is no shared rule across
-   the two domains.
+`thegreatestmusic.org` and `thegreatest.games` are on **free** plans. They have only the
+Cloudflare Managed Free Ruleset available and **no `http_request_firewall_managed` entrypoint
+ruleset at all** (the API returns `10003: could not find entrypoint ruleset in the
+http_request_firewall_managed phase`). There is nothing there to skip, and a books-style rule
+cannot even be created on those zones — the ruleset id in the books rule is zone-specific and does
+not exist elsewhere.
 
-**Verify:** this step has no test webhook of its own to check yet — the endpoints don't exist
-until step 2 — so its real verification happens there. Come back here if step 2's "Send test
-webhook" check comes back `403` instead of `200`.
+**The check, which needs nothing but curl.** An unsigned POST should be rejected by *Rails*, not by
+Cloudflare:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" -X POST https://thegreatestmusic.org/webhooks/stripe \
+  -H "Content-Type: application/json" -H "Stripe-Signature: t=1,v1=probe" -d '{"probe":true}'
+```
+
+- **`400` with an empty body** — correct. That is `Webhooks::StripeController` returning
+  `head :bad_request` after signature verification fails. The request reached the app; Cloudflare
+  is not in the way. (A `503` means the app is up but `STRIPE_WEBHOOK_SECRET` is unset — also a
+  Rails response, also fine for this check.)
+- **`403` with an HTML body** — Cloudflare challenged it. Add a skip rule, then re-run this check.
+
+Both hosts returned `400` on 2026-08-19.
+
+### The thing that will change this: upgrading music or games to a paid plan
+
+**A Pro upgrade deploys the managed WAF rulesets to that zone**, which is the same configuration
+that made the skip rule necessary on books. Webhook deliveries can start returning `403` some time
+after an upgrade, with nothing in the Stripe or app logs connecting the failure to a billing-plan
+change made weeks earlier.
+
+**If you upgrade either zone, re-run the check above before assuming anything still works.** If it
+returns `403`:
+
+- On a **paid** zone, mirror the books rule: a rule with action `skip` and
+  `action_parameters: {"ruleset": "current"}` in that zone's `http_request_firewall_managed`
+  entrypoint. Fetch the zone's own entrypoint id first
+  (`GET /zones/{zone}/rulesets/phases/http_request_firewall_managed/entrypoint`) — **do not reuse
+  the id from the books rule**, which is specific to that zone.
+- Scope the expression to `(http.request.uri.path eq "/webhooks/stripe")` rather than books'
+  `/webhooks/*`. This app has exactly one webhook route, and one guarded by signature verification
+  at that; a narrower skip is less to reason about later.
+- If the challenge turns out to come from Bot Fight Mode or Security Level rather than the managed
+  WAF, the skip belongs in the `http_request_firewall_custom` phase instead, with the relevant
+  products named in `action_parameters.products` — `skip` with `ruleset: current` only skips the
+  managed ruleset.
+
+Whatever you change, the verification is the same: the curl above, or step 2's "Send test webhook"
+returning `200`.
 
 ## 2. Register the two webhook endpoints
 
@@ -307,7 +344,73 @@ since you first confirmed them:
   "no resolvable user" — see legacy's `docs/features/stripe_coexistence_guard.md` for the full
   classification table).
 
-## 8. Post-deploy verification
+## 8. SendGrid: sending domain and API key
+
+Membership emails (increment 5 of the spec, `docs/features/email.md`) go out through SendGrid.
+This app never had a mail account before this branch — none of the steps below are a re-check of
+something already configured.
+
+1. **Create the API key.** In the SendGrid dashboard: Settings → API Keys → Create API Key. Give it
+   **Restricted Access** with **Mail Send** permission only — nothing else. This key becomes the
+   SMTP password `MailDeliverySettings.sendgrid_smtp` (`app/lib/mail_delivery_settings.rb`) sends on
+   every outbound connection; a key with any broader scope is unnecessary risk for no benefit, since
+   nothing in this app ever calls another SendGrid API.
+2. **Authenticate the sending domain.** Settings → Sender Authentication → Authenticate Your Domain,
+   for the domain `MAIL_FROM_ADDRESS` will send from (`thegreatestbooks.org`, matching the address
+   already used elsewhere in this runbook and in `deployment/ENV.md`'s example `.env` block). Add
+   the CNAME records SendGrid gives you to that domain's DNS and wait for SendGrid to show the
+   domain as verified — this can take up to the DNS provider's own propagation time, not just a few
+   minutes.
+
+   **This step is not optional, and skipping it fails silently.** An unauthenticated sending domain
+   doesn't bounce or error — SendGrid still accepts and sends the message, but SPF/DKIM checks fail
+   on the receiving side and the message lands in spam. `bin/rails mail:smoke` (below) would print
+   "Sent," and nothing about the app's own behavior would say anything was wrong.
+3. **Set the three ENV vars in production**, via SOPS:
+
+   ```bash
+   SOPS_AGE_KEY_FILE=~/.config/sops/age/production.txt sops secrets/.env.production
+   ```
+
+   Add or update:
+
+   ```
+   SENDGRID_API_KEY=SG.your_sendgrid_api_key_here
+   MAIL_FROM_ADDRESS=noreply@thegreatestbooks.org
+   ADMIN_NOTIFICATION_EMAIL=you@example.com
+   ```
+
+   Save and exit — SOPS re-encrypts on write. Commit `secrets/.env.production` and deploy. See
+   `deployment/ENV.md`'s "Email Configuration" section for what each variable does and what breaks
+   without it, and `deployment/SECRETS.md` for the SOPS workflow in full.
+4. **Run the smoke test on the production host**, once the deploy carrying `SENDGRID_API_KEY` is
+   live:
+
+   ```bash
+   bin/rails mail:smoke
+   ```
+
+   This calls `SystemMailer.smoke_test(...).deliver_now` (not `deliver_later` — the point is to see
+   a failure in this terminal, not in a Sidekiq retry). It prints `Sent a books smoke test to
+   <ADMIN_NOTIFICATION_EMAIL> via smtp.` on success, or aborts immediately if any of the three
+   variables above is still unset.
+
+**Verify:** the email actually arrives at `ADMIN_NOTIFICATION_EMAIL` — **check the spam folder, not
+just the inbox.** Because an unauthenticated sending domain (step 2, skipped or not yet propagated)
+delivers to spam rather than failing outright, "the task printed `Sent`" is not proof the domain
+authentication is working; only a delivered message in the inbox is. If it lands in spam, re-check
+that the domain shows as verified in SendGrid's Sender Authentication screen before assuming
+anything on the app's side is wrong.
+
+**What this step does NOT prove.** `mail:smoke` uses `deliver_now`, so it exercises SMTP and domain
+authentication only — the message never touches ActiveJob or Sidekiq. Increment 8's membership
+emails send with `deliver_later`, which additionally requires a Sidekiq worker running and consuming
+the `default` queue. A green smoke test with a stopped worker means real membership emails enqueue,
+report success, and are never delivered. Before relying on queued mail, confirm the worker container
+is up and processing `default` (`config/sidekiq.yml` lists `critical` and `default`), and check the
+Sidekiq web UI for a growing `default` backlog.
+
+## 9. Post-deploy verification
 
 After the app is deployed with `STRIPE_LIVEMODE=true`, the live `STRIPE_SECRET_KEY`, and the
 comma-separated `STRIPE_WEBHOOK_SECRET` from step 2:
@@ -320,7 +423,7 @@ comma-separated `STRIPE_WEBHOOK_SECRET` from step 2:
 | Legacy's `/admin/webhook_events` | The same events show `status: ignored`, with the `origin_app` reason from legacy's guard classifier. If they show anything else (`processed`, or an error), the legacy guard isn't doing its job and this app's traffic is leaking into legacy's data. |
 | `bin/rails billing:verify_migration` | Still reports `All invariants hold.` — a new live sale should never regress the legacy migration invariants; if it does, something is attaching new-app subscriptions to legacy-migrated rows incorrectly. |
 
-## 9. Rollback
+## 10. Rollback
 
 If something is wrong after the endpoints go live:
 

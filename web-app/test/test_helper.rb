@@ -29,6 +29,14 @@ module ActiveSupport
     end
 
     # Add more helper methods to be used by all tests here...
+
+    def with_env(vars)
+      original = vars.keys.index_with { |key| ENV[key] }
+      vars.each { |key, value| ENV[key] = value }
+      yield
+    ensure
+      original.each { |key, value| ENV[key] = value }
+    end
   end
 end
 
