@@ -54,6 +54,32 @@ module Admin
         end
       end
 
+      test "edit refuses another domain's topic" do
+        get edit_admin_books_news_topic_path(news_topics(:music_site_news))
+
+        assert_response :not_found
+      end
+
+      test "update refuses another domain's topic and leaves it unchanged" do
+        topic = news_topics(:music_site_news)
+
+        patch admin_books_news_topic_path(topic), params: {news_topic: {name: "Hijacked"}}
+
+        assert_response :not_found
+        assert_equal "Site News", topic.reload.name
+      end
+
+      test "destroy refuses another domain's topic and does not remove it" do
+        topic = news_topics(:music_site_news)
+
+        assert_no_difference -> { NewsTopic.count } do
+          delete admin_books_news_topic_path(topic)
+        end
+
+        assert_response :not_found
+        assert NewsTopic.exists?(topic.id)
+      end
+
       test "a signed-out visitor is turned away" do
         reset!
         host! "dev-new.thegreatestbooks.org"
