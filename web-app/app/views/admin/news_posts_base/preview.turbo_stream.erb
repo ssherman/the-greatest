@@ -1,0 +1,9 @@
+<%= turbo_stream.replace "news_post_preview" do %>
+  <div id="news_post_preview" class="prose max-w-none [overflow-wrap:anywhere]">
+    <% if @preview_html.blank? %>
+      <p class="text-base-content/70">Nothing to preview yet.</p>
+    <% else %>
+      <%= @preview_html %>
+    <% end %>
+  </div>
+<% end %>

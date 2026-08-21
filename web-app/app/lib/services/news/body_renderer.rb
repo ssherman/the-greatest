@@ -31,7 +31,12 @@ module Services
       HEADING_SELECTOR = "h1,h2,h3,h4,h5,h6".freeze
 
       COMMONMARKER_OPTIONS = {
-        render: {unsafe: false},
+        # hardbreaks: true is commonmarker's own default, pinned here
+        # deliberately rather than inherited. It makes a single newline inside
+        # a paragraph render as <br>, which is what an author typing in the
+        # admin textarea expects from pressing Enter once. A gem upgrade that
+        # flipped the default would otherwise reflow every post body silently.
+        render: {unsafe: false, hardbreaks: true},
         # header_ids: nil suppresses commonmarker's default anchor injection.
         # With it on, every heading gets <a href="#slug" class="anchor"></a>;
         # the sanitizer drops class but keeps href, leaving an empty link

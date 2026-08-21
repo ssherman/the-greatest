@@ -1,0 +1,160 @@
+<%= form_with model: @news_post,
+      url: (@news_post.persisted? ? news_post_path_for(@news_post) : news_posts_path_for),
+      class: "space-y-6" do |f| %>
+  <% if @news_post.errors.any? %>
+    <div class="alert alert-error">
+      <div>
+        <h3 class="font-bold"><%= pluralize(@news_post.errors.count, "error") %> prohibited this post from being saved:</h3>
+        <ul class="list-disc list-inside mt-2">
+          <% @news_post.errors.full_messages.each do |message| %>
+            <li><%= message %></li>
+          <% end %>
+        </ul>
+      </div>
+    </div>
+  <% end %>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body space-y-4">
+      <div>
+        <%= f.label :title, class: "label" do %>
+          <span class="font-semibold">Title <span class="text-error">*</span></span>
+        <% end %>
+        <%= f.text_field :title,
+              class: "input w-full #{"input-error" if @news_post.errors[:title].any?}",
+              required: true, autofocus: true %>
+        <% if @news_post.persisted? %>
+          <p class="text-sm text-base-content/70 mt-1">
+            URL stays <span class="font-mono">/news/<%= @news_post.slug %></span> — retitling does not move it.
+          </p>
+        <% end %>
+      </div>
+
+      <div data-controller="admin--markdown-preview"
+           data-admin--markdown-preview-url-value="<%= preview_news_posts_path_for %>"
+           data-admin--markdown-preview-delay-value="400">
+        <%= f.label :body, class: "label" do %>
+          <span class="font-semibold">Body <span class="text-error">*</span></span>
+        <% end %>
+        <p class="text-sm text-base-content/70 mb-1">
+          Markdown. <code>**bold**</code>, <code>_italic_</code>, <code>[text](url)</code>,
+          <code>- bullets</code>, <code>## Heading</code>. Headings are shown one level
+          smaller than you write them, because the post title is already the page heading.
+        </p>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <%= f.text_area :body,
+                rows: 20,
+                class: "textarea w-full font-mono #{"textarea-error" if @news_post.errors[:body].any?}",
+                required: true,
+                data: {
+                  admin__markdown_preview_target: "source",
+                  action: "input->admin--markdown-preview#schedule"
+                } %>
+
+          <div class="border border-base-300 rounded-box p-4 overflow-y-auto" style="max-height: 32rem;">
+            <div class="text-xs uppercase tracking-wide text-base-content/60 mb-2">Preview</div>
+            <%# NOT a turbo_frame_tag: this is a plain div replaced by a turbo-stream,
+                so there is no frame for links inside the preview to be trapped by. %>
+            <div id="news_post_preview" class="prose max-w-none [overflow-wrap:anywhere]">
+              <%= Services::News::BodyRenderer.call(@news_post.body) %>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <%= f.label :summary, class: "label" do %>
+          <span class="font-semibold">Summary</span>
+        <% end %>
+        <p class="text-sm text-base-content/70 mb-1">
+          Optional. Shown on the news index, in search results and on shared links.
+          Left empty, the opening of the post is used.
+        </p>
+        <%= f.text_area :summary, rows: 3, class: "textarea w-full" %>
+      </div>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body space-y-4">
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend font-semibold">Topics</legend>
+        <% if available_topics.any? %>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <% available_topics.each do |topic| %>
+              <label class="label cursor-pointer justify-start gap-2">
+                <%= check_box_tag "news_post[news_topic_ids][]", topic.id,
+                      @news_post.news_topic_ids.include?(topic.id),
+                      id: "news_post_news_topic_ids_#{topic.id}",
+                      class: "checkbox" %>
+                <span><%= topic.name %></span>
+              </label>
+            <% end %>
+          </div>
+        <% else %>
+          <p class="text-base-content/70">No topics yet. Create one first.</p>
+        <% end %>
+        <%# Ensures an all-unticked submission clears the topics rather than
+            omitting the key entirely. %>
+        <%= hidden_field_tag "news_post[news_topic_ids][]", "" %>
+      </fieldset>
+
+      <div>
+        <%= f.label :share_image, class: "label" do %>
+          <span class="font-semibold">Share image</span>
+        <% end %>
+        <p class="text-sm text-base-content/70 mb-1">
+          Shown when someone posts a link to this article on social media. Wide images work
+          best — around 1200 by 630 pixels.
+        </p>
+        <%# attached? is true for a pending, unsaved attachment too (assigned
+            via params on a record that then failed validation) -- its blob
+            has no id yet, so url_for/variant raise "Cannot get a signed_id
+            for a new record". persisted? excludes that case. On a failed
+            update where a replacement was uploaded, this also means the
+            still-good previous image is not shown for that one re-render:
+            the pending replacement shadows it (Attached::One#attachment
+            resolves to the pending change, not the DB row) and reaching
+            behind that proxy for the old attachment is more machinery than
+            this preview is worth. The upload was rejected, not lost -- the
+            saved image is intact and reappears once the form is reloaded. %>
+        <% if @news_post.share_image.attached? && @news_post.share_image.persisted? %>
+          <div class="mb-2">
+            <%= image_tag @news_post.share_image.variant(:card), class: "max-w-xs rounded-box" %>
+          </div>
+        <% end %>
+        <%= f.file_field :share_image, accept: "image/png,image/jpeg,image/webp", class: "file-input w-full" %>
+      </div>
+
+      <div>
+        <%= label_tag "news_post_body_images", class: "label" do %>
+          <span class="font-semibold">Images for the body</span>
+        <% end %>
+        <p class="text-sm text-base-content/70 mb-1">
+          Upload a screenshot here, then copy the snippet it gives you into the body text
+          where you want the picture to appear.
+        </p>
+        <%= file_field_tag "news_post[body_images][]", multiple: true,
+              accept: "image/png,image/jpeg,image/webp,image/gif",
+              id: "news_post_body_images", class: "file-input w-full" %>
+        <%= render "body_images", news_post: @news_post %>
+      </div>
+
+      <div>
+        <%= f.label :published_at, class: "label" do %>
+          <span class="font-semibold">Publish date</span>
+        <% end %>
+        <p class="text-sm text-base-content/70 mb-1">
+          Leave empty to keep this a draft. A draft is not reachable at its public URL.
+        </p>
+        <%= f.datetime_field :published_at, class: "input w-full" %>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex gap-2">
+    <%= f.submit(@news_post.persisted? ? "Save Post" : "Create Post", class: "btn btn-primary") %>
+    <%= link_to "Cancel", news_posts_path_for, class: "btn btn-ghost" %>
+  </div>
+<% end %>
