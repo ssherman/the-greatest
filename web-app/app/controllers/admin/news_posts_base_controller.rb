@@ -2,18 +2,16 @@
 # supplies a routable subclass filling in news_domain and the path helpers, and
 # mixing in Admin::DomainScopedAuth itself. Mirrors Admin::ReviewsBaseController.
 class Admin::NewsPostsBaseController < Admin::BaseController
-  # :only lists here name only the actions this controller implements so far
-  # (index, show, new, create, edit, update, destroy) -- NOT the full set the
-  # finished controller will eventually have (preview is still to come). This
+  # :only lists here name only the actions this controller implements. This
   # app's test and development environments both set
   # config.action_controller.raise_on_missing_callback_actions = true (Rails
   # 7.1 default), which raises AbstractController::ActionNotFound on EVERY
   # request -- not just a request to the missing action -- the moment a
   # before_action's :only names an action the controller does not define.
   # Verified against this app: listing an action here before the controller
-  # defines it 404s every other action too. Later tasks that add more actions
-  # (preview) must add their names to these lists at the same time.
-  before_action :require_domain_write!, only: [:create, :update, :destroy]
+  # defines it 404s every other action too. Any future action must be added to
+  # these lists at the same time it is defined below.
+  before_action :require_domain_write!, only: [:create, :update, :destroy, :preview]
   before_action :set_news_post, only: [:show, :edit, :update, :destroy]
 
   helper_method :news_posts_path_for, :news_post_path_for, :new_news_post_path_for,
@@ -63,6 +61,16 @@ class Admin::NewsPostsBaseController < Admin::BaseController
   def destroy
     @news_post.destroy!
     redirect_to news_posts_path_for, notice: "Post deleted."
+  end
+
+  # Server-rendered so the preview goes through the exact BodyRenderer the public
+  # page uses and cannot drift from it. A client-side Markdown library is not an
+  # option while admin and public share application.js -- it would be downloaded
+  # by every visitor to every site to serve this one screen.
+  def preview
+    @preview_html = Services::News::BodyRenderer.call(params.dig(:news_post, :body))
+
+    render :preview
   end
 
   private

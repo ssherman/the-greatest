@@ -212,6 +212,83 @@ module Admin
           post admin_books_news_posts_path, params: {news_post: {title: "Should Not Exist", body: "x"}}
         end
       end
+
+      test "preview renders Markdown through the public renderer" do
+        post preview_admin_books_news_posts_path,
+          params: {news_post: {body: "# Heading\n\nSome **bold** text."}},
+          as: :turbo_stream
+
+        assert_response :success
+        assert_includes response.body, "<h2>Heading</h2>"
+        assert_includes response.body, "<strong>bold</strong>"
+      end
+
+      # The only assertion the plan gave this test is a negative
+      # (assert_not_includes "<script>alert"), which a 404, a 500, a redirect or
+      # an empty body would all satisfy just as well as a correctly-rendered
+      # preview -- see task-11-brief.md's own R11 precedent and
+      # task-12-brief.md correction 3. assert_response :success closes that
+      # gap.
+      #
+      # The brief also asks for a positive assertion that "alert('x')" survives
+      # as inert text. It does not, for this exact input, and that is NOT a bug
+      # to fix here -- see the task-12-report.md finding. `<script>...</script>`
+      # on a line by itself is a CommonMark "HTML block" (type 1: starts with
+      # `<script`, runs to the matching close tag), and BodyRenderer's
+      # unsafe: false replaces the ENTIRE block -- open tag, enclosed text, and
+      # close tag together -- with one `<!-- raw HTML omitted -->` comment,
+      # which the sanitizer then strips. Verified directly against
+      # Services::News::BodyRenderer on this branch:
+      #   BodyRenderer.call("<script>alert('x')</script>") == "\n"
+      # The enclosed text "alert('x')" is gone, not preserved as inert text.
+      # (An inline script tag surrounded by ordinary prose behaves differently
+      # -- CommonMark treats the tags as inline raw HTML spans and leaves the
+      # text between them alone -- but that is a different input than the one
+      # this test, and the brief's correction, specify.) Services::News::BodyRenderer
+      # is explicitly out of scope for this task, so this assertion is not added.
+      test "preview escapes raw HTML exactly as the public page does" do
+        post preview_admin_books_news_posts_path,
+          params: {news_post: {body: "<script>alert('x')</script>"}},
+          as: :turbo_stream
+
+        assert_response :success
+        assert_not_includes response.body, "<script>alert"
+      end
+
+      test "preview replaces the preview frame" do
+        post preview_admin_books_news_posts_path,
+          params: {news_post: {body: "hi"}},
+          as: :turbo_stream
+
+        assert_includes response.body, 'target="news_post_preview"'
+      end
+
+      # A bare assert_response :success does not distinguish "rendered an empty
+      # preview correctly" from "returned 200 having rendered something else"
+      # (task-12-brief.md correction 4) -- the same trap assert_empty and a
+      # bare assert_response :success are called out for project-wide. Checking
+      # the turbo-stream actually targeted the preview region closes that gap.
+      test "preview handles an empty body" do
+        post preview_admin_books_news_posts_path, params: {news_post: {body: ""}}, as: :turbo_stream
+
+        assert_response :success
+        assert_includes response.body, 'target="news_post_preview"'
+      end
+
+      # require_domain_write!'s :only list is an allowlist: forgetting to name
+      # :preview there does not fail loudly, it just leaves the endpoint
+      # reachable by any domain user with read-only access (task-12-brief.md
+      # correction 2).
+      test "preview is refused for a domain user without write access" do
+        regular_user = users(:regular_user)
+        regular_user.domain_roles.create!(domain: :books, permission_level: :viewer)
+        sign_in_as(regular_user, stub_auth: true)
+
+        post preview_admin_books_news_posts_path,
+          params: {news_post: {body: "hi"}}, as: :turbo_stream
+
+        assert_redirected_to books_root_path
+      end
     end
   end
 end

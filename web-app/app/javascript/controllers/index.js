@@ -4,6 +4,9 @@
 
 import { application } from "./application"
 
+import Admin__MarkdownPreviewController from "./admin/markdown_preview_controller"
+application.register("admin--markdown-preview", Admin__MarkdownPreviewController)
+
 import Admin__SearchController from "./admin/search_controller"
 application.register("admin--search", Admin__SearchController)
 

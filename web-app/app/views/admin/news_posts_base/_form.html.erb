@@ -30,7 +30,9 @@
         <% end %>
       </div>
 
-      <div>
+      <div data-controller="admin--markdown-preview"
+           data-admin--markdown-preview-url-value="<%= preview_news_posts_path_for %>"
+           data-admin--markdown-preview-delay-value="400">
         <%= f.label :body, class: "label" do %>
           <span class="font-semibold">Body <span class="text-error">*</span></span>
         <% end %>
@@ -39,10 +41,26 @@
           <code>- bullets</code>, <code>## Heading</code>. Headings are shown one level
           smaller than you write them, because the post title is already the page heading.
         </p>
-        <%= f.text_area :body,
-              rows: 20,
-              class: "textarea w-full font-mono #{"textarea-error" if @news_post.errors[:body].any?}",
-              required: true %>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <%= f.text_area :body,
+                rows: 20,
+                class: "textarea w-full font-mono #{"textarea-error" if @news_post.errors[:body].any?}",
+                required: true,
+                data: {
+                  admin__markdown_preview_target: "source",
+                  action: "input->admin--markdown-preview#schedule"
+                } %>
+
+          <div class="border border-base-300 rounded-box p-4 overflow-y-auto" style="max-height: 32rem;">
+            <div class="text-xs uppercase tracking-wide text-base-content/60 mb-2">Preview</div>
+            <%# NOT a turbo_frame_tag: this is a plain div replaced by a turbo-stream,
+                so there is no frame for links inside the preview to be trapped by. %>
+            <div id="news_post_preview" class="prose max-w-none [overflow-wrap:anywhere]">
+              <%= Services::News::BodyRenderer.call(@news_post.body) %>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div>
