@@ -248,16 +248,21 @@ module Services
         assert_nil membership.origin_domain
       end
 
-      # The nightly sweep re-reconciles every subscription on the account. Stripe is
-      # the source of truth, so a value that disappeared upstream must disappear
-      # here -- but a real value must never be clobbered by a later sync.
-      test "keeps origin_domain across a second reconcile of the same subscription" do
-        subscription = stripe_subscription(metadata: {"origin_domain" => "games"})
-
+      # The nightly sweep re-reconciles every subscription on the account. Stripe
+      # is the source of truth, so the assignment must be unconditional: if
+      # origin_domain is absent on a later read, it must be cleared here too, not
+      # stuck at whatever an earlier reconcile saw. A sticky `|| membership.
+      # origin_domain` (the natural analogy to the `user: user || membership.user`
+      # line above) would silently keep emailing about a membership whose
+      # ownership signal Stripe no longer reports.
+      test "clears origin_domain when it disappears from the subscription's Stripe metadata" do
+        subscription = stripe_subscription(id: "sub_origin_clears", metadata: {"origin_domain" => "games"})
         reconcile_and_fetch(subscription)
+
+        subscription = stripe_subscription(id: "sub_origin_clears", metadata: {})
         membership = reconcile_and_fetch(subscription)
 
-        assert_equal "games", membership.origin_domain
+        assert_nil membership.origin_domain
       end
     end
   end
