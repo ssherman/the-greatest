@@ -42,4 +42,11 @@ Rails.application.configure do
 
   # Raise error when a before_action's only/except options reference missing actions.
   config.action_controller.raise_on_missing_callback_actions = true
+
+  # ActionMailer::TestCase forces :test per-test, but an integration test that
+  # triggers a send outside it would otherwise fall through to the mail gem's
+  # localhost:25 default -- failing on CI, or really relaying on any machine
+  # running an MTA.
+  config.action_mailer.delivery_method = :test
+  config.action_mailer.perform_deliveries = true
 end

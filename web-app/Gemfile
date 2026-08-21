@@ -36,6 +36,10 @@ gem "ruby-vips"
 gem "vacuum", "~> 4.3.0"
 gem "down", "~> 5.0"
 
+# Markdown for news post bodies. Rendered at read time; the stored body is
+# always the author's Markdown source.
+gem "commonmarker", "~> 2.9"
+
 # Windows does not include zoneinfo files, so bundle the tzinfo-data gem
 gem "tzinfo-data", platforms: %i[windows jruby]
 
@@ -106,3 +110,7 @@ gem "pundit"
 
 # Icon library (Lucide-backed via rails_icons)
 gem "rails_icons", "~> 1.8"
+
+# HTML -> Markdown, needed only for the one-time legacy blog migration.
+# Removable once the production run is done.
+gem "reverse_markdown", "~> 3.0"

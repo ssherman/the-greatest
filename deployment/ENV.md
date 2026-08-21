@@ -192,6 +192,48 @@ together until the rotation completes, then drop the old one.
 - **Used By**: web, worker
 - **Guard**: The application refuses to boot if a live key (`sk_live_*`) is provided with `STRIPE_LIVEMODE=false`
 
+### Email Configuration
+
+#### SENDGRID_API_KEY
+- **Description**: SendGrid API key, used as the SMTP password. The SMTP *username* is the literal
+  string `apikey` and is not configurable.
+- **Required**: Yes
+- **Used By**: web, worker
+- **Security**: Never commit this value. Managed via SOPS — see `deployment/SECRETS.md`.
+- **Note**: A missing key does **not** fail loudly. The app boots normally — deliberately, since
+  raising while `config/environments/production.rb` is still loading would crash-loop the web
+  container under `bin/docker-entrypoint`'s `bash -e` and take all four sites down. Instead,
+  `production.rb`'s guard skips calling `MailDeliverySettings.sendgrid_smtp` entirely when the key
+  is absent, so its `MissingApiKey` raise never runs; `smtp_settings` becomes `{}` and the `mail`
+  gem falls back to its own default of `localhost:25`, so every send then fails with a bare SMTP
+  connection error that names neither `SENDGRID_API_KEY` nor `MissingApiKey`. The signal to look
+  for instead is the boot-time warning from `config/initializers/mail_delivery_check.rb`:
+  `"SENDGRID_API_KEY is not set; outbound mail will fail at send time"`.
+
+#### MAIL_FROM_ADDRESS
+- **Description**: The envelope from-address for all outbound mail. Currently
+  `contact@thegreatestbooks.org`. Must be an address SendGrid recognises as a verified Sender
+  Identity: if it is not, SendGrid rejects the send outright with an SMTP error, rather than
+  delivering it anywhere.
+- **Required**: Yes
+- **Used By**: web, worker
+- **Note**: One address serves every site the membership covers — books, music and games —
+  deliberately. Music and games mail therefore sends from a `thegreatestbooks.org` address. SendGrid
+  authenticates a *sending domain*, and only that one is set up; a per-site address would mean
+  maintaining authentication and DNS for each domain, for no gain the recipient can see. The
+  *display name* varies per site ("The Greatest Books", "The Greatest Music", ...) — see
+  `app/lib/mail_branding.rb`.
+- **Two failure modes, and they look nothing alike**: an address with no verified Sender Identity is
+  **rejected** by SendGrid with a visible SMTP error. An address that *is* verified but whose domain
+  authentication is incomplete or whose DNS has not propagated sends successfully and is likely
+  filed as **spam** — silently, with nothing in the app reporting it. Only the second one requires
+  checking the recipient's spam folder to detect.
+
+#### ADMIN_NOTIFICATION_EMAIL
+- **Description**: Recipient for administrative notifications and the `mail:smoke` test email.
+- **Required**: Yes
+- **Used By**: web, worker
+
 ## Example .env File
 
 ```bash
@@ -231,6 +273,11 @@ FIREBASE_API_KEY=your_firebase_api_key_here
 STRIPE_SECRET_KEY=sk_live_your_stripe_secret_key_here
 STRIPE_WEBHOOK_SECRET=whsec_music_endpoint_secret,whsec_games_endpoint_secret  # one per registered endpoint
 STRIPE_LIVEMODE=true
+
+# Email Configuration
+SENDGRID_API_KEY=SG.your_sendgrid_api_key_here
+MAIL_FROM_ADDRESS=contact@thegreatestbooks.org
+ADMIN_NOTIFICATION_EMAIL=you@example.com
 
 # Performance Tuning (optional)
 RAILS_MAX_THREADS=50

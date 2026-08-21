@@ -1,0 +1,64 @@
+# Explicit published_at values, deliberately NOT in fixture-id order, so a sort
+# assertion cannot pass by coinciding with hashed id order.
+# books_december_update is the ONLY published books post -- several tests assert
+# an exact id list against it.
+# == Schema Information
+#
+# Table name: news_posts
+#
+#  id           :bigint           not null, primary key
+#  body         :text             not null
+#  domain       :integer          not null
+#  published_at :datetime
+#  slug         :string           not null
+#  summary      :text
+#  title        :string           not null
+#  created_at   :datetime         not null
+#  updated_at   :datetime         not null
+#  user_id      :bigint           not null
+#
+# Indexes
+#
+#  index_news_posts_on_domain_and_published_at  (domain,published_at DESC)
+#  index_news_posts_on_domain_and_slug          (domain,slug) UNIQUE
+#  index_news_posts_on_user_id                  (user_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (user_id => users.id)
+#
+books_december_update:
+  domain: 2
+  title: December Update
+  slug: december-update
+  body: |
+    Just an update, since I have not posted in a while.
+
+    **Rankings** refreshed this month.
+  summary: The December update.
+  published_at: <%= 3.days.ago.to_fs(:db) %>
+  user: admin_user
+
+books_draft:
+  domain: 2
+  title: Something Unfinished
+  slug: something-unfinished
+  body: Not ready yet.
+  published_at:
+  user: admin_user
+
+books_scheduled:
+  domain: 2
+  title: Next Week
+  slug: next-week
+  body: Scheduled for later.
+  published_at: <%= 7.days.from_now.to_fs(:db) %>
+  user: admin_user
+
+music_launch:
+  domain: 0
+  title: The Greatest Music Is Live
+  slug: the-greatest-music-is-live
+  body: We are live.
+  published_at: <%= 2.days.ago.to_fs(:db) %>
+  user: admin_user

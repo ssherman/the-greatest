@@ -223,10 +223,31 @@ namespace :data_migration do
     })
   end
 
+  desc "Migrate legacy blog_posts into news_posts (domain :books; preserves slugs + dates)"
+  task news_posts: :environment do
+    pp Services::BooksMigration::NewsPostMigrator.call
+  end
+
+  desc "Dump legacy blog HTML next to its converted Markdown for hand review"
+  task news_posts_diff: :environment do
+    puts "wrote #{Services::BooksMigration::NewsConversionReport.call}"
+  end
+
+  # news_posts belongs here, unlike the other tasks left out of this list. The
+  # exclusions each have a specific reason -- book_images needs LEGACY_R2_* env
+  # and enqueues jobs, descriptions is a composite whose internal order is
+  # load-bearing, memberships and donations are billing -- and none of them
+  # apply to a 31-row content migration with no external dependency.
+  #
+  # It also has a real dependency this list satisfies: NewsPost belongs_to :user
+  # without optional: true, and every legacy post is authored by user 1141, so
+  # running news_posts before :users raises RecordInvalid. Leaving it out meant
+  # a development rebuild through this task silently produced an empty news
+  # section.
   desc "Run all Phase-1 migrators in dependency order"
   task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers,
     :categories, :category_items, :book_attributes, :book_type_categories, :countries,
     :book_countries, :external_links, :lists, :list_items, :ranking_configurations,
     :ranked_lists, :penalties, :list_penalties, :user_lists, :user_list_items,
-    :saved_searches, :reviews]
+    :saved_searches, :reviews, :news_posts]
 end
