@@ -54,16 +54,22 @@ test.describe('Books news', () => {
   // working and <h2> with it removed. Neither is an <h1>, so that assertion
   // passed whether shift_headings worked, was broken, or was deleted -- it
   // could not fail. "major-ranking-changes" is the only development post
-  // whose body opens with a SINGLE "#", which is the one case that produces
-  // a genuine second <h1> if the shift is removed.
+  // whose body opens with a SINGLE "#".
   test('a body heading is shifted below the page title', async ({ page }) => {
+    // The h1 count below is a page-structure check, NOT the heading-shift
+    // check: BodyRenderer's ALLOWED_TAGS excludes h1 entirely, so when the
+    // shift is disabled the sanitizer STRIPS a would-be second h1 down to
+    // plain text rather than rendering it. Measured on this post: with the
+    // shift, 0 h1 / 3 h2; without it, 0 h1 / 0 h2 -- the h1 count alone
+    // cannot tell the two apart. "Exactly one h1 on the page" is still a
+    // real, independent page-structure property worth asserting (it would
+    // fail if the layout or template ever grew a genuine second h1), but the
+    // h2 assertion below -- pinned to the shifted heading's own text -- is
+    // the one that actually catches a broken or removed shift.
     await page.goto('/news/major-ranking-changes');
 
     await expect(page.locator('h1')).toHaveCount(1);
-    // Positive control: toHaveCount(1) on h1 alone also passes on a page
-    // whose body failed to render at all, so also prove the shifted heading
-    // is actually present in the rendered body.
-    await expect(page.locator('.prose h2').first()).toBeVisible();
+    await expect(page.locator('.prose h2').first()).toHaveText('List Date Penalty Feature');
   });
 
   test('the legacy blog post url redirects', async ({ page }) => {
