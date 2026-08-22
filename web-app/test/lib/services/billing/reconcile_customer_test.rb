@@ -91,6 +91,36 @@ module Services
         assert ::Membership.find_by!(stripe_subscription_id: "sub_r3").interval_yearly?
       end
 
+      # Stripe stopped expressing a period-end cancellation as cancel_at_period_end
+      # and now sets a cancel_at timestamp instead. Verified live 2026-08-22: a real
+      # portal cancellation returned cancel_at_period_end=false with cancel_at set
+      # to exactly current_period_end. Reading only the boolean left the column
+      # permanently false, so /membership told a member who had just cancelled that
+      # their membership renews.
+      test "treats a cancel_at timestamp as a scheduled cancellation" do
+        subscription = stripe_subscription(cancel_at_period_end: false, cancel_at: 30.days.from_now.to_i)
+
+        membership = reconcile_and_fetch(subscription)
+
+        assert membership.cancel_at_period_end
+      end
+
+      test "still honours the cancel_at_period_end boolean when Stripe sets it" do
+        subscription = stripe_subscription(cancel_at_period_end: true, cancel_at: nil)
+
+        membership = reconcile_and_fetch(subscription)
+
+        assert membership.cancel_at_period_end
+      end
+
+      test "reports no scheduled cancellation when Stripe sets neither signal" do
+        subscription = stripe_subscription(cancel_at_period_end: false, cancel_at: nil)
+
+        membership = reconcile_and_fetch(subscription)
+
+        assert_not membership.cancel_at_period_end
+      end
+
       test "updates an existing membership rather than duplicating it" do
         ::Membership.create!(user: @user, source: :stripe, status: :past_due,
           interval: :monthly, stripe_subscription_id: "sub_r4",
