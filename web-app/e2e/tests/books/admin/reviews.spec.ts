@@ -21,7 +21,7 @@ test.describe("Books admin — reviews", () => {
     expect(dates.length).toBeGreaterThan(1);
     expect(dates).toEqual([...dates].sort().reverse());
 
-    const firstReviewLink = page.locator("tbody tr").first().getByRole("link").first();
+    const firstReviewLink = page.locator("main table tbody tr").first().getByRole("link").first();
     await firstReviewLink.click();
 
     await expect(page).toHaveURL(/\/admin\/reviews\/\d+$/);
@@ -58,7 +58,7 @@ test.describe("Books admin — reviews", () => {
       // Find it in the admin list by its own text, never by position -- the list
       // is newest-first but other specs write reviews too.
       await page.goto("/admin/reviews?q=nightmare");
-      const row = page.locator("tbody tr", { hasText: "E2E admin scratch review" }).first();
+      const row = page.locator("main table tbody tr", { hasText: "E2E admin scratch review" }).first();
       await expect(row).toBeVisible();
       await row.getByRole("link").first().click();
 
@@ -74,7 +74,7 @@ test.describe("Books admin — reviews", () => {
 
       await expect(page).toHaveURL(/\/admin\/reviews$/);
       await expect(
-        page.locator("tbody tr", { hasText: "E2E admin scratch review" })
+        page.locator("main table tbody tr", { hasText: "E2E admin scratch review" })
       ).toHaveCount(0);
     });
   });
