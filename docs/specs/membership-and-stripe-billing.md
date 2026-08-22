@@ -1,12 +1,14 @@
 # Membership & Stripe Billing
 
 ## Status
-- **Status**: In Progress — increments 1–7 and 9–11 shipped (Stripe foundation, webhook ingest,
-  reconciliation engine, data migration, mail foundation, checkout, entitlements, admin UI, legacy
-  guard patch, E2E); increment 8 — the eight membership emails — is the only one remaining. The
-  Stripe-side production setup this all depends on (registering webhook endpoints, labelling live
-  prices, activating the Billing Portal) is a separate by-hand runbook, not code — see
-  `docs/guides/stripe-account-setup.md`
+- **Status**: **Complete** — all 11 increments shipped (Stripe foundation, webhook ingest,
+  reconciliation engine, data migration, mail foundation, checkout, entitlements, the eight
+  membership emails, admin UI, legacy guard patch, E2E). Increment 8 was the last one remaining and
+  shipped on branch `membership-emails`. The Stripe-side production setup this all depends on
+  (registering webhook endpoints, labelling live prices, activating the Billing Portal) is a
+  separate by-hand runbook, not code — see `docs/guides/stripe-account-setup.md`. Remaining
+  production follow-ups (not code, tracked in "Carried forward" below): flipping
+  `MEMBERSHIP_EMAIL_SCOPE` to `all` at legacy cutover.
 - **Priority**: High
 - **Created**: 2026-08-14
 - **Developer**: Shane Sherman
@@ -551,7 +553,7 @@ verification.
 | 5 | Mail foundation — ActionMailer + SendGrid, domain-aware `ApplicationMailer`, previews | — | ✅ |
 | 6 | Checkout — `billing_plans`, rake tasks, `EnsureCustomer`, checkout/portal/donate, `/membership`, thanks page | 3, 10 | ✅ |
 | 7 | Entitlements — `member?`, access scope, `MembershipGate`, `/membership_state`, members-only area | 3 | ✅ |
-| 8 | Membership emails — the eight | 5, 6 | |
+| 8 | Membership emails — the eight | 5, 6 | ✅ |
 | 9 | Admin UI — memberships incl. comping, donations, stripe events, billing plans | 3 | ✅ |
 | 10 | **Legacy guard patch** (separate repo) | — | ✅ |
 | 11 | E2E tests | 6, 7 | ✅ |
@@ -616,8 +618,17 @@ three against it.
       this is a cross-database fact about a legacy database that is still taking writes
 - [x] Every legacy `paid: true` user has a `source: :legacy` membership — same caveat,
       same task: verified against live data rather than a test, for the same reason
-- [ ] The welcome email sends exactly once across repeated reconciles — increment 8, not shipped
-- [ ] A membership email uses the branding of `origin_domain`, not a `Current` lookup — increment 8, not shipped
+- [x] The welcome email sends exactly once across repeated reconciles —
+      `test/lib/services/billing/membership_notifier_test.rb`, `"stamps welcome_email_sent_at so a
+      second reconcile cannot resend"` (and its cancellation-side twin, `"stamps
+      ended_email_sent_at so a second reconcile cannot resend"`); the seam between reconcile and
+      the notifier is separately covered end-to-end by `reconcile_customer_test.rb`'s
+      `"reconciling a membership this app sold enqueues its welcome email once it becomes active"`
+- [x] A membership email uses the branding of `origin_domain`, not a `Current` lookup —
+      `test/mailers/membership_mailer_test.rb`, `"brands the welcome email for the membership's own
+      origin_domain"`; `grep -rn "Current\." app/mailers app/views/membership_mailer
+      app/views/admin_mailer` finds only two explanatory comments (naming *why* `Current` is never
+      read), no code that actually reads it
 - [x] `bin/rails test` and `bundle exec standardrb` pass; Playwright covers `/membership` —
       the suite, standardrb and `zeitwerk:check` were all clean when increment 11 merged, and 13
       Playwright tests cover `/membership` across four spec files:
@@ -650,15 +661,25 @@ entitlements, the admin UI, the legacy guard patch, and writing the account-setu
 None blocks that work; each has a named owner among the later increments, or is deferred
 with a stated reason.
 
-- **`origin_domain` is never written by reconcile.** `upsert` deliberately omits it so
-  a value set at checkout survives, but that means every membership created *before* a
-  checkout exists — including every row from the initial account-wide migration — lands
-  with `origin_domain: nil`. Increment 8's mailers need a nil-domain fallback, since
-  they cannot read `Current` from inside Sidekiq.
-- **The welcome-mailer status diff has nothing to diff against.** This spec's reconcile
-  contract says a genuine status transition drives the mailer, guarded by
-  `welcome_email_sent_at`. `upsert` uses `assign_attributes` and discards the prior
-  status, so increment 8 must capture it before assignment.
+- ~~`origin_domain` is never written by reconcile.~~ **Fixed by increment 8.** `upsert` now
+  assigns `origin_domain: subscription.metadata&.[]("origin_domain")` unconditionally on every
+  reconcile — `CreateCheckoutSession` stamps it into the subscription's Stripe metadata once, and
+  every later reconcile (webhook or nightly sweep) reads it back from Stripe rather than trusting
+  a value this app wrote earlier, so a value that disappears upstream clears locally too instead of
+  going stale. Every membership created *before* checkout existed — including every row from the
+  initial account-wide migration — still has `origin_domain: nil` and always will, since there is
+  no Stripe metadata to backfill it from; that nil is what `MailBranding.for(nil)`'s books fallback
+  and `MembershipEmailScope`'s `own_only` default both exist to handle. See
+  `docs/features/membership-billing.md` §§2, 8 and 13 for the full mechanism.
+- ~~The welcome-mailer status diff has nothing to diff against.~~ **Fixed by increment 8.**
+  `Services::Billing::MembershipTransition` is the diff: `upsert` now captures
+  `membership.persisted? ? membership.status : nil` immediately before `assign_attributes`
+  overwrites it, and returns a `MembershipTransition` pairing that `previous_status` with the saved
+  `Membership` — on every path, including the comped-row collision guard's early return, which
+  yields a no-op transition rather than a bare `Membership`. `MembershipTransition#became_active?`/
+  `#became_canceled?` are what `Services::Billing::MembershipNotifier` reads to decide whether a
+  reconcile owes an email; see `docs/features/membership-billing.md` §2's "returns a
+  `Services::Billing::MembershipTransition`" note for the full contract.
 - **Decide v2 event handling before enabling any v2 destination.** `construct_event`
   raises a bare `ArgumentError` on a v2 "thin event" envelope, which would 500. It is
   unreachable without a valid signature and nothing here subscribes to v2. Note that

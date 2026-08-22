@@ -82,4 +82,42 @@ class ApplicationMailerTest < ActionMailer::TestCase
       assert_equal before, ProbeMailer.default_url_options
     end
   end
+
+  # Drives the real deliver_later -> ActionMailer::MailDeliveryJob -> deliver_now
+  # path (perform_enqueued_jobs, not a bare deliver_now call), because the
+  # rescue_from's coverage of the actual SMTP round-trip -- as opposed to just
+  # the mailer action body -- is exactly what Step 1 needed verified rather
+  # than assumed. Stubs Mail::Message#deliver, the lowest-level call inside
+  # that path, to simulate the SMTP failure itself.
+  test "swallows a permanent SMTP failure instead of letting it raise" do
+    with_env("MAIL_FROM_ADDRESS" => "noreply@example.org") do
+      Mail::Message.any_instance.stubs(:deliver).raises(Net::SMTPFatalError.new("550 mailbox unavailable"))
+
+      assert_nothing_raised do
+        perform_enqueued_jobs do
+          ProbeMailer.probe(domain: :books).deliver_later
+        end
+      end
+    end
+  end
+
+  test "still raises a transient SMTP failure so Sidekiq retries it" do
+    with_env("MAIL_FROM_ADDRESS" => "noreply@example.org") do
+      Mail::Message.any_instance.stubs(:deliver).raises(Net::SMTPServerBusy.new("421 too busy"))
+
+      # assert_raises has to sit INSIDE perform_enqueued_jobs's block, not
+      # around the whole call: perform_enqueued_jobs itself wraps its block in
+      # assert_nothing_raised, which repackages any escaping exception as a
+      # Minitest::UnexpectedError -- a class assert_raises(Net::SMTPServerBusy)
+      # would never match, so it would misreport as an unrelated Error instead
+      # of confirming the real exception propagated. This is what
+      # perform_enqueued_jobs's own warning message ("use assert_raises as
+      # near to the code that raises as possible") is telling you to do.
+      perform_enqueued_jobs do
+        assert_raises(Net::SMTPServerBusy) do
+          ProbeMailer.probe(domain: :books).deliver_later
+        end
+      end
+    end
+  end
 end
