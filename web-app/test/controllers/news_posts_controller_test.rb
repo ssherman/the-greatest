@@ -168,4 +168,127 @@ class NewsPostsControllerTest < ActionDispatch::IntegrationTest
     assert_match(/max-age=21600/, response.headers["Cache-Control"])
     assert_match(/public/, response.headers["Cache-Control"])
   end
+
+  test "show renders a published post" do
+    get news_post_path(slug: "december-update")
+
+    assert_response :success
+    assert_select "h1", text: /December Update/
+  end
+
+  test "show renders the body as HTML from Markdown" do
+    get news_post_path(slug: "december-update")
+
+    assert_includes response.body, "<strong>Rankings</strong>"
+  end
+
+  # D1: rescue_from ActiveRecord::RecordNotFound (application_controller.rb:9)
+  # means the exception never escapes the controller -- assert_response
+  # :not_found, not assert_raises.
+  test "show 404s for a draft" do
+    get news_post_path(slug: "something-unfinished")
+
+    assert_response :not_found
+    # render_not_found also calls prevent_caching, so a draft's 404 must
+    # never be edge-cached alongside the published show action's 24h header.
+    assert_match(/no-store/, response.headers["Cache-Control"])
+  end
+
+  test "show 404s for a future-dated post" do
+    get news_post_path(slug: "next-week")
+
+    assert_response :not_found
+  end
+
+  test "show 404s for another domain's post" do
+    get news_post_path(slug: "the-greatest-music-is-live")
+
+    assert_response :not_found
+  end
+
+  test "show is edge cacheable for 24 hours" do
+    get news_post_path(slug: "december-update")
+
+    assert_match(/max-age=86400/, response.headers["Cache-Control"])
+  end
+
+  test "show sets a canonical url" do
+    get news_post_path(slug: "december-update")
+
+    assert_select "link[rel=canonical][href=?]",
+      "http://dev-new.thegreatestbooks.org/news/december-update"
+  end
+
+  test "show emits Open Graph tags" do
+    get news_post_path(slug: "december-update")
+
+    assert_select "meta[property='og:title'][content=?]", "December Update"
+    assert_select "meta[property='og:type'][content=?]", "article"
+    assert_select "meta[property='og:description'][content=?]", "The December update."
+    assert_select "meta[name='twitter:card']"
+  end
+
+  # D4: og:url must follow the canonical URL, not request.original_url, or a
+  # shared link with tracking params (?utm_source=twitter) would advertise
+  # itself as a distinct share target from the bare canonical URL. This
+  # request carries a query string specifically so a naive
+  # request.original_url implementation would fail it.
+  test "show's og:url matches the canonical url even with tracking parameters" do
+    get news_post_path(slug: "december-update", utm_source: "twitter")
+
+    assert_select "meta[property='og:url'][content=?]",
+      "http://dev-new.thegreatestbooks.org/news/december-update"
+  end
+
+  # D2: @indexable defaults to nil, so without an explicit assignment a post
+  # page would ship noindex -- on exactly the URLs ~156k legacy links 301 into.
+  test "show is indexable" do
+    Books::PublicIndexing.stubs(:enabled?).returns(true)
+
+    get news_post_path(slug: "december-update")
+
+    assert_select "meta[name=robots][content=?]", "index, follow"
+  end
+
+  # D3: og:image must be an absolute URL (scrapers ignore relative ones) and
+  # must go through the images CDN, not the Rails origin.
+  test "show emits an absolute og:image when a share image is attached" do
+    post = news_posts(:books_december_update)
+    post.share_image.attach(io: File.open(file_fixture("test_image.png")),
+      filename: "card.png", content_type: "image/png")
+
+    get news_post_path(slug: "december-update")
+
+    content = css_select("meta[property='og:image']").first["content"]
+    assert content.start_with?("https://"),
+      "og:image must be absolute for share-card scrapers, got #{content.inspect}"
+    assert_select "meta[name='twitter:card'][content=?]", "summary_large_image"
+  end
+
+  test "show falls back to a summary card when no share image is attached" do
+    get news_post_path(slug: "december-update")
+
+    assert_select "meta[property='og:image']", false
+    assert_select "meta[name='twitter:card'][content=?]", "summary"
+  end
+
+  test "the index page still emits default Open Graph tags" do
+    get news_path
+
+    assert_select "meta[property='og:type'][content=?]", "website"
+  end
+
+  # D5: presence alone ("meta[property='og:title']") passes whether or not the
+  # page is unaffected -- it is satisfied by a layout that emits an empty
+  # content for every page in the app. Assert the page's own concrete values
+  # instead, per app/views/books/lists/index.html.erb:2-3.
+  test "an existing books page renders and its Open Graph tags follow its own title" do
+    get "/lists"
+
+    assert_response :success
+    assert_select "meta[property='og:title'][content=?]",
+      "The Greatest Books Lists | The Greatest Books"
+    assert_select "meta[property='og:description'][content=?]",
+      "Every published best-books list we aggregate to build the rankings, weighted by quality, credibility and scope."
+  end
 end

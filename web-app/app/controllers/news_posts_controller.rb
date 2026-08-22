@@ -10,6 +10,7 @@ class NewsPostsController < ApplicationController
   layout :resolve_layout
 
   before_action :cache_for_index_page, only: [:index]
+  before_action :cache_for_show_page, only: [:show]
   before_action :find_topic, only: [:index]
 
   PER_PAGE = 10
@@ -21,6 +22,16 @@ class NewsPostsController < ApplicationController
     @pagy, @news_posts = pagy_path(scope, limit: PER_PAGE)
     @page_title = @topic ? "#{@topic.name} | News" : "News"
     @indexable = @news_posts.any?
+  end
+
+  def show
+    @news_post = published_scope
+      .includes(:news_topics, :user)
+      .friendly.find(params[:slug])
+
+    @body_html = Services::News::BodyRenderer.call(@news_post.body)
+    @canonical_url = news_post_url(slug: @news_post.slug)
+    @indexable = true
   end
 
   private

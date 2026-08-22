@@ -1,0 +1,55 @@
+<%
+  # share_image's :card variant is preprocessed: true, so ActiveStorage
+  # normally generates it via a background job right after attach. That job
+  # may not have finished by the time this page is first requested (or, under
+  # the test adapter, may never run at all), and with ActiveStorage.track_variants
+  # enabled the variant's key is nil until a variant record exists -- so
+  # rails_public_blob_url would raise. .processed is a no-op DB check once the
+  # background job has already run (the overwhelmingly common case) and only
+  # falls back to synchronous processing as a safety net.
+  share_image_variant = @news_post.share_image.variant(:card).processed if @news_post.share_image.attached?
+
+  content_for :page_title, "#{@news_post.title} | #{domain_name}"
+  content_for :meta_description, @news_post.excerpt(limit: 160)
+  content_for :canonical_url, @canonical_url
+  content_for :og_title, @news_post.title
+  content_for :og_description, @news_post.excerpt(limit: 200)
+  content_for :og_type, "article"
+  content_for :og_image, rails_public_blob_url(share_image_variant) if share_image_variant
+%>
+
+<article class="max-w-3xl mx-auto space-y-6">
+  <header class="space-y-3">
+    <h1 class="text-3xl sm:text-4xl font-bold text-balance [overflow-wrap:anywhere]">
+      <%= @news_post.title %>
+    </h1>
+
+    <p class="text-base-content/70">
+      <time datetime="<%= @news_post.published_at.iso8601 %>">
+        <%= @news_post.published_at.strftime("%B %-d, %Y") %>
+      </time>
+    </p>
+
+    <% if @news_post.news_topics.any? %>
+      <div class="flex flex-wrap gap-2">
+        <% @news_post.news_topics.each do |topic| %>
+          <%= link_to topic.name, news_topic_path(topic_slug: topic.slug),
+                class: "badge badge-outline" %>
+        <% end %>
+      </div>
+    <% end %>
+  </header>
+
+  <% if share_image_variant %>
+    <%= image_tag rails_public_blob_url(share_image_variant),
+          class: "w-full rounded-box", alt: "" %>
+  <% end %>
+
+  <div class="prose max-w-none [overflow-wrap:anywhere]">
+    <%= @body_html %>
+  </div>
+
+  <footer class="pt-6 border-t border-base-300">
+    <%= link_to "← All news", news_path, class: "link" %>
+  </footer>
+</article>
