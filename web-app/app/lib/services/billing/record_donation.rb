@@ -60,6 +60,16 @@ module Services
         # retry -- and ProcessStripeEventJob re-enqueues whenever its event row
         # is still `received` or `failed` -- re-receipts a donor whose donation
         # committed on an earlier attempt.
+        #
+        # The flip side is accepted, not overlooked: if the row commits but the
+        # deliver_later enqueue itself fails (a Redis blip, the process dying in
+        # that exact window), the donation is never retried as new, so that
+        # receipt never goes out. Donations have no *_email_sent_at column, so
+        # nothing records that a receipt was owed and never sent -- a silent
+        # miss, on purpose. For a receipt, a rare silent miss is the better
+        # failure direction than double-mailing a donor; a donor who never got
+        # theirs can still be traced through stripe_events or the Stripe
+        # dashboard if it ever needs chasing up.
         deliver_receipt(donation) if donation.previously_new_record?
 
         success(donation)
