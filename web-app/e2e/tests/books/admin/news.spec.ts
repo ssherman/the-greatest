@@ -63,14 +63,25 @@ async function deletePostFromShowPage(page: Page) {
 // that fails before reaching its own inline delete cannot strand a row in
 // the (not disposable) development database. Bounded so a stuck delete
 // surfaces as a thrown error instead of hanging the run.
+//
+// Synchronizes each iteration on the matching-row COUNT dropping by exactly
+// one, rather than on toHaveURL. The sweep starts at indexPath and every
+// delete redirects back to indexPath, so a URL check there is already true
+// before the click and proves nothing -- with 2+ stranded rows that let the
+// next iteration read row.count() and click while the previous delete's
+// Turbo round trip was still in flight, targeting a row mid-detach. Row
+// count is a real signal of the state we're actually waiting on, and
+// `rows` is a live locator (re-queried on every check), so this never holds
+// a handle to a node that gets removed out from under it.
 async function sweepByPrefix(page: Page, indexPath: string, prefix: string, maxIterations = 20) {
   await page.goto(indexPath);
+  const rows = page.locator("main table tbody tr", { hasText: prefix });
   for (let i = 0; i < maxIterations; i++) {
-    const row = page.locator("main table tbody tr", { hasText: prefix }).first();
-    if ((await row.count()) === 0) return;
+    const before = await rows.count();
+    if (before === 0) return;
     page.once("dialog", (dialog) => dialog.accept());
-    await row.getByRole("button", { name: "Delete" }).click();
-    await expect(page).toHaveURL(new RegExp(`${indexPath}$`));
+    await rows.first().getByRole("button", { name: "Delete" }).click();
+    await expect(rows).toHaveCount(before - 1);
   }
   throw new Error(
     `sweepByPrefix: rows matching "${prefix}" at ${indexPath} were not fully cleared after ${maxIterations} attempts`
