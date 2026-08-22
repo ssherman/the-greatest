@@ -57,6 +57,18 @@ class Admin::NewsPostsBaseController < Admin::BaseController
   end
 
   def update
+    # Captured BEFORE assign_attributes, and unioned with the post-save set
+    # below. An update is the one write where neither state contains the other:
+    # unpublishing the 11th post, or dropping the topic that gave a topic index
+    # its 11th, REMOVES /news/page/2 (or the topic's page 2), so a set derived
+    # only from the saved state sees 10 rows, derives one page, and leaves the
+    # disappearing page cached with the retracted post on it for the full 6-hour
+    # TTL. Create can only grow the set and destroy only shrink it, so both are
+    # covered by a single snapshot on the correct side of the write.
+    # Must precede assign_attributes, not merely the save: assigning
+    # news_topic_ids on a persisted record writes the join table immediately.
+    urls_before = Services::News::CachedUrls.call(@news_post)
+
     # assign_attributes, THEN check valid? BEFORE attach_body_images, and only
     # attach once known valid: has_many_attached#attach saves eagerly for a
     # persisted, unchanged record (`record.persisted? && !record.changed?`).
@@ -79,7 +91,7 @@ class Admin::NewsPostsBaseController < Admin::BaseController
       # remove, while a needless purge costs a few origin re-renders. It also
       # covers the worst case for free -- setting published_at back to nil comes
       # through here, so a retracted post's page is purged like any other edit.
-      enqueue_cache_purge(@news_post)
+      enqueue_cache_purge(@news_post, also: urls_before)
       redirect_to news_post_path_for(@news_post), notice: "Post updated."
     else
       render :edit, status: :unprocessable_entity
@@ -114,10 +126,9 @@ class Admin::NewsPostsBaseController < Admin::BaseController
   # is invisible to its callers and would fire from the legacy-blog data
   # migration and from every test that creates a post. Both arguments are
   # JSON-native so they survive Sidekiq's serialisation unchanged.
-  def enqueue_cache_purge(news_post)
-    ::News::PurgeCachedPagesJob.perform_async(
-      news_post.domain, Services::News::CachedUrls.call(news_post)
-    )
+  def enqueue_cache_purge(news_post, also: [])
+    urls = (Services::News::CachedUrls.call(news_post) + also).uniq
+    ::News::PurgeCachedPagesJob.perform_async(news_post.domain, urls)
   end
 
   # Always scoped, never a bare NewsPost.find: authenticate_admin! proves access

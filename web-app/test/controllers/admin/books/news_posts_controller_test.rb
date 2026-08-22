@@ -572,6 +572,61 @@ module Admin
         end
       end
 
+      # An update can SHRINK the result set across a page boundary, and neither
+      # the before-state nor the after-state contains the other: unpublishing the
+      # 11th post leaves /news/page/2 cached with the retracted post on it for
+      # the full 6-hour index TTL. Computing the set only after the save sees 10
+      # rows, derives one page, and never names page 2. Found by Codex on #248.
+      test "unpublishing across a page boundary purges the index page that is about to disappear" do
+        10.times do |i|
+          NewsPost.create!(
+            domain: :books, title: "Boundary Filler #{i}", body: "x",
+            published_at: (i + 10).days.ago, user: users(:admin_user)
+          )
+        end
+        post_record = news_posts(:books_december_update)
+        assert_equal 11, NewsPost.where(domain: :books).published.count
+
+        Sidekiq::Testing.fake! do
+          ::News::PurgeCachedPagesJob.jobs.clear
+
+          patch admin_books_news_post_path(post_record),
+            params: {news_post: {title: post_record.title, body: post_record.body, published_at: ""}}
+
+          assert_equal 10, NewsPost.where(domain: :books).published.count
+          _domain, urls = ::News::PurgeCachedPagesJob.jobs.first["args"]
+          assert_includes urls, "https://#{books_host}/news/page/2"
+        end
+      end
+
+      # The same defect on the topic axis: dropping the post's topic shrinks that
+      # topic's index, so its page 2 goes stale. Purging every topic of the domain
+      # does not help -- each topic's page count is derived from the post-save
+      # state too.
+      test "removing a topic across a page boundary purges that topic's disappearing page" do
+        topic = news_topics(:books_rankings)
+        10.times do |i|
+          filler = NewsPost.create!(
+            domain: :books, title: "Topic Boundary Filler #{i}", body: "x",
+            published_at: (i + 10).days.ago, user: users(:admin_user)
+          )
+          filler.news_topics << topic
+        end
+        post_record = news_posts(:books_december_update)
+        assert_includes post_record.news_topic_ids, topic.id
+
+        Sidekiq::Testing.fake! do
+          ::News::PurgeCachedPagesJob.jobs.clear
+
+          patch admin_books_news_post_path(post_record),
+            params: {news_post: {title: post_record.title, body: post_record.body, news_topic_ids: [""]}}
+
+          assert_empty post_record.reload.news_topic_ids
+          _domain, urls = ::News::PurgeCachedPagesJob.jobs.first["args"]
+          assert_includes urls, "https://#{books_host}/news/topic/rankings/page/2"
+        end
+      end
+
       test "update does not enqueue a purge when the submission is invalid" do
         Sidekiq::Testing.fake! do
           ::News::PurgeCachedPagesJob.jobs.clear

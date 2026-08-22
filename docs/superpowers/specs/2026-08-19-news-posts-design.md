@@ -229,6 +229,13 @@ What one write purges, for the post's domain only:
 | `/news`, `/news/page/2..n` | the index sorts `published_at DESC`, so any write shifts every page |
 | `/news/topic/:slug` (+ pages), for **every** topic of that domain | an update can change topic membership, and the old set is unrecoverable once `assign_attributes` has run |
 
+An **update** purges the union of the before-state and after-state sets, snapshotted before
+`assign_attributes` (which writes `news_topic_ids` to the join table immediately, not on save).
+Neither state contains the other: unpublishing the 11th post, or dropping the topic that gave a
+topic index its 11th, *removes* `/news/page/2`, and a set derived only from the saved state would
+leave that page cached with the retracted post on it. Create can only grow the set and destroy only
+shrink it, so each needs a snapshot on one side of the write only.
+
 Purged for every host in the domain's `config.domains` entry, which may be a comma-separated list —
 Cloudflare keys its cache by host, and `detect_current_domain` treats each entry as a live serving
 host. This differs deliberately from `MailBranding` and `MembershipController`, which take `.first`
