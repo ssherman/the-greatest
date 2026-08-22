@@ -63,9 +63,15 @@ module Services
 
         with_env(MembershipEmailScope::ENV_VAR => "all") do
           # Welcome to the member, admin notice to the owner -- the scope
-          # guard covers both, so opening it up opens both at once.
+          # guard covers both, so opening it up opens both at once. Naming
+          # both mailers, not just the total, is what would catch a
+          # regression that opened the scope for two welcomes and zero admin
+          # notices (or vice versa) while still summing to 2.
           assert_enqueued_emails(2) { MembershipNotifier.call(transition) }
         end
+
+        assert_enqueued_email_with MembershipMailer, :welcome, args: [membership]
+        assert_enqueued_email_with AdminMailer, :new_subscription, args: [membership]
       end
 
       # The nightly sweep re-reconciles every subscription on the account.

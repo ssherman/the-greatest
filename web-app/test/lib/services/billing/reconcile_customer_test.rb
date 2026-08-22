@@ -411,8 +411,10 @@ module Services
         ])
 
         # Built before the stub below replaces .welcome, so this is the
-        # genuine mailer output -- just for an unrelated fixture membership,
-        # since only the *count* of enqueued emails matters here.
+        # genuine mailer output -- just for an unrelated fixture membership.
+        # Its enqueued job therefore carries THIS fixture membership as its
+        # args, not "healthy" below (which does not exist yet -- it is
+        # created inside the ReconcileCustomer.call this test drives).
         fallback_mail = MembershipMailer.welcome(memberships(:regular_user_monthly))
         MembershipMailer.stubs(:welcome).raises(StandardError, "redis down").then.returns(fallback_mail)
 
@@ -420,7 +422,10 @@ module Services
         # notice. The poisoned membership's raise happens inside
         # deliver_welcome's with_lock, before that method reaches its own
         # (post-lock) admin send -- see MembershipNotifier -- so it
-        # contributes zero emails, not one.
+        # contributes zero emails, not one. Naming both mailers below (not
+        # just the total) is what would catch a regression that enqueued the
+        # customer mail twice and dropped the admin notice, or vice versa,
+        # while still summing to 2.
         assert_enqueued_emails(2) do
           ReconcileCustomer.call(stripe_customer_id: "cus_reconcile")
         end
@@ -430,6 +435,9 @@ module Services
         assert_nil poisoned.welcome_email_sent_at,
           "the membership whose notification raised should not be stamped -- see Finding 1(b)"
         assert_not_nil healthy.welcome_email_sent_at
+
+        assert_enqueued_email_with MembershipMailer, :welcome, args: [memberships(:regular_user_monthly)]
+        assert_enqueued_email_with AdminMailer, :new_subscription, args: [healthy]
       end
     end
   end

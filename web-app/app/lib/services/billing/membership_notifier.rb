@@ -65,19 +65,28 @@ module Services
           MembershipMailer.welcome(@membership).deliver_later
         end
 
-        # Deliberately OUTSIDE the with_lock above. MembershipMailer's
-        # deliver_later has already been pushed to Sidekiq by the time
-        # execution reaches here -- that push is not part of the DB
-        # transaction, so it does not roll back with it. If this admin send
-        # raised from INSIDE the lock (say, ADMIN_NOTIFICATION_EMAIL unset),
-        # the transaction would roll welcome_email_sent_at back to nil while
-        # the customer's welcome job was already queued to run -- reopening
-        # the exact double-send the stamp-before-enqueue ordering exists to
-        # prevent, only now triggered by a failure on the admin side. Keeping
-        # it outside means an admin-send failure can never affect whether the
-        # member gets exactly one welcome email; at worst the owner misses a
-        # notice, which is the same silent-miss tradeoff RecordDonation
-        # accepts for a donor receipt.
+        # Deliberately OUTSIDE the with_lock above -- but NOT because
+        # AdminMailer's own action body could raise inside the transaction.
+        # deliver_later never runs the mailer action at enqueue time; it only
+        # serialises (mailer_class, action, args) into an ActiveJob, so
+        # admin_address's MissingAdminAddress raise (if ADMIN_NOTIFICATION_EMAIL
+        # were ever unset) would fire later, when that job PERFORMS in Sidekiq
+        # -- fully decoupled from this transaction by then. Confirmed: with
+        # ADMIN_NOTIFICATION_EMAIL unset, MembershipNotifier.call does not raise.
+        #
+        # The real risk is the enqueue itself: deliver_later's push to Redis is
+        # a synchronous call that can fail (Redis down, say). Two deliver_later
+        # calls sharing one with_lock means a failure on the SECOND leaves the
+        # FIRST irrevocably already pushed to Sidekiq -- the transaction still
+        # rolls back and clears welcome_email_sent_at, but the customer's
+        # welcome job is already queued to run. A retried reconcile would then
+        # find the once-only guard cleared and send a second welcome email --
+        # reopening the exact double-send Task 5's with_lock exists to prevent,
+        # only now triggered by the admin enqueue instead of the customer one.
+        # Keeping the admin send outside the lock means a failed admin enqueue
+        # can never affect whether the member gets exactly one welcome email;
+        # at worst the owner misses a notice, the same silent-miss tradeoff
+        # RecordDonation accepts for a donor receipt.
         AdminMailer.new_subscription(@membership).deliver_later
 
         Result.new(success?: true, data: :welcome, errors: [])
@@ -101,9 +110,12 @@ module Services
           end
         end
 
-        # Same reasoning as deliver_welcome: outside the lock, so a failure
-        # sending the admin notice can never roll back ended_email_sent_at
-        # and reopen a double-send of the customer's cancellation email.
+        # Same reasoning as deliver_welcome: outside the lock not because the
+        # mailer action body could raise transactionally (deliver_later never
+        # runs it there -- see deliver_welcome), but because a failed Redis
+        # enqueue for this admin send, if it shared the lock above, would roll
+        # back ended_email_sent_at after the customer's cancellation job was
+        # already irrevocably queued -- reopening a double-send of that email.
         AdminMailer.subscription_canceled(@membership).deliver_later
 
         Result.new(success?: true, data: result, errors: [])

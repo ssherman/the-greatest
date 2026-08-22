@@ -305,6 +305,31 @@ module Services
 
         assert_enqueued_email_with AdminMailer, :anonymous_donation, args: [result.data]
       end
+
+      # Finding 3, fix round 1: every other donation-flow test above leaves
+      # the donation userless, so all of them exercise deliver_receipt's
+      # anonymous_donation branch. This one attaches a real signed-in donor
+      # end-to-end through RecordDonation.call, so the OTHER branch --
+      # new_donation for an identified donor -- has real service-level
+      # coverage too. If that branch inverted (a named donor's notice saying
+      # "anonymous"), this is the test that would catch it.
+      test "notifies the owner with new_donation, not anonymous_donation, for a donation from a signed-in donor" do
+        user = users(:regular_user)
+        ::Stripe::Checkout::Session.expects(:retrieve)
+          .returns(session_stub(metadata: {
+            "origin_domain" => "books", "app_user_id" => user.id.to_s,
+            "origin_app" => ::Services::Billing::StripeClient::ORIGIN_APP
+          }))
+
+        result = nil
+        assert_enqueued_emails(2) do
+          result = RecordDonation.call(checkout_session_id: "cs_test_1")
+        end
+
+        assert_equal user, result.data.user
+        assert_enqueued_email_with MembershipMailer, :donation_receipt, args: [result.data]
+        assert_enqueued_email_with AdminMailer, :new_donation, args: [result.data]
+      end
     end
   end
 end
