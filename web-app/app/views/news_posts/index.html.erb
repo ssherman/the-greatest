@@ -1,0 +1,35 @@
+<%
+  content_for :page_title, "#{@page_title} | #{domain_name}"
+  content_for :meta_description,
+    @topic ? "News and updates about #{@topic.name.downcase} from #{domain_name}." :
+             "Site news, ranking updates and new features from #{domain_name}."
+%>
+
+<div class="space-y-8">
+  <h1 class="text-3xl sm:text-4xl font-bold text-center text-balance">
+    <%= @topic ? @topic.name : "News" %>
+  </h1>
+
+  <% if @topic %>
+    <p class="text-center">
+      <%= link_to "All news", news_path, class: "link" %>
+    </p>
+  <% end %>
+
+  <% if @news_posts.any? %>
+    <div class="max-w-3xl mx-auto space-y-6">
+      <% @news_posts.each do |news_post| %>
+        <%= render "card", news_post: news_post %>
+      <% end %>
+    </div>
+
+    <div class="flex justify-center">
+      <%== @pagy.series_nav(slots: 5) %>
+    </div>
+    <p class="text-center text-sm text-base-content/70">
+      Page <%= number_with_delimiter(@pagy.page) %> of <%= number_with_delimiter(@pagy.last) %>
+    </p>
+  <% else %>
+    <p class="text-center text-base-content/70">No news yet.</p>
+  <% end %>
+</div>

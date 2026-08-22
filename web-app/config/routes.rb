@@ -315,6 +315,24 @@ Rails.application.routes.draw do
   # The members' area -- the first thing behind the paywall.
   get "members", to: "members#show", as: :members
 
+  # News -- global (non-domain-constrained) like /membership and /my/lists: each
+  # site serves its own posts from one set of routes, with the layout resolved
+  # from Current.domain in the controller. Edge-cached; drafts 404 rather than
+  # rendering behind a cache.
+  #
+  # The topic route is declared BEFORE the slug route, and "topic" is a
+  # friendly_id reserved word, so no post can ever claim /news/topic.
+  #
+  # Order matters: /page/1 must precede the generic /page/:page.
+  get "news", to: "news_posts#index", as: :news
+  get "news/page/1", to: redirect("/news", status: 301)
+  get "news/page/:page", to: "news_posts#index", as: :news_page, constraints: {page: /\d+/}
+  get "news/topic/:topic_slug/page/1", to: redirect("/news/topic/%{topic_slug}", status: 301)
+  get "news/topic/:topic_slug", to: "news_posts#index", as: :news_topic
+  get "news/topic/:topic_slug/page/:page", to: "news_posts#index", as: :news_topic_page,
+    constraints: {page: /\d+/}
+  get "news/:slug", to: "news_posts#show", as: :news_post
+
   # Legacy books URL. ~15 years of inbound links point at /support.
   get "support", to: redirect("/membership", status: 301)
 
