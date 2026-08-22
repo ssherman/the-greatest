@@ -12,6 +12,24 @@ import { test, expect, type Page } from "@playwright/test";
 // The live Markdown preview test is the one exception: it drives the `new`
 // post form's body field directly and never submits, so it creates nothing to
 // clean up.
+//
+// Every table-row locator below is scoped to "main table tbody tr", never a
+// bare "tbody tr" -- same hazard reviews.spec.ts already documents:
+// rack-mini-profiler (Gemfile, development only) injects its own markup
+// straight into <body>, outside <main>, and an unscoped tbody selector can
+// match its rows too. This was a real, reproducible flake here (not a
+// timing issue): after a topic's row was gone and "Topic deleted." had
+// rendered, an unscoped locator for the deleted row's own name still
+// resolved to 1 element -- mini-profiler's own panel can carry the literal
+// SQL text of the query that just ran, which contains the deleted row's
+// name.
+//
+// Every name this file creates starts with E2E_PREFIX. The inline deletes
+// below are the happy path; the test.afterEach sweep at the bottom is the
+// safety net for when an assertion fails before a test reaches its own
+// cleanup -- mirroring reviews.spec.ts's afterEach, the closest precedent
+// named in the brief.
+const E2E_PREFIX = "E2E News";
 
 async function createTopic(page: Page, name: string) {
   await page.goto("/admin/news_topics/new");
@@ -22,11 +40,15 @@ async function createTopic(page: Page, name: string) {
 
 async function deleteTopic(page: Page, name: string) {
   await page.goto("/admin/news_topics");
-  const row = page.locator("tbody tr", { hasText: name });
+  const row = page.locator("main table tbody tr", { hasText: name });
   await expect(row).toBeVisible();
   page.once("dialog", (dialog) => dialog.accept());
   await row.getByRole("button", { name: "Delete" }).click();
-  await expect(page.locator("tbody tr", { hasText: name })).toHaveCount(0);
+
+  // Synchronizes on the flash notice before checking the row is gone, as a
+  // clear checkpoint that the redirect + re-render actually completed.
+  await expect(page.locator("#flash")).toContainText("Topic deleted.");
+  await expect(page.locator("main table tbody tr", { hasText: name })).toHaveCount(0);
 }
 
 // Deletes the post whose show page is currently on screen.
@@ -36,7 +58,31 @@ async function deletePostFromShowPage(page: Page) {
   await expect(page).toHaveURL(/\/admin\/news_posts$/);
 }
 
+// Safety-net sweep: deletes every row at indexPath whose text contains
+// prefix, through the admin UI itself. Used from test.afterEach so a test
+// that fails before reaching its own inline delete cannot strand a row in
+// the (not disposable) development database. Bounded so a stuck delete
+// surfaces as a thrown error instead of hanging the run.
+async function sweepByPrefix(page: Page, indexPath: string, prefix: string, maxIterations = 20) {
+  await page.goto(indexPath);
+  for (let i = 0; i < maxIterations; i++) {
+    const row = page.locator("main table tbody tr", { hasText: prefix }).first();
+    if ((await row.count()) === 0) return;
+    page.once("dialog", (dialog) => dialog.accept());
+    await row.getByRole("button", { name: "Delete" }).click();
+    await expect(page).toHaveURL(new RegExp(`${indexPath}$`));
+  }
+  throw new Error(
+    `sweepByPrefix: rows matching "${prefix}" at ${indexPath} were not fully cleared after ${maxIterations} attempts`
+  );
+}
+
 test.describe("Books admin — news", () => {
+  test.afterEach(async ({ page }) => {
+    await sweepByPrefix(page, "/admin/news_posts", E2E_PREFIX);
+    await sweepByPrefix(page, "/admin/news_topics", E2E_PREFIX);
+  });
+
   test.describe("sidebar navigation", () => {
     const sidebar = (page: Page) => page.getByTestId("admin-sidebar");
 
@@ -56,18 +102,18 @@ test.describe("Books admin — news", () => {
   });
 
   test("creates a topic, sees it listed, then deletes it", async ({ page }) => {
-    const name = `E2E News Topic ${Date.now()}`;
+    const name = `${E2E_PREFIX} Topic ${Date.now()}`;
     await createTopic(page, name);
 
-    const row = page.locator("tbody tr", { hasText: name });
+    const row = page.locator("main table tbody tr", { hasText: name });
     await expect(row).toBeVisible();
 
     await deleteTopic(page, name);
   });
 
   test("creates a post with a topic and sees it on the index", async ({ page }) => {
-    const topicName = `E2E News Topic ${Date.now()}`;
-    const title = `E2E News Post ${Date.now()}`;
+    const topicName = `${E2E_PREFIX} Topic ${Date.now()}`;
+    const title = `${E2E_PREFIX} Post ${Date.now()}`;
     await createTopic(page, topicName);
 
     await page.goto("/admin/news_posts/new");
@@ -80,7 +126,7 @@ test.describe("Books admin — news", () => {
     await expect(page.getByRole("heading", { name: title, level: 1 })).toBeVisible();
 
     await page.goto("/admin/news_posts");
-    const row = page.locator("tbody tr", { hasText: title });
+    const row = page.locator("main table tbody tr", { hasText: title });
     await expect(row).toBeVisible();
     await expect(row.getByText(topicName)).toBeVisible();
 
@@ -111,7 +157,7 @@ test.describe("Books admin — news", () => {
   });
 
   test("editing a post persists the change", async ({ page }) => {
-    const title = `E2E News Post ${Date.now()}`;
+    const title = `${E2E_PREFIX} Post ${Date.now()}`;
     await page.goto("/admin/news_posts/new");
     await page.locator('input[name="news_post[title]"]').fill(title);
     await page.locator('textarea[name="news_post[body]"]').fill("Original body.");
@@ -139,7 +185,7 @@ test.describe("Books admin — news", () => {
   });
 
   test("deletes a post through the delete control, including the confirmation dialog", async ({ page }) => {
-    const title = `E2E News Post ${Date.now()}`;
+    const title = `${E2E_PREFIX} Post ${Date.now()}`;
     await page.goto("/admin/news_posts/new");
     await page.locator('input[name="news_post[title]"]').fill(title);
     await page.locator('textarea[name="news_post[body]"]').fill("Body to be deleted.");
@@ -154,11 +200,11 @@ test.describe("Books admin — news", () => {
     await page.getByRole("button", { name: "Delete" }).click();
 
     await expect(page).toHaveURL(/\/admin\/news_posts$/);
-    await expect(page.locator("tbody tr", { hasText: title })).toHaveCount(0);
+    await expect(page.locator("main table tbody tr", { hasText: title })).toHaveCount(0);
   });
 
   test("a draft post is visible in the admin list and marked as a draft in words", async ({ page }) => {
-    const title = `E2E News Draft ${Date.now()}`;
+    const title = `${E2E_PREFIX} Draft ${Date.now()}`;
     await page.goto("/admin/news_posts/new");
     await page.locator('input[name="news_post[title]"]').fill(title);
     await page.locator('textarea[name="news_post[body]"]').fill("Draft body, no publish date set.");
@@ -174,7 +220,7 @@ test.describe("Books admin — news", () => {
     await expect(page.getByText("Draft", { exact: true })).toBeVisible();
 
     await page.goto("/admin/news_posts");
-    const row = page.locator("tbody tr", { hasText: title });
+    const row = page.locator("main table tbody tr", { hasText: title });
     await expect(row).toBeVisible();
     await expect(row.getByText("Draft", { exact: true })).toBeVisible();
 
@@ -187,7 +233,7 @@ test.describe("Books admin — news", () => {
     test("copies the uploaded image's Markdown snippet to the clipboard", async ({ page, context }) => {
       await context.grantPermissions(["clipboard-read", "clipboard-write"]);
 
-      const title = `E2E News Post Image ${Date.now()}`;
+      const title = `${E2E_PREFIX} Post Image ${Date.now()}`;
       // A minimal 1x1 PNG, inline -- no fixture file needed.
       const png = Buffer.from(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
