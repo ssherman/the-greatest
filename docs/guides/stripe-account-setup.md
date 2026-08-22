@@ -344,6 +344,37 @@ since you first confirmed them:
   "no resolvable user" — see legacy's `docs/features/stripe_coexistence_guard.md` for the full
   classification table).
 
+### The `payment_link` confirmation — done 2026-08-22, and how to redo it
+
+Legacy's guard skips any `checkout.session.completed` whose `payment_link` is blank, treating it as
+another app's. If legacy's own sessions ever arrived without that field, legacy would silently stop
+recording its own donations — no row, no receipt, and a 200 back to Stripe so nothing retries.
+
+**Confirmed present on a real delivery**: `"payment_link": "plink_1QwDVhEAWBHYHNGXlIAVbWOp"`, on a
+live $5 donation through legacy's own payment link. The same payload also showed
+`metadata.created_by = "greatest_books_app"` with no `origin_app` key (so the new app's ownership
+gate correctly reads it as not-ours) and `client_reference_id = "1141"`, a **legacy** user id —
+which is exactly why `RecordDonation` gates that field on `origin_app` before trusting it.
+
+**Two traps if you redo this check.**
+
+*Stripe prunes event payload data after 30 days.* An older event renders as three fields with
+"Events older than 30 days have limited data", and `payment_link`'s absence there means nothing. On
+a quiet account there may be no recent checkout at all — legacy had none between 13 July and 22
+August 2026. The cheap fix is to make a small donation through legacy's own payment link and inspect
+that: a few dollars, refundable, and it also proves legacy's whole payment path still works.
+
+*Do not retrieve the session fresh via the API or the CLI.* That uses your client's API version, not
+the version pinned to legacy's endpoint — and the endpoint's pinned version is the entire variable
+under test. Read the request body from the endpoint's delivery log instead.
+
+Also note the runbook's earlier advice not to settle this by reading the endpoint's API version
+still stands, but there is a sound code-level argument that makes the risk negligible: legacy's
+`stripe:setup_webhook` calls `Stripe::WebhookEndpoint.create` with **no `api_version`**, so the
+endpoint is pinned to the account default as of February 2025 — four years after Payment Links
+shipped. That is inference, not observation, which is why the payload check above was still worth
+doing.
+
 ## 8. SendGrid: sending domain and API key
 
 Membership emails (increment 5 of the spec, `docs/features/email.md`) go out through SendGrid.
