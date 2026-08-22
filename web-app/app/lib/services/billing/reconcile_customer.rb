@@ -34,6 +34,17 @@ module Services
           subscriptions.map { |subscription| upsert(subscription, user) }
         end
 
+        # Deliberately outside the transaction above, and after it has
+        # committed. MembershipNotifier enqueues a Sidekiq job carrying a
+        # GlobalID and writes welcome_email_sent_at as its once-only guard;
+        # either one happening before the reconcile's own transaction commits
+        # would be wrong. A rollback after this point (a later subscription in
+        # the same batch failing, say) would otherwise leave Sidekiq holding a
+        # job for a Membership row that reverted or never existed, and would
+        # let a retried reconcile re-send a welcome email whose "sent" stamp
+        # got rolled back with it.
+        transitions.each { |transition| MembershipNotifier.call(transition) }
+
         Result.new(success?: true, data: transitions, errors: [])
       rescue Stripe::StripeError => e
         Rails.logger.error("[billing] reconcile failed for #{@stripe_customer_id}: #{e.class}")

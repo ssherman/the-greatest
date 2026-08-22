@@ -1,0 +1,17 @@
+<p>Thank you for becoming a member of <strong><%= @branding.site_name %></strong>.</p>
+
+<p>Your support keeps the site running and ad-free.</p>
+
+<% if @renews_on %>
+  <p>Your membership renews on <%= @renews_on.strftime("%B %-d, %Y") %>.</p>
+<% end %>
+
+<p>
+  You can manage or cancel your membership at any time from
+  <%= link_to "your membership page", membership_url(@branding.url_options) %>.
+</p>
+
+<p>
+  If there is something you would like to see added to the site, just reply to this
+  email — I read every one.
+</p>
