@@ -28,6 +28,13 @@ namespace :billing do
     events.each { |event| Billing::ProcessStripeEventJob.perform_async(event.id) }
   end
 
+  desc "Mark every existing membership as already-emailed, before opening MEMBERSHIP_EMAIL_SCOPE"
+  task backfill_email_stamps: :environment do
+    result = Services::Billing::BackfillEmailStamps.call
+    puts "welcome stamps filled: #{result.data[:welcome]}"
+    puts "ended stamps filled:   #{result.data[:ended]}"
+  end
+
   desc "Report the legacy -> new billing migration invariants"
   task verify_migration: :environment do
     result = Services::Billing::VerifyMigration.call

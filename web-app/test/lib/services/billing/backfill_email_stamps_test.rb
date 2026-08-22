@@ -1,0 +1,115 @@
+require "test_helper"
+
+module Services
+  module Billing
+    class BackfillEmailStampsTest < ActiveSupport::TestCase
+      include ActionMailer::TestHelper
+
+      # Only exercised by the two load-bearing demonstration tests below,
+      # which route through MembershipNotifier -> AdminMailer; the ordinary
+      # backfill tests never render mail. Set unconditionally anyway, to
+      # match the convention in membership_notifier_test.rb.
+      setup do
+        ENV["MAIL_FROM_ADDRESS"] = "contact@example.org"
+        ENV["ADMIN_NOTIFICATION_EMAIL"] = "owner@example.org"
+      end
+
+      teardown do
+        ENV.delete("MAIL_FROM_ADDRESS")
+        ENV.delete("ADMIN_NOTIFICATION_EMAIL")
+      end
+
+      test "stamps a membership that was never welcomed" do
+        membership = memberships(:regular_user_monthly)
+        membership.update!(welcome_email_sent_at: nil, status: :active)
+
+        BackfillEmailStamps.call
+
+        assert_not_nil membership.reload.welcome_email_sent_at
+      end
+
+      test "stamps the ending notice on a membership that is already cancelled" do
+        membership = memberships(:regular_user_monthly)
+        membership.update!(status: :canceled, welcome_email_sent_at: nil, ended_email_sent_at: nil)
+
+        BackfillEmailStamps.call
+
+        assert_not_nil membership.reload.ended_email_sent_at
+      end
+
+      # Idempotent: running it twice must not move a stamp that already exists,
+      # or a genuine send date would be rewritten to the backfill date.
+      test "leaves an existing stamp untouched" do
+        original = 3.days.ago.change(usec: 0)
+        membership = memberships(:regular_user_monthly)
+        membership.update!(welcome_email_sent_at: original)
+
+        BackfillEmailStamps.call
+
+        assert_equal original.to_i, membership.reload.welcome_email_sent_at.to_i
+      end
+
+      # The whole point: it must not send anything.
+      test "sends no email of any kind" do
+        memberships(:regular_user_monthly).update!(welcome_email_sent_at: nil)
+
+        assert_no_enqueued_emails { BackfillEmailStamps.call }
+      end
+
+      test "reports how many rows it stamped" do
+        memberships(:regular_user_monthly).update!(welcome_email_sent_at: nil, status: :active)
+
+        result = BackfillEmailStamps.call
+
+        assert result.success?
+        assert result.data[:welcome] >= 1
+      end
+
+      # LOAD-BEARING DEMONSTRATION. This is the actual hazard the backfill
+      # exists to close: the moment MEMBERSHIP_EMAIL_SCOPE=all is set at
+      # legacy cutover, a legacy-shaped membership (no origin_domain, never
+      # welcomed, access-granting) is exactly what MembershipNotifier would
+      # mail on the very next reconcile. Without the backfill run first, it
+      # does; with it run first, it does not. If this pair of assertions ever
+      # both pass with the "before" half showing no mail, the protection is
+      # decorative, not load-bearing -- so the "before" half must show mail
+      # actually going out.
+      test "without the backfill, opening the scope mails a legacy membership on the next reconcile" do
+        membership = legacy_shaped_membership
+
+        with_env(MembershipEmailScope::ENV_VAR => "all") do
+          assert_enqueued_emails(2) do
+            MembershipNotifier.call(
+              MembershipTransition.new(membership: membership, previous_status: "active")
+            )
+          end
+        end
+      end
+
+      test "after the backfill, opening the scope sends nothing for the same legacy membership" do
+        membership = legacy_shaped_membership
+
+        BackfillEmailStamps.call
+
+        with_env(MembershipEmailScope::ENV_VAR => "all") do
+          assert_no_enqueued_emails do
+            MembershipNotifier.call(
+              MembershipTransition.new(membership: membership, previous_status: "active")
+            )
+          end
+        end
+      end
+
+      private
+
+      # Never sold by this app (no origin_domain), never welcomed, currently
+      # access-granting -- exactly what every pre-cutover legacy membership
+      # looks like.
+      def legacy_shaped_membership
+        memberships(:regular_user_monthly).tap do |m|
+          m.update!(origin_domain: nil, welcome_email_sent_at: nil, status: :active)
+        end
+      end
+    end
+  end
+end
