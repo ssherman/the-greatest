@@ -89,15 +89,41 @@ class ApplicationMailerTest < ActionMailer::TestCase
   # the mailer action body -- is exactly what Step 1 needed verified rather
   # than assumed. Stubs Mail::Message#deliver, the lowest-level call inside
   # that path, to simulate the SMTP failure itself.
-  test "swallows a permanent SMTP failure instead of letting it raise" do
+  # A regression that interpolated error.message (or the recipient) into the
+  # log line would pass "swallows ... instead of letting it raise" just as
+  # easily as the fixed code -- that assertion only sees whether something
+  # raised, not what got logged. This repo is public, and a real SMTP 550
+  # quotes the rejected address back in its message, so the log line matters
+  # as much as the non-raise. The rejected address below is deliberately
+  # recognisable (not a generic string) so an interpolation regression can't
+  # slip past by coincidence.
+  test "swallows a permanent SMTP failure instead of letting it raise, and never logs the address or exception message" do
     with_env("MAIL_FROM_ADDRESS" => "noreply@example.org") do
-      Mail::Message.any_instance.stubs(:deliver).raises(Net::SMTPFatalError.new("550 mailbox unavailable"))
+      rejected_address = "nobody-rejected@example.org"
+      smtp_error = Net::SMTPFatalError.new(
+        "550 5.1.1 <#{rejected_address}>: Recipient address rejected: User unknown in virtual mailbox table"
+      )
+      Mail::Message.any_instance.stubs(:deliver).raises(smtp_error)
 
-      assert_nothing_raised do
-        perform_enqueued_jobs do
-          ProbeMailer.probe(domain: :books).deliver_later
+      log_output = StringIO.new
+      original_logger = Rails.logger
+      Rails.logger = Logger.new(log_output)
+
+      begin
+        assert_nothing_raised do
+          perform_enqueued_jobs do
+            ProbeMailer.probe(domain: :books).deliver_later
+          end
         end
+      ensure
+        Rails.logger = original_logger
       end
+
+      logged = log_output.string
+      assert_includes logged, "#{ProbeMailer.mailer_name}#probe"
+      assert_includes logged, "Net::SMTPFatalError"
+      refute_includes logged, rejected_address
+      refute_includes logged, smtp_error.message
     end
   end
 

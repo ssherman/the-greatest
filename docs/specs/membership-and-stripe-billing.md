@@ -763,6 +763,19 @@ with a stated reason.
   redirect to Stripe, logging a bare `console.error`. `assert_redirected_to` passes against that
   code. The fix is `data: {turbo: false}` on the submitter. Any future control that redirects
   off-origin inherits the same hazard and needs E2E coverage, not a controller test.
+- **A `memberships` rebuild from Stripe is a mass welcome-email event.**
+  `MembershipTransition#became_active?` has no `previous_status.nil?` guard, unlike
+  `became_canceled?` — correct for normal operation, where `previous_status: nil` only ever means
+  "this membership row didn't exist a moment ago," i.e. a genuine new activation. But rebuilding
+  `memberships` from Stripe (dropping the table and re-running `billing:reconcile_all`) produces
+  that same `previous_status: nil` for every row it recreates, including every already-existing
+  active subscription — the rebuild reads as thousands of fresh activations, all owed a welcome
+  email. Today `MembershipEmailScope`'s `own_only` default limits the blast radius to memberships
+  `origin_domain`-tagged as sold by this app; once cutover flips `MEMBERSHIP_EMAIL_SCOPE=all`, the
+  same rebuild would welcome-email the whole account, legacy-sold memberships included.
+  **Mitigation:** set `MEMBERSHIP_EMAIL_SCOPE` to anything other than `all` (or unset it — `own_only`
+  is the default) before running any bulk `memberships` rebuild, and confirm it's back to the
+  intended value afterward.
 
 ## Future Improvements
 

@@ -61,15 +61,29 @@ module Services
         # is still `received` or `failed` -- re-receipts a donor whose donation
         # committed on an earlier attempt.
         #
-        # The flip side is accepted, not overlooked: if the row commits but the
-        # deliver_later enqueue itself fails (a Redis blip, the process dying in
-        # that exact window), the donation is never retried as new, so that
-        # receipt never goes out. Donations have no *_email_sent_at column, so
-        # nothing records that a receipt was owed and never sent -- a silent
-        # miss, on purpose. For a receipt, a rare silent miss is the better
-        # failure direction than double-mailing a donor; a donor who never got
-        # theirs can still be traced through stripe_events or the Stripe
-        # dashboard if it ever needs chasing up.
+        # The flip side is a deliberately CHOSEN trade-off, not the only option
+        # on the table: if the row commits but the deliver_later enqueue
+        # itself fails (a Redis blip, the process dying in that exact window),
+        # the donation is never retried as new, so that receipt never goes
+        # out, and donations have no *_email_sent_at column to record that one
+        # was owed. A real alternative exists -- wrapping save! and the donor
+        # receipt's deliver_later in one DB transaction would mean a raise
+        # from that enqueue rolls the save back too: previously_new_record?
+        # never sticks, the row never commits, and a Sidekiq retry of the same
+        # event finds no row, builds a fresh one, and sends the receipt. That
+        # was not taken here: a rare silent miss (the donor never gets a
+        # receipt, but the row and the revenue are recorded correctly) is
+        # judged the better failure direction than double-mailing a donor. A
+        # donor who never got theirs can still be traced through
+        # stripe_events or the Stripe dashboard if it ever needs chasing up.
+        #
+        # If this trade-off gets revisited, the admin sends in deliver_receipt
+        # below would have to stay OUTSIDE any such transaction wrap: they run
+        # after the donor receipt, so a failed admin enqueue sharing that
+        # transaction would roll back a row whose donor receipt was already
+        # irrevocably pushed to Sidekiq -- reopening exactly the double-send
+        # this trade-off exists to avoid, only now triggered by the admin
+        # send instead of the donor one.
         deliver_receipt(donation) if donation.previously_new_record?
 
         success(donation)

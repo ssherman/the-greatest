@@ -30,6 +30,25 @@ class AdminMailerTest < ActionMailer::TestCase
     assert_match "The Greatest Games", mail.body.encoded
   end
 
+  test "subscription_canceled goes to the admin address, not to the member" do
+    membership = memberships(:regular_user_monthly)
+    membership.update!(origin_domain: "music")
+
+    mail = AdminMailer.subscription_canceled(membership)
+
+    assert_equal ["owner@example.org"], mail.to
+    assert_no_match(/#{Regexp.escape(membership.user.email)}/, mail.subject)
+  end
+
+  test "subscription_canceled names which site the membership was on" do
+    membership = memberships(:regular_user_monthly)
+    membership.update!(origin_domain: "games")
+
+    mail = AdminMailer.subscription_canceled(membership)
+
+    assert_match "The Greatest Games", mail.body.encoded
+  end
+
   test "new_donation names the amount" do
     donation = donations(:regular_user_gift)
     donation.update!(amount_cents: 5000, domain: "books")

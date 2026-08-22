@@ -11,7 +11,12 @@ module Services
     #      this, they get two of every email.
     #   2. The *_email_sent_at timestamps -- the nightly sweep re-reconciles
     #      every subscription on the account, and a transient Stripe blip can
-    #      replay a transition. These make each email once-only per membership.
+    #      replay a transition. These make each email once-only per
+    #      membership -- self-sufficiently: deliver_welcome / deliver_cancellation
+    #      re-check the stamp INSIDE @membership.with_lock, where the row lock
+    #      and reload mean a second caller -- even one holding a completely
+    #      separate, independently-loaded copy of the membership -- sees the
+    #      first caller's committed stamp before it can send.
     #   3. The transition itself -- "currently active" is true every night;
     #      "just became active" is true once.
     class MembershipNotifier
@@ -41,29 +46,47 @@ module Services
       private
 
       def deliver_welcome
-        # Stamp BEFORE enqueuing. Two webhook endpoints deliver every event, so
-        # two jobs routinely process the same transition concurrently; stamping
-        # first means the loser of that race finds the timestamp set and sends
-        # nothing. Enqueuing first would send two emails and then stamp twice.
-        # (Belt and braces: acquire_lock's transaction-scoped advisory lock
-        # already serialises concurrent reconciles for one customer, so by the
-        # time a second reconcile's upsert re-reads this row, became_active?
-        # is already false for it. This ordering matters for the case that
-        # guard does not cover -- two independently-triggered reconciles, or a
-        # future caller that does not take that lock.)
+        # The re-check INSIDE with_lock is what makes this guard self-
+        # sufficient. with_lock takes a row lock and reloads the membership
+        # from the database before the block runs, so a second notifier --
+        # holding an entirely separate in-memory copy of this same membership,
+        # each loaded via its own Membership.find before either one stamped
+        # anything -- blocks on that row lock, then reloads and sees the first
+        # notifier's already-committed welcome_email_sent_at. Without this
+        # re-check, two such copies both pass call's outer
+        # `welcome_email_sent_at.nil?` check (each reads the column before any
+        # lock exists), both stamp, and both enqueue: two welcome emails and
+        # two admin notices for one transition. See
+        # "sends exactly one welcome and one admin notice for two
+        # independently-loaded copies of the same membership" below for the
+        # regression test.
         #
-        # with_lock wraps both statements in one DB transaction (with a row
-        # lock, so a concurrent updater blocks rather than racing). If
-        # MembershipMailer.welcome or .deliver_later raises -- Redis is down,
-        # say -- the update! above rolls back with it, so the stamp does NOT
-        # survive a failed enqueue. Without this, a transient enqueue failure
-        # would permanently burn the once-only guard: welcome_email_sent_at
-        # would already be set, so no future reconcile would ever try again,
-        # and the member would never get a welcome email.
+        # ReconcileCustomer#acquire_lock's transaction-scoped advisory lock,
+        # keyed on the Stripe customer, is an ADDITIONAL layer on top of this,
+        # not a substitute for it. It serialises today's only path in --two
+        # webhook endpoints delivering the same event, or the nightly sweep
+        # racing a webhook -- but it says nothing about a caller that does not
+        # take that lock: an admin "resend welcome" action, a backfill task,
+        # anything calling this notifier directly. The in-lock re-check below
+        # is what stays correct regardless of who calls in.
+        #
+        # with_lock wraps the re-check, the stamp and the enqueue in one DB
+        # transaction (with a row lock, so a concurrent updater blocks rather
+        # than racing). If MembershipMailer.welcome or .deliver_later raises --
+        # Redis is down, say -- the update! above rolls back with it, so the
+        # stamp does NOT survive a failed enqueue. Without this, a transient
+        # enqueue failure would permanently burn the once-only guard:
+        # welcome_email_sent_at would already be set, so no future reconcile
+        # would ever try again, and the member would never get a welcome email.
+        sent = false
         @membership.with_lock do
+          next if @membership.welcome_email_sent_at.present?
+
           @membership.update!(welcome_email_sent_at: Time.current)
           MembershipMailer.welcome(@membership).deliver_later
+          sent = true
         end
+        return skipped("welcome already sent") unless sent
 
         # Deliberately OUTSIDE the with_lock above -- but NOT because
         # AdminMailer's own action body could raise inside the transaction.
@@ -93,12 +116,19 @@ module Services
       end
 
       def deliver_cancellation
-        # Stamp before enqueuing -- see deliver_welcome. with_lock wraps the
-        # stamp and the enqueue in one transaction, so a raising enqueue rolls
-        # the stamp back too, and a retried reconcile can genuinely resend.
+        # Same shape as deliver_welcome, see there for the full reasoning: the
+        # re-check INSIDE with_lock -- not stamp-before-enqueue ordering by
+        # itself -- is what makes this guard self-sufficient against two
+        # independently-loaded copies of the same membership. with_lock wraps
+        # the re-check, the stamp and the enqueue in one transaction, so a
+        # raising enqueue rolls the stamp back too, and a retried reconcile
+        # can genuinely resend.
         result = nil
+        sent = false
 
         @membership.with_lock do
+          next if @membership.ended_email_sent_at.present?
+
           @membership.update!(ended_email_sent_at: Time.current)
 
           if other_access?
@@ -108,7 +138,10 @@ module Services
             MembershipMailer.canceled_last(@membership).deliver_later
             result = :canceled_last
           end
+
+          sent = true
         end
+        return skipped("cancellation already sent") unless sent
 
         # Same reasoning as deliver_welcome: outside the lock not because the
         # mailer action body could raise transactionally (deliver_later never

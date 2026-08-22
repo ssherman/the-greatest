@@ -174,6 +174,40 @@ module Services
         assert_enqueued_emails(2) { MembershipNotifier.call(transition) }
       end
 
+      # THE ONCE-ONLY GUARD MUST BE SELF-SUFFICIENT. call's outer
+      # `welcome_email_sent_at.nil?` check reads the column from whatever
+      # in-memory copy of the membership it was handed -- it says nothing
+      # about what any OTHER copy has done. Two webhook endpoints receiving
+      # the same event each do their own Membership.find, so this is not a
+      # contrived scenario: each notifier here loads its own copy before
+      # either one stamps anything, exactly like two real webhook deliveries
+      # would. Only the re-check inside @membership.with_lock (which reloads
+      # the row under a lock) can catch that the other copy already sent.
+      #
+      # Without that in-lock re-check this sends 4 emails: two welcomes and
+      # two admin notices, from two calls that both find the guard clear.
+      test "sends exactly one welcome and one admin notice for two independently-loaded copies of the same membership" do
+        membership = sold_membership(status: :active)
+
+        first_copy = ::Membership.find(membership.id)
+        second_copy = ::Membership.find(membership.id)
+
+        first_transition = MembershipTransition.new(membership: first_copy, previous_status: nil)
+        second_transition = MembershipTransition.new(membership: second_copy, previous_status: nil)
+
+        assert_enqueued_emails(2) do
+          MembershipNotifier.call(first_transition)
+          MembershipNotifier.call(second_transition)
+        end
+
+        # Combined with the total of 2 above, these two pin exactly one of
+        # each -- not two welcomes and zero admin notices, or vice versa.
+        assert_enqueued_email_with MembershipMailer, :welcome, args: [membership]
+        assert_enqueued_email_with AdminMailer, :new_subscription, args: [membership]
+
+        assert_not_nil membership.reload.welcome_email_sent_at
+      end
+
       test "a membership this app did not sell notifies nobody, owner included" do
         membership = sold_membership(status: :active)
         membership.update!(origin_domain: nil)
