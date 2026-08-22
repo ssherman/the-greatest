@@ -6,9 +6,12 @@
   membership emails, admin UI, legacy guard patch, E2E). Increment 8 was the last one remaining and
   shipped on branch `membership-emails`. The Stripe-side production setup this all depends on
   (registering webhook endpoints, labelling live prices, activating the Billing Portal) is a
-  separate by-hand runbook, not code — see `docs/guides/stripe-account-setup.md`. Remaining
-  production follow-ups (not code, tracked in "Carried forward" below): flipping
-  `MEMBERSHIP_EMAIL_SCOPE` to `all` at legacy cutover.
+  separate by-hand runbook, not code — see `docs/guides/stripe-account-setup.md`.
+  **One code follow-up must land before the first real sale**: a notification that fails to enqueue
+  is currently lost permanently and silently — see the first entry under "Carried forward" below.
+  It is unreachable until this app sells something, which is why it did not block increment 8.
+  The remaining production follow-up is flipping `MEMBERSHIP_EMAIL_SCOPE` to `all` at legacy
+  cutover.
 - **Priority**: High
 - **Created**: 2026-08-14
 - **Developer**: Shane Sherman
@@ -660,6 +663,29 @@ Found during implementation and review of the billing core, the data migration, 
 entitlements, the admin UI, the legacy guard patch, and writing the account-setup runbook.
 None blocks that work; each has a named owner among the later increments, or is deferred
 with a stated reason.
+
+- **A notification that fails to enqueue is lost permanently, and silently. OPEN — fix before the
+  first real sale.** Raised by Codex on PR #245 and reproduced: if `MembershipNotifier` raises during
+  `deliver_later` (Redis unavailable is the realistic case), the `with_lock` block correctly rolls the
+  `welcome_email_sent_at` stamp back — but `upsert` has already committed the *status*. Every later
+  webhook retry and nightly sweep therefore computes `previous_status == status`, so `became_active?`
+  is false forever, and `ReconcileCustomer`'s per-transition rescue converts the failure into a
+  successful reconcile so the Stripe event is marked processed and Sidekiq never retries. The
+  membership is owed a welcome, the nil timestamp records exactly that, and nothing reads it.
+  Measured on a membership left in that state: `welcome_email_sent_at: nil`, emails enqueued on
+  retry: 0.
+
+  **The fix is to make eligibility durable rather than transitional.** The database already holds the
+  fact; `MembershipTransition` is the wrong authority for it. Send a welcome when the membership is
+  one this app sold, currently grants access, and has never been welcomed; send a cancellation when
+  it is one this app sold, is cancelled, has no ending notice, **and was welcomed** — that last clause
+  subsumes the existing "arrived already cancelled" guard, since a bulk-migrated row nobody welcomed
+  can never be sent an ending notice either. That shape is self-healing: a failed enqueue is simply
+  retried by the next sweep.
+
+  Unreachable today — nothing has been sold through this app, so no membership has
+  `origin_domain` set. It becomes live the moment the production Stripe setup is finished, which is
+  why it must land before the first sale rather than after.
 
 - ~~`origin_domain` is never written by reconcile.~~ **Fixed by increment 8.** `upsert` now
   assigns `origin_domain: subscription.metadata&.[]("origin_domain")` unconditionally on every
