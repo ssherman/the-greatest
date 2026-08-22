@@ -520,6 +520,96 @@ class NewsPostsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  # --- Task 19: games and music rollout ---
+
+  # The plan asserted an EMPTY games index plus `assert_select "html[data-theme]"`.
+  # Neither can fail: the games index is empty whether or not the domain scope
+  # works, and every layout in this app sets some data-theme. A published games
+  # post plus the games theme by NAME makes both halves discriminate.
+  test "the games host serves its own news index, not another site's" do
+    host! "dev.thegreatest.games"
+    games_post = NewsPost.create!(
+      domain: :games, title: "Games Launch Day", body: "We are live on games.",
+      published_at: 1.day.ago, user: users(:admin_user)
+    )
+
+    get news_path
+
+    assert_response :success
+    assert_equal [games_post.id], @controller.view_assigns["news_posts"].map(&:id)
+    assert_select "html[data-theme=?]", "abyss"
+  end
+
+  test "the music host serves its own news index" do
+    host! "dev.thegreatestmusic.org"
+
+    get news_path
+
+    assert_response :success
+    assert_equal [news_posts(:music_launch).id],
+      @controller.view_assigns["news_posts"].map(&:id)
+  end
+
+  test "the music post page emits Open Graph tags" do
+    host! "dev.thegreatestmusic.org"
+
+    get news_post_path(slug: "the-greatest-music-is-live")
+
+    assert_response :success
+    assert_select "meta[property='og:type'][content=?]", "article"
+  end
+
+  test "the games post page emits Open Graph tags" do
+    host! "dev.thegreatest.games"
+    NewsPost.create!(domain: :games, title: "Games OG Probe", body: "body",
+      published_at: 1.day.ago, user: users(:admin_user))
+
+    get news_post_path(slug: "games-og-probe")
+
+    assert_response :success
+    assert_select "meta[property='og:type'][content=?]", "article"
+  end
+
+  # Increment 4 gave books a self-referential canonical; music and games render
+  # the same views through their own layouts, and neither layout carried a
+  # canonical tag at all, so /news on those two hosts emitted none.
+  test "the music news index sets a canonical url" do
+    host! "dev.thegreatestmusic.org"
+
+    get news_path
+
+    assert_select "link[rel=canonical][href=?]", "http://dev.thegreatestmusic.org/news"
+  end
+
+  test "the games news index sets a canonical url" do
+    host! "dev.thegreatest.games"
+
+    get news_path
+
+    assert_select "link[rel=canonical][href=?]", "http://dev.thegreatest.games/news"
+  end
+
+  test "the music index links its own feed for autodiscovery" do
+    host! "dev.thegreatestmusic.org"
+
+    get news_path
+
+    assert_select "link[rel=?][type=?][href=?]", "alternate", "application/rss+xml",
+      "http://dev.thegreatestmusic.org/news.rss"
+  end
+
+  test "the games feed serves that site's posts" do
+    host! "dev.thegreatest.games"
+    NewsPost.create!(domain: :games, title: "Games Feed Item", body: "body",
+      published_at: 1.day.ago, user: users(:admin_user))
+
+    get news_path(format: :rss)
+
+    assert_response :success
+    assert_includes response.body, "Games Feed Item"
+    assert_not_includes response.body, "December Update"
+  end
+
   # --- Task 18: RSS feed ---
 
   test "the feed renders as rss" do

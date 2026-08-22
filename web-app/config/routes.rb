@@ -79,6 +79,13 @@ Rails.application.routes.draw do
     namespace :admin, module: "admin/music" do
       root to: "dashboard#index"
 
+      resources :news_topics
+      resources :news_posts do
+        collection do
+          post :preview
+        end
+      end
+
       # MusicBrainz search endpoints (shared across admin features)
       scope :musicbrainz, controller: "musicbrainz_search", as: "musicbrainz" do
         get :artists
@@ -755,6 +762,13 @@ Rails.application.routes.draw do
     # Admin interface for games domain
     namespace :admin, module: "admin/games", as: "admin_games" do
       root to: "dashboard#index"
+
+      resources :news_topics
+      resources :news_posts do
+        collection do
+          post :preview
+        end
+      end
 
       resources :games do
         resources :game_companies, only: [:create], shallow: true
