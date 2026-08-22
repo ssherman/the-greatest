@@ -49,6 +49,14 @@ module Services
       private
 
       # trialing and active both grant access.
+      #
+      # Deliberately NOT the same set as Membership.granting_access, despite
+      # the near-identical name -- that scope also grants to a `canceled`
+      # Stripe row still inside its paid-through grace period. Welcome
+      # eligibility here must not: a row that is already canceled, grace
+      # period or not, has nothing to welcome it to. Unifying these on the
+      # strength of the names would start sending welcome emails to members
+      # who have already cancelled.
       ACCESS_GRANTING = %w[trialing active].freeze
 
       # Eligibility is derived from DURABLE state, not from the status

@@ -42,10 +42,17 @@ module Services
 
       # Idempotent: running it twice must not move a stamp that already exists,
       # or a genuine send date would be rewritten to the backfill date.
+      #
+      # origin_domain: nil -- this must be a blank-origin row, i.e. inside the
+      # backfill's scope, or the assertion passes for the wrong reason (the
+      # ownership scope keeping it untouched, not the nil guard this test
+      # claims to exercise). Confirmed by deleting
+      # `.where(welcome_email_sent_at: nil)` from the service and watching
+      # this test go red -- see the fix-round report.
       test "leaves an existing stamp untouched" do
         original = 3.days.ago.change(usec: 0)
         membership = memberships(:regular_user_monthly)
-        membership.update!(welcome_email_sent_at: original)
+        membership.update!(origin_domain: nil, welcome_email_sent_at: original)
 
         BackfillEmailStamps.call
 
@@ -60,7 +67,7 @@ module Services
       end
 
       test "reports how many rows it stamped" do
-        memberships(:regular_user_monthly).update!(welcome_email_sent_at: nil, status: :active)
+        memberships(:regular_user_monthly).update!(origin_domain: nil, welcome_email_sent_at: nil, status: :active)
 
         result = BackfillEmailStamps.call
 
@@ -130,6 +137,32 @@ module Services
 
         with_env(MembershipEmailScope::ENV_VAR => "all") do
           assert_no_enqueued_emails do
+            MembershipNotifier.call(
+              MembershipTransition.new(membership: membership, previous_status: "active")
+            )
+          end
+        end
+      end
+
+      # LOAD-BEARING DEMONSTRATION, second half. The ended-stamp query narrows
+      # to `status: :canceled` deliberately: only a row that is ALREADY
+      # cancelled at backfill time should have its ended stamp pre-filled. A
+      # legacy row that is still active at cutover and cancels LATER must not
+      # be pre-stamped, or cancellation_owed? finds ended_email_sent_at
+      # already set and the member never gets a goodbye. Confirmed by
+      # deleting `status: :canceled` from the service's ended-stamp query and
+      # watching this test go red -- see the fix-round report.
+      test "a legacy row that cancels after cutover still gets its goodbye" do
+        membership = legacy_shaped_membership
+
+        BackfillEmailStamps.call
+        assert_not_nil membership.reload.welcome_email_sent_at
+        assert_nil membership.ended_email_sent_at
+
+        membership.update!(status: :canceled)
+
+        with_env(MembershipEmailScope::ENV_VAR => "all") do
+          assert_enqueued_email_with MembershipMailer, :canceled_last, args: [membership] do
             MembershipNotifier.call(
               MembershipTransition.new(membership: membership, previous_status: "active")
             )

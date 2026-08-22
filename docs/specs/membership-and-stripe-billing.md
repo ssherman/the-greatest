@@ -498,7 +498,12 @@ legacy's `/support`. **There is no data migration at the end** — it happens no
 and the nightly reconcile keeps it true.
 
 **Email eligibility is a second, separate cutover step, and it is a two-step operation where the
-order is not optional:**
+order is not optional. It also has an ordering requirement against the infra steps above: run the
+backfill only after legacy's `/support` has been retired, immediately before flipping the scope.**
+The backfill is a point-in-time snapshot, not an invariant — a legacy sale that completes between
+the backfill and the flip creates a fresh `source: :stripe`, blank-`origin_domain`, unstamped row
+that would mail at the flip, after legacy has already emailed that same person itself. Retiring
+`/support` first closes that window.
 
 ```
 1. bin/rails billing:backfill_email_stamps
@@ -716,10 +721,15 @@ with a stated reason.
   One deliberate trade-off ships with it: `cancellation_owed?` requires that a welcome actually went
   out, so a membership whose welcome enqueue failed and which is then cancelled before the next
   sweep recovers it receives no email at all, ever. The window is small — bounded by the nightly
-  sweep (at most 24 hours) and only reachable if the enqueue also fails — and it was chosen over
-  dropping the clause, which would make bulk-migration safety depend entirely on
-  `billing:backfill_email_stamps` having been run, an ops step a person can forget. See
-  `docs/features/email.md`'s "Durable eligibility, not transition-driven" for the full reasoning.
+  sweep (at most 24 hours) and only reachable if the enqueue also fails. The clause is not a
+  cutover safeguard — `welcome_owed?` has no analogous clause and cannot have one, so with the
+  backfill skipped every access-granting legacy row is owed a welcome regardless of whether this
+  clause exists; dropping it would only shrink the additional damage, not prevent it. The real
+  justification is a correctness property independent of cutover: never say goodbye to someone you
+  never said hello to. It covers cases the backfill never touches — a subscription created directly
+  in the Stripe Dashboard, or one created and cancelled while the webhook endpoint was down past
+  Stripe's retry window. See `docs/features/email.md`'s "Durable eligibility, not
+  transition-driven" for the full reasoning.
 
   This closes the "unreachable until this app sells something" gap noted below: it became live the
   moment the production Stripe setup finished, which is why it had to land before the first sale.

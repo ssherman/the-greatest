@@ -22,9 +22,17 @@ module Services
     # no error and no distinguishing log line. This backfill exists solely to
     # neutralise rows held back by the scope gate, so it must only ever touch
     # rows the gate is currently blocking: origin_domain blank. `[nil, ""]`
-    # mirrors Membership#sold_by_this_app? (`origin_domain.present?`) exactly
-    # -- a scope that disagreed with that predicate would be its own future
-    # bug.
+    # covers nil and the empty string, which is NOT quite the same set as
+    # Membership#sold_by_this_app? (`origin_domain.present?`): a
+    # whitespace-only value (`" "`) is blank per that predicate -- so
+    # sold_by_this_app? is false and the ownership gate would let it through
+    # -- but `[nil, ""]` does not match it, so this backfill would leave such
+    # a row untouched and it would mail at cutover. That gap is believed
+    # unreachable in practice: the only writer of origin_domain,
+    # CreateCheckoutSession, sets it from `.presence` and then `.compact`s
+    # the metadata hash, and Stripe itself drops a metadata key whose value
+    # is `""` -- there is no path that stamps whitespace into this column.
+    # If that ever changes, this scope must change with it.
     #
     # Idempotent and additive: it only ever fills a nil stamp, never moves an
     # existing one, and never sends anything. This is the one place in the

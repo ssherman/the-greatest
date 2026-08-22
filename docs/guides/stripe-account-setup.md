@@ -548,6 +548,31 @@ moment someone on the legacy side is likely to run it to clean up. Legacy's doc'
 never run `stripe:delete_webhooks` at or after cutover, and to remove legacy's endpoint from the
 Stripe Dashboard by hand instead — the cutover runbook should carry that instruction forward.
 
+## 11. Cutover
+
+Two landmines converge at books cutover (`thegreatestbooks.org` repointed at this app). Both are
+described above; this section is the runbook that carries them forward.
+
+1. **Remove legacy's webhook endpoint by hand, in the Stripe Dashboard.** Do not run
+   `rake stripe:delete_webhooks` from either side once `thegreatestbooks.org` points at this app —
+   see "10. Rollback" above for why the scoped guard resolves to **this app's** endpoint at exactly
+   that moment, not legacy's.
+2. **Run `bin/rails billing:backfill_email_stamps` BEFORE setting `MEMBERSHIP_EMAIL_SCOPE=all`, in
+   that order, every time.** `Services::Billing::MembershipNotifier` derives email eligibility from
+   each membership's own `welcome_email_sent_at`/`ended_email_sent_at` columns, not from a status
+   transition, which means every legacy membership on the account — none of which this app ever
+   welcomed — is one config flag away from being owed a welcome the moment the scope opens.
+   `billing:backfill_email_stamps` stamps those columns first, for every row the scope currently
+   blocks, so there is nothing left to send once it opens. **Reversing that order, or skipping the
+   backfill, mails a welcome email to every legacy member on the account at the next nightly sweep**
+   (`Billing::ReconcileAllCustomersJob`, 05:00 UTC) — this is the single most damaging mistake
+   available in this subsystem. Also run the backfill only after legacy's `/support` has been
+   retired (step 1's infra work), immediately before flipping the scope — a legacy sale that
+   completes between the backfill and the flip is a fresh, unstamped row that would otherwise mail
+   at cutover after legacy has already emailed that same person itself. See
+   `docs/features/email.md`'s "Durable eligibility, not transition-driven" and
+   `docs/specs/membership-and-stripe-billing.md`'s "Cutover" section for the full mechanism.
+
 ## See also
 
 - `docs/specs/membership-and-stripe-billing.md` — the design spec this runbook implements,

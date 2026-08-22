@@ -315,13 +315,21 @@ to survive for that to work, because none is consulted any more.
 oversight.** It means a membership whose welcome enqueue failed, and which is then cancelled before
 the next nightly sweep recovers it, receives no email at all — ever: the cancellation guard never
 fires, because there was no welcome to look back on. The window this can happen in is small —
-bounded by the nightly sweep (at most 24 hours) and only reachable at all if the enqueue also fails
-— and it was chosen deliberately over the alternative: dropping the clause would make
-bulk-migration safety (never emailing a legacy row this app never welcomed) depend entirely on
-`bin/rails billing:backfill_email_stamps` having been run before cutover, which is an ops step a
-person can forget. See `deployment/ENV.md`'s `MEMBERSHIP_EMAIL_SCOPE` entry and
-`docs/specs/membership-and-stripe-billing.md`'s "Cutover" section for why the backfill is mandatory,
-not optional, regardless.
+bounded by the nightly sweep (at most 24 hours) and only reachable at all if the enqueue also fails.
+
+The clause is NOT a cutover safeguard, and dropping it would not make bulk-migration safety depend
+on `billing:backfill_email_stamps`. `welcome_owed?` has no analogous clause and cannot have one —
+with the backfill skipped, every access-granting legacy row is owed a welcome regardless of whether
+this clause exists on the cancellation side. Removing it would only shrink the additional damage a
+skipped backfill causes, not prevent the catastrophe. The real justification, already captured by
+`MembershipNotifier`'s own comment on `cancellation_owed?` ("a membership this app never welcomed
+must never be sent an ending notice"), is a correctness property independent of cutover: **never
+say goodbye to someone you never said hello to.** It covers cases the backfill
+never touches at all — a subscription created directly in the Stripe Dashboard, or one created and
+cancelled while the webhook endpoint was down past Stripe's retry window, neither of which any
+bulk-migration step ever sees. See `deployment/ENV.md`'s `MEMBERSHIP_EMAIL_SCOPE` entry and
+`docs/specs/membership-and-stripe-billing.md`'s "Cutover" section for the backfill's own reasoning,
+which is separate from this clause's.
 
 **`Services::Billing::MembershipTransition` still exists**, with `previous_status` still captured
 and still readable, but nothing derives a boolean from it any more. It survives as the uniform
