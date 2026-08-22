@@ -40,4 +40,17 @@ class MembershipMailer < ApplicationMailer
       subject: "Your #{MailBranding.for(membership.origin_domain).site_name} membership has ended"
     )
   end
+
+  # Anonymous donations are supported and create no Customer, so the recipient
+  # is the address Stripe collected at checkout, not a user record.
+  def donation_receipt(donation)
+    @donation = donation
+    @amount = ActiveSupport::NumberHelper.number_to_currency(donation.amount_in_dollars)
+
+    branded_mail(
+      domain: donation.domain,
+      to: donation.email,
+      subject: "Thank you for your donation to #{MailBranding.for(donation.domain).site_name}"
+    )
+  end
 end

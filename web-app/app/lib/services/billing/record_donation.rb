@@ -56,6 +56,7 @@ module Services
           domain: session.metadata&.[]("origin_domain")
         )
         donation.save!
+        deliver_receipt(donation)
 
         success(donation)
       rescue ActiveRecord::RecordNotUnique
@@ -122,6 +123,16 @@ module Services
         # A Stripe customer id is globally unique and genuinely identifies a
         # person, so this match is safe even for a legacy-originated session.
         ::User.find_by(stripe_customer_id: session.customer) if session.customer.present?
+      end
+
+      # Legacy still takes donations through its own payment links and emails
+      # those donors itself, so this app must stay quiet about anything it did
+      # not take. MembershipEmailScope is the switch that opens up at cutover.
+      def deliver_receipt(donation)
+        return if donation.email.blank?
+        return unless MembershipEmailScope.may_email?(donation)
+
+        MembershipMailer.donation_receipt(donation).deliver_later
       end
 
       def success(data) = Result.new(success?: true, data: data, errors: [])

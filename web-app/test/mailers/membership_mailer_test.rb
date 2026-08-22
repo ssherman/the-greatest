@@ -61,4 +61,23 @@ class MembershipMailerTest < ActionMailer::TestCase
     assert_equal [membership.user.email], mail.to
     assert_no_match(/revert to a free account/, mail.body.encoded)
   end
+
+  test "the donation receipt goes to the address Stripe collected and names the amount" do
+    donation = donations(:regular_user_gift)
+    donation.update!(email: "donor@example.org", amount_cents: 2500, domain: "books", user: nil)
+
+    mail = MembershipMailer.donation_receipt(donation)
+
+    assert_equal ["donor@example.org"], mail.to
+    assert_match "$25.00", mail.body.encoded
+  end
+
+  test "the donation receipt is branded for the site the donation came from" do
+    donation = donations(:regular_user_gift)
+    donation.update!(email: "donor@example.org", domain: "games")
+
+    mail = MembershipMailer.donation_receipt(donation)
+
+    assert_match "The Greatest Games", mail.body.encoded
+  end
 end

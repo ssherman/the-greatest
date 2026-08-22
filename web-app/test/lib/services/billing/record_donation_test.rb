@@ -3,6 +3,11 @@ require "test_helper"
 module Services
   module Billing
     class RecordDonationTest < ActiveSupport::TestCase
+      # ActionMailer::TestHelper (not the plain ActiveJob one) is what defines
+      # assert_enqueued_emails / assert_no_enqueued_emails; it includes
+      # ActiveJob::TestHelper itself, so this is the superset.
+      include ActionMailer::TestHelper
+
       def session_stub(overrides = {})
         stub({
           id: "cs_test_1",
@@ -162,6 +167,25 @@ module Services
         assert_equal winner, result.data
       end
 
+      # Proves deliver_receipt is placed outside the rescue blocks: the first
+      # call is the genuine winner (creates the row and sends), the second is
+      # forced into the RecordNotUnique recovery path exactly like the test
+      # above -- it must converge on the winner's row WITHOUT sending a second
+      # receipt. This exercises the real rescue code (save! actually raises and
+      # is actually caught here), not a short-circuit earlier in #call -- both
+      # calls reach the same session/paid/amount checks and the same
+      # find_or_initialize_by + save! line.
+      test "running RecordDonation.call twice for a race'd payment intent sends exactly one receipt" do
+        ::Stripe::Checkout::Session.expects(:retrieve).twice.returns(session_stub)
+
+        assert_enqueued_emails 1 do
+          RecordDonation.call(checkout_session_id: "cs_test_1")
+
+          ::Donation.any_instance.expects(:save!).raises(ActiveRecord::RecordNotUnique.new("duplicate key"))
+          RecordDonation.call(checkout_session_id: "cs_test_1")
+        end
+      end
+
       # The of_kind? guard must not swallow a donation that is invalid for some
       # OTHER reason -- that would return success with nothing recorded and no
       # audit trail, which is exactly the defect class this codebase has been
@@ -208,6 +232,33 @@ module Services
         )
 
         assert_nil RecordDonation.call(checkout_session_id: "cs_test_1").data.user
+      end
+
+      test "emails a receipt for a donation this app took" do
+        ::Stripe::Checkout::Session.expects(:retrieve).returns(session_stub)
+
+        assert_enqueued_emails 1 do
+          RecordDonation.call(checkout_session_id: "cs_test_1")
+        end
+      end
+
+      # Legacy is still live, still takes donations through its own payment links,
+      # and still emails its own donors.
+      test "emails nothing for a donation this app did not take" do
+        ::Stripe::Checkout::Session.expects(:retrieve).returns(session_stub(metadata: {}))
+
+        assert_no_enqueued_emails do
+          RecordDonation.call(checkout_session_id: "cs_test_1")
+        end
+      end
+
+      test "emails nothing when Stripe collected no address" do
+        ::Stripe::Checkout::Session.expects(:retrieve)
+          .returns(session_stub(customer_details: stub(email: nil)))
+
+        assert_no_enqueued_emails do
+          RecordDonation.call(checkout_session_id: "cs_test_1")
+        end
       end
     end
   end
