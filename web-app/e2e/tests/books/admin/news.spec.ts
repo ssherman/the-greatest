@@ -237,6 +237,19 @@ test.describe("Books admin — news", () => {
 
     await row.getByRole("link", { name: title }).click();
     await expect(page).toHaveURL(/\/admin\/news_posts\/[^/]+$/);
+
+    // F2 (R57): the spec makes "a logged-in admin sees drafts on a public
+    // URL" unrepresentable on purpose, because /news/:slug is edge-cached
+    // for 24 hours. This is the only end-to-end proof of the branch's
+    // central safety property -- "drafts never render on a public URL" --
+    // using a real draft reached at its real public URL, rather than an
+    // unknown slug that 404s whether or not the draft gate exists at all.
+    const adminUrl = page.url();
+    const slug = new URL(adminUrl).pathname.split("/").pop()!;
+    const draftResponse = await page.goto(`/news/${slug}`);
+    expect(draftResponse?.status()).toBe(404);
+    await page.goto(adminUrl);
+
     await deletePostFromShowPage(page);
   });
 

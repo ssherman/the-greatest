@@ -119,4 +119,34 @@ class NewsPostTest < ActiveSupport::TestCase
   test "to_param is the slug" do
     assert_equal "december-update", news_posts(:books_december_update).to_param
   end
+
+  # "topic" and "page" are reserved on this model rather than globally (see
+  # the comment above friendly_id_config.reserved_words in news_post.rb):
+  # reserving them in config/initializers/friendly_id.rb would apply to all 18
+  # friendly_id models, and two live rows already hold the slug "page"
+  # (books_books 130620, categories 49860) -- that was measured to make both
+  # invalid. This model's own reserved word list must not leak onto other
+  # friendly_id models.
+  test "topic is a reserved slug" do
+    post = NewsPost.new(domain: :books, title: "Topic", body: "hi", user: users(:admin_user))
+    assert_not post.valid?
+    assert_includes post.errors[:friendly_id], "is reserved"
+  end
+
+  test "page is a reserved slug" do
+    post = NewsPost.new(domain: :books, title: "Page", body: "hi", user: users(:admin_user))
+    assert_not post.valid?
+    assert_includes post.errors[:friendly_id], "is reserved"
+  end
+
+  test "an ordinary title is not reserved" do
+    post = NewsPost.new(domain: :books, title: "A Big Update", body: "hi", user: users(:admin_user))
+    assert post.valid?
+  end
+
+  test "topic and page are not reserved on Books::Book" do
+    reserved = ::Books::Book.friendly_id_config.reserved_words
+    assert_not_includes reserved, "topic"
+    assert_not_includes reserved, "page"
+  end
 end
