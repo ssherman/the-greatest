@@ -13,13 +13,11 @@ class NewsPostsController < ApplicationController
   before_action :cache_for_show_page, only: [:show]
   before_action :find_topic, only: [:index]
 
-  PER_PAGE = 10
-
   def index
     scope = published_scope.includes(:news_topics).recent
     scope = scope.joins(:news_post_topics).where(news_post_topics: {news_topic_id: @topic.id}) if @topic
 
-    @pagy, @news_posts = pagy_path(scope, limit: PER_PAGE)
+    @pagy, @news_posts = pagy_path(scope, limit: NewsPost::PER_PAGE)
     @page_title = @topic ? "#{@topic.name} | News" : "News"
     @indexable = @news_posts.any?
 

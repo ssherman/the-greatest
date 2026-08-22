@@ -28,6 +28,12 @@ class NewsPost < ApplicationRecord
 
   EXCERPT_LIMIT = 200
 
+  # Lives on the model rather than on NewsPostsController because
+  # Services::News::CachedUrls has to derive the same page count the public
+  # index paginates by; two copies of "10" would drift the moment one changed
+  # and would silently leave the last index page uncached.
+  PER_PAGE = 10
+
   # Scoped to :domain -- books and music may each hold a "december-update".
   # :finders is deliberately absent: with a scoped slug a bare find("x") could
   # resolve to another domain's post. Always scope first, then .friendly.find.

@@ -211,6 +211,49 @@ post can claim `/news/topic`, and the topic route is declared before the slug ro
 
 Format is constrained to `html` and `rss`.
 
+### Cache invalidation
+
+Every public news page is edge-cached (6h index, 24h show), and nothing about a write reaches
+Cloudflare on its own. So `Admin::NewsPostsBaseController` enqueues
+`News::PurgeCachedPagesJob` explicitly from `#create`, `#update` and `#destroy` — never from a
+model callback, which would also fire from the data migration and from every test that creates a
+post. `Services::News::CachedUrls` builds the URL set; the job purges it via
+`Cloudflare::PurgeService#purge_urls`, in batches of 100 (Cloudflare's per-request cap on this
+plan), and never raises — a failed purge degrades to the page staying cached until it expires.
+
+What one write purges, for the post's domain only:
+
+| URL | Why |
+| --- | --- |
+| `/news/:slug` | the post itself |
+| `/news`, `/news/page/2..n` | the index sorts `published_at DESC`, so any write shifts every page |
+| `/news/topic/:slug` (+ pages), for **every** topic of that domain | an update can change topic membership, and the old set is unrecoverable once `assign_attributes` has run |
+
+An **update** purges the union of the before-state and after-state sets, snapshotted before
+`assign_attributes` (which writes `news_topic_ids` to the join table immediately, not on save).
+Neither state contains the other: unpublishing the 11th post, or dropping the topic that gave a
+topic index its 11th, *removes* `/news/page/2`, and a set derived only from the saved state would
+leave that page cached with the retracted post on it. Create can only grow the set and destroy only
+shrink it, so each needs a snapshot on one side of the write only.
+
+Purged for every host in the domain's `config.domains` entry, which may be a comma-separated list —
+Cloudflare keys its cache by host, and `detect_current_domain` treats each entry as a live serving
+host. This differs deliberately from `MailBranding` and `MembershipController`, which take `.first`
+because they must name exactly one canonical host.
+
+Every write purges, with no `published?` gate: a wrong gate means a published post that never
+purges, while a needless purge costs a few origin re-renders. That also covers unpublishing, which
+is the worst case — without it a retracted post stays publicly readable for 24 hours.
+
+Not covered, deliberately: query-string variants (`/news?utm_source=x` is its own cache entry and
+cannot be enumerated); the legacy `/blog_posts/*` routes (301s, not content); the bulk data
+migration (creates rows directly, and a full-zone purge is the right tool for a one-off import); and
+**news topic** create/update/delete, which changes the name shown on `/news/topic/:slug` and on every
+post page listing it. Post writes are what this covers.
+
+**Increment 5 must extend it:** `/news.rss` is a seventh cached URL and belongs in
+`Services::News::CachedUrls` when the feed lands.
+
 ### Legacy redirects
 
 `/news` is already the legacy index path and carries over unchanged — no redirect, no lost links.
