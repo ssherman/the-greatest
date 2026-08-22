@@ -20,8 +20,11 @@ module Services
       end
 
       test "stamps a membership that was never welcomed" do
+        # origin_domain: nil -- the backfill is scoped to rows this app never
+        # had authority over (see the service's ownership-scope comment); an
+        # own-sold row is covered separately below.
         membership = memberships(:regular_user_monthly)
-        membership.update!(welcome_email_sent_at: nil, status: :active)
+        membership.update!(origin_domain: nil, welcome_email_sent_at: nil, status: :active)
 
         BackfillEmailStamps.call
 
@@ -30,7 +33,7 @@ module Services
 
       test "stamps the ending notice on a membership that is already cancelled" do
         membership = memberships(:regular_user_monthly)
-        membership.update!(status: :canceled, welcome_email_sent_at: nil, ended_email_sent_at: nil)
+        membership.update!(origin_domain: nil, status: :canceled, welcome_email_sent_at: nil, ended_email_sent_at: nil)
 
         BackfillEmailStamps.call
 
@@ -63,6 +66,40 @@ module Services
 
         assert result.success?
         assert result.data[:welcome] >= 1
+      end
+
+      # FIX ROUND 1 -- ownership scoping. MembershipEmailScope already lets an
+      # own-sold row (origin_domain present) through regardless of the scope
+      # setting, so a nil stamp on one is never a legacy-cutover artifact: it
+      # is either a membership that has not yet earned its welcome (mid-trial,
+      # incomplete) or exactly the failed-enqueue recovery case Task 2 exists
+      # to self-heal. The backfill must never touch these rows.
+      test "does not stamp an own-sold membership, even with a nil welcome stamp" do
+        membership = memberships(:regular_user_monthly)
+        membership.update!(origin_domain: "books", welcome_email_sent_at: nil, status: :active)
+
+        BackfillEmailStamps.call
+
+        assert_nil membership.reload.welcome_email_sent_at
+      end
+
+      # The recovery path Task 2 added must survive a cutover backfill: an
+      # own-sold membership backfilled while not yet access-granting (or mid
+      # failed-enqueue-recovery) must still receive its welcome once it
+      # actually earns one.
+      test "an own-sold membership backfilled while unwelcomed still gets its welcome once it converts" do
+        membership = memberships(:regular_user_monthly)
+        membership.update!(origin_domain: "books", welcome_email_sent_at: nil, status: :incomplete)
+
+        BackfillEmailStamps.call
+        assert_nil membership.reload.welcome_email_sent_at
+
+        membership.update!(status: :active)
+        transition = MembershipTransition.new(membership: membership, previous_status: "incomplete")
+
+        assert_enqueued_email_with MembershipMailer, :welcome, args: [membership] do
+          MembershipNotifier.call(transition)
+        end
       end
 
       # LOAD-BEARING DEMONSTRATION. This is the actual hazard the backfill
