@@ -20,6 +20,9 @@
     <% else %>
       <meta name="twitter:card" content="summary">
     <% end %>
+    <%# Per-page <link> elements (RSS autodiscovery today). Renders nothing
+        when no page sets it, so every existing page is byte-identical. %>
+    <%= yield(:head_links) if content_for?(:head_links) %>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
