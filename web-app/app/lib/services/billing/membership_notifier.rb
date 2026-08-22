@@ -31,6 +31,8 @@ module Services
 
         if @transition.became_active? && @membership.welcome_email_sent_at.nil?
           deliver_welcome
+        elsif @transition.became_canceled? && @membership.ended_email_sent_at.nil?
+          deliver_cancellation
         else
           skipped("no email owed for this transition")
         end
@@ -64,6 +66,34 @@ module Services
         end
 
         Result.new(success?: true, data: :welcome, errors: [])
+      end
+
+      def deliver_cancellation
+        # Stamp before enqueuing -- see deliver_welcome. with_lock wraps the
+        # stamp and the enqueue in one transaction, so a raising enqueue rolls
+        # the stamp back too, and a retried reconcile can genuinely resend.
+        result = nil
+
+        @membership.with_lock do
+          @membership.update!(ended_email_sent_at: Time.current)
+
+          if other_access?
+            MembershipMailer.canceled_with_other_active(@membership).deliver_later
+            result = :canceled_with_other_active
+          else
+            MembershipMailer.canceled_last(@membership).deliver_later
+            result = :canceled_last
+          end
+        end
+
+        Result.new(success?: true, data: result, errors: [])
+      end
+
+      # Does the user still hold access from some OTHER membership? Reuses the
+      # same scope that answers User#member?, so the email can never contradict
+      # what the site actually does.
+      def other_access?
+        @membership.user.memberships.granting_access.where.not(id: @membership.id).exists?
       end
 
       def skipped(reason)

@@ -41,4 +41,24 @@ class MembershipMailerTest < ActionMailer::TestCase
 
     assert_equal ["text/html", "text/plain"], mail.parts.map(&:mime_type).sort
   end
+
+  test "the cancelled-last email says access ends and names the date" do
+    membership = memberships(:regular_user_monthly)
+    membership.update!(status: :canceled, current_period_end: 30.days.from_now, origin_domain: "books")
+
+    mail = MembershipMailer.canceled_last(membership)
+
+    assert_equal [membership.user.email], mail.to
+    assert_match membership.current_period_end.strftime("%B %-d, %Y"), mail.body.encoded
+  end
+
+  test "the cancelled-with-other-active email does not claim access is ending" do
+    membership = memberships(:regular_user_monthly)
+    membership.update!(status: :canceled, current_period_end: 30.days.from_now, origin_domain: "books")
+
+    mail = MembershipMailer.canceled_with_other_active(membership)
+
+    assert_equal [membership.user.email], mail.to
+    assert_no_match(/revert to a free account/, mail.body.encoded)
+  end
 end

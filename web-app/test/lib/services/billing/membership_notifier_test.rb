@@ -101,6 +101,51 @@ module Services
         assert_nil membership.reload.welcome_email_sent_at
       end
 
+      test "sends the cancelled-last email when the user holds no other access" do
+        membership = sold_membership(status: :canceled)
+        transition = MembershipTransition.new(membership: membership, previous_status: "active")
+
+        assert_enqueued_email_with MembershipMailer, :canceled_last, args: [membership] do
+          MembershipNotifier.call(transition)
+        end
+      end
+
+      test "sends the other-active variant when the user still holds another membership" do
+        membership = sold_membership(status: :canceled)
+        ::Membership.create!(
+          user: membership.user, source: :comped, status: :active, current_period_end: nil
+        )
+        transition = MembershipTransition.new(membership: membership, previous_status: "active")
+
+        assert_enqueued_email_with MembershipMailer, :canceled_with_other_active, args: [membership] do
+          MembershipNotifier.call(transition)
+        end
+      end
+
+      test "stamps ended_email_sent_at so a second reconcile cannot resend" do
+        membership = sold_membership(status: :canceled)
+        transition = MembershipTransition.new(membership: membership, previous_status: "active")
+
+        MembershipNotifier.call(transition)
+        assert_not_nil membership.reload.ended_email_sent_at
+
+        assert_no_enqueued_emails do
+          MembershipNotifier.call(
+            MembershipTransition.new(membership: membership, previous_status: "active")
+          )
+        end
+      end
+
+      # A membership that arrived already cancelled -- as the account-wide
+      # migration produced in bulk -- is not a cancellation anyone should hear
+      # about.
+      test "sends nothing when a membership arrives already cancelled" do
+        membership = sold_membership(status: :canceled)
+        transition = MembershipTransition.new(membership: membership, previous_status: nil)
+
+        assert_no_enqueued_emails { MembershipNotifier.call(transition) }
+      end
+
       private
 
       def sold_membership(status:)

@@ -1,0 +1,12 @@
+<p>Your <strong><%= @branding.site_name %></strong> membership has been cancelled.</p>
+
+<% if @access_until %>
+  <p>This membership stays active until <%= @access_until.strftime("%B %-d, %Y") %>.</p>
+<% end %>
+
+<p>You still have another active membership, so your access continues.</p>
+
+<p>
+  You can review everything from
+  <%= link_to "your membership page", membership_url(@branding.url_options) %>.
+</p>
