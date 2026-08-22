@@ -6,6 +6,9 @@ module Services
   module Billing
     class ReconcileCustomerTest < ActiveSupport::TestCase
       include StripeWebhookHelper
+      # ActionMailer::TestHelper (which itself includes ActiveJob::TestHelper)
+      # is what defines assert_enqueued_emails / assert_no_enqueued_emails.
+      include ActionMailer::TestHelper
 
       setup do
         @user = users(:contractor_user)
@@ -363,6 +366,57 @@ module Services
 
         assert_nil transition.previous_status
         assert_not transition.became_canceled?
+      end
+
+      # THE SEAM. A reviewer commented out the `transitions.each { ... }` line
+      # that wires MembershipNotifier into #call and reran the full file
+      # (plus membership_notifier_test.rb): all 28 tests still passed, because
+      # nothing anywhere asserted that reconciling actually enqueues mail.
+      # This is the one test in the suite that would go red if that wiring
+      # were ever deleted or pointed at the wrong argument. Deliberately does
+      # not stub MembershipNotifier -- the whole point is to exercise the real
+      # call site.
+      test "reconciling a membership this app sold enqueues its welcome email once it becomes active" do
+        subscription = stripe_subscription(metadata: {"origin_domain" => "books"})
+
+        assert_enqueued_emails 1 do
+          reconcile_and_fetch(subscription)
+        end
+      end
+
+      # FINDING 1(a). MembershipNotifier only rescues Stripe::StripeError, so
+      # without a per-transition rescue at this call site, one membership's
+      # notification blowing up would abort the `each` loop and cost every
+      # OTHER membership in the same customer's batch its welcome email --
+      # permanently, since the next reconcile's upsert recomputes
+      # previous_status from the now-committed (already-active) row and
+      # became_active? is false for it forever after.
+      #
+      # The first call raises via a stubbed MembershipMailer.welcome; the
+      # second call is untouched by the stub (Mocha's `.then` only changes
+      # behaviour on the SAME expectation's next invocation) and runs for
+      # real, so its email is what this test counts.
+      test "a notifier failure for one membership does not stop a sibling's welcome email from sending" do
+        stub_stripe_list([
+          stripe_subscription(id: "sub_notify_poisoned", metadata: {"origin_domain" => "books"}),
+          stripe_subscription(id: "sub_notify_healthy", metadata: {"origin_domain" => "books"})
+        ])
+
+        # Built before the stub below replaces .welcome, so this is the
+        # genuine mailer output -- just for an unrelated fixture membership,
+        # since only the *count* of enqueued emails matters here.
+        fallback_mail = MembershipMailer.welcome(memberships(:regular_user_monthly))
+        MembershipMailer.stubs(:welcome).raises(StandardError, "redis down").then.returns(fallback_mail)
+
+        assert_enqueued_emails 1 do
+          ReconcileCustomer.call(stripe_customer_id: "cus_reconcile")
+        end
+
+        poisoned = ::Membership.find_by!(stripe_subscription_id: "sub_notify_poisoned")
+        healthy = ::Membership.find_by!(stripe_subscription_id: "sub_notify_healthy")
+        assert_nil poisoned.welcome_email_sent_at,
+          "the membership whose notification raised should not be stamped -- see Finding 1(b)"
+        assert_not_nil healthy.welcome_email_sent_at
       end
     end
   end

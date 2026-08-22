@@ -43,8 +43,25 @@ module Services
         # two jobs routinely process the same transition concurrently; stamping
         # first means the loser of that race finds the timestamp set and sends
         # nothing. Enqueuing first would send two emails and then stamp twice.
-        @membership.update!(welcome_email_sent_at: Time.current)
-        MembershipMailer.welcome(@membership).deliver_later
+        # (Belt and braces: acquire_lock's transaction-scoped advisory lock
+        # already serialises concurrent reconciles for one customer, so by the
+        # time a second reconcile's upsert re-reads this row, became_active?
+        # is already false for it. This ordering matters for the case that
+        # guard does not cover -- two independently-triggered reconciles, or a
+        # future caller that does not take that lock.)
+        #
+        # with_lock wraps both statements in one DB transaction (with a row
+        # lock, so a concurrent updater blocks rather than racing). If
+        # MembershipMailer.welcome or .deliver_later raises -- Redis is down,
+        # say -- the update! above rolls back with it, so the stamp does NOT
+        # survive a failed enqueue. Without this, a transient enqueue failure
+        # would permanently burn the once-only guard: welcome_email_sent_at
+        # would already be set, so no future reconcile would ever try again,
+        # and the member would never get a welcome email.
+        @membership.with_lock do
+          @membership.update!(welcome_email_sent_at: Time.current)
+          MembershipMailer.welcome(@membership).deliver_later
+        end
 
         Result.new(success?: true, data: :welcome, errors: [])
       end

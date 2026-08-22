@@ -43,7 +43,20 @@ module Services
         # job for a Membership row that reverted or never existed, and would
         # let a retried reconcile re-send a welcome email whose "sent" stamp
         # got rolled back with it.
-        transitions.each { |transition| MembershipNotifier.call(transition) }
+        #
+        # Rescued per transition, mirroring ReconcileAllCustomers' per-customer
+        # rescue: one membership's notification blowing up (a Redis blip on
+        # enqueue, say) must not cost every OTHER membership in this same
+        # customer's batch its welcome email. MembershipNotifier itself only
+        # rescues Stripe::StripeError, by design, so this is the only backstop.
+        transitions.each do |transition|
+          MembershipNotifier.call(transition)
+        rescue => e
+          # Never the exception message: it is written by whoever raised it,
+          # and this repo is public. The membership id plus the exception
+          # class is enough to go find it in the logs.
+          Rails.logger.error("[billing] welcome notification failed for membership #{transition.membership.id}: #{e.class}")
+        end
 
         Result.new(success?: true, data: transitions, errors: [])
       rescue Stripe::StripeError => e

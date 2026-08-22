@@ -77,6 +77,30 @@ module Services
         assert_no_enqueued_emails { MembershipNotifier.call(transition) }
       end
 
+      # FINDING 1(b). Without wrapping the stamp and the enqueue in one
+      # transaction, a raising deliver_later would still leave
+      # welcome_email_sent_at set from the update! just before it -- burning
+      # the once-only guard on an email nobody actually received. Wrapping
+      # both in @membership.with_lock means the raise rolls the stamp back
+      # too, so a retried reconcile can genuinely resend.
+      #
+      # This test does not go through MembershipMailer.welcome's real
+      # rendering at all -- it stubs the class method to return a double
+      # whose #deliver_later raises, isolating the enqueue failure from
+      # anything about mail content.
+      test "a failed enqueue does not leave welcome_email_sent_at stamped, so a retry can still resend" do
+        membership = sold_membership(status: :active)
+        transition = MembershipTransition.new(membership: membership, previous_status: nil)
+
+        failing_mail = mock("mail")
+        failing_mail.stubs(:deliver_later).raises(StandardError, "redis down")
+        MembershipMailer.stubs(:welcome).returns(failing_mail)
+
+        assert_raises(StandardError) { MembershipNotifier.call(transition) }
+
+        assert_nil membership.reload.welcome_email_sent_at
+      end
+
       private
 
       def sold_membership(status:)
