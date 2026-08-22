@@ -186,6 +186,20 @@ module Services
         end
       end
 
+      # The gap the exception-driven race test above cannot see: ProcessStripeEventJob
+      # re-enqueues whenever its stripe_events row is still `received` or `failed`, and
+      # Sidekiq retries on top of that -- so an ordinary second call for an
+      # already-committed donation, with no unique-constraint collision at all, must
+      # still send only once. previously_new_record? is what tells the two calls apart.
+      test "running RecordDonation.call twice through the ordinary path sends exactly one receipt" do
+        ::Stripe::Checkout::Session.expects(:retrieve).twice.returns(session_stub)
+
+        assert_enqueued_emails 1 do
+          RecordDonation.call(checkout_session_id: "cs_test_1")
+          RecordDonation.call(checkout_session_id: "cs_test_1")
+        end
+      end
+
       # The of_kind? guard must not swallow a donation that is invalid for some
       # OTHER reason -- that would return success with nothing recorded and no
       # audit trail, which is exactly the defect class this codebase has been

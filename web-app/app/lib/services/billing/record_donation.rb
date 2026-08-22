@@ -56,7 +56,11 @@ module Services
           domain: session.metadata&.[]("origin_domain")
         )
         donation.save!
-        deliver_receipt(donation)
+        # Only the call that actually created the row sends. Without this, any
+        # retry -- and ProcessStripeEventJob re-enqueues whenever its event row
+        # is still `received` or `failed` -- re-receipts a donor whose donation
+        # committed on an earlier attempt.
+        deliver_receipt(donation) if donation.previously_new_record?
 
         success(donation)
       rescue ActiveRecord::RecordNotUnique
