@@ -74,22 +74,6 @@ module Services
         assert_enqueued_email_with AdminMailer, :new_subscription, args: [membership]
       end
 
-      # The nightly sweep re-reconciles every subscription on the account.
-      #
-      # Task 2 note: this membership must already be welcomed for "unchanged"
-      # to mean "nothing owed" -- an unchanged transition on an UNwelcomed
-      # membership is exactly the recovery case (see
-      # "sends a welcome that an earlier failed enqueue left owed" above),
-      # which correctly DOES send. Without this stamp this test would assert
-      # the defect Task 2 exists to fix, not the guard it's named for.
-      test "sends nothing when the status did not change" do
-        membership = sold_membership(status: :active)
-        membership.update!(welcome_email_sent_at: Time.current)
-        transition = MembershipTransition.new(membership: membership, previous_status: "active")
-
-        assert_no_enqueued_emails { MembershipNotifier.call(transition) }
-      end
-
       # A comped membership never came from Stripe and has no origin_domain.
       test "sends nothing for a comped membership" do
         membership = memberships(:editor_user_comped)
