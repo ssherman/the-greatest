@@ -138,6 +138,15 @@ module Services
         assert_predicate BodyRenderer.call("hi"), :html_safe?
       end
 
+      test ".call renders a single soft newline inside a paragraph as a line break" do
+        # A soft break -- one newline, no trailing spaces, no backslash -- is
+        # what an author gets from pressing Enter once in the admin textarea.
+        # commonmarker only turns this into <br> when hardbreaks: true.
+        html = BodyRenderer.call("first line\nsecond line")
+
+        assert_includes html, "<br>"
+      end
+
       test ".call is a pure function of its input" do
         # Rendering is a read-time transform, so calling it twice on the same
         # stored source must give the same answer. This is NOT the same claim as

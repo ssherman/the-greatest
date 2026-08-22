@@ -67,7 +67,13 @@ test.describe('Books curated collections', () => {
       return { count: ul.querySelectorAll('a').length, wrapped, overflowed, bad };
     });
 
-    expect(report.count).toBe(9);
+    // 10 entries: All Lists, The Global Canon, The Greatest Books of the
+    // 21st Century, then the six legacy collections (women, africa, asia,
+    // latin-america, non-western, western), then Users' Favorite. Was 9
+    // until feat(books): global canon page, routes and nav entry (4572abe3,
+    // 2026-08-19) added "The Global Canon" as a genuine 10th entry -- not a
+    // duplicate, confirmed against app/views/books/shared/_nav_links.html.erb.
+    expect(report.count).toBe(10);
     expect(report.bad, 'labels that wrap or overflow the panel').toEqual([]);
     expect(report.wrapped + report.overflowed).toBe(0);
   });

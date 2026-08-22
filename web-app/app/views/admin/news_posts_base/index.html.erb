@@ -1,0 +1,73 @@
+<% content_for :title, "News" %>
+
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-2xl font-bold">News</h1>
+  <% if current_user_can_write? %>
+    <%= link_to "New Post", new_news_post_path_for, class: "btn btn-primary" %>
+  <% end %>
+</div>
+
+<div class="card bg-base-100 shadow-xl">
+  <div class="card-body">
+    <% if @news_posts.any? %>
+      <div class="overflow-x-auto">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Status</th>
+              <th>Topics</th>
+              <th>Author</th>
+              <th class="text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% @news_posts.each do |post| %>
+              <tr>
+                <td class="font-semibold [overflow-wrap:anywhere]">
+                  <%= link_to post.title, news_post_path_for(post), class: "link" %>
+                </td>
+                <td>
+                  <%# Status is stated in words, never colour alone. %>
+                  <% if post.published? %>
+                    <span class="badge badge-success">Published</span>
+                    <div class="text-xs text-base-content/70 mt-1">
+                      <%= post.published_at.strftime("%b %-d, %Y") %>
+                    </div>
+                  <% elsif post.published_at.present? %>
+                    <span class="badge badge-warning">Scheduled</span>
+                    <div class="text-xs text-base-content/70 mt-1">
+                      <%= post.published_at.strftime("%b %-d, %Y") %>
+                    </div>
+                  <% else %>
+                    <span class="badge badge-ghost">Draft</span>
+                  <% end %>
+                </td>
+                <td>
+                  <% post.news_topics.each do |topic| %>
+                    <span class="badge badge-outline"><%= topic.name %></span>
+                  <% end %>
+                </td>
+                <td class="text-sm [overflow-wrap:anywhere]"><%= post.user.email %></td>
+                <td class="text-right">
+                  <div class="flex items-center justify-end gap-1">
+                    <% if current_user_can_write? %>
+                      <%= link_to "Edit", edit_news_post_path_for(post), class: "btn btn-sm btn-ghost" %>
+                    <% end %>
+                    <% if current_user_can_delete? %>
+                      <%= button_to "Delete", news_post_path_for(post), method: :delete,
+                            class: "btn btn-sm btn-outline btn-error",
+                            form: {class: "inline", data: {turbo_confirm: "Delete “#{post.title}”? This cannot be undone."}} %>
+                    <% end %>
+                  </div>
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% else %>
+      <p class="text-base-content/70">No posts yet.</p>
+    <% end %>
+  </div>
+</div>

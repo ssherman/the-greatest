@@ -53,6 +53,8 @@
   --noise: 0;
 }
 
+@plugin "@tailwindcss/typography";
+
 @layer components {
   .stats,
   .table {

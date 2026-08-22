@@ -457,6 +457,13 @@ Rails.application.routes.draw do
 
       resources :reviews, only: [:index, :show, :destroy]
 
+      resources :news_topics
+      resources :news_posts do
+        collection do
+          post :preview
+        end
+      end
+
       resources :ranking_configurations do
         member { post :execute_action }
         collection { post :index_action }
