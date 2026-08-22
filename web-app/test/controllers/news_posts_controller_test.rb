@@ -38,13 +38,17 @@ class NewsPostsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "index orders newest first" do
-    older = news_posts(:books_december_update)
-    newer = NewsPost.create!(domain: :books, title: "Newer", body: "hi",
-      user: users(:admin_user), published_at: 1.hour.ago)
+    # newest is the fixture (lower id, published_at closer to now); oldest is
+    # created at runtime (higher id, published_at far in the past) -- id order
+    # and publish order disagree, so this cannot pass by coinciding with
+    # `order(id: :desc)` alone.
+    newest = news_posts(:books_december_update)
+    oldest = NewsPost.create!(domain: :books, title: "Older", body: "hi",
+      user: users(:admin_user), published_at: 30.days.ago)
 
     get news_path
 
-    assert_equal [newer.id, older.id], @controller.view_assigns["news_posts"].map(&:id)
+    assert_equal [newest.id, oldest.id], @controller.view_assigns["news_posts"].map(&:id)
   end
 
   test "index renders the post title and summary" do
@@ -83,6 +87,7 @@ class NewsPostsControllerTest < ActionDispatch::IntegrationTest
     get news_page_path(page: 99)
 
     assert_response :not_found
+    assert_match(/no-store/, response.headers["Cache-Control"])
   end
 
   test "index on the music host lists music posts" do
@@ -92,6 +97,20 @@ class NewsPostsControllerTest < ActionDispatch::IntegrationTest
 
     assert_equal [news_posts(:music_launch).id],
       @controller.view_assigns["news_posts"].map(&:id)
+  end
+
+  test "a topic page lists only that topic's posts" do
+    get news_topic_path(topic_slug: "rankings")
+
+    assert_response :success
+    assert_equal [news_posts(:books_december_update).id],
+      @controller.view_assigns["news_posts"].map(&:id)
+  end
+
+  test "another domain's topic 404s" do
+    get news_topic_path(topic_slug: "site-news")
+
+    assert_response :not_found
   end
 
   test "index is indexable" do
@@ -115,6 +134,21 @@ class NewsPostsControllerTest < ActionDispatch::IntegrationTest
     assert_select "meta[name=robots][content=?]", "noindex, follow"
   end
 
+  test "an empty index on the games host is not indexable" do
+    # books/default_helper.rb defaults to noindex whenever @indexable is
+    # false, nil, OR never assigned -- so a books-only empty-index assertion
+    # is satisfied by the pre-existing (unassigned) state and cannot tell
+    # `@indexable = @news_posts.any?` apart from no assignment at all.
+    # games/default_helper.rb inverts that default (index unless
+    # @indexable == false), so only the games host actually discriminates.
+    # Games holds no posts in fixtures, so no cleanup is needed.
+    host! "dev.thegreatest.games"
+
+    get news_path
+
+    assert_select "meta[name=robots][content=?]", "noindex, follow"
+  end
+
   test "page 1 canonicalises to the bare path" do
     get "/news/page/1"
 
@@ -131,5 +165,7 @@ class NewsPostsControllerTest < ActionDispatch::IntegrationTest
     ids = @controller.view_assigns["news_posts"].map(&:id)
     assert_equal [news_posts(:books_december_update).id], ids
     assert_not_includes response.body, "Something Unfinished"
+    assert_match(/max-age=21600/, response.headers["Cache-Control"])
+    assert_match(/public/, response.headers["Cache-Control"])
   end
 end
