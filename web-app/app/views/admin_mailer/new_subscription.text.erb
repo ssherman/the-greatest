@@ -1,0 +1,5 @@
+A new membership was purchased on <%= @site_name %>.
+
+Interval:      <%= @membership.interval || "unknown" %>
+Renews:        <%= @membership.current_period_end&.strftime("%B %-d, %Y") || "unknown" %>
+Membership ID: <%= @membership.id %>

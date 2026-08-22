@@ -1,0 +1,4 @@
+A membership was cancelled on <%= @site_name %>.
+
+Access until:  <%= @membership.current_period_end&.strftime("%B %-d, %Y") || "unknown" %>
+Membership ID: <%= @membership.id %>

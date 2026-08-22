@@ -234,6 +234,26 @@ together until the rotation completes, then drop the old one.
 - **Required**: Yes
 - **Used By**: web, worker
 
+#### MEMBERSHIP_EMAIL_SCOPE
+- **Description**: Which memberships and donations this app is allowed to email about. See
+  `app/lib/membership_email_scope.rb`.
+- **Required**: No
+- **Default**: `own_only`
+- **Used By**: web, worker
+- **Values**:
+  - `own_only` — email only about memberships and donations **this app sold**. Correct while the
+    legacy books app is live, because legacy still emails its own subscribers, and both apps'
+    webhook endpoints receive every event on the one shared Stripe account — without this scope, a
+    legacy subscriber would get the same welcome or cancellation email twice, once from each app.
+  - `all` — email about everything on the account, legacy-sold memberships and donations included.
+    **Set this at legacy cutover**, or every legacy-era membership — including the entire
+    account-wide migration, which predates checkout and carries no `origin_domain` — will silently
+    never receive a cancellation email from anyone again, since legacy will have stopped running.
+  - Any unrecognised value (a typo, an empty string that isn't literally unset) is treated as
+    `own_only`, deliberately: the failure direction matters more than convenience. A misconfigured
+    value must never silently start double-emailing paying customers; it should just look like the
+    switch was never flipped.
+
 ## Example .env File
 
 ```bash
@@ -278,6 +298,7 @@ STRIPE_LIVEMODE=true
 SENDGRID_API_KEY=SG.your_sendgrid_api_key_here
 MAIL_FROM_ADDRESS=contact@thegreatestbooks.org
 ADMIN_NOTIFICATION_EMAIL=you@example.com
+# MEMBERSHIP_EMAIL_SCOPE=own_only  # optional; set to "all" only at legacy cutover
 
 # Performance Tuning (optional)
 RAILS_MAX_THREADS=50
