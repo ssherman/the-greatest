@@ -46,6 +46,7 @@ class Admin::NewsPostsBaseController < Admin::BaseController
     attach_body_images
 
     if @news_post.save
+      enqueue_cache_purge(@news_post)
       redirect_to news_post_path_for(@news_post), notice: "Post created."
     else
       render :new, status: :unprocessable_entity
@@ -73,6 +74,12 @@ class Admin::NewsPostsBaseController < Admin::BaseController
     attach_body_images if @news_post.valid?
 
     if @news_post.save
+      # Unconditional, with no published? gate: a wrong gate means a published
+      # post that never purges, which is the 24-hour-stale bug this exists to
+      # remove, while a needless purge costs a few origin re-renders. It also
+      # covers the worst case for free -- setting published_at back to nil comes
+      # through here, so a retracted post's page is purged like any other edit.
+      enqueue_cache_purge(@news_post)
       redirect_to news_post_path_for(@news_post), notice: "Post updated."
     else
       render :edit, status: :unprocessable_entity
@@ -80,7 +87,14 @@ class Admin::NewsPostsBaseController < Admin::BaseController
   end
 
   def destroy
+    # Computed BEFORE destroy!, unlike create and update: a deleted post cannot
+    # be looked up, and its news_post_topics rows go with it
+    # (dependent: :destroy), so nothing downstream could rebuild this list.
+    urls = Services::News::CachedUrls.call(@news_post)
+    domain = @news_post.domain
     @news_post.destroy!
+    ::News::PurgeCachedPagesJob.perform_async(domain, urls)
+
     redirect_to news_posts_path_for, notice: "Post deleted."
   end
 
@@ -95,6 +109,16 @@ class Admin::NewsPostsBaseController < Admin::BaseController
   end
 
   private
+
+  # Explicit, not a model callback: an after_commit making an external HTTP call
+  # is invisible to its callers and would fire from the legacy-blog data
+  # migration and from every test that creates a post. Both arguments are
+  # JSON-native so they survive Sidekiq's serialisation unchanged.
+  def enqueue_cache_purge(news_post)
+    ::News::PurgeCachedPagesJob.perform_async(
+      news_post.domain, Services::News::CachedUrls.call(news_post)
+    )
+  end
 
   # Always scoped, never a bare NewsPost.find: authenticate_admin! proves access
   # to the domain this controller is MOUNTED under, not that the id in the URL
