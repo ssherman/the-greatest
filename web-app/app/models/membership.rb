@@ -87,6 +87,15 @@ class Membership < ApplicationRecord
   # source_stripe? and gives a single place to change the rule.
   def stripe? = source_stripe?
 
+  # Did THIS app sell this membership, as opposed to the legacy books app?
+  #
+  # origin_domain is stamped into Stripe metadata by CreateCheckoutSession and
+  # read back by ReconcileCustomer. Legacy creates its subscriptions through
+  # Stripe Payment Links and sets no metadata, so a blank origin_domain means
+  # "not ours" -- which is exactly when this app must stay quiet, because
+  # legacy is still emailing that subscriber itself.
+  def sold_by_this_app? = origin_domain.present?
+
   # The single definition of "this row grants access". Three rules that look
   # similar but exist for different reasons -- see the spec's Entitlement
   # section before changing any of them.

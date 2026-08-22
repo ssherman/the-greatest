@@ -58,6 +58,8 @@ Services::Billing::ReconcileCustomer#call
                                                                            not from the event
   4. upsert a Membership row per subscription, matched on stripe_subscription_id
   5. COMMIT
+  6. (outside the transaction, once committed) notify: enqueue whichever membership
+     email, if any, each transition earns -- see below and docs/features/email.md
 ```
 
 Because no event payload is ever written as membership state, **delivery order cannot matter.** A
@@ -65,6 +67,25 @@ Because no event payload is ever written as membership state, **delivery order c
 triggers a redundant reconcile that converges on the same rows Stripe currently reports. There is
 no "last write wins" bug to have, because nothing is written from an event body in the first
 place.
+
+**`upsert` returns a `Services::Billing::MembershipTransition`, not a bare `Membership`, on every
+path — including the comped-row collision guard's early return.** `Membership#status` gets
+overwritten by `assign_attributes`, so `upsert` captures it first (`nil` for a brand-new row) and
+wraps the saved `Membership` together with that `previous_status` in a `MembershipTransition`
+value object. That is the whole reason the class exists: "this membership is currently active" is
+true on every reconcile the nightly sweep runs — once a night, forever, for every stripe-sourced
+row — but "this membership just *became* active" is true exactly once, and only a transition object
+carrying both the before and after status can answer that. `MembershipTransition#became_active?`
+and `#became_canceled?` are what `Services::Billing::MembershipNotifier` (see
+`docs/features/email.md`'s "The eight membership emails") reads to decide whether a reconcile owes
+a welcome or cancellation email; `ReconcileCustomer#call` collects one `MembershipTransition` per
+subscription into `Result#data`, and runs each one through the notifier after its own transaction
+has committed, never inside it — enqueuing a job or stamping the once-only guard before the row
+that job references is durably saved would be wrong twice over. The comped-row guard's early
+return yields a **no-op** `MembershipTransition` (`previous_status` set to the row's own current
+`status`, so `status_changed?`/`became_active?`/`became_canceled?` are all false) rather than a bare
+`Membership`, specifically so a caller that treats every element of `Result#data` uniformly — which
+the notifier loop does — never has to special-case the one path where nothing actually changed.
 
 The same `ReconcileCustomer` call is reused for three purposes with one implementation:
 
@@ -261,11 +282,22 @@ customer in one pass rather than replaying events one at a time.
 These are accepted trade-offs, not oversights — still true as of this writing, carried forward from
 the spec:
 
-- **`origin_domain` is never written by the reconciler.** `Membership#origin_domain` only gets set
-  at checkout time (which domain — books, music, or games — the user was on when they subscribed).
-  Any row that predates that write path, including everything built by
-  `billing:reconcile_all`/the legacy-history import, has `origin_domain: nil`. The admin detail page
-  shows "Unknown" for these rather than guessing.
+- ~~`origin_domain` is never written by the reconciler.~~ **Resolved**, by the membership-emails
+  increment. `upsert` now assigns `origin_domain: subscription.metadata&.[]("origin_domain")`
+  unconditionally on every reconcile, not just at checkout: `CreateCheckoutSession` stamps
+  `origin_domain` into the subscription's Stripe metadata once, at creation, and every later
+  reconcile — webhook-triggered or the nightly sweep — reads it back from Stripe rather than from
+  whatever this app wrote last time. Unconditional cuts both ways on purpose: if the metadata key
+  ever disappears upstream, the local column clears too, rather than sticking at a stale value (a
+  `subscription.metadata&.[]("origin_domain") || membership.origin_domain` "keep whatever we already
+  had" form was considered and rejected — it would silently keep emailing about a membership whose
+  ownership signal Stripe no longer reports; see the "clears origin_domain when it disappears…"
+  test in `reconcile_customer_test.rb`). Every row that predates checkout entirely — including
+  everything built by the original `billing:reconcile_all`/the legacy-history import, before this
+  metadata tag existed — still has `origin_domain: nil` and always will, since there is no Stripe
+  metadata to backfill it from. The admin detail page shows "Unknown" for these rather than
+  guessing, and `Membership#sold_by_this_app?`/`MailBranding.for(nil)`'s books fallback both treat
+  that `nil` as the expected, permanent case it is — see §13 below.
 - **`ReconcileAllCustomers` reports `success?: true` even when every individual customer failed to
   reconcile**, as long as at least one customer succeeded. The service only reports failure when
   *zero* customers reconciled out of a non-empty set (the "Stripe is down / credentials are wrong"
@@ -522,3 +554,66 @@ independently now), and finally `stripe_customer_id` (safe unconditionally — a
 genuinely identifies one person regardless of which app created the session). A donation
 attributable to neither path is recorded with `user_id: nil` and whatever `email` Stripe collected
 — an anonymous donation, same as one made by a signed-out visitor on this app.
+
+## 13. Email coexistence: this app emails only what it sold
+
+§12 established that both webhook endpoints receive every event on the shared account — legacy's
+subscriptions and donations included, not just this app's own. The membership-emails increment
+(spec increment 8; see `docs/features/email.md` for the mailer-side detail) has to answer the
+question that raises: when this app reconciles a **legacy-sold** subscription or records a
+**legacy-taken** donation — which it does, routinely, because it cannot tell them apart from an
+event alone — does it also email that person? It must not. Legacy is still live and still emails
+its own subscribers and donors through its own, unmodified pipeline; if this app emailed them too,
+every legacy member would get two welcome emails, two cancellation notices, two receipts, one from
+each app, for as long as both run.
+
+**`origin_domain` (memberships) / `domain` (donations) is the one signal both branding and
+ownership are read from — the same column answers two different questions.** `CreateCheckoutSession`
+stamps `origin_domain`/`domain` into Stripe metadata only on a session **this app** creates; legacy
+creates its sessions through Payment Links and stamps nothing. §2 above covers how that value gets
+onto the `Membership` row (`upsert` reads it back from the subscription's metadata, unconditionally,
+on every reconcile); `RecordDonation` writes `donation.domain` from the same
+`session.metadata["origin_domain"]` key at record time. Two independent readers then use that one
+column for two different purposes:
+
+- **Branding** — `MembershipMailer`/`AdminMailer` pass `membership.origin_domain`/`donation.domain`
+  straight to `MailBranding.for(...)`, which resolves it to a site name, brand colour and host.
+  `MailBranding.for(nil)` — every row this app didn't sell, plus every membership from before
+  checkout existed — falls back to books' branding rather than raising, because a mailer running in
+  Sidekiq has no `Current.domain` to fall back to instead (see `docs/features/email.md`'s "The one
+  rule"). This fallback fires whether or not the email is actually sent — it only decides what a
+  sent email would look like.
+- **Ownership** — `Membership#sold_by_this_app?`/`Donation#sold_by_this_app?` are just
+  `origin_domain.present?`/`domain.present?`, and `MembershipEmailScope.may_email?` gates every
+  send on that predicate (unless `MEMBERSHIP_EMAIL_SCOPE=all` — see below). This is the check that
+  actually decides *whether* to send, upstream of branding ever mattering.
+
+The consequence of using one column for both: a legacy-sold membership reconciled by this app gets
+branded mail templates *rendered* correctly (as books, since `origin_domain` is `nil`) if anyone
+ever previews or force-sends one, but `MembershipEmailScope` stops it from ever actually being
+*sent* in the normal flow — the blank `origin_domain` that makes `MailBranding` fall back to books
+is the exact same blank value that makes `sold_by_this_app?` false and the send never happen.
+Nothing about this needed a second column or a separate "who sold this" flag; the metadata tag
+`CreateCheckoutSession` already had to stamp for legacy's own coexistence guard (see "Legacy
+coexistence" in `docs/specs/membership-and-stripe-billing.md`) turned out to be sufficient signal
+for the email side too.
+
+**Legacy's own guard is the mirror image, not a coincidence.** Legacy's coexistence patch (§10 of
+the spec's Increments table; `docs/features/stripe_coexistence_guard.md` in the legacy repo) skips
+any event tagged `metadata[origin_app] == "the-greatest"` before writing or emailing anything.
+Put the two guards side by side: legacy stays quiet about events *this* app created; this app stays
+quiet (`MembershipEmailScope`, `own_only`) about events *legacy* created. Neither app can read the
+other's source, so each one only trusts its own tag on its own outbound sessions — there is no
+shared "who owns this" service, by design, because there will not always be two apps to ask.
+
+**The switch, and why it lives in ENV rather than code.** `MEMBERSHIP_EMAIL_SCOPE` (see
+`deployment/ENV.md`) is what turns this app from "quiet about legacy's traffic" into "the only
+mailer left" without a deploy carrying application logic — set it to `all` in the same
+infrastructure change that retires legacy's webhook endpoint at cutover, and every subsequent
+reconcile or donation record starts emailing regardless of `origin_domain`/`domain`. Missing that
+step at cutover has a specific, silent failure: legacy stops running (so it obviously stops
+emailing), this app is still defaulting to `own_only` (so it *also* stays quiet about every
+legacy-era row, forever, since no code path will ever flip that column from `nil` to something
+truthy after the fact), and no membership or donation predating the cutover ever gets another email
+from anyone again — not a crash, not a log line, just silence. See `docs/features/email.md`'s "The
+eight membership emails" for the mailer/notifier side of this same gate.

@@ -1,0 +1,18 @@
+<p>Your <strong><%= @branding.site_name %></strong> membership has been cancelled.</p>
+
+<% if @access_until %>
+  <p>
+    You keep member access until <%= @access_until.strftime("%B %-d, %Y") %> — the end of the
+    period you have already paid for. After that your account will revert to a free account.
+  </p>
+<% end %>
+
+<p>
+  You can resubscribe at any time from
+  <%= link_to "your membership page", membership_url(@branding.url_options) %>.
+</p>
+
+<p>
+  If there was something specific that prompted you to cancel, I would genuinely like to hear
+  it — just reply to this email.
+</p>

@@ -107,16 +107,40 @@ returns `403`:
 Whatever you change, the verification is the same: the curl above, or step 2's "Send test webhook"
 returning `200`.
 
-## 2. Register the two webhook endpoints
+## 2. Register the webhook endpoint
 
-Register two endpoints in the **live** Stripe account (Developers → Webhooks → Add endpoint):
+Register **one** endpoint in the **live** Stripe account (Developers → Webhooks → Add endpoint):
 
 - `https://thegreatestmusic.org/webhooks/stripe`
-- `https://thegreatest.games/webhooks/stripe`
+
+Set the API version to the current one (`2026-07-29.dahlia` at time of writing) and the scope to
+**your account**, not connected accounts. Make sure it is a standard v1 *snapshot* event
+destination: `Stripe::Webhook.construct_event` raises a bare `ArgumentError` on a v2 thin-event
+envelope, which would 500 the endpoint into a 72-hour retry loop. Nothing here subscribes to v2.
+
+**One endpoint is enough, and this section used to say two.** Both hostnames reach the same Rails
+app and the same database, and `post "webhooks/stripe"` in `config/routes.rb` is deliberately
+registered *outside* every domain constraint, so the hostname an event arrives on changes nothing.
+Stripe also delivers every subscribed event to every registered endpoint, so a second one does not
+split traffic — it duplicates it, and every event is then processed twice, concurrently. The design
+survives that (unique index on `stripe_events.stripe_event_id`, the advisory lock in
+`ReconcileCustomer`, the race rescues in `RecordDonation`), but surviving it is not needing it.
+
+The only thing a second endpoint buys is failover if one hostname breaks, and that is already
+covered twice over: Stripe retries a failed delivery for 72 hours, and `billing:reconcile_all` runs
+nightly at 05:00 UTC and rebuilds `memberships` from Stripe regardless of what webhooks did or did
+not arrive. A single endpoint also makes the first real sale far easier to debug — one delivery log,
+one secret, no concurrent duplicate jobs to reason about.
+
+Adding a second later is purely additive: register it, **append** its secret to
+`STRIPE_WEBHOOK_SECRET` after a comma (`StripeClient.webhook_secrets` splits on commas and tries
+each in turn), and redeploy. Note the append — replacing the existing value instead would leave the
+first endpoint failing signature verification, returning 400, and eventually being disabled by
+Stripe after enough consecutive failures, with nothing in the app's own logs naming the cause.
 
 Books is not in this list — it has not cut over yet, and still runs on legacy's own endpoint.
 
-Subscribe both endpoints to exactly these events:
+Subscribe the endpoint to exactly these events:
 
 ```
 checkout.session.completed
@@ -141,36 +165,43 @@ settles and is never recorded anywhere: no error, no failed row, just a `Donatio
 exist and doesn't. `checkout.session.async_payment_failed` is deliberately not in this list —
 there is nothing to record on a failed delayed payment.
 
-**Both endpoints receive every one of these events, for every subscription on the account —
+**This endpoint receives every one of these events, for every subscription on the account —
 legacy's included.** That is by design, not a targeting mistake: Stripe delivers every subscribed
-event type to every endpoint, with no way to scope a delivery to "only events this app created."
-Concretely, a single subscription change delivers to both `thegreatestmusic.org` and
-`thegreatest.games`, and both deliveries land within moments of each other. The unique index on
-`stripe_events.stripe_event_id` (`app/models/stripe_event.rb`) makes the second delivery
-`find_by`-and-reuse the same row rather than inserting a duplicate — see
-`Webhooks::StripeController#record_event` — but it does **not** mean the second delivery is a
-no-op. `#create` re-enqueues `Billing::ProcessStripeEventJob` whenever that row is still `received`
-or `failed`, deliberately: a duplicate is not proof the first delivery was ever processed, and a row
-stranded at `received` because `perform_async` failed must not be reported to Stripe as delivered.
-Since the two endpoints fire together, the second delivery normally finds the row still `received`
-— **two concurrent jobs processing the same event is the norm, not an edge case.** The job and the
-services it calls (`ReconcileCustomer`'s advisory lock, `RecordDonation`'s race-recovery rescue) are
-what make that converge quietly instead of double-processing; see `docs/features/membership-billing.md`
-§12 for how each one does it.
+event type to every registered endpoint, with no way to scope a delivery to "only events this app
+created." Legacy's own subscription changes therefore arrive here, are reconciled into
+`memberships`, and — because they carry no `origin_domain` — generate no email from this app. See
+`MembershipEmailScope` and §13 of `docs/features/membership-billing.md`.
 
-**Copy both endpoints' signing secrets into `STRIPE_WEBHOOK_SECRET` as one comma-separated
-value.** Each endpoint gets its own secret from Stripe, and a delivery is only ever signed with
-the secret of the endpoint it was sent to
-(`Services::Billing::StripeClient.webhook_secrets` / `#verified_event` in
-`app/controllers/webhooks/stripe_controller.rb` try every configured secret in turn). Setting only
-one secret means every delivery to the *other* endpoint fails signature verification, returns 400,
-and Stripe eventually disables that endpoint after enough consecutive failures — a slow, silent
-loss of every event from one of the two production hosts. See `deployment/ENV.md`'s
-`STRIPE_WEBHOOK_SECRET` entry, which already documents the comma-separated format and shows it in
-the example `.env` block.
+Duplicate delivery of a single event is still possible even with one endpoint, and the app is built
+for it. The unique index on `stripe_events.stripe_event_id` (`app/models/stripe_event.rb`) makes a
+repeat delivery `find_by`-and-reuse the same row rather than inserting a duplicate — see
+`Webhooks::StripeController#record_event` — but it does **not** make the repeat a no-op. `#create`
+re-enqueues `Billing::ProcessStripeEventJob` whenever that row is still `received` or `failed`,
+deliberately: a duplicate is not proof the first delivery was ever processed, and a row stranded at
+`received` because `perform_async` failed must not be reported to Stripe as delivered. The job and
+the services it calls (`ReconcileCustomer`'s advisory lock, `RecordDonation`'s race-recovery rescue
+and `previously_new_record?` gate) are what make concurrent processing converge quietly instead of
+double-processing; see `docs/features/membership-billing.md` §12 for how each one does it. Register
+a second endpoint and that concurrency stops being occasional and becomes the norm.
 
-**Verify:** from each endpoint's detail page in the Dashboard, use "Send test webhook" for
-`checkout.session.completed`. Expect a `200` in the delivery log for both endpoints.
+**Copy the endpoint's signing secret into `STRIPE_WEBHOOK_SECRET`.** With one endpoint that is a
+single value, no comma. `Services::Billing::StripeClient.webhook_secrets` reads the variable as a
+comma-separated *list* and `#verified_event` tries each in turn, which is what makes adding a
+second endpoint later a matter of appending rather than migrating.
+
+**If you ever have more than one endpoint, every secret must be present simultaneously.** A
+delivery is only ever signed with the secret of the endpoint it was sent to, so a missing one means
+every delivery to that endpoint fails verification, returns 400, and Stripe eventually disables it
+after enough consecutive failures — a slow, silent loss of every event from that host. Replacing an
+existing value rather than appending to it produces exactly that. See `deployment/ENV.md`'s
+`STRIPE_WEBHOOK_SECRET` entry.
+
+**Verify:** from the endpoint's detail page in the Dashboard, use "Send test webhook" for
+`checkout.session.completed`. Expect a `200` in the delivery log.
+
+Also confirm this is the **only** endpoint registered for this app — an older one left enabled with
+a secret no longer in `STRIPE_WEBHOOK_SECRET` will fail every delivery and be disabled by Stripe
+without anything in the app's logs naming the cause. Legacy's endpoint is separate and stays.
 
 - A `403` with a Cloudflare-branded body means step 1's skip rule isn't matching that hostname —
   double check the path and hostname on the rule.
@@ -344,6 +375,37 @@ since you first confirmed them:
   "no resolvable user" — see legacy's `docs/features/stripe_coexistence_guard.md` for the full
   classification table).
 
+### The `payment_link` confirmation — done 2026-08-22, and how to redo it
+
+Legacy's guard skips any `checkout.session.completed` whose `payment_link` is blank, treating it as
+another app's. If legacy's own sessions ever arrived without that field, legacy would silently stop
+recording its own donations — no row, no receipt, and a 200 back to Stripe so nothing retries.
+
+**Confirmed present on a real delivery**: `"payment_link": "plink_1QwDVhEAWBHYHNGXlIAVbWOp"`, on a
+live $5 donation through legacy's own payment link. The same payload also showed
+`metadata.created_by = "greatest_books_app"` with no `origin_app` key (so the new app's ownership
+gate correctly reads it as not-ours) and `client_reference_id = "1141"`, a **legacy** user id —
+which is exactly why `RecordDonation` gates that field on `origin_app` before trusting it.
+
+**Two traps if you redo this check.**
+
+*Stripe prunes event payload data after 30 days.* An older event renders as three fields with
+"Events older than 30 days have limited data", and `payment_link`'s absence there means nothing. On
+a quiet account there may be no recent checkout at all — legacy had none between 13 July and 22
+August 2026. The cheap fix is to make a small donation through legacy's own payment link and inspect
+that: a few dollars, refundable, and it also proves legacy's whole payment path still works.
+
+*Do not retrieve the session fresh via the API or the CLI.* That uses your client's API version, not
+the version pinned to legacy's endpoint — and the endpoint's pinned version is the entire variable
+under test. Read the request body from the endpoint's delivery log instead.
+
+Also note the runbook's earlier advice not to settle this by reading the endpoint's API version
+still stands, but there is a sound code-level argument that makes the risk negligible: legacy's
+`stripe:setup_webhook` calls `Stripe::WebhookEndpoint.create` with **no `api_version`**, so the
+endpoint is pinned to the account default as of February 2025 — four years after Payment Links
+shipped. That is inference, not observation, which is why the payload check above was still worth
+doing.
+
 ## 8. SendGrid: sending domain and API key
 
 Membership emails (increment 5 of the spec, `docs/features/email.md`) go out through SendGrid.
@@ -442,7 +504,7 @@ comma-separated `STRIPE_WEBHOOK_SECRET` from step 2:
 |---|---|
 | `/membership` renders on all three hosts | Music, games, and books (the new app's own pre-cutover books host — not `thegreatestbooks.org`, which is still legacy) each show $5.00/mo and $50.00/yr, sourced from the `billing_plans` rows seeded in step 5. |
 | A real sandbox purchase, end to end | Using **sandbox** keys, not live: sign in, `/membership` → checkout → complete a card on `checkout.stripe.com` → land on `/membership/thanks` → `/members` opens without a redirect. |
-| `stripe_events` admin (`/admin/stripe_events`) | Events from the purchase above show `status: processed`. The same event delivered to both endpoints shows as **one row**, not two — the unique index from step 2 is what guarantees this. |
+| `stripe_events` admin (`/admin/stripe_events`) | Events from the purchase above show `status: processed`. A redelivered event shows as **one row**, not two — the unique index from step 2 is what guarantees this. |
 | Legacy's `/admin/webhook_events` | The same events show `status: ignored`, with the `origin_app` reason from legacy's guard classifier. If they show anything else (`processed`, or an error), the legacy guard isn't doing its job and this app's traffic is leaking into legacy's data. |
 | `bin/rails billing:verify_migration` | Still reports `All invariants hold.` — a new live sale should never regress the legacy migration invariants; if it does, something is attaching new-app subscriptions to legacy-migrated rows incorrectly. |
 
