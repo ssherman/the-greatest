@@ -7,7 +7,22 @@
   # rails_public_blob_url would raise. .processed is a no-op DB check once the
   # background job has already run (the overwhelmingly common case) and only
   # falls back to synchronous processing as a safety net.
-  share_image_variant = @news_post.share_image.variant(:card).processed if @news_post.share_image.attached?
+  #
+  # That fallback can itself fail (an undecodable upload, a transient service
+  # error), and .processed re-attempts synchronously on every request, so an
+  # unrescued failure here would take the whole public post page down every
+  # time it's hit. Rescue and degrade to no image -- the layout correctly
+  # downgrades og:image/twitter:card to a plain "summary" when og_image is
+  # unset -- but log it, since a silently dropped share image is itself a bug
+  # worth knowing about.
+  share_image_variant = begin
+    @news_post.share_image.variant(:card).processed if @news_post.share_image.attached?
+  rescue => e
+    Rails.logger.error(
+      "NewsPost##{@news_post.id} share_image :card variant failed to process: #{e.class}: #{e.message}"
+    )
+    nil
+  end
 
   content_for :page_title, "#{@news_post.title} | #{domain_name}"
   content_for :meta_description, @news_post.excerpt(limit: 160)

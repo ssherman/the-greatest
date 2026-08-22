@@ -210,6 +210,7 @@ class NewsPostsControllerTest < ActionDispatch::IntegrationTest
     get news_post_path(slug: "december-update")
 
     assert_match(/max-age=86400/, response.headers["Cache-Control"])
+    assert_match(/public/, response.headers["Cache-Control"])
   end
 
   test "show sets a canonical url" do
@@ -225,7 +226,6 @@ class NewsPostsControllerTest < ActionDispatch::IntegrationTest
     assert_select "meta[property='og:title'][content=?]", "December Update"
     assert_select "meta[property='og:type'][content=?]", "article"
     assert_select "meta[property='og:description'][content=?]", "The December update."
-    assert_select "meta[name='twitter:card']"
   end
 
   # D4: og:url must follow the canonical URL, not request.original_url, or a
@@ -259,9 +259,13 @@ class NewsPostsControllerTest < ActionDispatch::IntegrationTest
 
     get news_post_path(slug: "december-update")
 
-    content = css_select("meta[property='og:image']").first["content"]
+    tag = css_select("meta[property='og:image']").first
+    refute_nil tag, "expected an og:image meta tag, found none"
+    content = tag["content"]
     assert content.start_with?("https://"),
       "og:image must be absolute for share-card scrapers, got #{content.inspect}"
+    assert_not_includes content, "/rails/active_storage/",
+      "og:image must go through the images CDN, not the Rails origin, got #{content.inspect}"
     assert_select "meta[name='twitter:card'][content=?]", "summary_large_image"
   end
 
@@ -272,7 +276,9 @@ class NewsPostsControllerTest < ActionDispatch::IntegrationTest
     assert_select "meta[name='twitter:card'][content=?]", "summary"
   end
 
-  test "the index page still emits default Open Graph tags" do
+  # Named for what it checks, not the route: news_path is only the vehicle
+  # because #index never sets og_type, exercising the layout's own fallback.
+  test "a page that sets no og:type falls back to the website default" do
     get news_path
 
     assert_select "meta[property='og:type'][content=?]", "website"
@@ -290,5 +296,22 @@ class NewsPostsControllerTest < ActionDispatch::IntegrationTest
       "The Greatest Books Lists | The Greatest Books"
     assert_select "meta[property='og:description'][content=?]",
       "Every published best-books list we aggregate to build the rankings, weighted by quality, credibility and scope."
+  end
+
+  # Review finding: strip_tags decodes an already-escaped content_for buffer
+  # and returns it html_safe, so ERB does not re-escape it and a literal
+  # double quote in the fallback breaks out of the content="" attribute. The
+  # /lists test above can't catch this -- its title is a hardcoded,
+  # quote-free constant. A news topic page never sets og_title, so it drives
+  # the layout's fallback branch with a hostile value.
+  test "the og:title fallback survives a title containing a double quote" do
+    topic = NewsTopic.create!(domain: :books, name: 'The "Best" Rankings')
+    domain_name = Rails.application.config.domain_settings[:books][:name]
+
+    get news_topic_path(topic_slug: topic.slug)
+
+    assert_response :success
+    assert_select "meta[property='og:title'][content=?]",
+      "The \"Best\" Rankings | News | #{domain_name}"
   end
 end

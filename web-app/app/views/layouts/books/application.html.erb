@@ -11,7 +11,7 @@
         so pages that set none of them render exactly as they did before. %>
     <meta property="og:site_name" content="<%= domain_name %>">
     <meta property="og:type" content="<%= content_for?(:og_type) ? yield(:og_type) : "website" %>">
-    <meta property="og:title" content="<%= content_for?(:og_title) ? yield(:og_title) : strip_tags(yield(:page_title).presence || "The Greatest Books") %>">
+    <meta property="og:title" content="<%= content_for?(:og_title) ? yield(:og_title) : (yield(:page_title).presence || "The Greatest Books") %>">
     <meta property="og:description" content="<%= content_for?(:og_description) ? yield(:og_description) : (content_for?(:meta_description) ? yield(:meta_description) : "Discover definitive rankings of the greatest books of all time.") %>">
     <meta property="og:url" content="<%= content_for?(:canonical_url) ? yield(:canonical_url) : request.original_url %>">
     <% if content_for?(:og_image) %>

@@ -37,8 +37,9 @@ class NewsPostsController < ApplicationController
   private
 
   # Drafts and future-dated posts are excluded here, not in a view conditional:
-  # these responses are edge-cached for six hours, so a draft rendered even once
-  # would be served to everyone until the entry expired.
+  # this scope backs both #index (edge-cached 6 hours) and #show (24 hours),
+  # so a draft rendered even once would be served to everyone until the
+  # longer of the two entries expired.
   def published_scope
     NewsPost.where(domain: Current.domain).published
   end
