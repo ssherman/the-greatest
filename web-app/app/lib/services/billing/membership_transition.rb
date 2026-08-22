@@ -5,33 +5,32 @@ module Services
     # What changed about a membership during one reconcile.
     #
     # Exists because ReconcileCustomer#upsert uses assign_attributes + save!,
-    # which discards the prior status -- and every customer email in this
-    # subsystem is driven by a genuine transition, not by a current state. The
-    # nightly sweep re-reconciles every subscription on the account, so
-    # "currently active" fires every night; "just became active" fires once.
+    # which discards the prior status -- previous_status is the only place
+    # that value survives past the one reconcile that overwrote it.
+    #
+    # #upsert returns this on every path, including the comped-row no-op --
+    # never a bare Membership -- so any caller that expects #membership
+    # (MembershipNotifier, the per-transition error log in
+    # ReconcileCustomer#call) gets a uniform type to call it on.
+    #
+    # Task 2: MembershipNotifier no longer derives email eligibility from a
+    # transition (it used to, via predicates this class no longer defines --
+    # became_active?, became_canceled?, status_changed?). A status transition
+    # is observable exactly once, but upsert commits the new status before
+    # MembershipNotifier runs, so a failed mail enqueue (Redis unavailable,
+    # say) could roll back the once-only stamp while the status stayed
+    # committed -- leaving the email owed forever with nothing left able to
+    # see that it was owed. Eligibility reads the membership's own
+    # *_email_sent_at columns instead, which are durable. See
+    # MembershipNotifier for the current logic; previous_status remains here
+    # as the transition's data, even though nothing currently derives a
+    # boolean from it.
     class MembershipTransition
-      # trialing and active both grant access, so moving between them is not a
-      # new activation -- the welcome email already went out at trial start.
-      ACCESS_GRANTING = %w[trialing active].freeze
-
       attr_reader :membership, :previous_status
 
       def initialize(membership:, previous_status:)
         @membership = membership
         @previous_status = previous_status
-      end
-
-      def status_changed?
-        previous_status.to_s != membership.status.to_s
-      end
-
-      def became_active?
-        ACCESS_GRANTING.include?(membership.status.to_s) &&
-          !ACCESS_GRANTING.include?(previous_status.to_s)
-      end
-
-      def became_canceled?
-        membership.canceled? && !previous_status.nil? && previous_status.to_s != "canceled"
       end
     end
   end

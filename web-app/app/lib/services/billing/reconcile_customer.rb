@@ -128,9 +128,10 @@ module Services
         # touch a manual grant, and that promise deserves an explicit guard.
         #
         # A comped row is one the reconciler must not touch, so report it as a
-        # no-op transition rather than a bare Membership: callers get a uniform
-        # return type, and status_changed?/became_active?/became_canceled? are
-        # all false, which is exactly right for a row nothing changed about.
+        # no-op transition rather than a bare Membership: callers get a
+        # uniform return type -- MembershipNotifier's #membership and this
+        # method's own #membership.id below both need to work on whatever
+        # #upsert returns, on every path, including this one.
         if membership.persisted? && !membership.stripe?
           return MembershipTransition.new(membership: membership, previous_status: membership.status)
         end

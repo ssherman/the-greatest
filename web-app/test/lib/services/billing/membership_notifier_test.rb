@@ -75,8 +75,16 @@ module Services
       end
 
       # The nightly sweep re-reconciles every subscription on the account.
+      #
+      # Task 2 note: this membership must already be welcomed for "unchanged"
+      # to mean "nothing owed" -- an unchanged transition on an UNwelcomed
+      # membership is exactly the recovery case (see
+      # "sends a welcome that an earlier failed enqueue left owed" above),
+      # which correctly DOES send. Without this stamp this test would assert
+      # the defect Task 2 exists to fix, not the guard it's named for.
       test "sends nothing when the status did not change" do
         membership = sold_membership(status: :active)
+        membership.update!(welcome_email_sent_at: Time.current)
         transition = MembershipTransition.new(membership: membership, previous_status: "active")
 
         assert_no_enqueued_emails { MembershipNotifier.call(transition) }
@@ -122,8 +130,14 @@ module Services
         assert_nil membership.reload.welcome_email_sent_at
       end
 
+      # Task 2 note: cancellation_owed? requires a prior welcome (see
+      # MembershipNotifier), so this membership must be stamped as welcomed --
+      # a realistic precondition, since it was active before this reconcile
+      # and would have been welcomed then. Without the stamp, the scenario is
+      # indistinguishable from "never welcomed" and correctly sends nothing.
       test "sends the cancelled-last email when the user holds no other access" do
         membership = sold_membership(status: :canceled)
+        membership.update!(welcome_email_sent_at: 1.month.ago)
         transition = MembershipTransition.new(membership: membership, previous_status: "active")
 
         assert_enqueued_email_with MembershipMailer, :canceled_last, args: [membership] do
@@ -133,6 +147,7 @@ module Services
 
       test "sends the other-active variant when the user still holds another membership" do
         membership = sold_membership(status: :canceled)
+        membership.update!(welcome_email_sent_at: 1.month.ago)
         ::Membership.create!(
           user: membership.user, source: :comped, status: :active, current_period_end: nil
         )
@@ -145,6 +160,7 @@ module Services
 
       test "stamps ended_email_sent_at so a second reconcile cannot resend" do
         membership = sold_membership(status: :canceled)
+        membership.update!(welcome_email_sent_at: 1.month.ago)
         transition = MembershipTransition.new(membership: membership, previous_status: "active")
 
         MembershipNotifier.call(transition)
@@ -214,6 +230,59 @@ module Services
         transition = MembershipTransition.new(membership: membership, previous_status: nil)
 
         assert_no_enqueued_emails { MembershipNotifier.call(transition) }
+      end
+
+      # THE RECOVERY CASE. A prior attempt committed the status and then failed
+      # to enqueue, so the stamp rolled back to nil. Under transition-derived
+      # eligibility this membership could never be welcomed again, because every
+      # later reconcile sees previous_status == status.
+      test "sends a welcome that an earlier failed enqueue left owed" do
+        membership = sold_membership(status: :active)
+        membership.update!(welcome_email_sent_at: nil)
+        # previous_status equals the current status: no transition to observe.
+        transition = MembershipTransition.new(membership: membership, previous_status: "active")
+
+        assert_enqueued_emails(2) { MembershipNotifier.call(transition) }
+        assert_not_nil membership.reload.welcome_email_sent_at
+      end
+
+      test "sends nothing once the welcome has been sent, however often it reconciles" do
+        membership = sold_membership(status: :active)
+        membership.update!(welcome_email_sent_at: Time.current)
+        transition = MembershipTransition.new(membership: membership, previous_status: "active")
+
+        assert_no_enqueued_emails { MembershipNotifier.call(transition) }
+      end
+
+      # A membership we never welcomed must never receive an ending notice. This
+      # replaces the old "arrived already cancelled" guard and covers the same
+      # bulk-migrated rows, durably rather than transitionally.
+      test "sends no cancellation for a membership that was never welcomed" do
+        membership = sold_membership(status: :canceled)
+        membership.update!(welcome_email_sent_at: nil, ended_email_sent_at: nil)
+        transition = MembershipTransition.new(membership: membership, previous_status: "canceled")
+
+        assert_no_enqueued_emails { MembershipNotifier.call(transition) }
+      end
+
+      test "sends a cancellation that an earlier failed enqueue left owed" do
+        membership = sold_membership(status: :canceled)
+        membership.update!(welcome_email_sent_at: 1.month.ago, ended_email_sent_at: nil)
+        transition = MembershipTransition.new(membership: membership, previous_status: "canceled")
+
+        assert_enqueued_emails(2) { MembershipNotifier.call(transition) }
+        assert_not_nil membership.reload.ended_email_sent_at
+      end
+
+      # A past_due membership recovering to active is not a new member, but it
+      # IS access-granting and unwelcomed -- so it correctly gets the welcome it
+      # never received. Documented rather than special-cased.
+      test "welcomes an access-granting membership regardless of what it was before" do
+        membership = sold_membership(status: :active)
+        membership.update!(welcome_email_sent_at: nil)
+        transition = MembershipTransition.new(membership: membership, previous_status: "past_due")
+
+        assert_enqueued_emails(2) { MembershipNotifier.call(transition) }
       end
 
       private
