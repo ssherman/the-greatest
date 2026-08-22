@@ -224,10 +224,13 @@ The admin notice always fires for a donation this app took, even when there is n
 to send the donor a receipt — a donation with no address is still revenue the owner should hear
 about, so `#new_donation`/`#anonymous_donation` do not depend on `#donation_receipt` having sent.
 
-### Three independent guards, and why each exists
+### Two independent guards, and why each exists
 
-`MembershipNotifier#call` checks three things, in order, before it will enqueue anything, and each
-guards against a different failure:
+`MembershipNotifier#call` checks two things, in order, before it will enqueue anything, and each
+guards against a different failure. (This section used to describe three guards, with a status
+transition as the third and independent one. The `membership-email-recovery` branch folded that
+check into guard 2 below — see "Durable eligibility, not transition-driven" further down for why,
+and for what changed.)
 
 1. **`MembershipEmailScope.may_email?`** (`web-app/app/lib/membership_email_scope.rb`) — the
    ownership gate. The legacy books app is still live on the *same* Stripe account and still emails
@@ -241,10 +244,12 @@ guards against a different failure:
    `MEMBERSHIP_EMAIL_SCOPE=all` at legacy cutover** — see `deployment/ENV.md`'s entry for what
    happens if that switch is missed (every legacy-era member, silently, forever, gets no
    cancellation email from anyone).
-2. **The `welcome_email_sent_at`/`ended_email_sent_at` timestamps on `Membership`** — the once-only
-   guard for memberships. The nightly sweep re-reconciles every subscription on the account, so
-   "this membership is currently active" is true every single night; without a timestamp, every
-   member would get a new welcome email every night. `MembershipNotifier#deliver_welcome` and
+2. **The `welcome_email_sent_at`/`ended_email_sent_at` timestamps on `Membership`** — BOTH the
+   once-only guard for memberships AND, as of the `membership-email-recovery` branch, the entire
+   eligibility signal (see "Durable eligibility, not transition-driven" below for why a status
+   transition cannot be trusted for that). The nightly sweep re-reconciles every subscription on the
+   account, so "this membership is currently active" is true every single night; without a
+   timestamp, every member would get a new welcome email every night. `MembershipNotifier#deliver_welcome` and
    `#deliver_cancellation` both stamp their timestamp column and enqueue the mailer inside one
    `@membership.with_lock do ... end` block, **stamp before enqueue**. That ordering is
    load-bearing, not incidental: two webhook endpoints deliver every event, so two jobs routinely
@@ -266,19 +271,65 @@ guards against a different failure:
    better failure direction than double-mailing a donor, whereas a membership's welcome/cancellation
    pair gets the stronger, resendable guarantee because it is a first-class column on a row that
    already exists and already gets re-read every night.
-3. **The transition itself** — `Services::Billing::MembershipTransition`
-   (`web-app/app/lib/services/billing/membership_transition.rb`). "Currently active" is true every
-   night; "just became active" is true once. `ReconcileCustomer#upsert` captures the membership's
-   `status` immediately before `assign_attributes` overwrites it, and returns a
-   `MembershipTransition` — on *every* path, including the comped-row collision guard's early
-   return, which yields a no-op transition (`previous_status` equal to the row's own current
-   status, so nothing downstream can mistake an admin's manually-comped row for a fresh Stripe
-   activation). `#became_active?` treats `trialing` and `active` as the same access-granting state,
-   so converting a trial to a paid subscription is not a second welcome email. `#became_canceled?`
-   excludes a `nil` `previous_status` — a brand-new row that arrives already cancelled (the
-   account-wide migration's bulk import, or a subscription cancelled before this app ever saw it)
-   is not a fresh cancellation event and must not trigger a cancellation email for something the
-   person cancelled long ago.
+### Durable eligibility, not transition-driven
+
+`MembershipNotifier` used to decide whether an email was owed by asking
+`Services::Billing::MembershipTransition` (`web-app/app/lib/services/billing/membership_transition.rb`)
+whether the membership had just changed status — `#became_active?` treated `trialing` and `active`
+as the same access-granting state, so converting a trial to a paid subscription was not a second
+welcome email, and `#became_canceled?` excluded a `nil` `previous_status` so a brand-new row that
+arrived already cancelled (the account-wide migration's bulk import, or a subscription cancelled
+before this app ever saw it) did not trigger a cancellation email for something the person
+cancelled long ago.
+
+Both predicates, and `#status_changed?`, are gone — deleted, not renamed — because a status
+transition is observable exactly once. `ReconcileCustomer#upsert` commits the membership's new
+`status` before `MembershipNotifier` ever runs. If the notifier then raised while enqueuing (Redis
+unavailable is the realistic case), `with_lock`'s rollback correctly restored
+`welcome_email_sent_at` to `nil`, but the `status` write had already committed — so every later
+webhook retry and the nightly sweep alike computed `previous_status == status`, and a
+transition-based guard reported "nothing changed" forever. The email was owed, the nil stamp
+recorded exactly that, and nothing was left able to read it.
+
+`welcome_owed?`/`cancellation_owed?` (private methods on `MembershipNotifier`) read the
+membership's own durable state instead:
+
+```ruby
+def welcome_owed?
+  @membership.welcome_email_sent_at.nil? &&
+    ACCESS_GRANTING.include?(@membership.status.to_s)   # trialing, active
+end
+
+def cancellation_owed?
+  @membership.ended_email_sent_at.nil? &&
+    @membership.welcome_email_sent_at.present? &&
+    @membership.canceled?
+end
+```
+
+This makes a failed enqueue self-healing: the next nightly sweep re-reconciles every subscription
+on the account, recomputes `welcome_owed?` from the same nil stamp, and sends — no transition needs
+to survive for that to work, because none is consulted any more.
+
+**`cancellation_owed?`'s `welcome_email_sent_at.present?` clause is a deliberate trade-off, not an
+oversight.** It means a membership whose welcome enqueue failed, and which is then cancelled before
+the next nightly sweep recovers it, receives no email at all — ever: the cancellation guard never
+fires, because there was no welcome to look back on. The window this can happen in is small —
+bounded by the nightly sweep (at most 24 hours) and only reachable at all if the enqueue also fails
+— and it was chosen deliberately over the alternative: dropping the clause would make
+bulk-migration safety (never emailing a legacy row this app never welcomed) depend entirely on
+`bin/rails billing:backfill_email_stamps` having been run before cutover, which is an ops step a
+person can forget. See `deployment/ENV.md`'s `MEMBERSHIP_EMAIL_SCOPE` entry and
+`docs/specs/membership-and-stripe-billing.md`'s "Cutover" section for why the backfill is mandatory,
+not optional, regardless.
+
+**`Services::Billing::MembershipTransition` still exists**, with `previous_status` still captured
+and still readable, but nothing derives a boolean from it any more. It survives as the uniform
+return type of `ReconcileCustomer#upsert` on every path — including the comped-row collision
+guard's early return, which 127 production rows can reach (`docs/features/membership-billing.md`
+§8) — so every caller (`MembershipNotifier#initialize`, which now only pulls `#membership` off it;
+`ReconcileCustomer#call`'s per-transition error log) can treat whatever `upsert` hands back the same
+way, regardless of which path produced it.
 
 ### `deliver_later` does not run the mailer body
 
@@ -320,6 +371,12 @@ about *every* membership and donation on the shared Stripe account rather than o
 sold. See `deployment/ENV.md`'s `MEMBERSHIP_EMAIL_SCOPE` entry for the full production
 runbook note — in short: leave it unset (or `own_only`) while legacy is still live, and set it to
 `all` at legacy cutover, in the same change that retires legacy's webhook endpoint.
+
+**Run `bin/rails billing:backfill_email_stamps` first, always, in that order.** Because eligibility
+is now durable (above), flipping this switch without backfilling first mails a welcome to every
+legacy membership on the account at the next nightly sweep — the single most damaging mistake
+available in this subsystem. See `docs/specs/membership-and-stripe-billing.md`'s "Cutover" section
+for the two-step sequence.
 
 ## See also
 
