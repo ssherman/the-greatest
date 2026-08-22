@@ -519,4 +519,150 @@ class NewsPostsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
   end
+
+  # --- Task 18: RSS feed ---
+
+  test "the feed renders as rss" do
+    get news_path(format: :rss)
+
+    assert_response :success
+    # The plan asserted `response.media_type + "; charset=utf-8"` against the
+    # same literal with the charset appended, so the charset half compared a
+    # string to itself (ledger R5).
+    assert_equal "application/rss+xml", response.media_type
+    assert_includes response.body, "<rss"
+  end
+
+  test "the feed lists published posts with absolute urls" do
+    get news_path(format: :rss)
+
+    assert_includes response.body, "December Update"
+    assert_includes response.body, "http://dev-new.thegreatestbooks.org/news/december-update"
+  end
+
+  test "the feed excludes drafts" do
+    get news_path(format: :rss)
+
+    assert_not_includes response.body, "Something Unfinished"
+  end
+
+  test "the feed excludes future-dated posts" do
+    get news_path(format: :rss)
+
+    assert_not_includes response.body, "Next Week"
+  end
+
+  test "the feed excludes another domain's posts" do
+    get news_path(format: :rss)
+
+    assert_not_includes response.body, "The Greatest Music Is Live"
+  end
+
+  # The plan asserted the body contained "Rankings", which the <category>
+  # element satisfies on its own -- it would pass with an empty description.
+  # The rendered markup is what discriminates: <strong> exists only if
+  # BodyRenderer ran, and the raw "**Rankings**" proves the Markdown source
+  # was not shipped verbatim.
+  test "the feed carries the rendered html body, not the markdown source" do
+    get news_path(format: :rss)
+
+    assert_includes response.body, "<strong>Rankings</strong>"
+    assert_not_includes response.body, "**Rankings**"
+  end
+
+  test "the feed names each post's topics as categories" do
+    get news_path(format: :rss)
+
+    assert_includes response.body, "<category>Rankings</category>"
+  end
+
+  test "the feed is edge cacheable" do
+    get news_path(format: :rss)
+
+    assert_match(/max-age=21600/, response.headers["Cache-Control"])
+  end
+
+  test "the feed's channel link is the same url the index canonicalises to" do
+    get news_path
+
+    canonical = css_select("link[rel='canonical']").first["href"]
+
+    get news_path(format: :rss)
+
+    assert_includes response.body, "<link>#{canonical}</link>"
+  end
+
+  test "the feed advertises itself with an atom self link" do
+    get news_path(format: :rss)
+
+    assert_includes response.body, "http://dev-new.thegreatestbooks.org/news.rss"
+  end
+
+  test "the feed is a fixed window rather than a paginated one" do
+    30.times do |i|
+      NewsPost.create!(
+        domain: :books, title: "Feed Filler #{i}", body: "x",
+        published_at: (i + 10).days.ago, user: users(:admin_user)
+      )
+    end
+
+    get news_path(format: :rss)
+
+    assert_equal NewsPost::FEED_LIMIT, response.body.scan("<item>").size
+  end
+
+  test "the index links the feed for autodiscovery" do
+    get news_path
+
+    assert_select "link[rel=?][type=?][href=?]", "alternate", "application/rss+xml",
+      "http://dev-new.thegreatestbooks.org/news.rss"
+  end
+
+  # Before the format constraint this was a 406, not a 404 -- measured. A 404 is
+  # the easiest response to get by accident, so the constraint's removal was
+  # checked to produce 406 rather than trusting the status alone.
+  test "an unsupported format is not routable" do
+    get "/news.json"
+
+    assert_response :not_found
+  end
+
+  # The index route pins its format with defaults: {format: :html}. Without that
+  # pin an RSS reader sending Accept: application/rss+xml gets the FEED at the
+  # canonical HTML URL -- measured, it returns application/rss+xml -- and since
+  # that response is public/max-age=21600 with no Vary header, Cloudflare would
+  # then serve XML to every browser for six hours. Content negotiation and a
+  # shared edge cache do not mix.
+  test "an rss Accept header does not turn the html index into the feed" do
+    get "/news", headers: {"Accept" => "application/rss+xml"}
+
+    assert_response :success
+    assert_equal "text/html", response.media_type
+  end
+
+  # The R80 lesson applied to a new route: ask where else it matches. /news.rss
+  # is declared globally and only the DomainConstraint keeps it off the dormant
+  # host.
+  test "the feed is not served on an unimplemented site" do
+    host! Rails.application.config.domains[:movies].to_s.split(",").first
+
+    get "/news.rss"
+
+    assert_response :not_found
+  end
+
+  # The paginated and topic-filtered paths share #index, so without their own
+  # format constraint they would each serve the WHOLE feed from a scoped URL --
+  # an edge-cached page whose contents contradict its path.
+  test "a paginated url does not serve the feed" do
+    get "/news/page/2.rss"
+
+    assert_not_equal "application/rss+xml", response.media_type
+  end
+
+  test "a topic url does not serve the feed" do
+    get "/news/topic/rankings.rss"
+
+    assert_not_equal "application/rss+xml", response.media_type
+  end
 end

@@ -48,7 +48,13 @@ module Services
       end
 
       def urls_for(host)
-        [post_url(host)] + index_urls(host) + topic_urls(host)
+        [post_url(host), feed_url(host)] + index_urls(host) + topic_urls(host)
+      end
+
+      # The feed is a fixed window over the newest posts, so every write changes
+      # it, and it is edge-cached for the same six hours as the index.
+      def feed_url(host)
+        routes.news_url(format: :rss, **host_options(host))
       end
 
       def post_url(host)

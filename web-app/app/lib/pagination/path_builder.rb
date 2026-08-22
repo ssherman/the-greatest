@@ -8,7 +8,22 @@ module Pagination
     def self.from_request(request)
       format = request.path_parameters[:format]
       path = request.path
-      path = path.delete_suffix(".#{format}") if format.present?
+      suffix = ".#{format}"
+
+      # Only a format the PATH actually carries is reproduced. A route may pin
+      # its format with `defaults: {format: :html}` -- /news does, so that an
+      # Accept: application/rss+xml request cannot serve the feed at the
+      # canonical HTML URL and poison a six-hour edge-cache entry that has no
+      # Vary header. That leaves path_parameters[:format] set for a URL with no
+      # suffix at all, and echoing it back would page to /news/page/2.html: a
+      # second cache entry for every page, and a URL the canonical tag
+      # contradicts.
+      if format.present? && path.end_with?(suffix)
+        path = path.delete_suffix(suffix)
+      else
+        format = nil
+      end
+
       new(base_path: path.sub(PAGE_SEGMENT, ""), format: format)
     end
 

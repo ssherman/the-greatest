@@ -14,6 +14,12 @@ module Services
         assert_includes urls, "https://#{@books_host}/news/december-update"
       end
 
+      test "includes the rss feed, which every write changes" do
+        urls = CachedUrls.call(@post)
+
+        assert_includes urls, "https://#{@books_host}/news.rss"
+      end
+
       test "includes every index page for the domain, not only page one" do
         # books_december_update is the only published books fixture, so one page.
         # Eleven more published posts push the index to two pages: the assertion

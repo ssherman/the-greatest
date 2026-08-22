@@ -81,6 +81,26 @@ module Pagination
       assert_equal "/albums.html", builder.call(1)
     end
 
+    # A route may pin its format with `defaults: {format: :html}` -- /news does,
+    # to stop an Accept: application/rss+xml request from serving the feed at the
+    # canonical HTML URL and poisoning a six-hour edge cache entry. That makes
+    # path_parameters[:format] present for a URL carrying no suffix at all, and
+    # echoing it back pages to /news/page/2.html: a second cache entry per page,
+    # and a URL the canonical tag contradicts. Only a format the PATH actually
+    # carries may be reproduced.
+    test "from_request ignores a format the path does not carry" do
+      builder = Pagination::PathBuilder.from_request(fake_request("/news", format: "html"))
+
+      assert_equal "/news/page/2", builder.call(2)
+      assert_equal "/news", builder.call(1)
+    end
+
+    test "from_request ignores a defaulted format on an already-paged path" do
+      builder = Pagination::PathBuilder.from_request(fake_request("/news/page/2", format: "html"))
+
+      assert_equal "/news/page/3", builder.call(3)
+    end
+
     test "from_request with no format behaves exactly as before" do
       builder = Pagination::PathBuilder.from_request(fake_request("/albums/page/2"))
 

@@ -4,6 +4,9 @@
     <title><%= content_for?(:page_title) ? yield(:page_title) : "Greatest Songs & Albums Ranked | The Greatest Music" %></title>
     <meta name="description" content="<%= content_for?(:meta_description) ? yield(:meta_description) : "Discover definitive rankings of the greatest songs and albums of all time. Expert reviews, curated lists, and comprehensive music analysis." %>">
     <meta name="robots" content="<%= music_robots_content %>">
+    <%# Per-page <link> elements (RSS autodiscovery today). Renders nothing
+        when no page sets it, so every existing page is byte-identical. %>
+    <%= yield(:head_links) if content_for?(:head_links) %>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
