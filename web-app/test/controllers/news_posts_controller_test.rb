@@ -5,6 +5,14 @@ class NewsPostsControllerTest < ActionDispatch::IntegrationTest
     host! "dev-new.thegreatestbooks.org"
   end
 
+  test "the news routes serve only the three implemented sites" do
+    host! Rails.application.config.domains[:movies].to_s.split(",").first
+
+    get "/news"
+
+    assert_response :not_found
+  end
+
   test "index lists only this domain's published posts" do
     get news_path
 

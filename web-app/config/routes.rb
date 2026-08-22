@@ -315,23 +315,32 @@ Rails.application.routes.draw do
   # The members' area -- the first thing behind the paywall.
   get "members", to: "members#show", as: :members
 
-  # News -- global (non-domain-constrained) like /membership and /my/lists: each
-  # site serves its own posts from one set of routes, with the layout resolved
-  # from Current.domain in the controller. Edge-cached; drafts 404 rather than
-  # rendering behind a cache.
+  # News -- like /membership and /my/lists, one controller and one set of
+  # views serve every site, with the layout resolved from Current.domain in
+  # the controller. Unlike those, the routes ARE domain-constrained: the
+  # feature is only built for books, music and games, and without this
+  # constraint the global routes also matched on the movies host, serving an
+  # edge-cached, indexable page for a site that is otherwise just a
+  # placeholder root. DomainConstraint#initialize splits on "," and each
+  # config.domains value may itself be a comma-separated list, so joining the
+  # three with "," composes correctly.
   #
   # The topic route is declared BEFORE the slug route, and "topic" is a
   # friendly_id reserved word, so no post can ever claim /news/topic.
   #
   # Order matters: /page/1 must precede the generic /page/:page.
-  get "news", to: "news_posts#index", as: :news
-  get "news/page/1", to: redirect("/news", status: 301)
-  get "news/page/:page", to: "news_posts#index", as: :news_page, constraints: {page: /[1-9]\d*/}
-  get "news/topic/:topic_slug/page/1", to: redirect("/news/topic/%{topic_slug}", status: 301)
-  get "news/topic/:topic_slug", to: "news_posts#index", as: :news_topic
-  get "news/topic/:topic_slug/page/:page", to: "news_posts#index", as: :news_topic_page,
-    constraints: {page: /[1-9]\d*/}
-  get "news/:slug", to: "news_posts#show", as: :news_post
+  constraints DomainConstraint.new(
+    [:books, :music, :games].map { |domain| Rails.application.config.domains[domain] }.join(",")
+  ) do
+    get "news", to: "news_posts#index", as: :news
+    get "news/page/1", to: redirect("/news", status: 301)
+    get "news/page/:page", to: "news_posts#index", as: :news_page, constraints: {page: /[1-9]\d*/}
+    get "news/topic/:topic_slug/page/1", to: redirect("/news/topic/%{topic_slug}", status: 301)
+    get "news/topic/:topic_slug", to: "news_posts#index", as: :news_topic
+    get "news/topic/:topic_slug/page/:page", to: "news_posts#index", as: :news_topic_page,
+      constraints: {page: /[1-9]\d*/}
+    get "news/:slug", to: "news_posts#show", as: :news_post
+  end
 
   # Legacy books URL. ~15 years of inbound links point at /support.
   get "support", to: redirect("/membership", status: 301)
