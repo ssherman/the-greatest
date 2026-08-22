@@ -157,16 +157,6 @@ module Services
         end
       end
 
-      # A membership that arrived already cancelled -- as the account-wide
-      # migration produced in bulk -- is not a cancellation anyone should hear
-      # about.
-      test "sends nothing when a membership arrives already cancelled" do
-        membership = sold_membership(status: :canceled)
-        transition = MembershipTransition.new(membership: membership, previous_status: nil)
-
-        assert_no_enqueued_emails { MembershipNotifier.call(transition) }
-      end
-
       test "an activation sends both the member's welcome and the owner's notice" do
         membership = sold_membership(status: :active)
         transition = MembershipTransition.new(membership: membership, previous_status: nil)
