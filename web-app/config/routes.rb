@@ -512,6 +512,11 @@ Rails.application.routes.draw do
     get "lists/search_results", to: redirect("/lists", status: 301)
     get "lists/condensed", to: redirect("/lists", status: 301)
     get "lists/help", to: redirect("/lists", status: 301)
+
+    # Legacy blog URLs. /news is the legacy index path already and carries over
+    # unchanged, so it is deliberately absent here.
+    get "blog_posts", to: redirect("/news", status: 301)
+    get "blog_posts/:slug", to: redirect("/news/%{slug}", status: 301)
     get "lists/pending_lists", to: redirect("/lists", status: 301)
     get "lists/specialized_edit", to: redirect("/lists", status: 301)
     get "v/:view_type/lists", to: redirect("/lists", status: 301)

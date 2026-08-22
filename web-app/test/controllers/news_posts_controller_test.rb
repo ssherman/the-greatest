@@ -314,4 +314,85 @@ class NewsPostsControllerTest < ActionDispatch::IntegrationTest
     assert_select "meta[property='og:title'][content=?]",
       "The \"Best\" Rankings | News | #{domain_name}"
   end
+
+  # "a topic page lists only that topic's posts" and "another domain's topic
+  # 404s" were pulled forward into Task 14 (see test above) -- not duplicated
+  # here.
+
+  # E2: the fixtures hold exactly one published books post, so the test above
+  # cannot tell the joins(...) clause in #index apart from the plain domain
+  # scope -- deleting the topic filter still returns [books_december_update]
+  # unchanged. This test creates a SECOND, untagged books post, which is the
+  # one fixture condition that discriminates the clause. It is the only test
+  # in the suite that can catch that join disappearing.
+  test "a topic page excludes posts without that topic" do
+    other = NewsPost.create!(domain: :books, title: "Untagged", body: "x",
+      user: users(:admin_user), published_at: 1.hour.ago)
+
+    get news_topic_path(topic_slug: "rankings")
+
+    ids = @controller.view_assigns["news_posts"].map(&:id)
+    assert_includes ids, news_posts(:books_december_update).id # positive control
+    assert_not_includes ids, other.id
+  end
+
+  test "a topic page still excludes drafts" do
+    news_posts(:books_draft).news_topics << news_topics(:books_rankings)
+
+    get news_topic_path(topic_slug: "rankings")
+
+    ids = @controller.view_assigns["news_posts"].map(&:id)
+    assert_includes ids, news_posts(:books_december_update).id # positive control
+    assert_not_includes ids, news_posts(:books_draft).id
+  end
+
+  # E3: rescue_from ActiveRecord::RecordNotFound (application_controller.rb:9)
+  # means the exception never escapes the controller -- assert_response
+  # :not_found, not assert_raises.
+  test "an unknown topic 404s" do
+    get news_topic_path(topic_slug: "no-such-topic")
+
+    assert_response :not_found
+  end
+
+  test "a topic page names the topic in its heading" do
+    get news_topic_path(topic_slug: "rankings")
+
+    assert_select "h1", text: "Rankings"
+  end
+
+  test "the legacy blog index 301s to news" do
+    get "/blog_posts"
+
+    assert_redirected_to "/news"
+    assert_response :moved_permanently
+  end
+
+  test "a legacy blog post url 301s to its news url" do
+    get "/blog_posts/december-update"
+
+    assert_redirected_to "/news/december-update"
+    assert_response :moved_permanently
+  end
+
+  # E5: the legacy redirects belong inside the books domain constraint --
+  # music and games never had a /blog_posts URL space, so they must not gain
+  # a 301 for it now.
+  test "the legacy blog urls are books-only" do
+    host! "dev.thegreatestmusic.org"
+
+    get "/blog_posts"
+
+    assert_response :not_found
+  end
+
+  # E7: /news returning :success was already true before this task -- what
+  # this actually guards is that adding the /blog_posts redirects doesn't
+  # also add a mistaken get "news", to: redirect(...) alongside them, since
+  # /news is the legacy blog's index path too and must NOT redirect.
+  test "the legacy news index path still resolves" do
+    get "/news"
+
+    assert_response :success
+  end
 end
