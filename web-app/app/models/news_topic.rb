@@ -22,6 +22,12 @@ class NewsTopic < ApplicationRecord
   # .friendly.find.
   friendly_id :name, use: [:slugged, :scoped], scope: :domain
 
+  # Reserved on this model rather than in config/initializers/friendly_id.rb:
+  # FriendlyId.defaults applies that initializer to all 18 friendly_id models here,
+  # and two live rows already hold the slug "page" (books_books 130620, categories
+  # 49860) -- reserving it globally makes them fail validation on every save.
+  friendly_id_config.reserved_words += %w[topic page]
+
   # Same integer mapping as DomainRole so the two can never disagree about
   # which site an integer means.
   enum :domain, {music: 0, games: 1, books: 2, movies: 3}
