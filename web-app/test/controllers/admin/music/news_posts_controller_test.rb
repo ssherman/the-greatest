@@ -41,6 +41,21 @@ module Admin
         assert_response :not_found
       end
 
+      # The surface this PR newly exposed: a music editor could delete music
+      # posts through a crafted request.
+      test "destroy is refused for a music editor who cannot delete" do
+        editor = users(:regular_user)
+        editor.domain_roles.create!(domain: :music, permission_level: :editor)
+        sign_in_as(editor, stub_auth: true)
+        target = news_posts(:music_launch)
+
+        assert_no_difference -> { NewsPost.count } do
+          delete admin_news_post_path(target)
+        end
+
+        assert NewsPost.exists?(target.id)
+      end
+
       test "topics index lists only music topics" do
         get admin_news_topics_path
 

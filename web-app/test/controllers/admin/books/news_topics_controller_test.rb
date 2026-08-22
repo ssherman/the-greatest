@@ -8,6 +8,31 @@ module Admin
         sign_in_as(users(:admin_user), stub_auth: true)
       end
 
+      # Same hole as the posts controller: destroy was guarded only by
+      # require_domain_write!, which an editor passes.
+      test "destroy is refused for an editor who cannot delete" do
+        editor = users(:regular_user)
+        editor.domain_roles.create!(domain: :books, permission_level: :editor)
+        sign_in_as(editor, stub_auth: true)
+        target = news_topics(:books_new_lists)
+
+        assert_no_difference -> { NewsTopic.count } do
+          delete admin_books_news_topic_path(target)
+        end
+
+        assert NewsTopic.exists?(target.id)
+      end
+
+      test "destroy is allowed for a moderator" do
+        moderator = users(:regular_user)
+        moderator.domain_roles.create!(domain: :books, permission_level: :moderator)
+        sign_in_as(moderator, stub_auth: true)
+
+        assert_difference -> { NewsTopic.count }, -1 do
+          delete admin_books_news_topic_path(news_topics(:books_new_lists))
+        end
+      end
+
       test "index lists only this domain's topics" do
         get admin_books_news_topics_path
 

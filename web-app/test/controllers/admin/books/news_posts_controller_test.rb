@@ -698,6 +698,44 @@ module Admin
         end
       end
 
+      # `require_domain_write!` admits an editor (can_write? is editor|moderator|
+      # admin) while can_delete? is moderator|admin, so an editor passed the only
+      # guard on destroy and could remove posts through a crafted request even
+      # though the UI hides the Delete control from them. Every other admin
+      # controller is protected by Pundit, whose ApplicationPolicy#destroy? asks
+      # can_delete?; these controllers have no Pundit layer and so had nothing
+      # asking it. Measured before fixing: an editor's DELETE destroyed the row
+      # and returned 302. Found by Codex on #250.
+      test "destroy is refused for an editor who cannot delete" do
+        editor = users(:regular_user)
+        editor.domain_roles.create!(domain: :books, permission_level: :editor)
+        sign_in_as(editor, stub_auth: true)
+        target = news_posts(:books_december_update)
+
+        Sidekiq::Testing.fake! do
+          ::News::PurgeCachedPagesJob.jobs.clear
+
+          assert_no_difference -> { NewsPost.count } do
+            delete admin_books_news_post_path(target)
+          end
+
+          assert NewsPost.exists?(target.id)
+          assert_equal 0, ::News::PurgeCachedPagesJob.jobs.size
+        end
+      end
+
+      # Positive control: the guard must gate on delete permission, not simply
+      # refuse everyone who is not a global admin.
+      test "destroy is allowed for a moderator" do
+        moderator = users(:regular_user)
+        moderator.domain_roles.create!(domain: :books, permission_level: :moderator)
+        sign_in_as(moderator, stub_auth: true)
+
+        assert_difference -> { NewsPost.count }, -1 do
+          delete admin_books_news_post_path(news_posts(:books_december_update))
+        end
+      end
+
       private
 
       def books_host = Rails.application.config.domains[:books]
