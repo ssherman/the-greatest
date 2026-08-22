@@ -8,14 +8,27 @@ module Services
       # ActiveJob::TestHelper itself, so this is the superset.
       include ActionMailer::TestHelper
 
-      setup { ENV["MAIL_FROM_ADDRESS"] = "contact@example.org" }
-      teardown { ENV.delete("MAIL_FROM_ADDRESS") }
+      setup do
+        ENV["MAIL_FROM_ADDRESS"] = "contact@example.org"
+        # AdminMailer raises without this now that MembershipNotifier sends an
+        # owner notice alongside every customer email.
+        ENV["ADMIN_NOTIFICATION_EMAIL"] = "owner@example.org"
+      end
 
+      teardown do
+        ENV.delete("MAIL_FROM_ADDRESS")
+        ENV.delete("ADMIN_NOTIFICATION_EMAIL")
+      end
+
+      # Task 6: an activation now sends two emails, not one -- the member's
+      # welcome and the owner's admin notice. See the dedicated
+      # "sends both the member's welcome and the owner's notice" test below for
+      # the precise count; this one keeps asserting the welcome half by name.
       test "sends the welcome email when a membership this app sold becomes active" do
         membership = sold_membership(status: :active)
         transition = MembershipTransition.new(membership: membership, previous_status: nil)
 
-        assert_enqueued_emails 1 do
+        assert_enqueued_email_with MembershipMailer, :welcome, args: [membership] do
           MembershipNotifier.call(transition)
         end
       end
@@ -49,7 +62,9 @@ module Services
         transition = MembershipTransition.new(membership: membership, previous_status: nil)
 
         with_env(MembershipEmailScope::ENV_VAR => "all") do
-          assert_enqueued_emails(1) { MembershipNotifier.call(transition) }
+          # Welcome to the member, admin notice to the owner -- the scope
+          # guard covers both, so opening it up opens both at once.
+          assert_enqueued_emails(2) { MembershipNotifier.call(transition) }
         end
       end
 
@@ -141,6 +156,21 @@ module Services
       # about.
       test "sends nothing when a membership arrives already cancelled" do
         membership = sold_membership(status: :canceled)
+        transition = MembershipTransition.new(membership: membership, previous_status: nil)
+
+        assert_no_enqueued_emails { MembershipNotifier.call(transition) }
+      end
+
+      test "an activation sends both the member's welcome and the owner's notice" do
+        membership = sold_membership(status: :active)
+        transition = MembershipTransition.new(membership: membership, previous_status: nil)
+
+        assert_enqueued_emails(2) { MembershipNotifier.call(transition) }
+      end
+
+      test "a membership this app did not sell notifies nobody, owner included" do
+        membership = sold_membership(status: :active)
+        membership.update!(origin_domain: nil)
         transition = MembershipTransition.new(membership: membership, previous_status: nil)
 
         assert_no_enqueued_emails { MembershipNotifier.call(transition) }

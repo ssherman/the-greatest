@@ -379,9 +379,17 @@ module Services
       test "reconciling a membership this app sold enqueues its welcome email once it becomes active" do
         subscription = stripe_subscription(metadata: {"origin_domain" => "books"})
 
-        assert_enqueued_emails 1 do
-          reconcile_and_fetch(subscription)
+        membership = nil
+        # Task 6: two emails now, not one -- the member's welcome and the
+        # owner's admin notice. Following up with assert_enqueued_email_with
+        # keeps this test's original guarantee: it still goes red if the
+        # welcome wiring is ever deleted or pointed at the wrong membership,
+        # not just if the total count drifts.
+        assert_enqueued_emails(2) do
+          membership = reconcile_and_fetch(subscription)
         end
+
+        assert_enqueued_email_with MembershipMailer, :welcome, args: [membership]
       end
 
       # FINDING 1(a). MembershipNotifier only rescues Stripe::StripeError, so
@@ -408,7 +416,12 @@ module Services
         fallback_mail = MembershipMailer.welcome(memberships(:regular_user_monthly))
         MembershipMailer.stubs(:welcome).raises(StandardError, "redis down").then.returns(fallback_mail)
 
-        assert_enqueued_emails 1 do
+        # Two, not one: the healthy membership's welcome email plus its admin
+        # notice. The poisoned membership's raise happens inside
+        # deliver_welcome's with_lock, before that method reaches its own
+        # (post-lock) admin send -- see MembershipNotifier -- so it
+        # contributes zero emails, not one.
+        assert_enqueued_emails(2) do
           ReconcileCustomer.call(stripe_customer_id: "cus_reconcile")
         end
 

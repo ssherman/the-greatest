@@ -142,11 +142,23 @@ module Services
       # Legacy still takes donations through its own payment links and emails
       # those donors itself, so this app must stay quiet about anything it did
       # not take. MembershipEmailScope is the switch that opens up at cutover.
+      #
+      # The admin notice fires even when there is no address to send the donor
+      # a receipt -- a donation with no collected email is still revenue the
+      # owner should hear about. It inherits the caller's
+      # previously_new_record? gate (see #call), so a Sidekiq retry of an
+      # already-committed donation re-notifies the owner no more than it
+      # re-receipts the donor.
       def deliver_receipt(donation)
-        return if donation.email.blank?
         return unless MembershipEmailScope.may_email?(donation)
 
-        MembershipMailer.donation_receipt(donation).deliver_later
+        MembershipMailer.donation_receipt(donation).deliver_later if donation.email.present?
+
+        if donation.user_id.present?
+          AdminMailer.new_donation(donation).deliver_later
+        else
+          AdminMailer.anonymous_donation(donation).deliver_later
+        end
       end
 
       def success(data) = Result.new(success?: true, data: data, errors: [])

@@ -65,6 +65,21 @@ module Services
           MembershipMailer.welcome(@membership).deliver_later
         end
 
+        # Deliberately OUTSIDE the with_lock above. MembershipMailer's
+        # deliver_later has already been pushed to Sidekiq by the time
+        # execution reaches here -- that push is not part of the DB
+        # transaction, so it does not roll back with it. If this admin send
+        # raised from INSIDE the lock (say, ADMIN_NOTIFICATION_EMAIL unset),
+        # the transaction would roll welcome_email_sent_at back to nil while
+        # the customer's welcome job was already queued to run -- reopening
+        # the exact double-send the stamp-before-enqueue ordering exists to
+        # prevent, only now triggered by a failure on the admin side. Keeping
+        # it outside means an admin-send failure can never affect whether the
+        # member gets exactly one welcome email; at worst the owner misses a
+        # notice, which is the same silent-miss tradeoff RecordDonation
+        # accepts for a donor receipt.
+        AdminMailer.new_subscription(@membership).deliver_later
+
         Result.new(success?: true, data: :welcome, errors: [])
       end
 
@@ -85,6 +100,11 @@ module Services
             result = :canceled_last
           end
         end
+
+        # Same reasoning as deliver_welcome: outside the lock, so a failure
+        # sending the admin notice can never roll back ended_email_sent_at
+        # and reopen a double-send of the customer's cancellation email.
+        AdminMailer.subscription_canceled(@membership).deliver_later
 
         Result.new(success?: true, data: result, errors: [])
       end
