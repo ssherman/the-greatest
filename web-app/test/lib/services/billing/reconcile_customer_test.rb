@@ -6,6 +6,9 @@ module Services
   module Billing
     class ReconcileCustomerTest < ActiveSupport::TestCase
       include StripeWebhookHelper
+      # ActionMailer::TestHelper (which itself includes ActiveJob::TestHelper)
+      # is what defines assert_enqueued_emails / assert_no_enqueued_emails.
+      include ActionMailer::TestHelper
 
       setup do
         @user = users(:contractor_user)
@@ -13,10 +16,14 @@ module Services
       end
 
       # Builds a Stripe::Subscription from the helper's hash so the service sees
-      # the same object shape the real API returns.
-      def stripe_subscription(**opts)
+      # the same object shape the real API returns. id and customer default so a
+      # test that only cares about one attribute (e.g. metadata) doesn't have to
+      # restate the rest -- customer defaults to the fixture user's
+      # stripe_customer_id set up in `setup`, so resolving it never falls through
+      # to a real Stripe::Customer.retrieve call.
+      def stripe_subscription(id: "sub_#{SecureRandom.hex(6)}", customer: "cus_reconcile", **opts)
         Stripe::Subscription.construct_from(
-          stripe_subscription_object(**opts).deep_symbolize_keys
+          stripe_subscription_object(id: id, customer: customer, **opts).deep_symbolize_keys
         )
       end
 
@@ -26,6 +33,27 @@ module Services
           .returns(Stripe::ListObject.construct_from(
             {object: "list", data: subscriptions.map(&:to_hash), has_more: false}
           ))
+      end
+
+      # Runs the reconcile for one subscription and re-queries the resulting row
+      # from the database, rather than trusting whatever ReconcileCustomer.call
+      # returns -- a later task changes that return shape, and re-querying keeps
+      # these tests indifferent to it.
+      def reconcile_and_fetch(subscription)
+        stub_stripe_list([subscription])
+        ReconcileCustomer.call(stripe_customer_id: subscription.customer)
+        ::Membership.find_by(stripe_subscription_id: subscription.id)
+      end
+
+      # Runs the reconcile for one subscription and returns the resulting
+      # MembershipTransition. Unlike reconcile_and_fetch, this cannot be
+      # re-derived from the database -- previous_status only ever exists for
+      # the duration of one reconcile -- so it reads the service's own return
+      # value instead.
+      def reconcile_and_transition(subscription)
+        stub_stripe_list([subscription])
+        result = ReconcileCustomer.call(stripe_customer_id: subscription.customer)
+        result.data.first
       end
 
       test "creates a membership from a stripe subscription" do
@@ -209,6 +237,207 @@ module Services
         assert result.success?
         membership = ::Membership.find_by!(stripe_subscription_id: "sub_missing_customer")
         assert_nil membership.user
+      end
+
+      # THE GAP. origin_domain is stamped into subscription metadata at checkout,
+      # but upsert never read it back, so every membership row had origin_domain
+      # nil. That breaks two things at once: MailBranding.for(nil) falls back to
+      # books, so a music subscriber gets books-branded mail; and with no value
+      # there is no way to tell this app's memberships from legacy's, which is the
+      # ownership signal the email gate depends on.
+      test "writes origin_domain from the subscription's Stripe metadata" do
+        subscription = stripe_subscription(metadata: {"origin_domain" => "music"})
+
+        membership = reconcile_and_fetch(subscription)
+
+        assert_equal "music", membership.origin_domain
+      end
+
+      # Legacy sells through Stripe Payment Links and sets no metadata at all.
+      test "leaves origin_domain nil for a subscription with no metadata" do
+        subscription = stripe_subscription(metadata: {})
+
+        membership = reconcile_and_fetch(subscription)
+
+        assert_nil membership.origin_domain
+      end
+
+      # The nightly sweep re-reconciles every subscription on the account. Stripe
+      # is the source of truth, so the assignment must be unconditional: if
+      # origin_domain is absent on a later read, it must be cleared here too, not
+      # stuck at whatever an earlier reconcile saw. A sticky `|| membership.
+      # origin_domain` (the natural analogy to the `user: user || membership.user`
+      # line above) would silently keep emailing about a membership whose
+      # ownership signal Stripe no longer reports.
+      test "clears origin_domain when it disappears from the subscription's Stripe metadata" do
+        subscription = stripe_subscription(id: "sub_origin_clears", metadata: {"origin_domain" => "games"})
+        reconcile_and_fetch(subscription)
+
+        subscription = stripe_subscription(id: "sub_origin_clears", metadata: {})
+        membership = reconcile_and_fetch(subscription)
+
+        assert_nil membership.origin_domain
+      end
+
+      test "reports a brand-new active membership as having become active" do
+        subscription = stripe_subscription(status: "active")
+
+        transition = reconcile_and_transition(subscription)
+
+        assert_nil transition.previous_status
+        assert transition.became_active?
+        assert_not transition.became_canceled?
+      end
+
+      # The nightly sweep re-reconciles everything. An unchanged active membership
+      # must NOT look like a new activation, or every member gets a welcome email
+      # every night.
+      test "an unchanged active membership has not become active" do
+        subscription = stripe_subscription(status: "active")
+        reconcile_and_transition(subscription)
+
+        transition = reconcile_and_transition(subscription)
+
+        assert_equal "active", transition.previous_status
+        assert_not transition.became_active?
+        assert_not transition.status_changed?
+      end
+
+      test "reports the move from active to canceled as having become canceled" do
+        subscription = stripe_subscription(status: "active")
+        reconcile_and_transition(subscription)
+
+        transition = reconcile_and_transition(stripe_subscription(id: subscription.id, status: "canceled"))
+
+        assert_equal "active", transition.previous_status
+        assert transition.became_canceled?
+        assert transition.status_changed?
+      end
+
+      # trialing -> active is a real transition but not a new membership. The
+      # welcome email already went out when the trial started; sending a second on
+      # conversion would be a duplicate.
+      test "trialing counts as active, so converting a trial is not a new activation" do
+        subscription = stripe_subscription(status: "trialing")
+        reconcile_and_transition(subscription)
+
+        transition = reconcile_and_transition(stripe_subscription(id: subscription.id, status: "active"))
+
+        assert_not transition.became_active?
+      end
+
+      # The comped-row guard in `upsert` used to return a bare Membership on this
+      # path, while every other path returned a MembershipTransition -- a
+      # heterogeneous return type that would raise NoMethodError the moment a
+      # caller (the welcome-email dispatcher) calls #became_active? on whatever
+      # this returns. A real comped fixture validates absence of
+      # stripe_subscription_id, so update_column (which skips validations) is
+      # used to reproduce the legacy-shaped collision, exactly as the
+      # hand-built guarded row above does for the same reason.
+      test "a comped collision returns a no-op transition, not a bare Membership" do
+        comped = memberships(:editor_user_comped)
+        comped.update_column(:stripe_subscription_id, "sub_comped_collision")
+        original = comped.attributes.slice("status", "current_period_end", "note")
+
+        transition = reconcile_and_transition(
+          stripe_subscription(id: "sub_comped_collision", status: "canceled")
+        )
+
+        assert_instance_of MembershipTransition, transition
+        assert_not transition.status_changed?
+        assert_not transition.became_active?
+        assert_not transition.became_canceled?
+        assert_equal original, comped.reload.attributes.slice("status", "current_period_end", "note")
+      end
+
+      # The account-wide migration produced already-cancelled memberships in
+      # bulk. Without the `!previous_status.nil?` clause in became_canceled?,
+      # every one of those brand-new-but-already-cancelled rows would look
+      # like a fresh cancellation and get emailed a cancellation notice for a
+      # subscription they cancelled long ago. previous_status is nil here
+      # specifically because there is no prior membership row -- a random,
+      # never-seen-before subscription id (the stripe_subscription helper's
+      # default) is deliberate, not incidental: it guarantees no row exists to
+      # find.
+      test "a membership that arrives already cancelled is not a cancellation event" do
+        subscription = stripe_subscription(status: "canceled")
+
+        transition = reconcile_and_transition(subscription)
+
+        assert_nil transition.previous_status
+        assert_not transition.became_canceled?
+      end
+
+      # THE SEAM. A reviewer commented out the `transitions.each { ... }` line
+      # that wires MembershipNotifier into #call and reran the full file
+      # (plus membership_notifier_test.rb): all 28 tests still passed, because
+      # nothing anywhere asserted that reconciling actually enqueues mail.
+      # This is the one test in the suite that would go red if that wiring
+      # were ever deleted or pointed at the wrong argument. Deliberately does
+      # not stub MembershipNotifier -- the whole point is to exercise the real
+      # call site.
+      test "reconciling a membership this app sold enqueues its welcome email once it becomes active" do
+        subscription = stripe_subscription(metadata: {"origin_domain" => "books"})
+
+        membership = nil
+        # Task 6: two emails now, not one -- the member's welcome and the
+        # owner's admin notice. Following up with assert_enqueued_email_with
+        # keeps this test's original guarantee: it still goes red if the
+        # welcome wiring is ever deleted or pointed at the wrong membership,
+        # not just if the total count drifts.
+        assert_enqueued_emails(2) do
+          membership = reconcile_and_fetch(subscription)
+        end
+
+        assert_enqueued_email_with MembershipMailer, :welcome, args: [membership]
+      end
+
+      # FINDING 1(a). MembershipNotifier only rescues Stripe::StripeError, so
+      # without a per-transition rescue at this call site, one membership's
+      # notification blowing up would abort the `each` loop and cost every
+      # OTHER membership in the same customer's batch its welcome email --
+      # permanently, since the next reconcile's upsert recomputes
+      # previous_status from the now-committed (already-active) row and
+      # became_active? is false for it forever after.
+      #
+      # The first call raises via a stubbed MembershipMailer.welcome; the
+      # second call is untouched by the stub (Mocha's `.then` only changes
+      # behaviour on the SAME expectation's next invocation) and runs for
+      # real, so its email is what this test counts.
+      test "a notifier failure for one membership does not stop a sibling's welcome email from sending" do
+        stub_stripe_list([
+          stripe_subscription(id: "sub_notify_poisoned", metadata: {"origin_domain" => "books"}),
+          stripe_subscription(id: "sub_notify_healthy", metadata: {"origin_domain" => "books"})
+        ])
+
+        # Built before the stub below replaces .welcome, so this is the
+        # genuine mailer output -- just for an unrelated fixture membership.
+        # Its enqueued job therefore carries THIS fixture membership as its
+        # args, not "healthy" below (which does not exist yet -- it is
+        # created inside the ReconcileCustomer.call this test drives).
+        fallback_mail = MembershipMailer.welcome(memberships(:regular_user_monthly))
+        MembershipMailer.stubs(:welcome).raises(StandardError, "redis down").then.returns(fallback_mail)
+
+        # Two, not one: the healthy membership's welcome email plus its admin
+        # notice. The poisoned membership's raise happens inside
+        # deliver_welcome's with_lock, before that method reaches its own
+        # (post-lock) admin send -- see MembershipNotifier -- so it
+        # contributes zero emails, not one. Naming both mailers below (not
+        # just the total) is what would catch a regression that enqueued the
+        # customer mail twice and dropped the admin notice, or vice versa,
+        # while still summing to 2.
+        assert_enqueued_emails(2) do
+          ReconcileCustomer.call(stripe_customer_id: "cus_reconcile")
+        end
+
+        poisoned = ::Membership.find_by!(stripe_subscription_id: "sub_notify_poisoned")
+        healthy = ::Membership.find_by!(stripe_subscription_id: "sub_notify_healthy")
+        assert_nil poisoned.welcome_email_sent_at,
+          "the membership whose notification raised should not be stamped -- see Finding 1(b)"
+        assert_not_nil healthy.welcome_email_sent_at
+
+        assert_enqueued_email_with MembershipMailer, :welcome, args: [memberships(:regular_user_monthly)]
+        assert_enqueued_email_with AdminMailer, :new_subscription, args: [healthy]
       end
     end
   end

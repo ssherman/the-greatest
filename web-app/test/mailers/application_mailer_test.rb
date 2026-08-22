@@ -82,4 +82,68 @@ class ApplicationMailerTest < ActionMailer::TestCase
       assert_equal before, ProbeMailer.default_url_options
     end
   end
+
+  # Drives the real deliver_later -> ActionMailer::MailDeliveryJob -> deliver_now
+  # path (perform_enqueued_jobs, not a bare deliver_now call), because the
+  # rescue_from's coverage of the actual SMTP round-trip -- as opposed to just
+  # the mailer action body -- is exactly what Step 1 needed verified rather
+  # than assumed. Stubs Mail::Message#deliver, the lowest-level call inside
+  # that path, to simulate the SMTP failure itself.
+  # A regression that interpolated error.message (or the recipient) into the
+  # log line would pass "swallows ... instead of letting it raise" just as
+  # easily as the fixed code -- that assertion only sees whether something
+  # raised, not what got logged. This repo is public, and a real SMTP 550
+  # quotes the rejected address back in its message, so the log line matters
+  # as much as the non-raise. The rejected address below is deliberately
+  # recognisable (not a generic string) so an interpolation regression can't
+  # slip past by coincidence.
+  test "swallows a permanent SMTP failure instead of letting it raise, and never logs the address or exception message" do
+    with_env("MAIL_FROM_ADDRESS" => "noreply@example.org") do
+      rejected_address = "nobody-rejected@example.org"
+      smtp_error = Net::SMTPFatalError.new(
+        "550 5.1.1 <#{rejected_address}>: Recipient address rejected: User unknown in virtual mailbox table"
+      )
+      Mail::Message.any_instance.stubs(:deliver).raises(smtp_error)
+
+      log_output = StringIO.new
+      original_logger = Rails.logger
+      Rails.logger = Logger.new(log_output)
+
+      begin
+        assert_nothing_raised do
+          perform_enqueued_jobs do
+            ProbeMailer.probe(domain: :books).deliver_later
+          end
+        end
+      ensure
+        Rails.logger = original_logger
+      end
+
+      logged = log_output.string
+      assert_includes logged, "#{ProbeMailer.mailer_name}#probe"
+      assert_includes logged, "Net::SMTPFatalError"
+      refute_includes logged, rejected_address
+      refute_includes logged, smtp_error.message
+    end
+  end
+
+  test "still raises a transient SMTP failure so Sidekiq retries it" do
+    with_env("MAIL_FROM_ADDRESS" => "noreply@example.org") do
+      Mail::Message.any_instance.stubs(:deliver).raises(Net::SMTPServerBusy.new("421 too busy"))
+
+      # assert_raises has to sit INSIDE perform_enqueued_jobs's block, not
+      # around the whole call: perform_enqueued_jobs itself wraps its block in
+      # assert_nothing_raised, which repackages any escaping exception as a
+      # Minitest::UnexpectedError -- a class assert_raises(Net::SMTPServerBusy)
+      # would never match, so it would misreport as an unrelated Error instead
+      # of confirming the real exception propagated. This is what
+      # perform_enqueued_jobs's own warning message ("use assert_raises as
+      # near to the code that raises as possible") is telling you to do.
+      perform_enqueued_jobs do
+        assert_raises(Net::SMTPServerBusy) do
+          ProbeMailer.probe(domain: :books).deliver_later
+        end
+      end
+    end
+  end
 end

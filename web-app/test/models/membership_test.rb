@@ -193,4 +193,20 @@ class MembershipTest < ActiveSupport::TestCase
 
     assert_includes Membership.granting_access, membership
   end
+
+  # origin_domain is set only by this app's own checkout, via Stripe metadata
+  # that CreateCheckoutSession stamps and ReconcileCustomer reads back. A
+  # membership legacy sold has none, and that absence is the ownership signal.
+  test "sold_by_this_app? is true only when origin_domain is present" do
+    membership = memberships(:regular_user_monthly)
+
+    membership.origin_domain = "music"
+    assert membership.sold_by_this_app?
+
+    membership.origin_domain = nil
+    assert_not membership.sold_by_this_app?
+
+    membership.origin_domain = ""
+    assert_not membership.sold_by_this_app?
+  end
 end

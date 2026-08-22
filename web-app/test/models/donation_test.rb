@@ -70,4 +70,14 @@ class DonationTest < ActiveSupport::TestCase
     assert_includes Donation.successful, donations(:regular_user_gift)
     refute_includes Donation.successful, donations(:failed_attempt)
   end
+
+  test "sold_by_this_app? is true only when domain is present" do
+    donation = donations(:regular_user_gift)
+
+    donation.domain = "books"
+    assert donation.sold_by_this_app?
+
+    donation.domain = nil
+    assert_not donation.sold_by_this_app?
+  end
 end

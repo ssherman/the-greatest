@@ -56,6 +56,35 @@ module Services
           domain: session.metadata&.[]("origin_domain")
         )
         donation.save!
+        # Only the call that actually created the row sends. Without this, any
+        # retry -- and ProcessStripeEventJob re-enqueues whenever its event row
+        # is still `received` or `failed` -- re-receipts a donor whose donation
+        # committed on an earlier attempt.
+        #
+        # The flip side is a deliberately CHOSEN trade-off, not the only option
+        # on the table: if the row commits but the deliver_later enqueue
+        # itself fails (a Redis blip, the process dying in that exact window),
+        # the donation is never retried as new, so that receipt never goes
+        # out, and donations have no *_email_sent_at column to record that one
+        # was owed. A real alternative exists -- wrapping save! and the donor
+        # receipt's deliver_later in one DB transaction would mean a raise
+        # from that enqueue rolls the save back too: previously_new_record?
+        # never sticks, the row never commits, and a Sidekiq retry of the same
+        # event finds no row, builds a fresh one, and sends the receipt. That
+        # was not taken here: a rare silent miss (the donor never gets a
+        # receipt, but the row and the revenue are recorded correctly) is
+        # judged the better failure direction than double-mailing a donor. A
+        # donor who never got theirs can still be traced through
+        # stripe_events or the Stripe dashboard if it ever needs chasing up.
+        #
+        # If this trade-off gets revisited, the admin sends in deliver_receipt
+        # below would have to stay OUTSIDE any such transaction wrap: they run
+        # after the donor receipt, so a failed admin enqueue sharing that
+        # transaction would roll back a row whose donor receipt was already
+        # irrevocably pushed to Sidekiq -- reopening exactly the double-send
+        # this trade-off exists to avoid, only now triggered by the admin
+        # send instead of the donor one.
+        deliver_receipt(donation) if donation.previously_new_record?
 
         success(donation)
       rescue ActiveRecord::RecordNotUnique
@@ -122,6 +151,28 @@ module Services
         # A Stripe customer id is globally unique and genuinely identifies a
         # person, so this match is safe even for a legacy-originated session.
         ::User.find_by(stripe_customer_id: session.customer) if session.customer.present?
+      end
+
+      # Legacy still takes donations through its own payment links and emails
+      # those donors itself, so this app must stay quiet about anything it did
+      # not take. MembershipEmailScope is the switch that opens up at cutover.
+      #
+      # The admin notice fires even when there is no address to send the donor
+      # a receipt -- a donation with no collected email is still revenue the
+      # owner should hear about. It inherits the caller's
+      # previously_new_record? gate (see #call), so a Sidekiq retry of an
+      # already-committed donation re-notifies the owner no more than it
+      # re-receipts the donor.
+      def deliver_receipt(donation)
+        return unless MembershipEmailScope.may_email?(donation)
+
+        MembershipMailer.donation_receipt(donation).deliver_later if donation.email.present?
+
+        if donation.user_id.present?
+          AdminMailer.new_donation(donation).deliver_later
+        else
+          AdminMailer.anonymous_donation(donation).deliver_later
+        end
       end
 
       def success(data) = Result.new(success?: true, data: data, errors: [])

@@ -28,13 +28,37 @@ module Services
       def call
         return failure("stripe_customer_id is required") if @stripe_customer_id.blank?
 
-        memberships = ActiveRecord::Base.transaction do
+        transitions = ActiveRecord::Base.transaction do
           acquire_lock
           user = resolve_user
           subscriptions.map { |subscription| upsert(subscription, user) }
         end
 
-        Result.new(success?: true, data: memberships, errors: [])
+        # Deliberately outside the transaction above, and after it has
+        # committed. MembershipNotifier enqueues a Sidekiq job carrying a
+        # GlobalID and writes welcome_email_sent_at as its once-only guard;
+        # either one happening before the reconcile's own transaction commits
+        # would be wrong. A rollback after this point (a later subscription in
+        # the same batch failing, say) would otherwise leave Sidekiq holding a
+        # job for a Membership row that reverted or never existed, and would
+        # let a retried reconcile re-send a welcome email whose "sent" stamp
+        # got rolled back with it.
+        #
+        # Rescued per transition, mirroring ReconcileAllCustomers' per-customer
+        # rescue: one membership's notification blowing up (a Redis blip on
+        # enqueue, say) must not cost every OTHER membership in this same
+        # customer's batch its welcome email. MembershipNotifier itself only
+        # rescues Stripe::StripeError, by design, so this is the only backstop.
+        transitions.each do |transition|
+          MembershipNotifier.call(transition)
+        rescue => e
+          # Never the exception message: it is written by whoever raised it,
+          # and this repo is public. The membership id plus the exception
+          # class is enough to go find it in the logs.
+          Rails.logger.error("[billing] welcome notification failed for membership #{transition.membership.id}: #{e.class}")
+        end
+
+        Result.new(success?: true, data: transitions, errors: [])
       rescue Stripe::StripeError => e
         Rails.logger.error("[billing] reconcile failed for #{@stripe_customer_id}: #{e.class}")
         failure(e.message)
@@ -102,9 +126,20 @@ module Services
         # Belt and braces. A comped row has no stripe_subscription_id so it can
         # never be found here, but the design promise is that a webhook cannot
         # touch a manual grant, and that promise deserves an explicit guard.
-        return membership if membership.persisted? && !membership.stripe?
+        #
+        # A comped row is one the reconciler must not touch, so report it as a
+        # no-op transition rather than a bare Membership: callers get a uniform
+        # return type, and status_changed?/became_active?/became_canceled? are
+        # all false, which is exactly right for a row nothing changed about.
+        if membership.persisted? && !membership.stripe?
+          return MembershipTransition.new(membership: membership, previous_status: membership.status)
+        end
 
         item = subscription.items.data.first
+
+        # Captured BEFORE assign_attributes, which overwrites it. nil for a new
+        # row. This is the whole reason MembershipTransition exists.
+        previous_status = membership.persisted? ? membership.status : nil
 
         membership.assign_attributes(
           # Never downgrade an existing attachment: a Stripe subscription cannot change
@@ -117,6 +152,12 @@ module Services
           status: subscription.status,
           interval: (item&.price&.recurring&.interval == "year") ? :yearly : :monthly,
           stripe_customer_id: subscription.customer,
+          # Stripe is the source of truth for this like everything else here.
+          # CreateCheckoutSession stamps origin_domain into subscription
+          # metadata; legacy's subscriptions have none, and that absence is the
+          # signal Membership#sold_by_this_app? reads. Assign unconditionally --
+          # a value that vanished upstream must vanish here too.
+          origin_domain: subscription.metadata&.[]("origin_domain"),
           # Basil (2025-03-31) moved this off the subscription onto the item.
           # Reading subscription.current_period_end works today via a deprecated
           # accessor and will stop working without warning.
@@ -126,7 +167,7 @@ module Services
           stripe_synced_at: Time.current
         )
         membership.save!
-        membership
+        MembershipTransition.new(membership: membership, previous_status: previous_status)
       end
 
       def failure(message)
