@@ -119,4 +119,9 @@ module Music::DefaultHelper
       link_to category.name, path, **options
     end
   end
+
+  def music_robots_content
+    return "noindex, follow" if params[:ranking_configuration_id].present?
+    (@indexable == false) ? "noindex, follow" : "index, follow"
+  end
 end

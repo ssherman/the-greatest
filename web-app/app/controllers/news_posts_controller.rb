@@ -22,6 +22,18 @@ class NewsPostsController < ApplicationController
     @pagy, @news_posts = pagy_path(scope, limit: PER_PAGE)
     @page_title = @topic ? "#{@topic.name} | News" : "News"
     @indexable = @news_posts.any?
+
+    # Self-referential: a URL carrying a tracking parameter (?utm_source=x) or
+    # a non-canonical form (/news.html, /news/page/01) is not a distinct share
+    # target, and the layout's og:url already prefers this over
+    # request.original_url -- see D4 on #show.
+    @canonical_url = if @topic
+      (@pagy.page > 1) ? news_topic_page_url(topic_slug: @topic.slug, page: @pagy.page) : news_topic_url(topic_slug: @topic.slug)
+    elsif @pagy.page > 1
+      news_page_url(page: @pagy.page)
+    else
+      news_url
+    end
   end
 
   def show

@@ -90,6 +90,61 @@ class NewsPostsControllerTest < ActionDispatch::IntegrationTest
     assert_match(/no-store/, response.headers["Cache-Control"])
   end
 
+  # Fix 1(b): /news/page/0 and /news/page/01 must not be a second, distinct
+  # 200 for the same content as /news -- {page: /[1-9]\d*/} rejects the
+  # non-canonical numeral before the controller (and Cacheable) ever see it.
+  test "news/page/0 404s rather than serving duplicate content" do
+    get "/news/page/0"
+
+    assert_response :not_found
+  end
+
+  test "news/page/01 404s rather than serving duplicate content" do
+    get "/news/page/01"
+
+    assert_response :not_found
+  end
+
+  # Fix 1(a): #index sets no canonical today, so five distinct URLs
+  # (/news, /news?utm_source=x, /news.html, /news/page/0, /news/page/01) all
+  # served byte-identical 200s with no <link rel="canonical">. This pins the
+  # bare-path case; the tracking-parameter and later-page cases follow below.
+  test "index sets a canonical url" do
+    get news_path
+
+    assert_select "link[rel=canonical][href=?]", "http://dev-new.thegreatestbooks.org/news"
+  end
+
+  test "index sets a canonical url on a later page" do
+    12.times do |i|
+      NewsPost.create!(domain: :books, title: "Filler #{i}", body: "x",
+        user: users(:admin_user), published_at: (i + 2).hours.ago)
+    end
+
+    get news_page_path(page: 2)
+
+    assert_select "link[rel=canonical][href=?]",
+      "http://dev-new.thegreatestbooks.org/news/page/2"
+  end
+
+  test "a topic page sets a canonical url" do
+    get news_topic_path(topic_slug: "rankings")
+
+    assert_select "link[rel=canonical][href=?]",
+      "http://dev-new.thegreatestbooks.org/news/topic/rankings"
+  end
+
+  # A URL carrying a tracking parameter is a distinct share object from the
+  # bare canonical URL and must not advertise itself as one -- the same
+  # invariant #show already holds (D4). request.original_url would echo the
+  # query string; the canonical/og:url pair must not.
+  test "index's og:url matches the canonical url even with tracking parameters" do
+    get news_path(utm_source: "twitter")
+
+    assert_select "meta[property='og:url'][content=?]",
+      "http://dev-new.thegreatestbooks.org/news"
+  end
+
   test "index on the music host lists music posts" do
     host! "dev.thegreatestmusic.org"
 
@@ -146,6 +201,24 @@ class NewsPostsControllerTest < ActionDispatch::IntegrationTest
 
     get news_path
 
+    assert_select "meta[name=robots][content=?]", "noindex, follow"
+  end
+
+  # Fix 5: /news is a global route, live on thegreatestmusic.org the moment
+  # this merges, and music/application.html.erb rendered no robots meta at
+  # all before this. music_robots_content mirrors games' opt-out semantics
+  # (see the games test above for why only an opt-out helper discriminates
+  # `@indexable = @news_posts.any?` from an unassigned default).
+  test "an empty index on the music host emits a noindex robots tag" do
+    # destroy_all, not delete_all: matches the books empty-index test's
+    # reasoning above, and is safe here even though music_launch has no
+    # news_post_topics join row today.
+    NewsPost.where(domain: :music).destroy_all
+    host! "dev.thegreatestmusic.org"
+
+    get news_path
+
+    assert_response :success
     assert_select "meta[name=robots][content=?]", "noindex, follow"
   end
 
@@ -359,6 +432,49 @@ class NewsPostsControllerTest < ActionDispatch::IntegrationTest
     get news_topic_path(topic_slug: "rankings")
 
     assert_select "h1", text: "Rankings"
+  end
+
+  # Fix 2: news_topic_page and its /page/1 301 appeared in no controller test
+  # and no E2E spec -- a test gap on public, path-based paging, a standing
+  # landmine in this codebase. The fixture topic already carries one tagged
+  # post (december_update_rankings), so 12 new tagged posts make 13 total: 10
+  # on page 1, 3 on page 2.
+  test "a topic's pagination links are path based" do
+    12.times do |i|
+      post = NewsPost.create!(domain: :books, title: "Topic Filler #{i}", body: "x",
+        user: users(:admin_user), published_at: (i + 1).hours.ago)
+      post.news_topics << news_topics(:books_rankings)
+    end
+
+    get news_topic_path(topic_slug: "rankings")
+
+    assert_select "nav.pagy a[href='/news/topic/rankings/page/2']"
+    assert_equal "/news/topic/rankings/page/2", @controller.view_assigns["pagy"].page_url(2)
+  end
+
+  test "a topic's second page lists the remaining posts" do
+    posts = 12.times.map do |i|
+      post = NewsPost.create!(domain: :books, title: "Topic Filler #{i}", body: "x",
+        user: users(:admin_user), published_at: (i + 1).hours.ago)
+      post.news_topics << news_topics(:books_rankings)
+      post
+    end
+
+    get news_topic_page_path(topic_slug: "rankings", page: 2)
+
+    assert_response :success
+    # The 10 most recent (i = 0..9, 1h-10h ago) land on page 1; the 2 oldest
+    # new posts (i = 10, 11) plus the 3-day-old fixture land on page 2, newest
+    # first.
+    expected_ids = [posts[10].id, posts[11].id, news_posts(:books_december_update).id]
+    assert_equal expected_ids, @controller.view_assigns["news_posts"].map(&:id)
+  end
+
+  test "a topic's page 1 canonicalises to the bare topic path" do
+    get "/news/topic/rankings/page/1"
+
+    assert_redirected_to "/news/topic/rankings"
+    assert_response :moved_permanently
   end
 
   test "the legacy blog index 301s to news" do

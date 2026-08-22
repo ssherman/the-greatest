@@ -3,6 +3,7 @@
   content_for :meta_description,
     @topic ? "News and updates about #{@topic.name.downcase} from #{domain_name}." :
              "Site news, ranking updates and new features from #{domain_name}."
+  content_for :canonical_url, @canonical_url
 %>
 
 <div class="space-y-8">

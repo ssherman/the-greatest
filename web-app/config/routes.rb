@@ -326,11 +326,11 @@ Rails.application.routes.draw do
   # Order matters: /page/1 must precede the generic /page/:page.
   get "news", to: "news_posts#index", as: :news
   get "news/page/1", to: redirect("/news", status: 301)
-  get "news/page/:page", to: "news_posts#index", as: :news_page, constraints: {page: /\d+/}
+  get "news/page/:page", to: "news_posts#index", as: :news_page, constraints: {page: /[1-9]\d*/}
   get "news/topic/:topic_slug/page/1", to: redirect("/news/topic/%{topic_slug}", status: 301)
   get "news/topic/:topic_slug", to: "news_posts#index", as: :news_topic
   get "news/topic/:topic_slug/page/:page", to: "news_posts#index", as: :news_topic_page,
-    constraints: {page: /\d+/}
+    constraints: {page: /[1-9]\d*/}
   get "news/:slug", to: "news_posts#show", as: :news_post
 
   # Legacy books URL. ~15 years of inbound links point at /support.
@@ -512,11 +512,6 @@ Rails.application.routes.draw do
     get "lists/search_results", to: redirect("/lists", status: 301)
     get "lists/condensed", to: redirect("/lists", status: 301)
     get "lists/help", to: redirect("/lists", status: 301)
-
-    # Legacy blog URLs. /news is the legacy index path already and carries over
-    # unchanged, so it is deliberately absent here.
-    get "blog_posts", to: redirect("/news", status: 301)
-    get "blog_posts/:slug", to: redirect("/news/%{slug}", status: 301)
     get "lists/pending_lists", to: redirect("/lists", status: 301)
     get "lists/specialized_edit", to: redirect("/lists", status: 301)
     get "v/:view_type/lists", to: redirect("/lists", status: 301)
@@ -527,6 +522,11 @@ Rails.application.routes.draw do
 
     get "lists/page/1", to: redirect("/lists", status: 301)
     get "lists/:id/page/1", to: redirect("/lists/%{id}", status: 301), constraints: {id: /\d+/}
+
+    # Legacy blog URLs. /news is the legacy index path already and carries over
+    # unchanged, so it is deliberately absent here.
+    get "blog_posts", to: redirect("/news", status: 301)
+    get "blog_posts/:slug", to: redirect("/news/%{slug}", status: 301)
 
     get "authors/page/1", to: redirect("/authors", status: 301)
     get "authors", to: "books/authors/ranked_items#index", as: :books_authors

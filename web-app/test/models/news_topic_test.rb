@@ -90,4 +90,34 @@ class NewsTopicTest < ActiveSupport::TestCase
     assert_equal DomainRole.domains["music"], NewsTopic.domains["music"]
     assert_equal DomainRole.domains["games"], NewsTopic.domains["games"]
   end
+
+  # "topic" and "page" are reserved on this model rather than globally (see
+  # the comment above friendly_id_config.reserved_words in news_topic.rb):
+  # reserving them in config/initializers/friendly_id.rb would apply to all 18
+  # friendly_id models, and two live rows already hold the slug "page"
+  # (books_books 130620, categories 49860) -- that was measured to make both
+  # invalid. This model's own reserved word list must not leak onto other
+  # friendly_id models.
+  test "topic is a reserved slug" do
+    topic = NewsTopic.new(domain: :books, name: "Topic")
+    assert_not topic.valid?
+    assert_includes topic.errors[:friendly_id], "is reserved"
+  end
+
+  test "page is a reserved slug" do
+    topic = NewsTopic.new(domain: :books, name: "Page")
+    assert_not topic.valid?
+    assert_includes topic.errors[:friendly_id], "is reserved"
+  end
+
+  test "an ordinary name is not reserved" do
+    topic = NewsTopic.new(domain: :books, name: "Digest Notes")
+    assert topic.valid?
+  end
+
+  test "topic and page are not reserved on Books::Book" do
+    reserved = ::Books::Book.friendly_id_config.reserved_words
+    assert_not_includes reserved, "topic"
+    assert_not_includes reserved, "page"
+  end
 end
