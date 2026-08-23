@@ -58,7 +58,7 @@ module Actions
           result = call({source_game_id: @target.id.to_s, confirm_merge: "1"})
 
           assert result.error?
-          assert_match(/itself/, result.message)
+          assert_equal "Cannot merge a game with itself. Please select a different game.", result.message
           assert ::Games::Game.exists?(@target.id)
         end
 
