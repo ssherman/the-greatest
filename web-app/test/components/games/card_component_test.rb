@@ -33,9 +33,16 @@ class Games::CardComponentTest < ViewComponent::TestCase
   end
 
   test "names the developer, not every associated company" do
+    # breath_of_the_wild's only fixture company (Nintendo) is already a developer,
+    # so select(&:developer?) has nothing to exclude there -- dropping it wouldn't
+    # fail this test. Add a publisher-only company here (rolled back after the
+    # test by the transactional fixtures) so the filter actually has work to do.
+    Games::GameCompany.create!(game: @game, company: games_companies(:capcom), developer: false, publisher: true)
+
     render_inline(Games::CardComponent.new(game: @game))
 
     assert_selector "p", text: "by Nintendo"
+    assert_no_selector "p", text: "Capcom"
   end
 
   test "shows a placeholder when the game has no image" do
