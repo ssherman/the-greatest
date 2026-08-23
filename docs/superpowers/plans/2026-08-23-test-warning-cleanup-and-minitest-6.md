@@ -858,8 +858,10 @@ class Games::CardComponentTest < ViewComponent::TestCase
   test "shows the rank badge when rendered from a ranked item" do
     render_inline(Games::CardComponent.new(ranked_item: ranked_items(:games_ranked_botw)))
 
-    # Anchored: a bare "#1" substring would also match a corrupted "#12".
-    assert_selector ".badge-primary", text: /\A#1\z/
+    # Anchored so a bare "#1" cannot match a corrupted "#12". normalize_ws is
+    # required: default_normalize_ws is false and the badge's raw text is
+    # "\n          #1\n        ", which no anchored regex matches (verified).
+    assert_selector ".badge-primary", text: /\A#1\z/, normalize_ws: true
     assert_selector "h2.card-title", text: @game.title
   end
 
@@ -867,7 +869,7 @@ class Games::CardComponentTest < ViewComponent::TestCase
     # list_items(:games_item) is breath_of_the_wild at position 1 (verified).
     render_inline(Games::CardComponent.new(list_item: list_items(:games_item)))
 
-    assert_selector ".badge-primary", text: /\A#1\z/
+    assert_selector ".badge-primary", text: /\A#1\z/, normalize_ws: true
   end
 end
 ```
@@ -1146,8 +1148,10 @@ module Music
           song: @song, ranked_item: ranked_items(:music_songs_ranked_item)
         ))
 
-        # Anchored: "#42" as a substring would also match a corrupted "#420".
-        assert_selector ".badge-primary", text: /\A#42\z/
+        # Anchored so "#42" cannot match a corrupted "#420". normalize_ws is required:
+        # default_normalize_ws is false and the badge's raw text carries newlines and
+        # indentation, which no anchored regex matches (verified).
+        assert_selector ".badge-primary", text: /\A#42\z/, normalize_ws: true
         assert_selector "tr td", count: 5
       end
 
@@ -1155,7 +1159,7 @@ module Music
         render_inline(Music::Songs::ListItemComponent.new(song: @song, show_index: 7))
 
         assert_no_selector ".badge-primary"
-        assert_selector "td", text: /\A7\z/
+        assert_selector "td", text: /\A7\z/, normalize_ws: true
         assert_selector "tr td", count: 5
       end
     end
