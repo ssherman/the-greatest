@@ -472,8 +472,9 @@
       Where <strong><%= @game.title %></strong> already has its own equivalent
       &mdash; the same list, the same identifier, the same kind of description
       &mdash; the duplicate's copy is discarded rather than kept alongside it.
-      <strong><%= @game.title %></strong> may also gain details it was missing from
-      the duplicate, including an earlier release year.
+      <strong><%= @game.title %></strong> may also take details from the duplicate:
+      any field it was missing, plus the duplicate's release year if that one is
+      earlier.
       The duplicate game will be permanently deleted.
     </p>
 
