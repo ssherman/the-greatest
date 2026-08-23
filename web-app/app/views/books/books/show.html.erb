@@ -1,5 +1,9 @@
 <%
-  author_names = @book.book_authors.map { |ba| ba.author.name }.join(", ")
+  # book_authors is ordered by position. The plain joined string feeds the title
+  # and meta description, which must stay markup-free; the visible line below
+  # renders the same names as links.
+  authors = @book.book_authors.map(&:author)
+  author_names = authors.map(&:name).join(", ")
   content_for :page_title, "#{@book.title}#{" by #{author_names}" if author_names.present?} | The Greatest Books"
   content_for :meta_description, "Read about #{@book.title}#{" by #{author_names}" if author_names.present?}, its ranking, categories, and the best-books lists it appears on."
 %>
@@ -33,8 +37,18 @@
       <% if @book.subtitle.present? %>
         <p class="text-xl text-base-content/70 mt-2"><%= @book.subtitle %></p>
       <% end %>
-      <% if author_names.present? %>
-        <p class="text-lg text-base-content/80 mt-2">by <%= author_names %></p>
+      <% if authors.any? %>
+        <p class="text-lg text-base-content/80 mt-2">
+          by
+          <%# Underlined for the same reason as the Origin value in the details
+              partial: link-hover leaves the name indistinguishable from ordinary
+              text until the pointer is on it. %>
+          <%= safe_join(authors.map { |author|
+                link_to author.name,
+                  author_path(slug: author.slug, ranking_configuration_id: params[:ranking_configuration_id]),
+                  class: "link"
+              }, ", ") %>
+        </p>
       <% end %>
       <% if @ranked_item %>
         <p class="text-base-content/70 mt-3">
@@ -78,16 +92,25 @@
       </div>
     <% end %>
 
+    <%= render "books/books/details", book: @book, ranking_configuration: @ranking_configuration %>
+
     <% if @categories_by_type.any? %>
       <div class="card bg-base-100 shadow-md">
         <div class="card-body">
           <h2 class="card-title text-xl">Categories</h2>
           <% @categories_by_type.each do |category_type, categories| %>
-            <div class="mt-3 first:mt-0">
-              <h3 class="text-sm font-semibold text-base-content/70 mb-2 uppercase"><%= category_type.to_s.titleize %></h3>
+            <%# data-category-type is a stable hook for the group's ordering: the
+                heading beside it is display copy and may be reworded freely. %>
+            <div class="mt-3 first:mt-0" data-testid="category-group" data-category-type="<%= category_type %>">
+              <h3 class="text-sm font-semibold text-base-content/70 mb-2 uppercase"><%= category_type.to_s.pluralize.titleize %></h3>
               <div class="flex flex-wrap gap-2">
+                <%# Books::FilterParams resolves any active Books::Category by slug with
+                    no type restriction, so genre, subject and location all route through
+                    the same grammar. FilterPath adds the /rc/ prefix when one applies. %>
                 <% categories.each do |category| %>
-                  <span class="badge badge-ghost"><%= category.name %></span>
+                  <%= link_to category.name,
+                        Books::FilterPath.call(categories: [category], ranking_configuration: @ranking_configuration),
+                        class: "badge badge-ghost hover:badge-primary" %>
                 <% end %>
               </div>
             </div>

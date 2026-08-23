@@ -6,6 +6,14 @@ class Books::BooksController < ApplicationController
   before_action :load_ranking_configuration, only: [:show]
   before_action :cache_for_show_page, only: [:show]
 
+  # Genre, then subject, then location: what kind of book it is, what it is about,
+  # then where it is set. The legacy site ordered its sidebar the same way; the
+  # bare group_by this replaced took whatever order the database returned, which
+  # routinely led with Location. A type outside this list sorts to the end rather
+  # than disappearing, and the secondary sort on the name itself keeps that tail
+  # deterministic (Ruby's sort_by is not stable).
+  CATEGORY_TYPE_ORDER = %w[genre subject location].freeze
+
   def self.ranking_configuration_class
     Books::RankingConfiguration
   end
@@ -15,7 +23,7 @@ class Books::BooksController < ApplicationController
     # primary keys, so 137 books with purely numeric slugs would otherwise be
     # ambiguous with a book id.
     @book = Books::Book
-      .includes(:categories, :descriptions, :review_summary, {book_authors: :author})
+      .includes(:categories, :descriptions, :review_summary, :countries, :original_language, {book_authors: :author})
       .includes(primary_image: {file_attachment: {blob: {variant_records: {image_attachment: :blob}}}})
       .find_by!(slug: params[:slug])
 
@@ -25,7 +33,12 @@ class Books::BooksController < ApplicationController
       @ranking_configuration.ranked_items.where.not(rank: nil).find_by(item: @book)
     end
     @indexable = @ranked_item.present?
-    @categories_by_type = @book.categories.active.group_by(&:category_type)
+    # An array of [category_type, categories] pairs rather than a Hash -- the view
+    # only iterates it, and an array is the only way to pin the order.
+    @categories_by_type = @book.categories.active
+      .sort_by { |category| category.name.to_s.downcase }
+      .group_by(&:category_type)
+      .sort_by { |type, _| [CATEGORY_TYPE_ORDER.index(type) || CATEGORY_TYPE_ORDER.size, type.to_s] }
     @description = @book.primary_description
 
     @list_items = @book.list_items
