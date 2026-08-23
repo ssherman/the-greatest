@@ -33,8 +33,7 @@ module Games
           destroy_source_game
         end
 
-        reindex_target_game
-        schedule_ranking_recalculation
+        run_post_commit_steps
 
         Result.new(success?: true, data: target_game, errors: [])
       rescue ActiveRecord::RecordInvalid => error
@@ -281,6 +280,21 @@ module Games
         end
 
         false
+      end
+
+      # The merge is committed by this point. Reindexing and ranking recalculation
+      # are follow-up work: if they fail, the merge still happened, so a failure
+      # here must not be reported as a failed merge. `success?` means "the merge
+      # committed", and that is what the admin UI reports.
+      def run_post_commit_steps
+        reindex_target_game
+        schedule_ranking_recalculation
+      rescue => error
+        Rails.logger.error(
+          "Games::Game::Merger: merge of #{source_game.id} into #{target_game.id} " \
+          "committed, but post-commit follow-up failed: #{error.class}: #{error.message}"
+        )
+        @stats[:post_commit_error] = error.message
       end
 
       def collect_affected_ranking_configurations

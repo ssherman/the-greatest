@@ -397,6 +397,36 @@ module Games
         assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
       end
 
+      test "still reports success when scheduling ranking recalculation fails" do
+        config = ranking_configurations(:games_global)
+        RankedItem.create!(item: @source, ranking_configuration: config, rank: 5, score: 10)
+        source_id = @source.id
+
+        merger = ::Games::Game::Merger.new(source: @source, target: @target)
+        merger.stubs(:schedule_ranking_recalculation).raises(StandardError.new("redis down"))
+
+        result = merger.call
+
+        assert result.success?,
+          "a post-commit failure must not be reported as a failed merge: #{result.errors.inspect}"
+        assert_not ::Games::Game.exists?(source_id), "the merge itself must still have committed"
+        assert_equal "redis down", merger.stats[:post_commit_error]
+      end
+
+      test "still reports success when reindexing the target fails" do
+        source_id = @source.id
+
+        merger = ::Games::Game::Merger.new(source: @source, target: @target)
+        merger.stubs(:reindex_target_game).raises(StandardError.new("opensearch down"))
+
+        result = merger.call
+
+        assert result.success?,
+          "a post-commit failure must not be reported as a failed merge: #{result.errors.inspect}"
+        assert_not ::Games::Game.exists?(source_id), "the merge itself must still have committed"
+        assert_equal "opensearch down", merger.stats[:post_commit_error]
+      end
+
       # Give the target the same release_year as the source (via update_all, which
       # skips callbacks) so reconcile_scalars leaves target_game unchanged. Otherwise
       # merge_release_year's own target_game.save! fires SearchIndexable's after_commit

@@ -81,6 +81,24 @@ That queuing checks `Services::BooksMigration.search_indexing_suppressed?` first
 `SearchIndexable`'s own callbacks already do — the intent is to stay silent during a bulk
 migration, not to add index requests `SearchIndexable` itself would have suppressed.
 
+### `success?` means "the merge committed" — not "reindexing and ranking also succeeded"
+
+Reindexing the target and scheduling ranking jobs are real, fallible I/O — `SearchIndexRequest.create!`
+hits the database, and `perform_async`/`perform_in` write to Redis — running after the transaction
+has already committed. If either raises (a Redis blip, a database hiccup), the merge itself is not
+undone: it can't be, the transaction is already closed, the source is already destroyed. Reporting
+that as a failed merge would be actively misleading — an admin would see "Failed to merge games"
+about a merge that in fact happened, and a retry would then fail with "Game not found" because the
+source no longer exists.
+
+So `#run_post_commit_steps` wraps both calls in their own rescue, separate from `#call`'s own
+rescue ladder (which still guards the transaction itself, and is unchanged). A post-commit failure
+is logged via `Rails.logger.error` and recorded in `stats[:post_commit_error]`; it does **not**
+flip `success?` to `false` or populate `errors`. This is a deliberate divergence from the three
+music mergers, which have no equivalent guard — their post-commit steps predate this failure mode
+being reachable, since before this increment `reindex_target_game` and
+`schedule_ranking_recalculation` were empty no-ops that could never raise.
+
 ## Games-specific rules
 
 - **`developer`/`publisher` are OR'd, not overwritten**, when both games share a company. A
