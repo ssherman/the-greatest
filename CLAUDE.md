@@ -80,6 +80,9 @@ which takes **hours**.
   provider re-runs). See `docs/features/data_importers.md`.
 - **AI response schemas are `OpenAI::BaseModel` subclasses.** `to_json_schema` is a **class** method —
   `schema.new.to_json_schema` raises `NoMethodError`. There is no `RubyLLM::Schema` in this app.
+- **Build OpenSearch clients through `Search::Shared::Client.instance`**, never `OpenSearch::Client.new`.
+  It carries the serializer that avoids multi_json's deprecated API; three drifted copies are how that
+  warning got three times louder than it needed to be.
 
 ## Testing (Minitest + fixtures + Mocha)
 

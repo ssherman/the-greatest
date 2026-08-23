@@ -5,11 +5,20 @@ module Search
     class Client
       class << self
         def instance
-          @instance ||= OpenSearch::Client.new(
-            host: ENV.fetch("OPENSEARCH_URL"),
-            log: Rails.env.development?,
-            trace: Rails.env.development?
-          )
+          @instance ||= begin
+            # `bulk` doesn't serialize through this client at all: opensearch-ruby's
+            # __bulkify builds the NDJSON body via the *module-level*
+            # OpenSearch::API.serializer setting before the request ever reaches the
+            # transport, so the transport's serializer_class: below has no effect on
+            # it. Both knobs have to point at the non-deprecated serializer, or bulk
+            # calls (reindexing, bulk_update, ...) keep warning on their own.
+            OpenSearch::API.settings[:serializer] = Search::Shared::Serializer.new
+
+            OpenSearch::Client.new(
+              host: ENV.fetch("OPENSEARCH_URL"),
+              serializer_class: Search::Shared::Serializer
+            )
+          end
         end
 
         def reset!
