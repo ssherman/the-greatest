@@ -290,6 +290,69 @@ module Games
         assert_nil target.reload.parent_game_id
       end
 
+      test "fills a blank description from the source" do
+        @source.update!(description: "A source blurb")
+        @target.update!(description: nil)
+
+        ::Games::Game::Merger.call(source: @source, target: @target)
+
+        assert_equal "A source blurb", @target.reload.description
+      end
+
+      test "never overwrites a field the target already has" do
+        @source.update!(description: "Source wins?")
+        @target.update!(description: "Target's own")
+
+        result = ::Games::Game::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_equal "Target's own", @target.reload.description
+      end
+
+      test "fills a blank series from the source" do
+        source = games_games(:resident_evil_4)
+        target = games_games(:half_life_2)
+        RankedItem.where(item: source).destroy_all
+        RankedItem.where(item: target).destroy_all
+        assert_nil target.series_id, "fixture precondition"
+
+        ::Games::Game::Merger.call(source: source, target: target)
+
+        assert_equal source.series_id, target.reload.series_id
+      end
+
+      test "keeps the earliest release year" do
+        @source.update!(release_year: 1998)
+        @target.update!(release_year: 2017)
+
+        ::Games::Game::Merger.call(source: @source, target: @target)
+
+        assert_equal 1998, @target.reload.release_year
+      end
+
+      test "does not move the release year later" do
+        @source.update!(release_year: 2020)
+        @target.update!(release_year: 2017)
+
+        result = ::Games::Game::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_equal 2017, @target.reload.release_year
+      end
+
+      test "does not give a main game a parent" do
+        source = games_games(:resident_evil_4_remake)
+        target = games_games(:half_life_2)
+        RankedItem.where(item: source).destroy_all
+        RankedItem.where(item: target).destroy_all
+        assert target.main_game?, "fixture precondition"
+
+        result = ::Games::Game::Merger.call(source: source, target: target)
+
+        assert result.success?, "parent_game_valid_for_type would reject this: #{result.errors.inspect}"
+        assert_nil target.reload.parent_game_id
+      end
+
       def attach_image(game, primary:)
         game.images.create!(primary: primary) do |image|
           image.file.attach(

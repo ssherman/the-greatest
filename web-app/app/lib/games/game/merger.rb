@@ -221,7 +221,66 @@ module Games
         @stats[:child_games] = count
       end
 
+      # Games have no alternate_titles column, so there is no name absorption here.
+      # Books and authors (increments 2 and 3) do.
+      BLANK_FILLABLE = %i[description series_id].freeze
+
       def reconcile_scalars
+        fill_blank_fields
+        merge_release_year
+        fill_parent_game
+      end
+
+      def fill_blank_fields
+        filled = []
+
+        BLANK_FILLABLE.each do |field|
+          next if target_game.public_send(field).present?
+
+          value = source_game.public_send(field)
+          next if value.blank?
+
+          target_game.public_send(:"#{field}=", value)
+          filled << field
+        end
+
+        @stats[:filled_fields] = filled
+      end
+
+      def merge_release_year
+        return if source_game.release_year.blank?
+
+        if target_game.release_year.nil? || source_game.release_year < target_game.release_year
+          target_game.release_year = source_game.release_year
+          @stats[:release_year_updated] = true
+        end
+      end
+
+      # Only fills a genuinely blank parent, and only when doing so is legal:
+      # parent_game_valid_for_type rejects a parent on a main game, and a parent that
+      # is the target itself (or a descendant of it) would be a cycle.
+      def fill_parent_game
+        return if target_game.parent_game_id.present?
+        return if target_game.main_game?
+
+        candidate_id = source_game.parent_game_id
+        return if candidate_id.blank?
+        return if candidate_id == target_game.id
+        return if descendant_of_target?(candidate_id)
+
+        target_game.parent_game_id = candidate_id
+      end
+
+      def descendant_of_target?(game_id)
+        seen = Set.new
+        current = game_id
+
+        while current.present? && seen.add?(current)
+          return true if current == target_game.id
+          current = ::Games::Game.where(id: current).pick(:parent_game_id)
+        end
+
+        false
       end
 
       def collect_affected_ranking_configurations
