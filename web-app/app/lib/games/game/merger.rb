@@ -212,6 +212,13 @@ module Games
         children.where(id: target_game.id).update_all(parent_game_id: nil)
         count = children.where.not(id: target_game.id).update_all(parent_game_id: target_game.id)
 
+        # Safe to discard target_game's in-memory state here ONLY because:
+        # (1) merge_child_games runs last in merge_all_associations, so no earlier
+        #     association method has left an unsaved change on target_game;
+        # (2) reconcile_scalars, which does dirty target_game, runs after
+        #     merge_all_associations, not before. Moving this call earlier, or
+        #     adding a scalar fill inside any merge_* method, would make this
+        #     reload silently discard that change.
         target_game.reload if target_game.parent_game_id == source_game.id
         @stats[:child_games] = count
       end

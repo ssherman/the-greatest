@@ -306,9 +306,12 @@ end
 ```
 
 **`success?` means "the merge committed"** — not "reindexing and ranking also succeeded". That is the
-contract the admin UI reports, and the modal copy says so. This is a deliberate divergence from the
-three music mergers, which still have the unfixed defect. Increments 2 and 3 follow the corrected
-pattern.
+contract the admin UI reports. The shipped modal (`app/views/admin/games/games/show.html.erb`) does
+not say so explicitly — its copy describes what data moves, what's discarded on collision, and what
+the survivor absorbs, not this success/post-commit-failure distinction; a post-commit failure instead
+surfaces via a warning message appended to the success text (see `Actions::Admin::Games::MergeGame`).
+This is a deliberate divergence from the three music mergers, which still have the unfixed defect.
+Increments 2 and 3 follow the corrected pattern.
 
 ## Admin plumbing
 
@@ -387,8 +390,13 @@ books data exists only in development.
   `the_greatest_test` with the main checkout and with any other agent's worktree.
 - Minitest is 6.x: `assert_nil`, never `assert_equal nil`.
 
-E2E gets one Playwright spec per merge flow in `web-app/e2e/tests/`, driving the modal against the
-real autocomplete. Local only — CI does not run Playwright.
+E2E gets one Playwright spec per merge flow in `web-app/e2e/tests/`. **Deliberate constraint, not an
+omission:** the spec does not perform a real merge. E2E runs against the **development** database —
+the one with irreversible, hours-to-rebuild books data (see CLAUDE.md) — and a merge destroys a row
+with no undo. The shipped `games-merge.spec.ts` instead drives the modal up to (but not past) the
+point of submission: opening it from the show page and confirming the confirmation-checkbox guard,
+never clicking "Merge Game" with a real source selected. This constraint applies equally to
+increments 2 and 3. Local only — CI does not run Playwright.
 
 ## Increments
 
