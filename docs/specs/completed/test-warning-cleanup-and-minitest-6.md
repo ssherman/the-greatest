@@ -1,11 +1,11 @@
 # Test Warning Cleanup & Minitest 6 Upgrade
 
 ## Status
-- **Status**: Not Started
+- **Status**: Completed
 - **Priority**: Medium
 - **Created**: 2026-08-23
 - **Started**:
-- **Completed**:
+- **Completed**: 2026-08-23
 - **Developer**: Shane Sherman
 
 ## Overview
@@ -250,7 +250,19 @@ the excluded `weighted_list_rank` warning, and that file carries a load-bearing 
 - …
 
 ## Acceptance Results
-- Date, verifier, artifacts:
+- Date: 2026-08-23. Verifier: Task 9 (full verification), branch `warning-cleanup-minitest-6`.
+- **Before** (measured prior to this work): `7362 runs, 161787 assertions, 0 failures, 0 errors`,
+  minitest 5.27.0, ~190 warning lines in a full `bin/rails test` run.
+- **After** (measured in Task 9, Steps 1-3): `7400 runs, 162678 assertions, 0 failures, 0 errors, 0 skips`,
+  minitest 6.0.6. The run count is higher than the original 7362 baseline because Tasks 6-8 added real
+  assertions to six previously-empty ViewComponent stub tests.
+- All seven targeted warning patterns (`ruby_llm-schema`, `MultiJSON`, `MultiJson`,
+  `connecting to Redis`, `Use assert_nil`, `sidekiq/testing`, `Test is missing assertions`) confirmed
+  at **0** occurrences.
+- Residual output after filtering the Minitest run/summary lines: 102 lines total, all attributable to
+  the two excluded sources — 34 `weighted_list_rank` "Item position … is higher than" lines and 68
+  npm/yarn/rollup/tailwindcss build lines from `test:prepare`. No other warning source remains.
+- `bundle exec standardrb`: no offenses.
 
 ## Future Improvements
 - `weighted_list_rank` 0.6.1: replace the raw `puts` at `lib/weighted_list_rank/strategies/exponential.rb:69`
@@ -263,6 +275,6 @@ the excluded `weighted_list_rank` warning, and that file carries a load-bearing 
 - #…
 
 ## Documentation Updated
-- [ ] `CLAUDE.md`
-- [ ] `docs/testing.md`
-- [ ] `docs/specs/completed/013-ai-chat-service.md`
+- [x] `CLAUDE.md`
+- [x] `docs/testing.md`
+- [x] `docs/specs/completed/013-ai-chat-service.md`
