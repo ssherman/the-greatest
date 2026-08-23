@@ -126,6 +126,104 @@ module Games
         assert_equal 1, CategoryItem.where(category: category, item: @target).count
       end
 
+      test "moves a list item to the target" do
+        list = lists(:games_list)
+        # list_items(:games_item) already links games_list to @target; clear it so this
+        # test exercises the no-existing-target-item branch, not the collision branch
+        # (see list_item_enricher_test.rb). The no-collision branch creates a fresh row
+        # on the target rather than repointing the source's, so assert by lookup.
+        list_items(:games_item).destroy!
+        ListItem.create!(list: list, listable: @source, position: 3, verified: false)
+
+        ::Games::Game::Merger.call(source: @source, target: @target)
+
+        assert ListItem.exists?(list: list, listable: @target)
+      end
+
+      test "promotes the surviving list item to verified when the source was verified" do
+        list = lists(:games_list)
+        # list_items(:games_item) already links games_list to @target; clear it so the
+        # explicit row below doesn't collide with it (see list_item_enricher_test.rb).
+        list_items(:games_item).destroy!
+        ListItem.create!(list: list, listable: @target, position: 1, verified: false)
+        ListItem.create!(list: list, listable: @source, position: 2, verified: true)
+
+        ::Games::Game::Merger.call(source: @source, target: @target)
+
+        survivor = ListItem.find_by(list: list, listable: @target)
+        assert survivor.verified, "a verified source must not silently downgrade the survivor"
+        assert_equal 1, ListItem.where(list: list, listable: @target).count
+      end
+
+      test "moves a personal list entry to the target" do
+        user_list = user_lists(:regular_user_games_favorites)
+        # user_list_items(:regular_user_fav_game_1) already links this user_list to @target;
+        # clear it so this test exercises the no-collision branch, which repoints the
+        # source's row instead of dropping it.
+        user_list_items(:regular_user_fav_game_1).destroy!
+        entry = UserListItem.create!(user_list: user_list, listable: @source, position: 5)
+
+        ::Games::Game::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, entry.reload.listable_id
+      end
+
+      test "drops a personal list entry when that list already holds the target" do
+        user_list = user_lists(:regular_user_games_favorites)
+        # user_list_items(:regular_user_fav_game_1) already links this user_list to @target;
+        # clear it so the explicit row below doesn't collide with it.
+        user_list_items(:regular_user_fav_game_1).destroy!
+        UserListItem.create!(user_list: user_list, listable: @target, position: 1)
+        UserListItem.create!(user_list: user_list, listable: @source, position: 2)
+
+        result = ::Games::Game::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_equal 1, UserListItem.where(user_list: user_list, listable: @target).count
+      end
+
+      test "moves a description the target does not have" do
+        description = Description.create!(
+          describable: @source, content: "Source blurb",
+          kind: :long, locale: "en", source: :ai_generated, rank: :normal
+        )
+
+        ::Games::Game::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, description.reload.describable_id
+      end
+
+      test "drops a source description that collides with the target's" do
+        # descriptions(:botw_igdb) is already summary/en/igdb/preferred on the target.
+        Description.create!(
+          describable: @source, content: "Source blurb",
+          kind: :summary, locale: "en", source: :igdb, rank: :normal
+        )
+
+        result = ::Games::Game::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "collision must not raise: #{result.errors.inspect}"
+        assert_equal 1, Description.where(
+          describable: @target, kind: :summary, locale: "en", source: :igdb
+        ).count
+      end
+
+      test "demotes a moved description when the target already has a preferred one" do
+        # descriptions(:botw_igdb) is already summary/en/preferred on the target. A different
+        # source avoids the composite index but still hits the one-preferred-per-key index.
+        moved = Description.create!(
+          describable: @source, content: "Other", kind: :summary, locale: "en",
+          source: :ai_generated, rank: :preferred
+        )
+
+        result = ::Games::Game::Merger.call(source: @source, target: @target)
+
+        assert result.success?,
+          "two preferred rows would violate the partial unique index: #{result.errors.inspect}"
+        assert_equal "normal", moved.reload.rank
+        assert_equal @target.id, moved.describable_id
+      end
+
       def attach_image(game, primary:)
         game.images.create!(primary: primary) do |image|
           image.file.attach(

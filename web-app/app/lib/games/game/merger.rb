@@ -52,6 +52,9 @@ module Games
         merge_external_links
         merge_images
         merge_category_items
+        merge_list_items
+        merge_user_list_items
+        merge_descriptions
       end
 
       def merge_identifiers
@@ -98,6 +101,74 @@ module Games
           count += 1
         end
         @stats[:category_items] = count
+      end
+
+      def merge_list_items
+        count = 0
+        source_game.list_items.find_each do |list_item|
+          existing = target_game.list_items.find_by(list_id: list_item.list_id)
+
+          if existing
+            existing.update!(verified: true) if list_item.verified? && !existing.verified?
+          else
+            target_game.list_items.create!(
+              list_id: list_item.list_id,
+              position: list_item.position,
+              verified: list_item.verified
+            )
+          end
+          count += 1
+        end
+        @stats[:list_items] = count
+      end
+
+      # position is scoped to the user_list, which does not change, so a moved row
+      # keeps a valid position.
+      def merge_user_list_items
+        count = 0
+        source_game.user_list_items.find_each do |entry|
+          if UserListItem.exists?(user_list_id: entry.user_list_id, listable: target_game)
+            entry.destroy!
+          else
+            entry.update!(listable_id: target_game.id)
+            count += 1
+          end
+        end
+        @stats[:user_list_items] = count
+      end
+
+      # Two unique indexes apply: one on
+      # (describable, kind, locale, source, source_name) with nulls_not_distinct,
+      # and a partial one allowing a single rank=1 row per (describable, kind, locale).
+      def merge_descriptions
+        preferred_keys = target_game.descriptions.select(&:preferred?)
+          .map { |description| [description.kind, description.locale] }
+          .to_set
+        count = 0
+
+        source_game.descriptions.find_each do |description|
+          collides = target_game.descriptions.exists?(
+            kind: description.kind,
+            locale: description.locale,
+            source: description.source,
+            source_name: description.source_name
+          )
+
+          if collides
+            description.destroy!
+            next
+          end
+
+          attrs = {describable_id: target_game.id}
+          if description.preferred? &&
+              preferred_keys.include?([description.kind, description.locale])
+            attrs[:rank] = :normal
+          end
+
+          description.update!(attrs)
+          count += 1
+        end
+        @stats[:descriptions] = count
       end
 
       def reconcile_scalars
