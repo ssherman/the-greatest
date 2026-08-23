@@ -100,6 +100,9 @@ which takes **hours**.
 - **Sidekiq test mode is `Sidekiq.testing!(:inline)`** (set globally in `test_helper.rb`); never
   `require "sidekiq/testing"`, which Sidekiq 9 removes. `Sidekiq::Testing.fake! { }` blocks still work
   and are how you stop a job from running inline inside one test.
+- **A clean `bin/rails test` emits no warnings** beyond two known upstream sources (`weighted_list_rank`'s
+  position `puts`, and npm/yarn during `test:prepare`). A new warning line is a regression — fix the
+  cause, don't filter the output. ~190 lines of noise accumulated once because nobody was watching.
 
 ## Frontend
 

@@ -124,7 +124,7 @@ assert_equal [original_country, original_kind], [@person.country, @person.kind]
 ```
 
 A nil-expected `assert_equal` is a vacuous assertion as much as a deprecated one — see
-"What NOT to Test" above.
+"What NOT to Test" below.
 
 ## Controller Testing Best Practices
 
