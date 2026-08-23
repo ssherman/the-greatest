@@ -63,9 +63,29 @@ above). A **domain-scoped** editor who cannot press Delete can today delete an a
 (Global admins and global editors pass both checks via `global_role?`, so they are unaffected — the
 hole is specific to per-domain roles.)
 
-The three new policies gate `execute_action?` on `can_delete?`, and the three music policies are
-corrected to match. This mirrors the existing `require_domain_write!` vs `require_domain_delete!`
-distinction already documented in `Admin::DomainScopedAuth`.
+**Corrected during increment 1 — gate the ACTION, not the endpoint.** The original design here said to
+gate `execute_action?` itself on `can_delete?`. That is wrong, and shipping it would have caused a
+functional regression. `execute_action` is a **shared** endpoint: `admin/music/albums/show.html.erb`
+routes "Generate AI Description" through it, and `artists/show.html.erb` routes both "Generate AI
+Description" and "Refresh Artist Ranking". Only songs are merge-only. Blanket-gating the endpoint on
+`can_delete?` would strip domain-scoped editors of non-destructive abilities they have today.
+
+The implemented design instead:
+
+- `Actions::Admin::BaseAction.destructive?` returns `false` by default.
+- Every `Merge*` action overrides it to `true`.
+- `execute_action?` on every policy stays `global_role? || domain_role&.can_write?` — write access is
+  the floor for the shared endpoint.
+- Each controller calls `authorize @record, :destroy? if action_class.destructive?` immediately after
+  resolving the action class and before invoking it.
+
+This closes the hole for merges while preserving existing permissions for everything else, and it
+generalises: any future destructive action gets the right gate by declaring itself destructive.
+Increments 2 and 3 must follow this pattern — a `Merge*` action that omits the `destructive?`
+override leaves the gate silently inert.
+
+The load-bearing test lives at the **controller** level (a domain-scoped editor is rejected, a
+moderator is allowed), not in the policy unit test, because the controller is the real entry point.
 
 The music mergers' other gap — silently discarding descriptions, credits, AI chats, and personal-list
 entries — is explicitly **not** backported. The new mergers do it right; music keeps shipped
@@ -96,6 +116,15 @@ dedupe on `author_id` automatically. The default does not rely on the admin doin
 URL, ~156k pages indexed) and `/book/<source-slug>` return 404 with no trail back. There is no
 slug-history or redirect table anywhere in the app and none is added. Decided deliberately; matches
 music.
+
+**The confirmation dialog must describe what actually happens.** Increment 1 needed three review
+rounds on this string. Several associations dedupe against what the survivor already has and **drop**
+the duplicate's copy rather than merging it — including entries in real users' personal saved lists,
+and including curated list entries (whose `position` is lost, only `verified` surviving). And
+`reconcile_scalars` mutates the *survivor*: blank fields are filled, and `release_year` is
+**overwritten** when the duplicate's is earlier. Enumerating exceptions per-association just surfaces
+the next one; state one general collision caveat that is true of every dedup path. See
+`app/views/admin/games/games/show.html.erb` for the wording that survived review.
 
 Also out of scope: any merge preview or dry-run, field-level conflict resolution UI, and undo.
 
@@ -254,6 +283,32 @@ half-applying.
 
 Guards evaluated **before** the transaction opens, returning an error result rather than raising:
 self-merge, and for games a parent/child cycle check.
+
+### Post-commit steps must not fail the merge
+
+**Added during increment 1.** The rescue ladder above guards the *transaction*. The reindex request
+and the ranking jobs run **after** it commits, and they do real fallible I/O — `SearchIndexRequest.create!`
+and Redis `perform_async`/`perform_in`. Leaving them inside the same method-level rescue means a Redis
+blip returns `success?: false` for a merge that already happened: the source is destroyed, the target
+updated, and the admin is told it failed. A retry then fails with "not found".
+
+The rationale for the ladder — "everything mutating is inside the transaction" — simply does not hold
+for these steps. So they are wrapped separately:
+
+```ruby
+def run_post_commit_steps
+  reindex_target
+  schedule_ranking_recalculation
+rescue => error
+  Rails.logger.error("... committed, but post-commit follow-up failed: #{error.class}: #{error.message}")
+  @stats[:post_commit_error] = error.message
+end
+```
+
+**`success?` means "the merge committed"** — not "reindexing and ranking also succeeded". That is the
+contract the admin UI reports, and the modal copy says so. This is a deliberate divergence from the
+three music mergers, which still have the unfixed defect. Increments 2 and 3 follow the corrected
+pattern.
 
 ## Admin plumbing
 
