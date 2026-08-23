@@ -36,9 +36,23 @@ module Music
       end
 
       test "caps the category badges at three and counts the overflow" do
+        # No artist fixture carries any categories -- verified against
+        # test/fixtures/category_items.yml, which has zero Music::Artist rows at
+        # all -- so build four here, rolled back after the test by the
+        # transactional fixtures (no fixture file touched). This gives the
+        # cap-and-overflow branch (card_component.html.erb's limit(3) and the
+        # "+N more" span) something real to exercise: a floor (badges must
+        # appear at all) and a ceiling (no more than 3 category badges, plus
+        # exactly one overflow badge naming the true remainder).
+        4.times do |i|
+          category = Music::Category.create!(name: "Test Genre #{i}")
+          CategoryItem.create!(category: category, item: @artist)
+        end
+
         render_inline(Music::Artists::CardComponent.new(artist: @artist))
 
-        assert_operator page.all(".badge-ghost").count, :<=, 4
+        assert_selector ".badge-ghost", count: 4
+        assert_selector ".badge-ghost", text: "+1 more"
       end
     end
   end
