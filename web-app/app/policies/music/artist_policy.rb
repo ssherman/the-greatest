@@ -16,11 +16,12 @@ module Music
       global_role? || domain_role&.can_delete?
     end
 
-    # Gated on can_delete?, not can_write?: execute_action routes merges, which
-    # destroy the source record. A domain editor could otherwise delete a record
-    # they are not permitted to delete.
+    # execute_action is a shared endpoint: it carries non-destructive actions
+    # (AI descriptions, ranking refresh) as well as merges. Write access is the
+    # floor; the controller additionally requires destroy? for actions that
+    # declare themselves destructive.
     def execute_action?
-      global_role? || domain_role&.can_delete?
+      global_role? || domain_role&.can_write?
     end
 
     # Allow index_action (refresh all rankings, etc.) for domain admins

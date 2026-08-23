@@ -1,9 +1,9 @@
 require "test_helper"
 
 module Music
-  class AlbumPolicyTest < ActiveSupport::TestCase
+  class SongPolicyTest < ActiveSupport::TestCase
     test "a domain editor can execute non-destructive actions but cannot destroy" do
-      policy = ::Music::AlbumPolicy.new(users(:contractor_user), music_albums(:dark_side_of_the_moon))
+      policy = ::Music::SongPolicy.new(users(:contractor_user), music_songs(:money))
 
       assert policy.update?
       assert_not policy.destroy?

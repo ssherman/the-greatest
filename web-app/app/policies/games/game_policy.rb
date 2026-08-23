@@ -10,10 +10,12 @@ module Games
       manage?
     end
 
-    # Gated on can_delete?, not can_write?: the only action routed through
-    # execute_action is a merge, which destroys the source record.
+    # execute_action is a shared endpoint: it carries non-destructive actions
+    # (AI descriptions, ranking refresh) as well as merges. Write access is the
+    # floor; the controller additionally requires destroy? for actions that
+    # declare themselves destructive.
     def execute_action?
-      global_role? || domain_role&.can_delete?
+      global_role? || domain_role&.can_write?
     end
 
     class Scope < ApplicationPolicy::Scope

@@ -6,16 +6,16 @@ module Games
       @game = games_games(:breath_of_the_wild)
     end
 
-    test "a domain editor cannot execute admin actions" do
+    test "a domain editor can execute non-destructive actions but cannot destroy" do
       policy = ::Games::GamePolicy.new(users(:games_editor_user), @game)
 
       assert policy.update?, "an editor should still be able to edit"
       assert_not policy.destroy?
-      assert_not policy.execute_action?,
-        "merge deletes a record, so write access must not be enough"
+      assert policy.execute_action?,
+        "execute_action carries non-destructive actions too; write access must be enough to reach it"
     end
 
-    test "a domain moderator can execute admin actions" do
+    test "a domain moderator can destroy and execute admin actions" do
       policy = ::Games::GamePolicy.new(users(:games_moderator_user), @game)
 
       assert policy.destroy?

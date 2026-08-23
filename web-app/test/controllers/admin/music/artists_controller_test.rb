@@ -404,6 +404,36 @@ module Admin
         assert_redirected_to admin_artist_path(@artist)
       end
 
+      # Destructive action authorization: execute_action is a shared endpoint,
+      # so it must not let write access reach a destructive action (merge).
+
+      test "should reject merge action for a domain-scoped editor" do
+        sign_in_as(users(:contractor_user), stub_auth: true)
+        source_artist = music_artists(:the_beatles)
+
+        ::Music::Artist::Merger.expects(:call).never
+
+        post execute_action_admin_artist_path(@artist), params: {
+          action_name: "MergeArtist",
+          source_artist_id: source_artist.id,
+          confirm_merge: "1"
+        }
+
+        assert_redirected_to music_root_path
+        assert_equal "You are not authorized to perform this action.", flash[:alert]
+        assert ::Music::Artist.exists?(source_artist.id), "the source artist must not have been deleted"
+      end
+
+      test "should not reject a non-destructive action for a domain-scoped editor" do
+        sign_in_as(users(:contractor_user), stub_auth: true)
+
+        ::Music::ArtistDescriptionJob.expects(:perform_async).with(@artist.id)
+
+        post execute_action_admin_artist_path(@artist, action_name: "GenerateArtistDescription")
+
+        assert_redirected_to admin_artist_path(@artist)
+      end
+
       # Search with exclude_id Tests
 
       test "should filter out excluded artist id from search results" do

@@ -18,6 +18,10 @@ module Actions
           context[:view] == :show
         end
 
+        def self.destructive?
+          true
+        end
+
         def call
           return error("This action can only be performed on a single artist.") if models.count != 1
 
