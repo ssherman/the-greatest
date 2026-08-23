@@ -79,6 +79,13 @@ Rails.application.routes.draw do
     namespace :admin, module: "admin/music" do
       root to: "dashboard#index"
 
+      resources :news_topics
+      resources :news_posts do
+        collection do
+          post :preview
+        end
+      end
+
       # MusicBrainz search endpoints (shared across admin features)
       scope :musicbrainz, controller: "musicbrainz_search", as: "musicbrainz" do
         get :artists
@@ -329,17 +336,28 @@ Rails.application.routes.draw do
   # friendly_id reserved word, so no post can ever claim /news/topic.
   #
   # Order matters: /page/1 must precede the generic /page/:page.
+  #
+  # Every route declares the formats it serves. Only the bare index has an rss
+  # representation; the paginated and topic-filtered paths share #index, so
+  # without their own constraint /news/page/2.rss and /news/topic/x.rss would
+  # each serve the WHOLE feed from a scoped URL -- an edge-cached page whose
+  # contents contradict its path. Measured before constraining: an
+  # unrepresentable format was a 406, and becomes a 404 once the route stops
+  # matching. No news slug contains a dot (checked against all 31 live rows),
+  # so no real URL loses its trailing segment to the format parser.
   constraints DomainConstraint.new(
     [:books, :music, :games].map { |domain| Rails.application.config.domains[domain] }.join(",")
   ) do
-    get "news", to: "news_posts#index", as: :news
+    get "news", to: "news_posts#index", as: :news, defaults: {format: :html},
+      constraints: {format: /html|rss/}
     get "news/page/1", to: redirect("/news", status: 301)
-    get "news/page/:page", to: "news_posts#index", as: :news_page, constraints: {page: /[1-9]\d*/}
+    get "news/page/:page", to: "news_posts#index", as: :news_page,
+      constraints: {page: /[1-9]\d*/, format: /html/}
     get "news/topic/:topic_slug/page/1", to: redirect("/news/topic/%{topic_slug}", status: 301)
-    get "news/topic/:topic_slug", to: "news_posts#index", as: :news_topic
+    get "news/topic/:topic_slug", to: "news_posts#index", as: :news_topic, constraints: {format: /html/}
     get "news/topic/:topic_slug/page/:page", to: "news_posts#index", as: :news_topic_page,
-      constraints: {page: /[1-9]\d*/}
-    get "news/:slug", to: "news_posts#show", as: :news_post
+      constraints: {page: /[1-9]\d*/, format: /html/}
+    get "news/:slug", to: "news_posts#show", as: :news_post, constraints: {format: /html/}
   end
 
   # Legacy books URL. ~15 years of inbound links point at /support.
@@ -744,6 +762,13 @@ Rails.application.routes.draw do
     # Admin interface for games domain
     namespace :admin, module: "admin/games", as: "admin_games" do
       root to: "dashboard#index"
+
+      resources :news_topics
+      resources :news_posts do
+        collection do
+          post :preview
+        end
+      end
 
       resources :games do
         resources :game_companies, only: [:create], shallow: true

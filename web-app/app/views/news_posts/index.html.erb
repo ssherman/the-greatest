@@ -4,6 +4,8 @@
     @topic ? "News and updates about #{@topic.name.downcase} from #{domain_name}." :
              "Site news, ranking updates and new features from #{domain_name}."
   content_for :canonical_url, @canonical_url
+  content_for :head_links, tag.link(rel: "alternate", type: "application/rss+xml",
+    title: "#{domain_name} News", href: news_url(format: :rss))
 %>
 
 <div class="space-y-8">
@@ -33,4 +35,8 @@
   <% else %>
     <p class="text-center text-base-content/70">No news yet.</p>
   <% end %>
+
+  <p class="text-center">
+    <%= link_to "Subscribe by RSS", news_path(format: :rss), class: "link" %>
+  </p>
 </div>

@@ -6,6 +6,21 @@ module Admin
       setup do
         host! "dev-new.thegreatestbooks.org"
         sign_in_as(users(:admin_user), stub_auth: true)
+
+        # test_helper.rb sets Sidekiq::Testing.inline!, so every write in this
+        # file runs News::PurgeCachedPagesJob#perform synchronously, in-process.
+        # That job only skips Cloudflare::PurgeService -- and therefore the
+        # network -- when CLOUDFLARE_CACHE_PURGE_TOKEN is blank. This machine's
+        # own .env carries a real token, so clear it here rather than trust
+        # ambient state; CI has no .env and would pass either way, which is
+        # exactly why this must not be left implicit. Mirrors the identical
+        # guard in ReviewsControllerTest.
+        @original_purge_token = ENV["CLOUDFLARE_CACHE_PURGE_TOKEN"]
+        ENV.delete("CLOUDFLARE_CACHE_PURGE_TOKEN")
+      end
+
+      teardown do
+        ENV["CLOUDFLARE_CACHE_PURGE_TOKEN"] = @original_purge_token
       end
 
       test "index lists this domain's posts, drafts included" do
@@ -493,6 +508,237 @@ module Admin
 
         assert_select "a", text: "New Post", count: 0
       end
+
+      # Sidekiq::Testing.inline! is global (test_helper.rb), so `.jobs` is always
+      # empty outside a fake! block -- the job runs instead of being recorded.
+      # Asserting on the recorded args also proves they survive Sidekiq's JSON
+      # round-trip, which is the constraint that forced the URLs to be plain
+      # strings computed in the controller rather than a record id.
+      test "create enqueues a purge naming the new post's page and the index" do
+        Sidekiq::Testing.fake! do
+          ::News::PurgeCachedPagesJob.jobs.clear
+
+          post admin_books_news_posts_path,
+            params: {news_post: {title: "Fresh Off The Press", body: "hello", published_at: 1.minute.ago.to_fs(:db)}}
+
+          assert_equal 1, ::News::PurgeCachedPagesJob.jobs.size
+          domain, urls = ::News::PurgeCachedPagesJob.jobs.first["args"]
+          assert_equal "books", domain
+          assert_includes urls, "https://#{books_host}/news/fresh-off-the-press"
+          assert_includes urls, "https://#{books_host}/news"
+        end
+      end
+
+      test "create does not enqueue a purge when the post is invalid" do
+        Sidekiq::Testing.fake! do
+          ::News::PurgeCachedPagesJob.jobs.clear
+
+          post admin_books_news_posts_path, params: {news_post: {title: "", body: "kept text"}}
+
+          assert_response :unprocessable_entity
+          assert_equal 0, ::News::PurgeCachedPagesJob.jobs.size
+        end
+      end
+
+      test "update enqueues a purge naming the edited post's page" do
+        Sidekiq::Testing.fake! do
+          ::News::PurgeCachedPagesJob.jobs.clear
+          post_record = news_posts(:books_december_update)
+
+          patch admin_books_news_post_path(post_record),
+            params: {news_post: {title: post_record.title, body: "corrected body"}}
+
+          assert_equal 1, ::News::PurgeCachedPagesJob.jobs.size
+          domain, urls = ::News::PurgeCachedPagesJob.jobs.first["args"]
+          assert_equal "books", domain
+          assert_includes urls, "https://#{books_host}/news/december-update"
+        end
+      end
+
+      # The worst case in this feature: without a purge, a retracted post stays
+      # publicly readable for the full 24-hour show-page TTL.
+      test "unpublishing a post enqueues a purge for its page" do
+        Sidekiq::Testing.fake! do
+          ::News::PurgeCachedPagesJob.jobs.clear
+          post_record = news_posts(:books_december_update)
+
+          patch admin_books_news_post_path(post_record),
+            params: {news_post: {title: post_record.title, body: post_record.body, published_at: ""}}
+
+          assert_predicate post_record.reload, :draft?
+          assert_equal 1, ::News::PurgeCachedPagesJob.jobs.size
+          _domain, urls = ::News::PurgeCachedPagesJob.jobs.first["args"]
+          assert_includes urls, "https://#{books_host}/news/december-update"
+        end
+      end
+
+      # An update can SHRINK the result set across a page boundary, and neither
+      # the before-state nor the after-state contains the other: unpublishing the
+      # 11th post leaves /news/page/2 cached with the retracted post on it for
+      # the full 6-hour index TTL. Computing the set only after the save sees 10
+      # rows, derives one page, and never names page 2. Found by Codex on #248.
+      test "unpublishing across a page boundary purges the index page that is about to disappear" do
+        10.times do |i|
+          NewsPost.create!(
+            domain: :books, title: "Boundary Filler #{i}", body: "x",
+            published_at: (i + 10).days.ago, user: users(:admin_user)
+          )
+        end
+        post_record = news_posts(:books_december_update)
+        assert_equal 11, NewsPost.where(domain: :books).published.count
+
+        Sidekiq::Testing.fake! do
+          ::News::PurgeCachedPagesJob.jobs.clear
+
+          patch admin_books_news_post_path(post_record),
+            params: {news_post: {title: post_record.title, body: post_record.body, published_at: ""}}
+
+          assert_equal 10, NewsPost.where(domain: :books).published.count
+          _domain, urls = ::News::PurgeCachedPagesJob.jobs.first["args"]
+          assert_includes urls, "https://#{books_host}/news/page/2"
+        end
+      end
+
+      # The same defect on the topic axis: dropping the post's topic shrinks that
+      # topic's index, so its page 2 goes stale. Purging every topic of the domain
+      # does not help -- each topic's page count is derived from the post-save
+      # state too.
+      test "removing a topic across a page boundary purges that topic's disappearing page" do
+        topic = news_topics(:books_rankings)
+        10.times do |i|
+          filler = NewsPost.create!(
+            domain: :books, title: "Topic Boundary Filler #{i}", body: "x",
+            published_at: (i + 10).days.ago, user: users(:admin_user)
+          )
+          filler.news_topics << topic
+        end
+        post_record = news_posts(:books_december_update)
+        assert_includes post_record.news_topic_ids, topic.id
+
+        Sidekiq::Testing.fake! do
+          ::News::PurgeCachedPagesJob.jobs.clear
+
+          patch admin_books_news_post_path(post_record),
+            params: {news_post: {title: post_record.title, body: post_record.body, news_topic_ids: [""]}}
+
+          assert_empty post_record.reload.news_topic_ids
+          _domain, urls = ::News::PurgeCachedPagesJob.jobs.first["args"]
+          assert_includes urls, "https://#{books_host}/news/topic/rankings/page/2"
+        end
+      end
+
+      test "update does not enqueue a purge when the submission is invalid" do
+        Sidekiq::Testing.fake! do
+          ::News::PurgeCachedPagesJob.jobs.clear
+
+          patch admin_books_news_post_path(news_posts(:books_december_update)),
+            params: {news_post: {title: "", body: ""}}
+
+          assert_response :unprocessable_entity
+          assert_equal 0, ::News::PurgeCachedPagesJob.jobs.size
+        end
+      end
+
+      # Naming the deleted post's own page discriminates against a job that
+      # resolves the record itself, the shape Reviews::PurgeCachedPageJob uses --
+      # after destroy! there is no row to find.
+      #
+      # It does NOT discriminate against computing the list after destroy!: the
+      # destroyed object is frozen but still carries its slug, so that ordering
+      # produces the same post URL. Verified by moving the call below destroy!
+      # and watching an earlier version of this test still pass. The page count
+      # is what actually separates the two, hence the ten extra posts: with the
+      # doomed post present the index is 2 pages, without it 1, so /news/page/2
+      # is purged only if the set was computed while the row still existed.
+      test "destroy enqueues a purge computed while the post still existed" do
+        10.times do |i|
+          NewsPost.create!(
+            domain: :books, title: "Destroy Filler #{i}", body: "x",
+            published_at: (i + 10).days.ago, user: users(:admin_user)
+          )
+        end
+        assert_equal 11, NewsPost.where(domain: :books).published.count
+
+        Sidekiq::Testing.fake! do
+          ::News::PurgeCachedPagesJob.jobs.clear
+
+          delete admin_books_news_post_path(news_posts(:books_december_update))
+
+          assert_equal 1, ::News::PurgeCachedPagesJob.jobs.size
+          domain, urls = ::News::PurgeCachedPagesJob.jobs.first["args"]
+          assert_equal "books", domain
+          assert_includes urls, "https://#{books_host}/news/december-update"
+          assert_includes urls, "https://#{books_host}/news"
+          assert_includes urls, "https://#{books_host}/news/page/2"
+        end
+      end
+
+      test "destroy does not enqueue a purge for another domain's post" do
+        Sidekiq::Testing.fake! do
+          ::News::PurgeCachedPagesJob.jobs.clear
+
+          delete admin_books_news_post_path(news_posts(:music_launch))
+
+          assert_response :not_found
+          assert_equal 0, ::News::PurgeCachedPagesJob.jobs.size
+        end
+      end
+
+      test "a write refused for lack of write access does not enqueue a purge" do
+        regular_user = users(:regular_user)
+        regular_user.domain_roles.create!(domain: :books, permission_level: :viewer)
+        sign_in_as(regular_user, stub_auth: true)
+
+        Sidekiq::Testing.fake! do
+          ::News::PurgeCachedPagesJob.jobs.clear
+
+          post admin_books_news_posts_path, params: {news_post: {title: "Should Not Exist", body: "x"}}
+
+          assert_equal 0, ::News::PurgeCachedPagesJob.jobs.size
+        end
+      end
+
+      # `require_domain_write!` admits an editor (can_write? is editor|moderator|
+      # admin) while can_delete? is moderator|admin, so an editor passed the only
+      # guard on destroy and could remove posts through a crafted request even
+      # though the UI hides the Delete control from them. Every other admin
+      # controller is protected by Pundit, whose ApplicationPolicy#destroy? asks
+      # can_delete?; these controllers have no Pundit layer and so had nothing
+      # asking it. Measured before fixing: an editor's DELETE destroyed the row
+      # and returned 302. Found by Codex on #250.
+      test "destroy is refused for an editor who cannot delete" do
+        editor = users(:regular_user)
+        editor.domain_roles.create!(domain: :books, permission_level: :editor)
+        sign_in_as(editor, stub_auth: true)
+        target = news_posts(:books_december_update)
+
+        Sidekiq::Testing.fake! do
+          ::News::PurgeCachedPagesJob.jobs.clear
+
+          assert_no_difference -> { NewsPost.count } do
+            delete admin_books_news_post_path(target)
+          end
+
+          assert NewsPost.exists?(target.id)
+          assert_equal 0, ::News::PurgeCachedPagesJob.jobs.size
+        end
+      end
+
+      # Positive control: the guard must gate on delete permission, not simply
+      # refuse everyone who is not a global admin.
+      test "destroy is allowed for a moderator" do
+        moderator = users(:regular_user)
+        moderator.domain_roles.create!(domain: :books, permission_level: :moderator)
+        sign_in_as(moderator, stub_auth: true)
+
+        assert_difference -> { NewsPost.count }, -1 do
+          delete admin_books_news_post_path(news_posts(:books_december_update))
+        end
+      end
+
+      private
+
+      def books_host = Rails.application.config.domains[:books]
     end
   end
 end

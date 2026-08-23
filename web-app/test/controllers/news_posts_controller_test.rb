@@ -519,4 +519,240 @@ class NewsPostsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
   end
+
+  # --- Task 19: games and music rollout ---
+
+  # The plan asserted an EMPTY games index plus `assert_select "html[data-theme]"`.
+  # Neither can fail: the games index is empty whether or not the domain scope
+  # works, and every layout in this app sets some data-theme. A published games
+  # post plus the games theme by NAME makes both halves discriminate.
+  test "the games host serves its own news index, not another site's" do
+    host! "dev.thegreatest.games"
+    games_post = NewsPost.create!(
+      domain: :games, title: "Games Launch Day", body: "We are live on games.",
+      published_at: 1.day.ago, user: users(:admin_user)
+    )
+
+    get news_path
+
+    assert_response :success
+    assert_equal [games_post.id], @controller.view_assigns["news_posts"].map(&:id)
+    assert_select "html[data-theme=?]", "abyss"
+  end
+
+  test "the music host serves its own news index" do
+    host! "dev.thegreatestmusic.org"
+
+    get news_path
+
+    assert_response :success
+    assert_equal [news_posts(:music_launch).id],
+      @controller.view_assigns["news_posts"].map(&:id)
+  end
+
+  test "the music post page emits Open Graph tags" do
+    host! "dev.thegreatestmusic.org"
+
+    get news_post_path(slug: "the-greatest-music-is-live")
+
+    assert_response :success
+    assert_select "meta[property='og:type'][content=?]", "article"
+  end
+
+  test "the games post page emits Open Graph tags" do
+    host! "dev.thegreatest.games"
+    NewsPost.create!(domain: :games, title: "Games OG Probe", body: "body",
+      published_at: 1.day.ago, user: users(:admin_user))
+
+    get news_post_path(slug: "games-og-probe")
+
+    assert_response :success
+    assert_select "meta[property='og:type'][content=?]", "article"
+  end
+
+  # Increment 4 gave books a self-referential canonical; music and games render
+  # the same views through their own layouts, and neither layout carried a
+  # canonical tag at all, so /news on those two hosts emitted none.
+  test "the music news index sets a canonical url" do
+    host! "dev.thegreatestmusic.org"
+
+    get news_path
+
+    assert_select "link[rel=canonical][href=?]", "http://dev.thegreatestmusic.org/news"
+  end
+
+  test "the games news index sets a canonical url" do
+    host! "dev.thegreatest.games"
+
+    get news_path
+
+    assert_select "link[rel=canonical][href=?]", "http://dev.thegreatest.games/news"
+  end
+
+  test "the music index links its own feed for autodiscovery" do
+    host! "dev.thegreatestmusic.org"
+
+    get news_path
+
+    assert_select "link[rel=?][type=?][href=?]", "alternate", "application/rss+xml",
+      "http://dev.thegreatestmusic.org/news.rss"
+  end
+
+  test "the games feed serves that site's posts" do
+    host! "dev.thegreatest.games"
+    NewsPost.create!(domain: :games, title: "Games Feed Item", body: "body",
+      published_at: 1.day.ago, user: users(:admin_user))
+
+    get news_path(format: :rss)
+
+    assert_response :success
+    assert_includes response.body, "Games Feed Item"
+    assert_not_includes response.body, "December Update"
+  end
+
+  # --- Task 18: RSS feed ---
+
+  test "the feed renders as rss" do
+    get news_path(format: :rss)
+
+    assert_response :success
+    # The plan asserted `response.media_type + "; charset=utf-8"` against the
+    # same literal with the charset appended, so the charset half compared a
+    # string to itself (ledger R5).
+    assert_equal "application/rss+xml", response.media_type
+    assert_includes response.body, "<rss"
+  end
+
+  test "the feed lists published posts with absolute urls" do
+    get news_path(format: :rss)
+
+    assert_includes response.body, "December Update"
+    assert_includes response.body, "http://dev-new.thegreatestbooks.org/news/december-update"
+  end
+
+  test "the feed excludes drafts" do
+    get news_path(format: :rss)
+
+    assert_not_includes response.body, "Something Unfinished"
+  end
+
+  test "the feed excludes future-dated posts" do
+    get news_path(format: :rss)
+
+    assert_not_includes response.body, "Next Week"
+  end
+
+  test "the feed excludes another domain's posts" do
+    get news_path(format: :rss)
+
+    assert_not_includes response.body, "The Greatest Music Is Live"
+  end
+
+  # The plan asserted the body contained "Rankings", which the <category>
+  # element satisfies on its own -- it would pass with an empty description.
+  # The rendered markup is what discriminates: <strong> exists only if
+  # BodyRenderer ran, and the raw "**Rankings**" proves the Markdown source
+  # was not shipped verbatim.
+  test "the feed carries the rendered html body, not the markdown source" do
+    get news_path(format: :rss)
+
+    assert_includes response.body, "<strong>Rankings</strong>"
+    assert_not_includes response.body, "**Rankings**"
+  end
+
+  test "the feed names each post's topics as categories" do
+    get news_path(format: :rss)
+
+    assert_includes response.body, "<category>Rankings</category>"
+  end
+
+  test "the feed is edge cacheable" do
+    get news_path(format: :rss)
+
+    assert_match(/max-age=21600/, response.headers["Cache-Control"])
+  end
+
+  test "the feed's channel link is the same url the index canonicalises to" do
+    get news_path
+
+    canonical = css_select("link[rel='canonical']").first["href"]
+
+    get news_path(format: :rss)
+
+    assert_includes response.body, "<link>#{canonical}</link>"
+  end
+
+  test "the feed advertises itself with an atom self link" do
+    get news_path(format: :rss)
+
+    assert_includes response.body, "http://dev-new.thegreatestbooks.org/news.rss"
+  end
+
+  test "the feed is a fixed window rather than a paginated one" do
+    30.times do |i|
+      NewsPost.create!(
+        domain: :books, title: "Feed Filler #{i}", body: "x",
+        published_at: (i + 10).days.ago, user: users(:admin_user)
+      )
+    end
+
+    get news_path(format: :rss)
+
+    assert_equal NewsPost::FEED_LIMIT, response.body.scan("<item>").size
+  end
+
+  test "the index links the feed for autodiscovery" do
+    get news_path
+
+    assert_select "link[rel=?][type=?][href=?]", "alternate", "application/rss+xml",
+      "http://dev-new.thegreatestbooks.org/news.rss"
+  end
+
+  # Before the format constraint this was a 406, not a 404 -- measured. A 404 is
+  # the easiest response to get by accident, so the constraint's removal was
+  # checked to produce 406 rather than trusting the status alone.
+  test "an unsupported format is not routable" do
+    get "/news.json"
+
+    assert_response :not_found
+  end
+
+  # The index route pins its format with defaults: {format: :html}. Without that
+  # pin an RSS reader sending Accept: application/rss+xml gets the FEED at the
+  # canonical HTML URL -- measured, it returns application/rss+xml -- and since
+  # that response is public/max-age=21600 with no Vary header, Cloudflare would
+  # then serve XML to every browser for six hours. Content negotiation and a
+  # shared edge cache do not mix.
+  test "an rss Accept header does not turn the html index into the feed" do
+    get "/news", headers: {"Accept" => "application/rss+xml"}
+
+    assert_response :success
+    assert_equal "text/html", response.media_type
+  end
+
+  # The R80 lesson applied to a new route: ask where else it matches. /news.rss
+  # is declared globally and only the DomainConstraint keeps it off the dormant
+  # host.
+  test "the feed is not served on an unimplemented site" do
+    host! Rails.application.config.domains[:movies].to_s.split(",").first
+
+    get "/news.rss"
+
+    assert_response :not_found
+  end
+
+  # The paginated and topic-filtered paths share #index, so without their own
+  # format constraint they would each serve the WHOLE feed from a scoped URL --
+  # an edge-cached page whose contents contradict its path.
+  test "a paginated url does not serve the feed" do
+    get "/news/page/2.rss"
+
+    assert_not_equal "application/rss+xml", response.media_type
+  end
+
+  test "a topic url does not serve the feed" do
+    get "/news/topic/rankings.rss"
+
+    assert_not_equal "application/rss+xml", response.media_type
+  end
 end

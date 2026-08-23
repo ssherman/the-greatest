@@ -13,13 +13,30 @@ class NewsPostsController < ApplicationController
   before_action :cache_for_show_page, only: [:show]
   before_action :find_topic, only: [:index]
 
-  PER_PAGE = 10
-
   def index
+    respond_to do |format|
+      format.html { load_index_page }
+      format.rss { load_feed }
+    end
+  end
+
+  def show
+    @news_post = published_scope
+      .includes(:news_topics, :user)
+      .friendly.find(params[:slug])
+
+    @body_html = Services::News::BodyRenderer.call(@news_post.body)
+    @canonical_url = news_post_url(slug: @news_post.slug)
+    @indexable = true
+  end
+
+  private
+
+  def load_index_page
     scope = published_scope.includes(:news_topics).recent
     scope = scope.joins(:news_post_topics).where(news_post_topics: {news_topic_id: @topic.id}) if @topic
 
-    @pagy, @news_posts = pagy_path(scope, limit: PER_PAGE)
+    @pagy, @news_posts = pagy_path(scope, limit: NewsPost::PER_PAGE)
     @page_title = @topic ? "#{@topic.name} | News" : "News"
     @indexable = @news_posts.any?
 
@@ -36,17 +53,17 @@ class NewsPostsController < ApplicationController
     end
   end
 
-  def show
-    @news_post = published_scope
-      .includes(:news_topics, :user)
-      .friendly.find(params[:slug])
-
-    @body_html = Services::News::BodyRenderer.call(@news_post.body)
-    @canonical_url = news_post_url(slug: @news_post.slug)
-    @indexable = true
+  # One fixed window over the whole domain: never topic-filtered, never
+  # paginated. The topic and page routes are declared html-only for exactly that
+  # reason, so @topic cannot be set here -- published_scope is used directly
+  # rather than the filtered scope so this stays true by construction and not
+  # only by the routes agreeing with it.
+  def load_feed
+    @news_posts = published_scope
+      .includes(:news_topics)
+      .recent
+      .limit(NewsPost::FEED_LIMIT)
   end
-
-  private
 
   # Drafts and future-dated posts are excluded here, not in a view conditional:
   # this scope backs both #index (edge-cached 6 hours) and #show (24 hours),

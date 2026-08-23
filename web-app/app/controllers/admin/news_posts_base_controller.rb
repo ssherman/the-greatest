@@ -12,6 +12,7 @@ class Admin::NewsPostsBaseController < Admin::BaseController
   # defines it 404s every other action too. Any future action must be added to
   # these lists at the same time it is defined below.
   before_action :require_domain_write!, only: [:new, :create, :edit, :update, :destroy, :preview]
+  before_action :require_domain_delete!, only: [:destroy]
   before_action :set_news_post, only: [:show, :edit, :update, :destroy]
 
   helper_method :news_posts_path_for, :news_post_path_for, :new_news_post_path_for,
@@ -46,6 +47,7 @@ class Admin::NewsPostsBaseController < Admin::BaseController
     attach_body_images
 
     if @news_post.save
+      enqueue_cache_purge(@news_post)
       redirect_to news_post_path_for(@news_post), notice: "Post created."
     else
       render :new, status: :unprocessable_entity
@@ -56,6 +58,18 @@ class Admin::NewsPostsBaseController < Admin::BaseController
   end
 
   def update
+    # Captured BEFORE assign_attributes, and unioned with the post-save set
+    # below. An update is the one write where neither state contains the other:
+    # unpublishing the 11th post, or dropping the topic that gave a topic index
+    # its 11th, REMOVES /news/page/2 (or the topic's page 2), so a set derived
+    # only from the saved state sees 10 rows, derives one page, and leaves the
+    # disappearing page cached with the retracted post on it for the full 6-hour
+    # TTL. Create can only grow the set and destroy only shrink it, so both are
+    # covered by a single snapshot on the correct side of the write.
+    # Must precede assign_attributes, not merely the save: assigning
+    # news_topic_ids on a persisted record writes the join table immediately.
+    urls_before = Services::News::CachedUrls.call(@news_post)
+
     # assign_attributes, THEN check valid? BEFORE attach_body_images, and only
     # attach once known valid: has_many_attached#attach saves eagerly for a
     # persisted, unchanged record (`record.persisted? && !record.changed?`).
@@ -73,6 +87,12 @@ class Admin::NewsPostsBaseController < Admin::BaseController
     attach_body_images if @news_post.valid?
 
     if @news_post.save
+      # Unconditional, with no published? gate: a wrong gate means a published
+      # post that never purges, which is the 24-hour-stale bug this exists to
+      # remove, while a needless purge costs a few origin re-renders. It also
+      # covers the worst case for free -- setting published_at back to nil comes
+      # through here, so a retracted post's page is purged like any other edit.
+      enqueue_cache_purge(@news_post, also: urls_before)
       redirect_to news_post_path_for(@news_post), notice: "Post updated."
     else
       render :edit, status: :unprocessable_entity
@@ -80,7 +100,14 @@ class Admin::NewsPostsBaseController < Admin::BaseController
   end
 
   def destroy
+    # Computed BEFORE destroy!, unlike create and update: a deleted post cannot
+    # be looked up, and its news_post_topics rows go with it
+    # (dependent: :destroy), so nothing downstream could rebuild this list.
+    urls = Services::News::CachedUrls.call(@news_post)
+    domain = @news_post.domain
     @news_post.destroy!
+    ::News::PurgeCachedPagesJob.perform_async(domain, urls)
+
     redirect_to news_posts_path_for, notice: "Post deleted."
   end
 
@@ -95,6 +122,15 @@ class Admin::NewsPostsBaseController < Admin::BaseController
   end
 
   private
+
+  # Explicit, not a model callback: an after_commit making an external HTTP call
+  # is invisible to its callers and would fire from the legacy-blog data
+  # migration and from every test that creates a post. Both arguments are
+  # JSON-native so they survive Sidekiq's serialisation unchanged.
+  def enqueue_cache_purge(news_post, also: [])
+    urls = (Services::News::CachedUrls.call(news_post) + also).uniq
+    ::News::PurgeCachedPagesJob.perform_async(news_post.domain, urls)
+  end
 
   # Always scoped, never a bare NewsPost.find: authenticate_admin! proves access
   # to the domain this controller is MOUNTED under, not that the id in the URL
