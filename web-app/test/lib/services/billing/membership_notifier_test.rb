@@ -114,6 +114,33 @@ module Services
         assert_nil membership.reload.welcome_email_sent_at
       end
 
+      # The rollback above works only because the enqueue happens INSIDE the
+      # transaction. Rails can defer deliver_later until after commit; if it
+      # ever did here, the stamp would be durable before Redis was contacted, a
+      # failed enqueue would leave it set, and the recovery this whole change
+      # exists to provide would silently stop working -- with every test above
+      # still green, because they raise inside the transaction either way.
+      #
+      # Verified false under RAILS_ENV=production with the Sidekiq adapter on
+      # 2026-08-22, and this pins it.
+      #
+      # What this guard does and does not catch, measured rather than assumed:
+      # setting `config.active_job.enqueue_after_transaction_commit = true` in
+      # application.rb does NOT move these values on Rails 8.1 -- the config key
+      # is accepted and ignored, so that route cannot break the rollback and
+      # this test cannot catch it. Assigning the class attribute directly (in an
+      # initializer, or by a future Rails release changing the default) DOES
+      # move them, and this test goes red when it happens. That second case is
+      # the realistic one, and the one that would otherwise disable recovery
+      # with no other test noticing.
+      test "deliver_later is not deferred past commit, which is what makes the rollback possible" do
+        assert_equal false, ActiveJob::Base.enqueue_after_transaction_commit,
+          "ActiveJob now defers enqueues past commit; MembershipNotifier's stamp rollback no longer protects a failed enqueue"
+
+        assert_equal false, ActionMailer::MailDeliveryJob.enqueue_after_transaction_commit,
+          "MailDeliveryJob now defers enqueues past commit; MembershipNotifier's stamp rollback no longer protects a failed enqueue"
+      end
+
       # Task 2 note: cancellation_owed? requires a prior welcome (see
       # MembershipNotifier), so this membership must be stamped as welcomed --
       # a realistic precondition, since it was active before this reconcile
