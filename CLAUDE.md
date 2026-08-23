@@ -78,6 +78,8 @@ which takes **hours**.
   `listable: dark_side (Music::Album)` — never set `_type` manually.
 - **DataImporters:** for identifiers always `find_or_initialize_by`, never `build` (avoids dupes on
   provider re-runs). See `docs/features/data_importers.md`.
+- **AI response schemas are `OpenAI::BaseModel` subclasses.** `to_json_schema` is a **class** method —
+  `schema.new.to_json_schema` raises `NoMethodError`. There is no `RubyLLM::Schema` in this app.
 
 ## Testing (Minitest + fixtures + Mocha)
 

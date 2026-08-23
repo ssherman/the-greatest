@@ -50,7 +50,6 @@ gem "bootsnap", require: false
 gem "thruster", require: false
 
 gem "countries"
-gem "ruby_llm-schema"
 gem "openai"
 gem "stripe", "~> 19.5"
 gem "opensearch-ruby"

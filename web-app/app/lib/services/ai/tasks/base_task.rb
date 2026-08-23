@@ -62,10 +62,6 @@ module Services
           raise
         end
 
-        def user_prompt_with_fallbacks
-          user_prompt
-        end
-
         def response_format
           nil
         end
@@ -98,7 +94,7 @@ module Services
         end
 
         def validate!(raw_json)
-          # All providers now use RubyLLM schema validation
+          # Schemas are OpenAI::BaseModel subclasses; validate! is an instance method.
           schema = response_schema
           return JSON.parse(raw_json, symbolize_names: true) unless schema
 
@@ -129,13 +125,7 @@ module Services
         end
 
         def schema_to_json(schema)
-          if schema < OpenAI::BaseModel
-            # OpenAI::BaseModel has to_json_schema class method
-            schema.to_json_schema.to_json
-          else
-            # Fallback for RubyLLM or other schema types
-            schema.new.to_json_schema
-          end
+          schema.to_json_schema.to_json
         end
 
         def add_user_message(content)

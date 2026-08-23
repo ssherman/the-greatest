@@ -430,7 +430,7 @@ end
 - OpenAI gem for OpenAI API
 - Anthropic gem for Anthropic API
 - Google AI gem for Gemini API
-- ruby_llm-schema gem for JSON schema definitions
+- `OpenAI::BaseModel` for JSON schema definitions (the original `ruby_llm-schema` gem was removed 2026-08-23; it was never used)
 
 ## Acceptance Criteria
 - [ ] Can switch providers globally with one line: `Ai::ProviderRegistry.use!(:anthropic)`
