@@ -227,14 +227,28 @@ module Books
       assert_select "a[href=?]", "/rc/#{rc.id}/the-greatest/novels/books"
     end
 
+    # Asserted on the assigned order and on the group's data-category-type, never on
+    # the heading copy: "Locations" is a display string a designer may freely change
+    # (the browse pages already call the same axis "Book Settings"), whereas the
+    # order of the types is the behaviour this controller decides.
     test "groups the categories genre, then subject, then location" do
       CategoryItem.create!(category: categories(:books_france_location), item: @book)
       CategoryItem.create!(category: categories(:books_politics_subject), item: @book)
 
       get "/book/#{@book.slug}"
 
-      assert_equal ["Genres", "Subjects", "Locations"],
-        css_select("[data-testid='category-group'] h3").map { |heading| heading.text.strip }
+      assert_equal %w[genre subject location],
+        @controller.view_assigns["categories_by_type"].map(&:first)
+    end
+
+    test "renders the category groups in the order the controller assigned" do
+      CategoryItem.create!(category: categories(:books_france_location), item: @book)
+      CategoryItem.create!(category: categories(:books_politics_subject), item: @book)
+
+      get "/book/#{@book.slug}"
+
+      assert_equal %w[genre subject location],
+        css_select("[data-category-type]").map { |group| group["data-category-type"] }
     end
 
     test "sorts the categories by name within a group" do
@@ -248,7 +262,7 @@ module Books
       get "/book/#{@book.slug}"
 
       assert_equal ["Adventure", "Classics", "Novels"],
-        css_select("[data-testid='category-group'] a").map { |link| link.text.strip }
+        @controller.view_assigns["categories_by_type"].first.last.map(&:name)
     end
 
     test "renders the details a book has values for" do

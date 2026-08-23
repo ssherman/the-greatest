@@ -99,7 +99,9 @@
         <div class="card-body">
           <h2 class="card-title text-xl">Categories</h2>
           <% @categories_by_type.each do |category_type, categories| %>
-            <div class="mt-3 first:mt-0" data-testid="category-group">
+            <%# data-category-type is a stable hook for the group's ordering: the
+                heading beside it is display copy and may be reworded freely. %>
+            <div class="mt-3 first:mt-0" data-testid="category-group" data-category-type="<%= category_type %>">
               <h3 class="text-sm font-semibold text-base-content/70 mb-2 uppercase"><%= category_type.to_s.pluralize.titleize %></h3>
               <div class="flex flex-wrap gap-2">
                 <%# Books::FilterParams resolves any active Books::Category by slug with
