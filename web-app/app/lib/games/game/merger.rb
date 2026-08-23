@@ -55,6 +55,9 @@ module Games
         merge_list_items
         merge_user_list_items
         merge_descriptions
+        merge_game_companies
+        merge_game_platforms
+        merge_child_games
       end
 
       def merge_identifiers
@@ -169,6 +172,53 @@ module Games
           count += 1
         end
         @stats[:descriptions] = count
+      end
+
+      # developer/publisher are ORed rather than dropped: a source row marking a
+      # company as publisher carries information the target's row may not have.
+      def merge_game_companies
+        count = 0
+        source_game.game_companies.find_each do |link|
+          existing = target_game.game_companies.find_by(company_id: link.company_id)
+
+          if existing
+            existing.update!(
+              developer: existing.developer? || link.developer?,
+              publisher: existing.publisher? || link.publisher?
+            )
+            link.destroy!
+          else
+            link.update!(game_id: target_game.id)
+            count += 1
+          end
+        end
+        @stats[:game_companies] = count
+      end
+
+      def merge_game_platforms
+        count = 0
+        source_game.game_platforms.find_each do |link|
+          if target_game.game_platforms.exists?(platform_id: link.platform_id)
+            link.destroy!
+          else
+            link.update!(game_id: target_game.id)
+            count += 1
+          end
+        end
+        @stats[:game_platforms] = count
+      end
+
+      # child_games is dependent: :nullify, so leaving these alone orphans the whole
+      # subtree when the source is destroyed. The target itself cannot become its own
+      # parent, so it is nullified instead.
+      def merge_child_games
+        children = ::Games::Game.where(parent_game_id: source_game.id)
+
+        children.where(id: target_game.id).update_all(parent_game_id: nil)
+        count = children.where.not(id: target_game.id).update_all(parent_game_id: target_game.id)
+
+        target_game.reload if target_game.parent_game_id == source_game.id
+        @stats[:child_games] = count
       end
 
       def reconcile_scalars

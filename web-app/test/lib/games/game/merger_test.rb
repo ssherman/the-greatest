@@ -224,6 +224,72 @@ module Games
         assert_equal @target.id, moved.describable_id
       end
 
+      test "moves a company link the target does not have" do
+        link = games_game_companies(:hl2_valve_dev)
+
+        ::Games::Game::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, link.reload.game_id
+      end
+
+      test "ORs developer and publisher flags when both games share a company" do
+        company = games_companies(:nintendo)
+        ::Games::GameCompany.where(game: @source, company: company).destroy_all
+        ::Games::GameCompany.create!(game: @source, company: company, developer: false, publisher: true)
+        target_link = ::Games::GameCompany.find_by(game: @target, company: company)
+        target_link.update!(developer: true, publisher: false)
+
+        ::Games::Game::Merger.call(source: @source, target: @target)
+
+        target_link.reload
+        assert target_link.developer, "the target's own developer flag must survive"
+        assert target_link.publisher, "the source's publisher flag must not be discarded"
+        assert_equal 1, ::Games::GameCompany.where(game: @target, company: company).count
+      end
+
+      test "moves a platform link the target does not have" do
+        link = games_game_platforms(:hl2_pc)
+
+        ::Games::Game::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, link.reload.game_id
+      end
+
+      test "drops a platform link both games share" do
+        platform = games_platforms(:pc)
+        ::Games::GamePlatform.find_or_create_by!(game: @target, platform: platform)
+
+        result = ::Games::Game::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_equal 1, ::Games::GamePlatform.where(game: @target, platform: platform).count
+      end
+
+      test "repoints child games to the target instead of orphaning them" do
+        source = games_games(:resident_evil_4)
+        target = games_games(:half_life_2)
+        child = games_games(:resident_evil_4_remake)
+        RankedItem.where(item: source).destroy_all
+        RankedItem.where(item: target).destroy_all
+
+        ::Games::Game::Merger.call(source: source, target: target)
+
+        assert_equal target.id, child.reload.parent_game_id,
+          "child_games is dependent: :nullify, so doing nothing orphans the subtree"
+      end
+
+      test "nullifies rather than self-parents when the target is a child of the source" do
+        source = games_games(:resident_evil_4)
+        target = games_games(:resident_evil_4_remake)
+        RankedItem.where(item: source).destroy_all
+        RankedItem.where(item: target).destroy_all
+
+        result = ::Games::Game::Merger.call(source: source, target: target)
+
+        assert result.success?, "a game cannot be its own parent: #{result.errors.inspect}"
+        assert_nil target.reload.parent_game_id
+      end
+
       def attach_image(game, primary:)
         game.images.create!(primary: primary) do |image|
           image.file.attach(
