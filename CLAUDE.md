@@ -90,6 +90,10 @@ which takes **hours**.
   designer could change it freely, don't test it.
 - **Every new user-facing page/flow needs a Playwright E2E test** in `web-app/e2e/tests/`. Add
   `data-testid` (kebab-case) only when role/text/label can't target an element.
+- **Minitest is 6.x.** `assert_equal nil, x` is a **hard failure**, not a warning — use `assert_nil`, or
+  compare tuples (`assert_equal [a, b], [x, y]`) when the intent is "these did not change" and one of
+  them may be nil. Also gone in 6: `assert_send`, `minitest/mock` (its own gem now — we don't use it),
+  the `MiniTest` namespace, and spec expectations on `Object`.
 
 ## Frontend
 

@@ -100,6 +100,32 @@ test/
 - One assertion per test when possible
 - Setup common test data in `setup` method
 
+### Minitest 6 Assertion Rules
+
+Minitest 6 removed several APIs that fail loudly rather than silently:
+
+| Removed | Use instead |
+|---|---|
+| `assert_equal nil, x` | `assert_nil x`, or a tuple comparison |
+| `assert_send` | `assert_predicate` / `assert_operator` |
+| `require "minitest/mock"` | Mocha (already the project standard) |
+| `MiniTest::...` | `Minitest::...` |
+| spec expectations on `Object` | `_(value).must_equal` |
+
+The tuple form matters for "nothing changed" assertions, where the expected value is a variable that
+may hold nil:
+
+```ruby
+# Fails under Minitest 6 when original_country is nil -- and proved nothing anyway
+assert_equal original_country, @person.country
+
+# Expectation is an Array, never nil, and the diff names whichever attribute moved
+assert_equal [original_country, original_kind], [@person.country, @person.kind]
+```
+
+A nil-expected `assert_equal` is a vacuous assertion as much as a deprecated one — see
+"What NOT to Test" above.
+
 ## Controller Testing Best Practices
 
 Controller tests should verify that controllers handle requests correctly and return appropriate responses. **Do not test view implementation details.**
