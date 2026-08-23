@@ -47,8 +47,57 @@ module Games
 
       private
 
-      # Filled in by later tasks.
       def merge_all_associations
+        merge_identifiers
+        merge_external_links
+        merge_images
+        merge_category_items
+      end
+
+      def merge_identifiers
+        count = 0
+        source_game.identifiers.find_each do |identifier|
+          existing = target_game.identifiers.find_by(
+            identifier_type: identifier.identifier_type,
+            value: identifier.value
+          )
+
+          if existing
+            identifier.destroy!
+          else
+            identifier.update!(identifiable_id: target_game.id)
+            count += 1
+          end
+        end
+        @stats[:identifiers] = count
+      end
+
+      def merge_external_links
+        @stats[:external_links] = source_game.external_links.update_all(parent_id: target_game.id)
+      end
+
+      def merge_images
+        has_target_primary = target_game.primary_image.present?
+        count = 0
+
+        source_game.images.find_each do |image|
+          image.update!(
+            parent_id: target_game.id,
+            primary: has_target_primary ? false : image.primary
+          )
+          count += 1
+        end
+
+        @stats[:images] = count
+      end
+
+      def merge_category_items
+        count = 0
+        source_game.category_items.find_each do |category_item|
+          target_game.category_items.find_or_create_by!(category_id: category_item.category_id)
+          count += 1
+        end
+        @stats[:category_items] = count
       end
 
       def reconcile_scalars
