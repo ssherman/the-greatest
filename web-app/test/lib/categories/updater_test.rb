@@ -90,10 +90,13 @@ module Categories
       result = updater.update
 
       assert_equal "Renamed Genre", result.name
-      assert_equal "Updated description", result.description
-      assert_equal @test_category.category_type, result.category_type
-      assert_equal @test_category.import_source, result.import_source
-      assert_equal @test_category.parent, result.parent
+      # Tuple comparison: @test_category.parent is nil, so a bare
+      # `assert_equal @test_category.parent, result.parent` is vacuous and fails
+      # outright under Minitest 6.
+      assert_equal ["Updated description", @test_category.category_type,
+        @test_category.import_source, @test_category.parent],
+        [result.description, result.category_type,
+          result.import_source, result.parent]
     end
 
     test "should reset original category attributes after name change" do
