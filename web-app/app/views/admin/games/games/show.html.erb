@@ -464,9 +464,14 @@
     <h3 class="font-bold text-lg">Merge Another Game Into This One</h3>
     <p class="py-4">
       Search for a duplicate game to merge into <strong><%= @game.title %></strong>.
-      Companies, platforms, categories, identifiers, images, links, descriptions, list
-      entries, and any child games will be transferred. The source game will be
-      permanently deleted.
+      Companies, platforms, categories, identifiers, images, links, descriptions,
+      curated list entries, and any child games will be transferred.
+      Entries in users' personal saved lists move across too &mdash; but where someone
+      already has <strong><%= @game.title %></strong> saved, their entry for the
+      duplicate is removed rather than moved.
+      <strong><%= @game.title %></strong> may also gain details it was missing from
+      the duplicate, including an earlier release year.
+      The duplicate game will be permanently deleted.
     </p>
 
     <%= form_with url: execute_action_admin_games_game_path(@game),
