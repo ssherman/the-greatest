@@ -1,0 +1,43 @@
+<%
+  content_for :page_title, @query.present? ? "Search results for \"#{@query}\" | The Greatest Books" : "Search | The Greatest Books"
+%>
+
+<div class="space-y-8">
+  <div>
+    <h1 class="text-3xl sm:text-4xl font-bold text-center text-balance">
+      <% if @query.present? %>
+        Search results for "<%= @query %>"
+      <% else %>
+        Search
+      <% end %>
+    </h1>
+    <% if @books.any? %>
+      <p class="text-center text-base-content/70 mt-2">
+        Found <%= pluralize(@books.size, "book") %>
+      </p>
+    <% end %>
+  </div>
+
+  <% if @query.blank? %>
+    <div class="max-w-xl mx-auto">
+      <%= form_with url: books_search_path, method: :get, data: { turbo: false } do |f| %>
+        <div class="join w-full">
+          <%= f.search_field :q, placeholder: "Search books...", class: "input join-item flex-1",
+              autofocus: true, autocomplete: "off", "aria-label": "Search books" %>
+          <button type="submit" class="btn btn-primary join-item">Search</button>
+        </div>
+      <% end %>
+    </div>
+    <%= render Search::EmptyStateComponent.new(message: "Enter a search term to find books by title or author") %>
+
+  <% elsif @books.empty? %>
+    <%= render Search::EmptyStateComponent.new(message: "No results found for", query: @query) %>
+
+  <% else %>
+    <div class="<%= Books::CardComponent::GRID_CONTAINER_CLASS %>">
+      <% @books.each_with_index do |book, index| %>
+        <%= render Books::CardComponent.new(book: book, rank: book.ranked_position, index: index) %>
+      <% end %>
+    </div>
+  <% end %>
+</div>
