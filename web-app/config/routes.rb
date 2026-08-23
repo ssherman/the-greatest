@@ -776,6 +776,9 @@ Rails.application.routes.draw do
         resources :category_items, only: [:index, :create], controller: "/admin/category_items"
         resources :images, only: [:index, :create], controller: "/admin/images"
         resources :descriptions, only: [:index, :create], controller: "/admin/descriptions"
+        member do
+          post :execute_action
+        end
         collection do
           post :import_from_igdb
           get :igdb_search

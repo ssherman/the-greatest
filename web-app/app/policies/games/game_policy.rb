@@ -10,10 +10,11 @@ module Games
       manage?
     end
 
-    # execute_action is a shared endpoint: it carries non-destructive actions
-    # (AI descriptions, ranking refresh) as well as merges. Write access is the
-    # floor; the controller additionally requires destroy? for actions that
-    # declare themselves destructive.
+    # execute_action is a shared admin endpoint: write access is the floor to
+    # reach it at all. The controller additionally requires destroy? for any
+    # action that declares itself destructive (currently only MergeGame), so
+    # a domain-scoped editor (can_write? but not can_delete?) still cannot
+    # merge, even though this policy method returns true for them.
     def execute_action?
       global_role? || domain_role&.can_write?
     end
