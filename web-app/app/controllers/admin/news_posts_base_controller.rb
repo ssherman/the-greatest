@@ -12,6 +12,7 @@ class Admin::NewsPostsBaseController < Admin::BaseController
   # defines it 404s every other action too. Any future action must be added to
   # these lists at the same time it is defined below.
   before_action :require_domain_write!, only: [:new, :create, :edit, :update, :destroy, :preview]
+  before_action :require_domain_delete!, only: [:destroy]
   before_action :set_news_post, only: [:show, :edit, :update, :destroy]
 
   helper_method :news_posts_path_for, :news_post_path_for, :new_news_post_path_for,

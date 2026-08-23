@@ -26,6 +26,22 @@ module Admin
       redirect_to domain_root_path, alert: access_denied_message(domain)
     end
 
+    # Gate a destroying action on DELETE access to the resolved domain.
+    # require_domain_write! is not enough: can_write? is editor|moderator|admin
+    # while can_delete? is moderator|admin, so an editor passes the write guard
+    # and could remove records through a crafted request even where the UI hides
+    # the Delete control. Controllers with a Pundit layer already get this from
+    # ApplicationPolicy#destroy?, which asks can_delete?; this is the equivalent
+    # for the ones that have none.
+    def require_domain_delete!
+      return if current_user&.admin? || current_user&.editor?
+
+      domain = domain_for_auth
+      return if domain.present? && current_user&.can_delete_in_domain?(domain)
+
+      redirect_to domain_root_path, alert: access_denied_message(domain)
+    end
+
     def domain_for_auth
       parent = domain_auth_parent
       return Admin::DomainRouting.domain_for(parent)&.to_s if parent
