@@ -297,6 +297,33 @@ module Games
         assert_nil target.reload.parent_game_id
       end
 
+      test "breaks the ancestry link rather than creating a cycle when the target is a deeper descendant" do
+        source = games_games(:half_life_2)
+        RankedItem.where(item: source).destroy_all
+
+        middle = ::Games::Game.create!(
+          title: "Half-Life 2: Middle Edition",
+          slug: "half-life-2-middle-edition",
+          release_year: 2005,
+          game_type: :remake,
+          parent_game: source
+        )
+        target = ::Games::Game.create!(
+          title: "Half-Life 2: Middle Edition Remastered",
+          slug: "half-life-2-middle-edition-remastered",
+          release_year: 2006,
+          game_type: :remaster,
+          parent_game: middle
+        )
+
+        result = ::Games::Game::Merger.call(source: source, target: target)
+
+        assert result.success?, "merge must succeed: #{result.errors.inspect}"
+        assert_equal target.id, middle.reload.parent_game_id
+        assert_nil target.reload.parent_game_id,
+          "target's ancestry ran through the source, which is about to be destroyed"
+      end
+
       test "fills a blank description from the source" do
         @source.update!(description: "A source blurb")
         @target.update!(description: nil)

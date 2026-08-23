@@ -205,12 +205,22 @@ module Games
 
       # child_games is dependent: :nullify, so leaving these alone orphans the whole
       # subtree when the source is destroyed. The target itself cannot become its own
-      # parent, so it is nullified instead.
+      # parent, so it is nullified instead. This also covers a target that is a
+      # *deeper* descendant of the source (source -> C -> target): target's ancestry
+      # runs through the source, which is about to be destroyed, so it is meaningless
+      # after the merge either way. Breaking that edge is what prevents a cycle when
+      # the source's direct children (including C) are repointed to the target below.
       def merge_child_games
-        children = ::Games::Game.where(parent_game_id: source_game.id)
+        target_was_descendant = descendant_of?(target_game.id, source_game.id)
+        if target_was_descendant
+          ::Games::Game.where(id: target_game.id).update_all(parent_game_id: nil)
+        end
 
-        children.where(id: target_game.id).update_all(parent_game_id: nil)
-        count = children.where.not(id: target_game.id).update_all(parent_game_id: target_game.id)
+        # By this point target_game's own parent_game_id (if it ran through the
+        # source at all) has already been nilled above, so it can never match
+        # parent_game_id: source_game.id here and be repointed to itself.
+        count = ::Games::Game.where(parent_game_id: source_game.id)
+          .update_all(parent_game_id: target_game.id)
 
         # Safe to discard target_game's in-memory state here ONLY because:
         # (1) merge_child_games runs last in merge_all_associations, so no earlier
@@ -219,7 +229,7 @@ module Games
         #     merge_all_associations, not before. Moving this call earlier, or
         #     adding a scalar fill inside any merge_* method, would make this
         #     reload silently discard that change.
-        target_game.reload if target_game.parent_game_id == source_game.id
+        target_game.reload if target_was_descendant
         @stats[:child_games] = count
       end
 
@@ -274,11 +284,18 @@ module Games
       end
 
       def descendant_of_target?(game_id)
+        descendant_of?(game_id, target_game.id)
+      end
+
+      # Walks up parent_game_id from game_id looking for ancestor_id. The Set guard
+      # is load-bearing: it terminates the walk even against data that is already
+      # cyclic, rather than looping forever.
+      def descendant_of?(game_id, ancestor_id)
         seen = Set.new
         current = game_id
 
         while current.present? && seen.add?(current)
-          return true if current == target_game.id
+          return true if current == ancestor_id
           current = ::Games::Game.where(id: current).pick(:parent_game_id)
         end
 
