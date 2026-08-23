@@ -203,9 +203,10 @@ Currently carries **no** minitest-version or Sidekiq guidance, so these are addi
       162678 assertions, 0 failures, 0 errors, 0 skips`
 - [x] `bundle exec standardrb` clean — measured: exit 0, no offenses
 - [x] `Gemfile.lock` shows `minitest (6.0.6)`, and no `ruby_llm-schema` or `schematist`
-- [x] Warning lines per full run drop from ~190 to **102** (34 `weighted_list_rank` + 67 npm/yarn), not
-      the planned ~47 — the plan's original inventory only tallied the narrow "Unknown env config" /
-      "package-lock.json found" subset (~13); Step 3's broader residual filter also catches the rest
+- [x] Warning lines per full run drop from ~190 to **102** (34 `weighted_list_rank` + 67 npm/yarn + 1
+      Minitest banner), not the planned ~47 — the plan's original inventory only tallied the narrow
+      "Unknown env config" / "package-lock.json found" subset (~13); Step 3's broader residual filter
+      also catches the rest
       of `test:prepare`'s yarn/rollup/tailwindcss/daisyUI build output, including lines where a raw
       ANSI escape code lands on its own line after filtering. Every remaining line is either
       `weighted_list_rank`, npm/yarn/build output, or Minitest 6's own non-warning parallel-worker

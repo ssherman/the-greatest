@@ -56,13 +56,16 @@ module Music
         # The badge still renders here: show_rank? is `ranked_item.present?`, not
         # `ranked_item.rank.present?`, so a rankless ranked_item produces a badge
         # containing a bare "#". Asserted as-is rather than as desired behaviour --
-        # changing the component is not part of this work.
+        # changing the component is not part of this work. Anchored so an emptied-out
+        # badge (e.g. the rank interpolation deleted) can't slip past; normalize_ws is
+        # required because default_normalize_ws is false and the badge's raw text
+        # carries newlines/indentation around the "#".
         render_inline(Music::Albums::CardComponent.new(
           ranked_item: ranked_items(:music_albums_unranked_item)
         ))
 
         assert_selector "h2.card-title", text: music_albums(:animals).title
-        assert_selector ".badge-primary"
+        assert_selector ".badge-primary", text: /\A#\z/, normalize_ws: true
       end
     end
   end

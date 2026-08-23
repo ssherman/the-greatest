@@ -81,8 +81,9 @@ which takes **hours**.
 - **AI response schemas are `OpenAI::BaseModel` subclasses.** `to_json_schema` is a **class** method —
   `schema.new.to_json_schema` raises `NoMethodError`. There is no `RubyLLM::Schema` in this app.
 - **Build OpenSearch clients through `Search::Shared::Client.instance`**, never `OpenSearch::Client.new`.
-  It carries the serializer that avoids multi_json's deprecated API; three drifted copies are how that
-  warning got three times louder than it needed to be.
+  It carries the serializer that avoids multi_json's deprecated API; the serializer only needs
+  configuring in one place, and the three separately-constructed clients this replaced (`Search::Base::Index`,
+  `Search::Base::Search`, and the shared client) were three places that had to be kept in sync.
 
 ## Testing (Minitest + fixtures + Mocha)
 
