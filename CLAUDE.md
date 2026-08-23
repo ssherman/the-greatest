@@ -133,6 +133,22 @@ link off-page, and opt pagination back in with
 `target: "_top"` releases **forms** inside the frame as well as links; a form that must update the
 frame in place needs `data: {turbo_frame: "<frame_id>"}`. The guard checks anchors only.
 
+## Specs and planning
+
+**Use the superpowers defaults. Specs go in `docs/superpowers/specs/`**, named
+`YYYY-MM-DD-<topic>-design.md`. Plan non-trivial work there via the `superpowers:brainstorming` →
+`superpowers:writing-plans` flow. That is the only live spec location.
+
+**`docs/specs/` and `docs/spec-instructions.md` are the OLD way and are archived data.** They
+describe a numbered-spec workflow (`060-album-merge-feature.md`, a `templates/` dir, a `completed/`
+dir) that this project no longer follows. Read them for historical context on shipped features —
+never add to them, never follow their instructions, and do not treat `docs/spec-instructions.md` as
+current guidance. It still says to create specs in `docs/specs/`; that instruction is dead.
+
+This note exists because the previous wording here actively told agents to plan in `docs/specs/`,
+and CLAUDE.md overrides skill defaults — so every agent correctly obeyed it and put specs in the
+wrong place.
+
 ## Deeper docs
 
 - `docs/dev-core-values.md` — full development principles
@@ -140,5 +156,4 @@ frame in place needs `data: {turbo_frame: "<frame_id>"}`. The guard checks ancho
 - `docs/summary.md` — architecture & goals · `docs/dev_setup.md` — local setup
 - `docs/features/` — feature docs (data_importers, authentication, rankings, search,
   saved_searches, ...)
-- `docs/documentation.md` & `docs/spec-instructions.md` — docs/spec workflow (every model/service
-  gets a doc in `docs/`; plan non-trivial work in `docs/specs/`)
+- `docs/documentation.md` — every model/service gets a doc in `docs/`
