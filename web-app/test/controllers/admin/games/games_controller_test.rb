@@ -298,6 +298,24 @@ module Admin
         assert_not ::Games::Game.exists?(source.id)
       end
 
+      test "merge via turbo_stream replaces the flash target and still performs the merge" do
+        sign_in_as(@admin_user, stub_auth: true)
+        source = games_games(:half_life_2)
+        RankedItem.where(item: source).destroy_all
+        RankedItem.where(item: @game).destroy_all
+
+        post execute_action_admin_games_game_path(@game), params: {
+          action_name: "MergeGame",
+          source_game_id: source.id.to_s,
+          confirm_merge: "1"
+        }, as: :turbo_stream
+
+        assert_response :success
+        assert_match(/turbo-stream/, response.content_type)
+        assert_includes response.body, 'target="flash"'
+        assert_not ::Games::Game.exists?(source.id)
+      end
+
       test "a domain editor cannot merge" do
         sign_in_as(users(:games_editor_user), stub_auth: true)
         source = games_games(:half_life_2)
