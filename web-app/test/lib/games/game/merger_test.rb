@@ -64,8 +64,9 @@ module Games
         Identifier.create!(identifiable: @source, identifier_type: :games_igdb_id, value: "222")
         Identifier.create!(identifiable: @target, identifier_type: :games_igdb_id, value: "222")
 
-        ::Games::Game::Merger.call(source: @source, target: @target)
+        result = ::Games::Game::Merger.call(source: @source, target: @target)
 
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
         assert_equal 1, Identifier.where(
           identifiable: @target, identifier_type: :games_igdb_id, value: "222"
         ).count
@@ -99,8 +100,9 @@ module Games
       test "keeps a moved image primary when the target has none" do
         source_image = attach_image(@source, primary: true)
 
-        ::Games::Game::Merger.call(source: @source, target: @target)
+        result = ::Games::Game::Merger.call(source: @source, target: @target)
 
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
         assert source_image.reload.primary
       end
 
@@ -118,8 +120,9 @@ module Games
         CategoryItem.create!(category: category, item: @source)
         CategoryItem.create!(category: category, item: @target)
 
-        ::Games::Game::Merger.call(source: @source, target: @target)
+        result = ::Games::Game::Merger.call(source: @source, target: @target)
 
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
         assert_equal 1, CategoryItem.where(category: category, item: @target).count
       end
 
