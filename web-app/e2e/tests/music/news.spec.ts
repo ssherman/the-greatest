@@ -46,6 +46,19 @@ test.describe("Music news", () => {
     await sweepByPrefix(page, "/admin/news_posts", E2E_PREFIX);
   });
 
+  // The link a reader actually uses. Scoped to .navbar-center (the desktop bar)
+  // because the mobile dropdown holds a second copy that is `lg:hidden` at
+  // Playwright"s default 1280px viewport, and clicking a hidden element hangs
+  // rather than fails clearly.
+  test("the top nav links to the news section", async ({ page }) => {
+    await page.goto("/");
+
+    await page.locator(".navbar-center").getByRole("link", { name: "News", exact: true }).click();
+
+    await expect(page).toHaveURL(/\/news$/);
+    await expect(page.getByRole("heading", { name: "News", level: 1 })).toBeVisible();
+  });
+
   test("the index loads and renders the heading", async ({ page }) => {
     const response = await page.goto("/news");
 

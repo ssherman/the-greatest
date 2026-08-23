@@ -45,6 +45,7 @@
           <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
             <li><%= link_to "Games", "/" %></li>
             <li><%= link_to "Lists", games_lists_path %></li>
+            <li><%= link_to "News", news_path %></li>
             <%# Revealed client-side by user_list_state_controller when signed in. %>
             <li id="navbar_my_lists" class="hidden"><a href="/my/lists">My Lists</a></li>
             <%# Revealed client-side by membership_state_controller when the visitor is a member. %>
@@ -61,6 +62,7 @@
         <ul class="menu menu-horizontal px-1">
           <li><%= link_to "Games", "/" %></li>
           <li><%= link_to "Lists", games_lists_path %></li>
+          <li><%= link_to "News", news_path %></li>
           <%# Revealed client-side by user_list_state_controller when signed in. %>
           <li id="navbar_my_lists" class="hidden"><a href="/my/lists">My Lists</a></li>
           <%# Revealed client-side by membership_state_controller when the visitor is a member. %>
