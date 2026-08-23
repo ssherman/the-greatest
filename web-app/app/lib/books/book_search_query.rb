@@ -25,23 +25,33 @@ module Books
     # The join is written out rather than using `includes(:primary_ranked_item)`
     # because the rank has to come from the default primary specifically, and a
     # LEFT JOIN keeps unranked matches in the result set.
+    #
+    # With no default primary configuration there is no rank to report, but the
+    # matches are still matches: the column is selected as NULL so every caller
+    # can read `ranked_position` unconditionally. Returning early here instead
+    # would turn a recoverable metadata gap into a search that finds nothing.
     def self.hydrate(ids)
       return [] if ids.empty?
 
       rc = ::Books::RankingConfiguration.default_primary
-      return [] if rc.nil?
 
-      books = ::Books::Book
+      scope = ::Books::Book
         .where(id: ids)
-        .select("books_books.*, ranked_items.rank AS ranked_position")
-        .joins(
-          "LEFT OUTER JOIN ranked_items ON ranked_items.item_id = books_books.id " \
-          "AND ranked_items.item_type = 'Books::Book' " \
-          "AND ranked_items.ranking_configuration_id = #{rc.id.to_i}"
-        )
         .preload(book_authors: :author, primary_image: {file_attachment: :blob})
-        .index_by(&:id)
 
+      scope = if rc
+        scope
+          .select("books_books.*, ranked_items.rank AS ranked_position")
+          .joins(
+            "LEFT OUTER JOIN ranked_items ON ranked_items.item_id = books_books.id " \
+            "AND ranked_items.item_type = 'Books::Book' " \
+            "AND ranked_items.ranking_configuration_id = #{rc.id.to_i}"
+          )
+      else
+        scope.select("books_books.*, NULL::integer AS ranked_position")
+      end
+
+      books = scope.index_by(&:id)
       ids.filter_map { |id| books[id] }
     end
 

@@ -91,6 +91,20 @@ module Books
       assert_nil ::Books::BookSearchQuery.call("war").first.ranked_position
     end
 
+    # Rank is supplemental card metadata, so losing the ranking configuration
+    # must cost the badge and nothing else. Guarding this path by returning
+    # early turns a recoverable data gap into a search page that finds nothing.
+    test "still returns matches when there is no default primary configuration" do
+      ranking_configurations(:books_global).update!(primary: false)
+      assert_nil ::Books::RankingConfiguration.default_primary, "fixture setup no longer clears the default primary"
+      stub_search(@book_a, @book_b)
+
+      books = ::Books::BookSearchQuery.call("x")
+
+      assert_equal [@book_a.id, @book_b.id], books.map(&:id)
+      assert_nil books.first.ranked_position
+    end
+
     test "asks OpenSearch for the requested number of results" do
       ::Search::Books::Search::BookGeneral.expects(:call).with("war", size: 50).returns([])
       ::Books::BookSearchQuery.call("war")
