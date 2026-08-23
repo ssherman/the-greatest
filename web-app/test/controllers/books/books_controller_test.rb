@@ -186,6 +186,165 @@ module Books
       assert_select "#review_summary_line [data-testid='review-summary-line']"
     end
 
+    # --- Author, category and country links, and the details card ---
+
+    test "the author name links to the author page" do
+      get "/book/#{@book.slug}"
+
+      assert_select "a[href=?]", "/author/leo-tolstoy", text: "Leo Tolstoy"
+    end
+
+    test "the author link carries the ranking configuration prefix" do
+      rc = ranking_configurations(:books_inherited)
+
+      get "/rc/#{rc.id}/book/#{@book.slug}"
+
+      assert_select "a[href=?]", "/rc/#{rc.id}/author/leo-tolstoy"
+    end
+
+    test "each category links to that category's filtered list" do
+      get "/book/#{@book.slug}"
+
+      assert_select "a[href=?]", "/the-greatest/classics/books", text: "Classics"
+      assert_select "a[href=?]", "/the-greatest/novels/books", text: "Novels"
+    end
+
+    # A location category routes through the same grammar as a genre -- the filter
+    # params resolve any active Books::Category by slug, with no type restriction.
+    test "a location category links through the same filter grammar as a genre" do
+      CategoryItem.create!(category: categories(:books_france_location), item: @book)
+
+      get "/book/#{@book.slug}"
+
+      assert_select "a[href=?]", "/the-greatest/france/books", text: "France"
+    end
+
+    test "category links carry the ranking configuration prefix" do
+      rc = ranking_configurations(:books_inherited)
+
+      get "/rc/#{rc.id}/book/#{@book.slug}"
+
+      assert_select "a[href=?]", "/rc/#{rc.id}/the-greatest/novels/books"
+    end
+
+    # Asserted on the assigned order and on the group's data-category-type, never on
+    # the heading copy: "Locations" is a display string a designer may freely change
+    # (the browse pages already call the same axis "Book Settings"), whereas the
+    # order of the types is the behaviour this controller decides.
+    test "groups the categories genre, then subject, then location" do
+      CategoryItem.create!(category: categories(:books_france_location), item: @book)
+      CategoryItem.create!(category: categories(:books_politics_subject), item: @book)
+
+      get "/book/#{@book.slug}"
+
+      assert_equal %w[genre subject location],
+        @controller.view_assigns["categories_by_type"].map(&:first)
+    end
+
+    test "renders the category groups in the order the controller assigned" do
+      CategoryItem.create!(category: categories(:books_france_location), item: @book)
+      CategoryItem.create!(category: categories(:books_politics_subject), item: @book)
+
+      get "/book/#{@book.slug}"
+
+      assert_equal %w[genre subject location],
+        css_select("[data-category-type]").map { |group| group["data-category-type"] }
+    end
+
+    test "sorts the categories by name within a group" do
+      # Created last, so its id sorts after both fixture genres. The two fixtures
+      # already come back from the database in name order, so without a row whose
+      # id order and name order disagree this assertion passes whether or not the
+      # sort exists.
+      adventure = Books::Category.create!(name: "Adventure", category_type: :genre)
+      CategoryItem.create!(category: adventure, item: @book)
+
+      get "/book/#{@book.slug}"
+
+      assert_equal ["Adventure", "Classics", "Novels"],
+        @controller.view_assigns["categories_by_type"].first.last.map(&:name)
+    end
+
+    test "renders the details a book has values for" do
+      # page_range drives book_length through the model's derive callback, so this
+      # sets both.
+      @book.update!(page_range: "1200-1300")
+
+      get "/book/#{@book.slug}"
+
+      assert_equal "1869", detail_value("published")
+      assert_equal "French", detail_value("origin")
+      assert_equal "Very Long", detail_value("length")
+      assert_equal "1200-1300", detail_value("pages")
+      assert_equal "Russian", detail_value("original-language")
+      assert_equal "Voyna i mir", detail_value("alternate-titles")
+    end
+
+    test "the origin links to the country-filtered list" do
+      get "/book/#{@book.slug}"
+
+      assert_select "[data-testid='detail-origin'] a[href=?]",
+        "/the-greatest-books/written-by/french/authors", text: "French"
+    end
+
+    # Books::Country.filterable hides the Unknown row from /countries, so linking it
+    # here would route readers into a page the site otherwise conceals. 27% of the
+    # corpus sits on that row.
+    test "omits an unknown origin rather than linking it" do
+      book = books_books(:got)
+      book.book_countries.destroy_all
+      Books::BookCountry.create!(book: book, country: books_countries(:unknown))
+
+      get "/book/#{book.slug}"
+
+      assert_response :success
+      assert_select "[data-testid='detail-origin']", 0
+    end
+
+    test "omits a detail row the book has no value for" do
+      get "/book/#{@book.slug}"
+
+      assert_select "[data-testid='detail-published']", 1
+      assert_select "[data-testid='detail-pages']", 0
+      assert_select "[data-testid='detail-length']", 0
+    end
+
+    test "renders no details card at all for a book with no metadata" do
+      book = Books::Book.create!(title: "A Book With Nothing Known About It")
+
+      get "/book/#{book.slug}"
+
+      assert_response :success
+      assert_select "[data-testid='book-details']", 0
+    end
+
+    test "shows every alternate title inline when there are five or fewer" do
+      @book.update!(alternate_titles: ["Voyna i mir", "La Guerre et la Paix"])
+
+      get "/book/#{@book.slug}"
+
+      assert_equal ["La Guerre et la Paix", "Voyna i mir"],
+        css_select("[data-testid='alternate-titles-visible'] li").map { |item| item.text.strip }
+      assert_select "[data-testid='alternate-titles-rest']", 0
+    end
+
+    test "hides alternate titles past the fifth behind an expander" do
+      @book.update!(alternate_titles: %w[Golf Foxtrot Echo Delta Charlie Bravo Alpha])
+
+      get "/book/#{@book.slug}"
+
+      assert_equal %w[Alpha Bravo Charlie Delta Echo],
+        css_select("[data-testid='alternate-titles-visible'] li").map { |item| item.text.strip }
+      assert_equal %w[Foxtrot Golf],
+        css_select("[data-testid='alternate-titles-rest'] li").map { |item| item.text.strip }
+    end
+
+    # Deliberately not declared `private`, for the same reason count_queries below
+    # is not.
+    def detail_value(key)
+      css_select("[data-testid='detail-#{key}'] dd").map { |value| value.text.strip }.first
+    end
+
     # Deliberately not declared `private`. Minitest only collects public `test_`
     # methods, so a `private` keyword here would silently stop every test defined
     # after it in the file from running.

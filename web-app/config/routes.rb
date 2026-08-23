@@ -564,6 +564,10 @@ Rails.application.routes.draw do
     get "authors/:id/all_books", to: "books/legacy_authors#show", constraints: {id: /\d+/}
     get "authors/:id", to: "books/legacy_authors#show", constraints: {id: /\d+/}
 
+    # Site search. Declared above the legacy collection catch-alls further down
+    # so a future collection slug cannot swallow it.
+    get "search", to: "books/searches#index", as: :books_search
+
     get "lists", to: "books/lists#index", as: :books_lists
     get "lists/page/:page", to: "books/lists#index", as: :books_lists_page, constraints: {page: /\d+/}
     get "lists/:id", to: "books/lists#show", as: :books_list, constraints: {id: /\d+/}

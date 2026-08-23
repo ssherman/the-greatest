@@ -1,0 +1,109 @@
+<%
+  # The "Unknown" country is excluded rather than rendered: Books::Country.filterable
+  # keeps that row off /countries, so linking it here would route readers into a page
+  # the site otherwise conceals -- and 27% of the corpus sits on it.
+  origin_countries = book.countries.reject { |country| country.slug == "unknown" }.sort_by(&:name)
+  alternate_titles = book.alternate_titles.compact_blank.sort
+
+  # Rows with no value are omitted rather than printed as "Unknown" the way the
+  # legacy site did: only 67-87% of books carry any given field, and a card reading
+  # "Unknown" six times over is noise on tens of thousands of pages. When nothing at
+  # all is known, the card itself does not render.
+  rows = {
+    "published" => book.first_published_year.presence,
+    "origin" => origin_countries.presence,
+    "length" => book.book_length.presence,
+    "pages" => book.page_range.presence,
+    "original-language" => book.original_language,
+    "alternate-titles" => alternate_titles.presence
+  }.compact
+
+  row_class = "sm:grid sm:grid-cols-[10rem_1fr] sm:gap-4"
+  label_class = "text-sm font-semibold text-base-content/70 uppercase sm:normal-case sm:text-base sm:font-semibold"
+%>
+
+<% if rows.any? %>
+  <div class="card bg-base-100 shadow-md" data-testid="book-details">
+    <div class="card-body">
+      <h2 class="card-title text-xl">Details</h2>
+      <dl class="mt-2 space-y-3">
+        <% if rows.key?("published") %>
+          <div class="<%= row_class %>" data-testid="detail-published">
+            <dt class="<%= label_class %>">Published</dt>
+            <dd><%= rows["published"] %></dd>
+          </div>
+        <% end %>
+
+        <% if rows.key?("origin") %>
+          <div class="<%= row_class %>" data-testid="detail-origin">
+            <dt class="<%= label_class %>">Origin</dt>
+            <dd>
+              <%# A persistent underline, not link-hover: this value sits directly
+                  above "Original language", which for many books renders the very
+                  same word as plain text. With link-hover the two are identical --
+                  same colour, same weight, no underline -- so nothing marks one as
+                  clickable until the pointer is already on it, and a colour-only
+                  cue would not carry for a colour-blind reader either. %>
+              <%= safe_join(rows["origin"].map { |country|
+                    link_to country.name,
+                      Books::FilterPath.call(countries: [country], ranking_configuration: ranking_configuration),
+                      class: "link"
+                  }, ", ") %>
+            </dd>
+          </div>
+        <% end %>
+
+        <% if rows.key?("length") %>
+          <div class="<%= row_class %>" data-testid="detail-length">
+            <dt class="<%= label_class %>">Length</dt>
+            <dd><%= rows["length"].titleize %></dd>
+          </div>
+        <% end %>
+
+        <% if rows.key?("pages") %>
+          <div class="<%= row_class %>" data-testid="detail-pages">
+            <dt class="<%= label_class %>">Pages</dt>
+            <dd><%= rows["pages"] %></dd>
+          </div>
+        <% end %>
+
+        <% if rows.key?("original-language") %>
+          <div class="<%= row_class %>" data-testid="detail-original-language">
+            <dt class="<%= label_class %>">Original language</dt>
+            <dd><%= rows["original-language"].name %></dd>
+          </div>
+        <% end %>
+
+        <% if rows.key?("alternate-titles") %>
+          <% titles = rows["alternate-titles"] %>
+          <div class="<%= row_class %>" data-testid="detail-alternate-titles">
+            <dt class="<%= label_class %>">Alternate titles</dt>
+            <%# overflow-wrap:anywhere, not break-words: a single long unbroken token
+                otherwise makes the whole page scroll sideways. %>
+            <dd class="[overflow-wrap:anywhere]">
+              <ul data-testid="alternate-titles-visible">
+                <% titles.first(5).each do |title| %>
+                  <li><%= title %></li>
+                <% end %>
+              </ul>
+              <%# A native disclosure, so the long tail costs no JavaScript. Only ~1,000
+                  books carry more than five titles; the most carries 66. %>
+              <% if titles.size > 5 %>
+                <details class="mt-1">
+                  <summary class="cursor-pointer link link-hover text-sm">
+                    Show <%= pluralize(titles.size - 5, "more title") %>
+                  </summary>
+                  <ul class="mt-1" data-testid="alternate-titles-rest">
+                    <% titles.drop(5).each do |title| %>
+                      <li><%= title %></li>
+                    <% end %>
+                  </ul>
+                </details>
+              <% end %>
+            </dd>
+          </div>
+        <% end %>
+      </dl>
+    </div>
+  </div>
+<% end %>

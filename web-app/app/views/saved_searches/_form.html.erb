@@ -6,7 +6,7 @@
   # reads (params.require(:saved_search)) and the same key the criteria
   # partial's hardcoded book_length check_box_tag already uses.
 %>
-<%= form_with model: search, url: url, scope: :saved_search, class: "space-y-6" do |f| %>
+<%= form_with model: search, url: url, scope: :saved_search, id: "saved-search-form", class: "space-y-6" do |f| %>
   <% if search.errors.any? %>
     <div class="alert alert-error" role="alert">
       <ul class="list-disc list-inside">
