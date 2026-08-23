@@ -79,6 +79,9 @@ app/lib/search/
       author_general.rb
       book_autocomplete.rb
 
+app/lib/books/
+  book_search_query.rb           # Public site search: BookGeneral + hydration + rank
+
 app/models/
   concerns/search_indexable.rb   # AR concern: after_commit hooks for index queue
   search_index_request.rb        # Polymorphic queue table model
@@ -330,6 +333,27 @@ records_by_id = Model.where(id: ids).includes(...).index_by(&:id)
 ids.map { |id| records_by_id[id] }.compact
 ```
 
+**Books**: `app/controllers/books/searches_controller.rb`
+**Route**: `GET /search` (books domain, behind `DomainConstraint`), named `books_search`
+
+Single query type (BookGeneral, `size: 50`), but the hydration lives in a query
+object rather than a private controller method: `Books::BookSearchQuery`
+(`app/lib/books/book_search_query.rb`), alongside the domain's other query
+objects. It differs from the games/music snippet above in one way -- it
+LEFT JOINs `ranked_items` for the default primary ranking configuration and
+exposes the rank as `ranked_position`, so `Books::CardComponent` renders the
+same `#N` badge it does on the homepage. Unranked matches keep their place in
+relevance order and simply render without a badge.
+
+Two behaviours inherited from `BookGeneral`: results are filtered to
+`book_kind: "standalone"` (anthology/omnibus records stay out), and `min_score: 1`
+drops weak matches.
+
+All three controllers `include Cacheable` and `before_action :prevent_caching`.
+On books, `@indexable` is additionally left unset so `books_robots_content`
+emits `noindex, follow`: the page is keyed on visitor-supplied text, so an
+indexable variant is unbounded.
+
 ### Admin Autocomplete
 
 Admin controllers (e.g., `Admin::Music::ArtistsController#search`) expose `GET /admin/artists/search?q=...` returning JSON `[{value: id, text: name}]` for select widget autocomplete.
@@ -368,6 +392,19 @@ Three sections rendered conditionally (artists grid, albums grid, songs table), 
 **Games**: `app/views/games/searches/index.html.erb`
 
 Single section: games card grid using `Games::CardComponent`, plus shared `Search::EmptyStateComponent`.
+
+**Books**: `app/views/books/searches/index.html.erb`
+
+Single section: book card grid using `Books::CardComponent` and its
+`GRID_CONTAINER_CLASS`, so the results grid is identical to the homepage's.
+Shared `Search::EmptyStateComponent` covers both the blank-query prompt and the
+no-results case. Top 50, no pagination -- same as games and music.
+
+Every domain layout carries the search box in `navbar-end` (a magnifier icon on
+mobile, an input on desktop, `data: {turbo: false}`). On books the input echoes
+`params[:q]` only when `request.path` is the search page: `/lists` takes its own
+`q` for list search, and without that guard a list query would surface in the
+global box.
 
 ## Rake Tasks
 
@@ -411,3 +448,10 @@ To add search for a new domain (e.g., games public search):
 6. **Controller**: Create `{Domain}::SearchesController` with hydration logic
 7. **Views**: Search results page + ViewComponents for result cards
 8. **Routes**: Add search route within the domain constraint
+9. **Layout**: Add the search box to the domain layout's `navbar-end` (mobile
+   icon + desktop input). Note this puts a `<form>` ahead of the page's own in
+   the DOM -- a test that reaches for `at_css("form")` will start picking up the
+   nav form instead (this is why the saved-search form carries
+   `id="saved-search-form"`).
+10. **E2E**: Add a Playwright spec under `e2e/tests/{domain}/search.spec.ts` --
+    CI does not run these, so they are the only guard on the rendered page

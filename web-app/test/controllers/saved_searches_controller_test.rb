@@ -509,7 +509,7 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     get new_saved_search_path
     assert_response :success
 
-    form = Nokogiri::HTML5.fragment(response.body).at_css("form")
+    form = Nokogiri::HTML5.fragment(response.body).at_css("form#saved-search-form")
     action = form["action"]
 
     name_field = form.at_css("input[name$='[name]']")
@@ -554,8 +554,11 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
   # and returns them as the nested params hash a real submit would send. Tests
   # that build their params by hand cannot catch a control that is MISSING from
   # the form, which is the exact defect this section guards against.
+  # Selected by id, not by being the first form on the page: every domain
+  # layout carries a navbar search form ahead of the yield, so `at_css("form")`
+  # picks that one up instead.
   def submitted_criteria(html)
-    form = Nokogiri::HTML5.fragment(html).at_css("form")
+    form = Nokogiri::HTML5.fragment(html).at_css("form#saved-search-form")
     pairs = form.css("[name^='saved_search[criteria]']").flat_map do |node|
       case node.name
       when "select"
