@@ -16,9 +16,11 @@ module Music
       global_role? || domain_role&.can_delete?
     end
 
-    # Allow execute_action (custom admin actions) for editors and above
+    # Gated on can_delete?, not can_write?: execute_action routes merges, which
+    # destroy the source record. A domain editor could otherwise delete a record
+    # they are not permitted to delete.
     def execute_action?
-      global_role? || domain_role&.can_write?
+      global_role? || domain_role&.can_delete?
     end
 
     class Scope < ApplicationPolicy::Scope

@@ -34,3 +34,15 @@ games_viewer:
   user: contractor_user
   domain: 1  # games
   permission_level: 0  # viewer
+
+# Domain-scoped games editor: can_write? but NOT can_delete?
+games_editor:
+  user: games_editor_user
+  domain: 1  # games
+  permission_level: 1  # editor
+
+# Domain-scoped games moderator: can_delete?
+games_moderator:
+  user: games_moderator_user
+  domain: 1  # games
+  permission_level: 2  # moderator
