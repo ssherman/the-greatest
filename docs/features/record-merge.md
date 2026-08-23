@@ -95,9 +95,13 @@ So `#run_post_commit_steps` wraps both calls in their own rescue, separate from 
 rescue ladder (which still guards the transaction itself, and is unchanged). A post-commit failure
 is logged via `Rails.logger.error` and recorded in `stats[:post_commit_error]`; it does **not**
 flip `success?` to `false` or populate `errors`. This is a deliberate divergence from the three
-music mergers, which have no equivalent guard — their post-commit steps predate this failure mode
-being reachable, since before this increment `reindex_target_game` and
-`schedule_ranking_recalculation` were empty no-ops that could never raise.
+music mergers, which have no equivalent guard today: `reindex_target_album`/`reindex_target_artist`
+and `schedule_ranking_recalculation` in `Music::{Album,Artist,Song}::Merger` already do real I/O
+(`SearchIndexRequest.create!`, `perform_async`/`perform_in`) inside `call`'s own rescue ladder, so a
+Redis or database blip there reports `success?: false` for a merge that already committed — the
+same failure mode this games merger closes. That defect is live in music today; fixing it is a known
+follow-up, deliberately out of scope here — this branch scoped music to the authorization change
+only (see "Merge requires delete permission" in the design doc).
 
 ## Games-specific rules
 
