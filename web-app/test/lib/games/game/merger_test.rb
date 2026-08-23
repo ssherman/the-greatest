@@ -353,6 +353,60 @@ module Games
         assert_nil target.reload.parent_game_id
       end
 
+      test "queues the target for reindexing" do
+        neutralize_release_year_confound
+
+        result = ::Games::Game::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert SearchIndexRequest.exists?(
+          parent_type: "Games::Game", parent_id: @target.id, action: "index_item"
+        )
+      end
+
+      test "does not queue indexing while migration suppression is on" do
+        neutralize_release_year_confound
+        Services::BooksMigration.stubs(:search_indexing_suppressed?).returns(true)
+
+        result = ::Games::Game::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_not SearchIndexRequest.exists?(
+          parent_type: "Games::Game", parent_id: @target.id, action: "index_item"
+        )
+      end
+
+      test "schedules recalculation for every affected ranking configuration" do
+        config = ranking_configurations(:games_global)
+        RankedItem.create!(item: @source, ranking_configuration: config, rank: 5, score: 10)
+
+        BulkCalculateWeightsJob.expects(:perform_async).with(config.id)
+        CalculateRankingsJob.expects(:perform_in).with(5.minutes, config.id)
+
+        result = ::Games::Game::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+      end
+
+      test "schedules nothing when neither game is ranked" do
+        BulkCalculateWeightsJob.expects(:perform_async).never
+        CalculateRankingsJob.expects(:perform_in).never
+
+        result = ::Games::Game::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+      end
+
+      # Give the target the same release_year as the source (via update_all, which
+      # skips callbacks) so reconcile_scalars leaves target_game unchanged. Otherwise
+      # merge_release_year's own target_game.save! fires SearchIndexable's after_commit
+      # callback and creates the very index_item row these two tests are trying to
+      # attribute to reindex_target_game, passing even with that method stubbed empty.
+      def neutralize_release_year_confound
+        ::Games::Game.where(id: @target.id).update_all(release_year: @source.release_year)
+        @target.reload
+      end
+
       def attach_image(game, primary:)
         game.images.create!(primary: primary) do |image|
           image.file.attach(

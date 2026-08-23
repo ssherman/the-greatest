@@ -284,12 +284,27 @@ module Games
       end
 
       def collect_affected_ranking_configurations
+        source_configs = RankedItem.where(item_type: "Games::Game", item_id: source_game.id)
+          .pluck(:ranking_configuration_id)
+        target_configs = RankedItem.where(item_type: "Games::Game", item_id: target_game.id)
+          .pluck(:ranking_configuration_id)
+
+        @affected_ranking_configurations = (source_configs + target_configs).uniq
       end
 
+      # SearchIndexable already respects this flag on its own callbacks; the merger
+      # matches it rather than writing requests during a bulk migration.
       def reindex_target_game
+        return if Services::BooksMigration.search_indexing_suppressed?
+
+        SearchIndexRequest.create!(parent: target_game, action: :index_item)
       end
 
       def schedule_ranking_recalculation
+        @affected_ranking_configurations.each do |config_id|
+          BulkCalculateWeightsJob.perform_async(config_id)
+          CalculateRankingsJob.perform_in(5.minutes, config_id)
+        end
       end
 
       def destroy_source_game
