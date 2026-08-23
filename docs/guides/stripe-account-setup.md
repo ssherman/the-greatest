@@ -506,7 +506,20 @@ comma-separated `STRIPE_WEBHOOK_SECRET` from step 2:
 | A real sandbox purchase, end to end | Using **sandbox** keys, not live: sign in, `/membership` → checkout → complete a card on `checkout.stripe.com` → land on `/membership/thanks` → `/members` opens without a redirect. |
 | `stripe_events` admin (`/admin/stripe_events`) | Events from the purchase above show `status: processed`. A redelivered event shows as **one row**, not two — the unique index from step 2 is what guarantees this. |
 | Legacy's `/admin/webhook_events` | The same events show `status: ignored`, with the `origin_app` reason from legacy's guard classifier. If they show anything else (`processed`, or an error), the legacy guard isn't doing its job and this app's traffic is leaking into legacy's data. |
+| **Cancel the sandbox subscription just purchased, live, and re-read `/membership`** | From the sandbox subscription's own Billing Portal (or the Dashboard), cancel it. Reload `/membership` (a webhook or a manual `rake billing:reconcile_all` may be needed to pick it up) and confirm it now reads **"Your membership is cancelled and stays active until …"**, not "… renews on …". |
 | `bin/rails billing:verify_migration` | Still reports `All invariants hold.` — a new live sale should never regress the legacy migration invariants; if it does, something is attaching new-app subscriptions to legacy-migrated rows incorrectly. |
+
+**Why the cancellation check earns a permanent line in this runbook, not a one-time check.** Stripe
+has moved a field under this subsystem twice already: Basil (2025-03-31) relocated
+`current_period_end` onto the subscription item, and — found only by actually cancelling a real
+subscription on 2026-08-22 — the Billing Portal stopped setting `subscription.cancel_at_period_end`
+for a period-end cancellation and now expresses it only as a `cancel_at` timestamp. Reading only
+the boolean silently told a member who had just cancelled that their membership renews. **No
+offline test can catch the next such move**: the automated suite stubs the exact shape Stripe is
+expected to return, so a further silent field change passes every existing test while writing the
+wrong column in production. This live check — cancel a real subscription, read the sentence back —
+is the only thing that would have caught it, and is the only thing that will catch the next one.
+Re-run it after any Stripe API version bump, not only at initial launch.
 
 ## 10. Rollback
 
@@ -534,6 +547,31 @@ path this app also serves. Once `thegreatestbooks.org` is repointed at this app 
 moment someone on the legacy side is likely to run it to clean up. Legacy's doc's own remedy is to
 never run `stripe:delete_webhooks` at or after cutover, and to remove legacy's endpoint from the
 Stripe Dashboard by hand instead — the cutover runbook should carry that instruction forward.
+
+## 11. Cutover
+
+Two landmines converge at books cutover (`thegreatestbooks.org` repointed at this app). Both are
+described above; this section is the runbook that carries them forward.
+
+1. **Remove legacy's webhook endpoint by hand, in the Stripe Dashboard.** Do not run
+   `rake stripe:delete_webhooks` from either side once `thegreatestbooks.org` points at this app —
+   see "10. Rollback" above for why the scoped guard resolves to **this app's** endpoint at exactly
+   that moment, not legacy's.
+2. **Run `bin/rails billing:backfill_email_stamps` BEFORE setting `MEMBERSHIP_EMAIL_SCOPE=all`, in
+   that order, every time.** `Services::Billing::MembershipNotifier` derives email eligibility from
+   each membership's own `welcome_email_sent_at`/`ended_email_sent_at` columns, not from a status
+   transition, which means every legacy membership on the account — none of which this app ever
+   welcomed — is one config flag away from being owed a welcome the moment the scope opens.
+   `billing:backfill_email_stamps` stamps those columns first, for every row the scope currently
+   blocks, so there is nothing left to send once it opens. **Reversing that order, or skipping the
+   backfill, mails a welcome email to every legacy member on the account at the next nightly sweep**
+   (`Billing::ReconcileAllCustomersJob`, 05:00 UTC) — this is the single most damaging mistake
+   available in this subsystem. Also run the backfill only after legacy's `/support` has been
+   retired (step 1's infra work), immediately before flipping the scope — a legacy sale that
+   completes between the backfill and the flip is a fresh, unstamped row that would otherwise mail
+   at cutover after legacy has already emailed that same person itself. See
+   `docs/features/email.md`'s "Durable eligibility, not transition-driven" and
+   `docs/specs/membership-and-stripe-billing.md`'s "Cutover" section for the full mechanism.
 
 ## See also
 

@@ -4,28 +4,31 @@ module Services
     #
     # All the "should we send this" logic lives here rather than in the mailers,
     # so a mailer stays a mailer and this stays testable without rendering
-    # anything. Three independent guards, each of which exists for a reason:
+    # anything. Two independent guards, each of which exists for a reason:
     #
     #   1. MembershipEmailScope -- the legacy books app is still live on the
     #      same Stripe account and still emails its own subscribers. Without
     #      this, they get two of every email.
-    #   2. The *_email_sent_at timestamps -- the nightly sweep re-reconciles
-    #      every subscription on the account, and a transient Stripe blip can
-    #      replay a transition. These make each email once-only per
+    #   2. The *_email_sent_at timestamps -- these are BOTH the once-only guard
+    #      AND, as of this service, the entire eligibility signal (see
+    #      welcome_owed? / cancellation_owed? below for why a status transition
+    #      cannot be trusted for that). The nightly sweep re-reconciles every
+    #      subscription on the account, and a transient Stripe blip can replay
+    #      a transition, so the stamps make each email once-only per
     #      membership -- self-sufficiently: deliver_welcome / deliver_cancellation
     #      re-check the stamp INSIDE @membership.with_lock, where the row lock
     #      and reload mean a second caller -- even one holding a completely
     #      separate, independently-loaded copy of the membership -- sees the
     #      first caller's committed stamp before it can send.
-    #   3. The transition itself -- "currently active" is true every night;
-    #      "just became active" is true once.
     class MembershipNotifier
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
       def self.call(transition) = new(transition).call
 
       def initialize(transition)
-        @transition = transition
+        # The transition is only ever a carrier for the membership now -- see
+        # the class comment. Eligibility reads the membership's own durable
+        # state, not anything about the transition itself.
         @membership = transition.membership
       end
 
@@ -34,16 +37,54 @@ module Services
         return skipped("no user to email") if @membership.user&.email.blank?
         return skipped("outside the configured email scope") unless MembershipEmailScope.may_email?(@membership)
 
-        if @transition.became_active? && @membership.welcome_email_sent_at.nil?
+        if welcome_owed?
           deliver_welcome
-        elsif @transition.became_canceled? && @membership.ended_email_sent_at.nil?
+        elsif cancellation_owed?
           deliver_cancellation
         else
-          skipped("no email owed for this transition")
+          skipped("no email owed")
         end
       end
 
       private
+
+      # trialing and active both grant access.
+      #
+      # Deliberately NOT the same set as Membership.granting_access, despite
+      # the near-identical name -- that scope also grants to a `canceled`
+      # Stripe row still inside its paid-through grace period. Welcome
+      # eligibility here must not: a row that is already canceled, grace
+      # period or not, has nothing to welcome it to. Unifying these on the
+      # strength of the names would start sending welcome emails to members
+      # who have already cancelled.
+      ACCESS_GRANTING = %w[trialing active].freeze
+
+      # Eligibility is derived from DURABLE state, not from the status
+      # transition, and that is the whole point of this service.
+      #
+      # A transition is observable exactly once. upsert commits the status
+      # before this service runs, so a failed enqueue -- Redis unavailable, say
+      # -- leaves the stamp rolled back and the status already committed, and
+      # every later retry and nightly sweep then computes previous_status ==
+      # status. The email would be owed forever and never sent. The
+      # *_email_sent_at columns ARE the record of what is owed; reading them
+      # makes the whole path self-healing, because the next sweep simply
+      # notices and sends.
+      def welcome_owed?
+        @membership.welcome_email_sent_at.nil? &&
+          ACCESS_GRANTING.include?(@membership.status.to_s)
+      end
+
+      # Requires that a welcome actually went out. A membership this app never
+      # welcomed must never be sent an ending notice -- which covers the
+      # bulk-migrated rows that arrived already cancelled, durably, and replaces
+      # the transition-era guard that did the same job only at the moment the
+      # row was first seen.
+      def cancellation_owed?
+        @membership.ended_email_sent_at.nil? &&
+          @membership.welcome_email_sent_at.present? &&
+          @membership.canceled?
+      end
 
       def deliver_welcome
         # The re-check INSIDE with_lock is what makes this guard self-

@@ -91,6 +91,36 @@ module Services
         assert ::Membership.find_by!(stripe_subscription_id: "sub_r3").interval_yearly?
       end
 
+      # Stripe stopped expressing a period-end cancellation as cancel_at_period_end
+      # and now sets a cancel_at timestamp instead. Verified live 2026-08-22: a real
+      # portal cancellation returned cancel_at_period_end=false with cancel_at set
+      # to exactly current_period_end. Reading only the boolean left the column
+      # permanently false, so /membership told a member who had just cancelled that
+      # their membership renews.
+      test "treats a cancel_at timestamp as a scheduled cancellation" do
+        subscription = stripe_subscription(cancel_at_period_end: false, cancel_at: 30.days.from_now.to_i)
+
+        membership = reconcile_and_fetch(subscription)
+
+        assert membership.cancel_at_period_end
+      end
+
+      test "still honours the cancel_at_period_end boolean when Stripe sets it" do
+        subscription = stripe_subscription(cancel_at_period_end: true, cancel_at: nil)
+
+        membership = reconcile_and_fetch(subscription)
+
+        assert membership.cancel_at_period_end
+      end
+
+      test "reports no scheduled cancellation when Stripe sets neither signal" do
+        subscription = stripe_subscription(cancel_at_period_end: false, cancel_at: nil)
+
+        membership = reconcile_and_fetch(subscription)
+
+        assert_not membership.cancel_at_period_end
+      end
+
       test "updates an existing membership rather than duplicating it" do
         ::Membership.create!(user: @user, source: :stripe, status: :past_due,
           interval: :monthly, stripe_subscription_id: "sub_r4",
@@ -279,58 +309,30 @@ module Services
         assert_nil membership.origin_domain
       end
 
-      test "reports a brand-new active membership as having become active" do
-        subscription = stripe_subscription(status: "active")
-
-        transition = reconcile_and_transition(subscription)
-
-        assert_nil transition.previous_status
-        assert transition.became_active?
-        assert_not transition.became_canceled?
-      end
-
-      # The nightly sweep re-reconciles everything. An unchanged active membership
-      # must NOT look like a new activation, or every member gets a welcome email
-      # every night.
-      test "an unchanged active membership has not become active" do
-        subscription = stripe_subscription(status: "active")
-        reconcile_and_transition(subscription)
-
-        transition = reconcile_and_transition(subscription)
-
-        assert_equal "active", transition.previous_status
-        assert_not transition.became_active?
-        assert_not transition.status_changed?
-      end
-
-      test "reports the move from active to canceled as having become canceled" do
+      # Task 2 removed MembershipTransition#became_active? / #became_canceled? /
+      # #status_changed? -- MembershipNotifier no longer derives email
+      # eligibility from a transition (see its class comment for why: a
+      # transition is observable exactly once, and a failed mail enqueue could
+      # roll back the once-only stamp while the status stayed committed).
+      # previous_status itself has no reader left in production, but #upsert
+      # must still capture it BEFORE assign_attributes overwrites the row's
+      # status, and that ordering is the one part of MembershipTransition
+      # still worth pinning here.
+      test "captures the membership's prior status before upsert overwrites it" do
         subscription = stripe_subscription(status: "active")
         reconcile_and_transition(subscription)
 
         transition = reconcile_and_transition(stripe_subscription(id: subscription.id, status: "canceled"))
 
         assert_equal "active", transition.previous_status
-        assert transition.became_canceled?
-        assert transition.status_changed?
-      end
-
-      # trialing -> active is a real transition but not a new membership. The
-      # welcome email already went out when the trial started; sending a second on
-      # conversion would be a duplicate.
-      test "trialing counts as active, so converting a trial is not a new activation" do
-        subscription = stripe_subscription(status: "trialing")
-        reconcile_and_transition(subscription)
-
-        transition = reconcile_and_transition(stripe_subscription(id: subscription.id, status: "active"))
-
-        assert_not transition.became_active?
       end
 
       # The comped-row guard in `upsert` used to return a bare Membership on this
       # path, while every other path returned a MembershipTransition -- a
       # heterogeneous return type that would raise NoMethodError the moment a
-      # caller (the welcome-email dispatcher) calls #became_active? on whatever
-      # this returns. A real comped fixture validates absence of
+      # caller (MembershipNotifier's initializer, or the per-transition error
+      # log in ReconcileCustomer#call) calls #membership on whatever this
+      # returns. A real comped fixture validates absence of
       # stripe_subscription_id, so update_column (which skips validations) is
       # used to reproduce the legacy-shaped collision, exactly as the
       # hand-built guarded row above does for the same reason.
@@ -344,28 +346,7 @@ module Services
         )
 
         assert_instance_of MembershipTransition, transition
-        assert_not transition.status_changed?
-        assert_not transition.became_active?
-        assert_not transition.became_canceled?
         assert_equal original, comped.reload.attributes.slice("status", "current_period_end", "note")
-      end
-
-      # The account-wide migration produced already-cancelled memberships in
-      # bulk. Without the `!previous_status.nil?` clause in became_canceled?,
-      # every one of those brand-new-but-already-cancelled rows would look
-      # like a fresh cancellation and get emailed a cancellation notice for a
-      # subscription they cancelled long ago. previous_status is nil here
-      # specifically because there is no prior membership row -- a random,
-      # never-seen-before subscription id (the stripe_subscription helper's
-      # default) is deliberate, not incidental: it guarantees no row exists to
-      # find.
-      test "a membership that arrives already cancelled is not a cancellation event" do
-        subscription = stripe_subscription(status: "canceled")
-
-        transition = reconcile_and_transition(subscription)
-
-        assert_nil transition.previous_status
-        assert_not transition.became_canceled?
       end
 
       # THE SEAM. A reviewer commented out the `transitions.each { ... }` line
@@ -396,9 +377,13 @@ module Services
       # without a per-transition rescue at this call site, one membership's
       # notification blowing up would abort the `each` loop and cost every
       # OTHER membership in the same customer's batch its welcome email --
-      # permanently, since the next reconcile's upsert recomputes
-      # previous_status from the now-committed (already-active) row and
-      # became_active? is false for it forever after.
+      # for however long it takes the next reconcile (a retried webhook, or
+      # the nightly sweep) to run. Task 2 made that recoverable rather than
+      # permanent -- MembershipNotifier now reads welcome_email_sent_at
+      # directly instead of a transition, so the next reconcile still sees it
+      # nil and sends -- but a per-transition rescue here is still what keeps
+      # a sibling in the SAME batch from waiting on that next reconcile at
+      # all.
       #
       # The first call raises via a stubbed MembershipMailer.welcome; the
       # second call is untouched by the stub (Mocha's `.then` only changes
