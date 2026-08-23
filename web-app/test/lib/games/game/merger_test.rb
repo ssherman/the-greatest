@@ -126,18 +126,25 @@ module Games
         assert_equal 1, CategoryItem.where(category: category, item: @target).count
       end
 
-      test "moves a list item to the target" do
+      test "moves a list item to the target by repointing the same row" do
         list = lists(:games_list)
         # list_items(:games_item) already links games_list to @target; clear it so this
         # test exercises the no-existing-target-item branch, not the collision branch
-        # (see list_item_enricher_test.rb). The no-collision branch creates a fresh row
-        # on the target rather than repointing the source's, so assert by lookup.
+        # (see list_item_enricher_test.rb).
         list_items(:games_item).destroy!
-        ListItem.create!(list: list, listable: @source, position: 3, verified: false)
+        item = ListItem.create!(
+          list: list, listable: @source, position: 3, verified: false,
+          metadata: {"title" => "Half-Life 2", "opensearch_match" => true}
+        )
 
         ::Games::Game::Merger.call(source: @source, target: @target)
 
-        assert ListItem.exists?(list: list, listable: @target)
+        # A copy (create! on the target, leaving the source's row to die with the
+        # source) would make this reload raise RecordNotFound and would drop
+        # metadata -- enrichment provenance the base_list_item_enricher writes into
+        # this same column. Repointing keeps the same row, id, and metadata intact.
+        assert_equal @target.id, item.reload.listable_id
+        assert_equal({"title" => "Half-Life 2", "opensearch_match" => true}, item.metadata)
       end
 
       test "promotes the surviving list item to verified when the source was verified" do

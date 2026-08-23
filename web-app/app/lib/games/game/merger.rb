@@ -113,11 +113,7 @@ module Games
           if existing
             existing.update!(verified: true) if list_item.verified? && !existing.verified?
           else
-            target_game.list_items.create!(
-              list_id: list_item.list_id,
-              position: list_item.position,
-              verified: list_item.verified
-            )
+            list_item.update!(listable_id: target_game.id)
           end
           count += 1
         end
