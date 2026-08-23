@@ -232,11 +232,14 @@ module Music
 
       # Verify the artist was not updated
       @person.reload
-      assert_equal original_description, @person.description
-      assert_equal original_born_on, @person.born_on
-      assert_equal original_year_died, @person.year_died
-      assert_equal original_country, @person.country
-      assert_equal original_kind, @person.kind
+      # Compared as a tuple, not five separate assert_equal calls: three of these
+      # fixture columns are nil, so `assert_equal nil, nil` is both vacuous and a
+      # hard failure under Minitest 6. An Array expectation is never nil, and one
+      # diff names whichever attribute actually moved.
+      assert_equal [original_description, original_born_on, original_year_died,
+        original_country, original_kind],
+        [@person.description, @person.born_on, @person.year_died,
+          @person.country, @person.kind]
 
       refute result.success?
       assert_includes result.error, "AI service unavailable"
@@ -260,11 +263,10 @@ module Music
 
       # Verify the artist was not updated
       @person.reload
-      assert_equal original_description, @person.description
-      assert_equal original_born_on, @person.born_on
-      assert_equal original_year_died, @person.year_died
-      assert_equal original_country, @person.country
-      assert_equal original_kind, @person.kind
+      assert_equal [original_description, original_born_on, original_year_died,
+        original_country, original_kind],
+        [@person.description, @person.born_on, @person.year_died,
+          @person.country, @person.kind]
     end
 
     test "should handle band type artists with AI" do

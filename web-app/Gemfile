@@ -50,7 +50,6 @@ gem "bootsnap", require: false
 gem "thruster", require: false
 
 gem "countries"
-gem "ruby_llm-schema"
 gem "openai"
 gem "stripe", "~> 19.5"
 gem "opensearch-ruby"
@@ -96,8 +95,7 @@ group :test do
   gem "selenium-webdriver"
   gem "mocha"
   gem "webmock"
-  # Pin minitest to 5.x - version 6.0 is incompatible with Rails 8.x
-  gem "minitest", "~> 5.0"
+  gem "minitest", "~> 6.0"
   # ostruct is no longer a default gem as of Ruby 4.0 (used for OpenStruct test doubles)
   gem "ostruct"
 end

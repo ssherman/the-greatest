@@ -219,7 +219,10 @@ end
 
 ### Schema Validation
 - **OpenAI**: Server-side validation with native structured outputs
-- **Other Providers**: Client-side validation with RubyLLM schemas
+- **Other Providers**: No native structured-output support — `Capable#user_prompt_with_fallbacks`
+  (`capable.rb`) prepends the same `OpenAI::BaseModel` schema, rendered via its class-level
+  `to_json_schema`, as JSON instructions in the prompt text instead. There is no `RubyLLM::Schema`
+  in this app
 - **Automatic Fallback**: System handles provider capability differences
 
 ## Error Handling

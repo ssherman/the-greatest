@@ -4,7 +4,10 @@ module Search
   module Base
     class Search
       def self.client
-        @client ||= OpenSearch::Client.new(host: ENV.fetch("OPENSEARCH_URL"))
+        # Root-anchored: this class is itself named Search (Search::Base::Search),
+        # so a bare `Search::Shared` here would resolve `Search` to itself
+        # instead of the top-level module.
+        ::Search::Shared::Client.instance
       end
 
       def self.index_name

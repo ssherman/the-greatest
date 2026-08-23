@@ -2,13 +2,14 @@ ENV["RAILS_ENV"] ||= "test"
 require_relative "../config/environment"
 require "rails/test_help"
 require "mocha/minitest"
-require "sidekiq/testing"
 require "webmock/minitest"
 require_relative "support/turbo_frame_links"
 require_relative "support/stripe_webhook_helper"
 
 # Configure Sidekiq to run jobs inline during tests
-Sidekiq::Testing.inline!
+# Sidekiq 9 removes `require "sidekiq/testing"`. Sidekiq.testing! loads sidekiq/test_api
+# itself, which still defines Sidekiq::Testing.fake!/inline! for per-test overrides.
+Sidekiq.testing!(:inline)
 
 # Configure WebMock to prevent real HTTP requests during tests
 WebMock.disable_net_connect!(allow_localhost: true)

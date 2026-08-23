@@ -8,7 +8,7 @@ module Services
         unless supports?(:json_schema) || response_schema.nil?
           json_instr = <<~INSTR
             IMPORTANT: respond with JSON that validates against:
-            #{response_schema.new.to_json_schema.to_json}
+            #{response_schema.to_json_schema.to_json}
           INSTR
           prompt.prepend(json_instr)
         end

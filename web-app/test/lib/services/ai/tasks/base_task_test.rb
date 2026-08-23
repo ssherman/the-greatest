@@ -128,6 +128,20 @@ module Services
           assert_nil result.error
         end
 
+        test "inlines the JSON schema when the provider cannot enforce one" do
+          # OpenAI advertises :json_schema, so this fallback is dead today. It becomes
+          # live the moment a provider without that capability is wired up (the
+          # Anthropic and Gemini strategies are commented out in base_task.rb).
+          @mock_strategy.stubs(:capabilities).returns([:json_mode])
+          task = Music::ArtistDescriptionTask.new(parent: @artist)
+
+          prompt = task.send(:user_prompt_with_fallbacks)
+
+          assert_includes prompt, "IMPORTANT: respond with JSON that validates against:"
+          assert_includes prompt, Music::ArtistDescriptionTask::ResponseSchema.to_json_schema.to_json
+          assert_includes prompt, task.send(:user_prompt)
+        end
+
         private
 
         def mock_provider_response(data = nil)

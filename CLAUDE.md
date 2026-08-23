@@ -78,6 +78,12 @@ which takes **hours**.
   `listable: dark_side (Music::Album)` — never set `_type` manually.
 - **DataImporters:** for identifiers always `find_or_initialize_by`, never `build` (avoids dupes on
   provider re-runs). See `docs/features/data_importers.md`.
+- **AI response schemas are `OpenAI::BaseModel` subclasses.** `to_json_schema` is a **class** method —
+  `schema.new.to_json_schema` raises `NoMethodError`. There is no `RubyLLM::Schema` in this app.
+- **Build OpenSearch clients through `Search::Shared::Client.instance`**, never `OpenSearch::Client.new`.
+  It carries the serializer that avoids multi_json's deprecated API; the serializer only needs
+  configuring in one place, and the three separately-constructed clients this replaced (`Search::Base::Index`,
+  `Search::Base::Search`, and the shared client) were three places that had to be kept in sync.
 
 ## Testing (Minitest + fixtures + Mocha)
 
@@ -88,6 +94,16 @@ which takes **hours**.
   designer could change it freely, don't test it.
 - **Every new user-facing page/flow needs a Playwright E2E test** in `web-app/e2e/tests/`. Add
   `data-testid` (kebab-case) only when role/text/label can't target an element.
+- **Minitest is 6.x.** `assert_equal nil, x` is a **hard failure**, not a warning — use `assert_nil`, or
+  compare tuples (`assert_equal [a, b], [x, y]`) when the intent is "these did not change" and one of
+  them may be nil. Also gone in 6: `assert_send`, `minitest/mock` (its own gem now — we don't use it),
+  the `MiniTest` namespace, and spec expectations on `Object`.
+- **Sidekiq test mode is `Sidekiq.testing!(:inline)`** (set globally in `test_helper.rb`); never
+  `require "sidekiq/testing"`, which Sidekiq 9 removes. `Sidekiq::Testing.fake! { }` blocks still work
+  and are how you stop a job from running inline inside one test.
+- **A clean `bin/rails test` emits no warnings** beyond two known upstream sources (`weighted_list_rank`'s
+  position `puts`, and npm/yarn during `test:prepare`). A new warning line is a regression — fix the
+  cause, don't filter the output. ~190 lines of noise accumulated once because nobody was watching.
 
 ## Frontend
 
