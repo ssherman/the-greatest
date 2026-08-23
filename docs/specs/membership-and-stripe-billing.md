@@ -7,11 +7,15 @@
   shipped on branch `membership-emails`. The Stripe-side production setup this all depends on
   (registering webhook endpoints, labelling live prices, activating the Billing Portal) is a
   separate by-hand runbook, not code — see `docs/guides/stripe-account-setup.md`.
-  **One code follow-up must land before the first real sale**: a notification that fails to enqueue
-  is currently lost permanently and silently — see the first entry under "Carried forward" below.
-  It is unreachable until this app sells something, which is why it did not block increment 8.
-  The remaining production follow-up is flipping `MEMBERSHIP_EMAIL_SCOPE` to `all` at legacy
-  cutover.
+  **The code follow-up flagged as required before the first real sale is done**: a notification
+  that failed to enqueue used to be lost permanently and silently; the `membership-email-recovery`
+  branch made email eligibility durable instead of transition-driven, which makes a failed enqueue
+  self-healing on the next sweep — see the first two entries under "Carried forward" below.
+  **The remaining production follow-up is a two-step operation at legacy cutover, and the order is
+  not optional: run `bin/rails billing:backfill_email_stamps`, THEN set
+  `MEMBERSHIP_EMAIL_SCOPE=all`.** Reversing that order, or skipping the backfill, mails a welcome
+  to every legacy member on the account at the next nightly sweep — see "Cutover" and
+  `deployment/ENV.md`'s `MEMBERSHIP_EMAIL_SCOPE` entry.
 - **Priority**: High
 - **Created**: 2026-08-14
 - **Developer**: Shane Sherman
@@ -380,6 +384,7 @@ comparison rather than repeated string parsing.
 | `stripe:sync_plans` | Resolve each `billing_plans` row's price by `stripe_lookup_key` against the current environment's Stripe account and update `stripe_price_id`, `amount_cents`, `interval`. Fails loudly on an unresolvable key. |
 | `billing:reconcile_all` | Run `ReconcileAllCustomers` across the whole account. Also the nightly `sidekiq-cron` entry in `config/schedule.yml`. |
 | `billing:replay_failed` | Re-enqueue `stripe_events` left in `failed`. |
+| `billing:backfill_email_stamps` | Stamp `welcome_email_sent_at`/`ended_email_sent_at` on every membership `MembershipEmailScope` currently blocks (`origin_domain` blank), so opening the scope does not treat the whole legacy back catalogue as newly owed a welcome. **Must run immediately before, never after, setting `MEMBERSHIP_EMAIL_SCOPE=all`** — see "Cutover" below. |
 | `data_migration:memberships` | Import legacy `users.paid` early supporters as `source: :legacy` rows. |
 | `data_migration:donations` | Import legacy donation history. |
 | `billing:verify_migration` | Report the invariant below, plus unattached rows. |
@@ -491,6 +496,31 @@ already holds every subscription on cutover day. Cutover is: point
 thegreatestbooks.org at the new app, delete legacy's webhook endpoint, retire
 legacy's `/support`. **There is no data migration at the end** — it happens now,
 and the nightly reconcile keeps it true.
+
+**Email eligibility is a second, separate cutover step, and it is a two-step operation where the
+order is not optional. It also has an ordering requirement against the infra steps above: run the
+backfill only after legacy's `/support` has been retired, immediately before flipping the scope.**
+The backfill is a point-in-time snapshot, not an invariant — a legacy sale that completes between
+the backfill and the flip creates a fresh `source: :stripe`, blank-`origin_domain`, unstamped row
+that would mail at the flip, after legacy has already emailed that same person itself. Retiring
+`/support` first closes that window.
+
+```
+1. bin/rails billing:backfill_email_stamps
+2. set MEMBERSHIP_EMAIL_SCOPE=all
+```
+
+`Services::Billing::MembershipNotifier` derives eligibility from the membership's own
+`welcome_email_sent_at`/`ended_email_sent_at` columns, not from a status transition (see "Carried
+forward" below) — which means every legacy membership on the account, none of which this app ever
+welcomed, is one config flag away from being owed a welcome the instant `MEMBERSHIP_EMAIL_SCOPE`
+opens to `all`. `billing:backfill_email_stamps` stamps those columns for every row
+`MembershipEmailScope` currently blocks (`origin_domain` blank) *before* the scope opens, so there
+is nothing left to send once it does. **Run the steps in that order, every time. Flipping the scope
+first, or skipping the backfill, mails a welcome to every legacy member on the account at the next
+nightly sweep (`Billing::ReconcileAllCustomersJob`, 05:00 UTC) — this is the single most damaging
+mistake available in this subsystem.** See `deployment/ENV.md`'s `MEMBERSHIP_EMAIL_SCOPE` entry and
+`docs/features/email.md`'s "Durable eligibility, not transition-driven" for the full mechanism.
 
 ## Data migration
 
@@ -664,28 +694,64 @@ entitlements, the admin UI, the legacy guard patch, and writing the account-setu
 None blocks that work; each has a named owner among the later increments, or is deferred
 with a stated reason.
 
-- **A notification that fails to enqueue is lost permanently, and silently. OPEN — fix before the
-  first real sale.** Raised by Codex on PR #245 and reproduced: if `MembershipNotifier` raises during
-  `deliver_later` (Redis unavailable is the realistic case), the `with_lock` block correctly rolls the
-  `welcome_email_sent_at` stamp back — but `upsert` has already committed the *status*. Every later
-  webhook retry and nightly sweep therefore computes `previous_status == status`, so `became_active?`
-  is false forever, and `ReconcileCustomer`'s per-transition rescue converts the failure into a
-  successful reconcile so the Stripe event is marked processed and Sidekiq never retries. The
-  membership is owed a welcome, the nil timestamp records exactly that, and nothing reads it.
-  Measured on a membership left in that state: `welcome_email_sent_at: nil`, emails enqueued on
-  retry: 0.
+- ~~A notification that fails to enqueue is lost permanently, and silently.~~ **Fixed by the
+  `membership-email-recovery` branch.** Raised by Codex on PR #245 and reproduced: if
+  `MembershipNotifier` raised during `deliver_later` (Redis unavailable is the realistic case), the
+  `with_lock` block correctly rolled the `welcome_email_sent_at` stamp back — but `upsert` had
+  already committed the *status*. Every later webhook retry and nightly sweep therefore computed
+  `previous_status == status`, so a transition-based guard was false forever, and
+  `ReconcileCustomer`'s per-transition rescue converted the failure into a successful reconcile so
+  the Stripe event was marked processed and Sidekiq never retried. The membership was owed a
+  welcome, the nil timestamp recorded exactly that, and nothing read it. Measured on a membership
+  left in that state: `welcome_email_sent_at: nil`, emails enqueued on retry: 0.
 
-  **The fix is to make eligibility durable rather than transitional.** The database already holds the
-  fact; `MembershipTransition` is the wrong authority for it. Send a welcome when the membership is
-  one this app sold, currently grants access, and has never been welcomed; send a cancellation when
-  it is one this app sold, is cancelled, has no ending notice, **and was welcomed** — that last clause
-  subsumes the existing "arrived already cancelled" guard, since a bulk-migrated row nobody welcomed
-  can never be sent an ending notice either. That shape is self-healing: a failed enqueue is simply
-  retried by the next sweep.
+  **The fix makes eligibility durable rather than transitional.**
+  `Services::Billing::MembershipNotifier#welcome_owed?`/`#cancellation_owed?` now read the
+  membership's own `welcome_email_sent_at`/`ended_email_sent_at` columns directly: a welcome is
+  owed when the membership currently grants access (`trialing`/`active`) and has never been
+  welcomed; a cancellation is owed when it is cancelled, has no ending notice, **and was welcomed**
+  — that last clause subsumes the old "arrived already cancelled" guard, since a bulk-migrated row
+  nobody welcomed can never be sent an ending notice either. `MembershipTransition#became_active?`/
+  `#became_canceled?`/`#status_changed?` were deleted outright, not kept alongside the new logic —
+  the class itself remains only as the uniform return type of `ReconcileCustomer#upsert` on every
+  path, including the comped-row early return (127 production rows can reach it; see "Known limits"
+  §8 of `docs/features/membership-billing.md`). This shape is self-healing: a failed enqueue is
+  simply noticed and retried by the next nightly sweep, with nothing else to configure or run.
 
-  Unreachable today — nothing has been sold through this app, so no membership has
-  `origin_domain` set. It becomes live the moment the production Stripe setup is finished, which is
-  why it must land before the first sale rather than after.
+  One deliberate trade-off ships with it: `cancellation_owed?` requires that a welcome actually went
+  out, so a membership whose welcome enqueue failed and which is then cancelled before the next
+  sweep recovers it receives no email at all, ever. The window is small — bounded by the nightly
+  sweep (at most 24 hours) and only reachable if the enqueue also fails. The clause is not a
+  cutover safeguard — `welcome_owed?` has no analogous clause and cannot have one, so with the
+  backfill skipped every access-granting legacy row is owed a welcome regardless of whether this
+  clause exists; dropping it would only shrink the additional damage, not prevent it. The real
+  justification is a correctness property independent of cutover: never say goodbye to someone you
+  never said hello to. It covers cases the backfill never touches — a subscription created directly
+  in the Stripe Dashboard, or one created and cancelled while the webhook endpoint was down past
+  Stripe's retry window. See `docs/features/email.md`'s "Durable eligibility, not
+  transition-driven" for the full reasoning.
+
+  This closes the "unreachable until this app sells something" gap noted below: it became live the
+  moment the production Stripe setup finished, which is why it had to land before the first sale.
+
+- ~~Stripe silently changed how a scheduled cancellation is represented, and this app only read the
+  boolean.~~ **Fixed by the `membership-email-recovery` branch.** `ReconcileCustomer#upsert` used to
+  write `cancel_at_period_end: !!subscription.cancel_at_period_end`. Stripe's Billing Portal no
+  longer sets that boolean for a period-end cancellation; it expresses the same fact only as a
+  `cancel_at` timestamp. **Verified live on 2026-08-22:** a real portal cancellation returned
+  `cancel_at_period_end: false`, `cancel_at` equal to `current_period_end`, and `canceled_at` at the
+  moment the member clicked cancel. Reading only the boolean left the column permanently `false`, so
+  `/membership` told a member who had just cancelled that their membership renews. `upsert` now
+  writes `cancel_at_period_end: subscription.cancel_at_period_end.present? || subscription.cancel_at.present?`
+  — either signal establishes that a cancellation is scheduled.
+
+  **This is the second time a Stripe field has moved under this subsystem** — the first was Basil
+  (2025-03-31) relocating `current_period_end` off the subscription onto the subscription item. Say
+  this plainly: **no offline test can catch the next one.** The test suite stubs the shape Stripe is
+  expected to return, so a further silent change would pass every existing test while writing the
+  wrong column in production. The guard against a third occurrence is operational, not automated —
+  `docs/guides/stripe-account-setup.md`'s post-deploy verification now cancels a real sandbox
+  subscription and confirms `/membership` reads back the cancelled copy, not the renewing one.
 
 - ~~`origin_domain` is never written by reconcile.~~ **Fixed by increment 8.** `upsert` now
   assigns `origin_domain: subscription.metadata&.[]("origin_domain")` unconditionally on every
@@ -702,10 +768,13 @@ with a stated reason.
   `membership.persisted? ? membership.status : nil` immediately before `assign_attributes`
   overwrites it, and returns a `MembershipTransition` pairing that `previous_status` with the saved
   `Membership` — on every path, including the comped-row collision guard's early return, which
-  yields a no-op transition rather than a bare `Membership`. `MembershipTransition#became_active?`/
-  `#became_canceled?` are what `Services::Billing::MembershipNotifier` reads to decide whether a
-  reconcile owes an email; see `docs/features/membership-billing.md` §2's "returns a
-  `Services::Billing::MembershipTransition`" note for the full contract.
+  yields a no-op transition rather than a bare `Membership`. At the time this closed,
+  `MembershipTransition#became_active?`/`#became_canceled?` were what
+  `Services::Billing::MembershipNotifier` read to decide whether a reconcile owed an email; the
+  `membership-email-recovery` branch later deleted both predicates (see the entry above) and moved
+  that decision onto the membership's own `*_email_sent_at` columns instead.
+  `MembershipTransition` and `previous_status` still exist, unchanged in shape — see
+  `docs/features/membership-billing.md` §2 for the current contract.
 - **Decide v2 event handling before enabling any v2 destination.** `construct_event`
   raises a bare `ArgumentError` on a v2 "thin event" envelope, which would 500. It is
   unreachable without a valid signature and nothing here subscribes to v2. Note that
@@ -789,19 +858,25 @@ with a stated reason.
   redirect to Stripe, logging a bare `console.error`. `assert_redirected_to` passes against that
   code. The fix is `data: {turbo: false}` on the submitter. Any future control that redirects
   off-origin inherits the same hazard and needs E2E coverage, not a controller test.
-- **A `memberships` rebuild from Stripe is a mass welcome-email event.**
-  `MembershipTransition#became_active?` has no `previous_status.nil?` guard, unlike
-  `became_canceled?` — correct for normal operation, where `previous_status: nil` only ever means
-  "this membership row didn't exist a moment ago," i.e. a genuine new activation. But rebuilding
-  `memberships` from Stripe (dropping the table and re-running `billing:reconcile_all`) produces
-  that same `previous_status: nil` for every row it recreates, including every already-existing
-  active subscription — the rebuild reads as thousands of fresh activations, all owed a welcome
-  email. Today `MembershipEmailScope`'s `own_only` default limits the blast radius to memberships
+- **A `memberships` rebuild from Stripe is a mass welcome-email event.** Eligibility is now durable:
+  `MembershipNotifier#welcome_owed?` reads `welcome_email_sent_at.nil?` directly off the row (see
+  the "Carried forward" entry above), which is what makes a *failed enqueue* recoverable — but a
+  table **rebuild** (dropping `memberships` and re-running `billing:reconcile_all`) wipes that same
+  column back to `nil` for every row it recreates, including every already-existing active
+  subscription, for exactly the same reason a fresh row looks unwelcomed: there is no history left
+  to distinguish "never welcomed" from "welcomed once, and the record of that got dropped." The
+  rebuild reads as thousands of fresh activations, all owed a welcome email — durable eligibility
+  makes this *more* directly true than the old transition-based guard did, not less, since the
+  stamp the rebuild destroys is now the entire eligibility signal, not just the once-only guard.
+  Today `MembershipEmailScope`'s `own_only` default limits the blast radius to memberships
   `origin_domain`-tagged as sold by this app; once cutover flips `MEMBERSHIP_EMAIL_SCOPE=all`, the
-  same rebuild would welcome-email the whole account, legacy-sold memberships included.
+  same rebuild would welcome-email the whole account, legacy-sold memberships included, and
+  `billing:backfill_email_stamps` — a one-time pre-cutover step, not something a rebuild re-runs —
+  would no longer be there to have prevented it.
   **Mitigation:** set `MEMBERSHIP_EMAIL_SCOPE` to anything other than `all` (or unset it — `own_only`
   is the default) before running any bulk `memberships` rebuild, and confirm it's back to the
-  intended value afterward.
+  intended value afterward. There is no code fix for this today; it is a standing operational
+  hazard of ever dropping and rebuilding the table.
 
 ## Future Improvements
 

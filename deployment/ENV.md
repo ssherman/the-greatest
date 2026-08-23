@@ -240,13 +240,33 @@ together until the rotation completes, then drop the old one.
 - **Required**: No
 - **Default**: `own_only`
 - **Used By**: web, worker
+
+  > **Before setting this to `all`, run `bin/rails billing:backfill_email_stamps` first — every
+  > time, no exceptions. Doing this in the other order, or skipping the backfill, mails a welcome to
+  > every legacy member on the account at the next nightly sweep.** This is the single most
+  > damaging mistake available in this subsystem.
+  >
+  > Why: `Services::Billing::MembershipNotifier` derives email *eligibility*, not just its
+  > once-only guard, from the membership's own `welcome_email_sent_at` column — any membership that
+  > currently grants access (`trialing`/`active`) and has a nil stamp is owed a welcome
+  > (`docs/features/email.md`'s "Durable eligibility, not transition-driven"). The instant this
+  > scope opens to `all`, "owed" includes every legacy membership on the shared Stripe account,
+  > because this app never welcomed any of them — their `welcome_email_sent_at` has been `nil`
+  > since the account-wide migration. `bin/rails billing:backfill_email_stamps`
+  > (`Services::Billing::BackfillEmailStamps`) stamps `welcome_email_sent_at`/`ended_email_sent_at`
+  > on every row this scope currently blocks (`origin_domain` blank) *before* the scope opens, so
+  > there is nothing left owed once it does. It is additive and idempotent — safe to run more than
+  > once, and it never sends anything itself — but it must run **before**, never after, this
+  > variable is set to `all`.
+
 - **Values**:
   - `own_only` — email only about memberships and donations **this app sold**. Correct while the
     legacy books app is live, because legacy still emails its own subscribers, and both apps'
     webhook endpoints receive every event on the one shared Stripe account — without this scope, a
     legacy subscriber would get the same welcome or cancellation email twice, once from each app.
   - `all` — email about everything on the account, legacy-sold memberships and donations included.
-    **Set this at legacy cutover**, or every legacy-era membership — including the entire
+    **Set this at legacy cutover, and only after `bin/rails billing:backfill_email_stamps` has
+    already been run** (see above) — otherwise every legacy-era membership — including the entire
     account-wide migration, which predates checkout and carries no `origin_domain` — will silently
     never receive a cancellation email from anyone again, since legacy will have stopped running.
   - Any unrecognised value (a typo, an empty string that isn't literally unset) is treated as
@@ -298,7 +318,7 @@ STRIPE_LIVEMODE=true
 SENDGRID_API_KEY=SG.your_sendgrid_api_key_here
 MAIL_FROM_ADDRESS=contact@thegreatestbooks.org
 ADMIN_NOTIFICATION_EMAIL=you@example.com
-# MEMBERSHIP_EMAIL_SCOPE=own_only  # optional; set to "all" only at legacy cutover
+# MEMBERSHIP_EMAIL_SCOPE=own_only  # optional; run `bin/rails billing:backfill_email_stamps` BEFORE setting to "all" at legacy cutover — see above
 
 # Performance Tuning (optional)
 RAILS_MAX_THREADS=50

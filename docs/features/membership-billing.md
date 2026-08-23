@@ -72,20 +72,45 @@ place.
 path — including the comped-row collision guard's early return.** `Membership#status` gets
 overwritten by `assign_attributes`, so `upsert` captures it first (`nil` for a brand-new row) and
 wraps the saved `Membership` together with that `previous_status` in a `MembershipTransition`
-value object. That is the whole reason the class exists: "this membership is currently active" is
-true on every reconcile the nightly sweep runs — once a night, forever, for every stripe-sourced
-row — but "this membership just *became* active" is true exactly once, and only a transition object
-carrying both the before and after status can answer that. `MembershipTransition#became_active?`
-and `#became_canceled?` are what `Services::Billing::MembershipNotifier` (see
-`docs/features/email.md`'s "The eight membership emails") reads to decide whether a reconcile owes
-a welcome or cancellation email; `ReconcileCustomer#call` collects one `MembershipTransition` per
-subscription into `Result#data`, and runs each one through the notifier after its own transaction
-has committed, never inside it — enqueuing a job or stamping the once-only guard before the row
-that job references is durably saved would be wrong twice over. The comped-row guard's early
-return yields a **no-op** `MembershipTransition` (`previous_status` set to the row's own current
-`status`, so `status_changed?`/`became_active?`/`became_canceled?` are all false) rather than a bare
-`Membership`, specifically so a caller that treats every element of `Result#data` uniformly — which
-the notifier loop does — never has to special-case the one path where nothing actually changed.
+value object. `previous_status` is captured because `assign_attributes` is about to overwrite it —
+that's the entire reason the class exists. It is **not**, any more, how
+`Services::Billing::MembershipNotifier` decides whether an email is owed:
+`MembershipTransition#became_active?`, `#became_canceled?` and `#status_changed?` were deleted
+outright (`membership-email-recovery` branch), because a status transition is observable exactly
+once, and `upsert` commits the new `status` before the notifier ever runs — so a failed mail
+enqueue (Redis unavailable, say) could roll the once-only stamp back while the status stayed
+committed, leaving the email owed forever with nothing left able to see that it was owed. The
+notifier now reads the membership's own `welcome_email_sent_at`/`ended_email_sent_at` columns
+instead, which are durable; see `docs/features/email.md`'s "Durable eligibility, not
+transition-driven" for the full mechanism. `MembershipTransition` itself survives, `previous_status`
+and all, purely as the **uniform return type** every caller can rely on: `ReconcileCustomer#call`
+collects one per subscription into `Result#data` and runs each through the notifier after its own
+transaction has committed, never inside it; the comped-row guard's early return yields a **no-op**
+`MembershipTransition` (`previous_status` set to the row's own current `status`) rather than a bare
+`Membership`, specifically so a caller that calls `#membership` on every element of `Result#data` —
+which the notifier's `initialize` does, and so does `ReconcileCustomer#call`'s own per-transition
+error log — never has to special-case the one path where nothing actually changed. That path is not
+theoretical: 127 rows in production predate the `stripe_subscription_id` absence validation (§8)
+and can reach it.
+
+**`current_period_end` and `cancel_at_period_end` are each read from more than one Stripe field, and
+both learned that the hard way.** Basil (2025-03-31) moved `current_period_end` off the subscription
+onto the subscription item; `upsert` reads `subscription.items.data.first.current_period_end`, not
+the deprecated subscription-level accessor, which still resolves today but will stop working
+without warning. `cancel_at_period_end` moved too, more recently: Stripe's Billing Portal stopped
+setting `subscription.cancel_at_period_end` for a period-end cancellation and now expresses the
+same fact only as a `cancel_at` timestamp. **Verified live on 2026-08-22** — a real portal
+cancellation returned `cancel_at_period_end: false`, `cancel_at` equal to `current_period_end`, and
+`canceled_at` at the moment the member clicked cancel. `upsert` now writes
+`cancel_at_period_end: subscription.cancel_at_period_end.present? || subscription.cancel_at.present?`
+— reading both signals, since either one establishes that a cancellation is scheduled; reading only
+the boolean had left the column permanently `false`, so `/membership` told a member who had just
+cancelled that their membership renews. **This is the second time a Stripe field has moved under
+this subsystem, and no offline test can catch the next one** — the test suite stubs the shape
+Stripe is expected to return, so a further silent change would pass every existing test while
+writing the wrong column in production. The guard against a third occurrence is operational, not
+automated: see `docs/guides/stripe-account-setup.md`'s post-deploy verification, which cancels a
+real sandbox subscription and reads `/membership`'s copy back to confirm it changed.
 
 The same `ReconcileCustomer` call is reused for three purposes with one implementation:
 
@@ -617,3 +642,14 @@ legacy-era row, forever, since no code path will ever flip that column from `nil
 truthy after the fact), and no membership or donation predating the cutover ever gets another email
 from anyone again — not a crash, not a log line, just silence. See `docs/features/email.md`'s "The
 eight membership emails" for the mailer/notifier side of this same gate.
+
+**Flipping the switch without preparing for it fails the opposite way, and is the more damaging
+mistake of the two.** `MembershipNotifier` derives *eligibility*, not just the once-only guard, from
+`welcome_email_sent_at` (§2 above and `docs/features/email.md`'s "Durable eligibility, not
+transition-driven") — so the moment `MEMBERSHIP_EMAIL_SCOPE=all` opens the gate, every legacy
+membership that grants access and has a nil `welcome_email_sent_at` (which is all of them; this app
+never welcomed any of them) is owed a welcome at the very next nightly sweep. **Run
+`bin/rails billing:backfill_email_stamps` first, every time, with no exceptions** — it stamps
+`welcome_email_sent_at`/`ended_email_sent_at` for every row the scope currently blocks, so there is
+nothing left owed once it opens. See `deployment/ENV.md`'s `MEMBERSHIP_EMAIL_SCOPE` entry and
+`docs/specs/membership-and-stripe-billing.md`'s "Cutover" section for the two-step order.

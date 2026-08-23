@@ -128,9 +128,10 @@ module Services
         # touch a manual grant, and that promise deserves an explicit guard.
         #
         # A comped row is one the reconciler must not touch, so report it as a
-        # no-op transition rather than a bare Membership: callers get a uniform
-        # return type, and status_changed?/became_active?/became_canceled? are
-        # all false, which is exactly right for a row nothing changed about.
+        # no-op transition rather than a bare Membership: callers get a
+        # uniform return type -- MembershipNotifier's #membership and this
+        # method's own #membership.id below both need to work on whatever
+        # #upsert returns, on every path, including this one.
         if membership.persisted? && !membership.stripe?
           return MembershipTransition.new(membership: membership, previous_status: membership.status)
         end
@@ -162,7 +163,21 @@ module Services
           # Reading subscription.current_period_end works today via a deprecated
           # accessor and will stop working without warning.
           current_period_end: item && Time.at(item.current_period_end),
-          cancel_at_period_end: !!subscription.cancel_at_period_end,
+          # Stripe expresses a scheduled cancellation two different ways, and as
+          # of 2026 the portal uses the second: cancel_at_period_end stays FALSE
+          # and a cancel_at timestamp carries the date. Verified live on
+          # 2026-08-22 -- a real portal cancellation returned
+          # cancel_at_period_end=false, cancel_at=<exactly current_period_end>,
+          # canceled_at=<when cancel was clicked>. Reading only the boolean left
+          # this column permanently false, so /membership told a member who had
+          # just cancelled that their membership renews.
+          #
+          # Read both. The boolean may still be set by the API or by older
+          # flows, and this column means "is a cancellation scheduled", which
+          # either signal establishes. No offline test can catch the next such
+          # move -- the tests stub the shape we expect -- so the runbook's live
+          # cancellation check is what guards this going forward.
+          cancel_at_period_end: subscription.cancel_at_period_end.present? || subscription.cancel_at.present?,
           canceled_at: subscription.canceled_at && Time.at(subscription.canceled_at),
           stripe_synced_at: Time.current
         )
