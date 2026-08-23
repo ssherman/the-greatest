@@ -156,4 +156,5 @@ wrong place.
 - `docs/summary.md` — architecture & goals · `docs/dev_setup.md` — local setup
 - `docs/features/` — feature docs (data_importers, authentication, rankings, search,
   saved_searches, ...)
-- `docs/documentation.md` — every model/service gets a doc in `docs/`
+- `docs/documentation.md` — documentation philosophy. **Code is the source of truth: we do NOT write
+  class-level docs.** Features go in `docs/features/`, data models in `docs/object_models/`.
