@@ -520,6 +520,36 @@ class NewsPostsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  # --- Public navigation ---
+
+  # /news shipped on all three sites with nothing linking to it: every layout's
+  # nav listed only the ranking and list pages, so a reader could reach the news
+  # section only from a legacy /blog_posts link, a search engine, or by typing
+  # the URL. The spec's only "nav" references are to the ADMIN sidebar.
+  #
+  # Each layout renders its nav TWICE -- once in the mobile dropdown, once in
+  # the desktop bar (books via a shared partial, music and games as duplicated
+  # inline markup). Asserting a count of 2 is what discriminates: an edit that
+  # updated only one copy would leave the link missing on mobile or on desktop,
+  # and a single `assert_select` would pass either way.
+  {
+    "dev-new.thegreatestbooks.org" => :books,
+    "dev.thegreatestmusic.org" => :music,
+    "dev.thegreatest.games" => :games
+  }.each do |host, domain|
+    test "the #{domain} nav links to the news section on both mobile and desktop" do
+      host! host
+
+      get news_path
+
+      assert_response :success
+      # `.navbar`, not `nav`: the books layout wraps its bar in <nav class="navbar">
+      # while music and games use <div class="navbar">. Scoped to the bar so the
+      # books footer's own links cannot satisfy it.
+      assert_select ".navbar a[href=?]", "/news", count: 2
+    end
+  end
+
   # --- Task 19: games and music rollout ---
 
   # The plan asserted an EMPTY games index plus `assert_select "html[data-theme]"`.
