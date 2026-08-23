@@ -31,6 +31,21 @@ module Actions
           assert_not ::Games::Game.exists?(@source.id)
         end
 
+        test "reports a warning, not a plain success, when the post-commit follow-up fails" do
+          ::Games::Game::Merger.any_instance.stubs(:reindex_target_game)
+            .raises(StandardError.new("opensearch down"))
+
+          result = call({source_game_id: @source.id.to_s, confirm_merge: "1"})
+
+          assert result.warning?, result.message
+          assert_not result.success?, "a warning must not also report as a plain success"
+          assert_match(/Half-Life 2/, result.message)
+          assert_match(/source game has been deleted/, result.message)
+          assert_match(/could not be scheduled/, result.message)
+          assert_match(/opensearch down/, result.message)
+          assert_not ::Games::Game.exists?(@source.id), "the merge itself must still have committed"
+        end
+
         test "requires a source game id" do
           result = call({confirm_merge: "1"})
 
@@ -74,7 +89,7 @@ module Actions
         end
 
         test "surfaces merger failures" do
-          ::Games::Game::Merger.stubs(:call).returns(
+          ::Games::Game::Merger.any_instance.stubs(:call).returns(
             ::Games::Game::Merger::Result.new(success?: false, data: nil, errors: ["nope"])
           )
 

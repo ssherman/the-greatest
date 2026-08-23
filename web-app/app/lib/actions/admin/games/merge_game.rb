@@ -51,10 +51,18 @@ module Actions
           source_title = source_game.title
           source_id = source_game.id
 
-          result = ::Games::Game::Merger.call(source: source_game, target: target_game)
+          merger = ::Games::Game::Merger.new(source: source_game, target: target_game)
+          result = merger.call
 
           if result.success?
-            succeed "Successfully merged '#{source_title}' (ID: #{source_id}) into '#{target_game.title}'. The source game has been deleted."
+            message = "Successfully merged '#{source_title}' (ID: #{source_id}) into '#{target_game.title}'. The source game has been deleted."
+
+            if merger.stats[:post_commit_error].present?
+              warn "#{message} Note: search reindexing and ranking recalculation could not be " \
+                "scheduled (#{merger.stats[:post_commit_error]}); they will need to be re-run."
+            else
+              succeed message
+            end
           else
             error "Failed to merge games: #{result.errors.join(", ")}"
           end
