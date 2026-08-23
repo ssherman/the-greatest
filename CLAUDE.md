@@ -94,6 +94,9 @@ which takes **hours**.
   compare tuples (`assert_equal [a, b], [x, y]`) when the intent is "these did not change" and one of
   them may be nil. Also gone in 6: `assert_send`, `minitest/mock` (its own gem now — we don't use it),
   the `MiniTest` namespace, and spec expectations on `Object`.
+- **Sidekiq test mode is `Sidekiq.testing!(:inline)`** (set globally in `test_helper.rb`); never
+  `require "sidekiq/testing"`, which Sidekiq 9 removes. `Sidekiq::Testing.fake! { }` blocks still work
+  and are how you stop a job from running inline inside one test.
 
 ## Frontend
 

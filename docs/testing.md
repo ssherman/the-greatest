@@ -216,6 +216,20 @@ Examples of what should be tested:
 - Mock AI service responses
 - Never mock what you don't own
 
+### Sidekiq in Tests
+
+`test_helper.rb` sets `Sidekiq.testing!(:inline)`, so every enqueued job runs immediately. To assert a
+job was *enqueued* rather than let it execute, wrap the call:
+
+```ruby
+Sidekiq::Testing.fake! do
+  post reviews_path, params: {...}
+  assert_equal 1, SomeJob.jobs.size
+end
+```
+
+Never `require "sidekiq/testing"` — Sidekiq 9 removes it. `Sidekiq.testing!` loads the test API itself.
+
 ### What NOT to Test (Common Mistakes)
 - **Never test log statements at all** - Logging is an implementation detail, not behavior. Don't verify that logs are written.
   ```ruby

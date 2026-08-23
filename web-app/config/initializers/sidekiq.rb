@@ -24,3 +24,11 @@ end
 Sidekiq.configure_client do |config|
   config.redis = {url: ENV.fetch("REDIS_URL", "redis://localhost:6379/0")}
 end
+
+if Rails.env.test?
+  # Sidekiq logs "connecting to Redis" at INFO on every client connection, which in
+  # the test environment means one line per parallel worker (24+) on every run.
+  Sidekiq.configure_client do |config|
+    config.logger.level = Logger::WARN
+  end
+end
