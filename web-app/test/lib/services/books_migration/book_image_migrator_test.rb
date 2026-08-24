@@ -15,7 +15,7 @@ module Services
       end
 
       test "enqueues one MigrateCoverImageJob per legacy attachment with the blob fields" do
-        Books::MigrateCoverImageJob.expects(:perform_async).with(42, "blobkey", "cover.jpg", "image/jpeg").once
+        ::Books::MigrateCoverImageJob.expects(:perform_async).with(42, "blobkey", "cover.jpg", "image/jpeg").once
 
         result = run_migrator([row])
 
@@ -25,7 +25,7 @@ module Services
       end
 
       test "enqueues a job for every row" do
-        Books::MigrateCoverImageJob.expects(:perform_async).twice
+        ::Books::MigrateCoverImageJob.expects(:perform_async).twice
 
         result = run_migrator([row("book_id" => 1), row("book_id" => 2)])
 

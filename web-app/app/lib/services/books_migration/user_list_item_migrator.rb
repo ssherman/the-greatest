@@ -45,7 +45,7 @@ module Services
       end
 
       def preload_context
-        @book_ids = Books::Book.pluck(:id).to_set
+        @book_ids = ::Books::Book.pluck(:id).to_set
       end
 
       def build_rows(attrs)

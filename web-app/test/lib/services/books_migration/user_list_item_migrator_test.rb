@@ -5,8 +5,8 @@ module Services
     class UserListItemMigratorTest < ActiveSupport::TestCase
       setup do
         @user = users(:editor_user)
-        @list = Books::UserList.create!(user: @user, name: "Books I've Read", list_type: :read)
-        @book = Books::Book.create!(title: "Item Book")
+        @list = ::Books::UserList.create!(user: @user, name: "Books I've Read", list_type: :read)
+        @book = ::Books::Book.create!(title: "Item Book")
       end
 
       def run_migrator(rows)
@@ -51,9 +51,9 @@ module Services
       end
 
       test "renumbers positions to a contiguous 1..N, nulls last and ties broken by legacy id" do
-        second = Books::Book.create!(title: "Second")
-        third = Books::Book.create!(title: "Third")
-        fourth = Books::Book.create!(title: "Fourth")
+        second = ::Books::Book.create!(title: "Second")
+        third = ::Books::Book.create!(title: "Third")
+        fourth = ::Books::Book.create!(title: "Fourth")
 
         result = run_migrator([
           legacy_row("id" => 5000001, "book_id" => fourth.id, "position" => nil),
@@ -84,7 +84,7 @@ module Services
       end
 
       test "fails loud when the book is not migrated" do
-        missing = Books::Book.maximum(:id).to_i + 999_999
+        missing = ::Books::Book.maximum(:id).to_i + 999_999
         result = run_migrator([legacy_row("id" => 5000042, "book_id" => missing)])
 
         refute result[:success]

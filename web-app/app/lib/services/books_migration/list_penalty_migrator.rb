@@ -35,7 +35,7 @@ module Services
         raise "no migrated penalties; run data_migration:penalties first" if @penalty_map.empty?
         @static_penalty_ids = Penalty.static.pluck(:id).to_set
         @static_list_con_ids = @penalty_map.select { |_legacy_id, new_id| @static_penalty_ids.include?(new_id) }.keys
-        @list_ids = Books::List.pluck(:id).to_set
+        @list_ids = ::Books::List.pluck(:id).to_set
         @seen = Set.new
       end
 

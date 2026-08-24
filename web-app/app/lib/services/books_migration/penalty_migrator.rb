@@ -28,7 +28,7 @@ module Services
           when :reuse
             payload
           when :create_books
-            Books::Penalty.find_or_create_by!(name: payload[:name], user_id: nil) do |p|
+            ::Books::Penalty.find_or_create_by!(name: payload[:name], user_id: nil) do |p|
               p.dynamic_type = payload[:dynamic_type]
               p.description = attrs["description"]
               p.created_at = attrs["created_at"]

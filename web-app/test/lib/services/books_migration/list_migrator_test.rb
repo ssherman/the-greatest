@@ -46,7 +46,7 @@ module Services
         assert_equal "Books::List", result[:data][:model]
 
         list = List.find(990001)
-        assert_instance_of Books::List, list
+        assert_instance_of ::Books::List, list
         assert_equal "Best Books", list.name
         assert_equal "desc", list.description
         assert_equal "example.com", list.source

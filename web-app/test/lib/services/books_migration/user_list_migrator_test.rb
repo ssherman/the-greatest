@@ -39,7 +39,7 @@ module Services
         assert_equal "Books::UserList", result[:data][:model]
 
         list = ::UserList.find(300001)
-        assert_instance_of Books::UserList, list
+        assert_instance_of ::Books::UserList, list
         assert_equal @user, list.user
         assert_equal "Books I've Read", list.name
         assert_equal "desc", list.description

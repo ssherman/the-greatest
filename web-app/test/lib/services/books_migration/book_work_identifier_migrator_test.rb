@@ -8,7 +8,7 @@ class Services::BooksMigration::BookWorkIdentifierMigratorTest < ActiveSupport::
   end
 
   test "creates stripped openlibrary and verbatim goodreads ids on the book" do
-    book = Books::Book.create!(title: "Work Book")
+    book = ::Books::Book.create!(title: "Work Book")
     run_migrator([{"id" => book.id, "ol_work_id" => "/works/OL20600W", "goodreads_id" => "555"}])
     ol = Identifier.find_by(identifiable: book, identifier_type: :books_work_openlibrary_id)
     gr = Identifier.find_by(identifiable: book, identifier_type: :books_work_goodreads_id)
@@ -17,13 +17,13 @@ class Services::BooksMigration::BookWorkIdentifierMigratorTest < ActiveSupport::
   end
 
   test "creates only the present identifier when a column is nil" do
-    book = Books::Book.create!(title: "Partial Book")
+    book = ::Books::Book.create!(title: "Partial Book")
     run_migrator([{"id" => book.id, "ol_work_id" => "/works/OL99W", "goodreads_id" => nil}])
     assert_equal ["books_work_openlibrary_id"], Identifier.where(identifiable: book).map(&:identifier_type)
   end
 
   test "is idempotent" do
-    book = Books::Book.create!(title: "Idem Work Book")
+    book = ::Books::Book.create!(title: "Idem Work Book")
     rows = [{"id" => book.id, "ol_work_id" => "/works/OL1W", "goodreads_id" => "1"}]
     run_migrator(rows)
     assert_no_difference -> { Identifier.count } do
@@ -32,7 +32,7 @@ class Services::BooksMigration::BookWorkIdentifierMigratorTest < ActiveSupport::
   end
 
   test "book goodreads dedups against an identical book_identifiers goodreads, and coexists when different" do
-    book = Books::Book.create!(title: "Cross Source Book")
+    book = ::Books::Book.create!(title: "Cross Source Book")
     # book_identifiers type-5 source creates goodreads "123"
     bi = Services::BooksMigration::BookIdentifierMigrator.new
     bi.stubs(:legacy_each).multiple_yields([{"id" => 1, "book_id" => book.id, "identifier_type" => 5, "identifier" => "123"}])

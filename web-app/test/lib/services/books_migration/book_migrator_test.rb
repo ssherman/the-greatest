@@ -21,7 +21,7 @@ class Services::BooksMigration::BookMigratorTest < ActiveSupport::TestCase
     assert result[:success], result[:error]
     assert_equal 2, result[:data][:count]
 
-    b1 = Books::Book.find(90001)
+    b1 = ::Books::Book.find(90001)
     assert_equal "Legacy Book One", b1.title
     assert_equal "Sub", b1.subtitle
     assert_equal 1954, b1.first_published_year
@@ -29,7 +29,7 @@ class Services::BooksMigration::BookMigratorTest < ActiveSupport::TestCase
     assert_equal ["Alt One", "Alt Two"], b1.alternate_titles
     assert b1.slug.present?
 
-    b2 = Books::Book.find(90002)
+    b2 = ::Books::Book.find(90002)
     assert_nil b2.original_language_id
     assert_equal [], b2.alternate_titles
   end
@@ -43,13 +43,13 @@ class Services::BooksMigration::BookMigratorTest < ActiveSupport::TestCase
   test "is idempotent: re-running does not duplicate or error" do
     rows = [{"id" => 90004, "title" => "Repeat Book", "original_language_id" => nil}]
     run_migrator(rows)
-    assert_no_difference -> { Books::Book.count } do
+    assert_no_difference -> { ::Books::Book.count } do
       run_migrator(rows)
     end
   end
 
   test "resets the books_books sequence above the max migrated id" do
-    Books::Book.connection.expects(:reset_pk_sequence!).with("books_books")
+    ::Books::Book.connection.expects(:reset_pk_sequence!).with("books_books")
 
     result = run_migrator([{"id" => 90005, "title" => "Seq Probe Book", "original_language_id" => nil}])
 
@@ -64,6 +64,6 @@ class Services::BooksMigration::BookMigratorTest < ActiveSupport::TestCase
     refute result[:success]
     assert_includes result[:error], "legacy id=90010"
     assert_includes result[:error], "999999"
-    assert_nil Books::Book.find_by(id: 90010)
+    assert_nil ::Books::Book.find_by(id: 90010)
   end
 end

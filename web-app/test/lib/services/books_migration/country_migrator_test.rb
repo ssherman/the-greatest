@@ -25,7 +25,7 @@ class Services::BooksMigration::CountryMigratorTest < ActiveSupport::TestCase
     assert_equal 1, result[:data][:count]
     assert_equal "Books::Country", result[:data][:model]
 
-    country = Books::Country.find(9001)
+    country = ::Books::Country.find(9001)
     assert_equal "Peruvian", country.name
     assert_equal "Books of Peruvian origin.", country.description
     assert_equal ["latin_american"], country.labels
@@ -35,27 +35,27 @@ class Services::BooksMigration::CountryMigratorTest < ActiveSupport::TestCase
     result = run_migrator([legacy_row("name" => "United States", "slug" => "american")])
 
     assert result[:success], result[:error]
-    assert_equal "american", Books::Country.find(9001).slug
+    assert_equal "american", ::Books::Country.find(9001).slug
   end
 
   test "maps nil labels to an empty array" do
     result = run_migrator([legacy_row("labels" => nil)])
 
     assert result[:success], result[:error]
-    assert_equal [], Books::Country.find(9001).labels
+    assert_equal [], ::Books::Country.find(9001).labels
   end
 
   test "leaves book_count at zero for BookCountryMigrator to recompute" do
     run_migrator([legacy_row])
 
-    assert_equal 0, Books::Country.find(9001).book_count
+    assert_equal 0, ::Books::Country.find(9001).book_count
   end
 
   test "is idempotent on id" do
     rows = [legacy_row]
     run_migrator(rows)
 
-    assert_no_difference -> { Books::Country.count } do
+    assert_no_difference -> { ::Books::Country.count } do
       result = run_migrator(rows)
       assert result[:success], result[:error]
     end
@@ -65,11 +65,11 @@ class Services::BooksMigration::CountryMigratorTest < ActiveSupport::TestCase
     run_migrator([legacy_row])
     run_migrator([legacy_row("name" => "Peruvian (revised)")])
 
-    assert_equal "Peruvian (revised)", Books::Country.find(9001).name
+    assert_equal "Peruvian (revised)", ::Books::Country.find(9001).name
   end
 
   test "resets the primary key sequence so later inserts do not collide" do
-    Books::Country.connection.expects(:reset_pk_sequence!).with("books_countries")
+    ::Books::Country.connection.expects(:reset_pk_sequence!).with("books_countries")
 
     result = run_migrator([legacy_row])
 

@@ -26,9 +26,9 @@ module Services
       end
 
       def upsert_row(attrs)
-        Books::RankingConfiguration.transaction do
+        ::Books::RankingConfiguration.transaction do
           new_id = LegacyIdMap.lookup(model: model_key, legacy_id: attrs["id"])
-          rc = new_id ? Books::RankingConfiguration.find(new_id) : Books::RankingConfiguration.new
+          rc = new_id ? ::Books::RankingConfiguration.find(new_id) : ::Books::RankingConfiguration.new
           rc.assign_attributes(RankingConfigurationTransformer.call(attrs))
           rc.save!
           LegacyIdMap.record(model: model_key, legacy_id: attrs["id"], new_id: rc.id)

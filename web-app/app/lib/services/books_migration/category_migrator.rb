@@ -20,9 +20,9 @@ module Services
       end
 
       def upsert_row(attrs)
-        Books::Category.transaction do
+        ::Books::Category.transaction do
           new_id = LegacyIdMap.lookup(model: model_key, legacy_id: attrs["id"])
-          category = new_id ? Books::Category.find(new_id) : Books::Category.new
+          category = new_id ? ::Books::Category.find(new_id) : ::Books::Category.new
           category.assign_attributes(CategoryTransformer.call(attrs))
           def category.should_generate_new_friendly_id? = false
           category.save!
@@ -44,7 +44,7 @@ module Services
           child_new_id = LegacyIdMap.lookup(model: model_key, legacy_id: child_legacy_id)
           parent_new_id = LegacyIdMap.lookup(model: model_key, legacy_id: parent_legacy_id)
           next unless child_new_id && parent_new_id
-          Books::Category.where(id: child_new_id).update_all(parent_id: parent_new_id)
+          ::Books::Category.where(id: child_new_id).update_all(parent_id: parent_new_id)
         end
       end
     end

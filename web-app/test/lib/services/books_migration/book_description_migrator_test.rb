@@ -195,7 +195,7 @@ class Services::BooksMigration::BookDescriptionMigratorTest < ActiveSupport::Tes
   end
 
   test "fails loud when the legacy book has no migrated Books::Book" do
-    missing = Books::Book.maximum(:id).to_i + 999_999
+    missing = ::Books::Book.maximum(:id).to_i + 999_999
     result = run_migrator([legacy_book(missing, "ai_generated_description" => "Orphan text.")])
 
     refute result[:success]
