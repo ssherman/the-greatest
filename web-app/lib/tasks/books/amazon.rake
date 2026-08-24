@@ -6,9 +6,18 @@ namespace :books do
     puts "Done. #{written} identifier rows attempted (duplicates ignored)."
   end
 
-  desc "Enrich one book from Amazon: bin/rails books:amazon_enrich[123]"
+  desc "Enrich one book from Amazon: bin/rails books:amazon_enrich[123] or [some-slug]"
   task :amazon_enrich, [:book_id] => :environment do |_task, args|
-    book = ::Books::Book.find(args[:book_id])
+    # Rake args are always strings, and Books::Book uses friendly_id with :finders --
+    # so a bare .find("13") resolves by SLUG, and 137 books have purely numeric slugs
+    # that shadow real ids. Decide explicitly instead of letting friendly_id guess.
+    identifier = args[:book_id].to_s
+    book = if identifier.match?(/\A\d+\z/)
+      ::Books::Book.find_by!(id: identifier)
+    else
+      ::Books::Book.friendly.find(identifier)
+    end
+
     puts "Enriching #{book.title} (##{book.id})..."
     Books::AmazonProductEnrichmentJob.new.perform(book.id)
     puts "Done."

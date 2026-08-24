@@ -55,6 +55,20 @@ class Books::AmazonProductEnrichmentJobTest < ActiveSupport::TestCase
     Books::AmazonProductEnrichmentJob.new.perform(@book.id)
   end
 
+  # Books::Book uses friendly_id with :finders, so a STRING id resolves by slug.
+  # 137 books have purely numeric slugs that shadow real ids in production; no
+  # fixture book has one, so the collision is built here: a second book whose
+  # slug is the string form of @book.id.
+  test "perform resolves the book by primary key even when given a string id that collides with another book's slug" do
+    colliding = ::Books::Book.create!(title: "Colliding Book", slug: @book.id.to_s)
+    ::Services::Books::AmazonProductService.stubs(:call).returns({success: true, data: "ok"})
+
+    Books::AmazonProductEnrichmentJob.new.perform(@book.id.to_s)
+
+    assert_not_nil @book.reload.amazon_enriched_at
+    assert_nil colliding.reload.amazon_enriched_at
+  end
+
   test "job is configured for the serial queue" do
     assert_equal :serial, Books::AmazonProductEnrichmentJob.get_sidekiq_options["queue"]
   end

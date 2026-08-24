@@ -6,7 +6,7 @@ class Books::AmazonProductEnrichmentJob
   sidekiq_options queue: :serial
 
   def perform(book_id)
-    book = ::Books::Book.find(book_id)
+    book = ::Books::Book.find_by!(id: book_id)
 
     Rails.logger.info "Starting Amazon product enrichment for book: #{book.title}"
 
