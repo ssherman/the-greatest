@@ -8,6 +8,13 @@ namespace :books do
 
   desc "Enrich one book from Amazon: bin/rails books:amazon_enrich[123] or [some-slug]"
   task :amazon_enrich, [:book_id] => :environment do |_task, args|
+    # The upserter matches editions by their edition-level identifiers. Without the
+    # backfill, every legacy edition looks new and gets duplicated -- ~148,000 rows,
+    # with no merge tooling to undo it.
+    if Identifier.where(identifiable_type: "Books::Edition", identifier_type: :books_edition_asin).none?
+      abort "No edition-level ASIN identifiers found. Run books:backfill_edition_asins first."
+    end
+
     # Rake args are always strings, and Books::Book uses friendly_id with :finders --
     # so a bare .find("13") resolves by SLUG, and 137 books have purely numeric slugs
     # that shadow real ids. Decide explicitly instead of letting friendly_id guess.
@@ -25,6 +32,13 @@ namespace :books do
 
   desc "Enqueue Amazon enrichment for every ranked book, best-ranked first"
   task amazon_enrich_ranked: :environment do
+    # The upserter matches editions by their edition-level identifiers. Without the
+    # backfill, every legacy edition looks new and gets duplicated -- ~148,000 rows,
+    # with no merge tooling to undo it.
+    if Identifier.where(identifiable_type: "Books::Edition", identifier_type: :books_edition_asin).none?
+      abort "No edition-level ASIN identifiers found. Run books:backfill_edition_asins first."
+    end
+
     configuration = ::Books::RankingConfiguration.default_primary
     abort "No default primary books ranking configuration" if configuration.nil?
 
@@ -39,14 +53,12 @@ namespace :books do
     puts "At one job at a time this takes days, and it shares that queue with the"
     puts "cover-art and recording-id jobs. Ctrl-C now if that is not what you want."
 
-    # find_each ignores the `order` clause above and batches by primary key, so
-    # rank ordering is NOT preserved through it -- `order` only governs
-    # `scope.count` and manual inspection here. If strict rank ordering matters
-    # for a given run, replace find_each with scope.limit(N).pluck(:id).each,
-    # run it in chunks, and note that in the run log.
+    # find_each ignores the scope's order and batches by primary key, so it cannot
+    # preserve rank. 24,242 ids is a trivial pluck and keeps the ordering the
+    # operator was promised.
     enqueued = 0
-    scope.find_each(order: :desc) do |book|
-      Books::AmazonProductEnrichmentJob.perform_async(book.id)
+    scope.pluck(:id).each do |book_id|
+      Books::AmazonProductEnrichmentJob.perform_async(book_id)
       enqueued += 1
       puts "... #{enqueued}/#{total}" if (enqueued % 500).zero?
     end

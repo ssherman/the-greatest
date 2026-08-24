@@ -246,6 +246,26 @@ module Services
         assert_equal "https://amazon.com/dp/1400079985", @book.external_links.find_by(source: :amazon).url
       end
 
+      # Music's after_persist only attaches an image, which rescues internally.
+      # Books also creates a book-level link, which does not -- an editions-only
+      # success must not be turned into a failure (and 25 Sidekiq retries of
+      # already-persisted work) by a bad book-level link write.
+      test "a failing book-level affiliate link does not fail an otherwise successful run" do
+        ::Services::Amazon::Client.stubs(:search_items).returns([amazon_product])
+        stub_ai_match
+        stub_image
+
+        AmazonProductService.any_instance.stubs(:upsert_external_link).returns(nil)
+        AmazonProductService.any_instance.stubs(:upsert_external_link)
+          .with(has_entries(parent: @book))
+          .raises(StandardError, "boom")
+
+        result = AmazonProductService.call(book: @book)
+
+        assert result[:success]
+        assert_match(/Failed to create book-level Amazon link: boom/, result[:errors].join(" "))
+      end
+
       private
 
       def amazon_product

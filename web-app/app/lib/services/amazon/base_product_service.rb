@@ -208,7 +208,7 @@ module Services
           return
         end
 
-        tempfile = Down.download(image_url)
+        tempfile = Down.download(image_url, max_size: 10 * 1024 * 1024)
         return unless tempfile
 
         image = parent.images.build(primary: true)

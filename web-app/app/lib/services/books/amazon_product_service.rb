@@ -90,6 +90,12 @@ module Services
         return if entry.nil?
 
         upsert_external_link(parent: book, product: entry[:product])
+      rescue => e
+        # The editions and their links are already persisted; a bad book-level link
+        # must not turn a successful run into a failure and 25 retries of it.
+        @errors << "Failed to create book-level Amazon link: #{e.message}"
+        Rails.logger.error "Book-level link error for book #{book.id}: #{e.message}"
+        nil
       end
 
       def best_physical

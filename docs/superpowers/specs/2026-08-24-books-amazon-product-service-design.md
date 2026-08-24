@@ -309,6 +309,14 @@ capsule only ever existed to sidestep API errors, that the providers plainly all
 and that it should eventually be removed or parallelised — but explicitly not as part of this. Do not
 add a capsule, a parallel queue, or a concurrency bump here.
 
+**Prerequisite before that removal.** `find_edition` takes no lock, and the
+`identifiers` unique index is `(identifiable_type, identifier_type, value,
+identifiable_id)` -- scoped per identifiable, so it can never dedupe editions
+against each other. The serial capsule is currently the only thing preventing two
+concurrent sweeps over the same book from each creating an edition. Un-serialising
+the queue therefore turns this into a duplicate-edition bug unless a lock or a
+uniqueness constraint is added first.
+
 Ranked-first scoping is therefore the only lever on sweep duration, and it also bounds the two costs
 that scale with book count: gpt-5-mini calls and R2 objects for edition covers.
 
