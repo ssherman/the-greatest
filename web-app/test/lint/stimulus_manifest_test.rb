@@ -40,7 +40,59 @@ class StimulusManifestTest < ActiveSupport::TestCase
       "controller and its registration:\n#{unreferenced.map { |id| "  #{id}" }.join("\n")}"
   end
 
+  test "admin-only controllers are absent from every web manifest" do
+    admin_only = referenced_controllers.select { |_id, paths| paths.all? { |path| admin_path?(path) } }
+
+    leaked = admin_only.keys.each_with_object({}) do |identifier, result|
+      domains = WEB_MANIFESTS.keys.select { |domain| registered_in?(WEB_MANIFESTS[domain], identifier) }
+      result[identifier] = domains if domains.any?
+    end
+
+    assert_empty leaked,
+      "These controllers are referenced only from admin markup, so shipping them " \
+      "in a public bundle makes every reader download admin code:\n" \
+      "#{leaked.map { |id, domains| "  #{id}: in #{domains.join(", ")}" }.join("\n")}"
+  end
+
+  test "controllers referenced from shared markup are in every web manifest" do
+    shared = referenced_controllers.select { |_id, paths|
+      paths.any? { |path| !admin_path?(path) && domain_of(path).nil? }
+    }
+
+    gaps = shared.keys.each_with_object({}) do |identifier, result|
+      missing = WEB_MANIFESTS.keys.reject { |domain| registered_in?(WEB_MANIFESTS[domain], identifier) }
+      result[identifier] = missing if missing.any?
+    end
+
+    assert_empty gaps,
+      "These controllers are referenced from markup shared across domains (layouts, " \
+      "reviews/, user_lists/, root-level components), so every web bundle needs them. " \
+      "Missing from:\n#{gaps.map { |id, domains| "  #{id}: #{domains.join(", ")}" }.join("\n")}"
+  end
+
+  test "controllers referenced from domain markup are in that domain's web manifest" do
+    gaps = referenced_controllers.each_with_object({}) do |(identifier, paths), result|
+      domains = paths.filter_map { |path| domain_of(path) unless admin_path?(path) }.uniq
+      missing = domains.reject { |domain| registered_in?(WEB_MANIFESTS[domain], identifier) }
+      result[identifier] = missing if missing.any?
+    end
+
+    assert_empty gaps,
+      "These controllers are referenced from a domain's own markup but are not in " \
+      "that domain's web manifest, so they silently do nothing on that site:\n" \
+      "#{gaps.map { |id, domains| "  #{id}: #{domains.join(", ")}" }.join("\n")}"
+  end
+
   private
+
+  WEB_MANIFESTS = {
+    "books" => "app/javascript/manifests/books_web.js",
+    "music" => "app/javascript/manifests/music_web.js",
+    "games" => "app/javascript/manifests/games_web.js",
+    "movies" => "app/javascript/manifests/movies_web.js"
+  }.freeze
+
+  ADMIN_MANIFEST = "app/javascript/manifests/admin.js"
 
   # Stimulus identifier => sorted list of Rails.root-relative paths referencing it.
   #
@@ -79,16 +131,28 @@ class StimulusManifestTest < ActiveSupport::TestCase
     end
   end
 
-  # Identifiers passed to application.register("...", X) anywhere in the
-  # registration source. Task 4 repoints registration_files at the manifests.
+  # Comments are stripped before scanning. A commented-out
+  # `application.register("x", X)` would otherwise still match, so the guard
+  # would report a controller as registered while the browser saw nothing --
+  # exactly the silent-breakage class this test exists to catch. Manifests
+  # contain only imports and register calls, no string literals holding "//",
+  # so stripping line comments here is safe.
   def registered_controllers
-    @registered_controllers ||= registration_files.flat_map { |relative_path|
-      File.read(Rails.root.join(relative_path)).scan(/application\.register\(\s*["']([^"']+)["']/).flatten
-    }.uniq.sort
+    @registered_controllers ||= registration_files
+      .flat_map { |path| manifest_closure(path).to_a }
+      .uniq
+      .flat_map { |path|
+        source = File.read(Rails.root.join(path))
+          .gsub(%r{/\*.*?\*/}m, "")
+          .gsub(%r{^\s*//[^\n]*}, "")
+        source.scan(/application\.register\(\s*["']([^"']+)["']/).flatten
+      }
+      .uniq
+      .sort
   end
 
   def registration_files
-    ["app/javascript/controllers/index.js"]
+    WEB_MANIFESTS.values + [ADMIN_MANIFEST]
   end
 
   def markup_files
@@ -96,5 +160,47 @@ class StimulusManifestTest < ActiveSupport::TestCase
       .select { |path| File.file?(path) }
       .map { |path| Pathname.new(path).relative_path_from(Rails.root).to_s }
       .sort
+  end
+
+  def admin_path?(relative_path)
+    relative_path.start_with?("app/views/admin/", "app/components/admin/")
+  end
+
+  # The first path segment under app/views or app/components that names a domain.
+  #
+  # Scans EVERY segment, not just the first. Books-only markup lives at both
+  # app/views/books/... and app/views/saved_searches/books/..., and only the
+  # second segment identifies the domain in the latter -- matching just the
+  # first segment would classify saved-search-picker as shared and demand it in
+  # the music, games and movies manifests, where nothing references it.
+  #
+  # Returns nil for genuinely shared markup (reviews/, user_lists/, toast/,
+  # root-level components), which rule 4 then requires in every web manifest.
+  def domain_of(relative_path)
+    relative_path
+      .sub(%r{\Aapp/(?:views|components)/}, "")
+      .split("/")
+      .find { |segment| WEB_MANIFESTS.key?(segment) }
+  end
+
+  # Membership resolves transitively: books_web.js imports web_shared.js, so a
+  # controller registered in web_shared counts as present in every web manifest.
+  # Reading each manifest in isolation would report every shared controller as
+  # missing from all four.
+  def registered_in?(manifest_path, identifier)
+    manifest_closure(manifest_path).any? do |path|
+      File.read(Rails.root.join(path)).match?(/application\.register\(\s*["']#{Regexp.escape(identifier)}["']/)
+    end
+  end
+
+  def manifest_closure(manifest_path, seen = Set.new)
+    return seen if seen.include?(manifest_path)
+    seen << manifest_path
+
+    File.read(Rails.root.join(manifest_path)).scan(/^import\s+["']\.\/([a-z_]+)["']/).flatten.each do |sibling|
+      manifest_closure("app/javascript/manifests/#{sibling}.js", seen)
+    end
+
+    seen
   end
 end

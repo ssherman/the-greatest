@@ -1,7 +1,7 @@
 {
-  "application": "app/javascript/application.js",
-  "books": "app/javascript/books.js",
-  "music": "app/javascript/music.js",
-  "games": "app/javascript/games.js",
-  "movies": "app/javascript/movies.js"
+  "books-web": "app/javascript/entrypoints/books_web.js",
+  "music-web": "app/javascript/entrypoints/music_web.js",
+  "games-web": "app/javascript/entrypoints/games_web.js",
+  "movies-web": "app/javascript/entrypoints/movies_web.js",
+  "admin": "app/javascript/entrypoints/admin.js"
 }
