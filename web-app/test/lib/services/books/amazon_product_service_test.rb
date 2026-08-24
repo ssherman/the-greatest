@@ -65,13 +65,19 @@ module Services
       end
 
       test "de-duplicates the same ASIN across both search passes" do
+        # Both passes return the same product. The AI task must see it once.
         ::Services::Amazon::Client.stubs(:search_items).returns([amazon_product])
-        stub_ai_match
-        stub_image
 
-        assert_difference "::Books::Edition.count", 1 do
-          AmazonProductService.call(book: @book)
-        end
+        captured = nil
+        ::Services::Ai::Tasks::Books::AmazonBookMatchTask.stubs(:new).with { |**kwargs|
+          captured = kwargs[:search_results]
+          true
+        }.returns(stub(call: stub(success?: true, data: {matching_results: []})))
+
+        AmazonProductService.call(book: @book)
+
+        assert_equal 1, captured.size
+        assert_equal "1400079985", captured.first["asin"]
       end
 
       test "creates an edition and hangs the buy link off it" do
@@ -176,6 +182,68 @@ module Services
         # attach_book_cover attaches it again to the book's.
         assert_requested :get, "https://images.amazon.com/fallback.jpg", times: 2
         assert @book.reload.images.where(primary: true).exists?
+      end
+
+      # One unusable product must not cost the book its other matches.
+      test "skips a product that fails to persist and keeps the rest" do
+        second = amazon_product.deep_merge(
+          "asin" => "0140449175",
+          "detailPageURL" => "https://amazon.com/dp/0140449175"
+        )
+        ::Services::Amazon::Client.stubs(:search_items).returns([amazon_product, second])
+        stub_ai_match_for(%w[1400079985 0140449175])
+        stub_image
+
+        ::Services::Books::AmazonEditionUpserter
+          .stubs(:call)
+          .with(has_entries(product: has_entries("asin" => "1400079985")))
+          .raises(ActiveRecord::RecordInvalid.new(::Books::Edition.new))
+        ::Services::Books::AmazonEditionUpserter
+          .stubs(:call)
+          .with(has_entries(product: has_entries("asin" => "0140449175")))
+          .returns(::Services::Books::AmazonEditionUpserter::Result.new(
+            edition: @book.editions.create!(edition_type: :standard, book_binding: :paperback, popularity: 10),
+            created: true
+          ))
+
+        result = AmazonProductService.call(book: @book)
+
+        assert result[:success]
+        # "products" counts every AI-validated match (2); "links created" counts
+        # only the ones that actually persisted (1) -- the raising ASIN is
+        # skipped, not silently dropped from the count.
+        assert_match(/2 products, 1 links created/, result[:data])
+      end
+
+      # upsert_external_link alone dedups by URL, so a byte-identical re-run
+      # would look idempotent even with the guard deleted. The guard actually
+      # earns its keep when a LATER run's best-selling physical edition is a
+      # different product: without it, attach_book_affiliate_link would point
+      # the book at the new product's URL and add a second amazon link
+      # instead of leaving the first one alone.
+      test "leaves an existing book level amazon link alone on a re-run" do
+        ::Services::Amazon::Client.stubs(:search_items).returns([amazon_product])
+        stub_ai_match
+        stub_image
+        AmazonProductService.call(book: @book)
+        original = @book.external_links.find_by(source: :amazon)
+        assert original
+        assert_equal "https://amazon.com/dp/1400079985", original.url
+
+        better_ranked = amazon_product.deep_merge(
+          "asin" => "0140449175",
+          "detailPageURL" => "https://amazon.com/dp/0140449175",
+          "browseNodeInfo" => {"websiteSalesRank" => {"salesRank" => 1}}
+        )
+        ::Services::Amazon::Client.stubs(:search_items).returns([amazon_product, better_ranked])
+        stub_ai_match_for(%w[1400079985 0140449175])
+
+        assert_no_difference -> { @book.external_links.where(source: :amazon).count } do
+          AmazonProductService.call(book: @book)
+        end
+
+        assert_equal original.id, @book.external_links.find_by(source: :amazon).id
+        assert_equal "https://amazon.com/dp/1400079985", @book.external_links.find_by(source: :amazon).url
       end
 
       private

@@ -140,12 +140,17 @@ module Services
             next
           end
 
-          persist_match(match, product)
+          begin
+            persist_match(match, product)
+          rescue => e
+            # One unusable product must not discard every other match for this
+            # record. Skip it, record it, and keep going -- a partial result with
+            # a logged error beats silently dropping every other good match.
+            @errors << "Failed to persist ASIN #{match[:asin]}: #{e.message}"
+            Rails.logger.error "Persist error for ASIN #{match[:asin]}: #{e.message}"
+            next
+          end
         end
-      rescue => e
-        @errors << "Failed to persist matches: #{e.message}"
-        Rails.logger.error "Persist error: #{e.message}"
-        []
       end
 
       def product_for(match, search_results)
