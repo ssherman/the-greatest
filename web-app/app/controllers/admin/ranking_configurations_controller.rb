@@ -183,12 +183,8 @@ class Admin::RankingConfigurationsController < Admin::BaseController
     raise NotImplementedError, "Subclass must implement index_action_ranking_configurations_path"
   end
 
-  def validate_action_name!
-    unless allowed_action_names.include?(params[:action_name])
-      raise ActionController::BadRequest, "Invalid action: #{params[:action_name]}"
-    end
-  end
-
+  # validate_action_name! is inherited from Admin::BaseController; this class only
+  # declares which names it accepts.
   def allowed_action_names
     %w[RefreshRankings BulkCalculateWeights]
   end

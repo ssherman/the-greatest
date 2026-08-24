@@ -58,6 +58,7 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
   def execute_action
     fields_hash = params.except(:controller, :action, :id, :action_name, :artist_ids)
 
+    validate_action_name!
     action_class = "Actions::Admin::Music::#{params[:action_name]}".constantize
     authorize @artist, :destroy? if action_class.destructive?
     result = action_class.call(
@@ -83,6 +84,7 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
     artist_ids = params[:artist_ids] || []
     artists = Music::Artist.where(id: artist_ids)
 
+    validate_action_name!
     action_class = "Actions::Admin::Music::#{params[:action_name]}".constantize
     result = action_class.call(user: current_user, models: artists)
 
@@ -102,6 +104,7 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
 
   def index_action
     authorize Music::Artist, :index_action?
+    validate_action_name!
     action_class = "Actions::Admin::Music::#{params[:action_name]}".constantize
     result = action_class.call(user: current_user, models: [])
 
@@ -154,6 +157,13 @@ class Admin::Music::ArtistsController < Admin::Music::BaseController
   end
 
   private
+
+  # Covers all three endpoints on this controller: execute_action (merge, AI
+  # description, single-artist ranking refresh), bulk_action, and index_action
+  # (RefreshAllArtistsRankings, reached from the index page).
+  def allowed_action_names
+    %w[MergeArtist GenerateArtistDescription RefreshArtistRanking RefreshAllArtistsRankings]
+  end
 
   def set_artist
     @artist = Music::Artist.find(params[:id])

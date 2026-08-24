@@ -582,6 +582,30 @@ module Admin
         assert_redirected_to admin_artists_path
         assert_equal "Please select an artist from MusicBrainz", flash[:alert]
       end
+
+      test "execute_action rejects an action name outside the allowlist" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        post execute_action_admin_artist_path(@artist, action_name: "Object")
+
+        assert_response :bad_request
+      end
+
+      test "bulk_action rejects an action name outside the allowlist" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        post bulk_action_admin_artists_path(action_name: "Object", artist_ids: [@artist.id])
+
+        assert_response :bad_request
+      end
+
+      test "index_action rejects an action name outside the allowlist" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        post index_action_admin_artists_path(action_name: "Object")
+
+        assert_response :bad_request
+      end
     end
   end
 end

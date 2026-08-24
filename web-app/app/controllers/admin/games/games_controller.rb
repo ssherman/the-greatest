@@ -60,6 +60,7 @@ class Admin::Games::GamesController < Admin::Games::BaseController
   def execute_action
     fields_hash = params.except(:controller, :action, :id, :action_name, :game_ids)
 
+    validate_action_name!
     action_class = "Actions::Admin::Games::#{params[:action_name]}".constantize
     authorize @game, :destroy? if action_class.destructive?
     result = action_class.call(
@@ -143,6 +144,10 @@ class Admin::Games::GamesController < Admin::Games::BaseController
   end
 
   private
+
+  def allowed_action_names
+    %w[MergeGame]
+  end
 
   def set_game
     @game = Games::Game.find(params[:id])

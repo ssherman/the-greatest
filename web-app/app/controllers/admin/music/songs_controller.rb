@@ -58,6 +58,7 @@ class Admin::Music::SongsController < Admin::Music::BaseController
   def execute_action
     fields_hash = params.except(:controller, :action, :id, :action_name, :song_ids)
 
+    validate_action_name!
     action_class = "Actions::Admin::Music::#{params[:action_name]}".constantize
     authorize @song, :destroy? if action_class.destructive?
     result = action_class.call(
@@ -83,6 +84,7 @@ class Admin::Music::SongsController < Admin::Music::BaseController
     song_ids = params[:song_ids] || []
     songs = Music::Song.where(id: song_ids)
 
+    validate_action_name!
     action_class = "Actions::Admin::Music::#{params[:action_name]}".constantize
     result = action_class.call(user: current_user, models: songs)
 
@@ -122,6 +124,10 @@ class Admin::Music::SongsController < Admin::Music::BaseController
   end
 
   private
+
+  def allowed_action_names
+    %w[MergeSong]
+  end
 
   def set_song
     @song = Music::Song.find(params[:id])
