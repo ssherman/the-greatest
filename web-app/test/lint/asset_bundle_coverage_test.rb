@@ -36,9 +36,56 @@ class AssetBundleCoverageTest < ActiveSupport::TestCase
       "#{missing.map { |name, entry| "  #{name} -> #{entry}" }.join("\n")}"
   end
 
+  test "every domain layout's bundle is produced by the build" do
+    missing = domain_layouts.reject { |domain, _path| registry.key?("#{domain}-web") }
+
+    assert_empty missing,
+      "These domain layouts resolve to a bundle that config/asset_bundles.json does " \
+      "not produce. Propshaft raises MissingAssetError on a missing asset, so this " \
+      "is a 500 on every page of that site, not a degraded page:\n" \
+      "#{missing.map { |domain, path| "  #{domain} (#{path}) needs bundle #{domain}-web" }.join("\n")}"
+  end
+
+  test "the admin layout's bundle is produced by the build" do
+    assert registry.key?("admin"),
+      "app/views/layouts/admin.html.erb loads the \"admin\" bundle, but " \
+      "config/asset_bundles.json does not produce it."
+  end
+
+  test "no layout references a bundle outside the registry" do
+    offenders = layout_files.each_with_object({}) do |relative_path, result|
+      names = File.read(Rails.root.join(relative_path))
+        .scan(/javascript_include_tag\s+["']([^"']+)["']/)
+        .flatten
+        .reject { |name| registry.key?(name) }
+      result[relative_path] = names if names.any?
+    end
+
+    assert_empty offenders,
+      "These layouts name a JavaScript bundle the build does not produce:\n" \
+      "#{offenders.map { |path, names| "  #{path}: #{names.join(", ")}" }.join("\n")}"
+  end
+
   private
 
   def registry
     @registry ||= JSON.parse(File.read(Rails.root.join("config/asset_bundles.json")))
+  end
+
+  # "books" => "app/views/layouts/books/application.html.erb", for every domain
+  # that has its own layout. Derived from disk rather than hardcoded so a new
+  # domain layout cannot be added without a matching bundle.
+  def domain_layouts
+    @domain_layouts ||= Dir.glob(Rails.root.join("app/views/layouts/*/application.html.erb"))
+      .to_h { |path|
+        relative = Pathname.new(path).relative_path_from(Rails.root).to_s
+        [relative.split("/")[3], relative]
+      }
+  end
+
+  def layout_files
+    @layout_files ||= Dir.glob(Rails.root.join("app/views/layouts/**/*.erb"))
+      .map { |path| Pathname.new(path).relative_path_from(Rails.root).to_s }
+      .sort
   end
 end
