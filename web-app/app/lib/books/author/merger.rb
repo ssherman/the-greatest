@@ -58,6 +58,8 @@ module Books
         merge_descriptions
         merge_book_authors
         merge_credits
+        merge_author_relationships
+        merge_inverse_author_relationships
       end
 
       def merge_identifiers
@@ -199,6 +201,63 @@ module Books
           end
         end
         @stats[:credits] = count
+      end
+
+      # Repoints from_author_id. Two rows must be dropped instead: one that already
+      # points AT the target (repointing it makes the survivor relate to itself,
+      # which no_self_reference rejects and the whole merge would roll back on), and
+      # one the target already holds, which the (from, to, relation_type) unique
+      # index would reject.
+      def merge_author_relationships
+        count = 0
+        source_author.author_relationships.find_each do |relationship|
+          if relationship.to_author_id == target_author.id
+            relationship.destroy!
+            next
+          end
+
+          collides = ::Books::AuthorRelationship.exists?(
+            from_author_id: target_author.id,
+            to_author_id: relationship.to_author_id,
+            relation_type: relationship.relation_type
+          )
+
+          if collides
+            relationship.destroy!
+          else
+            relationship.update!(from_author_id: target_author.id)
+            count += 1
+          end
+        end
+        @stats[:author_relationships] = count
+      end
+
+      # The mirror image: repoints to_author_id, with the same two drops. Direction
+      # is meaningful (A is a pseudonym of B is not B is a pseudonym of A), so a
+      # relationship that survives in one direction is not a duplicate of one in the
+      # other and both are kept.
+      def merge_inverse_author_relationships
+        count = 0
+        source_author.inverse_author_relationships.find_each do |relationship|
+          if relationship.from_author_id == target_author.id
+            relationship.destroy!
+            next
+          end
+
+          collides = ::Books::AuthorRelationship.exists?(
+            from_author_id: relationship.from_author_id,
+            to_author_id: target_author.id,
+            relation_type: relationship.relation_type
+          )
+
+          if collides
+            relationship.destroy!
+          else
+            relationship.update!(to_author_id: target_author.id)
+            count += 1
+          end
+        end
+        @stats[:inverse_author_relationships] = count
       end
 
       def reconcile_scalars

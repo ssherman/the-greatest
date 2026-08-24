@@ -282,6 +282,81 @@ module Books
           "role is part of the dedup key -- a different role is a different credit"
       end
 
+      test "moves an outbound relationship to the target" do
+        relationship = ::Books::AuthorRelationship.create!(
+          from_author: @source, to_author: books_authors(:garnett), relation_type: :member_of
+        )
+
+        ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, relationship.reload.from_author_id
+      end
+
+      test "drops an outbound relationship that would point at the target itself" do
+        # The bachman_is_king fixture is exactly this: bachman -> king.
+        relationship = books_author_relationships(:bachman_is_king)
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_not ::Books::AuthorRelationship.exists?(relationship.id),
+          "repointing this would make the survivor a pseudonym of itself"
+      end
+
+      test "drops an outbound relationship the target already has" do
+        ::Books::AuthorRelationship.create!(
+          from_author: @source, to_author: books_authors(:garnett), relation_type: :member_of
+        )
+        ::Books::AuthorRelationship.create!(
+          from_author: @target, to_author: books_authors(:garnett), relation_type: :member_of
+        )
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_equal 1, ::Books::AuthorRelationship.where(
+          from_author: @target, to_author: books_authors(:garnett), relation_type: :member_of
+        ).count
+      end
+
+      test "moves an inbound relationship to the target" do
+        relationship = ::Books::AuthorRelationship.create!(
+          from_author: books_authors(:garnett), to_author: @source, relation_type: :member_of
+        )
+
+        ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, relationship.reload.to_author_id
+      end
+
+      test "drops an inbound relationship that would come from the target itself" do
+        relationship = ::Books::AuthorRelationship.create!(
+          from_author: @target, to_author: @source, relation_type: :member_of
+        )
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_not ::Books::AuthorRelationship.exists?(relationship.id),
+          "repointing this would make the survivor a member of itself"
+      end
+
+      test "drops an inbound relationship the target already has" do
+        ::Books::AuthorRelationship.create!(
+          from_author: books_authors(:garnett), to_author: @source, relation_type: :member_of
+        )
+        ::Books::AuthorRelationship.create!(
+          from_author: books_authors(:garnett), to_author: @target, relation_type: :member_of
+        )
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_equal 1, ::Books::AuthorRelationship.where(
+          from_author: books_authors(:garnett), to_author: @target, relation_type: :member_of
+        ).count
+      end
+
       def attach_image(author, primary:)
         author.images.create!(primary: primary) do |image|
           image.file.attach(
