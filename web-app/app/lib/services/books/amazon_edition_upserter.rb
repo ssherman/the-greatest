@@ -10,10 +10,15 @@ module Services
     # the wrong work. The ISBN fallback is what keeps an Amazon reissue under a
     # fresh ASIN from creating a second edition of the same printing.
     #
-    # Write rules: sales rank and the raw metadata always refresh, because they
-    # are inherently live. Everything descriptive is written only when blank --
-    # admins can hand-edit every one of those columns, and a blind refresh would
-    # silently revert their corrections across 148,296 rows.
+    # Write rules: the raw metadata always refreshes, because it is inherently
+    # live. Sales rank refreshes when Amazon has an answer; the last known value
+    # is kept when Amazon omits it (rank is transient -- it drops off the blob
+    # whenever an item goes out of stock, and popularity feeds both an admin
+    # ORDER BY and Task 6's edition-picking min_by, so nil'ing it on a missing
+    # key would move the edition to opposite ends of two different orderings).
+    # Everything descriptive is written only when blank -- admins can hand-edit
+    # every one of those columns, and a blind refresh would silently revert
+    # their corrections across 148,296 rows.
     class AmazonEditionUpserter
       Result = Struct.new(:edition, :created, keyword_init: true)
 
@@ -29,7 +34,14 @@ module Services
         "mp3 cd" => :audiobook,
         "library binding" => :library_binding,
         "leather bound" => :leather_bound,
-        "imitation leather" => :leather_bound
+        "imitation leather" => :leather_bound,
+        "perfect paperback" => :paperback,
+        "pocket book" => :paperback,
+        "paperback bunko" => :paperback,
+        "tankobon hardcover" => :hardcover,
+        "tankobon softcover" => :paperback,
+        "audio cassette" => :audiobook,
+        "preloaded digital audio player" => :audiobook
       }.freeze
 
       def self.call(book:, product:)
@@ -42,16 +54,18 @@ module Services
       end
 
       def call
-        edition = find_edition || book.editions.build(edition_type: :standard)
-        created = edition.new_record?
+        ::ActiveRecord::Base.transaction do
+          edition = find_edition || book.editions.build(edition_type: :standard)
+          created = edition.new_record?
 
-        apply_volatile(edition)
-        apply_descriptive(edition)
-        edition.save!
+          apply_volatile(edition)
+          apply_descriptive(edition)
+          edition.save!
 
-        write_identifiers(edition)
+          write_identifiers(edition)
 
-        Result.new(edition: edition, created: created)
+          Result.new(edition: edition, created: created)
+        end
       end
 
       private
@@ -85,7 +99,8 @@ module Services
       # ---- writes --------------------------------------------------------
 
       def apply_volatile(edition)
-        edition.popularity = product.dig("browseNodeInfo", "websiteSalesRank", "salesRank")
+        rank = product.dig("browseNodeInfo", "websiteSalesRank", "salesRank")
+        edition.popularity = rank if rank.present?
         edition.metadata = (edition.metadata || {}).merge("amazon" => product)
       end
 
@@ -141,8 +156,11 @@ module Services
         product.dig("itemInfo", "byLineInfo", "manufacturer", "displayValue").presence
       end
 
+      # Amazon uses 0 as a sentinel for Kindle/audio/unpaginated items -- 0 must
+      # never be written, or the write-once guard below locks it in forever.
       def page_count
-        product.dig("itemInfo", "contentInfo", "pagesCount", "displayValue")
+        value = product.dig("itemInfo", "contentInfo", "pagesCount", "displayValue").to_i
+        value.positive? ? value : nil
       end
 
       def publication_year
@@ -176,11 +194,20 @@ module Services
       end
 
       # Legacy's process_title: drop parenthesised and bracketed noise, then split
-      # the first colon into title and subtitle.
+      # the first colon into title and subtitle. Loops to convergence because
+      # nested brackets (e.g. "[Mass Market Paperback (2006)]") only expose their
+      # outer pair once the innermost one has already been stripped.
       def split_title(raw)
         return [nil, nil] if raw.blank?
 
-        cleaned = raw.gsub(/\s*[(\[][^)\]]*[)\]]\s*/, " ").squeeze(" ").strip
+        cleaned = raw.dup
+        loop do
+          stripped = cleaned.gsub(/\s*[(\[][^()\[\]]*[)\]]\s*/, " ")
+          break if stripped == cleaned
+          cleaned = stripped
+        end
+        cleaned = cleaned.squeeze(" ").strip
+
         head, tail = cleaned.split(":", 2)
         [head&.strip.presence, tail&.strip.presence]
       end

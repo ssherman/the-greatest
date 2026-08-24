@@ -56,6 +56,17 @@ module Services
         assert_equal languages(:english), edition.language
       end
 
+      # Amazon uses 0 as a page-count sentinel on Kindle/audio/unpaginated
+      # products; it must never be written, or the write-once guard locks it in.
+      test "never writes the zero page count sentinel" do
+        edition = AmazonEditionUpserter.call(
+          book: @book,
+          product: product("itemInfo" => {"contentInfo" => {"pagesCount" => {"displayValue" => 0}}})
+        ).edition
+
+        assert_nil edition.page_count
+      end
+
       test "writes edition level asin isbn and ean identifiers" do
         edition = AmazonEditionUpserter.call(book: @book, product: product).edition
 
@@ -86,6 +97,35 @@ module Services
         end
       end
 
+      # ISBN-13 is the primary fallback when Amazon reissues under a new ASIN.
+      test "finds the existing edition by ISBN-13 when the ASIN changed" do
+        thirteen = product("itemInfo" => {"externalIds" => {
+          "isbns" => {"displayValues" => ["9781400079988"]},
+          "eans" => {"displayValues" => []}
+        }})
+        first = AmazonEditionUpserter.call(book: @book, product: thirteen).edition
+
+        reissued = thirteen.deep_merge("asin" => "9999999999")
+
+        assert_no_difference "::Books::Edition.count" do
+          assert_equal first.id, AmazonEditionUpserter.call(book: @book, product: reissued).edition.id
+        end
+      end
+
+      # 2,747 legacy (ASIN, book) groups hold more than one edition. The pick must
+      # not depend on database order.
+      test "picks the lowest id when several editions in the book share an identifier" do
+        first = @book.editions.create!(edition_type: :standard, title: "First")
+        second = @book.editions.create!(edition_type: :standard, title: "Second")
+        [first, second].each do |edition|
+          edition.identifiers.create!(identifier_type: :books_edition_asin, value: "1400079985")
+        end
+
+        assert_no_difference "::Books::Edition.count" do
+          assert_equal first.id, AmazonEditionUpserter.call(book: @book, product: product).edition.id
+        end
+      end
+
       test "does not match an edition belonging to a different book" do
         other_book = books_books(:crime_and_punishment)
         AmazonEditionUpserter.call(book: @book, product: product)
@@ -97,6 +137,7 @@ module Services
 
       test "always refreshes popularity and metadata on an existing edition" do
         edition = AmazonEditionUpserter.call(book: @book, product: product).edition
+        edition.update!(metadata: edition.metadata.merge("curated" => {"note" => "keep me"}))
 
         AmazonEditionUpserter.call(
           book: @book,
@@ -106,17 +147,43 @@ module Services
         edition.reload
         assert_equal 12, edition.popularity
         assert_equal "1400079985", edition.metadata.dig("amazon", "asin")
+        assert_equal "keep me", edition.metadata.dig("curated", "note")
       end
 
-      test "never overwrites a populated descriptive field" do
+      test "keeps the last known popularity when Amazon omits sales rank" do
         edition = AmazonEditionUpserter.call(book: @book, product: product).edition
-        edition.update!(title: "Hand Corrected Title", publisher_name: "Corrected Publisher")
+        assert_equal 4211, edition.popularity
+
+        no_rank = product.deep_dup
+        no_rank.delete("browseNodeInfo")
+        AmazonEditionUpserter.call(book: @book, product: no_rank)
+
+        edition.reload
+        assert_equal 4211, edition.popularity
+      end
+
+      test "never overwrites any populated descriptive field" do
+        edition = AmazonEditionUpserter.call(book: @book, product: product).edition
+        edition.update!(
+          title: "Hand Corrected Title",
+          subtitle: "Hand Corrected Sub",
+          book_binding: :hardcover,
+          publisher_name: "Corrected Publisher",
+          publication_year: 1869,
+          page_count: 999,
+          language: languages(:russian)
+        )
 
         AmazonEditionUpserter.call(book: @book, product: product)
 
         edition.reload
         assert_equal "Hand Corrected Title", edition.title
+        assert_equal "Hand Corrected Sub", edition.subtitle
+        assert_equal "hardcover", edition.book_binding
         assert_equal "Corrected Publisher", edition.publisher_name
+        assert_equal 1869, edition.publication_year
+        assert_equal 999, edition.page_count
+        assert_equal languages(:russian), edition.language
       end
 
       test "fills a descriptive field that is blank on an existing edition" do
