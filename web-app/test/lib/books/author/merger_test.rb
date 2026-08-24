@@ -240,6 +240,48 @@ module Books
         )
       end
 
+      test "moves a credit the target does not have" do
+        credit = ::Books::Credit.create!(
+          author: @source, creditable: books_editions(:wp_maude), role: :illustrator
+        )
+
+        ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, credit.reload.author_id
+      end
+
+      test "drops a credit the target already has for the same work and role" do
+        ::Books::Credit.create!(
+          author: @source, creditable: books_editions(:wp_maude), role: :translator
+        )
+        ::Books::Credit.create!(
+          author: @target, creditable: books_editions(:wp_maude), role: :translator
+        )
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_equal 1, ::Books::Credit.where(
+          author: @target, creditable: books_editions(:wp_maude), role: :translator
+        ).count
+      end
+
+      test "keeps a credit for the same work in a different role" do
+        ::Books::Credit.create!(
+          author: @source, creditable: books_editions(:wp_maude), role: :illustrator
+        )
+        ::Books::Credit.create!(
+          author: @target, creditable: books_editions(:wp_maude), role: :translator
+        )
+
+        ::Books::Author::Merger.call(source: @source, target: @target)
+
+        roles = ::Books::Credit.where(author: @target, creditable: books_editions(:wp_maude))
+          .map(&:role).sort
+        assert_equal %w[illustrator translator], roles,
+          "role is part of the dedup key -- a different role is a different credit"
+      end
+
       def attach_image(author, primary:)
         author.images.create!(primary: primary) do |image|
           image.file.attach(

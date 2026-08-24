@@ -57,6 +57,7 @@ module Books
         merge_category_items
         merge_descriptions
         merge_book_authors
+        merge_credits
       end
 
       def merge_identifiers
@@ -175,6 +176,29 @@ module Books
 
         @stats[:book_authors] = moved
         @stats[:book_authors_dropped] = dropped
+      end
+
+      # books_credits has NO unique index, so the dedup key -- creditable + role --
+      # is enforced here or not at all. Two rows crediting the same person as
+      # translator of the same edition is exactly the duplicate a merge is supposed
+      # to remove, and nothing downstream would reject it.
+      def merge_credits
+        count = 0
+        source_author.credits.find_each do |credit|
+          collides = target_author.credits.exists?(
+            creditable_type: credit.creditable_type,
+            creditable_id: credit.creditable_id,
+            role: credit.role
+          )
+
+          if collides
+            credit.destroy!
+          else
+            credit.update!(author_id: target_author.id)
+            count += 1
+          end
+        end
+        @stats[:credits] = count
       end
 
       def reconcile_scalars
