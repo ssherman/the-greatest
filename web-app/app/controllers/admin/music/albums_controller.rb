@@ -60,6 +60,7 @@ class Admin::Music::AlbumsController < Admin::Music::BaseController
     fields_hash = params.except(:controller, :action, :id, :action_name, :album_ids)
 
     action_class = "Actions::Admin::Music::#{params[:action_name]}".constantize
+    authorize @album, :destroy? if action_class.destructive?
     result = action_class.call(
       user: current_user,
       models: [@album],

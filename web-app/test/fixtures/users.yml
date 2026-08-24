@@ -141,3 +141,19 @@ user_with_stale_cancellation:
   role: 0
   email_verified: false
   original_signup_domain: thegreatestmusic.org
+
+games_editor_user:
+  email: games-editor@example.com
+  display_name: Games Editor
+  name: Games Editor Full Name
+  role: 0
+  email_verified: true
+  original_signup_domain: thegreatestgames.org
+
+games_moderator_user:
+  email: games-moderator@example.com
+  display_name: Games Moderator
+  name: Games Moderator Full Name
+  role: 0
+  email_verified: true
+  original_signup_domain: thegreatestgames.org

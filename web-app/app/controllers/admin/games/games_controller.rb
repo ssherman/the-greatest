@@ -1,8 +1,8 @@
 class Admin::Games::GamesController < Admin::Games::BaseController
   include IgdbInputResolvable
 
-  before_action :set_game, only: [:show, :edit, :update, :destroy]
-  before_action :authorize_game, only: [:show, :edit, :update, :destroy]
+  before_action :set_game, only: [:show, :edit, :update, :destroy, :execute_action]
+  before_action :authorize_game, only: [:show, :edit, :update, :destroy, :execute_action]
 
   def index
     authorize Games::Game
@@ -57,6 +57,29 @@ class Admin::Games::GamesController < Admin::Games::BaseController
     redirect_to admin_games_games_path, notice: "Game deleted successfully."
   end
 
+  def execute_action
+    fields_hash = params.except(:controller, :action, :id, :action_name, :game_ids)
+
+    action_class = "Actions::Admin::Games::#{params[:action_name]}".constantize
+    authorize @game, :destroy? if action_class.destructive?
+    result = action_class.call(
+      user: current_user,
+      models: [@game],
+      fields: fields_hash
+    )
+
+    respond_to do |format|
+      format.turbo_stream do
+        render turbo_stream: turbo_stream.replace(
+          "flash",
+          partial: "admin/shared/flash",
+          locals: {result: result}
+        )
+      end
+      format.html { redirect_to admin_games_game_path(@game), notice: result.message }
+    end
+  end
+
   def import_from_igdb
     authorize Games::Game, :import?
 
@@ -105,6 +128,7 @@ class Admin::Games::GamesController < Admin::Games::BaseController
   def search
     search_results = ::Search::Games::Search::GameAutocomplete.call(params[:q], size: 20)
     game_ids = search_results.map { |r| r[:id].to_i }
+    game_ids.delete(params[:exclude_id].to_i) if params[:exclude_id].present?
 
     if game_ids.empty?
       render json: []

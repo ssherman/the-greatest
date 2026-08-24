@@ -56,6 +56,13 @@ module Actions
         true
       end
 
+      # Whether this action destroys a record. The controller requires delete
+      # permission (not merely write permission) before running a destructive
+      # action, because execute_action is a shared endpoint carrying both.
+      def self.destructive?
+        false
+      end
+
       protected
 
       def succeed(message, data: nil)

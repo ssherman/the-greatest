@@ -280,6 +280,86 @@ module Admin
         assert_response :success
       end
 
+      # Execute Action Tests
+
+      test "admin can merge one game into another" do
+        sign_in_as(@admin_user, stub_auth: true)
+        source = games_games(:half_life_2)
+        RankedItem.where(item: source).destroy_all
+        RankedItem.where(item: @game).destroy_all
+
+        post execute_action_admin_games_game_path(@game), params: {
+          action_name: "MergeGame",
+          source_game_id: source.id.to_s,
+          confirm_merge: "1"
+        }
+
+        assert_redirected_to admin_games_game_path(@game)
+        assert_not ::Games::Game.exists?(source.id)
+      end
+
+      test "merge via turbo_stream replaces the flash target and still performs the merge" do
+        sign_in_as(@admin_user, stub_auth: true)
+        source = games_games(:half_life_2)
+        RankedItem.where(item: source).destroy_all
+        RankedItem.where(item: @game).destroy_all
+
+        post execute_action_admin_games_game_path(@game), params: {
+          action_name: "MergeGame",
+          source_game_id: source.id.to_s,
+          confirm_merge: "1"
+        }, as: :turbo_stream
+
+        assert_response :success
+        assert_match(/turbo-stream/, response.content_type)
+        assert_includes response.body, 'target="flash"'
+        assert_not ::Games::Game.exists?(source.id)
+      end
+
+      test "a domain editor cannot merge" do
+        sign_in_as(users(:games_editor_user), stub_auth: true)
+        source = games_games(:half_life_2)
+
+        post execute_action_admin_games_game_path(@game), params: {
+          action_name: "MergeGame",
+          source_game_id: source.id.to_s,
+          confirm_merge: "1"
+        }
+
+        assert_redirected_to games_root_path
+        assert ::Games::Game.exists?(source.id), "an editor must not be able to delete via merge"
+      end
+
+      test "a domain moderator can merge" do
+        sign_in_as(users(:games_moderator_user), stub_auth: true)
+        source = games_games(:half_life_2)
+        RankedItem.where(item: source).destroy_all
+        RankedItem.where(item: @game).destroy_all
+
+        post execute_action_admin_games_game_path(@game), params: {
+          action_name: "MergeGame",
+          source_game_id: source.id.to_s,
+          confirm_merge: "1"
+        }
+
+        assert_not ::Games::Game.exists?(source.id)
+      end
+
+      # Search exclude_id
+
+      test "search omits the excluded game" do
+        sign_in_as(@admin_user, stub_auth: true)
+        ::Search::Games::Search::GameAutocomplete.stubs(:call).returns([
+          {id: @game.id.to_s}, {id: games_games(:half_life_2).id.to_s}
+        ])
+
+        get search_admin_games_games_path(q: "zelda", exclude_id: @game.id)
+
+        ids = JSON.parse(response.body).map { |row| row["value"] }
+        assert_not_includes ids, @game.id
+        assert_includes ids, games_games(:half_life_2).id
+      end
+
       # Import from IGDB Tests
 
       test "should import game from igdb by numeric id for admin" do

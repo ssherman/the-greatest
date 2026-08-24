@@ -28,6 +28,15 @@
         <span>Edit</span>
       <% end %>
 
+      <% if current_user_can_delete? %>
+        <button type="button"
+                class="btn btn-warning btn-outline"
+                data-testid="merge-game-button"
+                onclick="document.getElementById('merge-game-modal').showModal()">
+          <span>Merge</span>
+        </button>
+      <% end %>
+
       <%= button_to admin_games_game_path(@game),
           method: :delete,
           class: "btn btn-error btn-outline",
@@ -441,6 +450,71 @@
       <div class="modal-action">
         <button type="button" class="btn" onclick="add_image_modal.close()">Cancel</button>
         <%= f.submit "Upload Image", class: "btn btn-primary" %>
+      </div>
+    <% end %>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
+
+<!-- Merge Game Modal -->
+<dialog id="merge-game-modal" class="modal">
+  <div class="modal-box max-w-2xl">
+    <h3 class="font-bold text-lg">Merge Another Game Into This One</h3>
+    <p class="py-4">
+      Search for a duplicate game to merge into <strong><%= @game.title %></strong>.
+      Companies, platforms, categories, identifiers, images, links, descriptions,
+      list entries, and any child games move across &mdash; including entries in
+      users' personal saved lists.
+    </p>
+    <p class="pb-4">
+      Where <strong><%= @game.title %></strong> already has its own equivalent
+      &mdash; the same list, the same identifier, the same kind of description
+      &mdash; the duplicate's copy is discarded rather than kept alongside it.
+      <strong><%= @game.title %></strong> may also take details from the duplicate:
+      any field it was missing, plus the duplicate's release year if that one is
+      earlier.
+      The duplicate game will be permanently deleted.
+    </p>
+
+    <%= form_with url: execute_action_admin_games_game_path(@game),
+                  method: :post,
+                  class: "space-y-4",
+                  data: {
+                    controller: "modal-form",
+                    modal_form_modal_id_value: "merge-game-modal"
+                  } do |f| %>
+      <%= f.hidden_field :action_name, value: "MergeGame" %>
+
+      <div>
+        <%= f.label :source_game_id, class: "label" do %>
+          <span class="font-semibold">Source Game <span class="text-error">*</span></span>
+        <% end %>
+        <%= render AutocompleteComponent.new(
+          name: "source_game_id",
+          url: search_admin_games_games_path(exclude_id: @game.id),
+          placeholder: "Search for game to merge...",
+          required: true
+        ) %>
+        <label class="label">
+          <span>Search for the duplicate game you want to merge into this one</span>
+        </label>
+      </div>
+
+      <div>
+        <label class="label cursor-pointer justify-start gap-2">
+          <%= f.check_box :confirm_merge, class: "checkbox", required: true %>
+          <span>I understand this action cannot be undone</span>
+        </label>
+        <label class="label">
+          <span class="text-warning">The source game will be permanently deleted after merging</span>
+        </label>
+      </div>
+
+      <div class="modal-action">
+        <button type="button" class="btn" onclick="document.getElementById('merge-game-modal').close()">Cancel</button>
+        <%= f.submit "Merge Game", class: "btn btn-warning" %>
       </div>
     <% end %>
   </div>

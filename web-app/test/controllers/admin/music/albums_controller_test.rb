@@ -376,6 +376,35 @@ module Admin
 
         assert_redirected_to admin_album_path(@album)
       end
+
+      # Destructive action authorization: execute_action is a shared endpoint,
+      # so it must not let write access reach a destructive action (merge).
+
+      test "should reject merge action for a domain-scoped editor" do
+        sign_in_as(users(:contractor_user), stub_auth: true)
+        source_album = music_albums(:wish_you_were_here)
+
+        ::Music::Album::Merger.expects(:call).never
+
+        post execute_action_admin_album_path(@album, action_name: "MergeAlbum"), params: {
+          source_album_id: source_album.id,
+          confirm_merge: "1"
+        }
+
+        assert_redirected_to music_root_path
+        assert_equal "You are not authorized to perform this action.", flash[:alert]
+        assert ::Music::Album.exists?(source_album.id), "the source album must not have been deleted"
+      end
+
+      test "should not reject a non-destructive action for a domain-scoped editor" do
+        sign_in_as(users(:contractor_user), stub_auth: true)
+
+        ::Music::AlbumDescriptionJob.expects(:perform_async).with(@album.id)
+
+        post execute_action_admin_album_path(@album, action_name: "GenerateAlbumDescription")
+
+        assert_redirected_to admin_album_path(@album)
+      end
     end
   end
 end
