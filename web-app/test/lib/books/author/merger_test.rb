@@ -151,6 +151,57 @@ module Books
         assert_equal 1, CategoryItem.where(category: category, item: @target).count
       end
 
+      test "moves a description the target does not have" do
+        description = Description.create!(
+          describable: @source, kind: :summary, locale: "en",
+          source: :other, source_name: "Wikipedia", content: "A pen name."
+        )
+
+        ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, description.reload.describable_id
+      end
+
+      test "drops a source description that collides with the target's" do
+        Description.create!(
+          describable: @source, kind: :summary, locale: "en",
+          source: :other, source_name: "Wikipedia", content: "From the duplicate."
+        )
+        Description.create!(
+          describable: @target, kind: :summary, locale: "en",
+          source: :other, source_name: "Wikipedia", content: "From the survivor."
+        )
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        kept = Description.where(
+          describable_type: "Books::Author", describable_id: @target.id,
+          kind: :summary, locale: "en", source: :other, source_name: "Wikipedia"
+        )
+        assert_equal 1, kept.count
+        assert_equal "From the survivor.", kept.first.content
+      end
+
+      test "demotes a moved description when the target already has a preferred one" do
+        Description.create!(
+          describable: @target, kind: :summary, locale: "en",
+          source: :other, source_name: "Survivor Source", content: "Preferred.", rank: :preferred
+        )
+        moved = Description.create!(
+          describable: @source, kind: :summary, locale: "en",
+          source: :other, source_name: "Duplicate Source", content: "Also preferred.", rank: :preferred
+        )
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        moved.reload
+        assert_equal @target.id, moved.describable_id
+        assert_equal "normal", moved.rank,
+          "two preferred rows for the same kind+locale violate the partial unique index"
+      end
+
       def attach_image(author, primary:)
         author.images.create!(primary: primary) do |image|
           image.file.attach(

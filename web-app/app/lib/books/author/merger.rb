@@ -55,6 +55,7 @@ module Books
         merge_ai_chats
         merge_images
         merge_category_items
+        merge_descriptions
       end
 
       def merge_identifiers
@@ -105,6 +106,40 @@ module Books
           count += 1
         end
         @stats[:category_items] = count
+      end
+
+      # Two unique indexes apply: one on
+      # (describable, kind, locale, source, source_name) with nulls_not_distinct,
+      # and a partial one allowing a single rank=1 row per (describable, kind, locale).
+      def merge_descriptions
+        preferred_keys = target_author.descriptions.select(&:preferred?)
+          .map { |description| [description.kind, description.locale] }
+          .to_set
+        count = 0
+
+        source_author.descriptions.find_each do |description|
+          collides = target_author.descriptions.exists?(
+            kind: description.kind,
+            locale: description.locale,
+            source: description.source,
+            source_name: description.source_name
+          )
+
+          if collides
+            description.destroy!
+            next
+          end
+
+          attrs = {describable_id: target_author.id}
+          if description.preferred? &&
+              preferred_keys.include?([description.kind, description.locale])
+            attrs[:rank] = :normal
+          end
+
+          description.update!(attrs)
+          count += 1
+        end
+        @stats[:descriptions] = count
       end
 
       def reconcile_scalars
