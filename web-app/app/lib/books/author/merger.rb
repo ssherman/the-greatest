@@ -10,6 +10,9 @@ module Books
       # is a NOT NULL boolean defaulting to false, and `false.present?` is false, so
       # including it here would let a source's `true` silently overwrite a survivor's
       # `false` and drop the survivor out of the rankings.
+      # When descriptions-subsystem step D7 drops books_authors.description (see
+      # docs/superpowers/specs/2026-07-27-descriptions-subsystem-design.md), remove
+      # :description from this list or fill_blank_fields raises inside the transaction.
       BLANK_FILLABLE = %i[sort_name birth_year death_year gender description].freeze
 
       # 1,000 rows x 4 columns is 4,000 bind parameters per statement, comfortably
@@ -30,6 +33,12 @@ module Books
         @affected_book_ids = []
       end
 
+      # Must not be called from inside a caller-supplied transaction.
+      # ActiveRecord::Base.transaction joins an already-open transaction rather than
+      # nesting one, so the block below would close without committing and
+      # run_post_commit_steps would fire perform_async / write the SearchIndexRequest
+      # before the real commit -- if the outer transaction then rolled back, a
+      # Sidekiq job would wake up describing a merge that never happened.
       def call
         if source_author.id == target_author.id
           return Result.new(

@@ -20,15 +20,18 @@ An admin reaches it from a game's admin show page via a "Merge" button, gated on
 (moderator role and above) rather than the lower write permission other actions on that page use —
 merge deletes a record, so it needs the same permission delete does. The button opens a modal that
 searches for the duplicate to merge in, then submits to the game's `execute_action` route, which
-dispatches to `Actions::Admin::Games::MergeGame` and from there to the merger.
+dispatches to `Actions::Admin::Games::MergeGame` and from there to the merger. An author's admin
+show page offers the same button, dispatching via the author's own `execute_action` route to
+`Actions::Admin::Books::MergeAuthor` instead.
 
 ## Calling the merger
 
 ```ruby
 result = ::Games::Game::Merger.call(source: duplicate_game, target: canonical_game)
+result = ::Books::Author::Merger.call(source: duplicate_author, target: canonical_author)
 ```
 
-Returns a `Result = Struct.new(:success?, :data, :errors, keyword_init: true)`:
+Both return the same `Result = Struct.new(:success?, :data, :errors, keyword_init: true)`:
 
 - `success?` — `true` if the merge committed.
 - `data` — the target game (with merged data) on success, `nil` on failure.
@@ -60,8 +63,10 @@ Every association the merger moves falls into one of three patterns:
 
 ## Transaction boundary
 
-One `ActiveRecord::Base.transaction` wraps: collecting the affected ranking configurations, every
-association move, scalar reconciliation, `target.save!`, and `source.destroy!`. Reindexing the
+One `ActiveRecord::Base.transaction` wraps: collecting the affected ranking configurations (for
+mergers whose rankings derive from lists — games, and the planned books merger; the author merger
+has no such step, see "Author-specific rules" below), every association move, scalar
+reconciliation, `target.save!`, and `source.destroy!`. Reindexing the
 target and scheduling ranking jobs both happen **after** that transaction commits, never inside
 it — `perform_async`/`perform_in` write to Redis immediately, and a transaction rollback cannot
 undo a Redis write. A job scheduled inside the transaction and then rolled back would wake up
