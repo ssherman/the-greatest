@@ -29,8 +29,10 @@ module Books
       def initialize(source:, target:)
         @source_author = source
         @target_author = target
+        @source_author_id = source.id
         @stats = {}
         @affected_book_ids = []
+        @transaction_body_completed = false
       end
 
       # Must not be called from inside a caller-supplied transaction.
@@ -49,24 +51,65 @@ module Books
         end
 
         ActiveRecord::Base.transaction do
+          lock_authors
           merge_all_associations
           reconcile_scalars
           target_author.save! if target_author.changed?
           destroy_source_author
+          @transaction_body_completed = true
         end
 
         run_post_commit_steps
 
         Result.new(success?: true, data: target_author, errors: [])
       rescue ActiveRecord::RecordInvalid => error
-        Result.new(success?: false, data: nil, errors: [error.message])
+        result_for_raised(error, error.message)
       rescue ActiveRecord::RecordNotUnique => error
-        Result.new(success?: false, data: nil, errors: ["Constraint violation: #{error.message}"])
+        result_for_raised(error, "Constraint violation: #{error.message}")
       rescue => error
-        Result.new(success?: false, data: nil, errors: [error.message])
+        result_for_raised(error, error.message)
       end
 
       private
+
+      # Locks both rows FOR UPDATE before anything moves. Without it two admins
+      # merging the same duplicate can both pass the guards above, and the loser's
+      # destroy! silently affects zero rows -- books_authors has no lock_version, so
+      # Rails never checks the affected count -- reporting a completed merge that
+      # moved nothing. Ascending id order is what stops two merges with swapped
+      # source and target from deadlocking each other.
+      def lock_authors
+        [source_author, target_author].sort_by(&:id).each(&:lock!)
+      end
+
+      # SearchIndexable's after_commit callbacks -- the target's save! and the
+      # source's destroy! -- fire as the transaction block exits, which is AFTER the
+      # commit, and Rails propagates anything they raise out of that block straight
+      # into the rescues above. Reporting success?: false there would tell the admin
+      # a merge failed when the source is already permanently deleted, and their
+      # retry would then fail with "not found". So a raise arriving after a
+      # successful commit is treated as post-commit fallout, exactly like a failure
+      # inside run_post_commit_steps.
+      #
+      # Both halves of merge_committed? are load-bearing. The flag alone would
+      # misread a COMMIT that itself failed (a deferred constraint) as success. The
+      # missing row alone would misread a merge that never started because a
+      # concurrent merge had already consumed the source -- which is precisely what
+      # lock_authors raises on.
+      def result_for_raised(error, message)
+        return Result.new(success?: false, data: nil, errors: [message]) unless merge_committed?
+
+        Rails.logger.error(
+          "Books::Author::Merger: merge of #{@source_author_id} into #{target_author.id} " \
+          "committed, but a commit callback failed: #{error.class}: #{error.message}"
+        )
+        @stats[:post_commit_error] = error.message
+        Result.new(success?: true, data: target_author, errors: [])
+      end
+
+      def merge_committed?
+        @transaction_body_completed && !::Books::Author.exists?(@source_author_id)
+      end
 
       # Unlike the games and books mergers there is no
       # collect_affected_ranking_configurations step: author rankings do not derive

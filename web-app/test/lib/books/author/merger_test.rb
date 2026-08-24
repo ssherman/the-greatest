@@ -518,6 +518,68 @@ module Books
         assert_equal "opensearch down", merger.stats[:post_commit_error]
       end
 
+      # SearchIndexable's after_commit fires as the transaction block exits -- i.e.
+      # AFTER the commit -- and Rails 8 propagates exceptions raised there. They land
+      # in call's own rescue ladder, which would otherwise report success?: false for
+      # a merge whose source is already permanently deleted, sending the admin to a
+      # retry that fails with "not found".
+      test "still reports success when a commit callback fails after the merge committed" do
+        source_id = @source.id
+        SearchIndexRequest.stubs(:create!).raises(StandardError.new("index store down"))
+
+        merger = ::Books::Author::Merger.new(source: @source, target: @target)
+        result = merger.call
+
+        assert result.success?,
+          "a commit-callback failure must not be reported as a failed merge: #{result.errors.inspect}"
+        assert_not ::Books::Author.exists?(source_id), "the merge itself must still have committed"
+        assert_equal "index store down", merger.stats[:post_commit_error]
+      end
+
+      # The discriminator for "did it commit" is the source row's absence, so a merge
+      # that never started because the source was already gone must NOT be mistaken
+      # for a committed one.
+      test "reports failure when the source disappears before it can be locked" do
+        source_id = @source.id
+        merger = ::Books::Author::Merger.new(source: @source, target: @target)
+        merger.stubs(:lock_authors).raises(ActiveRecord::RecordNotFound.new("gone"))
+
+        # Stand in for a concurrent merge that already consumed this source: it
+        # would have moved the relationships off before deleting the row.
+        ::Books::AuthorRelationship.where(from_author_id: source_id).delete_all
+        ::Books::AuthorRelationship.where(to_author_id: source_id).delete_all
+        ::Books::Author.where(id: source_id).delete_all
+
+        result = merger.call
+
+        assert_not result.success?, "a merge that never ran must not report success"
+        assert_equal ["gone"], result.errors
+      end
+
+      test "locks both authors for update, in ascending id order, before moving anything" do
+        locked = []
+        subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+          sql = payload[:sql]
+          next unless sql.include?("books_authors") && sql.include?("FOR UPDATE")
+
+          # The id is a bind parameter ($1), not literal text in the SQL.
+          binds = payload[:type_casted_binds]
+          binds = binds.call if binds.respond_to?(:call)
+          locked << Array(binds).first
+        end
+
+        begin
+          result = ::Books::Author::Merger.call(source: @source, target: @target)
+        ensure
+          ActiveSupport::Notifications.unsubscribe(subscriber)
+        end
+
+        assert result.success?, "merge must succeed: #{result.errors.inspect}"
+        assert_equal [@source.id, @target.id].sort, locked.compact,
+          "both rows must be locked FOR UPDATE in ascending id order, or two merges " \
+          "with swapped source and target can deadlock each other"
+      end
+
       def attach_image(author, primary:)
         author.images.create!(primary: primary) do |image|
           image.file.attach(
