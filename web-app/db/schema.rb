@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_20_051154) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_24_085549) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -144,6 +144,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_20_051154) do
 
   create_table "books_books", force: :cascade do |t|
     t.string "alternate_titles", default: [], null: false, array: true
+    t.datetime "amazon_enriched_at"
     t.integer "book_kind", default: 0, null: false
     t.integer "book_length"
     t.datetime "created_at", null: false

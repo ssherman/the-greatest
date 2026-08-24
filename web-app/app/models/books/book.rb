@@ -4,6 +4,7 @@
 #
 #  id                   :bigint           not null, primary key
 #  alternate_titles     :string           default([]), not null, is an Array
+#  amazon_enriched_at   :datetime
 #  book_kind            :integer          default(0), not null
 #  book_length          :integer
 #  description          :text

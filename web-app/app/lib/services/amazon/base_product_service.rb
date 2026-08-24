@@ -231,7 +231,9 @@ module Services
       end
 
       def success(message)
-        {success: true, data: message}
+        result = {success: true, data: message}
+        result[:errors] = @errors if @errors.any?
+        result
       end
 
       def failure(error)
