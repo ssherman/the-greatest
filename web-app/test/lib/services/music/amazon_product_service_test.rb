@@ -28,24 +28,18 @@ module Services
       end
 
       test "call returns failure when Amazon API credentials are missing" do
-        original_access_key = ENV["AMAZON_PRODUCT_API_ACCESS_KEY"]
-        ENV["AMAZON_PRODUCT_API_ACCESS_KEY"] = nil
+        ::Services::Amazon::Client.stubs(:search_items)
+          .raises(::Services::Amazon::Client::Error, "Amazon API credentials not configured (AMAZON_PRODUCT_API_CRED_ID is missing)")
 
-        begin
-          result = AmazonProductService.call(album: @album)
+        result = AmazonProductService.call(album: @album)
 
-          refute result[:success]
-          assert_equal "Amazon API search failed: Amazon API credentials not configured", result[:error]
-        ensure
-          ENV["AMAZON_PRODUCT_API_ACCESS_KEY"] = original_access_key
-        end
+        refute result[:success]
+        assert_match(/Amazon API search failed/, result[:error])
+        assert_match(/credentials not configured/, result[:error])
       end
 
       test "call returns success when no matching products found after AI validation" do
-        # Mock Amazon API to return products
         mock_amazon_api
-
-        # Mock AI validation to return empty results
         mock_ai_validation([])
 
         result = AmazonProductService.call(album: @album)
@@ -55,14 +49,11 @@ module Services
       end
 
       test "call creates external links for validated products" do
-        # Mock Amazon API to return products
         mock_amazon_api
 
-        # Mock AI validation to return matching results
         matching_results = [{asin: "B001234567", title: "Test Album", artist: "Test Artist"}]
         mock_ai_validation(matching_results)
 
-        # Stub image download to prevent HTTP calls
         stub_request(:get, "https://images.amazon.com/test-image.jpg")
           .to_return(status: 404, body: "Not found")
 
@@ -71,15 +62,29 @@ module Services
         assert result[:success]
         assert_match(/Amazon enrichment completed/, result[:data])
 
-        # Check that external link was created
         external_link = @album.external_links.find_by(source: :amazon)
         assert external_link
         assert_equal "https://amazon.com/dp/B001234567", external_link.url
         assert_equal "product_link", external_link.link_category
+        assert_equal "The Dark Side of the Moon", external_link.name
+      end
+
+      # OffersV2 replaced Offers.Summaries in the Creators API: prices now live on
+      # individual listings, so "lowest new price" has to be computed, not read.
+      test "call stores the lowest new-condition price from the OffersV2 listings" do
+        mock_amazon_api
+        mock_ai_validation([{asin: "B001234567", title: "Test Album", artist: "Test Artist"}])
+
+        stub_request(:get, "https://images.amazon.com/test-image.jpg")
+          .to_return(status: 404, body: "Not found")
+
+        AmazonProductService.call(album: @album)
+
+        # Listings are 39.99 (new), 12.99 (new) and 4.50 (used) - lowest NEW wins.
+        assert_equal 1299, @album.external_links.find_by(source: :amazon).price_cents
       end
 
       test "call skips image download when album already has primary image" do
-        # Create existing primary image
         @album.images.create!(primary: true) do |image|
           image.file.attach(
             io: StringIO.new("fake image data"),
@@ -88,57 +93,38 @@ module Services
           )
         end
 
-        # Mock Amazon API and AI validation
         mock_amazon_api
-        matching_results = [{asin: "B001234567", title: "Test Album", artist: "Test Artist"}]
-        mock_ai_validation(matching_results)
-
-        # Should not make any image download requests
-        assert_not_requested :get, /images\.amazon\.com/
+        mock_ai_validation([{asin: "B001234567", title: "Test Album", artist: "Test Artist"}])
 
         result = AmazonProductService.call(album: @album)
 
         assert result[:success]
+        assert_not_requested :get, /images\.amazon\.com/
       end
 
       test "call downloads image from best ranked product" do
-        # Ensure album has no primary image
         @album.images.where(primary: true).destroy_all
 
-        # Mock Amazon API to return products with images and sales ranks
         mock_amazon_api_with_images
 
-        # Mock AI validation
         matching_results = [
           {asin: "B001234567", title: "Test Album", artist: "Test Artist"},
           {asin: "B007654321", title: "Test Album Deluxe", artist: "Test Artist"}
         ]
         mock_ai_validation(matching_results)
 
-        # Stub image download
         stub_request(:get, "https://images.amazon.com/best-image.jpg")
-          .to_return(
-            status: 200,
-            body: "fake image data",
-            headers: {"Content-Type" => "image/jpeg"}
-          )
+          .to_return(status: 200, body: "fake image data", headers: {"Content-Type" => "image/jpeg"})
 
         result = AmazonProductService.call(album: @album)
 
         assert result[:success]
-
-        # Verify image download was attempted
         assert_requested :get, "https://images.amazon.com/best-image.jpg"
-
-        # Check that image was created
         assert @album.images.where(primary: true).exists?
       end
 
       test "call handles Amazon API errors gracefully" do
-        # Mock Vacuum client to raise an error
-        client = mock
-        client.stubs(:search_items).raises(StandardError, "API error")
-        Vacuum.stubs(:new).returns(client)
+        ::Services::Amazon::Client.stubs(:search_items).raises(StandardError, "API error")
 
         result = AmazonProductService.call(album: @album)
 
@@ -146,11 +132,19 @@ module Services
         assert_match(/Amazon API search failed/, result[:error])
       end
 
+      test "call searches Amazon by artist and title within the Music index" do
+        ::Services::Amazon::Client.expects(:search_items)
+          .with(has_entries(artist: "Pink Floyd", title: @album.title, search_index: "Music"))
+          .returns([])
+
+        result = AmazonProductService.call(album: @album)
+
+        assert result[:success]
+      end
+
       test "call handles AI task failures gracefully" do
-        # Mock Amazon API to return products
         mock_amazon_api
 
-        # Mock AI task to fail
         ai_task = mock
         ai_result = mock
         ai_result.stubs(:success?).returns(false)
@@ -171,81 +165,55 @@ module Services
       def mock_amazon_api
         search_results = [
           {
-            "ASIN" => "B001234567",
-            "DetailPageURL" => "https://amazon.com/dp/B001234567",
-            "ItemInfo" => {
-              "Title" => {"DisplayValue" => "The Dark Side of the Moon"},
-              "ByLineInfo" => {
-                "Contributors" => [{"Role" => "Artist", "Name" => "Pink Floyd"}]
+            "asin" => "B001234567",
+            "detailPageURL" => "https://amazon.com/dp/B001234567",
+            "itemInfo" => {
+              "title" => {"displayValue" => "The Dark Side of the Moon"},
+              "byLineInfo" => {
+                "contributors" => [{"role" => "Artist", "name" => "Pink Floyd"}]
               }
             },
-            "Images" => {
-              "Primary" => {
-                "Large" => {"URL" => "https://images.amazon.com/test-image.jpg"}
+            "images" => {
+              "primary" => {
+                "large" => {"url" => "https://images.amazon.com/test-image.jpg"}
               }
             },
-            "Offers" => {
-              "Summaries" => [
-                {
-                  "Condition" => {"Value" => "New"},
-                  "LowestPrice" => {"Amount" => 12.99}
-                }
+            "offersV2" => {
+              "listings" => [
+                {"condition" => {"value" => "New"}, "price" => {"money" => {"amount" => 39.99}}},
+                {"condition" => {"value" => "New"}, "price" => {"money" => {"amount" => 12.99}}},
+                {"condition" => {"value" => "Used"}, "price" => {"money" => {"amount" => 4.50}}}
               ]
             }
           }
         ]
 
-        mock_vacuum_client(search_results)
+        stub_amazon_client(search_results)
       end
 
       def mock_amazon_api_with_images
         search_results = [
           {
-            "ASIN" => "B001234567",
-            "DetailPageURL" => "https://amazon.com/dp/B001234567",
-            "ItemInfo" => {
-              "Title" => {"DisplayValue" => "The Dark Side of the Moon"}
-            },
-            "Images" => {
-              "Primary" => {
-                "Large" => {"URL" => "https://images.amazon.com/best-image.jpg"}
-              }
-            },
-            "BrowseNodeInfo" => {
-              "WebsiteSalesRank" => {"SalesRank" => 100}
-            }
+            "asin" => "B001234567",
+            "detailPageURL" => "https://amazon.com/dp/B001234567",
+            "itemInfo" => {"title" => {"displayValue" => "The Dark Side of the Moon"}},
+            "images" => {"primary" => {"large" => {"url" => "https://images.amazon.com/best-image.jpg"}}},
+            "browseNodeInfo" => {"websiteSalesRank" => {"salesRank" => 100}}
           },
           {
-            "ASIN" => "B007654321",
-            "DetailPageURL" => "https://amazon.com/dp/B007654321",
-            "ItemInfo" => {
-              "Title" => {"DisplayValue" => "The Dark Side of the Moon Deluxe"}
-            },
-            "Images" => {
-              "Primary" => {
-                "Large" => {"URL" => "https://images.amazon.com/other-image.jpg"}
-              }
-            },
-            "BrowseNodeInfo" => {
-              "WebsiteSalesRank" => {"SalesRank" => 500}
-            }
+            "asin" => "B007654321",
+            "detailPageURL" => "https://amazon.com/dp/B007654321",
+            "itemInfo" => {"title" => {"displayValue" => "The Dark Side of the Moon Deluxe"}},
+            "images" => {"primary" => {"large" => {"url" => "https://images.amazon.com/other-image.jpg"}}},
+            "browseNodeInfo" => {"websiteSalesRank" => {"salesRank" => 500}}
           }
         ]
 
-        mock_vacuum_client(search_results)
+        stub_amazon_client(search_results)
       end
 
-      def mock_vacuum_client(search_results)
-        client = mock
-        response = mock
-        response.stubs(:to_h).returns({
-          "SearchResult" => {
-            "Items" => search_results
-          }
-        })
-        client.stubs(:search_items).returns(response)
-
-        Vacuum.stubs(:new).returns(client)
+      def stub_amazon_client(search_results)
+        ::Services::Amazon::Client.stubs(:search_items).returns(search_results)
       end
 
       def mock_ai_validation(matching_results)

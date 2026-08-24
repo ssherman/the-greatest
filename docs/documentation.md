@@ -84,6 +84,7 @@ Links to related features, specs, or external docs.
 - `features/authentication.md` - Auth flow diagrams, provider patterns, key files table
 - `features/data_importers.md` - Strategy pattern, provider architecture, extension points
 - `features/igdb-api-wrapper.md` - API wrapper architecture, rate limiting, query builder
+- `features/amazon-creators-api.md` - Amazon product enrichment, credentials, PA-API migration reference
 
 ## Specifications
 

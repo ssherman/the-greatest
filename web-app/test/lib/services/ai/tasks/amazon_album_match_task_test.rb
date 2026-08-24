@@ -139,34 +139,34 @@ module Services
           def mock_search_results
             [
               {
-                "ASIN" => "B001234567",
-                "ItemInfo" => {
-                  "Title" => {"DisplayValue" => "The Dark Side of the Moon"},
-                  "ByLineInfo" => {
-                    "Contributors" => [
-                      {"Role" => "Artist", "Name" => "Pink Floyd"}
+                "asin" => "B001234567",
+                "itemInfo" => {
+                  "title" => {"displayValue" => "The Dark Side of the Moon"},
+                  "byLineInfo" => {
+                    "contributors" => [
+                      {"role" => "Artist", "name" => "Pink Floyd"}
                     ],
-                    "Manufacturer" => {"DisplayValue" => "Capitol Records"}
+                    "manufacturer" => {"displayValue" => "Capitol Records"}
                   },
-                  "Classifications" => {
-                    "Binding" => {"DisplayValue" => "Audio CD"}
+                  "classifications" => {
+                    "binding" => {"displayValue" => "Audio CD"}
                   },
-                  "ProductInfo" => {
-                    "ReleaseDate" => {"DisplayValue" => "1994-08-02"}
+                  "productInfo" => {
+                    "releaseDate" => {"displayValue" => "1994-08-02"}
                   }
                 }
               },
               {
-                "ASIN" => "B007654321",
-                "ItemInfo" => {
-                  "Title" => {"DisplayValue" => "Dark Side of the Moon Poster"},
-                  "ByLineInfo" => {
-                    "Contributors" => [
-                      {"Role" => "Artist", "Name" => "Unknown"}
+                "asin" => "B007654321",
+                "itemInfo" => {
+                  "title" => {"displayValue" => "Dark Side of the Moon Poster"},
+                  "byLineInfo" => {
+                    "contributors" => [
+                      {"role" => "Artist", "name" => "Unknown"}
                     ]
                   },
-                  "Classifications" => {
-                    "Binding" => {"DisplayValue" => "Poster"}
+                  "classifications" => {
+                    "binding" => {"displayValue" => "Poster"}
                   }
                 }
               }

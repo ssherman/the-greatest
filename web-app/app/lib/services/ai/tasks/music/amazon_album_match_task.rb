@@ -49,15 +49,15 @@ module Services
 
           # Override to use album-specific formatting with Artist field
           def format_search_result(result)
-            title = result.dig("ItemInfo", "Title", "DisplayValue")
-            contributors = result.dig("ItemInfo", "ByLineInfo", "Contributors") || []
-            artist = contributors.find { |c| c["Role"] == "Artist" }&.dig("Name")
-            binding = result.dig("ItemInfo", "Classifications", "Binding", "DisplayValue")
-            manufacturer = result.dig("ItemInfo", "ByLineInfo", "Manufacturer", "DisplayValue")
-            release_date = result.dig("ItemInfo", "ProductInfo", "ReleaseDate", "DisplayValue")
+            title = result.dig("itemInfo", "title", "displayValue")
+            contributors = result.dig("itemInfo", "byLineInfo", "contributors") || []
+            artist = contributors.find { |c| c["role"] == "Artist" }&.dig("name")
+            binding = result.dig("itemInfo", "classifications", "binding", "displayValue")
+            manufacturer = result.dig("itemInfo", "byLineInfo", "manufacturer", "displayValue")
+            release_date = result.dig("itemInfo", "productInfo", "releaseDate", "displayValue")
 
             <<~RESULT
-              - ASIN: #{result["ASIN"]}
+              - ASIN: #{result["asin"]}
                 Title: #{title}
                 Artist: #{artist}
                 Format: #{binding}
