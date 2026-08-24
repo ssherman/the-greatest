@@ -11,20 +11,20 @@ module Services
             @game = games_games(:breath_of_the_wild)
             @search_results = [
               {
-                "ASIN" => "B01MS6MO77",
-                "ItemInfo" => {
-                  "Title" => {"DisplayValue" => "The Legend of Zelda: Breath of the Wild - Nintendo Switch"},
-                  "ByLineInfo" => {
-                    "Contributors" => [{"Role" => "Artist", "Name" => "Nintendo"}]
+                "asin" => "B01MS6MO77",
+                "itemInfo" => {
+                  "title" => {"displayValue" => "The Legend of Zelda: Breath of the Wild - Nintendo Switch"},
+                  "byLineInfo" => {
+                    "contributors" => [{"role" => "Artist", "name" => "Nintendo"}]
                   },
-                  "Classifications" => {"Binding" => {"DisplayValue" => "Video Game"}}
+                  "classifications" => {"binding" => {"displayValue" => "Video Game"}}
                 }
               },
               {
-                "ASIN" => "B06XBYCM49",
-                "ItemInfo" => {
-                  "Title" => {"DisplayValue" => "The Legend of Zelda: Breath of the Wild Official Strategy Guide"},
-                  "Classifications" => {"Binding" => {"DisplayValue" => "Paperback"}}
+                "asin" => "B06XBYCM49",
+                "itemInfo" => {
+                  "title" => {"displayValue" => "The Legend of Zelda: Breath of the Wild Official Strategy Guide"},
+                  "classifications" => {"binding" => {"displayValue" => "Paperback"}}
                 }
               }
             ]
@@ -90,6 +90,19 @@ module Services
 
             assert_includes user_prompt, @game.title
             assert_includes user_prompt, "Amazon search results:"
+          end
+
+          # The header above renders even when every product field is blank, so
+          # assert the search results themselves actually reach the model.
+          test "user_prompt includes the ASIN, title and format of each search result" do
+            user_prompt = @task.send(:user_prompt)
+
+            assert_includes user_prompt, "B01MS6MO77"
+            assert_includes user_prompt, "The Legend of Zelda: Breath of the Wild - Nintendo Switch"
+            assert_includes user_prompt, "Video Game"
+            assert_includes user_prompt, "Nintendo"
+            assert_includes user_prompt, "B06XBYCM49"
+            assert_includes user_prompt, "Paperback"
           end
 
           test "response_schema includes product_type field" do

@@ -48,33 +48,28 @@ module Services
       private
 
       AMAZON_RESOURCES = [
-        "ItemInfo.Title",
-        "ItemInfo.ByLineInfo",
-        "ItemInfo.Classifications",
-        "ItemInfo.ContentInfo",
-        "Images.Primary.Small",
-        "Images.Primary.Medium",
-        "Images.Primary.Large",
-        "BrowseNodeInfo.WebsiteSalesRank",
-        "Offers.Listings.Price",
-        "Offers.Summaries.LowestPrice"
+        "itemInfo.title",
+        "itemInfo.byLineInfo",
+        "itemInfo.classifications",
+        "itemInfo.contentInfo",
+        "itemInfo.productInfo",
+        "images.primary.small",
+        "images.primary.medium",
+        "images.primary.large",
+        "browseNodeInfo.websiteSalesRank",
+        "offersV2.listings.condition",
+        "offersV2.listings.price"
       ].freeze
 
       def search_amazon_products
-        client = amazon_client
-        return nil unless client
-
         Rails.logger.info "Searching Amazon for game: '#{@game.title}'"
 
         # Search all categories to find guides, soundtracks, collectibles, etc.
-        response = client.search_items(
+        items = ::Services::Amazon::Client.search_items(
           keywords: @game.title,
           search_index: "All",
           resources: AMAZON_RESOURCES
         )
-
-        result = response.to_h
-        items = result.dig("SearchResult", "Items") || []
 
         Rails.logger.info "Amazon returned #{items.count} results"
         items
@@ -82,24 +77,6 @@ module Services
         @errors << "Amazon API error: #{e.message}"
         Rails.logger.error "Amazon API error: #{e.message}"
         nil
-      end
-
-      def amazon_client
-        access_key = ENV["AMAZON_PRODUCT_API_ACCESS_KEY"]
-        secret_key = ENV["AMAZON_PRODUCT_API_SECRET_KEY"]
-        partner_tag = ENV["AMAZON_PRODUCT_API_PARTNER_KEY"]
-
-        if access_key.blank? || secret_key.blank? || partner_tag.blank?
-          @errors << "Amazon API credentials not configured"
-          return nil
-        end
-
-        Vacuum.new(
-          marketplace: "US",
-          access_key: access_key,
-          secret_key: secret_key,
-          partner_tag: partner_tag
-        )
       end
 
       def validate_matches_with_ai(search_results)
@@ -130,18 +107,18 @@ module Services
         Rails.logger.info "Creating external links for #{validated_results.count} validated results"
 
         validated_results.each do |match|
-          product = search_results.find { |item| item["ASIN"] == match[:asin] }
+          product = search_results.find { |item| item["asin"] == match[:asin] }
           next unless product
 
           # Extract price information
           price_cents = extract_price_cents(product)
 
-          # Use ASIN as unique identifier to prevent duplicates
+          # Use the detail page URL as the unique identifier to prevent duplicates
           link = @game.external_links.find_or_create_by!(
             source: :amazon,
-            url: product["DetailPageURL"]
+            url: product["detailPageURL"]
           ) do |new_link|
-            new_link.name = product.dig("ItemInfo", "Title", "DisplayValue") || "Amazon Product"
+            new_link.name = product.dig("itemInfo", "title", "displayValue") || "Amazon Product"
             new_link.link_category = :product_link
             new_link.price_cents = price_cents
             new_link.metadata = {
@@ -176,17 +153,7 @@ module Services
       end
 
       def extract_price_cents(product)
-        # Try to get lowest new price first
-        new_price = product.dig("Offers", "Summaries")&.find { |s| s.dig("Condition", "Value") == "New" }
-        price_amount = new_price&.dig("LowestPrice", "Amount")
-
-        # Fallback to any lowest price
-        if price_amount.nil?
-          first_price = product.dig("Offers", "Summaries")&.first
-          price_amount = first_price&.dig("LowestPrice", "Amount")
-        end
-
-        price_amount ? (price_amount * 100).to_i : nil
+        ::Services::Amazon::Product.lowest_price_cents(product)
       end
 
       def success(message)

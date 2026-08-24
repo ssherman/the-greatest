@@ -18,25 +18,19 @@ module Services
         assert_equal "Game title required", result[:error]
       end
 
-      test "call returns success when Amazon API credentials not configured" do
-        ENV.stubs(:[]).with("AMAZON_PRODUCT_API_ACCESS_KEY").returns(nil)
-        ENV.stubs(:[]).with("AMAZON_PRODUCT_API_SECRET_KEY").returns(nil)
-        ENV.stubs(:[]).with("AMAZON_PRODUCT_API_PARTNER_KEY").returns(nil)
+      test "call fails when Amazon API credentials not configured" do
+        ::Services::Amazon::Client.stubs(:search_items)
+          .raises(::Services::Amazon::Client::Error, "Amazon API credentials not configured (AMAZON_PRODUCT_API_CRED_ID is missing)")
 
         result = AmazonProductService.call(game: @game)
 
         refute result[:success]
         assert_includes result[:error], "Amazon API"
+        assert_includes result[:error], "credentials not configured"
       end
 
       test "call returns success with no products message when search returns empty" do
-        mock_client = mock
-        mock_client.expects(:search_items).returns(
-          stub(to_h: {"SearchResult" => {"Items" => []}})
-        )
-
-        Vacuum.stubs(:new).returns(mock_client)
-        stub_env_credentials
+        ::Services::Amazon::Client.stubs(:search_items).returns([])
 
         result = AmazonProductService.call(game: @game)
 
@@ -44,36 +38,25 @@ module Services
         assert_equal "No products found", result[:data]
       end
 
+      test "call searches every category so guides and soundtracks are found too" do
+        ::Services::Amazon::Client.expects(:search_items)
+          .with(has_entries(keywords: @game.title, search_index: "All"))
+          .returns([])
+
+        result = AmazonProductService.call(game: @game)
+
+        assert result[:success]
+      end
+
       test "call creates external links for validated products" do
-        mock_client = mock
-        mock_client.expects(:search_items).returns(
-          stub(to_h: {
-            "SearchResult" => {
-              "Items" => [
-                {
-                  "ASIN" => "B01MS6MO77",
-                  "DetailPageURL" => "https://amazon.com/dp/B01MS6MO77",
-                  "ItemInfo" => {
-                    "Title" => {"DisplayValue" => "Zelda BotW"}
-                  }
-                }
-              ]
-            }
-          })
-        )
-
-        ai_result = stub(
-          success?: true,
-          data: {
-            matching_results: [
-              {asin: "B01MS6MO77", title: "Zelda BotW", product_type: "game", explanation: "Match"}
-            ]
+        ::Services::Amazon::Client.stubs(:search_items).returns([
+          {
+            "asin" => "B01MS6MO77",
+            "detailPageURL" => "https://amazon.com/dp/B01MS6MO77",
+            "itemInfo" => {"title" => {"displayValue" => "Zelda BotW"}}
           }
-        )
-
-        Vacuum.stubs(:new).returns(mock_client)
-        stub_env_credentials
-        ::Services::Ai::Tasks::Games::AmazonGameMatchTask.any_instance.stubs(:call).returns(ai_result)
+        ])
+        stub_ai_match
 
         assert_difference "ExternalLink.count", 1 do
           result = AmazonProductService.call(game: @game)
@@ -87,39 +70,40 @@ module Services
         assert_equal "game", link.metadata["product_type"]
       end
 
-      test "call does not download images (IGDB only for cover art)" do
-        mock_client = mock
-        mock_client.expects(:search_items).returns(
-          stub(to_h: {
-            "SearchResult" => {
-              "Items" => [
-                {
-                  "ASIN" => "B01MS6MO77",
-                  "DetailPageURL" => "https://amazon.com/dp/B01MS6MO77",
-                  "ItemInfo" => {
-                    "Title" => {"DisplayValue" => "Zelda BotW"}
-                  },
-                  "Images" => {
-                    "Primary" => {"Large" => {"URL" => "https://images.amazon.com/image.jpg"}}
-                  }
-                }
+      # OffersV2 replaced Offers.Summaries in the Creators API: prices now live on
+      # individual listings, so "lowest new price" has to be computed, not read.
+      test "call stores the lowest new-condition price from the OffersV2 listings" do
+        ::Services::Amazon::Client.stubs(:search_items).returns([
+          {
+            "asin" => "B01MS6MO77",
+            "detailPageURL" => "https://amazon.com/dp/B01MS6MO77",
+            "itemInfo" => {"title" => {"displayValue" => "Zelda BotW"}},
+            "offersV2" => {
+              "listings" => [
+                {"condition" => {"value" => "New"}, "price" => {"money" => {"amount" => 59.99}}},
+                {"condition" => {"value" => "New"}, "price" => {"money" => {"amount" => 44.50}}},
+                {"condition" => {"value" => "Used"}, "price" => {"money" => {"amount" => 19.99}}}
               ]
             }
-          })
-        )
-
-        ai_result = stub(
-          success?: true,
-          data: {
-            matching_results: [
-              {asin: "B01MS6MO77", title: "Zelda BotW", product_type: "game", explanation: "Match"}
-            ]
           }
-        )
+        ])
+        stub_ai_match
 
-        Vacuum.stubs(:new).returns(mock_client)
-        stub_env_credentials
-        ::Services::Ai::Tasks::Games::AmazonGameMatchTask.any_instance.stubs(:call).returns(ai_result)
+        AmazonProductService.call(game: @game)
+
+        assert_equal 4450, @game.external_links.last.price_cents
+      end
+
+      test "call does not download images (IGDB only for cover art)" do
+        ::Services::Amazon::Client.stubs(:search_items).returns([
+          {
+            "asin" => "B01MS6MO77",
+            "detailPageURL" => "https://amazon.com/dp/B01MS6MO77",
+            "itemInfo" => {"title" => {"displayValue" => "Zelda BotW"}},
+            "images" => {"primary" => {"large" => {"url" => "https://images.amazon.com/image.jpg"}}}
+          }
+        ])
+        stub_ai_match
 
         # Should NOT call Down.download for images
         Down.expects(:download).never
@@ -129,10 +113,16 @@ module Services
 
       private
 
-      def stub_env_credentials
-        ENV.stubs(:[]).with("AMAZON_PRODUCT_API_ACCESS_KEY").returns("test_key")
-        ENV.stubs(:[]).with("AMAZON_PRODUCT_API_SECRET_KEY").returns("test_secret")
-        ENV.stubs(:[]).with("AMAZON_PRODUCT_API_PARTNER_KEY").returns("test_partner")
+      def stub_ai_match
+        ai_result = stub(
+          success?: true,
+          data: {
+            matching_results: [
+              {asin: "B01MS6MO77", title: "Zelda BotW", product_type: "game", explanation: "Match"}
+            ]
+          }
+        )
+        ::Services::Ai::Tasks::Games::AmazonGameMatchTask.any_instance.stubs(:call).returns(ai_result)
       end
     end
   end
