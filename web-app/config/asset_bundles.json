@@ -1,0 +1,7 @@
+{
+  "application": "app/javascript/application.js",
+  "books": "app/javascript/books.js",
+  "music": "app/javascript/music.js",
+  "games": "app/javascript/games.js",
+  "movies": "app/javascript/movies.js"
+}
