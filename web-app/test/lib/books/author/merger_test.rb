@@ -202,6 +202,44 @@ module Books
           "two preferred rows for the same kind+locale violate the partial unique index"
       end
 
+      test "repoints the source's book links to the target" do
+        link = ::Books::BookAuthor.create!(
+          book: books_books(:war_and_peace), author: @source, position: 2, role: :author
+        )
+
+        ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, link.reload.author_id
+      end
+
+      test "drops a book link the target already has" do
+        # got_king already links :got to the target.
+        ::Books::BookAuthor.create!(book: books_books(:got), author: @source, position: 2)
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_equal 1, ::Books::BookAuthor.where(
+          book: books_books(:got), author: @target
+        ).count
+      end
+
+      test "records every book the source authored, including one dropped as a duplicate" do
+        ::Books::BookAuthor.create!(
+          book: books_books(:war_and_peace), author: @source, position: 2
+        )
+        ::Books::BookAuthor.create!(book: books_books(:got), author: @source, position: 2)
+
+        merger = ::Books::Author::Merger.new(source: @source, target: @target)
+        merger.call
+
+        assert_equal(
+          [books_books(:war_and_peace).id, books_books(:got).id].sort,
+          merger.affected_book_ids.sort,
+          "a book whose duplicate link was dropped still changed authorship and must be reindexed"
+        )
+      end
+
       def attach_image(author, primary:)
         author.images.create!(primary: primary) do |image|
           image.file.attach(

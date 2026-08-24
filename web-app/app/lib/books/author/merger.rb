@@ -3,7 +3,7 @@ module Books
     class Merger
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
-      attr_reader :source_author, :target_author, :stats
+      attr_reader :source_author, :target_author, :stats, :affected_book_ids
 
       def self.call(source:, target:)
         new(source: source, target: target).call
@@ -56,6 +56,7 @@ module Books
         merge_images
         merge_category_items
         merge_descriptions
+        merge_book_authors
       end
 
       def merge_identifiers
@@ -140,6 +141,40 @@ module Books
           count += 1
         end
         @stats[:descriptions] = count
+      end
+
+      # Collected BEFORE any write: once the links are repointed there is no way to
+      # tell which books changed authorship, and a book whose duplicate link was
+      # *dropped* changed too -- it used to carry both authors and now carries one.
+      #
+      # delete_all/update_all rather than per-record destroy!/update!, for two
+      # reasons. Books::BookAuthor has its own after_commit reindex hook that would
+      # fire once per row and duplicate the batched fan-out run_post_commit_steps
+      # already performs; and a prolific author can carry thousands of links, which
+      # is a row-at-a-time query storm inside the merge transaction. The colliding
+      # rows are deleted first, so the (book_id, author_id) unique index is never at
+      # risk even though update_all skips the model's uniqueness validation.
+      #
+      # A subquery, not a plucked id list: this codebase has already hit
+      # PostgreSQL's 65,535 bind-parameter cap with a large IN.
+      #
+      # `position` is not renumbered. It is scoped to the book, which does not
+      # change, so every moved row keeps a valid position; a dropped duplicate can
+      # leave a gap in one book's sequence, which is cosmetic.
+      def merge_book_authors
+        @affected_book_ids = source_author.book_ids
+
+        dropped = ::Books::BookAuthor
+          .where(author_id: source_author.id)
+          .where(book_id: ::Books::BookAuthor.where(author_id: target_author.id).select(:book_id))
+          .delete_all
+
+        moved = ::Books::BookAuthor
+          .where(author_id: source_author.id)
+          .update_all(author_id: target_author.id)
+
+        @stats[:book_authors] = moved
+        @stats[:book_authors_dropped] = dropped
       end
 
       def reconcile_scalars
