@@ -1,6 +1,6 @@
 class Admin::Books::AuthorsController < Admin::Books::BaseController
-  before_action :set_author, only: [:show, :edit, :update, :destroy]
-  before_action :authorize_author, only: [:show, :edit, :update, :destroy]
+  before_action :set_author, only: [:show, :edit, :update, :destroy, :execute_action]
+  before_action :authorize_author, only: [:show, :edit, :update, :destroy, :execute_action]
 
   def index
     authorize ::Books::Author
@@ -57,6 +57,29 @@ class Admin::Books::AuthorsController < Admin::Books::BaseController
   def destroy
     @author.destroy!
     redirect_to admin_books_authors_path, notice: "Author deleted."
+  end
+
+  def execute_action
+    fields_hash = params.except(:controller, :action, :id, :action_name, :author_ids)
+
+    action_class = "Actions::Admin::Books::#{params[:action_name]}".constantize
+    authorize @author, :destroy? if action_class.destructive?
+    result = action_class.call(
+      user: current_user,
+      models: [@author],
+      fields: fields_hash
+    )
+
+    respond_to do |format|
+      format.turbo_stream do
+        render turbo_stream: turbo_stream.replace(
+          "flash",
+          partial: "admin/shared/flash",
+          locals: {result: result}
+        )
+      end
+      format.html { redirect_to admin_books_author_path(@author), notice: result.message }
+    end
   end
 
   private
