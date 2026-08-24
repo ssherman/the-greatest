@@ -74,12 +74,12 @@ class Services::BooksMigration::BookAttributesMigratorTest < ActiveSupport::Test
   test "ignores a legacy book with no counterpart in the new database" do
     # The UPDATE simply matches no rows. It must not raise, and must not touch
     # any other book -- a WHERE clause bug here would silently rewrite the corpus.
-    before = Books::Book.where.not(book_length: nil).count
+    before = ::Books::Book.where.not(book_length: nil).count
 
     result = run_migrator([legacy_row("id" => 999_999_999)])
 
     assert result[:success], result[:error]
-    assert_equal before, Books::Book.where.not(book_length: nil).count
+    assert_equal before, ::Books::Book.where.not(book_length: nil).count
     assert_nil @book.reload.book_length
   end
 

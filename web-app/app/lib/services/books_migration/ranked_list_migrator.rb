@@ -33,7 +33,7 @@ module Services
       def preload_context
         @rc_map = LegacyIdMap.where(model: "Books::RankingConfiguration").pluck(:legacy_id, :new_id).to_h
         raise "no migrated ranking_configurations; run data_migration:ranking_configurations first" if @rc_map.empty?
-        @list_ids = Books::List.pluck(:id).to_set
+        @list_ids = ::Books::List.pluck(:id).to_set
       end
 
       # Active RCs only: only ranked_lists whose rc was migrated (mapped) are yielded.

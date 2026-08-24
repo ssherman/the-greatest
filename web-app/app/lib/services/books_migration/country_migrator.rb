@@ -21,7 +21,7 @@ module Services
       end
 
       def upsert_row(attrs)
-        country = Books::Country.find_or_initialize_by(id: attrs["id"])
+        country = ::Books::Country.find_or_initialize_by(id: attrs["id"])
         country.assign_attributes(
           name: attrs["name"],
           slug: attrs["slug"],
@@ -33,7 +33,7 @@ module Services
       end
 
       def finalize
-        Books::Country.connection.reset_pk_sequence!("books_countries")
+        ::Books::Country.connection.reset_pk_sequence!("books_countries")
       end
     end
   end

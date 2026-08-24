@@ -2,7 +2,7 @@ require "test_helper"
 
 class Services::BooksMigration::PenaltyApplicationMigratorTest < ActiveSupport::TestCase
   setup do
-    @rc = Books::RankingConfiguration.create!(name: "PA Config")
+    @rc = ::Books::RankingConfiguration.create!(name: "PA Config")
     @penalty = Global::Penalty.create!(name: "Voters: Unknown Count", dynamic_type: :voter_count_unknown)
     LegacyIdMap.record(model: "Books::RankingConfiguration", legacy_id: 52, new_id: @rc.id)
     LegacyIdMap.record(model: "Penalty", legacy_id: 700, new_id: @penalty.id)

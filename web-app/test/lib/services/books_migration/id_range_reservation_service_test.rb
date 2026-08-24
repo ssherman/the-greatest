@@ -146,7 +146,7 @@ class Services::BooksMigration::IdRangeReservationServiceTest < ActiveSupport::T
   test "next List create lands at or above the lists ceiling" do
     Services::BooksMigration::IdRangeReservationService.call
 
-    list = Books::List.create!(name: "Post-reservation List")
+    list = ::Books::List.create!(name: "Post-reservation List")
     assert_operator list.id, :>=, LISTS_CEILING
   end
 

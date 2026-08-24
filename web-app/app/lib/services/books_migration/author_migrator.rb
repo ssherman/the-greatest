@@ -16,13 +16,13 @@ module Services
       end
 
       def upsert_row(attrs)
-        author = Books::Author.find_or_initialize_by(id: attrs["id"])
+        author = ::Books::Author.find_or_initialize_by(id: attrs["id"])
         author.assign_attributes(AuthorTransformer.call(attrs))
         author.save!
       end
 
       def finalize
-        Books::Author.connection.reset_pk_sequence!("books_authors")
+        ::Books::Author.connection.reset_pk_sequence!("books_authors")
       end
     end
   end

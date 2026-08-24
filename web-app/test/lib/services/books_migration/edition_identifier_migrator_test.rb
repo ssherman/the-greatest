@@ -8,8 +8,8 @@ class Services::BooksMigration::EditionIdentifierMigratorTest < ActiveSupport::T
   end
 
   test "creates a stripped openlibrary id on the mapped new edition" do
-    book = Books::Book.create!(title: "Ed Book")
-    edition = Books::Edition.create!(book: book, title: "Ed")
+    book = ::Books::Book.create!(title: "Ed Book")
+    edition = ::Books::Edition.create!(book: book, title: "Ed")
     LegacyIdMap.record(model: "Books::Edition", legacy_id: 900, new_id: edition.id)
     run_migrator([{"id" => 900, "ol_edition_id" => "/books/OL25955852M"}])
     idf = Identifier.find_by(identifiable: edition)

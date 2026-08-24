@@ -46,3 +46,19 @@ wp_volume_one:
   edition_type: 0
   language: english
   volume_number: 1
+
+wp_legacy_amazon:
+  book: war_and_peace
+  title: "War and Peace (Legacy Amazon Import)"
+  edition_type: 0
+  book_binding: 1
+  metadata:
+    amazon:
+      ASIN: "1400042062"
+      DetailPageURL: "https://amazon.com/dp/1400042062"
+      ItemInfo:
+        ExternalIds:
+          ISBNs:
+            DisplayValues: ["1400042062"]
+          EANs:
+            DisplayValues: ["9781400042067"]
