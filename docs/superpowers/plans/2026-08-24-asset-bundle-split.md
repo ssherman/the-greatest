@@ -2013,7 +2013,18 @@ Still by hand, on the same domain:
 2. Open the modal, enter an email, click **Forgot password** and submit — confirm the confirmation message appears.
 3. On `/admin`, confirm the page loads and sign-out redirects to `/`.
 
-- [ ] **Step 7: Record the measured sizes in the spec**
+- [ ] **Step 7: Verify PATCH and DELETE forms still submit correctly**
+
+This is Task 6's risk surface, checked here because no Rails test can see it — `assert_redirected_to` passes whether or not the browser encoded `_method`, and a regression turns every `form_with method: :patch` and `button_to method: :delete` into a silent POST.
+
+In `/admin` on the games domain:
+
+1. Edit a game and save. This is a `PATCH` through `form_with`. Confirm the change persists rather than hitting a routing error or an unexpected `create`.
+2. Delete a list item. This is a `DELETE` through `button_to`. Confirm it is removed.
+
+With devtools open on the Network tab, confirm the request body carries `_method`. If it does not, the `encodeMethodIntoRequestBody` import path in `app/javascript/turbo.js` is wrong for the installed turbo-rails version — that is the one thing to check first.
+
+- [ ] **Step 8: Record the measured sizes in the spec**
 
 Append to the Measurements section of `docs/superpowers/specs/2026-08-24-asset-bundle-split-design.md`, replacing the bracketed values with the numbers you recorded:
 
@@ -2033,7 +2044,7 @@ Actual gzipped transfer per public page, measured after implementation:
 Before: 183,913 bytes gzipped on every page of every site.
 ```
 
-- [ ] **Step 8: Full suite, linter, and commit**
+- [ ] **Step 9: Full suite, linter, and commit**
 
 ```bash
 ps aux | grep "[r]ails test"
