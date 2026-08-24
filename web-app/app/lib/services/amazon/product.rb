@@ -14,6 +14,12 @@ module Services
       # Cheapest new listing in whole cents, falling back to the cheapest
       # listing of any condition. Returns nil when the product carries no
       # priced offers.
+      #
+      # Non-positive amounts are ignored: Amazon lists a $0.00 "free with trial"
+      # offer alongside the real price on many Audible titles, and public-domain
+      # Kindle editions are often $0.00. Taking those as the lowest price both
+      # loses the buy link (ExternalLink requires price_cents > 0) and would
+      # display "$0.00" as the price of a paid product.
       def lowest_price_cents(product)
         listings = product.dig("offersV2", "listings") || []
         return nil if listings.empty?
@@ -26,7 +32,7 @@ module Services
       end
 
       def amounts(listings)
-        listings.filter_map { |listing| listing.dig("price", "money", "amount") }
+        listings.filter_map { |listing| listing.dig("price", "money", "amount") }.select(&:positive?)
       end
       private_class_method :amounts
     end
