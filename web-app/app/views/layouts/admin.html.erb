@@ -24,7 +24,9 @@
     });
   </script>
 </head>
-<body class="bg-base-200" data-controller="authentication">
+<body class="bg-base-200"
+      data-controller="authentication"
+      data-authentication-firebase-src-value="<%= asset_path("firebase-auth.js") %>">
   <div class="drawer lg:drawer-open">
     <input id="admin-drawer" type="checkbox" class="drawer-toggle" />
 

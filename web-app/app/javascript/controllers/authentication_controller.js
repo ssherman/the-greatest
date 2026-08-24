@@ -1,8 +1,12 @@
 import { Controller } from "@hotwired/stimulus"
-import firebaseAuthService from "../services/firebase_auth_service"
-import googleProvider from "../services/auth_providers/google_provider"
-import emailProvider from "../services/auth_providers/email_provider"
-import redirectHandler from "../services/auth_handlers/redirect_handler"
+import {
+  loadFirebase,
+  likelySignedIn,
+  markSignedIn,
+  clearSignedInHint,
+  markPendingRedirect,
+  clearPendingRedirect
+} from "../services/firebase_loader"
 
 // Connects to data-controller="authentication"
 export default class extends Controller {
@@ -14,25 +18,23 @@ export default class extends Controller {
   ]
   static values = {
     reloadAfterAuth: Boolean,
-    currentUser: Object
+    currentUser: Object,
+    firebaseSrc: String
   }
 
   connect() {
-    console.log("Authentication controller connected")
     this.isSignUpMode = false
     this.storedEmail = null
-
-    // Initialize Firebase and redirect handler
-    firebaseAuthService.initialize()
-    redirectHandler.initialize()
-
-    // Set up auth state listener
-    firebaseAuthService.onAuthStateChanged((user) => {
-      this.handleAuthStateChange(user)
-    })
-
-    // Listen for custom auth events
     this.setupEventListeners()
+
+    // Anonymous readers never download the 32 KB Firebase SDK. Anyone with a
+    // hint of a session gets it eagerly, so the navbar Login/Logout swap and
+    // the post-redirect getRedirectResult still happen on page load.
+    if (likelySignedIn()) {
+      this.firebase().catch((error) => console.error("Firebase eager load failed:", error))
+    } else {
+      this.showUnauthenticatedState()
+    }
   }
 
   disconnect() {
@@ -40,6 +42,29 @@ export default class extends Controller {
     window.removeEventListener('auth:success', this.handleAuthSuccess)
     window.removeEventListener('auth:error', this.handleAuthError)
     window.removeEventListener('auth:signout', this.handleSignOut)
+  }
+
+  // The ONLY way this controller reaches Firebase. Never import or reference
+  // the service singletons directly: in an async refactor of a controller that
+  // used to be entirely synchronous, a missed `await` yields undefined and
+  // fails silently. One accessor makes a missed await a visible mistake.
+  async firebase() {
+    if (!this._firebase) {
+      this._firebase = await loadFirebase(this.firebaseSrcValue)
+      this._initialiseFirebase(this._firebase)
+    }
+    return this._firebase
+  }
+
+  _initialiseFirebase(firebase) {
+    if (this._firebaseInitialised) return
+    this._firebaseInitialised = true
+
+    firebase.firebaseAuthService.initialize()
+    firebase.redirectHandler.initialize()
+    firebase.firebaseAuthService.onAuthStateChanged((user) => {
+      this.handleAuthStateChange(user)
+    })
   }
 
   setupEventListeners() {
@@ -54,9 +79,17 @@ export default class extends Controller {
 
   // Handle authentication state changes
   handleAuthStateChange(user) {
+    // Firebase has now resolved its initial state, including any redirect
+    // result, so the redirect is no longer pending either way. Clearing this
+    // only on success would leave the flag set forever when a reader cancels
+    // the Google flow, forcing an eager load on every later page view.
+    clearPendingRedirect()
+
     if (user) {
+      markSignedIn()
       this.showAuthenticatedState(user)
     } else {
+      clearSignedInHint()
       this.showUnauthenticatedState()
     }
   }
@@ -137,6 +170,8 @@ export default class extends Controller {
 
   // Open the login modal
   openModal() {
+    this.firebase().catch((error) => console.error("Firebase load failed:", error))
+
     const modal = document.getElementById('login_modal')
     if (modal) {
       modal.showModal()
@@ -236,9 +271,14 @@ export default class extends Controller {
     this.hideInfo()
 
     try {
+      const { googleProvider } = await this.firebase()
+      // Set BEFORE the redirect leaves the page: on return, connect() sees this
+      // and eager-loads Firebase so getRedirectResult can run.
+      markPendingRedirect()
       await googleProvider.signIn(event)
     } catch (error) {
       console.error("Google sign in error:", error)
+      clearPendingRedirect()
       this.showError(error.message)
       this.showLoading(false)
     }
@@ -257,19 +297,33 @@ export default class extends Controller {
     this.hideError()
     this.hideInfo()
 
+    // Resolved before the try, not inside the catch. loadFirebase() nulls its
+    // memo on a script-load error, so reaching for getUserFriendlyMessage from
+    // inside the catch would re-attempt the load and could reject there --
+    // an unhandled rejection with nothing shown to the reader.
+    let firebase
+    try {
+      firebase = await this.firebase()
+    } catch (error) {
+      console.error("Firebase load failed:", error)
+      this.showError('Sign-in is temporarily unavailable. Please try again.')
+      this.showLoading(false)
+      return
+    }
+
     try {
       if (this.isSignUpMode) {
-        await emailProvider.signUp(email, password)
+        await firebase.emailProvider.signUp(email, password)
         this.showInfo('Check your email to verify your account.')
       } else {
-        await emailProvider.signIn(email, password)
+        await firebase.emailProvider.signIn(email, password)
       }
     } catch (error) {
       console.error("Email auth error:", error)
       if (!this.isSignUpMode && (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found')) {
         await this.checkProviderConflict(email, error)
       } else {
-        this.showError(emailProvider.getUserFriendlyMessage(error))
+        this.showError(firebase.emailProvider.getUserFriendlyMessage(error))
       }
     } finally {
       this.showLoading(false)
@@ -361,10 +415,12 @@ export default class extends Controller {
     this.hideInfo()
 
     try {
+      const { emailProvider } = await this.firebase()
       await emailProvider.sendPasswordReset(email)
       this.showInfo('If an account exists with this email, a password reset link has been sent.')
     } catch {
-      // Show same message regardless of error (security: don't reveal if email exists)
+      // Show the same message regardless of error (security: don't reveal if
+      // the email exists).
       this.showInfo('If an account exists with this email, a password reset link has been sent.')
     } finally {
       this.showLoading(false)
@@ -378,6 +434,7 @@ export default class extends Controller {
     this.hideInfo()
 
     try {
+      const { emailProvider } = await this.firebase()
       await emailProvider.resendVerification()
       this.showInfo('Verification email sent. Check your inbox.')
     } catch (error) {
@@ -395,7 +452,9 @@ export default class extends Controller {
     this.showLoading(true)
 
     try {
+      const { firebaseAuthService } = await this.firebase()
       await firebaseAuthService.signOut()
+      clearSignedInHint()
 
       const response = await fetch('/auth/sign_out', {
         method: 'POST',
