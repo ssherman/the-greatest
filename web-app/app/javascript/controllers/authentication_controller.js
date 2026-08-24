@@ -26,6 +26,7 @@ export default class extends Controller {
     this.isSignUpMode = false
     this.storedEmail = null
     this.setupEventListeners()
+    this.observeLoginModal()
 
     // Anonymous readers never download the 32 KB Firebase SDK. Anyone with a
     // hint of a session gets it eagerly, so the navbar Login/Logout swap and
@@ -42,6 +43,29 @@ export default class extends Controller {
     window.removeEventListener('auth:success', this.handleAuthSuccess)
     window.removeEventListener('auth:error', this.handleAuthError)
     window.removeEventListener('auth:signout', this.handleSignOut)
+    this.modalObserver?.disconnect()
+  }
+
+  // Safety net for callers that open #login_modal directly instead of going
+  // through openModal() -- user_list_widget_controller, reviews/widget_controller,
+  // and membership/show's inline onclick all call showModal() on the dialog
+  // itself, and all three are on the anonymous-reader path exactly where
+  // deferring the download matters. Watching the dialog's `open` attribute
+  // catches every present and future direct-opener in one place, rather than
+  // pushing a firebase() call into each call site (including inline ERB
+  // onclick, where there is nothing sensible to call). openModal() still
+  // calls this.firebase() itself; loadFirebase() is memoised at module scope,
+  // so the observer's call here is a free no-op when that happens first.
+  observeLoginModal() {
+    const modal = document.getElementById('login_modal')
+    if (!modal) return // e.g. the admin layout has no login modal
+
+    this.modalObserver = new MutationObserver(() => {
+      if (modal.hasAttribute('open')) {
+        this.firebase().catch((error) => console.error("Firebase load failed:", error))
+      }
+    })
+    this.modalObserver.observe(modal, { attributes: true, attributeFilter: ['open'] })
   }
 
   // The ONLY way this controller reaches Firebase. Never import or reference
@@ -62,9 +86,17 @@ export default class extends Controller {
 
     firebase.firebaseAuthService.initialize()
     firebase.redirectHandler.initialize()
+
+    // FirebaseAuthService replays its constructor-initial null synchronously to
+    // a newly registered listener, before it has read IndexedDB. That is "not
+    // known yet", not "signed out", so it must not wipe the localStorage hint --
+    // the only signal that survives a browser restart, since tg_uid is a session
+    // cookie. The replay is synchronous, so this flag brackets it exactly.
+    this._replayingInitialAuthState = true
     firebase.firebaseAuthService.onAuthStateChanged((user) => {
       this.handleAuthStateChange(user)
     })
+    this._replayingInitialAuthState = false
   }
 
   setupEventListeners() {
@@ -89,7 +121,7 @@ export default class extends Controller {
       markSignedIn()
       this.showAuthenticatedState(user)
     } else {
-      clearSignedInHint()
+      if (!this._replayingInitialAuthState) clearSignedInHint()
       this.showUnauthenticatedState()
     }
   }
@@ -451,11 +483,29 @@ export default class extends Controller {
 
     this.showLoading(true)
 
+    // Resolved in its own try, same shape as submitEmailForm. On admin this is
+    // the only sign-out control on the page, so a failure here (or in the
+    // client-side signOut() call below) must never prevent the Rails-side
+    // sign-out that follows -- leaving the reader signed in because a client
+    // bundle 404'd would be worse than skipping the client Firebase sign-out.
+    let firebase = null
     try {
-      const { firebaseAuthService } = await this.firebase()
-      await firebaseAuthService.signOut()
-      clearSignedInHint()
+      firebase = await this.firebase()
+    } catch (error) {
+      console.error('Firebase load failed during sign out:', error)
+    }
 
+    if (firebase) {
+      try {
+        await firebase.firebaseAuthService.signOut()
+      } catch (error) {
+        console.error('Firebase sign out error:', error)
+      }
+    }
+
+    clearSignedInHint()
+
+    try {
       const response = await fetch('/auth/sign_out', {
         method: 'POST',
         headers: {
@@ -477,7 +527,7 @@ export default class extends Controller {
 
     } catch (error) {
       console.error('Sign out error:', error)
-      this.showError(error.message)
+      this.showError('Sign out failed. Please try again.')
       this.showLoading(false)
     }
   }

@@ -13,7 +13,9 @@ require "test_helper"
 # by inspecting build output. Keeping one list, checked from both sides, is what
 # makes that unrepresentable.
 #
-# Task 5 adds the layout -> bundle direction to this file.
+# Task 5 adds the layout -> bundle direction to this file. Task 7 adds
+# firebase-auth, referenced via asset_path (not javascript_include_tag) from
+# both a component and a layout, so the scan below has to catch that form too.
 class AssetBundleCoverageTest < ActiveSupport::TestCase
   test "the bundle registry is valid JSON mapping names to entry files" do
     assert_kind_of Hash, registry, "config/asset_bundles.json must be a JSON object"
@@ -52,17 +54,27 @@ class AssetBundleCoverageTest < ActiveSupport::TestCase
       "config/asset_bundles.json does not produce it."
   end
 
-  test "no layout references a bundle outside the registry" do
-    offenders = layout_files.each_with_object({}) do |relative_path, result|
+  test "the firebase-auth bundle is produced by the build" do
+    assert registry.key?("firebase-auth"),
+      "The authentication widget component and app/views/layouts/admin.html.erb " \
+      "both reference \"firebase-auth\" via asset_path, but config/asset_bundles.json " \
+      "does not produce it. asset_path is invisible to javascript_include_tag-based " \
+      "scans, so this bundle needs its own explicit check rather than relying on the " \
+      "scan below."
+  end
+
+  test "no layout or component references a bundle outside the registry" do
+    offenders = scanned_files.each_with_object({}) do |relative_path, result|
       names = File.read(Rails.root.join(relative_path))
-        .scan(/javascript_include_tag\s+["']([^"']+)["']/)
+        .scan(/javascript_include_tag\s+["']([^"']+)["']|asset_path\(\s*["']([^"']+)\.js["']\s*\)/)
         .flatten
+        .compact
         .reject { |name| registry.key?(name) }
       result[relative_path] = names if names.any?
     end
 
     assert_empty offenders,
-      "These layouts name a JavaScript bundle the build does not produce:\n" \
+      "These files name a JavaScript bundle the build does not produce:\n" \
       "#{offenders.map { |path, names| "  #{path}: #{names.join(", ")}" }.join("\n")}"
   end
 
@@ -83,8 +95,15 @@ class AssetBundleCoverageTest < ActiveSupport::TestCase
       }
   end
 
-  def layout_files
-    @layout_files ||= Dir.glob(Rails.root.join("app/views/layouts/**/*.erb"))
+  # Layouts can reference a bundle via javascript_include_tag. Components (e.g.
+  # the authentication widget, rendered inside a layout that already emits its
+  # own <script> tags) can only reach one via asset_path -- hence scanning
+  # app/components/** here too, not just app/views/layouts/**.
+  def scanned_files
+    @scanned_files ||= (
+      Dir.glob(Rails.root.join("app/views/layouts/**/*.erb")) +
+      Dir.glob(Rails.root.join("app/components/**/*.erb"))
+    )
       .map { |path| Pathname.new(path).relative_path_from(Rails.root).to_s }
       .sort
   end
