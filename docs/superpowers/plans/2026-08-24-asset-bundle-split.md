@@ -133,10 +133,14 @@ import { Application } from "@hotwired/stimulus"
 
 const application = Application.start()
 
-// Exposed so `window.Stimulus.debug = true` works from the browser console.
-// Do NOT set debug here: this file runs on every page of every site, so
+// Exposed so debug mode can be switched on from the browser console when you
+// need it locally (set the `debug` property on window.Stimulus).
+//
+// Do NOT enable it here: this file runs on every page of every site, so
 // leaving it on logs every controller connect and action dispatch for every
-// visitor. Guarded by test/lint/stimulus_debug_mode_test.rb.
+// visitor. Guarded by test/lint/stimulus_debug_mode_test.rb -- which scans
+// this file as raw text, comments included, so do not write the enabling
+// assignment out in full even inside a comment.
 window.Stimulus = application
 
 export { application }
@@ -1325,10 +1329,12 @@ Replace the whole of `web-app/app/javascript/turbo.js`:
 //
 // turbo-rails' entry also imports cable_stream_source_element and cable, which
 // pulls ActionCable into every bundle for ~3.5 KB gzipped. This app broadcasts
-// nothing over a cable: there is no turbo_stream_from anywhere, no broadcasts_*
-// helper, and no app/channels. <turbo-cable-stream-source> is the only thing
-// that ever opens a cable connection, and it only enters the DOM via
-// turbo_stream_from. test/lint/turbo_cable_test.rb enforces that precondition.
+// nothing over a cable: no view calls Turbo's stream-from helper, no model uses
+// a broadcast helper, and there is no app/channels. <turbo-cable-stream-source>
+// is the only thing that ever opens a cable connection, and it only enters the
+// DOM via that helper. test/lint/turbo_cable_test.rb enforces the precondition
+// -- it scans this file too, as raw text including comments, so name those
+// helpers rather than spelling them.
 //
 // Turbo Frames are plain fetch and never involve ActionCable. Turbo Stream
 // RESPONSES over HTTP (text/vnd.turbo-stream.html) are core Turbo and are
@@ -1713,25 +1719,36 @@ Replace `signInWithGoogle`:
   }
 ```
 
-Replace the body of `submitEmailForm`'s `try`/`catch` to resolve the provider first:
+Replace the body of `submitEmailForm`'s `try`/`catch`. Firebase is resolved **once, before** the try, with its own failure branch:
 
 ```js
+    // Resolved before the try, not inside the catch. loadFirebase() nulls its
+    // memo on a script-load error, so reaching for getUserFriendlyMessage from
+    // inside the catch would re-attempt the load and could reject there --
+    // an unhandled rejection with nothing shown to the reader.
+    let firebase
     try {
-      const { emailProvider } = await this.firebase()
+      firebase = await this.firebase()
+    } catch (error) {
+      console.error("Firebase load failed:", error)
+      this.showError('Sign-in is temporarily unavailable. Please try again.')
+      this.showLoading(false)
+      return
+    }
 
+    try {
       if (this.isSignUpMode) {
-        await emailProvider.signUp(email, password)
+        await firebase.emailProvider.signUp(email, password)
         this.showInfo('Check your email to verify your account.')
       } else {
-        await emailProvider.signIn(email, password)
+        await firebase.emailProvider.signIn(email, password)
       }
     } catch (error) {
       console.error("Email auth error:", error)
       if (!this.isSignUpMode && (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found')) {
         await this.checkProviderConflict(email, error)
       } else {
-        const { emailProvider } = await this.firebase()
-        this.showError(emailProvider.getUserFriendlyMessage(error))
+        this.showError(firebase.emailProvider.getUserFriendlyMessage(error))
       }
     } finally {
       this.showLoading(false)
