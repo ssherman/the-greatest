@@ -420,6 +420,104 @@ module Books
           "the survivor must not become a pseudonym because the duplicate was one"
       end
 
+      test "queues the target for reindexing" do
+        neutralize_scalar_confound
+
+        merger = ::Books::Author::Merger.new(source: @source, target: @target)
+        result = merger.call
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_nil merger.stats[:post_commit_error]
+        assert SearchIndexRequest.exists?(
+          parent_type: "Books::Author", parent_id: @target.id, action: "index_item"
+        )
+      end
+
+      test "does not queue indexing while migration suppression is on" do
+        neutralize_scalar_confound
+        Services::BooksMigration.stubs(:search_indexing_suppressed?).returns(true)
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_not SearchIndexRequest.exists?(
+          parent_type: "Books::Author", parent_id: @target.id, action: "index_item"
+        )
+      end
+
+      test "queues a reindex for every book the source authored" do
+        ::Books::BookAuthor.create!(
+          book: books_books(:war_and_peace), author: @source, position: 2
+        )
+        ::Books::BookAuthor.create!(book: books_books(:got), author: @source, position: 2)
+        SearchIndexRequest.where(parent_type: "Books::Book").delete_all
+
+        merger = ::Books::Author::Merger.new(source: @source, target: @target)
+        merger.call
+
+        assert_nil merger.stats[:post_commit_error]
+        queued = SearchIndexRequest.where(
+          parent_type: "Books::Book", action: "index_item"
+        ).pluck(:parent_id).uniq.sort
+        assert_equal(
+          [books_books(:war_and_peace).id, books_books(:got).id].sort, queued,
+          "a book's search document embeds author_names/author_ids, so both the moved " \
+          "link and the dropped duplicate change what the book indexes"
+        )
+      end
+
+      test "does not queue book reindexes while migration suppression is on" do
+        ::Books::BookAuthor.create!(
+          book: books_books(:war_and_peace), author: @source, position: 2
+        )
+        SearchIndexRequest.where(parent_type: "Books::Book").delete_all
+        Services::BooksMigration.stubs(:search_indexing_suppressed?).returns(true)
+
+        result = ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_equal 0, SearchIndexRequest.where(parent_type: "Books::Book").count
+      end
+
+      test "schedules the author ranking recalculation" do
+        ::Books::CalculateAuthorRankingsJob.expects(:perform_async).once
+
+        merger = ::Books::Author::Merger.new(source: @source, target: @target)
+        result = merger.call
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_nil merger.stats[:post_commit_error],
+          "a violated Mocha expectation in a post-commit step is swallowed into this key"
+      end
+
+      test "still reports success when scheduling the ranking job fails" do
+        source_id = @source.id
+
+        merger = ::Books::Author::Merger.new(source: @source, target: @target)
+        merger.stubs(:schedule_ranking_recalculation).raises(StandardError.new("redis down"))
+
+        result = merger.call
+
+        assert result.success?,
+          "a post-commit failure must not be reported as a failed merge: #{result.errors.inspect}"
+        assert_not ::Books::Author.exists?(source_id), "the merge itself must still have committed"
+        assert_equal "redis down", merger.stats[:post_commit_error]
+      end
+
+      test "still reports success when reindexing the target fails" do
+        source_id = @source.id
+
+        merger = ::Books::Author::Merger.new(source: @source, target: @target)
+        merger.stubs(:reindex_target_author).raises(StandardError.new("opensearch down"))
+
+        result = merger.call
+
+        assert result.success?,
+          "a post-commit failure must not be reported as a failed merge: #{result.errors.inspect}"
+        assert_not ::Books::Author.exists?(source_id), "the merge itself must still have committed"
+        assert_equal "opensearch down", merger.stats[:post_commit_error]
+      end
+
       def attach_image(author, primary:)
         author.images.create!(primary: primary) do |image|
           image.file.attach(
@@ -428,6 +526,18 @@ module Books
             content_type: "image/jpeg"
           )
         end
+      end
+
+      # reconcile_scalars all but always dirties the target -- absorbing the source's
+      # name into alternate_names alone does it -- and target_author.save! then fires
+      # SearchIndexable's after_commit, creating the very index_item row the two
+      # reindex tests are trying to attribute to reindex_target_author. Without this
+      # they pass with that method stubbed empty. Pre-load the absorption result so
+      # reconcile_scalars finds nothing to change, using update_columns to skip both
+      # validations and callbacks.
+      def neutralize_scalar_confound
+        @target.update_columns(alternate_names: [@source.name])
+        @target.reload
       end
     end
   end

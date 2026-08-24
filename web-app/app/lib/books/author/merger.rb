@@ -12,6 +12,11 @@ module Books
       # `false` and drop the survivor out of the rankings.
       BLANK_FILLABLE = %i[sort_name birth_year death_year gender description].freeze
 
+      # 1,000 rows x 4 columns is 4,000 bind parameters per statement, comfortably
+      # under PostgreSQL's 65,535 cap even for an author with tens of thousands of
+      # books.
+      REINDEX_BATCH_SIZE = 1000
+
       attr_reader :source_author, :target_author, :stats, :affected_book_ids
 
       def self.call(source:, target:)
@@ -307,7 +312,62 @@ module Books
         target_author.alternate_names = merged
       end
 
+      # The merge is committed by this point. Reindexing and ranking recalculation
+      # are follow-up work: if they fail, the merge still happened, so a failure
+      # here must not be reported as a failed merge. `success?` means "the merge
+      # committed", and that is what the admin UI reports.
       def run_post_commit_steps
+        reindex_target_author
+        reindex_affected_books
+        schedule_ranking_recalculation
+      rescue => error
+        Rails.logger.error(
+          "Books::Author::Merger: merge of #{source_author.id} into #{target_author.id} " \
+          "committed, but post-commit follow-up failed: #{error.class}: #{error.message}"
+        )
+        @stats[:post_commit_error] = error.message
+      end
+
+      # SearchIndexable already respects this flag on its own callbacks; the merger
+      # matches it rather than writing requests during a bulk migration.
+      def reindex_target_author
+        return if Services::BooksMigration.search_indexing_suppressed?
+
+        SearchIndexRequest.create!(parent: target_author, action: :index_item)
+      end
+
+      # Books must be reindexed explicitly. Books::Book#as_indexed_json embeds
+      # author_names and author_ids, but Books::Author#queue_books_for_reindexing
+      # fires only on a *name* change and only for the source's books, which are
+      # about to be reassigned -- and merge_book_authors uses bulk operations that
+      # skip Books::BookAuthor's own reindex callback. So the fan-out lives here,
+      # over the ids collected before the repoint.
+      def reindex_affected_books
+        return if Services::BooksMigration.search_indexing_suppressed?
+        return if affected_book_ids.blank?
+
+        now = Time.current
+        affected_book_ids.each_slice(REINDEX_BATCH_SIZE) do |batch|
+          rows = batch.map do |book_id|
+            {
+              parent_type: "Books::Book",
+              parent_id: book_id,
+              action: SearchIndexRequest.actions[:index_item],
+              created_at: now,
+              updated_at: now
+            }
+          end
+          SearchIndexRequest.insert_all(rows)
+        end
+      end
+
+      # Author rankings derive from book rankings rather than from lists, so unlike
+      # the games and books mergers there are no per-configuration jobs to schedule.
+      # This one job resolves Books::Authors::RankingConfiguration.default_primary
+      # itself. perform_async writes to Redis, which a rollback cannot undo -- hence
+      # post-commit, never inside the transaction.
+      def schedule_ranking_recalculation
+        ::Books::CalculateAuthorRankingsJob.perform_async
       end
 
       def destroy_source_author
