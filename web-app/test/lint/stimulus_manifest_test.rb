@@ -44,21 +44,37 @@ class StimulusManifestTest < ActiveSupport::TestCase
 
   # Stimulus identifier => sorted list of Rails.root-relative paths referencing it.
   #
-  # data-controller takes a space-separated list ("user-list-state membership-state"),
-  # so each attribute value is split. ERB interpolation inside the value would
-  # produce a junk identifier; no occurrence exists today, and one would fail the
-  # first test loudly rather than silently, which is the right direction to fail.
+  # BOTH idioms must be scanned. Markup reaches Stimulus two ways in this app:
+  #
+  #   1. the literal HTML attribute -- data-controller="user-list-state membership-state"
+  #   2. Rails' tag-builder hash    -- data: { controller: "metadata-editor modal-form" }
+  #
+  # The second renders to the first at runtime but never appears as that literal
+  # string in the source, and it is the DOMINANT idiom in admin views: 47 files
+  # reference modal-form that way and none reference it the other. A scanner
+  # matching only the attribute form reports those controllers as referenced by
+  # nothing -- which is exactly what happened, and three live controllers were
+  # deleted on the strength of it before this was caught.
+  #
+  # Both values are space-separated lists, so both get split. Tokens containing
+  # "/" are skipped: a Stimulus identifier never contains one, but
+  # url_for(controller: "admin/games") would otherwise register a phantom.
   def referenced_controllers
     @referenced_controllers ||= begin
       result = Hash.new { |hash, key| hash[key] = [] }
 
       markup_files.each do |relative_path|
-        File.read(Rails.root.join(relative_path)).scan(/\bdata-controller\s*=\s*(["'])(.*?)\1/m) do |_quote, value|
-          value.split(/\s+/).reject(&:empty?).each { |identifier| result[identifier] << relative_path }
+        source = File.read(Rails.root.join(relative_path))
+
+        [/\bdata-controller\s*=\s*(["'])(.*?)\1/m, /\bcontroller:\s*(["'])(.*?)\1/m].each do |pattern|
+          source.scan(pattern) do |_quote, value|
+            value.split(/\s+/).reject { |token| token.empty? || token.include?("/") }
+              .each { |identifier| result[identifier] << relative_path }
+          end
         end
       end
 
-      result.each_value(&:sort!)
+      result.each_value { |paths| paths.replace(paths.uniq.sort) }
       result
     end
   end
