@@ -176,29 +176,58 @@ controller that currently does everything synchronously in `connect()`, a missed
 `await` yields `undefined` and fails silently. Routing every touch through one
 accessor makes a missed `await` a visible mistake.
 
-Firebase **eager-loads** on `connect()` when either flag is present:
+Firebase **eager-loads** on `connect()` when **any** of these is present:
 
+- The **`tg_uid` cookie** — the app's existing signed-in marker, set by
+  `AuthController` (`TG_UID_COOKIE`) on sign-in, deleted on sign-out, backfilled by
+  `/user_list_state`, and cleared on a 401. Four controllers already gate on it
+  (`user_list_state`, `membership_state`, `user_list_widget`, `reviews/widget`), each
+  with its own copy of the same three-line regex; the auth controller adds a fifth,
+  matching the established convention rather than introducing a shared module used by
+  one of five call sites.
+- `localStorage['tg:auth:signed-in']` — set on successful sign-in, cleared on
+  sign-out.
 - `sessionStorage['tg:auth:pending-redirect']` — set immediately before
   `signInWithRedirect`, cleared once `getRedirectResult` resolves. As belt-and-braces
   the check also matches any existing `firebase:pendingRedirect*` sessionStorage key.
-- `localStorage['tg:auth:signed-in']` — set on successful sign-in, cleared on
-  sign-out.
 
 Otherwise Firebase loads only when the user opens the login modal.
 
-**Why the `signed-in` flag is required.** Without it, a returning signed-in user's
-navbar would sit on "Login" until they clicked something, because only Firebase knows
-they are signed in and the page is edge-cached so the server cannot render it. The
-flag preserves current behavior exactly: signed-in users still pay the 32 KB,
-anonymous readers — the overwhelming majority of traffic — do not.
+**Why both `tg_uid` and the localStorage flag, rather than either alone.** They fail
+in opposite directions and the union is strictly safer than either:
+
+- `tg_uid` is a **session** cookie with no explicit expiry, so it dies on browser
+  restart. Firebase's own persistence is IndexedDB, which survives. Gating on
+  `tg_uid` alone would show "Login" to a still-signed-in user after every browser
+  restart — a visible regression.
+- The localStorage flag is persistent and survives restarts, but is a client-side
+  mirror that can drift (a sign-out in another tab does not clear it in tabs that
+  never loaded Firebase). `tg_uid` is server-managed and authoritative.
+
+A false positive is cheap — load Firebase, get a null user, clear the flag, render
+Login. A false negative is the visible regression. So the condition is a union, and
+any hint of a signed-in user triggers the eager load.
+
+**Why an eager-load signal is required at all.** Without one, a returning signed-in
+user's navbar would sit on "Login" until they clicked something: only Firebase knows
+they are signed in, and the page is edge-cached so the server cannot render it. This
+preserves current behavior — signed-in users still pay the 32 KB, anonymous readers,
+the overwhelming majority of traffic, do not.
+
+Note that `data-signed-in="<%= signed_in? %>"` on the domain layouts' `<body>` is
+**not** a usable signal: those pages are edge-cached via `Cacheable`, so the baked-in
+value reflects whoever first populated the cache. That is precisely why `tg_uid` and
+client-side hydration exist.
 
 Failure modes, all graceful:
 
 | Situation | Result |
 |---|---|
-| Flag set, Firebase session expired | Loads Firebase, gets null user, clears flag, renders Login. Correct. |
-| Flag cleared in another tab, session live | Sees Login until they click; clicking restores the session. Degraded, not broken. |
-| Storage blocked or cleared | Same as above. |
+| Signal present, Firebase session expired | Loads Firebase, gets null user, clears flag, renders Login. Correct. |
+| Browser restarted (`tg_uid` gone) | localStorage flag still set → eager load. Correct. |
+| localStorage flag stale after sign-out in another tab | `tg_uid` already deleted, but the stale flag still triggers a load → null user → flag cleared. Correct, at the cost of one download. |
+| Both signals absent, Firebase session live | Sees Login until they click; clicking restores the session. Degraded, not broken. |
+| Storage blocked entirely | `tg_uid` alone still covers the common case within a browser session. |
 | sessionStorage lost across the redirect | Firebase's own `firebase:pendingRedirect:*` key has the identical durability requirement, so this path is already broken today. No new failure mode. |
 
 **CSP:** `config/initializers/content_security_policy.rb` is entirely commented out,
