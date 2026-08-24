@@ -10,6 +10,9 @@ application.register("admin--markdown-preview", Admin__MarkdownPreviewController
 import Admin__SearchController from "./admin/search_controller"
 application.register("admin--search", Admin__SearchController)
 
+import AutoDismissController from "./auto_dismiss_controller"
+application.register("auto-dismiss", AutoDismissController)
+
 import AuthenticationController from "./authentication_controller"
 application.register("authentication", AuthenticationController)
 
@@ -22,17 +25,8 @@ application.register("books--filter", Books__FilterController)
 import ClipboardCopyController from "./clipboard_copy_controller"
 application.register("clipboard-copy", ClipboardCopyController)
 
-import ConditionalFieldController from "./conditional_field_controller"
-application.register("conditional-field", ConditionalFieldController)
-
 import MembershipStateController from "./membership_state_controller"
 application.register("membership-state", MembershipStateController)
-
-import MetadataEditorController from "./metadata_editor_controller"
-application.register("metadata-editor", MetadataEditorController)
-
-import ModalFormController from "./modal_form_controller"
-application.register("modal-form", ModalFormController)
 
 import ReviewFilterController from "./review_filter_controller"
 application.register("review-filter", ReviewFilterController)
