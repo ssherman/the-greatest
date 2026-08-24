@@ -20,10 +20,17 @@ const BUNDLES = JSON.parse(fs.readFileSync("config/asset_bundles.json", "utf8"))
 // throws a ReferenceError the instant it runs in a browser. This hook
 // resolves that one path directly against the installed package's files,
 // ahead of the general resolver below, so the import genuinely works rather
-// than merely failing to warn. RE-VERIFY THIS PATH ON EVERY turbo-rails
-// UPGRADE -- if the file moves, this hook returns nothing, the specifier is
-// unresolved again, and the onwarn below is what actually turns that into a
-// build failure instead of quietly shipping broken JS.
+// than merely failing to warn.
+//
+// This hook and the import in app/javascript/turbo.js must be upgraded
+// together -- RE-VERIFY THIS PATH ON EVERY turbo-rails UPGRADE. Note what
+// actually happens if it goes stale: this hook returns the path below
+// UNCONDITIONALLY, with no existence check, so a moved file does not surface
+// as the UNRESOLVED_IMPORT the onwarn hook below is watching for. Instead
+// @rollup/plugin-commonjs tries to read the (now wrong) path this hook
+// handed it and throws "(plugin commonjs--resolver) ... ENOENT: no such file
+// or directory" -- still a hard build failure, just under a different error
+// banner than onwarn's comment would suggest.
 const TURBO_RAILS_FETCH_REQUESTS = "@hotwired/turbo-rails/app/javascript/turbo/fetch_requests"
 
 const resolveTurboRailsFetchRequests = {
@@ -57,6 +64,8 @@ export default Object.entries(BUNDLES).map(([name, input]) => ({
   // it as an external -- not to fail the build. That silently ships broken
   // JS (see resolveTurboRailsFetchRequests above), so any UNRESOLVED_IMPORT
   // is promoted to a thrown error here; every other warning still just warns.
+  // (This does NOT catch every way the turbo-rails deep import can break --
+  // see resolveTurboRailsFetchRequests above for the ENOENT case.)
   onwarn(warning, warn) {
     if (warning.code === "UNRESOLVED_IMPORT") {
       throw new Error(warning.message)

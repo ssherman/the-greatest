@@ -16,9 +16,14 @@
 // encodeMethodIntoRequestBody is the one Rails-specific piece turbo-rails adds
 // that this app genuinely needs: it encodes _method into non-GET form bodies,
 // without which `form_with method: :patch` and `button_to method: :delete`
-// silently submit as POST. This is a DEEP IMPORT into turbo-rails' internals --
-// RE-CHECK THIS PATH ON EVERY turbo-rails UPGRADE. If it moves, the import
-// throws at build time rather than failing silently, which is the safe direction.
+// silently submit as POST. This is a DEEP IMPORT into turbo-rails' internals,
+// and turbo-rails' package.json "exports" map does not expose this subpath at
+// all -- it resolves only because rollup.config.js's
+// resolveTurboRailsFetchRequests hook resolves it directly against the
+// installed package's files. This file and that hook must be upgraded
+// together -- RE-CHECK THIS PATH ON EVERY turbo-rails UPGRADE, in BOTH
+// places. See rollup.config.js for what actually happens when the path is
+// wrong (a build failure, but not the one you would guess from here).
 import * as Turbo from "@hotwired/turbo"
 import { encodeMethodIntoRequestBody } from "@hotwired/turbo-rails/app/javascript/turbo/fetch_requests"
 
