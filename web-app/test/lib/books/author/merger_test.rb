@@ -357,6 +357,69 @@ module Books
         ).count
       end
 
+      test "fills a blank sort name from the source" do
+        @source.update!(sort_name: "Bachman, Richard")
+
+        ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert_equal "Bachman, Richard", @target.reload.sort_name
+      end
+
+      test "never overwrites a field the target already has" do
+        @source.update!(birth_year: 1900)
+
+        ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert_equal 1947, @target.reload.birth_year, "the survivor's own value always wins"
+      end
+
+      test "absorbs the source's name into the target's alternate names" do
+        ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert_includes @target.reload.alternate_names, "Richard Bachman",
+          "folding a pseudonym in should leave the deleted spelling searchable"
+      end
+
+      test "absorbs the source's own alternate names too" do
+        @source.update!(alternate_names: ["R. Bachman"])
+
+        ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert_includes @target.reload.alternate_names, "R. Bachman"
+      end
+
+      test "does not duplicate an alternate name the target already has" do
+        @target.update!(alternate_names: ["Richard Bachman"])
+
+        ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert_equal ["Richard Bachman"], @target.reload.alternate_names
+      end
+
+      test "never records the survivor's own name as one of its alternate names" do
+        @source.update!(alternate_names: [@target.name])
+
+        ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert_not_includes @target.reload.alternate_names, @target.name
+      end
+
+      test "never lets the source's exclude_from_rankings overwrite the target's" do
+        @source.update!(exclude_from_rankings: true)
+
+        ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert_not @target.reload.exclude_from_rankings,
+          "false.present? is false, so a naive blank-fill would flip the survivor's flag"
+      end
+
+      test "never lets the source's kind overwrite the target's" do
+        ::Books::Author::Merger.call(source: @source, target: @target)
+
+        assert_equal "person", @target.reload.kind,
+          "the survivor must not become a pseudonym because the duplicate was one"
+      end
+
       def attach_image(author, primary:)
         author.images.create!(primary: primary) do |image|
           image.file.attach(

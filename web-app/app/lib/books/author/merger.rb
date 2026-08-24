@@ -3,6 +3,15 @@ module Books
     class Merger
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
+      # The survivor's own non-blank value always wins; these are only filled when it
+      # has none. `kind` and `exclude_from_rankings` are deliberately absent. `kind`
+      # is NOT NULL with a default, so it is never blank -- and folding a pseudonym
+      # into a person must not turn the person into a pseudonym. `exclude_from_rankings`
+      # is a NOT NULL boolean defaulting to false, and `false.present?` is false, so
+      # including it here would let a source's `true` silently overwrite a survivor's
+      # `false` and drop the survivor out of the rankings.
+      BLANK_FILLABLE = %i[sort_name birth_year death_year gender description].freeze
+
       attr_reader :source_author, :target_author, :stats, :affected_book_ids
 
       def self.call(source:, target:)
@@ -261,6 +270,41 @@ module Books
       end
 
       def reconcile_scalars
+        fill_blank_fields
+        absorb_alternate_names
+      end
+
+      def fill_blank_fields
+        filled = []
+
+        BLANK_FILLABLE.each do |field|
+          next if target_author.public_send(field).present?
+
+          value = source_author.public_send(field)
+          next if value.blank?
+
+          target_author.public_send(:"#{field}=", value)
+          filled << field
+        end
+
+        @stats[:filled_fields] = filled
+      end
+
+      # Absorbing the duplicate's name is often the whole point of the merge: folding
+      # "J.R.R. Tolkien" into "J. R. R. Tolkien" should leave the deleted spelling
+      # findable. alternate_names is GIN-indexed and feeds as_indexed_json, so the
+      # search index picks this up on the target's reindex.
+      def absorb_alternate_names
+        existing = Array(target_author.alternate_names)
+        incoming = ([source_author.name] + Array(source_author.alternate_names))
+          .map { |value| value.to_s.strip }
+          .compact_blank
+
+        merged = (existing + incoming).uniq - [target_author.name]
+        return if merged == existing
+
+        @stats[:alternate_names_added] = merged - existing
+        target_author.alternate_names = merged
       end
 
       def run_post_commit_steps
