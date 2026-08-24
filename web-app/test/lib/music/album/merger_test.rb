@@ -388,6 +388,81 @@ module Music
         @target_album.reload
         assert_nil @target_album.release_year
       end
+
+      test "refuses to merge an album with itself" do
+        result = Music::Album::Merger.call(source: @source_album, target: @source_album)
+
+        assert_not result.success?
+        assert_equal ["Cannot merge an album with itself"], result.errors
+        assert Music::Album.exists?(@source_album.id), "a self-merge would destroy the album outright"
+      end
+
+      # `success?` means the merge committed. Reindexing and ranking are follow-up
+      # work: if they fail the merge still happened, so reporting failure would send
+      # the admin to a retry that fails with "not found".
+      test "still reports success when scheduling ranking recalculation fails" do
+        source_id = @source_album.id
+
+        merger = Music::Album::Merger.new(source: @source_album, target: @target_album)
+        merger.stubs(:schedule_ranking_recalculation).raises(StandardError.new("redis down"))
+
+        result = merger.call
+
+        assert result.success?,
+          "a post-commit failure must not be reported as a failed merge: #{result.errors.inspect}"
+        assert_not Music::Album.exists?(source_id), "the merge itself must still have committed"
+        assert_equal "redis down", merger.stats[:post_commit_error]
+      end
+
+      # SearchIndexable's after_commit fires as the transaction block exits -- after
+      # the commit -- and Rails propagates what it raises into call's rescue ladder.
+      test "still reports success when a commit callback fails after the merge committed" do
+        source_id = @source_album.id
+        SearchIndexRequest.stubs(:create!).raises(StandardError.new("index store down"))
+
+        merger = Music::Album::Merger.new(source: @source_album, target: @target_album)
+        result = merger.call
+
+        assert result.success?,
+          "a commit-callback failure must not be reported as a failed merge: #{result.errors.inspect}"
+        assert_not Music::Album.exists?(source_id), "the merge itself must still have committed"
+        assert_equal "index store down", merger.stats[:post_commit_error]
+      end
+
+      test "reports failure when the source disappears before it can be locked" do
+        source_id = @source_album.id
+        merger = Music::Album::Merger.new(source: @source_album, target: @target_album)
+        merger.stubs(:lock_albums).raises(ActiveRecord::RecordNotFound.new("gone"))
+        Music::Album.where(id: source_id).delete_all
+
+        result = merger.call
+
+        assert_not result.success?, "a merge that never ran must not report success"
+        assert_equal ["gone"], result.errors
+      end
+
+      test "locks both albums for update, in ascending id order, before moving anything" do
+        locked = []
+        subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+          sql = payload[:sql]
+          next unless sql.include?("music_albums") && sql.include?("FOR UPDATE")
+
+          binds = payload[:type_casted_binds]
+          binds = binds.call if binds.respond_to?(:call)
+          locked << Array(binds).first
+        end
+
+        begin
+          result = Music::Album::Merger.call(source: @source_album, target: @target_album)
+        ensure
+          ActiveSupport::Notifications.unsubscribe(subscriber)
+        end
+
+        assert result.success?, "merge must succeed: #{result.errors.inspect}"
+        assert_equal [@source_album.id, @target_album.id].sort, locked.compact,
+          "both rows must be locked FOR UPDATE in ascending id order, or two merges " \
+          "with swapped source and target can deadlock each other"
+      end
     end
   end
 end

@@ -48,10 +48,21 @@ module Actions
             return error("Cannot merge an artist with itself. Please select a different artist.")
           end
 
-          result = ::Music::Artist::Merger.call(source: source_artist, target: target_artist)
+          source_name = source_artist.name
+          source_id = source_artist.id
+
+          merger = ::Music::Artist::Merger.new(source: source_artist, target: target_artist)
+          result = merger.call
 
           if result.success?
-            succeed "Successfully merged '#{source_artist.name}' (ID: #{source_artist.id}) into '#{target_artist.name}'. The source artist has been deleted."
+            message = "Successfully merged '#{source_name}' (ID: #{source_id}) into '#{target_artist.name}'. The source artist has been deleted."
+
+            if merger.stats[:post_commit_error].present?
+              warn "#{message} Note: search reindexing and ranking recalculation could not be " \
+                "scheduled (#{merger.stats[:post_commit_error]}); they will need to be re-run."
+            else
+              succeed message
+            end
           else
             error "Failed to merge artists: #{result.errors.join(", ")}"
           end

@@ -12,8 +12,10 @@ module Music
       def initialize(source:, target:)
         @source_artist = source
         @target_artist = target
+        @source_artist_id = source.id
         @stats = {}
         @affected_ranking_configurations = []
+        @transaction_body_completed = false
       end
 
       def call
@@ -26,24 +28,75 @@ module Music
         end
 
         ActiveRecord::Base.transaction do
+          lock_artists
           collect_affected_ranking_configurations
           merge_all_associations
           destroy_source_artist
+          @transaction_body_completed = true
         end
 
-        reindex_target_artist
-        schedule_ranking_recalculation
+        run_post_commit_steps
 
         Result.new(success?: true, data: target_artist, errors: [])
       rescue ActiveRecord::RecordInvalid => error
-        Result.new(success?: false, data: nil, errors: [error.message])
+        result_for_raised(error, error.message)
       rescue ActiveRecord::RecordNotUnique => error
-        Result.new(success?: false, data: nil, errors: ["Constraint violation: #{error.message}"])
+        result_for_raised(error, "Constraint violation: #{error.message}")
       rescue => error
-        Result.new(success?: false, data: nil, errors: [error.message])
+        result_for_raised(error, error.message)
       end
 
       private
+
+      # Locks both rows FOR UPDATE before anything moves. Without it two admins
+      # merging the same duplicate can both pass the guards above, and the loser's
+      # destroy! silently affects zero rows -- music_artists has no lock_version, so
+      # Rails never checks the affected count -- reporting a completed merge that
+      # moved nothing. Ascending id order stops two merges with swapped source and
+      # target from deadlocking each other.
+      def lock_artists
+        [source_artist, target_artist].sort_by(&:id).each(&:lock!)
+      end
+
+      # The merge is committed by this point. Reindexing and ranking recalculation
+      # are follow-up work: if they fail the merge still happened, so a failure here
+      # must not be reported as a failed merge. `success?` means "the merge
+      # committed", and that is what the admin UI reports.
+      def run_post_commit_steps
+        reindex_target_artist
+        schedule_ranking_recalculation
+      rescue => error
+        Rails.logger.error(
+          "Music::Artist::Merger: merge of #{@source_artist_id} into #{target_artist.id} " \
+          "committed, but post-commit follow-up failed: #{error.class}: #{error.message}"
+        )
+        @stats[:post_commit_error] = error.message
+      end
+
+      # SearchIndexable's after_commit callbacks fire as the transaction block exits,
+      # which is AFTER the commit, and Rails propagates anything they raise out of
+      # that block straight into the rescues above. Reporting success?: false there
+      # would tell the admin a merge failed when the source is already permanently
+      # deleted, and their retry would fail with "not found".
+      #
+      # Both halves of merge_committed? are load-bearing. The flag alone would
+      # misread a COMMIT that itself failed as success; the missing row alone would
+      # misread a merge that never started because a concurrent merge had already
+      # consumed the source -- which is what lock_artists raises on.
+      def result_for_raised(error, message)
+        return Result.new(success?: false, data: nil, errors: [message]) unless merge_committed?
+
+        Rails.logger.error(
+          "Music::Artist::Merger: merge of #{@source_artist_id} into #{target_artist.id} " \
+          "committed, but a commit callback failed: #{error.class}: #{error.message}"
+        )
+        @stats[:post_commit_error] = error.message
+        Result.new(success?: true, data: target_artist, errors: [])
+      end
+
+      def merge_committed?
+        @transaction_body_completed && !::Music::Artist.exists?(@source_artist_id)
+      end
 
       def merge_all_associations
         merge_album_artists
