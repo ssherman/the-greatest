@@ -154,10 +154,18 @@ module Services
 
       # The matched product with the best (lowest) sales rank. Products carrying
       # no rank sort last rather than winning by virtue of a nil.
-      def best_product(validated_results, search_results)
-        validated_results
-          .filter_map { |match| product_for(match, search_results) }
-          .min_by { |product| product.dig("browseNodeInfo", "websiteSalesRank", "salesRank") || Float::INFINITY }
+      #
+      # require_image restricts the ranking to products that actually carry a
+      # cover URL. Without it a rank winner with no image wins and then silently
+      # produces no cover, even when a lower-ranked match has one.
+      def best_product(validated_results, search_results, require_image: false)
+        candidates = validated_results.filter_map { |match| product_for(match, search_results) }
+        candidates = candidates.select { |product| image_url_for(product).present? } if require_image
+        candidates.min_by { |product| product.dig("browseNodeInfo", "websiteSalesRank", "salesRank") || Float::INFINITY }
+      end
+
+      def image_url_for(product)
+        product.dig("images", "primary", "large", "url")
       end
 
       def extract_price_cents(product)

@@ -36,13 +36,10 @@ module Services
       # Amazon is a fallback cover source for albums. attach_primary_image
       # already no-ops when the album has one, so no extra guard is needed here.
       def after_persist(validated_results, search_results)
-        product = best_product(validated_results, search_results)
+        product = best_product(validated_results, search_results, require_image: true)
         return if product.nil?
 
-        attach_primary_image(
-          parent: album,
-          image_url: product.dig("images", "primary", "large", "url")
-        )
+        attach_primary_image(parent: album, image_url: image_url_for(product))
       end
     end
   end
