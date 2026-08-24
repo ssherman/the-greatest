@@ -717,14 +717,25 @@ And add these three private helpers:
   end
 ```
 
-Also update `registered_controllers` so it resolves the same closure rather than reading only the listed files:
+Also update `registered_controllers` so it resolves the same closure rather than reading only the listed files, **and so a commented-out registration stops counting as a registration**:
 
 ```ruby
+  # Comments are stripped before scanning. A commented-out
+  # `application.register("x", X)` would otherwise still match, so the guard
+  # would report a controller as registered while the browser saw nothing --
+  # exactly the silent-breakage class this test exists to catch. Manifests
+  # contain only imports and register calls, no string literals holding "//",
+  # so stripping line comments here is safe.
   def registered_controllers
     @registered_controllers ||= registration_files
       .flat_map { |path| manifest_closure(path).to_a }
       .uniq
-      .flat_map { |path| File.read(Rails.root.join(path)).scan(/application\.register\(\s*["']([^"']+)["']/).flatten }
+      .flat_map { |path|
+        source = File.read(Rails.root.join(path))
+          .gsub(%r{/\*.*?\*/}m, "")
+          .gsub(%r{^\s*//[^\n]*}, "")
+        source.scan(/application\.register\(\s*["']([^"']+)["']/).flatten
+      }
       .uniq
       .sort
   end
