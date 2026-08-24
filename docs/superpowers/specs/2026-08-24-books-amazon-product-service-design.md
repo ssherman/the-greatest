@@ -336,10 +336,10 @@ Full gate before calling anything done: `bin/rails test` and `bundle exec standa
 
 ## Risks
 
-- **Production is still dead.** `AMAZON_PRODUCT_API_CRED_ID`, `_SECRET` and `_PARTNER_KEY` are in
-  `web-app/.env` but **not** in SOPS `secrets/.env.production`. Books enrichment will fail in
-  production exactly as music and games did silently for three months. These must land before any
-  sweep.
+- ~~**Production is still dead.**~~ **Resolved 2026-08-24** — the owner added
+  `AMAZON_PRODUCT_API_CRED_ID`, `_SECRET` and `_PARTNER_KEY` to SOPS `secrets/.env.production`
+  (file `lastmodified` 2026-08-24T03:20:08Z). This was the loose end from PR #258; music and games
+  enrichment go live in production with it, independently of this work.
 - **Nested namespace shadowing.** Inside `Services::Books::`, a bare `Books::Book` resolves to the
   nested module. Root-anchor `::Books::Book` in implementation *and* test files. This has bitten this
   codebase at least three times and presents as a confusing `NameError`.
