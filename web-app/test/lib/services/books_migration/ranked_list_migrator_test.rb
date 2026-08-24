@@ -6,8 +6,8 @@ module Services
       MODEL_KEY = "Books::RankingConfiguration"
 
       setup do
-        @rc = Books::RankingConfiguration.create!(name: "RL Config")
-        @list = Books::List.create!(name: "RL List")
+        @rc = ::Books::RankingConfiguration.create!(name: "RL Config")
+        @list = ::Books::List.create!(name: "RL List")
         LegacyIdMap.record(model: MODEL_KEY, legacy_id: 9100, new_id: @rc.id)
       end
 

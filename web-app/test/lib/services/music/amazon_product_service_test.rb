@@ -123,6 +123,43 @@ module Services
         assert @album.images.where(primary: true).exists?
       end
 
+      # The best-ranked product is not always the one with a cover. The old code
+      # filtered to products WITH an image before ranking; regressing that leaves
+      # the album with no cover at all.
+      test "call falls through to the next ranked product when the best has no image" do
+        @album.images.where(primary: true).destroy_all
+
+        search_results = [
+          {
+            "asin" => "B00NOIMAGE1",
+            "detailPageURL" => "https://amazon.com/dp/B00NOIMAGE1",
+            "itemInfo" => {"title" => {"displayValue" => "The Dark Side of the Moon"}},
+            "browseNodeInfo" => {"websiteSalesRank" => {"salesRank" => 1}}
+          },
+          {
+            "asin" => "B00HASIMAGE",
+            "detailPageURL" => "https://amazon.com/dp/B00HASIMAGE",
+            "itemInfo" => {"title" => {"displayValue" => "The Dark Side of the Moon Deluxe"}},
+            "images" => {"primary" => {"large" => {"url" => "https://images.amazon.com/fallback.jpg"}}},
+            "browseNodeInfo" => {"websiteSalesRank" => {"salesRank" => 900}}
+          }
+        ]
+        ::Services::Amazon::Client.stubs(:search_items).returns(search_results)
+        mock_ai_validation([
+          {asin: "B00NOIMAGE1", title: "The Dark Side of the Moon", artist: "Pink Floyd"},
+          {asin: "B00HASIMAGE", title: "The Dark Side of the Moon Deluxe", artist: "Pink Floyd"}
+        ])
+
+        stub_request(:get, "https://images.amazon.com/fallback.jpg")
+          .to_return(status: 200, body: "fake image data", headers: {"Content-Type" => "image/jpeg"})
+
+        result = AmazonProductService.call(album: @album)
+
+        assert result[:success]
+        assert_requested :get, "https://images.amazon.com/fallback.jpg"
+        assert @album.reload.images.where(primary: true).exists?
+      end
+
       test "call handles Amazon API errors gracefully" do
         ::Services::Amazon::Client.stubs(:search_items).raises(StandardError, "API error")
 

@@ -4,7 +4,7 @@ module Services
   module BooksMigration
     class ExternalLinkMigratorTest < ActiveSupport::TestCase
       setup do
-        @book = Books::Book.create!(title: "Link Parent")
+        @book = ::Books::Book.create!(title: "Link Parent")
         @user = users(:regular_user)
       end
 
@@ -68,7 +68,7 @@ module Services
           "http://www.powells.com/biblio/x" => "other"
         }
         rows = cases.keys.each_with_index.map do |url, i|
-          book = Books::Book.create!(title: "Src Parent #{i}")
+          book = ::Books::Book.create!(title: "Src Parent #{i}")
           legacy_row("id" => 100 + i, "book_id" => book.id, "url" => url)
         end
         result = run_migrator(rows)
@@ -82,7 +82,7 @@ module Services
       end
 
       test "sets source_name to the host for other-source links only" do
-        other_book = Books::Book.create!(title: "Other Parent")
+        other_book = ::Books::Book.create!(title: "Other Parent")
         run_migrator([
           legacy_row("id" => 200, "book_id" => other_book.id, "url" => "http://books.google.com/books?q=x"),
           legacy_row("id" => 201, "url" => "http://en.wikipedia.org/wiki/Y")
@@ -125,7 +125,7 @@ module Services
       end
 
       test "fails loud naming the legacy id when the book is missing" do
-        missing = Books::Book.maximum(:id).to_i + 999_999
+        missing = ::Books::Book.maximum(:id).to_i + 999_999
         result = run_migrator([legacy_row("id" => 4242, "book_id" => missing)])
 
         refute result[:success]

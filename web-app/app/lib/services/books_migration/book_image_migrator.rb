@@ -33,7 +33,7 @@ module Services
       end
 
       def upsert_row(attrs)
-        Books::MigrateCoverImageJob.perform_async(
+        ::Books::MigrateCoverImageJob.perform_async(
           attrs["book_id"], attrs["key"], attrs["filename"], attrs["content_type"]
         )
       end

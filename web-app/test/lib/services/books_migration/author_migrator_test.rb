@@ -19,11 +19,11 @@ class Services::BooksMigration::AuthorMigratorTest < ActiveSupport::TestCase
     assert result[:success], result[:error]
     assert_equal 2, result[:data][:count]
 
-    a = Books::Author.find(90001)
+    a = ::Books::Author.find(90001)
     assert_equal "Legacy Author One", a.name
     assert_equal "One", a.sort_name
     assert a.slug.present?
-    assert_equal ["L. Two"], Books::Author.find(90002).alternate_names
+    assert_equal ["L. Two"], ::Books::Author.find(90002).alternate_names
   end
 
   test "suppresses search indexing during the load" do
@@ -34,13 +34,13 @@ class Services::BooksMigration::AuthorMigratorTest < ActiveSupport::TestCase
 
   test "is idempotent: re-running does not duplicate or error" do
     run_migrator
-    assert_no_difference -> { Books::Author.count } do
+    assert_no_difference -> { ::Books::Author.count } do
       run_migrator
     end
   end
 
   test "resets the books_authors sequence above the max id" do
-    Books::Author.connection.expects(:reset_pk_sequence!).with("books_authors")
+    ::Books::Author.connection.expects(:reset_pk_sequence!).with("books_authors")
 
     result = run_migrator
 

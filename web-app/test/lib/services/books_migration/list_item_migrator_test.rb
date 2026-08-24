@@ -4,8 +4,8 @@ module Services
   module BooksMigration
     class ListItemMigratorTest < ActiveSupport::TestCase
       setup do
-        @list = Books::List.create!(name: "Item Parent List")
-        @book = Books::Book.create!(title: "Item Book")
+        @list = ::Books::List.create!(name: "Item Parent List")
+        @book = ::Books::Book.create!(title: "Item Book")
       end
 
       def run_migrator(rows)
@@ -67,7 +67,7 @@ module Services
       end
 
       test "fails loud when the book is not migrated" do
-        missing = Books::Book.maximum(:id).to_i + 999_999
+        missing = ::Books::Book.maximum(:id).to_i + 999_999
         result = run_migrator([legacy_row("id" => 8000042, "book_id" => missing)])
 
         refute result[:success]
