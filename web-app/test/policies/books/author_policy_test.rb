@@ -21,6 +21,13 @@ module Books
       refute ::Books::AuthorPolicy.new(music_user, @author).show?
     end
 
+    test "execute_action is open to writers" do
+      assert ::Books::AuthorPolicy.new(users(:editor_user), @author).execute_action?
+      assert ::Books::AuthorPolicy.new(books_user(:editor), @author).execute_action?
+      refute ::Books::AuthorPolicy.new(books_user(:viewer), @author).execute_action?
+      refute ::Books::AuthorPolicy.new(music_user, @author).execute_action?
+    end
+
     test "Scope resolves for books readers only" do
       assert_books_scope(::Books::AuthorPolicy, ::Books::Author)
     end
