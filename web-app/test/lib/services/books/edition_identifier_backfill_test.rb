@@ -53,6 +53,27 @@ module Services
 
         assert_operator written, :>=, 3
       end
+
+      # This is the query the books:amazon_enrich* rake tasks use to verify the
+      # backfill actually covers every edition before enrichment runs -- an
+      # edition carrying the legacy PascalCase blob but no books_edition_asin
+      # identifier is exactly the "would get duplicated" case.
+      test "an edition with legacy Amazon metadata and no ASIN identifier is detectable as un-backfilled" do
+        uncovered = -> {
+          ::Books::Edition.where("books_editions.metadata -> 'amazon' ->> 'ASIN' IS NOT NULL")
+            .where.not(
+              id: ::Identifier.where(identifiable_type: "Books::Edition", identifier_type: :books_edition_asin)
+                .select(:identifiable_id)
+            )
+        }
+
+        # wp_legacy_amazon carries the PascalCase blob and starts with no identifiers.
+        assert_includes uncovered.call.pluck(:id), @edition.id
+
+        EditionIdentifierBackfill.call
+
+        refute_includes uncovered.call.pluck(:id), @edition.id
+      end
     end
   end
 end

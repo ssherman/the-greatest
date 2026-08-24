@@ -1,4 +1,30 @@
 namespace :books do
+  # The upserter matches editions by their edition-level identifiers. The backfill
+  # commits batch by batch, so an interrupted run leaves some editions covered and
+  # the rest not -- and the uncovered ones get silently DUPLICATED. Checking that
+  # one identifier exists is not enough; verify that none are missing.
+  #
+  # Editions already enriched are correctly excluded: enrichment overwrites
+  # metadata["amazon"] with the lowerCamelCase blob, so the PascalCase "ASIN" key
+  # is gone and the row drops out of this scope -- by which point the upserter has
+  # already written its identifier.
+  def assert_edition_identifiers_backfilled!(editions_relation, description)
+    missing = editions_relation
+      .where("books_editions.metadata -> 'amazon' ->> 'ASIN' IS NOT NULL")
+      .where.not(
+        id: Identifier
+          .where(identifiable_type: "Books::Edition", identifier_type: :books_edition_asin)
+          .select(:identifiable_id)
+      )
+      .count
+
+    return if missing.zero?
+
+    abort "#{missing} #{description} still carry legacy Amazon metadata with no " \
+      "books_edition_asin identifier. Run books:backfill_edition_asins to completion " \
+      "first -- enriching now would create a duplicate edition for each of them."
+  end
+
   desc "Backfill edition-level ASIN/ISBN/EAN identifiers from legacy Amazon metadata (one-time)"
   task backfill_edition_asins: :environment do
     puts "Backfilling edition identifiers from legacy Amazon metadata..."
@@ -8,13 +34,6 @@ namespace :books do
 
   desc "Enrich one book from Amazon: bin/rails books:amazon_enrich[123] or [some-slug]"
   task :amazon_enrich, [:book_id] => :environment do |_task, args|
-    # The upserter matches editions by their edition-level identifiers. Without the
-    # backfill, every legacy edition looks new and gets duplicated -- ~148,000 rows,
-    # with no merge tooling to undo it.
-    if Identifier.where(identifiable_type: "Books::Edition", identifier_type: :books_edition_asin).none?
-      abort "No edition-level ASIN identifiers found. Run books:backfill_edition_asins first."
-    end
-
     # Rake args are always strings, and Books::Book uses friendly_id with :finders --
     # so a bare .find("13") resolves by SLUG, and 137 books have purely numeric slugs
     # that shadow real ids. Decide explicitly instead of letting friendly_id guess.
@@ -25,6 +44,8 @@ namespace :books do
       ::Books::Book.friendly.find(identifier)
     end
 
+    assert_edition_identifiers_backfilled!(book.editions, "editions of this book")
+
     puts "Enriching #{book.title} (##{book.id})..."
     Books::AmazonProductEnrichmentJob.new.perform(book.id)
     puts "Done."
@@ -32,12 +53,7 @@ namespace :books do
 
   desc "Enqueue Amazon enrichment for every ranked book, best-ranked first"
   task amazon_enrich_ranked: :environment do
-    # The upserter matches editions by their edition-level identifiers. Without the
-    # backfill, every legacy edition looks new and gets duplicated -- ~148,000 rows,
-    # with no merge tooling to undo it.
-    if Identifier.where(identifiable_type: "Books::Edition", identifier_type: :books_edition_asin).none?
-      abort "No edition-level ASIN identifiers found. Run books:backfill_edition_asins first."
-    end
+    assert_edition_identifiers_backfilled!(::Books::Edition.all, "editions")
 
     configuration = ::Books::RankingConfiguration.default_primary
     abort "No default primary books ranking configuration" if configuration.nil?
