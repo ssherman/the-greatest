@@ -85,6 +85,47 @@ module Services
 
             assert_equal %w[asin author explanation title], properties.sort
           end
+
+          # The CliffsNotes fixture carries no byLineInfo at all. Anthologies and
+          # many non-trade editions are the same. Rendering must produce a blank
+          # Author line, never raise.
+          test "format_search_result renders a result with no contributors without raising" do
+            formatted = @task.send(:format_search_result, @search_results.second)
+
+            assert_includes formatted, "0553213504"
+            assert_includes formatted, "CliffsNotes"
+            assert_match(/Author:\s*$/, formatted)
+          end
+
+          test "system_message combines the domain name and both criteria blocks" do
+            message = @task.send(:system_message)
+
+            assert_includes message, "book expert"
+            assert_includes message, "same literary work"
+            assert_includes message, "CliffsNotes"
+          end
+
+          test "user_prompt threads every search result through the formatter" do
+            prompt = @task.send(:user_prompt)
+
+            assert_includes prompt, "1400079985"
+            assert_includes prompt, "0553213504"
+            assert_includes prompt, "War and Peace"
+            assert_includes prompt, "Leo Tolstoy"
+          end
+
+          # A labelled line with nothing after it is noise the model has to interpret.
+          # These fields are optional and must be omitted entirely, not left blank.
+          test "item_description omits subtitle and alternate titles when the book has neither" do
+            plain = ::Books::Book.find(books_books(:crime_and_punishment).id)
+            task = AmazonBookMatchTask.new(parent: plain, search_results: @search_results)
+
+            description = task.send(:item_description)
+
+            refute_includes description, "Subtitle:"
+            refute_includes description, "Alternate Titles:"
+            assert_includes description, "Crime and Punishment"
+          end
         end
       end
     end
