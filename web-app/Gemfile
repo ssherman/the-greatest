@@ -33,7 +33,7 @@ gem "view_component"
 gem "nokogiri"
 gem "weighted_list_rank"
 gem "ruby-vips"
-gem "vacuum", "~> 4.3.0"
+gem "vacuum", "~> 5.1"
 gem "down", "~> 5.0"
 
 # Markdown for news post bodies. Rendered at read time; the stored body is

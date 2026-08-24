@@ -29,9 +29,9 @@ module Services
           @album = music_albums(:dark_side_of_the_moon)
           @search_results = [
             {
-              "ASIN" => "B001234",
-              "ItemInfo" => {
-                "Title" => {"DisplayValue" => "Test Product"}
+              "asin" => "B001234",
+              "itemInfo" => {
+                "title" => {"displayValue" => "Test Product"}
               }
             }
           ]
@@ -63,12 +63,12 @@ module Services
         test "format_search_results formats all results" do
           search_results = [
             {
-              "ASIN" => "B001",
-              "ItemInfo" => {"Title" => {"DisplayValue" => "Product 1"}}
+              "asin" => "B001",
+              "itemInfo" => {"title" => {"displayValue" => "Product 1"}}
             },
             {
-              "ASIN" => "B002",
-              "ItemInfo" => {"Title" => {"DisplayValue" => "Product 2"}}
+              "asin" => "B002",
+              "itemInfo" => {"title" => {"displayValue" => "Product 2"}}
             }
           ]
 

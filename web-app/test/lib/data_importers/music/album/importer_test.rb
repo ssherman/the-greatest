@@ -15,9 +15,14 @@ module DataImporters
           # Stub the AI description job since we're testing album importing
           ::Music::AlbumDescriptionJob.stubs(:perform_async)
 
-          # Stub Amazon API requests to prevent real HTTP calls during album import
-          stub_request(:post, "https://webservices.amazon.com/paapi5/searchitems")
-            .to_return(status: 200, body: '{"SearchResult": {"Items": []}}', headers: {"Content-Type" => "application/json"})
+          # Stub Amazon Creators API requests to prevent real HTTP calls during
+          # album import. It needs two hosts: OAuth2 token exchange, then search.
+          stub_request(:post, "https://api.amazon.com/auth/o2/token")
+            .to_return(status: 200, body: '{"access_token": "test-token", "expires_in": 3600}',
+              headers: {"Content-Type" => "application/json"})
+          stub_request(:post, "https://creatorsapi.amazon/catalog/v1/searchItems")
+            .to_return(status: 200, body: '{"searchResult": {"items": []}}',
+              headers: {"Content-Type" => "application/json"})
         end
 
         test "call with artist and title creates and imports new album" do
@@ -397,12 +402,13 @@ module DataImporters
           # Mock MusicBrainz provider to return success
           mock_musicbrainz_provider_success
 
-          # Should not make Amazon API calls since we're only running MusicBrainz
-          assert_not_requested :post, /webservices\.amazon\.com/
-
           result = Importer.call(item: existing_album, providers: [:music_brainz])
 
           assert result.success?
+
+          # Should not make Amazon API calls since we're only running MusicBrainz.
+          # Asserted after the import - before it, this is vacuously true.
+          assert_not_requested :post, /creatorsapi\.amazon/
         end
 
         test "call raises error when neither item nor query provided" do
