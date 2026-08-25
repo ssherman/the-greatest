@@ -19,8 +19,8 @@
     <link rel="apple-touch-icon" href="/icon.png">
 
     <%# Domain-specific stylesheets %>
-    <%= stylesheet_link_tag "#{current_domain}/application", "data-turbo-track": "reload" %>
-    <%= javascript_include_tag "#{current_domain}/application", "data-turbo-track": "reload", type: "module" %>
+    <%= stylesheet_link_tag current_domain.to_s, "data-turbo-track": "reload" %>
+    <%= javascript_include_tag domain_js_bundle, "data-turbo-track": "reload" %>
   </head>
 
   <body class="<%= domain_specific_class('body') %>">

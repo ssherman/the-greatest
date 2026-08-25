@@ -1,8 +1,12 @@
 import { Controller } from "@hotwired/stimulus"
-import firebaseAuthService from "../services/firebase_auth_service"
-import googleProvider from "../services/auth_providers/google_provider"
-import emailProvider from "../services/auth_providers/email_provider"
-import redirectHandler from "../services/auth_handlers/redirect_handler"
+import {
+  loadFirebase,
+  likelySignedIn,
+  markSignedIn,
+  clearSignedInHint,
+  markPendingRedirect,
+  clearPendingRedirect
+} from "../services/firebase_loader"
 
 // Connects to data-controller="authentication"
 export default class extends Controller {
@@ -14,25 +18,24 @@ export default class extends Controller {
   ]
   static values = {
     reloadAfterAuth: Boolean,
-    currentUser: Object
+    currentUser: Object,
+    firebaseSrc: String
   }
 
   connect() {
-    console.log("Authentication controller connected")
     this.isSignUpMode = false
     this.storedEmail = null
-
-    // Initialize Firebase and redirect handler
-    firebaseAuthService.initialize()
-    redirectHandler.initialize()
-
-    // Set up auth state listener
-    firebaseAuthService.onAuthStateChanged((user) => {
-      this.handleAuthStateChange(user)
-    })
-
-    // Listen for custom auth events
     this.setupEventListeners()
+    this.observeLoginModal()
+
+    // Anonymous readers never download the 32 KB Firebase SDK. Anyone with a
+    // hint of a session gets it eagerly, so the navbar Login/Logout swap and
+    // the post-redirect getRedirectResult still happen on page load.
+    if (likelySignedIn()) {
+      this.firebase().catch((error) => console.error("Firebase eager load failed:", error))
+    } else {
+      this.showUnauthenticatedState()
+    }
   }
 
   disconnect() {
@@ -40,6 +43,60 @@ export default class extends Controller {
     window.removeEventListener('auth:success', this.handleAuthSuccess)
     window.removeEventListener('auth:error', this.handleAuthError)
     window.removeEventListener('auth:signout', this.handleSignOut)
+    this.modalObserver?.disconnect()
+  }
+
+  // Safety net for callers that open #login_modal directly instead of going
+  // through openModal() -- user_list_widget_controller, reviews/widget_controller,
+  // and membership/show's inline onclick all call showModal() on the dialog
+  // itself, and all three are on the anonymous-reader path exactly where
+  // deferring the download matters. Watching the dialog's `open` attribute
+  // catches every present and future direct-opener in one place, rather than
+  // pushing a firebase() call into each call site (including inline ERB
+  // onclick, where there is nothing sensible to call). openModal() still
+  // calls this.firebase() itself; loadFirebase() is memoised at module scope,
+  // so the observer's call here is a free no-op when that happens first.
+  observeLoginModal() {
+    const modal = document.getElementById('login_modal')
+    if (!modal) return // e.g. the admin layout has no login modal
+
+    this.modalObserver = new MutationObserver(() => {
+      if (modal.hasAttribute('open')) {
+        this.firebase().catch((error) => console.error("Firebase load failed:", error))
+      }
+    })
+    this.modalObserver.observe(modal, { attributes: true, attributeFilter: ['open'] })
+  }
+
+  // The ONLY way this controller reaches Firebase. Never import or reference
+  // the service singletons directly: in an async refactor of a controller that
+  // used to be entirely synchronous, a missed `await` yields undefined and
+  // fails silently. One accessor makes a missed await a visible mistake.
+  async firebase() {
+    if (!this._firebase) {
+      this._firebase = await loadFirebase(this.firebaseSrcValue)
+      this._initialiseFirebase(this._firebase)
+    }
+    return this._firebase
+  }
+
+  _initialiseFirebase(firebase) {
+    if (this._firebaseInitialised) return
+    this._firebaseInitialised = true
+
+    firebase.firebaseAuthService.initialize()
+    firebase.redirectHandler.initialize()
+
+    // FirebaseAuthService replays its constructor-initial null synchronously to
+    // a newly registered listener, before it has read IndexedDB. That is "not
+    // known yet", not "signed out", so it must not wipe the localStorage hint --
+    // the only signal that survives a browser restart, since tg_uid is a session
+    // cookie. The replay is synchronous, so this flag brackets it exactly.
+    this._replayingInitialAuthState = true
+    firebase.firebaseAuthService.onAuthStateChanged((user) => {
+      this.handleAuthStateChange(user)
+    })
+    this._replayingInitialAuthState = false
   }
 
   setupEventListeners() {
@@ -54,9 +111,31 @@ export default class extends Controller {
 
   // Handle authentication state changes
   handleAuthStateChange(user) {
+    // Both markers clear only on a REAL notification, never on the synchronous
+    // replay of FirebaseAuthService's constructor-initial null.
+    //
+    // The redirect marker especially. redirectHandler.initialize() kicks off
+    // getRedirectResult() WITHOUT awaiting it, and the replay fires immediately
+    // after -- so clearing here unconditionally would drop the marker at the
+    // START of that round trip rather than the end. Reload inside that window
+    // and every signal is gone at once: tg_uid is unset (Rails has not seen the
+    // JWT yet), markSignedIn() has not run, our marker is cleared, and Firebase
+    // has already consumed its own firebase:pendingRedirect key. The next page
+    // would not load Firebase, getRedirectResult() would never run, and the
+    // sign-in would be silently lost.
+    //
+    // A real notification means Firebase has settled, and it arrives on both
+    // branches -- with a user on success, with null when the reader cancels at
+    // the consent screen -- so the marker cannot outlive the redirect either way.
+    if (!this._replayingInitialAuthState) {
+      clearPendingRedirect()
+    }
+
     if (user) {
+      markSignedIn()
       this.showAuthenticatedState(user)
     } else {
+      if (!this._replayingInitialAuthState) clearSignedInHint()
       this.showUnauthenticatedState()
     }
   }
@@ -137,6 +216,8 @@ export default class extends Controller {
 
   // Open the login modal
   openModal() {
+    this.firebase().catch((error) => console.error("Firebase load failed:", error))
+
     const modal = document.getElementById('login_modal')
     if (modal) {
       modal.showModal()
@@ -235,10 +316,30 @@ export default class extends Controller {
     this.hideError()
     this.hideInfo()
 
+    // Resolved in its own try, same shape as submitEmailForm: a bundle-load
+    // failure (e.g. firebase-auth.js 404s) has an error.message like "failed
+    // to load firebase bundle from /assets/firebase-auth-a1b2c3.js", which is
+    // meaningless -- and alarming -- in the login modal. A genuine Firebase
+    // auth error below (the reader cancelling the Google flow, a real
+    // provider error) is still shown verbatim, since that message IS useful.
+    let firebase
     try {
-      await googleProvider.signIn(event)
+      firebase = await this.firebase()
+    } catch (error) {
+      console.error("Firebase load failed:", error)
+      this.showError("Sign-in is temporarily unavailable. Please try again.")
+      this.showLoading(false)
+      return
+    }
+
+    try {
+      // Set BEFORE the redirect leaves the page: on return, connect() sees this
+      // and eager-loads Firebase so getRedirectResult can run.
+      markPendingRedirect()
+      await firebase.googleProvider.signIn(event)
     } catch (error) {
       console.error("Google sign in error:", error)
+      clearPendingRedirect()
       this.showError(error.message)
       this.showLoading(false)
     }
@@ -257,19 +358,33 @@ export default class extends Controller {
     this.hideError()
     this.hideInfo()
 
+    // Resolved before the try, not inside the catch. loadFirebase() nulls its
+    // memo on a script-load error, so reaching for getUserFriendlyMessage from
+    // inside the catch would re-attempt the load and could reject there --
+    // an unhandled rejection with nothing shown to the reader.
+    let firebase
+    try {
+      firebase = await this.firebase()
+    } catch (error) {
+      console.error("Firebase load failed:", error)
+      this.showError('Sign-in is temporarily unavailable. Please try again.')
+      this.showLoading(false)
+      return
+    }
+
     try {
       if (this.isSignUpMode) {
-        await emailProvider.signUp(email, password)
+        await firebase.emailProvider.signUp(email, password)
         this.showInfo('Check your email to verify your account.')
       } else {
-        await emailProvider.signIn(email, password)
+        await firebase.emailProvider.signIn(email, password)
       }
     } catch (error) {
       console.error("Email auth error:", error)
       if (!this.isSignUpMode && (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found')) {
         await this.checkProviderConflict(email, error)
       } else {
-        this.showError(emailProvider.getUserFriendlyMessage(error))
+        this.showError(firebase.emailProvider.getUserFriendlyMessage(error))
       }
     } finally {
       this.showLoading(false)
@@ -361,10 +476,12 @@ export default class extends Controller {
     this.hideInfo()
 
     try {
+      const { emailProvider } = await this.firebase()
       await emailProvider.sendPasswordReset(email)
       this.showInfo('If an account exists with this email, a password reset link has been sent.')
     } catch {
-      // Show same message regardless of error (security: don't reveal if email exists)
+      // Show the same message regardless of error (security: don't reveal if
+      // the email exists).
       this.showInfo('If an account exists with this email, a password reset link has been sent.')
     } finally {
       this.showLoading(false)
@@ -378,6 +495,7 @@ export default class extends Controller {
     this.hideInfo()
 
     try {
+      const { emailProvider } = await this.firebase()
       await emailProvider.resendVerification()
       this.showInfo('Verification email sent. Check your inbox.')
     } catch (error) {
@@ -394,9 +512,29 @@ export default class extends Controller {
 
     this.showLoading(true)
 
+    // Resolved in its own try, same shape as submitEmailForm. On admin this is
+    // the only sign-out control on the page, so a failure here (or in the
+    // client-side signOut() call below) must never prevent the Rails-side
+    // sign-out that follows -- leaving the reader signed in because a client
+    // bundle 404'd would be worse than skipping the client Firebase sign-out.
+    let firebase = null
     try {
-      await firebaseAuthService.signOut()
+      firebase = await this.firebase()
+    } catch (error) {
+      console.error('Firebase load failed during sign out:', error)
+    }
 
+    if (firebase) {
+      try {
+        await firebase.firebaseAuthService.signOut()
+      } catch (error) {
+        console.error('Firebase sign out error:', error)
+      }
+    }
+
+    clearSignedInHint()
+
+    try {
       const response = await fetch('/auth/sign_out', {
         method: 'POST',
         headers: {
@@ -418,7 +556,7 @@ export default class extends Controller {
 
     } catch (error) {
       console.error('Sign out error:', error)
-      this.showError(error.message)
+      this.showError('Sign out failed. Please try again.')
       this.showLoading(false)
     }
   }
