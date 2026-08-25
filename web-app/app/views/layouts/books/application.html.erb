@@ -50,7 +50,10 @@
              data-books--nav-drawer-target="toggle" />
 
       <div class="drawer-content" data-books--nav-drawer-target="content">
-        <nav class="navbar bg-base-300" aria-label="Main">
+        <%# sticky, not fixed: sticky reserves its own space, so no compensating
+            padding-top on the body. z-30 sits under .drawer-side's z-40 so the
+            open drawer and its dimmed overlay cover the header. %>
+        <nav class="navbar bg-base-300 sticky top-0 z-30" aria-label="Main">
           <div class="navbar-start">
             <label for="books-nav-drawer"
                    id="books-nav-drawer-button"
@@ -104,7 +107,7 @@
           </div>
         </nav>
 
-        <main id="main" class="container mx-auto px-4 py-8">
+        <main id="main" class="container mx-auto px-4 py-8 scroll-mt-20">
           <%= yield %>
         </main>
 

@@ -113,3 +113,43 @@ test.describe('Books mobile nav drawer', () => {
     await expect(lastLink).toBeInViewport();
   });
 });
+
+test.describe('Books header stays visible', () => {
+  test('the header is still at the top of the viewport after scrolling', async ({ page }) => {
+    await page.goto('/');
+
+    const before = await page.locator('nav.navbar').boundingBox();
+    expect(before?.y).toBe(0);
+
+    await page.evaluate(() => window.scrollBy(0, 1500));
+
+    const after = await page.locator('nav.navbar').boundingBox();
+    expect(after?.y).toBe(0);
+    await expect(page.locator('#navbar_login_button')).toBeInViewport();
+  });
+
+  test('the header stays visible on a phone too', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/');
+
+    await page.evaluate(() => window.scrollBy(0, 1500));
+
+    const box = await page.locator('nav.navbar').boundingBox();
+    expect(box?.y).toBe(0);
+  });
+
+  // The sidebar card on a book page is sticky in its own right. At the old
+  // top-8 (32px) it sat 32px under the 64px header.
+  test('the book detail sidebar card does not hide under the header', async ({ page }) => {
+    await page.goto('/');
+    const firstBook = page.locator('a[href^="/book/"]').first();
+    await firstBook.click();
+    await expect(page).toHaveURL(/\/book\//);
+
+    await page.evaluate(() => window.scrollBy(0, 1200));
+
+    const nav = await page.locator('nav.navbar').boundingBox();
+    const card = await page.locator('main .sticky').first().boundingBox();
+    expect(card!.y).toBeGreaterThanOrEqual(nav!.y + nav!.height);
+  });
+});
