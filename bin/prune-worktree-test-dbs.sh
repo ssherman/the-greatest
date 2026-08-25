@@ -16,6 +16,7 @@
 #   bin/prune-worktree-test-dbs.sh --list    # show only, drop nothing
 #
 set -euo pipefail
+shopt -s extglob   # for the _<digits> worker-suffix pattern below
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -55,6 +56,11 @@ mapfile -t WORKTREE_ROOTS < <(git worktree list --porcelain | awk '/^worktree /{
 
 mapfile -t LIVE < <(ruby -r "$MODULE" -e 'ARGV.each { |root| puts TestDatabaseName.for(root) }' "${WORKTREE_ROOTS[@]}")
 
+# A checkout may point somewhere else entirely with TEST_DATABASE, and this
+# script cannot see another checkout's environment. Honour our own, and below
+# only ever consider names this module could have produced.
+[ -n "${TEST_DATABASE:-}" ] && LIVE+=("$TEST_DATABASE")
+
 is_live() {
   local base="$1"
   for name in "${LIVE[@]}"; do [ "$name" = "$base" ] && return 0; done
@@ -66,15 +72,29 @@ mapfile -t ALL < <(docker compose exec -T "$DB_SERVICE" psql -U "$DB_USER" -d po
   </dev/null | tr -d '\r')
 
 STALE=()
+SKIPPED=0
 for db in "${ALL[@]}"; do
   [ -n "$db" ] || continue
-  # Strip the "_0".."_31" parallel worker suffix to get the checkout's base name.
-  # A base name ends in "_wt" (or is the main checkout's), never in a digit, so
-  # this can never mistake a base name for a worker name.
-  is_live "${db%_[0-9]*}" || STALE+=("$db")
+
+  # Only ever a candidate if it has the shape this module produces for a
+  # worktree: <base>_<slug>_<digest>_wt, optionally plus a worker suffix.
+  # Everything else is left strictly alone -- the main checkout's own
+  # the_greatest_test and its the_greatest_test_<n> workers, and any database
+  # another checkout named with TEST_DATABASE, which we cannot see from here.
+  if [[ ! $db =~ ^the_greatest_test_.+_wt(_[0-9]+)?$ ]]; then
+    SKIPPED=$((SKIPPED + 1))
+    continue
+  fi
+
+  # Strip the "_0".."_31" worker suffix to get the checkout's base name.
+  # "_+([0-9])" and not "_[0-9]*": the latter is a glob whose "*" swallows the
+  # rest of the name, so a live worktree called "feature-1" -- database
+  # the_greatest_test_feature_1_<digest>_wt -- reduced to
+  # the_greatest_test_feature and was reported stale while still in use.
+  is_live "${db%_+([0-9])}" || STALE+=("$db")
 done
 
-say "${#LIVE[@]} live worktree(s), ${#ALL[@]} the_greatest_test* database(s)."
+say "${#LIVE[@]} live name(s), ${#ALL[@]} the_greatest_test* database(s), $SKIPPED not worktree-owned (left alone)."
 
 if [ ${#STALE[@]} -eq 0 ]; then
   say "Nothing stale. All test databases belong to a live worktree."

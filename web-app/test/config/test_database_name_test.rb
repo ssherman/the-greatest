@@ -26,8 +26,8 @@ class TestDatabaseNameTest < ActiveSupport::TestCase
   end
 
   test "a worktree gets a database name of its own" do
-    assert_equal "the_greatest_test_news_posts_wt",
-      TestDatabaseName.for("#{WORKTREES}/news-posts/web-app")
+    assert_match(/\Athe_greatest_test_news_posts_[0-9a-f]{6}_wt\z/,
+      TestDatabaseName.for("#{WORKTREES}/news-posts/web-app"))
   end
 
   test "two worktrees never share a database name" do
@@ -41,8 +41,8 @@ class TestDatabaseNameTest < ActiveSupport::TestCase
   end
 
   test "characters Postgres cannot take in a bare identifier are replaced" do
-    assert_equal "the_greatest_test_feature_x_1_2_wt",
-      TestDatabaseName.for("#{WORKTREES}/feature.x-1 2/web-app")
+    assert_match(/\Athe_greatest_test_feature_x_1_2_[0-9a-f]{6}_wt\z/,
+      TestDatabaseName.for("#{WORKTREES}/feature.x-1 2/web-app"))
   end
 
   # 60 bytes, not 63: Rails' parallelize appends "-0".."-31" to whatever this
@@ -64,6 +64,20 @@ class TestDatabaseNameTest < ActiveSupport::TestCase
 
   test "a worktree cannot claim the main checkout's parallel worker database" do
     refute_equal "#{TestDatabaseName.for(MAIN)}_1", TestDatabaseName.for("#{WORKTREES}/1/web-app")
+  end
+
+  # Sanitizing for Postgres is lossy -- "feature-x" and "feature_x" are
+  # different worktrees that normalize to the same slug, as are two checkouts
+  # of the same name under different parents. Both would silently share a
+  # database, which is the collision this module exists to prevent.
+  test "worktree names that normalize to the same slug stay distinct" do
+    refute_equal TestDatabaseName.for("#{WORKTREES}/feature-x/web-app"),
+      TestDatabaseName.for("#{WORKTREES}/feature_x/web-app")
+  end
+
+  test "same-named worktrees under different parents stay distinct" do
+    refute_equal TestDatabaseName.for("/home/shane/dev/a/feature/web-app"),
+      TestDatabaseName.for("/home/shane/dev/b/feature/web-app")
   end
 
   test "two over-long worktree names stay distinct after shortening" do

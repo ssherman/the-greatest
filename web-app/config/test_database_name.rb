@@ -38,19 +38,27 @@ module TestDatabaseName
   # two can never meet.
   MARKER = "_wt"
 
-  # Postgres truncates identifiers past 63 bytes without raising, which would
-  # let two long worktree names collapse into one database -- the same silent
-  # collision by another route. What we return has to leave room for both the
-  # worker suffix and the marker.
+  # Every non-canonical name carries a digest of the full checkout path, not
+  # only the over-long ones. Slugging is lossy in two ways that both end in one
+  # database serving two checkouts: "feature-x" and "feature_x" normalize
+  # alike, and so do two checkouts of the same name under different parents.
+  # The digest is what actually guarantees distinctness; the slug is there to
+  # keep the name readable enough to recognise in a database listing.
+  DIGEST_BYTES = 6
+
+  # Postgres truncates identifiers past 63 bytes without raising, so the slug is
+  # cut to whatever is left once the fixed parts have their room: the base, the
+  # digest, the marker, two separators, and the worker suffix parallelize()
+  # appends to what we return (4 bytes covers "_999", far past any real count).
   MAX_BYTES = 63
-  WORKER_SUFFIX_BYTES = 3
-  BUDGET = MAX_BYTES - WORKER_SUFFIX_BYTES - MARKER.bytesize
+  WORKER_SUFFIX_BYTES = 4
+  MAX_SLUG_BYTES = MAX_BYTES - BASE.bytesize - DIGEST_BYTES - MARKER.bytesize - WORKER_SUFFIX_BYTES - 2
 
   def self.for(rails_root)
     slug = slug_for(rails_root)
     return BASE if slug == CANONICAL_CHECKOUT
 
-    "#{fit("#{BASE}_#{slug}", rails_root)}#{MARKER}"
+    "#{BASE}_#{slug.byteslice(0, MAX_SLUG_BYTES)}_#{digest_for(rails_root)}#{MARKER}"
   end
 
   # The Rails app sits in web-app/, so the checkout is one level up.
@@ -61,13 +69,8 @@ module TestDatabaseName
   end
   private_class_method :slug_for
 
-  # Truncating alone could map two long names onto one database, so the part
-  # that survives carries a digest of the full path to keep them apart.
-  def self.fit(name, rails_root)
-    return name if name.bytesize <= BUDGET
-
-    digest = Digest::SHA256.hexdigest(File.expand_path(rails_root.to_s))[0, 6]
-    "#{name.byteslice(0, BUDGET - digest.bytesize - 1)}_#{digest}"
+  def self.digest_for(rails_root)
+    Digest::SHA256.hexdigest(File.expand_path(rails_root.to_s))[0, DIGEST_BYTES]
   end
-  private_class_method :fit
+  private_class_method :digest_for
 end
