@@ -1,0 +1,66 @@
+<% content_for :title, "Correction ##{@correction.id}" %>
+
+<div class="space-y-4">
+  <div class="flex items-center justify-between">
+    <%= link_to "← Corrections", admin_books_corrections_path(status: @correction.status), class: "btn btn-ghost btn-sm" %>
+    <span class="badge"><%= @correction.status.titleize %></span>
+  </div>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body space-y-4">
+      <div>
+        <h2 class="font-semibold">Record</h2>
+        <% record_path = @record && Admin::DomainRouting.path_for(@record) %>
+        <% if @record.nil? %>
+          <p class="text-base-content/60 italic">(deleted)</p>
+        <% elsif record_path %>
+          <%= link_to @record.title, record_path, class: "link" %>
+        <% else %>
+          <%= @record.title %>
+        <% end %>
+      </div>
+
+      <div>
+        <h2 class="font-semibold">Submitted by</h2>
+        <p><%= @correction.user&.email || "Anonymous" %></p>
+      </div>
+
+      <% if @correction.notes.present? %>
+        <div>
+          <h2 class="font-semibold">Notes</h2>
+          <p class="[overflow-wrap:anywhere]"><%= @correction.notes %></p>
+        </div>
+      <% end %>
+
+      <% if @fields.any? %>
+        <div>
+          <h2 class="font-semibold">Proposed fields</h2>
+          <div class="overflow-x-auto">
+            <table class="table">
+              <thead>
+                <tr><th>Field</th><th>Current</th><th>Proposed</th><th>Status</th></tr>
+              </thead>
+              <tbody>
+                <% @fields.each do |field| %>
+                  <tr>
+                    <td><%= field.field_name.humanize %></td>
+                    <td class="[overflow-wrap:anywhere]"><%= field.old_value %></td>
+                    <td class="[overflow-wrap:anywhere]"><%= field.new_value %></td>
+                    <td><%= field.status.titleize %></td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      <% end %>
+
+      <% if @correction.resolution_notes.present? %>
+        <div>
+          <h2 class="font-semibold">Resolution notes</h2>
+          <p class="[overflow-wrap:anywhere]"><%= @correction.resolution_notes %></p>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</div>

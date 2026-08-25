@@ -511,6 +511,20 @@ Rails.application.routes.draw do
 
       resources :reviews, only: [:index, :show, :destroy]
 
+      # Shared controller, routed per domain -- same shape as descriptions and
+      # category items. The domain comes from the route, so the index can scope to
+      # this domain's correctable types.
+      resources :corrections, only: [:index, :show], controller: "/admin/corrections" do
+        member do
+          post :apply
+          post :reject
+          post :resolve
+        end
+        collection do
+          post :bulk_reject
+        end
+      end
+
       resources :news_topics
       resources :news_posts do
         collection do

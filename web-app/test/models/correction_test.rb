@@ -73,4 +73,37 @@ class CorrectionTest < ActiveSupport::TestCase
   test "defaults to pending" do
     assert_predicate Correction.new, :pending?
   end
+
+  # `recent` had no coverage at all before this. The trap this repo has hit
+  # before: fixture ids and insertion order tend to coincide with the intended
+  # sort order, so a naive ordering test can pass even when `recent` silently
+  # orders by id (or not at all). Insertion order here is deliberately NOT
+  # created_at order -- `newest` is inserted first (lowest id) with the most
+  # recent timestamp, `oldest` second (middle id) with the oldest timestamp,
+  # `middle` last (highest id) with a timestamp in between -- so id-ascending,
+  # id-descending, and plain insertion order all disagree with the correct
+  # created_at-desc answer. Only a `recent` that truly orders by created_at
+  # produces the asserted sequence.
+  test "recent orders by created_at, most recent first" do
+    newest = Correction.create!(correctable: @book, user: @user, notes: "n", created_at: 1.day.ago)
+    oldest = Correction.create!(correctable: @book, user: @user, notes: "o", created_at: 3.days.ago)
+    middle = Correction.create!(correctable: @book, user: @user, notes: "m", created_at: 2.days.ago)
+
+    ids = Correction.where(id: [newest.id, oldest.id, middle.id]).recent.pluck(:id)
+
+    assert_equal [newest.id, middle.id, oldest.id], ids
+  end
+
+  # The id tiebreak matters whenever two corrections land in the same request
+  # (e.g. a bulk migration import) and get identical created_at values. Without
+  # it, Postgres does not promise any particular order for ties.
+  test "recent breaks a created_at tie on id, higher id first" do
+    tied_at = 1.hour.ago
+    first_inserted = Correction.create!(correctable: @book, user: @user, notes: "a", created_at: tied_at)
+    second_inserted = Correction.create!(correctable: @book, user: @user, notes: "b", created_at: tied_at)
+
+    ids = Correction.where(id: [first_inserted.id, second_inserted.id]).recent.pluck(:id)
+
+    assert_equal [second_inserted.id, first_inserted.id], ids
+  end
 end
