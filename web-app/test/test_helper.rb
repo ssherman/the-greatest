@@ -16,8 +16,18 @@ WebMock.disable_net_connect!(allow_localhost: true)
 
 module ActiveSupport
   class TestCase
-    # Run tests in parallel with specified workers
-    parallelize(workers: :number_of_processors)
+    # Capped, not :number_of_processors. Several agents run suites at once in
+    # separate worktrees, and every worker holds one Postgres connection, so an
+    # unbounded count per run exhausts the server: measured 2026-08-24, three
+    # concurrent runs at 32 workers each produced thousands of
+    # ActiveRecord::ConnectionAdapters errors in all three -- scattered through
+    # fixture loading, where they read as real breakage. Three overlapping runs
+    # saturate the box at any worker count (~80s wall at 10, 16 or 32 alike), so
+    # a high count buys nothing exactly when it costs the most.
+    #
+    # CI runs alone on a 2-4 core runner, where the core count is the right
+    # answer. PARALLEL_WORKERS overrides either.
+    parallelize(workers: ENV["CI"] ? :number_of_processors : 10)
 
     # Setup all fixtures in test/fixtures/*.yml for all tests in alphabetical order.
     fixtures :all
