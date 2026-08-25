@@ -13,9 +13,13 @@ require "test_helper"
 # by inspecting build output. Keeping one list, checked from both sides, is what
 # makes that unrepresentable.
 #
-# Task 5 adds the layout -> bundle direction to this file. Task 7 adds
-# firebase-auth, referenced via asset_path (not javascript_include_tag) from
-# both a component and a layout, so the scan below has to catch that form too.
+# Guards both directions: every bundle the registry names has a real entry
+# file and is what every domain/admin layout actually resolves to, AND no
+# layout or component names a bundle the registry does not produce. The
+# firebase-auth bundle is referenced via asset_path (not
+# javascript_include_tag) from both the authentication widget component and
+# the admin layout, so the scan below has to catch that form too, not just
+# javascript_include_tag calls.
 class AssetBundleCoverageTest < ActiveSupport::TestCase
   test "the bundle registry is valid JSON mapping names to entry files" do
     assert_kind_of Hash, registry, "config/asset_bundles.json must be a JSON object"

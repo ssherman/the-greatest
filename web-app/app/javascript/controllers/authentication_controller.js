@@ -302,12 +302,27 @@ export default class extends Controller {
     this.hideError()
     this.hideInfo()
 
+    // Resolved in its own try, same shape as submitEmailForm: a bundle-load
+    // failure (e.g. firebase-auth.js 404s) has an error.message like "failed
+    // to load firebase bundle from /assets/firebase-auth-a1b2c3.js", which is
+    // meaningless -- and alarming -- in the login modal. A genuine Firebase
+    // auth error below (the reader cancelling the Google flow, a real
+    // provider error) is still shown verbatim, since that message IS useful.
+    let firebase
     try {
-      const { googleProvider } = await this.firebase()
+      firebase = await this.firebase()
+    } catch (error) {
+      console.error("Firebase load failed:", error)
+      this.showError("Sign-in is temporarily unavailable. Please try again.")
+      this.showLoading(false)
+      return
+    }
+
+    try {
       // Set BEFORE the redirect leaves the page: on return, connect() sees this
       // and eager-loads Firebase so getRedirectResult can run.
       markPendingRedirect()
-      await googleProvider.signIn(event)
+      await firebase.googleProvider.signIn(event)
     } catch (error) {
       console.error("Google sign in error:", error)
       clearPendingRedirect()

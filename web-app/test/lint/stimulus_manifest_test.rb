@@ -131,24 +131,27 @@ class StimulusManifestTest < ActiveSupport::TestCase
     end
   end
 
-  # Comments are stripped before scanning. A commented-out
-  # `application.register("x", X)` would otherwise still match, so the guard
-  # would report a controller as registered while the browser saw nothing --
-  # exactly the silent-breakage class this test exists to catch. Manifests
-  # contain only imports and register calls, no string literals holding "//",
-  # so stripping line comments here is safe.
   def registered_controllers
     @registered_controllers ||= registration_files
       .flat_map { |path| manifest_closure(path).to_a }
       .uniq
-      .flat_map { |path|
-        source = File.read(Rails.root.join(path))
-          .gsub(%r{/\*.*?\*/}m, "")
-          .gsub(%r{^\s*//[^\n]*}, "")
-        source.scan(/application\.register\(\s*["']([^"']+)["']/).flatten
-      }
+      .flat_map { |path| manifest_source(path).scan(/application\.register\(\s*["']([^"']+)["']/) }
+      .flatten
       .uniq
       .sort
+  end
+
+  # Comments are stripped before scanning, everywhere a manifest is scanned for
+  # a register call -- registered_controllers above AND registered_in? below.
+  # A commented-out `application.register("x", X)` would otherwise still
+  # match, so the guard would report a controller as registered while the
+  # browser saw nothing -- exactly the silent-breakage class this test exists
+  # to catch. Manifests contain only imports and register calls, no string
+  # literals holding "//", so stripping line comments here is safe.
+  def manifest_source(path)
+    File.read(Rails.root.join(path))
+      .gsub(%r{/\*.*?\*/}m, "")
+      .gsub(%r{^\s*//[^\n]*}, "")
   end
 
   def registration_files
@@ -189,7 +192,7 @@ class StimulusManifestTest < ActiveSupport::TestCase
   # missing from all four.
   def registered_in?(manifest_path, identifier)
     manifest_closure(manifest_path).any? do |path|
-      File.read(Rails.root.join(path)).match?(/application\.register\(\s*["']#{Regexp.escape(identifier)}["']/)
+      manifest_source(path).match?(/application\.register\(\s*["']#{Regexp.escape(identifier)}["']/)
     end
   end
 

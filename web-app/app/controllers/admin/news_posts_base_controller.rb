@@ -112,9 +112,10 @@ class Admin::NewsPostsBaseController < Admin::BaseController
   end
 
   # Server-rendered so the preview goes through the exact BodyRenderer the public
-  # page uses and cannot drift from it. A client-side Markdown library is not an
-  # option while admin and public share application.js -- it would be downloaded
-  # by every visitor to every site to serve this one screen.
+  # page uses and cannot drift from it. A client-side Markdown library is not
+  # worth it even though admin and public no longer share a bundle: it would
+  # still be a second rendering path that could disagree with BodyRenderer, and
+  # this way there is only one.
   def preview
     @preview_html = Services::News::BodyRenderer.call(params.dig(:news_post, :body))
 

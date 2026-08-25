@@ -29,13 +29,31 @@ class TurboCableTest < ActiveSupport::TestCase
   end
 
   test "turbo.js keeps the Rails method-override hook" do
+    # Comments are stripped before matching -- this file's own header comment
+    # talks about encodeMethodIntoRequestBody at length, and (more importantly)
+    # commenting out just the addEventListener(...) call below, while leaving
+    # the import intact, must NOT still satisfy the assertion. Matching raw
+    # source against a bare /encodeMethodIntoRequestBody/, or even the fuller
+    # addEventListener pattern below, would still find the identifier inside a
+    # `// addEventListener(...)` line and stay green while every PATCH/DELETE
+    # form silently downgrades to POST -- exactly the regression this test
+    # exists to catch. The assertion must match the actual listener
+    # REGISTRATION, live in the code, not merely the identifier's presence
+    # somewhere in the file.
     source = File.read(Rails.root.join("app/javascript/turbo.js"))
+      .gsub(%r{/\*.*?\*/}m, "")
+      .gsub(%r{^\s*//[^\n]*}, "")
 
-    assert_match(/encodeMethodIntoRequestBody/, source,
-      "app/javascript/turbo.js must install encodeMethodIntoRequestBody. It is " \
-      "the one piece of @hotwired/turbo-rails this app still needs: it encodes " \
-      "_method into non-GET form bodies. Without it, form_with method: :patch " \
-      "and button_to method: :delete silently submit as POST.")
+    assert_match(
+      /addEventListener\(\s*["']turbo:before-fetch-request["']\s*,\s*encodeMethodIntoRequestBody\s*\)/,
+      source,
+      "app/javascript/turbo.js must call " \
+      "addEventListener(\"turbo:before-fetch-request\", encodeMethodIntoRequestBody). " \
+      "That listener is the one piece of @hotwired/turbo-rails this app still " \
+      "needs: it encodes _method into non-GET form bodies. Without it, " \
+      "form_with method: :patch and button_to method: :delete silently submit " \
+      "as POST."
+    )
   end
 
   private
