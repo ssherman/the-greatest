@@ -38,6 +38,7 @@ class Books::Book < ApplicationRecord
   include Describable
   include SearchIndexable
   include Reviewable
+  include Correctable
 
   extend FriendlyId
 
@@ -57,6 +58,23 @@ class Books::Book < ApplicationRecord
   # work-level values. They exist to keep book_length derivable until a real
   # per-edition source arrives, and should go away when one does.
   enum :book_length, {very_short: 0, short: 1, medium: 2, moderate: 3, long: 4, very_long: 5}
+
+  # What a reader may propose a correction to. Ordered as the public form renders
+  # them.
+  #
+  # Deliberately absent: sort_title, book_kind and book_length are not visible to a
+  # reader, so a reader cannot know they are wrong; book_length is derived anyway.
+  #
+  # description is target: :description, not a column. books_books.description is
+  # read by no book page and is scheduled for deletion; the displayed text lives in
+  # the descriptions table.
+  correctable_field :title, type: :string
+  correctable_field :subtitle, type: :string
+  correctable_field :first_published_year, type: :integer
+  correctable_field :page_range, type: :string, hint: "A number or a range, e.g. 300 or 250-350"
+  correctable_field :word_count, type: :integer
+  correctable_field :alternate_titles, type: :string_array
+  correctable_field :description, type: :text, target: :description
 
   belongs_to :original_language, class_name: "Language", optional: true
   belongs_to :default_edition, class_name: "Books::Edition", optional: true
@@ -101,6 +119,16 @@ class Books::Book < ApplicationRecord
 
   def release_year
     first_published_year
+  end
+
+  # Correctable hook. derive_book_length only fires when book_length is blank, so
+  # correcting page_range or word_count on a book that already has a length would
+  # leave the "Length" and "Pages" rows of the public details card contradicting
+  # each other. Clearing it lets the existing before_validation re-derive on save.
+  def correction_applied(field_names)
+    return unless field_names.intersect?(%w[page_range word_count])
+
+    self.book_length = nil
   end
 
   # {file_attachment: :blob}, not a bare :primary_image -- the row and its

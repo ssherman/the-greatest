@@ -29,4 +29,26 @@ class CorrectionField < ApplicationRecord
   enum :status, {pending: 0, applied: 1, rejected: 2}
 
   validates :field_name, presence: true, uniqueness: {scope: :correction_id}
+  validate :field_name_is_declared
+
+  private
+
+  # Defence in depth. Submission only ever builds declared fields, so nothing in
+  # the request path can violate this today -- but the admin apply path rewrites
+  # new_value, and the whole point of this subsystem is that an agent will write
+  # corrections through it later. This is the invariant that lets the applier trust
+  # a stored field_name.
+  #
+  # Resolves through the registry rather than constantizing correctable_type, for
+  # the same reason the controllers do.
+  def field_name_is_declared
+    return if field_name.blank?  # presence validation already reported it
+
+    klass = Services::Corrections::TypeRegistry.resolve(correction&.correctable_type)
+    return if klass.nil?         # unknown type is not this validation's job
+
+    return if klass.correctable_fields.key?(field_name)
+
+    errors.add(:field_name, "is not correctable on #{correction.correctable_type}")
+  end
 end

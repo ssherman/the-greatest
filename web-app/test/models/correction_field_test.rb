@@ -57,4 +57,26 @@ class CorrectionFieldTest < ActiveSupport::TestCase
       old_value: 1869, new_value: 1867)
     assert_equal 1867, field.reload.new_value
   end
+
+  test "accepts a field name the record declares" do
+    field = CorrectionField.new(correction: corrections(:war_and_peace_pending),
+      field_name: "subtitle", old_value: nil, new_value: "A Novel")
+
+    assert_predicate field, :valid?
+  end
+
+  test "rejects a field name the record does not declare" do
+    field = CorrectionField.new(correction: corrections(:war_and_peace_pending),
+      field_name: "slug", old_value: "war-and-peace", new_value: "hacked")
+
+    assert_not field.valid?
+    assert_includes field.errors[:field_name].join, "not correctable"
+  end
+
+  test "does not blow up validating a blank field name" do
+    field = CorrectionField.new(correction: corrections(:war_and_peace_pending), field_name: nil)
+
+    assert_not field.valid?
+    assert_includes field.errors[:field_name].join, "can't be blank"
+  end
 end
