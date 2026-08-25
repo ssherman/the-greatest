@@ -26,16 +26,21 @@ test.describe('Admin corrections', () => {
     await subtitle.fill(SUBTITLE_MARKER);
     await page.getByTestId('correction-submit').click();
 
-    // #create redirects to the book page on success and re-renders the form
-    // with a 422 on failure, so the URL is the signal to check here. The
-    // books layout has no view that renders a server flash notice for an
-    // ordinary redirect -- Toast::RegionComponent only ever fires from an
-    // explicit `toast:show` dispatch in a handful of Stimulus controllers,
-    // and none of them are wired to this endpoint -- so the controller's
-    // "we've got your correction" notice is set but never actually shown to
-    // a visitor. Asserting on that text would be asserting something the
-    // page does not do.
-    await expect(page).toHaveURL(new RegExp(`${APPLY_BOOK}$`));
+    // #create redirects to a dedicated thanks page on success, not back to
+    // the book -- the book page is edge-cached with the session skipped, so
+    // a flash set on a redirect there would never be read (Toast::RegionComponent
+    // only ever fires from an explicit `toast:show` dispatch in a handful of
+    // Stimulus controllers, none of which are wired to this endpoint). The
+    // thanks page states the confirmation as static content instead.
+    //
+    // This also keeps the browser's disk cache out of the later `page.goto`
+    // back to APPLY_BOOK below: if #create still redirected to the book page
+    // itself, that GET -- happening BEFORE the correction is applied -- would
+    // be the only navigation to APPLY_BOOK before the strongest-proof
+    // assertion revisits it, and Chromium could serve that stale pre-apply
+    // response from cache instead of re-fetching, turning a real pass into a
+    // false failure.
+    await expect(page).toHaveURL(new RegExp(`${APPLY_BOOK}/suggest-correction/thanks$`));
 
     await page.goto('/admin/corrections');
     await expect(page.getByTestId('status-tab-pending')).toBeVisible();
@@ -65,9 +70,12 @@ test.describe('Admin corrections', () => {
     await expect(page.getByTestId('resolve-correction')).toHaveCount(0);
 
     // The strongest proof of all: Applier wrote the field onto the real
-    // record, and the public page reads it live. If apply were a no-op (or
-    // this were still the pre-apply cached page), this text would not exist
-    // anywhere -- nightmare-abbey has no subtitle otherwise.
+    // record, and the public page reads it live. If apply were a no-op, this
+    // text would not exist anywhere -- nightmare-abbey has no subtitle
+    // otherwise. This is also the FIRST time this test visits APPLY_BOOK
+    // itself (the earlier submission redirected to the thanks page, not
+    // here), so there is no pre-apply disk-cached response it could be
+    // served instead -- this goto is guaranteed to be a real fetch.
     await page.goto(APPLY_BOOK);
     await expect(page.getByText(SUBTITLE_MARKER)).toBeVisible();
   });
@@ -76,7 +84,7 @@ test.describe('Admin corrections', () => {
     await page.goto(`${REJECT_BOOK}/suggest-correction`);
     await page.locator('#correction_notes').fill(NOTES_MARKER);
     await page.getByTestId('correction-submit').click();
-    await expect(page).toHaveURL(new RegExp(`${REJECT_BOOK}$`));
+    await expect(page).toHaveURL(new RegExp(`${REJECT_BOOK}/suggest-correction/thanks$`));
 
     await page.goto('/admin/corrections');
     await page.getByTestId('correction-row').first().getByRole('link').click();

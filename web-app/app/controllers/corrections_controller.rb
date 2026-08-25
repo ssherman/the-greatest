@@ -17,8 +17,8 @@ class CorrectionsController < ApplicationController
   # thing lost is attribution for a signed-in user whose token fetch failed.
   protect_from_forgery with: :null_session, only: [:create]
 
-  before_action :set_record, only: [:new]
-  before_action :cache_for_show_page, only: [:new]
+  before_action :set_record, only: [:new, :thanks]
+  before_action :cache_for_show_page, only: [:new, :thanks]
   before_action :prevent_caching, only: [:create]
   before_action :set_record_from_params, only: [:create]
 
@@ -33,15 +33,24 @@ class CorrectionsController < ApplicationController
   # with: is not optional. Rails' default raises TooManyRequests, which renders an
   # HTML error body.
   #
+  # with: renders the form again instead of redirecting: the redirect target
+  # (the record's show page) is edge-cached with skip_session_for_caching, so a
+  # flash set on a redirect there is never read, let alone shown. Rendering here
+  # is uncached (prevent_caching runs before this filter) and can carry @error
+  # straight into the response.
+  #
   # Declared AFTER set_record_from_params, and that ordering is load-bearing:
   # filters run in declaration order and rate_limit installs its own before_action,
-  # so @record is already set when the with: lambda calls correctable_path. Move
-  # this above that filter and a throttled request redirects to nil.
+  # so @record is already set when the with: lambda builds @fields and renders
+  # :new. Move this above that filter and a throttled request raises
+  # NoMethodError on nil instead of showing the rate-limit message.
   rate_limit to: 5, within: 1.hour,
     by: -> { current_user&.id || visitor_ip },
     with: -> {
-      redirect_to correctable_path,
-        alert: "Thanks — you've sent us several corrections just now. Please try again shortly."
+      @indexable = false
+      @fields = @record.class.correctable_fields.values
+      @error = "Thanks — you've sent us several corrections just now. Please try again shortly."
+      render :new, status: :too_many_requests
     },
     store: Rails.application.config.x.rate_limit_store,
     name: "corrections-create",
@@ -56,7 +65,10 @@ class CorrectionsController < ApplicationController
   end
 
   def create
-    return redirect_to(correctable_path, notice: submitted_message) if honeypot_filled?
+    # Same destination as a real success (see correction_thanks_path) -- a bot
+    # that gets redirected somewhere else on a filled honeypot has learned its
+    # submission was discarded.
+    return redirect_to(correction_thanks_path) if honeypot_filled?
 
     result = Services::Corrections::Submission.call(
       record: @record,
@@ -70,13 +82,24 @@ class CorrectionsController < ApplicationController
       # deliver_later, not deliver_now: legacy built and sent this inline in the
       # request, which blocked the submitter on SendGrid and had no retry.
       AdminMailer.new_correction(result.data).deliver_later
-      redirect_to correctable_path, notice: submitted_message
+      # The record's show page is edge-cached and skips the session, so a flash
+      # set here would never be read -- and a cached copy would show one
+      # visitor's message to every other visitor. Redirect to the dedicated
+      # thanks page instead, which states the confirmation as static content.
+      redirect_to correction_thanks_path
     else
       @indexable = false
       @fields = @record.class.correctable_fields.values
-      flash.now[:alert] = result.errors.to_sentence
+      @error = result.errors.to_sentence
       render :new, status: :unprocessable_entity
     end
+  end
+
+  # Cacheable GET, reached only via the redirect from #create. Exists so the
+  # PRG success message can be shown without a flash -- see the comment on the
+  # #create redirect above.
+  def thanks
+    @indexable = false
   end
 
   private
@@ -139,9 +162,21 @@ class CorrectionsController < ApplicationController
   end
   helper_method :correctable_path
 
-  def submitted_message
-    "Thanks — we've got your correction and we'll review it."
+  # Same lookup shape as PUBLIC_PATHS, one level down: where #thanks lives for
+  # each correctable type. Kept separate from PUBLIC_PATHS (rather than deriving
+  # one from the other) because Admin::CorrectionsController already reuses
+  # PUBLIC_PATHS for its own "view public page" link -- growing that lookup's
+  # shape would ripple into a controller this task has no reason to touch.
+  THANKS_PATHS = {
+    "Books::Book" => :books_book_correction_thanks_path,
+    "Music::Album" => :music_album_correction_thanks_path,
+    "Games::Game" => :games_game_correction_thanks_path
+  }.freeze
+
+  def correction_thanks_path
+    public_send(THANKS_PATHS.fetch(@correctable_type), slug: @record.slug)
   end
+  helper_method :correction_thanks_path
 
   def domain_layout
     "#{Current.domain}/application"

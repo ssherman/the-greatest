@@ -12,6 +12,12 @@
     </p>
   </div>
 
+  <% if @error.present? %>
+    <div role="alert" class="alert alert-error" data-testid="correction-error">
+      <span><%= @error %></span>
+    </div>
+  <% end %>
+
   <%= form_with url: corrections_path, method: :post, class: "space-y-6",
         data: {corrections__form_target: "form"} do |f| %>
     <%= hidden_field_tag :correctable_type, @correctable_type %>

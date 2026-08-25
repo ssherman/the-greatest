@@ -1,0 +1,9 @@
+<%
+  content_for :page_title, "Thanks for your correction | #{domain_settings[:name]}"
+%>
+
+<div class="max-w-2xl mx-auto space-y-6 text-center py-12">
+  <h1 class="text-2xl sm:text-3xl font-bold">Thanks for your correction</h1>
+  <p class="text-base-content/70">We've got it and we'll review it soon.</p>
+  <%= link_to "Back to #{@record.title}", correctable_path, class: "btn btn-primary" %>
+</div>

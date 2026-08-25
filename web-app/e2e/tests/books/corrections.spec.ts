@@ -23,8 +23,12 @@ test.describe('Suggest a correction', () => {
     await page.getByRole('textbox').first().fill('The first published year looks wrong.');
     await page.getByTestId('correction-submit').click();
 
-    await expect(page).toHaveURL(/\/book\/war-and-peace$/);
-    await expect(page.getByText(/we've got your correction/i)).toBeVisible();
+    // #create redirects to the dedicated thanks page, not back to the book --
+    // the book page is edge-cached with the session skipped, so a flash set on
+    // a redirect there is never read. The thanks page states the confirmation
+    // as static content instead.
+    await expect(page).toHaveURL(/\/book\/war-and-peace\/suggest-correction\/thanks$/);
+    await expect(page.getByText(/we've got it/i)).toBeVisible();
   });
 
   test('an anonymous visitor can propose a field change', async ({ page }) => {
@@ -36,8 +40,8 @@ test.describe('Suggest a correction', () => {
     await yearInput.fill('1867');
     await page.getByTestId('correction-submit').click();
 
-    await expect(page).toHaveURL(/\/book\/war-and-peace$/);
-    await expect(page.getByText(/we've got your correction/i)).toBeVisible();
+    await expect(page).toHaveURL(/\/book\/war-and-peace\/suggest-correction\/thanks$/);
+    await expect(page.getByText(/we've got it/i)).toBeVisible();
   });
 
   test('an alternate title row can be added and removed', async ({ page }) => {

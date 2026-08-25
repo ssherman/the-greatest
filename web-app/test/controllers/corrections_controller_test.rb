@@ -68,12 +68,12 @@ class CorrectionsControllerTest < ActionDispatch::IntegrationTest
     }.deep_merge(params)
   end
 
-  test "creates a correction anonymously and redirects to the book" do
+  test "creates a correction anonymously and redirects to the thanks page" do
     assert_difference -> { Correction.count }, 1 do
       submit
     end
 
-    assert_redirected_to book_path(slug: @book.slug)
+    assert_redirected_to books_book_correction_thanks_path(slug: @book.slug)
     assert_nil Correction.last.user
   end
 
@@ -115,13 +115,14 @@ class CorrectionsControllerTest < ActionDispatch::IntegrationTest
   end
 
   # Accept-and-discard: a bot that gets a 200 stops retrying, and one that gets a
-  # 422 comes back.
+  # 422 comes back. Same redirect target as a real success -- see the next test
+  # -- so a bot cannot tell its submission was discarded.
   test "silently discards a submission with the honeypot filled" do
     assert_no_difference -> { Correction.count } do
       submit(website: "http://spam.example")
     end
 
-    assert_redirected_to book_path(slug: @book.slug)
+    assert_redirected_to books_book_correction_thanks_path(slug: @book.slug)
   end
 
   test "re-renders with an error when nothing was submitted" do
@@ -130,6 +131,7 @@ class CorrectionsControllerTest < ActionDispatch::IntegrationTest
     }
 
     assert_response :unprocessable_entity
+    assert_match "Tell us what&#39;s wrong, or propose a change to at least one field", response.body
   end
 
   test "never caches the create response" do
@@ -138,7 +140,7 @@ class CorrectionsControllerTest < ActionDispatch::IntegrationTest
     assert_match(/no-store/, response.headers["Cache-Control"])
   end
 
-  test "rate limits by ip and redirects rather than raising" do
+  test "rate limits by ip and re-renders the form with an inline error rather than raising" do
     Rails.application.config.x.rate_limit_store.clear
 
     6.times do
@@ -147,8 +149,8 @@ class CorrectionsControllerTest < ActionDispatch::IntegrationTest
         headers: {"CF-Connecting-IP" => "198.51.100.9"}
     end
 
-    assert_redirected_to book_path(slug: @book.slug)
-    assert_equal "Thanks — you've sent us several corrections just now. Please try again shortly.", flash[:alert]
+    assert_response :too_many_requests
+    assert_match "Thanks — you&#39;ve sent us several corrections just now. Please try again shortly.", response.body
   end
 
   # The cached page ships no usable token. null_session must accept the write as
@@ -164,7 +166,7 @@ class CorrectionsControllerTest < ActionDispatch::IntegrationTest
       }
     end
 
-    assert_redirected_to book_path(slug: @book.slug)
+    assert_redirected_to books_book_correction_thanks_path(slug: @book.slug)
   ensure
     ActionController::Base.allow_forgery_protection = original
   end
@@ -222,7 +224,7 @@ class CorrectionsControllerTest < ActionDispatch::IntegrationTest
     assert_select "meta[name=robots][content=?]", "noindex, follow"
   end
 
-  test "creates a correction for a music album and redirects to the album" do
+  test "creates a correction for a music album and redirects to the thanks page" do
     host! "dev.thegreatestmusic.org"
     album = music_albums(:dark_side_of_the_moon)
 
@@ -233,7 +235,7 @@ class CorrectionsControllerTest < ActionDispatch::IntegrationTest
       }
     end
 
-    assert_redirected_to album_path(slug: album.slug)
+    assert_redirected_to music_album_correction_thanks_path(slug: album.slug)
   end
 
   test "renders the form for a game" do
@@ -264,7 +266,7 @@ class CorrectionsControllerTest < ActionDispatch::IntegrationTest
     assert_select "meta[name=robots][content=?]", "noindex, follow"
   end
 
-  test "creates a correction for a game and redirects to the game" do
+  test "creates a correction for a game and redirects to the thanks page" do
     host! "dev.thegreatest.games"
     game = games_games(:breath_of_the_wild)
 
@@ -275,6 +277,22 @@ class CorrectionsControllerTest < ActionDispatch::IntegrationTest
       }
     end
 
-    assert_redirected_to game_path(slug: game.slug)
+    assert_redirected_to games_game_correction_thanks_path(slug: game.slug)
+  end
+
+  test "the thanks page renders, is cacheable and not indexable, for a book" do
+    get books_book_correction_thanks_path(slug: @book.slug)
+
+    assert_response :success
+    assert_match(/public/, response.headers["Cache-Control"])
+    assert_match(/max-age=86400/, response.headers["Cache-Control"])
+    assert_select "meta[name=robots][content=?]", "noindex, follow"
+    assert_select "a[href=?]", book_path(slug: @book.slug)
+  end
+
+  test "the thanks page 404s for an unknown slug" do
+    get books_book_correction_thanks_path(slug: "no-such-book")
+
+    assert_response :not_found
   end
 end

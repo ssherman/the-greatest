@@ -53,6 +53,13 @@ Rails.application.routes.draw do
       get "album/:slug/suggest-correction", to: "corrections#new",
         defaults: {correctable_type: "Music::Album"}, as: :music_album_correction
 
+      # Same cacheable-GET shape as the form above, nested under the same
+      # /suggest-correction prefix so robots.txt's existing
+      # "Disallow: /*/suggest-correction" rule (unanchored, so it matches this
+      # path too) covers it without a second rule.
+      get "album/:slug/suggest-correction/thanks", to: "corrections#thanks",
+        defaults: {correctable_type: "Music::Album"}, as: :music_album_correction_thanks
+
       # Song routes
       get "songs", to: "music/songs/ranked_items#index", as: :songs
       get "songs/page/:page", to: "music/songs/ranked_items#index", as: :songs_page, constraints: {page: /\d+/}
@@ -566,6 +573,13 @@ Rails.application.routes.draw do
       # pointing at this same shared controller.
       get "book/:slug/suggest-correction", to: "corrections#new",
         defaults: {correctable_type: "Books::Book"}, as: :books_book_correction
+
+      # Same cacheable-GET shape as the form above, nested under the same
+      # /suggest-correction prefix so robots.txt's existing
+      # "Disallow: /*/suggest-correction" rule (unanchored, so it matches this
+      # path too) covers it without a second rule.
+      get "book/:slug/suggest-correction/thanks", to: "corrections#thanks",
+        defaults: {correctable_type: "Books::Book"}, as: :books_book_correction_thanks
     end
 
     scope "(/rc/:ranking_configuration_id)" do
@@ -962,6 +976,13 @@ Rails.application.routes.draw do
       # music.
       get "game/:slug/suggest-correction", to: "corrections#new",
         defaults: {correctable_type: "Games::Game"}, as: :games_game_correction
+
+      # Same cacheable-GET shape as the form above, nested under the same
+      # /suggest-correction prefix so robots.txt's existing
+      # "Disallow: /*/suggest-correction" rule (unanchored, so it matches this
+      # path too) covers it without a second rule.
+      get "game/:slug/suggest-correction/thanks", to: "corrections#thanks",
+        defaults: {correctable_type: "Games::Game"}, as: :games_game_correction_thanks
 
       get "categories/:id", to: "games/categories#show", as: :games_category
       get "categories/:id/page/:page", to: "games/categories#show", as: :games_category_page, constraints: {page: /\d+/}
