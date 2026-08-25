@@ -2,12 +2,17 @@ class Admin::CorrectionsController < Admin::BaseController
   include Admin::DomainScopedAuth
   include Pagy::Method
 
-  # Task 12 adds apply/reject/resolve and extends this list. Listing them here
-  # already, before those actions exist, would break EVERY request to this
-  # controller: Rails validates the whole :only array on every dispatch (not
-  # just the current action) whenever raise_on_missing_callback_actions is on,
-  # which config/environments/{development,test}.rb both set.
-  before_action :set_correction, only: [:show]
+  # Widened for Task 12's apply/reject/resolve, which all load a single
+  # correction by id. bulk_reject is deliberately absent -- it works on a set
+  # of ids via correction_ids[], not on params[:id], so it has nothing for
+  # set_correction to load. Rails validates the whole :only array on every
+  # dispatch (not just the current action) whenever
+  # raise_on_missing_callback_actions is on, which config/environments/
+  # {development,test}.rb both set -- so naming an action that does not exist
+  # here breaks EVERY request to this controller, and naming bulk_reject here
+  # would leave @correction nil for it.
+  before_action :set_correction, only: [:show, :apply, :reject, :resolve]
+  before_action :require_domain_write!, only: [:apply, :reject, :resolve, :bulk_reject]
 
   STATUSES = %w[pending resolved rejected].freeze
 
@@ -22,6 +27,59 @@ class Admin::CorrectionsController < Admin::BaseController
   def show
     @fields = @correction.correction_fields.order(:field_name)
     @record = @correction.correctable
+  end
+
+  def apply
+    result = Services::Corrections::Applier.call(
+      correction: @correction, accepted: accepted_params, admin: current_user
+    )
+
+    if result.success?
+      redirect_to admin_books_correction_path(@correction), notice: "Correction applied."
+    else
+      redirect_to admin_books_correction_path(@correction),
+        alert: "Could not apply: #{result.errors.to_sentence}"
+    end
+  end
+
+  def reject
+    ::Correction.transaction do
+      @correction.correction_fields.update_all(status: ::CorrectionField.statuses[:rejected])
+      @correction.update!(
+        status: :rejected, resolved_by: current_user, resolved_at: Time.current,
+        resolution_notes: resolution_notes_param
+      )
+    end
+
+    redirect_to admin_books_corrections_path, notice: "Correction rejected."
+  end
+
+  # For a notes-only correction the admin acted on by hand -- there is nothing for
+  # the applier to write, but the queue must stop showing it.
+  def resolve
+    @correction.update!(
+      status: :resolved, resolved_by: current_user, resolved_at: Time.current,
+      resolution_notes: resolution_notes_param
+    )
+
+    redirect_to admin_books_corrections_path, notice: "Correction marked resolved."
+  end
+
+  def bulk_reject
+    scope = domain_scope.where(id: Array(params[:correction_ids]), status: :pending)
+    count = scope.count
+
+    ::Correction.transaction do
+      ::CorrectionField.where(correction_id: scope.select(:id))
+        .update_all(status: ::CorrectionField.statuses[:rejected])
+      scope.update_all(
+        status: ::Correction.statuses[:rejected], resolved_by_id: current_user.id,
+        resolved_at: Time.current, updated_at: Time.current
+      )
+    end
+
+    redirect_to admin_books_corrections_path(status: params[:status]),
+      notice: "Rejected #{count} #{"correction".pluralize(count)}."
   end
 
   private
@@ -53,5 +111,41 @@ class Admin::CorrectionsController < Admin::BaseController
     return nil if params[:id].blank?
 
     ::Correction.find_by(id: params[:id])&.correctable
+  end
+
+  # The review form submits a checkbox per accepted field in accepted_fields[],
+  # and every row's value in accepted[<name>] whether ticked or not. Slicing by the
+  # checkbox list is what makes UNTICKING a box mean anything -- without it, an
+  # unticked row's still-submitted input would be applied anyway.
+  #
+  # permit! is safe: the applier checks every field name against the record's own
+  # declaration, so restating an allowlist here would be the same list written twice.
+  def accepted_params
+    names = Array(params[:accepted_fields]).map(&:to_s)
+    return {} if names.empty?
+
+    # is_a? check, not just .present?: a crafted request can send `accepted=foo`
+    # (a plain String) instead of the nested `accepted[field]=...` the form always
+    # sends, and .permit! is not defined on String. Same shape as the params[:q]
+    # array hazard in filtered_scope -- guard the shape, not just presence.
+    submitted = params[:accepted].is_a?(ActionController::Parameters) ? params[:accepted].permit!.to_h : {}
+    submitted.slice(*names).transform_values { |value| normalize_accepted(value) }
+  end
+
+  # An array field is edited as ONE comma-separated input, so it arrives as
+  # ["a, b"] -- which ValueCaster would faithfully turn into a single-element
+  # array containing a comma. Splitting here keeps the review form to one input
+  # per field instead of a repeatable list the admin has to manage.
+  def normalize_accepted(value)
+    return value unless value.is_a?(Array) && value.size == 1
+
+    value.first.to_s.split(",")
+  end
+
+  # .to_s first: a crafted request can send resolution_notes as a nested hash
+  # instead of the plain text field the form always sends, and this keeps that
+  # from landing an ActionController::Parameters object in a text column.
+  def resolution_notes_param
+    params[:resolution_notes].to_s.presence
   end
 end

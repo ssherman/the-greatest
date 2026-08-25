@@ -1,66 +1,121 @@
 <% content_for :title, "Correction ##{@correction.id}" %>
 
-<div class="space-y-4">
-  <div class="flex items-center justify-between">
-    <%= link_to "← Corrections", admin_books_corrections_path(status: @correction.status), class: "btn btn-ghost btn-sm" %>
+<div class="space-y-6 max-w-4xl">
+  <div class="flex items-start justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold">Correction #<%= @correction.id %></h1>
+      <p class="text-sm text-base-content/70 mt-1">
+        <%= @correction.user&.email || "Anonymous" %>
+        · <%= @correction.created_at.strftime("%B %-d, %Y at %H:%M") %>
+        <% if @correction.submitter_ip.present? %>· <%= @correction.submitter_ip %><% end %>
+      </p>
+    </div>
     <span class="badge"><%= @correction.status.titleize %></span>
   </div>
 
-  <div class="card bg-base-100 shadow-xl">
-    <div class="card-body space-y-4">
-      <div>
-        <h2 class="font-semibold">Record</h2>
-        <% record_path = @record && Admin::DomainRouting.path_for(@record) %>
-        <% if @record.nil? %>
-          <p class="text-base-content/60 italic">(deleted)</p>
-        <% elsif record_path %>
-          <%= link_to @record.title, record_path, class: "link" %>
-        <% else %>
-          <%= @record.title %>
-        <% end %>
-      </div>
+  <% if @record %>
+    <div class="flex gap-2">
+      <%= link_to "Open in admin", Admin::DomainRouting.path_for(@record), class: "btn btn-sm" %>
+      <%= link_to "View public page", book_path(slug: @record.slug), class: "btn btn-sm btn-ghost" %>
+    </div>
+  <% else %>
+    <div class="alert alert-warning">The corrected record no longer exists.</div>
+  <% end %>
 
-      <div>
-        <h2 class="font-semibold">Submitted by</h2>
-        <p><%= @correction.user&.email || "Anonymous" %></p>
-      </div>
-
+  <%# Notes first and full width: 111 of the 236 pending legacy corrections are
+      notes-only, so this is the primary content, not a footnote under a table. %>
+  <div class="card bg-base-100 shadow-md">
+    <div class="card-body">
+      <h2 class="card-title text-lg">Notes</h2>
       <% if @correction.notes.present? %>
-        <div>
-          <h2 class="font-semibold">Notes</h2>
-          <p class="[overflow-wrap:anywhere]"><%= @correction.notes %></p>
-        </div>
+        <p class="[overflow-wrap:anywhere] whitespace-pre-line"><%= @correction.notes %></p>
+      <% else %>
+        <p class="text-base-content/70">No notes.</p>
       <% end %>
+    </div>
+  </div>
 
-      <% if @fields.any? %>
-        <div>
-          <h2 class="font-semibold">Proposed fields</h2>
+  <% if @fields.any? && @record %>
+    <%= form_with url: apply_admin_books_correction_path(@correction), method: :post do %>
+      <div class="card bg-base-100 shadow-md">
+        <div class="card-body">
+          <h2 class="card-title text-lg">Proposed changes</h2>
           <div class="overflow-x-auto">
             <table class="table">
               <thead>
-                <tr><th>Field</th><th>Current</th><th>Proposed</th><th>Status</th></tr>
+                <tr>
+                  <th>Accept</th>
+                  <th>Field</th>
+                  <th>Was</th>
+                  <th>Is now</th>
+                  <th>Proposed</th>
+                </tr>
               </thead>
               <tbody>
                 <% @fields.each do |field| %>
-                  <tr>
-                    <td><%= field.field_name.humanize %></td>
-                    <td class="[overflow-wrap:anywhere]"><%= field.old_value %></td>
-                    <td class="[overflow-wrap:anywhere]"><%= field.new_value %></td>
-                    <td><%= field.status.titleize %></td>
+                  <% definition = @record.class.correctable_fields[field.field_name] %>
+                  <% next if definition.nil? %>
+                  <% current = Services::Corrections::Targets.for(definition.target).read(@record, field.field_name) %>
+                  <% stale = current.to_s != field.old_value.to_s %>
+                  <tr data-testid="correction-field-row" data-field="<%= field.field_name %>">
+                    <td>
+                      <%= check_box_tag "accepted_fields[]", field.field_name, @correction.pending?,
+                            class: "checkbox", disabled: !@correction.pending? %>
+                    </td>
+                    <td><%= definition.label %></td>
+                    <td class="text-sm text-base-content/70 [overflow-wrap:anywhere]"><%= field.old_value.inspect %></td>
+                    <td class="text-sm [overflow-wrap:anywhere] <%= "text-warning font-semibold" if stale %>">
+                      <%= current.inspect %>
+                      <%# Flagged, not blocked. With a backlog reaching back to Oct
+                          2024 over books that have since been through the
+                          description migration and Amazon enrichment, a stale
+                          "Was" is the normal case -- the admin's judgement is the
+                          point. %>
+                      <% if stale %>
+                        <span class="badge badge-warning badge-sm" data-testid="stale-flag">changed since</span>
+                      <% end %>
+                    </td>
+                    <td>
+                      <% if definition.type == :string_array %>
+                        <%= text_field_tag "accepted[#{field.field_name}][]", Array(field.new_value).join(", "),
+                              class: "input input-sm w-full", disabled: !@correction.pending? %>
+                      <% elsif definition.type == :text %>
+                        <%= text_area_tag "accepted[#{field.field_name}]", field.new_value, rows: 4,
+                              class: "textarea w-full", disabled: !@correction.pending? %>
+                      <% else %>
+                        <%= text_field_tag "accepted[#{field.field_name}]", field.new_value,
+                              class: "input input-sm w-full", disabled: !@correction.pending? %>
+                      <% end %>
+                    </td>
                   </tr>
                 <% end %>
               </tbody>
             </table>
           </div>
+
+          <% if @correction.pending? %>
+            <div class="card-actions mt-4">
+              <%= submit_tag "Apply checked fields", class: "btn btn-primary",
+                    data: {testid: "apply-correction"} %>
+            </div>
+          <% end %>
         </div>
+      </div>
+    <% end %>
+  <% end %>
+
+  <% if @correction.pending? %>
+    <div class="flex flex-wrap gap-2">
+      <%= form_with url: resolve_admin_books_correction_path(@correction), method: :post do %>
+        <%= submit_tag "Mark resolved", class: "btn", data: {testid: "resolve-correction"} %>
       <% end %>
 
-      <% if @correction.resolution_notes.present? %>
-        <div>
-          <h2 class="font-semibold">Resolution notes</h2>
-          <p class="[overflow-wrap:anywhere]"><%= @correction.resolution_notes %></p>
-        </div>
+      <%= form_with url: reject_admin_books_correction_path(@correction), method: :post, class: "flex gap-2" do %>
+        <%= text_field_tag :resolution_notes, nil, placeholder: "Reason (optional)", class: "input" %>
+        <%= submit_tag "Reject", class: "btn btn-warning", data: {testid: "reject-correction"} %>
       <% end %>
     </div>
-  </div>
+  <% elsif @correction.resolution_notes.present? %>
+    <div class="alert"><%= @correction.resolution_notes %></div>
+  <% end %>
 </div>
