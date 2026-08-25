@@ -240,10 +240,13 @@ class CorrectionFieldTest < ActiveSupport::TestCase
     assert_equal ["Voyna i mir", "War & Peace"], field.reload.new_value
   end
 
+  # word_count, not first_published_year: the war_and_peace_year fixture already
+  # occupies first_published_year on this same correction, and the uniqueness
+  # validation above is scoped to correction_id.
   test "round-trips an integer through new_value" do
-    field = CorrectionField.create!(correction: @correction, field_name: "first_published_year",
-      old_value: 1869, new_value: 1867)
-    assert_equal 1867, field.reload.new_value
+    field = CorrectionField.create!(correction: @correction, field_name: "word_count",
+      old_value: 560_000, new_value: 587_287)
+    assert_equal 587_287, field.reload.new_value
   end
 end
 ```
