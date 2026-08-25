@@ -4259,7 +4259,9 @@ The last one is the real check, and it is the reason this task exists. Add a mus
 
 2. **Index domain scoping.** Same shape — "scopes to this domain's correctable types" becomes genuinely non-vacuous only now.
 
-Both were left weak deliberately, with the gap recorded, because books being the only correctable domain made honest coverage impossible. If either still cannot be made to go RED, stop and report it rather than leaving a passing test that proves nothing.
+3. **Mailer branding.** `AdminMailerTest`'s "new_correction is branded for the record's domain" currently proves nothing: it only exercises books, which is also `MailBranding`'s fallback default — so it cannot distinguish "domain resolved via `TypeRegistry.domain_for`" from "domain resolved as nil and fell back". Add a music-correction case asserting the mail is branded for music, and verify it goes RED if the mailer's domain lookup is replaced with `nil`. This is the test that proves a music correction does not send books-branded mail to the owner.
+
+All three were left weak deliberately, with the gap recorded, because books being the only correctable domain made honest coverage impossible. If any of them still cannot be made to go RED, stop and report it rather than leaving a passing test that proves nothing.
 
 - [ ] **Step 8: Run everything**
 
