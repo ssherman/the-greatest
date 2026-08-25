@@ -2508,9 +2508,13 @@ git commit -m "Add correction create with rate limiting and honeypot"
 - Consumes: `correction_token_path` from Task 8.
 - Produces: Stimulus controller registered as `corrections--form`, with value `tokenUrl`, targets `form` and `list`, actions `addListItem` and `removeListItem`.
 
-- [ ] **Step 1: Write the Stimulus controller**
+**Already partly built by Task 8.** The form view references `data-controller="corrections--form"`, and this repo's `test/lint/stimulus_manifest_test.rb` fails when markup names an unregistered controller — so Task 8 had to create a minimal version (the `list`/`form` targets, `addListItem`/`removeListItem`, the `tokenUrl` value) and register it to ship. It registered in `app/javascript/manifests/web_shared.js`, **not** `books_web.js`, because `app/views/corrections/new.html.erb` is shared across domains and a books-only registration fails that lint for music, games and movies.
 
-`app/javascript/controllers/corrections/form_controller.js`:
+So this task ADDS the token-fetch half to the existing controller and does NOT re-register it. Verify what is already there before writing.
+
+- [ ] **Step 1: Add token hydration to the existing Stimulus controller**
+
+Extend `app/javascript/controllers/corrections/form_controller.js` with `connect`, `ensureToken`, `_fetchToken` and `_applyToken`, keeping the list methods Task 8 already added. The complete intended file:
 
 ```javascript
 import { Controller } from "@hotwired/stimulus"
@@ -2611,14 +2615,9 @@ export default class extends Controller {
 }
 ```
 
-- [ ] **Step 2: Register it**
+- [ ] **Step 2: Confirm registration — do not add a second one**
 
-Append to `app/javascript/manifests/books_web.js`:
-
-```javascript
-import Corrections__FormController from "../controllers/corrections/form_controller"
-application.register("corrections--form", Corrections__FormController)
-```
+Task 8 already registered this controller in `app/javascript/manifests/web_shared.js`. Verify it is there and that `test/lint/stimulus_manifest_test.rb` passes. Do NOT also register it in `books_web.js` — `web_shared` is imported by every domain manifest, so a second registration would be a duplicate.
 
 - [ ] **Step 3: Arm the token fetch from the form**
 
