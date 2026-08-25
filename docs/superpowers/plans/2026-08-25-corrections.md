@@ -483,12 +483,35 @@ class CorrectableTest < ActiveSupport::TestCase
     end
   end
 
-  # class_attribute's default object is shared by every including class. If
-  # correctable_field mutated it in place, declaring a field on one model would
-  # add it to every other correctable model in the app.
+  # Documents intent, but note it CANNOT fail: ActiveSupport::Concern evaluates
+  # the `included` block once per DIRECT includer, so Dummy and OtherDummy each
+  # get their own class_attribute default and never share one, whatever
+  # correctable_field does. The subclass test below is the one with teeth.
   test "one class's declarations do not leak into another" do
     assert_equal %w[headline], OtherDummy.correctable_field_names
     assert_not_includes Dummy.correctable_field_names, "headline"
+  end
+
+  # THIS is the test that pins merge-not-mutate. A subclass inherits its parent's
+  # class_attribute VALUE — the same Hash object — so `correctable_fields[k] = v`
+  # in a subclass would add that field to the parent, and to every sibling
+  # subclass. Goes RED under in-place mutation with:
+  #   Expected ["parent_field", "child_field"] to not include "child_field"
+  class Parent
+    include ActiveModel::Model
+    def self.has_many(*, **) = nil
+    include Correctable
+
+    correctable_field :parent_field, type: :string
+  end
+
+  class Child < Parent
+    correctable_field :child_field, type: :string
+  end
+
+  test "a subclass's declarations do not leak up into its parent" do
+    assert_equal %w[parent_field child_field], Child.correctable_field_names
+    assert_not_includes Parent.correctable_field_names, "child_field"
   end
 
   test "correction_applied is a no-op by default" do
@@ -581,9 +604,11 @@ bin/rails test test/models/concerns/correctable_test.rb
 
 Expected: PASS.
 
-- [ ] **Step 5: Prove the leak test is not vacuous**
+- [ ] **Step 5: Prove the SUBCLASS leak test is not vacuous**
 
-Change `self.correctable_fields = correctable_fields.merge(...)` to `correctable_fields[definition.name] = definition` (dropping `.freeze` from the default so it runs). Re-run — "one class's declarations do not leak into another" must go RED. Restore.
+Change `self.correctable_fields = correctable_fields.merge(...)` to `correctable_fields[definition.name] = definition` (dropping `.freeze` from the default so it runs). Re-run — **"a subclass's declarations do not leak up into its parent"** must go RED. Restore.
+
+Check that test, not the sibling one. The sibling test cannot fail: `ActiveSupport::Concern` evaluates the `included` block once per direct includer, so two unrelated classes each get their own `class_attribute` default and never share one regardless of implementation. Only inheritance shares the value, which is what makes the subclass case the real hazard. If the subclass test also refuses to go red, stop and report it — that would mean the `merge` is not load-bearing, which is a design question rather than a test-authoring one.
 
 - [ ] **Step 6: Lint and commit**
 
