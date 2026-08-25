@@ -111,11 +111,25 @@ export default class extends Controller {
 
   // Handle authentication state changes
   handleAuthStateChange(user) {
-    // Firebase has now resolved its initial state, including any redirect
-    // result, so the redirect is no longer pending either way. Clearing this
-    // only on success would leave the flag set forever when a reader cancels
-    // the Google flow, forcing an eager load on every later page view.
-    clearPendingRedirect()
+    // Both markers clear only on a REAL notification, never on the synchronous
+    // replay of FirebaseAuthService's constructor-initial null.
+    //
+    // The redirect marker especially. redirectHandler.initialize() kicks off
+    // getRedirectResult() WITHOUT awaiting it, and the replay fires immediately
+    // after -- so clearing here unconditionally would drop the marker at the
+    // START of that round trip rather than the end. Reload inside that window
+    // and every signal is gone at once: tg_uid is unset (Rails has not seen the
+    // JWT yet), markSignedIn() has not run, our marker is cleared, and Firebase
+    // has already consumed its own firebase:pendingRedirect key. The next page
+    // would not load Firebase, getRedirectResult() would never run, and the
+    // sign-in would be silently lost.
+    //
+    // A real notification means Firebase has settled, and it arrives on both
+    // branches -- with a user on success, with null when the reader cancels at
+    // the consent screen -- so the marker cannot outlive the redirect either way.
+    if (!this._replayingInitialAuthState) {
+      clearPendingRedirect()
+    }
 
     if (user) {
       markSignedIn()

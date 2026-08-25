@@ -338,6 +338,16 @@ a second, better reason to keep the preview server-rendered — it cannot drift 
 - `test/lint/stimulus_manifest_test.rb`, the drift guard.
 - Playwright E2E: sign-in on all three public sites plus admin. This is the genuinely
   risky surface. CI does not run Playwright, so this is a local pre-merge gate.
+- **By hand, and not automatable: reload the page mid-redirect.** Complete a Google
+  sign-in as a first-ever sign-in in a fresh profile, and while the returning page is
+  still settling, reload it. The sign-in must still complete. This is the one window
+  where every other signal is absent — `tg_uid` is unset because Rails has not seen the
+  JWT, `markSignedIn()` has not run, and Firebase has already consumed its own
+  `firebase:pendingRedirect` key — so the `tg:auth:pending-redirect` marker is the sole
+  thing keeping the redirect recoverable. An earlier revision cleared that marker on
+  Firebase's synchronous initial-state replay, which lands at the *start* of the
+  `getRedirectResult()` round trip rather than the end, and a reload there lost the
+  sign-in silently. No automated test reaches this.
 - Record before/after gzip sizes per bundle and confirm against the projections above.
 
 Standard gates apply: `bin/rails test` and `bundle exec standardrb` must be green
