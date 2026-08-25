@@ -994,6 +994,32 @@ test "leaves book_length alone when an unrelated field is corrected" do
 end
 ```
 
+And to `test/models/correction_field_test.rb` — the spec's "an undeclared field cannot be stored" invariant, which only becomes testable now that a real model is correctable:
+
+```ruby
+test "accepts a field name the record declares" do
+  field = CorrectionField.new(correction: corrections(:war_and_peace_pending),
+    field_name: "subtitle", old_value: nil, new_value: "A Novel")
+
+  assert_predicate field, :valid?
+end
+
+test "rejects a field name the record does not declare" do
+  field = CorrectionField.new(correction: corrections(:war_and_peace_pending),
+    field_name: "slug", old_value: "war-and-peace", new_value: "hacked")
+
+  assert_not field.valid?
+  assert_includes field.errors[:field_name].join, "not correctable"
+end
+
+test "does not blow up validating a blank field name" do
+  field = CorrectionField.new(correction: corrections(:war_and_peace_pending), field_name: nil)
+
+  assert_not field.valid?
+  assert_includes field.errors[:field_name].join, "can't be blank"
+end
+```
+
 - [ ] **Step 2: Run the tests to verify they fail**
 
 ```bash
@@ -1094,6 +1120,39 @@ And the hook, as a public method beside `release_year`:
     self.book_length = nil
   end
 ```
+
+- [ ] **Step 4b: Add the declared-field validation to CorrectionField**
+
+The spec requires that an undeclared field cannot be stored. It lands here rather than in Task 1 because Task 1 runs before any model is correctable, so there would have been nothing to validate against and the test would have been vacuous.
+
+In `app/models/correction_field.rb`:
+
+```ruby
+  validate :field_name_is_declared
+
+  private
+
+  # Defence in depth. Submission only ever builds declared fields, so nothing in
+  # the request path can violate this today -- but the admin apply path rewrites
+  # new_value, and the whole point of this subsystem is that an agent will write
+  # corrections through it later. This is the invariant that lets the applier trust
+  # a stored field_name.
+  #
+  # Resolves through the registry rather than constantizing correctable_type, for
+  # the same reason the controllers do.
+  def field_name_is_declared
+    return if field_name.blank?  # presence validation already reported it
+
+    klass = Services::Corrections::TypeRegistry.resolve(correction&.correctable_type)
+    return if klass.nil?         # unknown type is not this validation's job
+
+    return if klass.correctable_fields.key?(field_name)
+
+    errors.add(:field_name, "is not correctable on #{correction.correctable_type}")
+  end
+```
+
+Note this is bypassed by `insert_all`, which is exactly how the legacy migrator (Task 15) writes — deliberate, and why the applier in Task 7 tolerates an undeclared row rather than raising.
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
@@ -1597,6 +1656,24 @@ module Services
         assert_not result.success?
         assert_includes result.errors.join, "already been resolved"
       end
+
+      # Reachable two ways: the legacy migrator writes with insert_all, which
+      # bypasses the declared-field validation, and a field removed from a model's
+      # declaration strands corrections already submitted against it. Neither may
+      # 500 the admin.
+      test "rejects a field whose name is no longer declared instead of raising" do
+        correction = ::Correction.create!(correctable: @book, notes: "legacy")
+        ::CorrectionField.insert_all([{
+          correction_id: correction.id, field_name: "series_name",
+          old_value: nil, new_value: "Discworld", status: 0,
+          created_at: Time.current, updated_at: Time.current
+        }])
+
+        result = Applier.call(correction: correction, accepted: {"series_name" => "Discworld"}, admin: @admin)
+
+        assert_predicate result, :success?
+        assert_predicate correction.reload.correction_fields.sole, :rejected?
+      end
     end
   end
 end
@@ -1683,7 +1760,16 @@ module Services
             next
           end
 
-          definition = @record.class.correctable_fields.fetch(field.field_name)
+          # [] with a nil guard, NOT fetch. insert_all in the legacy migrator
+          # bypasses validations, and a declaration removed later (say, dropping
+          # word_count) strands already-submitted rows -- fetch would turn both
+          # into a KeyError 500 in the admin, on data the admin cannot fix.
+          definition = @record.class.correctable_fields[field.field_name]
+          if definition.nil?
+            field.update!(status: :rejected)
+            next
+          end
+
           value = ValueCaster.call(@accepted[field.field_name], type: definition.type)
           Targets.for(definition.target).write(@record, field.field_name, value)
 
@@ -2297,7 +2383,11 @@ class CorrectionsController < ApplicationController
     klass = Services::Corrections::TypeRegistry.resolve(@correctable_type)
     raise ActionController::BadRequest, "Unknown correctable type" if klass.nil?
 
-    @record = klass.find(params[:correctable_id])
+    # find_by!(id:), NEVER find. Books::Book is friendly_id with :finders, so
+    # find("123") resolves the SLUG "123" before the primary key -- and this corpus
+    # has 137 purely-numeric slugs, so `find` would file corrections against the
+    # wrong book. Same trap the Amazon work hit.
+    @record = klass.find_by!(id: params[:correctable_id])
   end
 
   # A bot fills every input it finds. A filled honeypot is discarded, and the
@@ -2901,9 +2991,9 @@ bin/rails test test/controllers/admin/corrections_controller_test.rb test/lint/d
 
 Expected: PASS.
 
-- [ ] **Step 8: Prove the domain-scoping test is not vacuous**
+- [ ] **Step 8: Prove the status filter is not vacuous**
 
-Change `domain_scope` to plain `::Correction.all`. The "scopes to this domain's correctable types" test will still pass while books is the only correctable domain — so instead temporarily add `correctable_field :title, type: :string` and `include Correctable` to `Music::Album`, add a music correction fixture, confirm the test goes RED, then revert both. (Task 18 wires music for real.)
+Domain scoping cannot be tested non-vacuously while books is the only correctable domain — Task 16 Step 7 is where that assertion gets real teeth, and wiring a second model here just to revert it buys no coverage. Verify the filter instead: change `filtered_scope`'s `.where(status: @status)` to `.all`, re-run, and confirm both "index defaults to pending" and "index filters by status" go RED. Restore.
 
 - [ ] **Step 9: Lint and commit**
 
@@ -4096,7 +4186,9 @@ One link on `app/views/music/albums/show.html.erb` and `app/views/games/games/sh
 
 - [ ] **Step 7: Add tests**
 
-For each domain, mirror the books tests: the model declares its fields, `#new` renders and is cacheable and noindex, `#create` works, and the admin index scopes to that domain's types only. The last one is the real check — `test/controllers/admin/corrections_controller_test.rb`'s "scopes to this domain's correctable types" should now be genuinely non-vacuous, so remove the temporary-fixture workaround from Task 11 Step 8 and add a real music correction fixture.
+For each domain, mirror the books tests: the model declares its fields, `#new` renders and is cacheable and noindex, `#create` works, and the admin index scopes to that domain's types only.
+
+The last one is the real check, and it is the reason this task exists. Add a music correction fixture (`correctable: <some album> (Music::Album)`) and confirm `test/controllers/admin/corrections_controller_test.rb`'s "scopes to this domain's correctable types" now goes RED when `domain_scope` is replaced with `::Correction.all` — it could not, before this task, because books was the only correctable domain. Then restore.
 
 - [ ] **Step 8: Run everything**
 
