@@ -461,6 +461,59 @@ module Games
         assert_equal "opensearch down", merger.stats[:post_commit_error]
       end
 
+      # SearchIndexable's after_commit fires as the transaction block exits -- after
+      # the commit -- and Rails propagates what it raises into call's rescue ladder,
+      # bypassing run_post_commit_steps entirely.
+      test "still reports success when a commit callback fails after the merge committed" do
+        source_id = @source.id
+        SearchIndexRequest.stubs(:create!).raises(StandardError.new("index store down"))
+
+        merger = ::Games::Game::Merger.new(source: @source, target: @target)
+        result = merger.call
+
+        assert result.success?,
+          "a commit-callback failure must not be reported as a failed merge: #{result.errors.inspect}"
+        assert_not ::Games::Game.exists?(source_id), "the merge itself must still have committed"
+        assert_equal "index store down", merger.stats[:post_commit_error]
+      end
+
+      test "reports failure when the source disappears before it can be locked" do
+        # A throwaway game, so deleting it out from under the merger does not trip
+        # the foreign keys the fixtures carry.
+        ghost = ::Games::Game.create!(title: "Ghost Game", game_type: :main_game)
+        merger = ::Games::Game::Merger.new(source: ghost, target: @target)
+        merger.stubs(:lock_games).raises(ActiveRecord::RecordNotFound.new("gone"))
+        ::Games::Game.where(id: ghost.id).delete_all
+
+        result = merger.call
+
+        assert_not result.success?, "a merge that never ran must not report success"
+        assert_equal ["gone"], result.errors
+      end
+
+      test "locks both games for update, in ascending id order, before moving anything" do
+        locked = []
+        subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+          sql = payload[:sql]
+          next unless sql.include?("games_games") && sql.include?("FOR UPDATE")
+
+          binds = payload[:type_casted_binds]
+          binds = binds.call if binds.respond_to?(:call)
+          locked << Array(binds).first
+        end
+
+        begin
+          result = ::Games::Game::Merger.call(source: @source, target: @target)
+        ensure
+          ActiveSupport::Notifications.unsubscribe(subscriber)
+        end
+
+        assert result.success?, "merge must succeed: #{result.errors.inspect}"
+        assert_equal [@source.id, @target.id].sort, locked.compact,
+          "both rows must be locked FOR UPDATE in ascending id order, or two merges " \
+          "with swapped source and target can deadlock each other"
+      end
+
       # Give the target the same release_year as the source (via update_all, which
       # skips callbacks) so reconcile_scalars leaves target_game unchanged. Otherwise
       # merge_release_year's own target_game.save! fires SearchIndexable's after_commit
