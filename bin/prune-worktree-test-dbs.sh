@@ -45,7 +45,7 @@ done
 command -v ruby >/dev/null 2>&1 || die "ruby is not on PATH (try: mise exec -- $0)"
 [ -f "${MODULE}.rb" ] || die "Missing ${MODULE}.rb — cannot map worktrees to database names."
 
-docker compose exec -T "$DB_SERVICE" pg_isready -U "$DB_USER" >/dev/null 2>&1 \
+docker compose exec -T "$DB_SERVICE" pg_isready -U "$DB_USER" </dev/null >/dev/null 2>&1 \
   || die "Postgres in the '$DB_SERVICE' container is not accepting connections"
 
 # Live worktrees -> the database names they own. Derived by calling the same
@@ -62,7 +62,8 @@ is_live() {
 }
 
 mapfile -t ALL < <(docker compose exec -T "$DB_SERVICE" psql -U "$DB_USER" -d postgres -Atc \
-  "select datname from pg_database where datname like 'the_greatest_test%' order by datname;" | tr -d '\r')
+  "select datname from pg_database where datname like 'the_greatest_test%' order by datname;" \
+  </dev/null | tr -d '\r')
 
 STALE=()
 for db in "${ALL[@]}"; do
@@ -84,16 +85,19 @@ printf '\nStale (worktree no longer exists):\n'
 IN_LIST="$(printf "'%s'," "${STALE[@]}")"
 docker compose exec -T "$DB_SERVICE" psql -U "$DB_USER" -d postgres -c \
   "select datname, pg_size_pretty(pg_database_size(datname)) as size
-     from pg_database where datname in (${IN_LIST%,}) order by datname;"
+     from pg_database where datname in (${IN_LIST%,}) order by datname;" </dev/null
 
 [ "$MODE" = "list" ] && exit 0
 
 printf '\n'
+# Every `docker compose exec -T` above redirects stdin from /dev/null. Without
+# that it forwards this script's stdin to the container and consumes the answer
+# to this prompt before read ever sees it.
 read -r -p "Drop these ${#STALE[@]} database(s)? [y/N] " reply
 case "$reply" in y|Y|yes|YES) ;; *) die "Aborted." ;; esac
 
 for db in "${STALE[@]}"; do
-  docker compose exec -T "$DB_SERVICE" psql -U "$DB_USER" -d postgres -v ON_ERROR_STOP=1 -q <<SQL
+  docker compose exec -T "$DB_SERVICE" psql -U "$DB_USER" -d postgres -v ON_ERROR_STOP=1 -q -o /dev/null <<SQL
 SELECT pg_terminate_backend(pid) FROM pg_stat_activity
  WHERE datname = '${db}' AND pid <> pg_backend_pid();
 DROP DATABASE IF EXISTS "${db}";
