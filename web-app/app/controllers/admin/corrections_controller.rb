@@ -16,6 +16,17 @@ class Admin::CorrectionsController < Admin::BaseController
 
   STATUSES = %w[pending resolved rejected].freeze
 
+  # Each domain's admin namespace names its own `resources :corrections` --
+  # books gets an `admin_books_` prefix, games an `admin_games_` prefix, and
+  # music's `namespace :admin, module: "admin/music"` carries no `as:` at all,
+  # so its helpers are the bare `admin_corrections_path` family. See
+  # `bin/rails routes -g corrections`.
+  ADMIN_PATHS = {
+    books: :admin_books_corrections_path,
+    music: :admin_corrections_path,
+    games: :admin_games_corrections_path
+  }.freeze
+
   def index
     # Defaults to pending. Legacy's index was every changeset ever, newest first,
     # which is a log rather than a queue.
@@ -35,9 +46,9 @@ class Admin::CorrectionsController < Admin::BaseController
     )
 
     if result.success?
-      redirect_to admin_books_correction_path(@correction), notice: "Correction applied."
+      redirect_to correction_path_for(@correction), notice: "Correction applied."
     else
-      redirect_to admin_books_correction_path(@correction),
+      redirect_to correction_path_for(@correction),
         alert: "Could not apply: #{result.errors.to_sentence}"
     end
   end
@@ -51,7 +62,7 @@ class Admin::CorrectionsController < Admin::BaseController
       )
     end
 
-    redirect_to admin_books_corrections_path, notice: "Correction rejected."
+    redirect_to corrections_index_path, notice: "Correction rejected."
   end
 
   # For a notes-only correction the admin acted on by hand -- there is nothing for
@@ -62,7 +73,7 @@ class Admin::CorrectionsController < Admin::BaseController
       resolution_notes: params[:resolution_notes].presence
     )
 
-    redirect_to admin_books_corrections_path, notice: "Correction marked resolved."
+    redirect_to corrections_index_path, notice: "Correction marked resolved."
   end
 
   def bulk_reject
@@ -78,11 +89,63 @@ class Admin::CorrectionsController < Admin::BaseController
       )
     end
 
-    redirect_to admin_books_corrections_path(status: params[:status]),
+    redirect_to corrections_index_path(status: params[:status]),
       notice: "Rejected #{count} #{"correction".pluralize(count)}."
   end
 
+  # This domain's corrections index -- the plural route each domain's admin
+  # namespace generates for `resources :corrections`.
+  def corrections_index_path(**options)
+    public_send(ADMIN_PATHS.fetch(current_domain.to_sym), **options)
+  end
+  helper_method :corrections_index_path
+
+  # Resolved from the CORRECTION's own domain, not current_domain -- same rule as
+  # domain_auth_parent below. In practice the two agree, because domain_scope
+  # already restricts what set_correction can load.
+  def correction_path_for(correction)
+    domain = Services::Corrections::TypeRegistry.domain_for(correction.correctable_type)
+    public_send(singular_correction_helper(domain), correction)
+  end
+  helper_method :correction_path_for
+
+  def apply_correction_path(correction)
+    public_send(:"apply_#{singular_correction_helper(current_domain.to_sym)}", correction)
+  end
+  helper_method :apply_correction_path
+
+  def reject_correction_path(correction)
+    public_send(:"reject_#{singular_correction_helper(current_domain.to_sym)}", correction)
+  end
+  helper_method :reject_correction_path
+
+  def resolve_correction_path(correction)
+    public_send(:"resolve_#{singular_correction_helper(current_domain.to_sym)}", correction)
+  end
+  helper_method :resolve_correction_path
+
+  def bulk_reject_corrections_index_path(**options)
+    public_send(:"bulk_reject_#{ADMIN_PATHS.fetch(current_domain.to_sym)}", **options)
+  end
+  helper_method :bulk_reject_corrections_index_path
+
+  # The record's own public show page, for the "View public page" link -- reuses
+  # the one lookup CorrectionsController already maintains rather than keeping a
+  # second copy that could drift from it.
+  def public_path_for(record)
+    public_send(CorrectionsController::PUBLIC_PATHS.fetch(record.class.name), slug: record.slug)
+  end
+  helper_method :public_path_for
+
   private
+
+  # "admin_books_corrections_path" -> "admin_books_correction_path" (and the
+  # music/games equivalents) -- the member-route singular for the plural index
+  # helper ADMIN_PATHS already names. delete_suffix, not delete_prefix: the
+  # music helper carries no domain infix at all.
+  def singular_correction_helper(domain)
+    ADMIN_PATHS.fetch(domain).to_s.delete_suffix("s_path") + "_path"
+  end
 
   def domain_scope
     ::Correction.where(correctable_type: Services::Corrections::TypeRegistry.types_for_domain(current_domain))

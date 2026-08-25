@@ -11,7 +11,7 @@
   </td>
   <td>
     <%= link_to correction.correctable&.title || "(deleted)",
-          admin_books_correction_path(correction), class: "link" %>
+          correction_path_for(correction), class: "link" %>
   </td>
   <td class="text-sm">
     <%= correction.correction_fields.map(&:field_name).map(&:humanize).to_sentence.presence || "—" %>

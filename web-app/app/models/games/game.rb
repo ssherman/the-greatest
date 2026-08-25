@@ -29,10 +29,21 @@
 class Games::Game < ApplicationRecord
   include Describable
   include SearchIndexable
+  include Correctable
 
   extend FriendlyId
 
   friendly_id :title, use: [:slugged, :finders]
+
+  # What a reader may propose a correction to. Deliberately absent: game_type is
+  # an internal enum a reader never sees, so a reader cannot know it is wrong.
+  #
+  # description is target: :description, not the games_games.description column
+  # -- that column is read by nothing and is scheduled for deletion, same as
+  # Books::Book; the displayed text lives in the descriptions table.
+  correctable_field :title, type: :string
+  correctable_field :release_year, type: :integer
+  correctable_field :description, type: :text, target: :description
 
   # Enums
   # Note: IGDB uses different numeric values - mapping is in IGDB provider

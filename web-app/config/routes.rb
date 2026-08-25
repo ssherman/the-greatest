@@ -47,6 +47,12 @@ Rails.application.routes.draw do
         constraints: {year: /\d{4}(s|-\d{4})?/, page: /\d+/}
       get "album/:slug", to: "music/albums#show", as: :album
 
+      # correctable_type comes from route defaults, never from a param: #new then
+      # has no user input to validate at all. Same shared controller as books and
+      # games.
+      get "album/:slug/suggest-correction", to: "corrections#new",
+        defaults: {correctable_type: "Music::Album"}, as: :music_album_correction
+
       # Song routes
       get "songs", to: "music/songs/ranked_items#index", as: :songs
       get "songs/page/:page", to: "music/songs/ranked_items#index", as: :songs_page, constraints: {page: /\d+/}
@@ -248,6 +254,20 @@ Rails.application.routes.draw do
       resources :categories do
         collection do
           get :search
+        end
+      end
+
+      # Shared controller, routed per domain -- same shape as descriptions and
+      # category items. The domain comes from the route, so the index can scope to
+      # this domain's correctable types.
+      resources :corrections, only: [:index, :show], controller: "/admin/corrections" do
+        member do
+          post :apply
+          post :reject
+          post :resolve
+        end
+        collection do
+          post :bulk_reject
         end
       end
     end
@@ -890,6 +910,20 @@ Rails.application.routes.draw do
           post :index_action
         end
       end
+
+      # Shared controller, routed per domain -- same shape as descriptions and
+      # category items. The domain comes from the route, so the index can scope to
+      # this domain's correctable types.
+      resources :corrections, only: [:index, :show], controller: "/admin/corrections" do
+        member do
+          post :apply
+          post :reject
+          post :resolve
+        end
+        collection do
+          post :bulk_reject
+        end
+      end
     end
 
     scope as: "games" do
@@ -922,6 +956,13 @@ Rails.application.routes.draw do
       get "video-games/:year/page/:page", to: "games/ranked_items#index", as: :video_games_by_year_page,
         constraints: {year: /\d{4}(s|-\d{4})?/, page: /\d+/}
       get "game/:slug", to: "games/games#show", as: :game
+
+      # correctable_type comes from route defaults, never from a param: #new then
+      # has no user input to validate at all. Same shared controller as books and
+      # music.
+      get "game/:slug/suggest-correction", to: "corrections#new",
+        defaults: {correctable_type: "Games::Game"}, as: :games_game_correction
+
       get "categories/:id", to: "games/categories#show", as: :games_category
       get "categories/:id/page/:page", to: "games/categories#show", as: :games_category_page, constraints: {page: /\d+/}
     end

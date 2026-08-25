@@ -18,10 +18,20 @@
 class Music::Album < ApplicationRecord
   include Describable
   include SearchIndexable
+  include Correctable
 
   extend FriendlyId
 
   friendly_id :title, use: [:slugged, :finders]
+
+  # What a reader may propose a correction to.
+  #
+  # description is target: :description, not the music_albums.description column
+  # -- that column is read by nothing and is scheduled for deletion, same as
+  # Books::Book; the displayed text lives in the descriptions table.
+  correctable_field :title, type: :string
+  correctable_field :release_year, type: :integer
+  correctable_field :description, type: :text, target: :description
 
   # Associations
   has_many :album_artists, -> { order(:position) }, class_name: "Music::AlbumArtist", dependent: :destroy

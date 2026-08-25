@@ -58,3 +58,21 @@ crime_rejected:
   resolved_by: admin_user
   resolved_at: <%= 1.day.ago.to_fs(:db) %>
   resolution_notes: Spam.
+
+# Out-of-domain data for the books admin fixtures above -- a Music::Album
+# correction and a Games::Game correction. Their entire purpose is to give the
+# cross-domain scoping tests (Admin::CorrectionsControllerTest,
+# AdminMailerTest) a real other-domain row to prove exclusion against: before
+# Task 16, books was the only correctable domain, so domain_scope could be
+# replaced by ::Correction.all and every test would still pass.
+dark_side_pending:
+  correctable: dark_side_of_the_moon (Music::Album)
+  user:
+  notes: The release year looks wrong to me.
+  status: 0
+
+breath_of_the_wild_pending:
+  correctable: breath_of_the_wild (Games::Game)
+  user:
+  notes: The release year looks wrong to me.
+  status: 0

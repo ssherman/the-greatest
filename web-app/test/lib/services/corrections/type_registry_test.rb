@@ -36,8 +36,12 @@ module Services
         assert_equal ["Books::Book"], TypeRegistry.types_for_domain(:books)
       end
 
-      test "lists nothing for a domain with no correctable types yet" do
-        assert_empty TypeRegistry.types_for_domain(:music)
+      # movies, not music: Task 16 wired Music::Album into Admin::DomainRouting::
+      # ENTITIES, so music no longer has an empty list here. movies has no entry
+      # in ENTITIES at all -- it is out of scope for corrections -- so it is the
+      # one domain guaranteed to stay empty.
+      test "lists nothing for a domain with no correctable types" do
+        assert_empty TypeRegistry.types_for_domain(:movies)
       end
     end
   end

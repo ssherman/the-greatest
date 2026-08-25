@@ -5,7 +5,7 @@
 
   <div role="tablist" class="tabs tabs-border">
     <% Admin::CorrectionsController::STATUSES.each do |status| %>
-      <%= link_to admin_books_corrections_path(status: status, q: params[:q]),
+      <%= link_to corrections_index_path(status: status, q: params[:q]),
             role: "tab",
             class: "tab #{"tab-active" if @status == status}",
             data: {testid: "status-tab-#{status}"} do %>
@@ -16,13 +16,13 @@
     <% end %>
   </div>
 
-  <%= form_with url: admin_books_corrections_path, method: :get, class: "flex gap-2" do %>
+  <%= form_with url: corrections_index_path, method: :get, class: "flex gap-2" do %>
     <%= hidden_field_tag :status, @status %>
     <%= text_field_tag :q, params[:q], placeholder: "Search notes", class: "input w-full max-w-xs" %>
     <%= submit_tag "Search", class: "btn" %>
   <% end %>
 
-  <%= form_with url: bulk_reject_admin_books_corrections_path, method: :post do %>
+  <%= form_with url: bulk_reject_corrections_index_path, method: :post do %>
     <%= hidden_field_tag :status, @status %>
     <div class="overflow-x-auto">
       <table class="table bg-base-100">

@@ -16,7 +16,7 @@
   <% if @record %>
     <div class="flex gap-2">
       <%= link_to "Open in admin", Admin::DomainRouting.path_for(@record), class: "btn btn-sm" %>
-      <%= link_to "View public page", book_path(slug: @record.slug), class: "btn btn-sm btn-ghost" %>
+      <%= link_to "View public page", public_path_for(@record), class: "btn btn-sm btn-ghost" %>
     </div>
   <% else %>
     <div class="alert alert-warning">The corrected record no longer exists.</div>
@@ -36,7 +36,7 @@
   </div>
 
   <% if @fields.any? && @record %>
-    <%= form_with url: apply_admin_books_correction_path(@correction), method: :post do %>
+    <%= form_with url: apply_correction_path(@correction), method: :post do %>
       <div class="card bg-base-100 shadow-md">
         <div class="card-body">
           <h2 class="card-title text-lg">Proposed changes</h2>
@@ -106,11 +106,11 @@
 
   <% if @correction.pending? %>
     <div class="flex flex-wrap gap-2">
-      <%= form_with url: resolve_admin_books_correction_path(@correction), method: :post do %>
+      <%= form_with url: resolve_correction_path(@correction), method: :post do %>
         <%= submit_tag "Mark resolved", class: "btn", data: {testid: "resolve-correction"} %>
       <% end %>
 
-      <%= form_with url: reject_admin_books_correction_path(@correction), method: :post, class: "flex gap-2" do %>
+      <%= form_with url: reject_correction_path(@correction), method: :post, class: "flex gap-2" do %>
         <%= text_field_tag :resolution_notes, nil, placeholder: "Reason (optional)", class: "input" %>
         <%= submit_tag "Reject", class: "btn btn-warning", data: {testid: "reject-correction"} %>
       <% end %>

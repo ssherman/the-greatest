@@ -43,6 +43,15 @@ module Games
       assert @botw.valid?
     end
 
+    test "declares its correctable fields in display order" do
+      assert_equal %w[title release_year description], ::Games::Game.correctable_field_names
+    end
+
+    test "does not expose the internal game_type enum or the doomed description column as a column target" do
+      assert_not_includes ::Games::Game.correctable_field_names, "game_type"
+      assert_equal :description, ::Games::Game.correctable_fields["description"].target
+    end
+
     test "should require title" do
       @botw.title = nil
       assert_not @botw.valid?

@@ -41,17 +41,49 @@ module Admin
     test "index reports counts for every status" do
       get admin_books_corrections_path
 
+      # Scoped to books' correctable types, not Correction.count -- now that a
+      # second domain exists (dark_side_pending is a pending Music::Album
+      # correction), the unscoped count would include a row this page never
+      # shows.
+      books_types = Services::Corrections::TypeRegistry.types_for_domain(:books)
       assert_select "[data-testid=status-count-pending]",
-        text: Correction.where(status: :pending).count.to_s
+        text: Correction.where(status: :pending, correctable_type: books_types).count.to_s
       assert_select "[data-testid=status-count-rejected]",
-        text: Correction.where(status: :rejected).count.to_s
+        text: Correction.where(status: :rejected, correctable_type: books_types).count.to_s
     end
 
+    # Genuinely non-vacuous as of Task 16: fixtures now include a pending
+    # Music::Album correction (dark_side_pending) and a pending Games::Game
+    # correction (breath_of_the_wild_pending), so this assertion would fail if
+    # domain_scope were replaced with ::Correction.all -- before a second
+    # correctable domain existed, books was the only kind of row there was to
+    # find, and this test could not have caught that regression.
     test "index scopes to this domain's correctable types" do
       get admin_books_corrections_path
 
       assert_not_empty row_values("data-correctable-type")
       assert_equal ["Books::Book"], row_values("data-correctable-type").uniq
+    end
+
+    # The session cookie from setup's sign-in does not carry across -- each
+    # domain is a genuinely separate host, so re-authenticating after host! is
+    # not optional here the way it would be for a subdomain switch.
+    test "index scopes to music's correctable types" do
+      host! "dev.thegreatestmusic.org"
+      sign_in_as(@admin, stub_auth: true)
+      get admin_corrections_path
+
+      assert_not_empty row_values("data-correctable-type")
+      assert_equal ["Music::Album"], row_values("data-correctable-type").uniq
+    end
+
+    test "index scopes to games' correctable types" do
+      host! "dev.thegreatest.games"
+      sign_in_as(@admin, stub_auth: true)
+      get admin_games_corrections_path
+
+      assert_not_empty row_values("data-correctable-type")
+      assert_equal ["Games::Game"], row_values("data-correctable-type").uniq
     end
 
     test "index searches notes" do
@@ -178,17 +210,31 @@ module Admin
       assert_equal %w[rejected rejected], Correction.where(id: ids).map(&:status)
     end
 
-    # This does not yet prove cross-domain exclusion: books_books(:got) is a
-    # Books::Book, which IS the current domain, and no other model includes
-    # Correctable yet, so there is no out-of-domain correction to construct.
-    # What this proves today is that an id with no matching row in the scope
-    # (999_999) does not raise. Real cross-domain coverage arrives once a
-    # second domain is wired up.
+    # books_books(:got) IS the current (books) domain, so this only proves that
+    # an id with no matching row in the scope (999_999) does not raise -- the
+    # real cross-domain proof is the test below.
     test "bulk reject tolerates an id with no matching row" do
       other = Correction.create!(correctable: books_books(:got), notes: "x")
       post bulk_reject_admin_books_corrections_path, params: {correction_ids: [other.id, 999_999]}
 
       assert_predicate other.reload, :rejected?
+    end
+
+    # THE cross-domain exclusion test: a Music::Album correction id, submitted
+    # to bulk_reject from the BOOKS admin. bulk_reject is a mass-write endpoint
+    # driven entirely by params[:correction_ids] with no set_correction
+    # before_action to catch a wrong id first -- domain_scope is the only thing
+    # standing between "select all pending" on one domain's queue and rejecting
+    # another domain's row it never rendered. Before Task 16 wired a second
+    # correctable domain, this could not be written: every Correction in the
+    # test database was a Books::Book correction, so even `::Correction.all`
+    # in place of domain_scope would have passed.
+    test "bulk reject does not touch a correction from another domain" do
+      other = corrections(:dark_side_pending)
+
+      post bulk_reject_admin_books_corrections_path, params: {correction_ids: [other.id]}
+
+      assert_predicate other.reload, :pending?
     end
 
     # games_editor_user has no DomainRole for books at all, so

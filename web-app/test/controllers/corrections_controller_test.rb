@@ -190,4 +190,91 @@ class CorrectionsControllerTest < ActionDispatch::IntegrationTest
       submit(website: "http://spam.example")
     end
   end
+
+  # Music and games mirror the books coverage above -- proof the shared
+  # controller works from a second and third domain, not just the one it was
+  # built against.
+  test "renders the form for a music album" do
+    host! "dev.thegreatestmusic.org"
+    album = music_albums(:dark_side_of_the_moon)
+
+    get music_album_correction_path(slug: album.slug)
+
+    assert_response :success
+  end
+
+  test "is publicly cacheable for a music album" do
+    host! "dev.thegreatestmusic.org"
+    album = music_albums(:dark_side_of_the_moon)
+
+    get music_album_correction_path(slug: album.slug)
+
+    assert_match(/public/, response.headers["Cache-Control"])
+    assert_match(/max-age=86400/, response.headers["Cache-Control"])
+  end
+
+  test "is not indexable for a music album" do
+    host! "dev.thegreatestmusic.org"
+    album = music_albums(:dark_side_of_the_moon)
+
+    get music_album_correction_path(slug: album.slug)
+
+    assert_select "meta[name=robots][content=?]", "noindex, follow"
+  end
+
+  test "creates a correction for a music album and redirects to the album" do
+    host! "dev.thegreatestmusic.org"
+    album = music_albums(:dark_side_of_the_moon)
+
+    assert_difference -> { Correction.count }, 1 do
+      post corrections_path, params: {
+        correctable_type: "Music::Album", correctable_id: album.id,
+        correction: {notes: "The release year is wrong"}
+      }
+    end
+
+    assert_redirected_to album_path(slug: album.slug)
+  end
+
+  test "renders the form for a game" do
+    host! "dev.thegreatest.games"
+    game = games_games(:breath_of_the_wild)
+
+    get games_game_correction_path(slug: game.slug)
+
+    assert_response :success
+  end
+
+  test "is publicly cacheable for a game" do
+    host! "dev.thegreatest.games"
+    game = games_games(:breath_of_the_wild)
+
+    get games_game_correction_path(slug: game.slug)
+
+    assert_match(/public/, response.headers["Cache-Control"])
+    assert_match(/max-age=86400/, response.headers["Cache-Control"])
+  end
+
+  test "is not indexable for a game" do
+    host! "dev.thegreatest.games"
+    game = games_games(:breath_of_the_wild)
+
+    get games_game_correction_path(slug: game.slug)
+
+    assert_select "meta[name=robots][content=?]", "noindex, follow"
+  end
+
+  test "creates a correction for a game and redirects to the game" do
+    host! "dev.thegreatest.games"
+    game = games_games(:breath_of_the_wild)
+
+    assert_difference -> { Correction.count }, 1 do
+      post corrections_path, params: {
+        correctable_type: "Games::Game", correctable_id: game.id,
+        correction: {notes: "The release year is wrong"}
+      }
+    end
+
+    assert_redirected_to game_path(slug: game.slug)
+  end
 end

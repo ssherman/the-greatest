@@ -122,12 +122,22 @@ class CorrectionsController < ApplicationController
     submitted.permit!.to_h
   end
 
-  # Hardcoded to books until there is a second correctable domain. Task 16 replaces
-  # this with a lookup; generalising it before there is a second case would be
-  # guessing at the shape.
+  # Where to send the submitter back to. There is no single root-relative show
+  # helper in this app -- four sites share one route file, so each domain names its
+  # own -- which is why this is a lookup rather than polymorphic_path.
+  PUBLIC_PATHS = {
+    "Books::Book" => :book_path,
+    "Music::Album" => :album_path,
+    "Games::Game" => :game_path
+  }.freeze
+
+  # fetch, not []: a correctable type with no public path is a wiring mistake, and
+  # it should raise in that domain's own tests rather than produce a `nil` redirect
+  # in production.
   def correctable_path
-    book_path(slug: @record.slug)
+    public_send(PUBLIC_PATHS.fetch(@correctable_type), slug: @record.slug)
   end
+  helper_method :correctable_path
 
   def submitted_message
     "Thanks — we've got your correction and we'll review it."

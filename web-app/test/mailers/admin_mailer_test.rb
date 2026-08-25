@@ -93,6 +93,21 @@ class AdminMailerTest < ActionMailer::TestCase
     assert_match(/The Greatest Books/, mail[:from].to_s)
   end
 
+  # Books is MailBranding's DEFAULT_DOMAIN fallback, so the test above alone
+  # cannot tell a correctly-resolved books domain from a resolution that fell
+  # through to nil -- it would pass either way. A music correction has no such
+  # cover: if TypeRegistry.domain_for silently returned nil here, MailBranding
+  # would fall back to books branding and this assertion would catch it.
+  test "new_correction is branded for a music record's domain, not books' fallback branding" do
+    mail = AdminMailer.new_correction(corrections(:dark_side_pending))
+
+    assert_match(/The Greatest Music/, mail[:from].to_s)
+    assert_no_match(/The Greatest Books/, mail[:from].to_s)
+    # admin_correction_url, not admin_books_correction_url -- music's admin
+    # namespace has no domain infix (see Admin::CorrectionsController::ADMIN_PATHS).
+    assert_match(%r{//dev\.thegreatestmusic\.org(:\d+)?/admin/corrections/\d+}, mail.body.encoded)
+  end
+
   test "new_correction replies to a signed-in submitter" do
     mail = AdminMailer.new_correction(corrections(:war_and_peace_pending))
 

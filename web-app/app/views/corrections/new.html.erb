@@ -1,5 +1,5 @@
 <%
-  content_for :page_title, "Suggest a correction to #{@record.title} | The Greatest Books"
+  content_for :page_title, "Suggest a correction to #{@record.title} | #{domain_settings[:name]}"
 %>
 
 <div class="max-w-2xl mx-auto space-y-6" data-controller="corrections--form"
@@ -8,7 +8,7 @@
   <div>
     <h1 class="text-2xl sm:text-3xl font-bold">Suggest a correction</h1>
     <p class="text-base-content/70 mt-2">
-      <%= link_to @record.title, book_path(slug: @record.slug), class: "link" %>
+      <%= link_to @record.title, correctable_path, class: "link" %>
     </p>
   </div>
 
@@ -79,7 +79,7 @@
     <div class="flex gap-2">
       <%= f.submit "Submit correction", class: "btn btn-primary",
             data: {testid: "correction-submit"} %>
-      <%= link_to "Cancel", book_path(slug: @record.slug), class: "btn btn-ghost" %>
+      <%= link_to "Cancel", correctable_path, class: "btn btn-ghost" %>
     </div>
   <% end %>
 </div>
