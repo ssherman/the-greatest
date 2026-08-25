@@ -38,6 +38,10 @@ class Correction < ApplicationRecord
   belongs_to :resolved_by, class_name: "User", optional: true
   has_many :correction_fields, dependent: :destroy
 
+  # For the admin review form, which submits per-field decisions, and for tests
+  # that build a correction and its fields in one call.
+  accepts_nested_attributes_for :correction_fields
+
   # No `approved` state. Legacy declared one alongside `rejected` and set neither
   # for two years; nothing sits between approving a field and writing it. `resolved`
   # means the admin acted -- by applying fields, or by fixing something the notes
