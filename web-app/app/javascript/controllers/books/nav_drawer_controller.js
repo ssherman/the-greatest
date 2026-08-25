@@ -19,7 +19,7 @@ import { Controller } from "@hotwired/stimulus"
 //      on .drawer-side handles the visual half; this handles the state.
 //
 // Forward navigation needs no help: Turbo replaces <body> with freshly parsed
-// HTML, and a morph refresh syncs the checkbox property from the new document.
+// HTML, which leaves the checkbox unchecked.
 const DESKTOP = "(min-width: 64rem)" // Tailwind `lg`
 
 export default class extends Controller {
@@ -77,7 +77,13 @@ export default class extends Controller {
   }
 
   // Single place that mirrors checkbox state onto the things CSS cannot reach:
-  // the label's aria-expanded, and `inert` on the background content.
+  // `inert` on the background content, and aria-expanded on the label. The
+  // label itself maps to no ARIA role, so aria-expanded on it is unsupported
+  // and most assistive tech ignores it -- the checkbox is what actually
+  // carries the disclosure semantics: it's focusable, and it announces with
+  // the label's accessible name ("Open navigation menu") plus its own checked
+  // state. The aria-expanded mirror here is belt-and-braces for the AT that
+  // does read it, not the mechanism.
   syncState() {
     const open = this.isOpen
 

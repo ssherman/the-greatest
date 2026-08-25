@@ -26,7 +26,14 @@ test.describe('Book page ratings and reviews', () => {
     await page.getByTestId('review-summary-line').click();
 
     await expect(page).toHaveURL(/#ratings-reviews$/);
-    await expect(page.locator('#ratings-reviews')).toBeInViewport();
+
+    // toBeInViewport() passes on ANY intersection, so it would pass even with
+    // the card's top -- and its heading -- hidden behind the sticky header.
+    // Compare edges instead, the way the sidebar-card test in
+    // nav-drawer.spec.ts does.
+    const nav = await page.locator('nav.navbar').boundingBox();
+    const card = await page.locator('#ratings-reviews').boundingBox();
+    expect(card!.y).toBeGreaterThanOrEqual(nav!.y + nav!.height);
   });
 
   test('reviews are listed newest first', async ({ page }) => {

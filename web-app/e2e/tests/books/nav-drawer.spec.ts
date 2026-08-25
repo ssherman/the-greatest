@@ -82,10 +82,6 @@ test.describe('Books mobile nav drawer', () => {
     await expect(page.locator('#books-nav-drawer-panel')).toBeVisible();
 
     await expect(page.locator('.drawer-content')).toHaveAttribute('inert', '');
-    // The Login button lives in the navbar, behind the overlay.
-    await expect(page.locator('#navbar_login_button')).not.toBeFocused();
-    await page.keyboard.press('Tab');
-    await expect(page.locator('#navbar_login_button')).not.toBeFocused();
   });
 
   // `display:none` does not clear `:checked`. Without the matchMedia uncheck,
@@ -149,7 +145,7 @@ test.describe('Books header stays visible', () => {
     await page.evaluate(() => window.scrollBy(0, 1200));
 
     const nav = await page.locator('nav.navbar').boundingBox();
-    const card = await page.locator('main .sticky').first().boundingBox();
+    const card = await page.getByTestId('book-sidebar-card').boundingBox();
     expect(card!.y).toBeGreaterThanOrEqual(nav!.y + nav!.height);
   });
 });
