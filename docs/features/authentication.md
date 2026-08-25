@@ -115,7 +115,8 @@ sequenceDiagram
 | `app/javascript/services/auth_providers/google_provider.js` | Google OAuth provider (singleton). Configures `GoogleAuthProvider` with profile/email scopes, initiates `signInWithRedirect()` |
 | `app/javascript/services/auth_providers/email_provider.js` | Email/password provider (singleton). Handles sign-up, sign-in, password reset, email verification. Maps Firebase error codes to user-friendly messages |
 | `app/javascript/services/auth_handlers/redirect_handler.js` | Handles OAuth redirect results on page load (singleton). Processes redirect auth result, handles account conflict errors |
-| `app/javascript/controllers/authentication_controller.js` | Stimulus controller for the auth UI. Manages multi-step email flow, Google sign-in button, navbar login/logout toggle, modal open/close, provider conflict detection |
+| `app/javascript/services/firebase_loader.js` | Injects the `firebase-auth` bundle's `<script>` tag on demand and memoises the load at module scope. Also holds the sign-in-hint helpers (`likelySignedIn`, `markSignedIn`, `markPendingRedirect`, ...) that decide whether to load Firebase eagerly on page load |
+| `app/javascript/controllers/authentication_controller.js` | Stimulus controller for the auth UI. Manages multi-step email flow, Google sign-in button, navbar login/logout toggle, modal open/close, provider conflict detection. Reaches Firebase only through its `this.firebase()` accessor (see JS Bundling below) |
 
 ### Frontend (ViewComponent)
 
@@ -145,16 +146,22 @@ sequenceDiagram
 
 ### JS Bundling
 
-Each domain has its own Rollup entry point that imports the auth services:
+The Firebase SDK (~32 KB gzipped) is NOT part of any domain's public bundle. It builds into its
+own bundle, from its own Rollup entry point, and is fetched by a plain injected `<script>` tag only
+when a page actually needs it:
 
-| File | Domain |
-|------|--------|
-| `app/javascript/application.js` | Books (default) |
-| `app/javascript/music.js` | Music |
-| `app/javascript/movies.js` | Movies |
-| `app/javascript/games.js` | Games |
-| `app/javascript/books.js` | Books |
-| `rollup.config.js` | Rollup bundler config (separate IIFE bundles per domain) |
+| File | Purpose |
+|------|---------|
+| `app/javascript/entrypoints/firebase_auth.js` | The ONLY module that imports Firebase or the auth provider/service singletons. Rollup builds it into `firebase-auth.js`, registered in `config/asset_bundles.json`, and assigns everything it exports to `window.__tgFirebase` |
+| `app/javascript/services/firebase_loader.js` | Injects `firebase-auth.js` via a `<script src>` tag built from `asset_path`, and memoises the in-flight load at module scope so a Turbo-cached `connect()` re-run does not inject it twice |
+| `app/javascript/controllers/authentication_controller.js` | Reaches Firebase ONLY via `await this.firebase()`, which resolves to `window.__tgFirebase` once `firebase_loader.js` has loaded it. Never imports a Firebase service or provider directly |
+| `config/asset_bundles.json` | Registry of every Rollup entry point, including `firebase-auth` and the four `<domain>-web` bundles |
+| `rollup.config.js` | Reads the registry and builds one self-contained IIFE bundle per entry (see `test/lint/asset_bundle_coverage_test.rb` and `test/lint/firebase_bundle_isolation_test.rb`, which guard this split) |
+
+A domain's `<domain>-web` bundle (`app/javascript/entrypoints/<domain>_web.js`) never imports
+`firebase_auth.js` or any of the modules it pulls in -- doing so statically would compile the whole
+Firebase SDK into that public bundle regardless of whether the page ever opens the login modal. See
+the Gotchas section below.
 
 ### Authorization (post-authentication)
 
@@ -212,9 +219,9 @@ To add a new Firebase auth provider (e.g., Apple, GitHub), changes are needed at
 
 ### Frontend
 1. **Create a new provider singleton** in `app/javascript/services/auth_providers/` following the pattern of `google_provider.js` or `email_provider.js`. Import the relevant Firebase auth method (e.g., `signInWithRedirect` for OAuth, direct methods for others).
-2. **Update the Stimulus controller** (`authentication_controller.js`) to add a new action method (e.g., `signInWithApple`) that calls the new provider.
+2. **Update the Stimulus controller** (`authentication_controller.js`) to add a new action method (e.g., `signInWithApple`) that calls the new provider through `await this.firebase()` -- never by importing the new provider module directly into the controller.
 3. **Update the widget template** (`widget_component.html.erb`) to add a new sign-in button wired to the Stimulus action.
-4. **Import the new provider** in each domain entry point (`application.js`, `music.js`, `movies.js`, `games.js`, `books.js`).
+4. **Import the new provider** in `app/javascript/entrypoints/firebase_auth.js` and add it to the `window.__tgFirebase` object it builds. This is the ONLY file that should import it -- see Gotchas below.
 
 ### Backend
 5. **Add the provider to the User enum** in `app/models/user.rb` if not already present. The enum is integer-backed so add new values at the end to avoid breaking existing data.
@@ -232,7 +239,7 @@ To add a new Firebase auth provider (e.g., Apple, GitHub), changes are needed at
 - Firebase uses `"google.com"` as `providerId` for OAuth but just `"password"` for email/password - don't assume a `.com` suffix for all providers.
 - OAuth providers use redirect-based flow (`signInWithRedirect`), which requires the `redirect_handler.js` to process results on page load.
 - The `external_provider` enum is integer-backed: `facebook=0, twitter=1, google=2, apple=3, password=4`. New values must be appended.
-- All domain Rollup entry points must import the new provider for it to be available across all domains.
+- A new provider goes into `app/javascript/entrypoints/firebase_auth.js` and is reached through `authentication_controller.js`'s `this.firebase()` accessor. It must NEVER be statically imported into a controller or service that ships in a `<domain>-web` or `admin` bundle -- doing so silently drags the entire Firebase SDK back into every public page. This has already happened once: a static import of `firebase_auth_service` into `authentication_controller.js` took `books-web.js` from ~50 KB to ~82 KB gzipped with the whole test suite still green. `test/lint/firebase_bundle_isolation_test.rb` guards against a repeat by checking each built bundle's sourcemap for Firebase source.
 
 ## Related Documentation
 - [Domain-Scoped Authorization](domain-scoped-authorization.md) - Authorization system (roles, permissions, policies)

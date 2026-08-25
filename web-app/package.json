@@ -5,6 +5,7 @@
     "@playwright/test": "^1.50.0",
     "@rollup/plugin-commonjs": "^29.0.0",
     "@rollup/plugin-node-resolve": "^16.0.1",
+    "@rollup/plugin-terser": "^1.0.0",
     "@tailwindcss/typography": "0.5.20",
     "dotenv": "^17.3.0",
     "rollup": "^4.44.1"
@@ -25,6 +26,7 @@
   },
   "dependencies": {
     "@hotwired/stimulus": "^3.2.2",
+    "@hotwired/turbo": "^8.0.23",
     "@hotwired/turbo-rails": "^8.0.16",
     "@tailwindcss/cli": "^4.1.11",
     "@tarekraafat/autocomplete.js": "^10.2.9",
