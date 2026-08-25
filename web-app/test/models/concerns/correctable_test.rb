@@ -24,6 +24,26 @@ class CorrectableTest < ActiveSupport::TestCase
     correctable_field :headline, type: :string
   end
 
+  # A second throwaway pair, related by inheritance this time. `ActiveSupport::Concern`
+  # runs `included do ... end` once per direct includer, so Dummy and OtherDummy above
+  # each get their own `class_attribute` default and can never share it -- that pair
+  # cannot catch a `correctable_field` that mutates the hash in place instead of
+  # reassigning it. Child never calls `include Correctable` itself; it inherits Parent's
+  # `correctable_fields` getter, so Child's first `correctable_field` call reads the
+  # exact same Hash object Parent holds. That is the shape that catches mutation.
+  class Parent
+    include ActiveModel::Model
+
+    def self.has_many(*, **) = nil
+    include Correctable
+
+    correctable_field :parent_field, type: :string
+  end
+
+  class Child < Parent
+    correctable_field :child_field, type: :string
+  end
+
   test "records declarations in declaration order" do
     assert_equal %w[name year blurb], Dummy.correctable_field_names
   end
@@ -63,12 +83,22 @@ class CorrectableTest < ActiveSupport::TestCase
     end
   end
 
-  # class_attribute's default object is shared by every including class. If
-  # correctable_field mutated it in place, declaring a field on one model would
-  # add it to every other correctable model in the app.
+  # Sibling classes: cheap, and documents intent, but cannot actually catch a mutating
+  # `correctable_field` -- see the comment on Parent/Child above for why. Kept anyway;
+  # the subclass test below is the one with teeth.
   test "one class's declarations do not leak into another" do
     assert_equal %w[headline], OtherDummy.correctable_field_names
     assert_not_includes Dummy.correctable_field_names, "headline"
+  end
+
+  # The hazard this guards against: class_attribute's default hash, once a subclass
+  # inherits it unmodified, IS the superclass's own object. `correctable_field`
+  # mutating it in place (`correctable_fields[name] = definition`) rather than
+  # reassigning (`self.correctable_fields = correctable_fields.merge(...)`) would add
+  # Child's field to Parent too.
+  test "a subclass's declarations do not leak into its superclass" do
+    assert_includes Child.correctable_field_names, "child_field"
+    assert_not_includes Parent.correctable_field_names, "child_field"
   end
 
   test "correction_applied is a no-op by default" do
