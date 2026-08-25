@@ -48,6 +48,20 @@ Rejected on measurement: splitting domain CSS into web/admin variants by excludi
 saves **1.75 KB gzip** (28.1 → 26.4). Not worth doubling the CSS build matrix. CSS
 stays at one file per domain.
 
+### Measured result
+
+Actual gzipped transfer per public page, measured after implementation:
+
+| Bundle | gzip |
+|---|---|
+| `books-web.js` | 49.0 KB |
+| `music-web.js` | 47.6 KB |
+| `games-web.js` | 47.6 KB |
+| `admin.js` | 44.3 KB |
+| `firebase-auth.js` (on demand only) | 34.6 KB |
+
+Before: 183,913 bytes gzipped on every page of every site.
+
 ## Constraint: Propshaft cannot rewrite ES import specifiers
 
 Propshaft 1.3.2's `Propshaft::Compiler::JsAssetUrls` rewrites only explicit
