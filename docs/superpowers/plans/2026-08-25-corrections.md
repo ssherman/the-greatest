@@ -4213,12 +4213,15 @@ This step is the one most likely to reveal that the abstraction did not fully ho
 
 - [ ] **Step 5: Add sidebar entries and robots rules**
 
-One `{label: "Corrections", icon: :chat, ...}` item in `CONFIGS[:music][:items]` and `CONFIGS[:games][:items]`, and a `resources :corrections, only: [:index, :show], controller: "/admin/corrections"` block (with the same `member`/`collection` routes as books) inside each domain's admin namespace. Two more `Disallow:` lines in `robots.txt`:
+One `{label: "Corrections", icon: :chat, ...}` item in `CONFIGS[:music][:items]` and `CONFIGS[:games][:items]`, and a `resources :corrections, only: [:index, :show], controller: "/admin/corrections"` block (with the same `member`/`collection` routes as books) inside each domain's admin namespace.
+
+Then fix and extend `robots.txt`. Task 8's books line is missing the leading `/*`, so it does not match the `/rc/:ranking_configuration_id/book/...` form of the same route — which is live, because the public route sits inside `scope "(/rc/:ranking_configuration_id)"`. The two rules already above it in that file carry a leading `/*` for exactly this reason. Replace the books line and add the other two in the same shape:
 
 ```
-Disallow: /album/*/suggest-correction
-Disallow: /game/*/suggest-correction
+Disallow: /*/suggest-correction
 ```
+
+One rule covers all three domains and both URL forms, so the `/album/` and `/game/` paths need no separate lines. Verify with `bin/rails routes -g suggest` that every generated path ends in `/suggest-correction`, so the single pattern really does cover them.
 
 - [ ] **Step 6: Add the "Suggest a correction" links**
 
