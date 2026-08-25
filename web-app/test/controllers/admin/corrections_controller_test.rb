@@ -66,6 +66,18 @@ module Admin
       assert_empty row_ids
     end
 
+    # ?q[]=x arrives as params[:q] == ["x"], not a String. sanitize_sql_like
+    # calls .gsub on whatever it's given, so an uncoerced Array raises
+    # NoMethodError -- a reachable 500 for any admin who double-submits a
+    # search param. Same shape this repo already guards against in
+    # Admin::StripeEventsController, Admin::DonationsController and
+    # Admin::MembershipsController.
+    test "index does not crash when q arrives as an array" do
+      get admin_books_corrections_path(status: "pending", q: ["x"])
+
+      assert_response :success
+    end
+
     test "show renders" do
       get admin_books_correction_path(corrections(:war_and_peace_pending))
 
