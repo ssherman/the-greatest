@@ -4406,6 +4406,8 @@ In `app/views/corrections/new.html.erb`, above the form:
 
 `e2e/tests/books/corrections.spec.ts` asserts on the never-rendered success text and would fail when run. Point both submission tests at the thanks URL instead. Also fix the misleading comment identified earlier: "Wait for the token fetch armed by focusin before submitting" describes a wait that does not happen — either make it wait on something real or delete the claim.
 
+**And fix a cache-flakiness hazard in `e2e/tests/books/admin/corrections.spec.ts`.** Its final assertion re-navigates to `/book/:slug` to confirm an applied correction is visible. That page is served `Cache-Control: public, max-age=86400`, and the test already fetched it moments earlier — so Chromium's disk cache can satisfy the second navigation with no network round-trip, showing pre-correction content. That produces a false FAILURE on working code, which is the expensive kind of flake: it cries wolf and trains people to ignore the spec. Either bust the cache for that one navigation (a unique query param is fine here — this is a test, not the flood-exposed path) or use a reload that bypasses cache. Do NOT simply delete the assertion; verifying the correction actually reached the public page is the strongest thing that spec does.
+
 - [ ] **Step 8: Add the robots rule**
 
 The thanks path is under `/*/suggest-correction`, so Task 16's single `Disallow: /*/suggest-correction` rule already covers it. Verify with `bin/rails routes -g suggest` rather than assuming.
