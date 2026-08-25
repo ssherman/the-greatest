@@ -1,0 +1,8 @@
+{
+  "books-web": "app/javascript/entrypoints/books_web.js",
+  "music-web": "app/javascript/entrypoints/music_web.js",
+  "games-web": "app/javascript/entrypoints/games_web.js",
+  "movies-web": "app/javascript/entrypoints/movies_web.js",
+  "admin": "app/javascript/entrypoints/admin.js",
+  "firebase-auth": "app/javascript/entrypoints/firebase_auth.js"
+}

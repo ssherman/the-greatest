@@ -71,8 +71,8 @@
           render-time allowlist strips any data-action a span might carry, so
           the binding has to sit on this wrapper. Drop either attribute and
           spoiler passages render permanently unreadable with no way to unblur
-          them. The controller is registered in the shared
-          app/javascript/controllers/index.js, which the admin layout already
+          them. The controller is registered in
+          app/javascript/manifests/admin.js, which the admin layout already
           loads -- no bundling change needed. %>
       <div class="review-body mt-6 max-w-[68ch] leading-relaxed [overflow-wrap:anywhere]"
            data-controller="reviews--spoiler"
