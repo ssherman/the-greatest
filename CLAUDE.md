@@ -64,12 +64,14 @@ which takes **hours**.
   restore books.
 
 **The test database is per-checkout.** `config/test_database_name.rb` names the test primary after
-the directory the checkout lives in, so each git worktree gets its own `the_greatest_test_<worktree>`
-(plus the `-0..N` databases `parallelize` fans it out to). The main checkout and CI keep the
-unchanged `the_greatest_test`. This is what makes it safe to run `bin/rails test` in several
-worktrees at once — before it, every worktree shared one set of databases and concurrent runs
-truncated each other's fixtures, producing phantom failures in a suite that was actually green.
-Override with `TEST_DATABASE` if you ever need to. Deleting a worktree leaves its ~500 MB behind:
+the directory the checkout lives in, so each git worktree gets its own
+`the_greatest_test_<worktree>_wt`, plus the `_0..N` databases `parallelize` fans it out to. The main
+checkout and CI keep the unchanged `the_greatest_test`. This is what makes it safe to run
+`bin/rails test` in several worktrees at once — before it every worktree shared one set of databases,
+and concurrent runs truncated each other's fixtures, producing phantom failures in a suite that was
+actually green. The `_wt` terminator is load-bearing: worker databases end in `_<digit>`, so without
+it worktree `feature-1` would claim the database worktree `feature` uses for its worker 1. Override
+with `TEST_DATABASE` if you need to. Deleting a worktree leaves ~500 MB behind —
 `bin/prune-worktree-test-dbs.sh` (`--list` to look first) drops the databases whose worktree is gone.
 
 ## Non-negotiable conventions

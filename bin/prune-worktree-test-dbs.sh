@@ -3,8 +3,8 @@
 # prune-worktree-test-dbs.sh — Drop test databases left behind by deleted worktrees.
 #
 # Why: config/test_database_name.rb names the test primary after the checkout it
-# runs in, so every git worktree gets its own `the_greatest_test_<worktree>` plus
-# the `-0..N` databases parallelize() fans it out to. Deleting a worktree does not
+# runs in, so every git worktree gets its own `the_greatest_test_<worktree>_wt`
+# plus the `_0..N` databases parallelize() fans it out to. Deleting a worktree does not
 # delete those, so they accumulate at roughly 500 MB per worktree.
 #
 # This finds every the_greatest_test* database whose worktree is gone and offers
@@ -67,8 +67,10 @@ mapfile -t ALL < <(docker compose exec -T "$DB_SERVICE" psql -U "$DB_USER" -d po
 STALE=()
 for db in "${ALL[@]}"; do
   [ -n "$db" ] || continue
-  # Strip the "-0".."-31" parallel worker suffix to get the checkout's base name.
-  is_live "${db%-[0-9]*}" || STALE+=("$db")
+  # Strip the "_0".."_31" parallel worker suffix to get the checkout's base name.
+  # A base name ends in "_wt" (or is the main checkout's), never in a digit, so
+  # this can never mistake a base name for a worker name.
+  is_live "${db%_[0-9]*}" || STALE+=("$db")
 done
 
 say "${#LIVE[@]} live worktree(s), ${#ALL[@]} the_greatest_test* database(s)."

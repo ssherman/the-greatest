@@ -26,7 +26,7 @@ class TestDatabaseNameTest < ActiveSupport::TestCase
   end
 
   test "a worktree gets a database name of its own" do
-    assert_equal "the_greatest_test_news_posts",
+    assert_equal "the_greatest_test_news_posts_wt",
       TestDatabaseName.for("#{WORKTREES}/news-posts/web-app")
   end
 
@@ -41,7 +41,7 @@ class TestDatabaseNameTest < ActiveSupport::TestCase
   end
 
   test "characters Postgres cannot take in a bare identifier are replaced" do
-    assert_equal "the_greatest_test_feature_x_1_2",
+    assert_equal "the_greatest_test_feature_x_1_2_wt",
       TestDatabaseName.for("#{WORKTREES}/feature.x-1 2/web-app")
   end
 
@@ -50,6 +50,20 @@ class TestDatabaseNameTest < ActiveSupport::TestCase
   test "a name too long for Postgres is shortened" do
     long = "a-very-long-worktree-branch-name-that-runs-well-past-the-limit"
     assert_operator TestDatabaseName.for("#{WORKTREES}/#{long}/web-app").bytesize, :<=, 60
+  end
+
+  # parallelize() appends "_0".."_31" to whatever we return, using an
+  # underscore -- the same character the slug uses for every character
+  # Postgres will not take bare. Without a terminator that cannot end a worker
+  # name, worktree "feature-1" would claim the database worktree "feature" is
+  # already using for its worker 1. Both are plausible branch names.
+  test "a worktree cannot claim another worktree's parallel worker database" do
+    feature = TestDatabaseName.for("#{WORKTREES}/feature/web-app")
+    refute_equal "#{feature}_1", TestDatabaseName.for("#{WORKTREES}/feature-1/web-app")
+  end
+
+  test "a worktree cannot claim the main checkout's parallel worker database" do
+    refute_equal "#{TestDatabaseName.for(MAIN)}_1", TestDatabaseName.for("#{WORKTREES}/1/web-app")
   end
 
   test "two over-long worktree names stay distinct after shortening" do
