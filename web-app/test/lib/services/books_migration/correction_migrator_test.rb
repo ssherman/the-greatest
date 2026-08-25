@@ -3,11 +3,6 @@ require "test_helper"
 module Services
   module BooksMigration
     class CorrectionMigratorTest < ActiveSupport::TestCase
-      # Only ActionDispatch::IntegrationTest gets this for free in this app (see
-      # test_helper.rb) -- ActiveSupport::TestCase does not. Needed for
-      # "sends no email" below.
-      include ActionMailer::TestHelper
-
       def legacy_row(overrides = {})
         {
           "id" => 9001,
@@ -44,7 +39,11 @@ module Services
         assert_equal Time.zone.parse("2025-01-02 03:04:05"), correction.created_at
       end
 
-      test "maps Book to Books::Book" do
+      # The migrator hardcodes correctable_type to "Books::Book" -- it never reads
+      # attrs["changeable_type"] -- because every legacy row's changeable_type is
+      # "Book" (verified against the real legacy data; there is no Author row).
+      # This pins that hardcoded literal, not a mapping the code actually performs.
+      test "hardcodes correctable_type to Books::Book" do
         migrate([legacy_row])
 
         assert_equal "Books::Book", ::Correction.find(9001).correctable_type
@@ -126,19 +125,25 @@ module Services
         assert_nil ::Correction.find(9001).user_id
       end
 
+      # The second call's result is asserted, not just the row count: Migrator#call
+      # rescues internally into {success: false, ...} without raising, so a re-run
+      # that blew up partway through would still leave count == 1 (from the first,
+      # successful call) and a row-count-only assertion would never see it.
       test "is idempotent" do
         migrate([legacy_row])
-        migrate([legacy_row])
+        result = migrate([legacy_row])
 
+        assert result[:success], result[:error]
         assert_equal 1, ::Correction.where(id: 9001).count
       end
 
-      # insert_all bypasses callbacks, so the 448-row run must not fire 448 emails.
-      test "sends no email" do
-        assert_emails 0 do
-          migrate([legacy_row])
-        end
-      end
+      # AdminMailer.new_correction is sent from CorrectionsController#create, never
+      # from a model callback, so insert_all bypassing callbacks is not what keeps
+      # this migrator quiet -- Correction.create! would send nothing either. The
+      # test with actual teeth is CorrectionTest#"sending the notification is not
+      # the model's responsibility" (test/models/correction_test.rb), which fails
+      # the moment anyone moves that send into an after_create. Nothing to assert
+      # here that test doesn't already cover.
 
       test "resets the primary key sequence so a new correction does not collide" do
         migrate([legacy_row])

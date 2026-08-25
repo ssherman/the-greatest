@@ -12,6 +12,12 @@ module Services
     # does not model. It uses insert_all directly for the same
     # callbacks-and-validations-bypassed reason -- notably, no correction email.
     #
+    # The parent and child inserts run inside one `Correction.transaction` (see
+    # upsert_row) so a process death between them can never leave a correction
+    # committed with no fields -- and the child insert is always attempted, even
+    # when the parent's insert_all reports zero rows (already migrated), so a
+    # re-run recovers a row that WAS left partial before this transaction existed.
+    #
     # ::Books, ::Correction and ::CorrectionField are root-anchored: Services::Books
     # exists, so a bare Books::Book here resolves to Services::Books::Book.
     class CorrectionMigrator < Migrator
@@ -22,7 +28,6 @@ module Services
         "first_year_published" => "first_published_year"
       }.freeze
 
-      LEGACY_STATUS_PENDING = 0
       LEGACY_STATUS_APPLIED = 3
 
       # PUBLIC, deliberately. Migrator.call is `new.call`, so a private #call here
@@ -69,20 +74,28 @@ module Services
         mappable, unmappable = partition_change_data(attrs["change_data"])
         applied = attrs["status"] == LEGACY_STATUS_APPLIED
 
-        inserted = ::Correction.insert_all(
-          [correction_row(attrs, unmappable, applied)],
-          unique_by: nil, record_timestamps: false
-        )
-        # Empty means ON CONFLICT DO NOTHING skipped it -- already migrated, so its
-        # children are too.
-        return if inserted.length.zero?
+        # One transaction for both inserts, and the child insert is ALWAYS attempted
+        # (not gated on the parent's insert_all reporting a row). Two separate
+        # statements with an early return on "parent reported 0 rows" -- the earlier
+        # version of this method -- meant a process death between them committed the
+        # parent with no children, and a later re-run's ON CONFLICT DO NOTHING on the
+        # parent (0 rows, "already migrated") skipped the children forever, with no
+        # way to recover. Children carry their own UNIQUE (correction_id, field_name)
+        # index and unique_by: nil, so re-attempting them is a no-op once they exist
+        # and a real recovery when they don't.
+        ::Correction.transaction do
+          ::Correction.insert_all(
+            [correction_row(attrs, unmappable, applied)],
+            unique_by: nil, record_timestamps: false
+          )
 
-        return if mappable.empty?
+          next if mappable.empty?
 
-        ::CorrectionField.insert_all(
-          mappable.map { |name, change| field_row(attrs, name, change, applied) },
-          unique_by: nil, record_timestamps: false
-        )
+          ::CorrectionField.insert_all(
+            mappable.map { |name, change| field_row(attrs, name, change, applied) },
+            unique_by: nil, record_timestamps: false
+          )
+        end
       end
 
       def correction_row(attrs, unmappable, applied)
