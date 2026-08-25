@@ -62,6 +62,7 @@ class Admin::Books::AuthorsController < Admin::Books::BaseController
   def execute_action
     fields_hash = params.except(:controller, :action, :id, :action_name, :author_ids)
 
+    validate_action_name!
     action_class = "Actions::Admin::Books::#{params[:action_name]}".constantize
     authorize @author, :destroy? if action_class.destructive?
     result = action_class.call(
@@ -83,6 +84,10 @@ class Admin::Books::AuthorsController < Admin::Books::BaseController
   end
 
   private
+
+  def allowed_action_names
+    %w[MergeAuthor]
+  end
 
   def load_authors_for_index
     if params[:q].present?

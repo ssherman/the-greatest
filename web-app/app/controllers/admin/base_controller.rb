@@ -64,4 +64,24 @@ class Admin::BaseController < ApplicationController
     @current_user ||= User.find_by(id: session[:user_id]) if session[:user_id].present?
   end
   helper_method :current_user
+
+  # The execute_action / bulk_action endpoints resolve an action class by
+  # interpolating params[:action_name] into a namespace and calling constantize.
+  # That is attacker-influenced input: `const_get` cannot escape the namespace, so
+  # the blast radius is bounded, but an unknown or malformed name raises an
+  # unrescued NameError -- a 500 for an authenticated admin, and a needlessly
+  # noisy one. Every such endpoint calls this first.
+  #
+  # allowed_action_names defaults to EMPTY, so a controller that adds one of those
+  # endpoints and forgets to declare its allowlist fails closed (every action
+  # rejected, loudly, in its own tests) rather than open.
+  def validate_action_name!
+    return if allowed_action_names.include?(params[:action_name])
+
+    raise ActionController::BadRequest, "Invalid action: #{params[:action_name]}"
+  end
+
+  def allowed_action_names
+    []
+  end
 end
