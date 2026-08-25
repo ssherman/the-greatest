@@ -22,39 +22,59 @@ class CorrectionsController < ApplicationController
   before_action :prevent_caching, only: [:create]
   before_action :set_record_from_params, only: [:create]
 
-  # Five an hour is far above any human correcting books they are reading, and it
-  # caps a script at 120/day per address rather than unbounded.
+  # Two buckets, because the two populations behave nothing alike.
+  #
+  # A signed-in contributor who has just discovered the feature works through a
+  # shelf in one sitting: in the migrated legacy data one user submitted 27
+  # corrections inside a single hour, and a flat 5/hour would have rejected 53
+  # real corrections from 2 users -- about 12% of the entire historical corpus,
+  # and specifically from the most engaged contributors. Their bucket is keyed on
+  # user id, so the cost of being wrong is bounded and attributable: a bad actor
+  # with an account can be banned, and every submission is moderated before it
+  # touches a record.
+  #
+  # Anonymous submitters share an IP bucket and cannot be identified, so they get
+  # a tighter cap. It is still well clear of legitimate burst behaviour -- 35% of
+  # legacy submissions were anonymous -- because nothing an anonymous flood
+  # produces is published; it costs triage time, which bulk-reject makes cheap.
   #
   # by: goes through visitor_ip, NOT request.remote_ip -- see the VisitorIp
   # concern. remote_ip in production is the Cloudflare edge IP, so keying on it
-  # would put every visitor in one bucket and lock out the whole site at the fifth
-  # submission of the hour.
+  # would put every visitor into one bucket and lock out the whole site.
   #
   # with: is not optional. Rails' default raises TooManyRequests, which renders an
   # HTML error body.
+  #
+  # Both declared AFTER set_record_from_params, and that ordering is load-bearing:
+  # filters run in declaration order and rate_limit installs its own before_action,
+  # so @record is already set when the with: lambda builds @fields and renders
+  # :new. Move either above that filter and a throttled request raises
+  # NoMethodError on nil instead of showing the rate-limit message.
   #
   # with: renders the form again instead of redirecting: the redirect target
   # (the record's show page) is edge-cached with skip_session_for_caching, so a
   # flash set on a redirect there is never read, let alone shown. Rendering here
   # is uncached (prevent_caching runs before this filter) and can carry @error
   # straight into the response.
-  #
-  # Declared AFTER set_record_from_params, and that ordering is load-bearing:
-  # filters run in declaration order and rate_limit installs its own before_action,
-  # so @record is already set when the with: lambda builds @fields and renders
-  # :new. Move this above that filter and a throttled request raises
-  # NoMethodError on nil instead of showing the rate-limit message.
-  rate_limit to: 5, within: 1.hour,
-    by: -> { current_user&.id || visitor_ip },
-    with: -> {
-      @indexable = false
-      @fields = @record.class.correctable_fields.values
-      @error = "Thanks — you've sent us several corrections just now. Please try again shortly."
-      render :new, status: :too_many_requests
-    },
+  SIGNED_IN_RATE = 60
+  ANONYMOUS_RATE = 20
+  RATE_WINDOW = 1.hour
+
+  rate_limit to: SIGNED_IN_RATE, within: RATE_WINDOW,
+    by: -> { current_user.id },
+    with: -> { render_rate_limited },
     store: Rails.application.config.x.rate_limit_store,
-    name: "corrections-create",
-    only: [:create]
+    name: "corrections-create-signed-in",
+    only: [:create],
+    if: -> { current_user.present? }
+
+  rate_limit to: ANONYMOUS_RATE, within: RATE_WINDOW,
+    by: -> { visitor_ip },
+    with: -> { render_rate_limited },
+    store: Rails.application.config.x.rate_limit_store,
+    name: "corrections-create-anonymous",
+    only: [:create],
+    unless: -> { current_user.present? }
 
   def new
     # Load-bearing on music and games, where the helper renders "index, follow"
@@ -163,6 +183,15 @@ class CorrectionsController < ApplicationController
     public_send(PUBLIC_PATHS.fetch(@correctable_type), slug: @record.slug)
   end
   helper_method :correctable_path
+
+  # Shared by both rate-limit buckets so a throttled submitter sees the same
+  # thing either way, and so the two declarations cannot drift apart.
+  def render_rate_limited
+    @indexable = false
+    @fields = @record.class.correctable_fields.values
+    @error = "Thanks — you've sent us several corrections just now. Please try again shortly."
+    render :new, status: :too_many_requests
+  end
 
   # Same lookup shape as PUBLIC_PATHS, one level down: where #thanks lives for
   # each correctable type. Kept separate from PUBLIC_PATHS (rather than deriving

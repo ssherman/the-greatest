@@ -269,10 +269,10 @@ class CorrectionsControllerTest < ActionDispatch::IntegrationTest
     assert_match(/no-store/, response.headers["Cache-Control"])
   end
 
-  test "rate limits by ip and re-renders the form with an inline error rather than raising" do
+  test "rate limits an anonymous submitter by ip and re-renders the form with an inline error rather than raising" do
     Rails.application.config.x.rate_limit_store.clear
 
-    6.times do
+    (CorrectionsController::ANONYMOUS_RATE + 1).times do
       post corrections_path,
         params: {correctable_type: "Books::Book", correctable_id: @book.id, correction: {notes: "wrong"}},
         headers: {"CF-Connecting-IP" => "198.51.100.9"}
@@ -281,6 +281,55 @@ class CorrectionsControllerTest < ActionDispatch::IntegrationTest
     assert_response :too_many_requests
     assert_match(/no-store/, response.headers["Cache-Control"])
     assert_select "[data-testid=correction-error]", "Thanks — you've sent us several corrections just now. Please try again shortly."
+  end
+
+  # The anonymous cap must not apply to a signed-in contributor. In the migrated
+  # legacy data one user submitted 27 corrections inside a single hour, so a
+  # shared cap set for anonymous traffic would reject real work from exactly the
+  # people the feature exists for.
+  test "a signed-in submitter is not held to the anonymous cap" do
+    Rails.application.config.x.rate_limit_store.clear
+    sign_in_as(users(:regular_user), stub_auth: true)
+
+    (CorrectionsController::ANONYMOUS_RATE + 1).times do |i|
+      post corrections_path,
+        params: {correctable_type: "Books::Book", correctable_id: @book.id, correction: {notes: "wrong #{i}"}},
+        headers: {"CF-Connecting-IP" => "198.51.100.9"}
+    end
+
+    assert_response :redirect
+  end
+
+  test "rate limits a signed-in submitter at the higher cap" do
+    Rails.application.config.x.rate_limit_store.clear
+    sign_in_as(users(:regular_user), stub_auth: true)
+
+    (CorrectionsController::SIGNED_IN_RATE + 1).times do |i|
+      post corrections_path,
+        params: {correctable_type: "Books::Book", correctable_id: @book.id, correction: {notes: "wrong #{i}"}}
+    end
+
+    assert_response :too_many_requests
+    assert_select "[data-testid=correction-error]", "Thanks — you've sent us several corrections just now. Please try again shortly."
+  end
+
+  # Two signed-in users must not share a bucket -- the signed-in limiter keys on
+  # user id, so one heavy contributor cannot throttle another.
+  test "one signed-in submitter's usage does not throttle another" do
+    Rails.application.config.x.rate_limit_store.clear
+    sign_in_as(users(:regular_user), stub_auth: true)
+
+    CorrectionsController::SIGNED_IN_RATE.times do |i|
+      post corrections_path,
+        params: {correctable_type: "Books::Book", correctable_id: @book.id, correction: {notes: "wrong #{i}"}}
+    end
+    assert_response :redirect
+
+    sign_in_as(users(:admin_user), stub_auth: true)
+    post corrections_path,
+      params: {correctable_type: "Books::Book", correctable_id: @book.id, correction: {notes: "different user"}}
+
+    assert_response :redirect
   end
 
   # The cached page ships no usable token. null_session must accept the write as
