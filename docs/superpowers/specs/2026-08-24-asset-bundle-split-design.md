@@ -118,8 +118,8 @@ manifests under `app/javascript/manifests/`:
 - **`music_web.js`** — web_shared + `year-range-modal`
 - **`games_web.js`** — web_shared + `year-range-modal`
 - **`admin.js`** — `admin--markdown-preview`, `admin--search`, `autocomplete`,
-  `auto-dismiss`, `clipboard-copy`, `review-filter`, `reviews--spoiler`,
-  `shared-modal`, `wizard-step`
+  `auto-dismiss`, `clipboard-copy`, `conditional-field`, `metadata-editor`,
+  `modal-form`, `review-filter`, `reviews--spoiler`, `shared-modal`, `wizard-step`
 
 `bin/rails stimulus:manifest:update` is retired for this app; `controllers/index.js`
 is deleted.
@@ -128,14 +128,28 @@ is deleted.
 
 Hand-split manifests recreate the failure already present in the codebase:
 `auto-dismiss` is referenced by three admin views and registered nowhere, so admin
-flash messages have silently never auto-dismissed. Three registered controllers
-(`conditional-field`, `metadata-editor`, `modal-form`) are referenced by no view at
-all.
+flash messages have silently never auto-dismissed.
+
+**Correction, made during implementation.** This spec originally also called
+`conditional-field`, `metadata-editor` and `modal-form` dead and had them deleted.
+That was wrong, and the mistake is instructive enough to keep on the record: they are
+**live admin-only controllers**, reached through Rails' tag-builder hash idiom —
+`data: { controller: "metadata-editor modal-form" }` — in 2, 4 and 47 files
+respectively. That form renders to `data-controller="…"` at runtime but never appears
+as that literal string in source, so a scan of the attribute alone reported them as
+referenced by nothing. They were deleted on that evidence and restored when a review
+caught it.
+
+The guard therefore scans **both idioms** — the literal `data-controller="…"`
+attribute and `controller: "…"` inside a Rails `data:` hash — skipping tokens
+containing `/` so `url_for(controller: "admin/games")` cannot register a phantom. It
+also strips comments before scanning registrations, so a commented-out
+`application.register(…)` no longer counts as registered.
 
 A new `test/lint/stimulus_manifest_test.rb` — alongside the three lint tests already
-in `test/lint/` — scans every `data-controller="…"` token in `app/views/**` and
-`app/components/**` and enforces five rules, all decidable from the file tree with
-no guessing about render sites:
+in `test/lint/` — scans `app/views/**` and `app/components/**` for both idioms and
+enforces five rules, all decidable from the file tree with no guessing about render
+sites:
 
 1. Referenced anywhere ⇒ present in at least one manifest
 2. Present in a manifest ⇒ referenced somewhere
@@ -150,8 +164,10 @@ so a controller registered in `web_shared` counts as present in all three web
 manifests for rules 3–5. The test must follow the import graph, not read each
 manifest file in isolation.
 
-Rules 1 and 2 would have caught all four existing defects. The allowlist is empty
-and should stay that way; when the test fails, fix the manifest.
+Rule 1 would have caught `auto-dismiss`. Rule 2 is the one that misfired on the
+three live controllers above until the scanner learned the second idiom — a guard is
+only as good as its notion of "referenced". The allowlist is empty and should stay
+that way; when the test fails, fix the manifest.
 
 Note rule 4's necessity: `AutocompleteComponent` lives at
 `app/components/autocomplete_component.rb` (root, not admin) but is rendered by both
