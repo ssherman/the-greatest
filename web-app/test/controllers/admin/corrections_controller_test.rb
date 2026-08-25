@@ -178,18 +178,81 @@ module Admin
       assert_equal %w[rejected rejected], Correction.where(id: ids).map(&:status)
     end
 
-    test "bulk reject ignores ids outside this domain" do
+    # This does not yet prove cross-domain exclusion: books_books(:got) is a
+    # Books::Book, which IS the current domain, and no other model includes
+    # Correctable yet, so there is no out-of-domain correction to construct.
+    # What this proves today is that an id with no matching row in the scope
+    # (999_999) does not raise. Real cross-domain coverage arrives once a
+    # second domain is wired up.
+    test "bulk reject tolerates an id with no matching row" do
       other = Correction.create!(correctable: books_books(:got), notes: "x")
       post bulk_reject_admin_books_corrections_path, params: {correction_ids: [other.id, 999_999]}
 
       assert_predicate other.reload, :rejected?
     end
 
+    # games_editor_user has no DomainRole for books at all, so
+    # authenticate_admin! (which runs before require_domain_write!) redirects
+    # first -- this proves domain access is required, not that write access is.
+    # The "view access but no write access" tests below are what exercise
+    # require_domain_write! itself.
     test "a domain user without write access cannot apply" do
       sign_in_as(users(:games_editor_user), stub_auth: true)
       correction = corrections(:war_and_peace_pending)
 
       post apply_admin_books_correction_path(correction), params: {accepted: {}}
+
+      assert_response :redirect
+      assert_predicate correction.reload, :pending?
+    end
+
+    # books_viewer_user has a books DomainRole at viewer level, so it clears
+    # authenticate_admin! (can_access_domain?) and reaches require_domain_write!,
+    # which viewer permission fails (can_write_in_domain? is editor|moderator|
+    # admin only). Without require_domain_write! on :apply, this would 200 and
+    # write the field.
+    test "a domain viewer (read access, no write) cannot apply" do
+      sign_in_as(users(:books_viewer_user), stub_auth: true)
+      correction = corrections(:war_and_peace_pending)
+
+      post apply_admin_books_correction_path(correction),
+        params: {accepted_fields: ["first_published_year"], accepted: {first_published_year: "1867"}}
+
+      assert_response :redirect
+      assert_predicate correction.reload, :pending?
+      assert_equal 1869, books_books(:war_and_peace).reload.first_published_year
+    end
+
+    test "a domain viewer (read access, no write) cannot reject" do
+      sign_in_as(users(:books_viewer_user), stub_auth: true)
+      correction = corrections(:war_and_peace_pending)
+
+      post reject_admin_books_correction_path(correction), params: {resolution_notes: "no"}
+
+      assert_response :redirect
+      assert_predicate correction.reload, :pending?
+      assert_nil correction.resolution_notes
+    end
+
+    test "a domain viewer (read access, no write) cannot resolve" do
+      sign_in_as(users(:books_viewer_user), stub_auth: true)
+      correction = corrections(:war_and_peace_notes_only)
+
+      post resolve_admin_books_correction_path(correction)
+
+      assert_response :redirect
+      assert_predicate correction.reload, :pending?
+      assert_nil correction.resolved_by
+    end
+
+    # bulk_reject has no before_action :set_correction (it works on a set of
+    # ids, not params[:id]), which makes its require_domain_write! guard the
+    # easiest of the four to lose by accident.
+    test "a domain viewer (read access, no write) cannot bulk reject" do
+      sign_in_as(users(:books_viewer_user), stub_auth: true)
+      correction = corrections(:war_and_peace_pending)
+
+      post bulk_reject_admin_books_corrections_path, params: {correction_ids: [correction.id]}
 
       assert_response :redirect
       assert_predicate correction.reload, :pending?

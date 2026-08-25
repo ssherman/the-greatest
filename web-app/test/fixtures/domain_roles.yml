@@ -46,3 +46,9 @@ games_moderator:
   user: games_moderator_user
   domain: 1  # games
   permission_level: 2  # moderator
+
+# Domain-scoped books viewer: can_access_domain? but NOT can_write_in_domain?
+books_viewer:
+  user: books_viewer_user
+  domain: 2  # books
+  permission_level: 0  # viewer

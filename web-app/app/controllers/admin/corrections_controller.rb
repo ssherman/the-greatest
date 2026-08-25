@@ -47,7 +47,7 @@ class Admin::CorrectionsController < Admin::BaseController
       @correction.correction_fields.update_all(status: ::CorrectionField.statuses[:rejected])
       @correction.update!(
         status: :rejected, resolved_by: current_user, resolved_at: Time.current,
-        resolution_notes: resolution_notes_param
+        resolution_notes: params[:resolution_notes].presence
       )
     end
 
@@ -59,14 +59,14 @@ class Admin::CorrectionsController < Admin::BaseController
   def resolve
     @correction.update!(
       status: :resolved, resolved_by: current_user, resolved_at: Time.current,
-      resolution_notes: resolution_notes_param
+      resolution_notes: params[:resolution_notes].presence
     )
 
     redirect_to admin_books_corrections_path, notice: "Correction marked resolved."
   end
 
   def bulk_reject
-    scope = domain_scope.where(id: Array(params[:correction_ids]), status: :pending)
+    scope = domain_scope.where(id: params[:correction_ids], status: :pending)
     count = scope.count
 
     ::Correction.transaction do
@@ -121,7 +121,7 @@ class Admin::CorrectionsController < Admin::BaseController
   # permit! is safe: the applier checks every field name against the record's own
   # declaration, so restating an allowlist here would be the same list written twice.
   def accepted_params
-    names = Array(params[:accepted_fields]).map(&:to_s)
+    names = Array(params[:accepted_fields])
     return {} if names.empty?
 
     # is_a? check, not just .present?: a crafted request can send `accepted=foo`
@@ -140,12 +140,5 @@ class Admin::CorrectionsController < Admin::BaseController
     return value unless value.is_a?(Array) && value.size == 1
 
     value.first.to_s.split(",")
-  end
-
-  # .to_s first: a crafted request can send resolution_notes as a nested hash
-  # instead of the plain text field the form always sends, and this keeps that
-  # from landing an ActionController::Parameters object in a text column.
-  def resolution_notes_param
-    params[:resolution_notes].to_s.presence
   end
 end
