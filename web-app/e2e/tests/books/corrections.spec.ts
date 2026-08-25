@@ -49,6 +49,13 @@ test.describe('Suggest a correction', () => {
     await expect(page.getByText(/we've got it/i)).toBeVisible();
   });
 
+  // UNVERIFIED NOTE (not run: port 3000 belonged to another worktree when the
+  // final review fixes landed). The name for a row added here now comes from the
+  // list element's data-input-name attribute rather than a literal inside
+  // form_controller.js -- the admin review form drives the same controller with a
+  // different name (accepted[<field>][]). The attribute is set in
+  // app/views/corrections/new.html.erb; if this test ever fails on the count
+  // assertion, check that attribute first.
   test('an alternate title row can be added and removed', async ({ page }) => {
     await page.goto('/book/war-and-peace/suggest-correction');
 

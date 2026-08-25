@@ -49,7 +49,8 @@
 
         <% if definition.type == :string_array %>
           <label class="label" for="correction_fields_<%= definition.name %>"><%= definition.label %></label>
-          <div data-corrections--form-target="list" data-field="<%= definition.name %>" class="space-y-2">
+          <div data-corrections--form-target="list" data-field="<%= definition.name %>"
+               data-input-name="correction[fields][<%= definition.name %>][]" class="space-y-2">
             <% Array(current).each do |value| %>
               <div class="join w-full">
                 <%= text_field_tag "correction[fields][#{definition.name}][]", value,
@@ -64,15 +65,20 @@
             Add <%= definition.label.singularize.downcase %>
           </button>
 
+        <%# maxlength mirrors the notes textarea above and the server-side caps in
+            Services::Corrections::Submission. It is a courtesy, not the control:
+            the browser is not the thing being defended against here. %>
         <% elsif definition.type == :text %>
           <label class="label" for="correction_fields_<%= definition.name %>"><%= definition.label %></label>
           <%= text_area_tag "correction[fields][#{definition.name}]", current, rows: 6,
-                id: "correction_fields_#{definition.name}", class: "textarea w-full" %>
+                id: "correction_fields_#{definition.name}", class: "textarea w-full",
+                maxlength: Correction::MAX_TEXT_VALUE_LENGTH %>
 
         <% else %>
           <label class="label" for="correction_fields_<%= definition.name %>"><%= definition.label %></label>
           <%= text_field_tag "correction[fields][#{definition.name}]", current,
                 id: "correction_fields_#{definition.name}", class: "input w-full",
+                maxlength: Correction::MAX_FIELD_VALUE_LENGTH,
                 inputmode: (definition.type == :integer ? "numeric" : nil) %>
         <% end %>
 

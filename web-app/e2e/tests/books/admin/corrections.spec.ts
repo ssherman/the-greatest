@@ -9,6 +9,15 @@ import { test, expect } from '@playwright/test';
 // Both have no subtitle in the migrated corpus (verified with
 // `bin/rails runner` before writing this file), so the marker text below is
 // unambiguously new content, not a coincidental match.
+// UNVERIFIED NOTE (not run: port 3000 belonged to another worktree when the
+// final review fixes landed). Nothing in this file changed, and nothing in it
+// needed to: the correction URLs below never carried an /rc/<id> prefix, and the
+// prefix has since been removed from the routes entirely, so these paths are
+// still the only ones that resolve. The review form's ARRAY fields
+// (alternate_titles) now render one input per element instead of one
+// comma-joined input -- no test here touches an array field, and the string
+// field this spec does drive (#accepted_subtitle) is unchanged. That change is
+// covered by Admin::CorrectionsControllerTest, not here.
 const APPLY_BOOK = '/book/nightmare-abbey';
 const REJECT_BOOK = '/book/war-and-peace';
 const SUBTITLE_MARKER = 'A Gothic Satire [e2e-corrections-spec]';

@@ -14,6 +14,19 @@ class Admin::CorrectionsController < Admin::BaseController
   before_action :set_correction, only: [:show, :apply, :reject, :resolve]
   before_action :require_domain_write!, only: [:apply, :reject, :resolve, :bulk_reject]
 
+  # apply does not need this -- Services::Corrections::Applier refuses a
+  # non-pending correction itself, and its refusal is the same string. bulk_reject
+  # does not need it either: its scope already carries `status: :pending`, so a
+  # non-pending id simply is not in the set.
+  #
+  # reject and resolve had neither. A stale show page -- bfcache, or a second tab
+  # left open -- still renders the review controls, so clicking Reject on a
+  # correction that was APPLIED minutes ago flipped it to `rejected` and
+  # update_all marked its `applied` field rows `rejected` too, while the record
+  # kept every value that had been written to it. The audit trail then said
+  # nothing was ever applied.
+  before_action :ensure_pending!, only: [:reject, :resolve]
+
   STATUSES = %w[pending resolved rejected].freeze
 
   # Each domain's admin namespace names its own `resources :corrections` --
@@ -168,6 +181,16 @@ class Admin::CorrectionsController < Admin::BaseController
     @correction = domain_scope.find(params[:id])
   end
 
+  # Same destination and same "Could not <verb>: <reason>" shape as apply's
+  # failure branch, off the one string Applier already owns -- action_name is
+  # "reject" or "resolve", so the three paths cannot drift apart in wording.
+  def ensure_pending!
+    return if @correction.pending?
+
+    redirect_to correction_path_for(@correction),
+      alert: "Could not #{action_name}: #{Services::Corrections::Applier::ALREADY_RESOLVED}"
+  end
+
   # Authorize against the corrected RECORD's domain, not the request host --
   # same rule as Admin::DescriptionsController.
   def domain_auth_parent
@@ -192,16 +215,17 @@ class Admin::CorrectionsController < Admin::BaseController
     # sends, and .permit! is not defined on String. Same shape as the params[:q]
     # array hazard in filtered_scope -- guard the shape, not just presence.
     submitted = params[:accepted].is_a?(ActionController::Parameters) ? params[:accepted].permit!.to_h : {}
-    submitted.slice(*names).transform_values { |value| normalize_accepted(value) }
-  end
 
-  # An array field is edited as ONE comma-separated input, so it arrives as
-  # ["a, b"] -- which ValueCaster would faithfully turn into a single-element
-  # array containing a comma. Splitting here keeps the review form to one input
-  # per field instead of a repeatable list the admin has to manage.
-  def normalize_accepted(value)
-    return value unless value.is_a?(Array) && value.size == 1
-
-    value.first.to_s.split(",")
+    # No normalisation. An array field is edited as one input PER ELEMENT (see
+    # show.html.erb), so it arrives already split and ValueCaster only has to
+    # strip and drop blanks. There used to be a normalize_accepted here that
+    # split a single-element array on "," -- because the form rendered array
+    # fields as one comma-joined input -- and since the form always joined, the
+    # size == 1 branch always fired: applying ["Good Night, Mr. Tom"] wrote
+    # ["Good Night", "Mr. Tom"] to books_books.alternate_titles, silently, and
+    # from there into the search index. 4 of the 49 migrated alternate_titles
+    # proposals contain an intra-title comma. A separator cannot be chosen safely
+    # for free text; one input per element removes the need for one.
+    submitted.slice(*names)
   end
 end

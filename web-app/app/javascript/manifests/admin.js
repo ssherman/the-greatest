@@ -25,6 +25,13 @@ application.register("clipboard-copy", ClipboardCopyController)
 import ConditionalFieldController from "../controllers/conditional_field_controller"
 application.register("conditional-field", ConditionalFieldController)
 
+// Shared with the public correction form: the admin review form edits an array
+// proposal through the same repeatable add/remove list, so it drives the same
+// controller. Only the list actions are used here -- the token-fetch half is
+// wired from a focusin action the admin markup does not declare.
+import Corrections__FormController from "../controllers/corrections/form_controller"
+application.register("corrections--form", Corrections__FormController)
+
 import MetadataEditorController from "../controllers/metadata_editor_controller"
 application.register("metadata-editor", MetadataEditorController)
 

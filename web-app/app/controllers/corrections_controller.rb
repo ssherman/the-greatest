@@ -57,9 +57,10 @@ class CorrectionsController < ApplicationController
     only: [:create]
 
   def new
-    # The books layout emits "noindex, follow" unless @indexable is truthy, so nil
-    # would already do it. Explicit, because "not indexed" here is a decision, not
-    # an accident of a default.
+    # Load-bearing on music and games, where the helper renders "index, follow"
+    # unless @indexable is explicitly false. Books::DefaultHelper defaults the
+    # other way, so on books this line changes nothing -- which is exactly why the
+    # books "is not indexable" test cannot fail and the music/games ones can.
     @indexable = false
     @fields = @record.class.correctable_fields.values
   end
@@ -99,6 +100,7 @@ class CorrectionsController < ApplicationController
   # PRG success message can be shown without a flash -- see the comment on the
   # #create redirect above.
   def thanks
+    # Set separately from #new, and for the same reason -- see the comment there.
     @indexable = false
   end
 

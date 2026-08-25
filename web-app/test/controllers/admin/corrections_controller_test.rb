@@ -158,7 +158,9 @@ module Admin
       assert_equal "War & Peace, Revised", books_books(:war_and_peace).reload.title
     end
 
-    test "apply splits a comma-joined array field" do
+    # One input PER ELEMENT, so a multi-element array arrives as a multi-element
+    # array and nothing has to be split back apart.
+    test "apply writes one array element per submitted input" do
       correction = ::Correction.create!(correctable: books_books(:war_and_peace),
         correction_fields_attributes: [{field_name: "alternate_titles",
                                         old_value: ["Voyna i mir"],
@@ -166,9 +168,72 @@ module Admin
 
       post apply_admin_books_correction_path(correction),
         params: {accepted_fields: ["alternate_titles"],
-                 accepted: {alternate_titles: ["Voyna i mir, War & Peace"]}}
+                 accepted: {alternate_titles: ["", "Voyna i mir", "War & Peace"]}}
 
       assert_equal ["Voyna i mir", "War & Peace"], books_books(:war_and_peace).reload.alternate_titles
+    end
+
+    # THE regression test for the comma-joining defect. The review form used to
+    # render an array field as ONE comma-joined input and split it back on ",", so
+    # a title that legitimately contains a comma was silently torn in two and
+    # written to books_books.alternate_titles -- which then feeds the search index.
+    #
+    # Not a hypothetical: 4 of the 49 alternate_titles proposals in the migrated
+    # corpus contain an intra-title comma (corrections 20, 57, 126 and 134 --
+    # "Good Night, Mr. Tom", "It's Me, Anna", "Moby Dick; or, The Whale" /
+    # "The Whale", "Kim Ji-young, Born 1982"), so roughly 8% of future submissions
+    # will be shaped like this. The pre-existing test used "Voyna i mir, War &
+    # Peace", which really IS two titles, so it could never see the bug.
+    # Posts the ONE-element array deliberately: that is the exact shape the old
+    # normalize_accepted split on "," and the exact shape the form used to send
+    # for a single-element proposal. Applying it must store the value whole.
+    test "apply preserves a comma that belongs inside a single array value" do
+      correction = ::Correction.create!(correctable: books_books(:war_and_peace),
+        correction_fields_attributes: [{field_name: "alternate_titles",
+                                        old_value: [],
+                                        new_value: ["Good Night, Mr. Tom"]}])
+
+      post apply_admin_books_correction_path(correction),
+        params: {accepted_fields: ["alternate_titles"],
+                 accepted: {alternate_titles: ["Good Night, Mr. Tom"]}}
+
+      assert_equal ["Good Night, Mr. Tom"], books_books(:war_and_peace).reload.alternate_titles
+    end
+
+    # The always-present blank element the form emits ahead of the list is what
+    # makes "remove every row" mean "clear the field" rather than "this field was
+    # never accepted" -- without it the browser sends no accepted[<name>] key at
+    # all and the applier rejects the row instead of applying it.
+    test "apply clears an array field when every input was removed" do
+      correction = ::Correction.create!(correctable: books_books(:war_and_peace),
+        correction_fields_attributes: [{field_name: "alternate_titles",
+                                        old_value: ["Voyna i mir"],
+                                        new_value: ["Voyna i mir", "War & Peace"]}])
+
+      post apply_admin_books_correction_path(correction),
+        params: {accepted_fields: ["alternate_titles"], accepted: {alternate_titles: [""]}}
+
+      assert_empty books_books(:war_and_peace).reload.alternate_titles
+      assert_predicate correction.reload.correction_fields.first, :applied?
+    end
+
+    # The review form must render an array proposal as one input per element. A
+    # single comma-joined input cannot represent a value containing the separator,
+    # which is the defect the test above guards on the write side.
+    test "the review form renders one input per array element" do
+      correction = ::Correction.create!(correctable: books_books(:war_and_peace),
+        correction_fields_attributes: [{field_name: "alternate_titles",
+                                        old_value: [],
+                                        new_value: ["Good Night, Mr. Tom", "The Whale"]}])
+
+      get admin_books_correction_path(correction)
+
+      inputs = css_select("input[name='accepted[alternate_titles][]'][type=text]")
+      assert_equal ["Good Night, Mr. Tom", "The Whale"], inputs.map { |input| input["value"] }
+
+      # ...preceded by the always-present blank element the "clear the field"
+      # test above relies on.
+      assert_select "input[type=hidden][name='accepted[alternate_titles][]'][value='']"
     end
 
     test "apply reports validation errors without changing anything" do
@@ -191,6 +256,37 @@ module Admin
       assert_equal "Not supported by any source", correction.resolution_notes
       assert_equal 1869, books_books(:war_and_peace).reload.first_published_year
       assert correction.correction_fields.all?(&:rejected?)
+    end
+
+    # A stale show page -- bfcache, or a second tab left open on a correction
+    # somebody has since applied -- still renders the Reject button. Before the
+    # pending? guard, clicking it flipped the correction to `rejected` AND
+    # update_all rewrote its `applied` field rows to `rejected`, while the record
+    # kept every value the apply had written. The audit trail then claimed nothing
+    # had been applied, which is the one thing it exists to be right about.
+    test "reject refuses a correction that is already resolved and leaves the audit trail alone" do
+      correction = corrections(:crime_resolved)
+
+      post reject_admin_books_correction_path(correction), params: {resolution_notes: "from a stale tab"}
+
+      correction.reload
+      assert_predicate correction, :resolved?
+      assert_predicate correction_fields(:crime_subtitle_applied).reload, :applied?
+      assert_nil correction.resolution_notes
+      assert_redirected_to admin_books_correction_path(correction)
+      assert_match(/already been resolved or rejected/, flash[:alert])
+    end
+
+    test "resolve refuses a correction that is already rejected" do
+      correction = corrections(:crime_rejected)
+
+      post resolve_admin_books_correction_path(correction), params: {resolution_notes: "from a stale tab"}
+
+      correction.reload
+      assert_predicate correction, :rejected?
+      assert_equal "Spam.", correction.resolution_notes
+      assert_redirected_to admin_books_correction_path(correction)
+      assert_match(/already been resolved or rejected/, flash[:alert])
     end
 
     test "resolve closes a notes-only correction fixed by hand" do

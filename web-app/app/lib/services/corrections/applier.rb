@@ -13,6 +13,13 @@ module Services
     class Applier
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
+      # Named so Admin::CorrectionsController's reject/resolve guards can say the
+      # same thing this service says. All three write paths refuse a non-pending
+      # correction for the same reason -- a stale show page, from bfcache or a
+      # second tab -- and an admin who hits one should not be able to tell which
+      # of the three it was by the wording.
+      ALREADY_RESOLVED = "This correction has already been resolved or rejected"
+
       def self.call(correction:, accepted:, admin:)
         new(correction: correction, accepted: accepted || {}, admin: admin).call
       end
@@ -25,7 +32,7 @@ module Services
 
       def call
         unless @correction.pending?
-          return failure(["This correction has already been resolved or rejected"])
+          return failure([ALREADY_RESOLVED])
         end
 
         ::Correction.transaction do

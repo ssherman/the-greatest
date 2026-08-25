@@ -71,9 +71,17 @@ export default class extends Controller {
     const row = document.createElement("div")
     row.className = "join w-full"
 
+    // The input name comes from the list element, never from a literal here.
+    // Two callers post different shapes: the public form posts
+    // correction[fields][<field>][] and the admin review form posts
+    // accepted[<field>][]. Reading it from the markup that already declares it
+    // is what lets one controller serve both without the two drifting.
+    const inputName = list.dataset.inputName
+    if (!inputName) return
+
     const input = document.createElement("input")
     input.type = "text"
-    input.name = `correction[fields][${field}][]`
+    input.name = inputName
     input.className = "input join-item w-full"
 
     const button = document.createElement("button")

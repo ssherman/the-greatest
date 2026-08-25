@@ -77,8 +77,44 @@
                     </td>
                     <td>
                       <% if definition.type == :string_array %>
-                        <%= text_field_tag "accepted[#{field.field_name}][]", Array(field.new_value).join(", "),
-                              class: "input input-sm w-full", disabled: !@correction.pending? %>
+                        <%# One input PER ELEMENT, never one comma-joined input. A
+                            joined input cannot represent a value that contains the
+                            separator: "Good Night, Mr. Tom" went in as one title
+                            and came back out as two, written straight onto the
+                            record. Same repeatable-list shape, and the same
+                            corrections--form Stimulus controller, as the public
+                            form in app/views/corrections/new.html.erb -- one
+                            implementation, not two. %>
+                        <div data-controller="corrections--form">
+                          <%# Always submitted, always blank. Without it, removing
+                              every row sends no accepted[<field>] key at all, which
+                              the applier reads as "not accepted" and REJECTS --
+                              there would be no way to clear a list. ValueCaster
+                              drops the blank. %>
+                          <%= hidden_field_tag "accepted[#{field.field_name}][]", "", id: nil %>
+                          <div data-corrections--form-target="list"
+                               data-field="<%= field.field_name %>"
+                               data-input-name="accepted[<%= field.field_name %>][]"
+                               class="space-y-1">
+                            <% Array(field.new_value).each do |value| %>
+                              <div class="join w-full">
+                                <%= text_field_tag "accepted[#{field.field_name}][]", value,
+                                      id: nil, class: "input join-item w-full",
+                                      disabled: !@correction.pending? %>
+                                <button type="button" class="btn join-item"
+                                        data-action="corrections--form#removeListItem"
+                                        <%= "disabled" unless @correction.pending? %>>Remove</button>
+                              </div>
+                            <% end %>
+                          </div>
+                          <% if @correction.pending? %>
+                            <button type="button" class="btn btn-sm mt-2"
+                                    data-field="<%= field.field_name %>"
+                                    data-action="corrections--form#addListItem">
+                              Add <%= definition.label.singularize.downcase %>
+                            </button>
+                          <% end %>
+                        </div>
                       <% elsif definition.type == :text %>
                         <%= text_area_tag "accepted[#{field.field_name}]", field.new_value, rows: 4,
                               class: "textarea w-full", disabled: !@correction.pending? %>
