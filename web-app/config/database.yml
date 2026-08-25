@@ -36,10 +36,19 @@ development:
 # Warning: The database defined as "test" will be erased and
 # re-generated from your development database when you run "rake".
 # Do not set this db to the same as development or production.
+#
+# The test primary is named after the checkout it is running in, so that each
+# git worktree gets its own databases instead of every worktree sharing one set
+# and truncating each other's fixtures. The main checkout and CI both resolve to
+# the unchanged "the_greatest_test". See config/test_database_name.rb.
+#
+# Rails.root, not __dir__: this is evaluated as ERB, where the file the code
+# came from is not something to rely on.
+<% require Rails.root.join("config/test_database_name").to_s %>
 test:
   primary:
     <<: *default
-    database: the_greatest_test
+    database: <%= ENV.fetch("TEST_DATABASE") { TestDatabaseName.for(Rails.root) } %>
   legacy_books:
     <<: *default
     database: <%= ENV.fetch("LEGACY_BOOKS_TEST_DATABASE", "the_greatest_books_legacy_test") %>

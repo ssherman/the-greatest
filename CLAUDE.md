@@ -63,6 +63,19 @@ which takes **hours**.
 - `bin/refresh-dev-db.sh` restores music/games/movies from the production backup. It does **not**
   restore books.
 
+**The test database is per-checkout.** `config/test_database_name.rb` names the test primary after
+the directory the checkout lives in, so each git worktree gets its own
+`the_greatest_test_<worktree>_<digest>_wt` plus the `_0..N` databases `parallelize` fans it out to.
+The main checkout and CI keep the unchanged `the_greatest_test`. This is what makes it safe to run
+`bin/rails test` in several worktrees at once — before it every worktree shared one set of databases,
+and concurrent runs truncated each other's fixtures, producing phantom failures in a suite that was
+actually green. Two parts of that name are load-bearing: the digest, because slugging is lossy and
+`feature-x`/`feature_x` would otherwise share a database; and the `_wt` terminator, because worker
+databases end in `_<digit>`, so without it worktree `feature-1` would claim the database worktree
+`feature` uses for its worker 1. Override with `TEST_DATABASE` if you need to — the prune script
+leaves any name it did not derive alone. Deleting a worktree leaves ~165 MB behind:
+`bin/prune-worktree-test-dbs.sh` (`--list` to look first) drops the databases whose worktree is gone.
+
 ## Non-negotiable conventions
 
 - **Use Rails generators** — never hand-create models/controllers/jobs/components. Generators create
