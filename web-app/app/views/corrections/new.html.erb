@@ -3,7 +3,8 @@
 %>
 
 <div class="max-w-2xl mx-auto space-y-6" data-controller="corrections--form"
-     data-corrections--form-token-url-value="<%= correction_token_path %>">
+     data-corrections--form-token-url-value="<%= correction_token_path %>"
+     data-action="focusin->corrections--form#ensureToken">
   <div>
     <h1 class="text-2xl sm:text-3xl font-bold">Suggest a correction</h1>
     <p class="text-base-content/70 mt-2">
