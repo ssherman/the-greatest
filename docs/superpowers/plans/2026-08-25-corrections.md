@@ -4283,6 +4283,150 @@ git commit -m "Wire corrections for music and games"
 
 ---
 
+## Task 17: Give the submitter feedback
+
+**Files:**
+- Modify: `app/controllers/corrections_controller.rb`, `app/views/corrections/new.html.erb`, `config/routes.rb`, `public/robots.txt`
+- Create: `app/views/corrections/thanks.html.erb`
+- Modify: `e2e/tests/books/corrections.spec.ts`
+- Test: `test/controllers/corrections_controller_test.rb`
+
+**Why this task exists.** The public flow currently tells the visitor nothing on any path. Verified: **no public layout renders flash** — `grep -rn "flash" app/views/layouts/` excluding admin returns nothing, for books, music, games and movies alike. So three messages are dead code:
+
+1. `#create`'s success `notice:` — the visitor submits and is silently bounced back to the book page.
+2. The rate limit's `with:` `alert:`.
+3. `#create`'s validation-failure `flash.now[:alert]` on `render :new` — submit an empty form, get the form back with no explanation. The worst of the three, because it looks broken.
+
+**Adding a flash partial to the layouts is NOT the fix.** The success redirect targets the book page, which is edge-cached with `skip_session_for_caching`. The session is never read there, so a flash cannot survive the redirect — and a cached copy would show one visitor's message to every other visitor. It is also a pre-existing platform gap affecting every public controller in the app, which is outside this feature's scope.
+
+**Interfaces:**
+- Consumes: everything from Tasks 8–10.
+- Produces: `GET /book/:slug/suggest-correction/thanks` → `corrections#thanks` (cacheable, static, `@indexable = false`).
+
+- [ ] **Step 1: Write the failing tests**
+
+```ruby
+  test "a successful submission redirects to the thanks page" do
+    submit
+
+    assert_redirected_to books_book_correction_thanks_path(slug: @book.slug)
+  end
+
+  test "the thanks page renders and is cacheable" do
+    get books_book_correction_thanks_path(slug: @book.slug)
+
+    assert_response :success
+    assert_match(/public/, response.headers["Cache-Control"])
+  end
+
+  test "the thanks page is not indexable" do
+    get books_book_correction_thanks_path(slug: @book.slug)
+
+    assert_select "meta[name=robots][content=?]", "noindex, follow"
+  end
+
+  # The whole point of this task: a rejected submission must SAY why, in the
+  # response body, not via a flash no layout renders.
+  test "a submission with nothing in it explains itself in the page" do
+    post corrections_path, params: {
+      correctable_type: "Books::Book", correctable_id: @book.id, correction: {notes: ""}
+    }
+
+    assert_response :unprocessable_entity
+    assert_select "[data-testid=correction-error]", /Tell us what's wrong/
+  end
+
+  test "a throttled submission explains itself in the page" do
+    Rails.application.config.x.rate_limit_store.clear
+
+    6.times do
+      post corrections_path,
+        params: {correctable_type: "Books::Book", correctable_id: @book.id, correction: {notes: "wrong"}},
+        headers: {"CF-Connecting-IP" => "198.51.100.11"}
+    end
+
+    assert_response :too_many_requests
+    assert_select "[data-testid=correction-error]", /try again/i
+  end
+```
+
+- [ ] **Step 2: Run them to verify they fail**
+
+```bash
+cd web-app
+bin/rails test test/controllers/corrections_controller_test.rb
+```
+
+Expected: FAIL — no thanks route, no `correction-error` element.
+
+- [ ] **Step 3: Add the route**
+
+Beside the existing suggest-correction route, inside the books domain constraint:
+
+```ruby
+    get "book/:slug/suggest-correction/thanks", to: "corrections#thanks",
+      defaults: {correctable_type: "Books::Book"}, as: :books_book_correction_thanks
+```
+
+- [ ] **Step 4: Change the controller**
+
+`#create`'s success branch redirects to the thanks path instead of the record, and drops the `notice:`. The rate limit's `with:` renders the form with an inline error at `:too_many_requests` instead of redirecting with an `alert:`. The validation branch keeps `render :new` but sets `@error` instead of `flash.now[:alert]`. Add:
+
+```ruby
+  # Cacheable and static -- identical for every visitor, so it costs the origin
+  # nothing under a flood, unlike a session-backed flash.
+  def thanks
+    @indexable = false
+  end
+```
+
+with `before_action :set_record, only: [:new, :thanks]` and `cache_for_show_page, only: [:new, :thanks]`.
+
+The honeypot path redirects to the same thanks page — a bot must not be able to tell it was discarded.
+
+- [ ] **Step 5: Render the error in the view**
+
+In `app/views/corrections/new.html.erb`, above the form:
+
+```erb
+<% if @error.present? %>
+  <div role="alert" class="alert alert-error" data-testid="correction-error">
+    <%= @error %>
+  </div>
+<% end %>
+```
+
+`role="alert"` so it is announced to a screen reader, not merely visible.
+
+- [ ] **Step 6: Write the thanks view**
+
+`app/views/corrections/thanks.html.erb` — a heading, one line thanking the submitter and saying it will be reviewed, and a link back to the record. No form, no session dependency.
+
+- [ ] **Step 7: Fix the E2E spec**
+
+`e2e/tests/books/corrections.spec.ts` asserts on the never-rendered success text and would fail when run. Point both submission tests at the thanks URL instead. Also fix the misleading comment identified earlier: "Wait for the token fetch armed by focusin before submitting" describes a wait that does not happen — either make it wait on something real or delete the claim.
+
+- [ ] **Step 8: Add the robots rule**
+
+The thanks path is under `/*/suggest-correction`, so Task 16's single `Disallow: /*/suggest-correction` rule already covers it. Verify with `bin/rails routes -g suggest` rather than assuming.
+
+- [ ] **Step 9: Prove the error test is not vacuous**
+
+Delete the `data-testid="correction-error"` block from the view. Confirm both the validation and rate-limit tests go RED. Restore.
+
+- [ ] **Step 10: Run everything and commit**
+
+```bash
+cd web-app
+bin/rails test
+bundle exec standardrb
+bin/rails test test/lint/daisyui_v4_classes_test.rb
+git add -A
+git commit -m "Give correction submitters visible feedback"
+```
+
+---
+
 ## Final verification
 
 - [ ] **Full suite and lint**
