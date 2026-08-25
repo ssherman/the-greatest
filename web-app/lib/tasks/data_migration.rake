@@ -38,6 +38,17 @@ namespace :data_migration do
     pp Services::BooksMigration::EditionIsbnIdentifierMigrator.call
   end
 
+  # EditionIsbnIdentifierMigrator deliberately folds edition ISBNs and ASINs UP to
+  # the work level, so a fresh migration leaves editions with legacy Amazon
+  # metadata and no edition-level identifiers. Amazon enrichment matches editions
+  # by exactly those identifiers -- without this step it would create a duplicate
+  # edition for every one of the ~148,000 legacy rows, and there is no books
+  # record-merge tooling to undo it. Part of :all so a rebuild cannot forget it.
+  desc "Backfill edition-level Amazon identifiers (ASIN/ISBN/EAN) from legacy metadata"
+  task edition_amazon_identifiers: :environment do
+    pp Services::Books::EditionIdentifierBackfill.call
+  end
+
   desc "Migrate legacy categories into Books::Category (fresh ids + map; preserves slug + parent)"
   task categories: :environment do
     pp Services::BooksMigration::CategoryMigrator.call
@@ -245,7 +256,7 @@ namespace :data_migration do
   # a development rebuild through this task silently produced an empty news
   # section.
   desc "Run all Phase-1 migrators in dependency order"
-  task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers,
+  task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers, :edition_amazon_identifiers,
     :categories, :category_items, :book_attributes, :book_type_categories, :countries,
     :book_countries, :external_links, :lists, :list_items, :ranking_configurations,
     :ranked_lists, :penalties, :list_penalties, :user_lists, :user_list_items,

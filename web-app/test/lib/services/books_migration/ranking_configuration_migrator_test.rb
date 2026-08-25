@@ -80,8 +80,8 @@ class Services::BooksMigration::RankingConfigurationMigratorTest < ActiveSupport
   end
 
   test "sets the mapped list ids directly" do
-    primary = Books::List.create!(name: "Primary Mapped")
-    secondary = Books::List.create!(name: "Secondary Mapped")
+    primary = ::Books::List.create!(name: "Primary Mapped")
+    secondary = ::Books::List.create!(name: "Secondary Mapped")
     result = run_migrator([legacy(9005, "primary_mapped_list_id" => primary.id, "secondary_mapped_list_id" => secondary.id)])
     assert result[:success], result[:error]
     rc = find_new(9005)

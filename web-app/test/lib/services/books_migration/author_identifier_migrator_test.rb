@@ -8,7 +8,7 @@ class Services::BooksMigration::AuthorIdentifierMigratorTest < ActiveSupport::Te
   end
 
   test "creates a stripped openlibrary id on the author" do
-    author = Books::Author.create!(name: "OL Author")
+    author = ::Books::Author.create!(name: "OL Author")
     run_migrator([{"id" => author.id, "ol_author_id" => "/authors/OL9100206A"}])
     idf = Identifier.find_by(identifiable: author)
     assert_equal "books_author_openlibrary_id", idf.identifier_type
@@ -16,14 +16,14 @@ class Services::BooksMigration::AuthorIdentifierMigratorTest < ActiveSupport::Te
   end
 
   test "skips authors with no ol_author_id" do
-    author = Books::Author.create!(name: "No OL Author")
+    author = ::Books::Author.create!(name: "No OL Author")
     assert_no_difference -> { Identifier.count } do
       run_migrator([{"id" => author.id, "ol_author_id" => nil}])
     end
   end
 
   test "is idempotent" do
-    author = Books::Author.create!(name: "Idem OL Author")
+    author = ::Books::Author.create!(name: "Idem OL Author")
     rows = [{"id" => author.id, "ol_author_id" => "/authors/OL1A"}]
     run_migrator(rows)
     assert_no_difference -> { Identifier.count } do

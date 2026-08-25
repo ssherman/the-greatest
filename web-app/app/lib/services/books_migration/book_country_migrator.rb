@@ -37,7 +37,7 @@ module Services
       end
 
       def target_model
-        Books::BookCountry
+        ::Books::BookCountry
       end
 
       def unique_by
@@ -45,7 +45,7 @@ module Services
       end
 
       def preload_context
-        @country_ids = Books::Country.pluck(:id).to_set
+        @country_ids = ::Books::Country.pluck(:id).to_set
         @seen = Set.new
       end
 
@@ -64,7 +64,7 @@ module Services
       end
 
       def finalize
-        Books::BookCountry.connection.execute(<<~SQL)
+        ::Books::BookCountry.connection.execute(<<~SQL)
           UPDATE books_countries c
           SET book_count = (
             SELECT COUNT(*) FROM books_book_countries bc WHERE bc.country_id = c.id

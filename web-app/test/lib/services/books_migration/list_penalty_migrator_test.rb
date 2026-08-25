@@ -2,7 +2,7 @@ require "test_helper"
 
 class Services::BooksMigration::ListPenaltyMigratorTest < ActiveSupport::TestCase
   setup do
-    @list = Books::List.create!(name: "LP List")
+    @list = ::Books::List.create!(name: "LP List")
     @static_penalty = Global::Penalty.create!(name: "Voters: not critics, authors, or experts")
     @dynamic_penalty = Global::Penalty.create!(name: "Voters: Voter Count", dynamic_type: :number_of_voters)
     LegacyIdMap.record(model: "Penalty", legacy_id: 500, new_id: @static_penalty.id)

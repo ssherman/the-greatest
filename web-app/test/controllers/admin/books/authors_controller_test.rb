@@ -253,6 +253,75 @@ module Admin
         get admin_books_author_path(books_authors(:king))
         assert_response :success
       end
+
+      # Execute Action
+
+      test "admin can merge one author into another" do
+        ::Books::CalculateAuthorRankingsJob.stubs(:perform_async)
+        sign_in_as(@admin_user, stub_auth: true)
+        target = books_authors(:king)
+        source = books_authors(:bachman)
+
+        post execute_action_admin_books_author_path(target), params: {
+          action_name: "MergeAuthor",
+          source_author_id: source.id.to_s,
+          confirm_merge: "1"
+        }
+
+        assert_redirected_to admin_books_author_path(target)
+        assert_not ::Books::Author.exists?(source.id)
+      end
+
+      test "merge via turbo_stream replaces the flash target and still performs the merge" do
+        ::Books::CalculateAuthorRankingsJob.stubs(:perform_async)
+        sign_in_as(@admin_user, stub_auth: true)
+        target = books_authors(:king)
+        source = books_authors(:bachman)
+
+        post execute_action_admin_books_author_path(target), params: {
+          action_name: "MergeAuthor",
+          source_author_id: source.id.to_s,
+          confirm_merge: "1"
+        }, as: :turbo_stream
+
+        assert_response :success
+        assert_match(/turbo-stream/, response.content_type)
+        assert_includes response.body, 'target="flash"'
+        assert_not ::Books::Author.exists?(source.id)
+      end
+
+      test "a books domain editor cannot merge" do
+        ::Books::CalculateAuthorRankingsJob.stubs(:perform_async)
+        @regular_user.domain_roles.create!(domain: :books, permission_level: :editor)
+        sign_in_as(@regular_user, stub_auth: true)
+        target = books_authors(:king)
+        source = books_authors(:bachman)
+
+        post execute_action_admin_books_author_path(target), params: {
+          action_name: "MergeAuthor",
+          source_author_id: source.id.to_s,
+          confirm_merge: "1"
+        }
+
+        assert_redirected_to books_root_path
+        assert ::Books::Author.exists?(source.id), "an editor must not be able to delete via merge"
+      end
+
+      test "a books domain moderator can merge" do
+        ::Books::CalculateAuthorRankingsJob.stubs(:perform_async)
+        @regular_user.domain_roles.create!(domain: :books, permission_level: :moderator)
+        sign_in_as(@regular_user, stub_auth: true)
+        target = books_authors(:king)
+        source = books_authors(:bachman)
+
+        post execute_action_admin_books_author_path(target), params: {
+          action_name: "MergeAuthor",
+          source_author_id: source.id.to_s,
+          confirm_merge: "1"
+        }
+
+        assert_not ::Books::Author.exists?(source.id)
+      end
     end
   end
 end

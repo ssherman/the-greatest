@@ -52,7 +52,7 @@ module Services
       end
 
       def preload_context
-        @author_ids = Books::Author.pluck(:id).to_set
+        @author_ids = ::Books::Author.pluck(:id).to_set
       end
 
       def legacy_each(&block)

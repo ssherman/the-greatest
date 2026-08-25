@@ -16,7 +16,7 @@ module Services
       end
 
       def upsert_row(attrs)
-        book_author = Books::BookAuthor.find_or_initialize_by(
+        book_author = ::Books::BookAuthor.find_or_initialize_by(
           book_id: attrs["book_id"], author_id: attrs["author_id"]
         )
         book_author.assign_attributes(BookAuthorTransformer.call(attrs))

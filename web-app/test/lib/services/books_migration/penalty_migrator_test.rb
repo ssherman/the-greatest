@@ -38,7 +38,7 @@ class Services::BooksMigration::PenaltyMigratorTest < ActiveSupport::TestCase
   end
 
   test "creates a Books::Penalty for an unmatched static list_con, verbatim name + preserved fields" do
-    assert_difference -> { Books::Penalty.count }, 1 do
+    assert_difference -> { ::Books::Penalty.count }, 1 do
       result = run_migrator([legacy(8001)])
       assert result[:success], result[:error]
     end
@@ -65,7 +65,7 @@ class Services::BooksMigration::PenaltyMigratorTest < ActiveSupport::TestCase
 
   test "does not reuse a user-owned Global::Penalty; creates a system Books::Penalty instead" do
     user_global = Global::Penalty.create!(name: "List: honorable mention", user_id: users(:regular_user).id)
-    assert_difference -> { Books::Penalty.count }, 1 do
+    assert_difference -> { ::Books::Penalty.count }, 1 do
       run_migrator([legacy(8009, "name" => "List: honorable mention")])
     end
     penalty = mapped(8009)

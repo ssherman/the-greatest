@@ -476,6 +476,9 @@ Rails.application.routes.draw do
         resources :descriptions, only: [:index, :create], controller: "/admin/descriptions"
         resources :author_relationships, only: [:create]
         resources :category_items, only: [:index, :create], controller: "/admin/category_items"
+        member do
+          post :execute_action
+        end
         collection do
           get :search
         end

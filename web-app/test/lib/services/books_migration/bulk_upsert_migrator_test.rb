@@ -39,7 +39,7 @@ class Services::BooksMigration::BulkUpsertMigratorTest < ActiveSupport::TestCase
   end
 
   def setup
-    @category = Books::Category.create!(name: "Bulk Base Cat")
+    @category = ::Books::Category.create!(name: "Bulk Base Cat")
   end
 
   def run_migrator(rows)

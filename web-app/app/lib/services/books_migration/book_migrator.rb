@@ -17,7 +17,7 @@ module Services
       end
 
       def upsert_row(attrs)
-        book = Books::Book.find_or_initialize_by(id: attrs["id"])
+        book = ::Books::Book.find_or_initialize_by(id: attrs["id"])
         book.assign_attributes(BookTransformer.call(attrs))
         book.original_language_id = remap_language(attrs["original_language_id"])
         book.save!
@@ -35,7 +35,7 @@ module Services
       end
 
       def finalize
-        Books::Book.connection.reset_pk_sequence!("books_books")
+        ::Books::Book.connection.reset_pk_sequence!("books_books")
       end
     end
   end

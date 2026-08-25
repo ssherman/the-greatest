@@ -17,9 +17,9 @@ module Services
       end
 
       def upsert_row(attrs)
-        Books::Edition.transaction do
+        ::Books::Edition.transaction do
           new_id = LegacyIdMap.lookup(model: model_key, legacy_id: attrs["id"])
-          edition = new_id ? Books::Edition.find(new_id) : Books::Edition.new
+          edition = new_id ? ::Books::Edition.find(new_id) : ::Books::Edition.new
           edition.assign_attributes(EditionTransformer.call(attrs))
           edition.book_id = attrs["book_id"]
           edition.save!
@@ -35,7 +35,7 @@ module Services
       # every run (meant for a pre-launch cutover), so re-running tracks the
       # current most-popular edition rather than preserving a hand-picked default.
       def finalize
-        Books::Book.connection.execute(<<~SQL)
+        ::Books::Book.connection.execute(<<~SQL)
           UPDATE books_books b
           SET default_edition_id = e.id
           FROM (

@@ -8,7 +8,7 @@ class Services::BooksMigration::BookIdentifierMigratorTest < ActiveSupport::Test
   end
 
   test "migrates goodreads (type 5) as a work-level goodreads id on the book" do
-    book = Books::Book.create!(title: "GR Book")
+    book = ::Books::Book.create!(title: "GR Book")
     result = run_migrator([{"id" => 1, "book_id" => book.id, "identifier_type" => 5, "identifier" => "1079398"}])
     assert result[:success], result[:error]
     idf = Identifier.find_by(identifiable: book)
@@ -17,7 +17,7 @@ class Services::BooksMigration::BookIdentifierMigratorTest < ActiveSupport::Test
   end
 
   test "migrates isbn10 (type 1), isbn13 (type 2), ean13 (type 4) as work-level ids" do
-    book = Books::Book.create!(title: "ISBN Book")
+    book = ::Books::Book.create!(title: "ISBN Book")
     result = run_migrator([
       {"id" => 2, "book_id" => book.id, "identifier_type" => 1, "identifier" => "0375755349"},
       {"id" => 3, "book_id" => book.id, "identifier_type" => 2, "identifier" => "9780375755347"},
@@ -29,7 +29,7 @@ class Services::BooksMigration::BookIdentifierMigratorTest < ActiveSupport::Test
   end
 
   test "reclassifies an ISBN-10-shaped asin (type 3) as isbn10 but keeps a Kindle asin" do
-    book = Books::Book.create!(title: "ASIN Book")
+    book = ::Books::Book.create!(title: "ASIN Book")
     run_migrator([
       {"id" => 7, "book_id" => book.id, "identifier_type" => 3, "identifier" => "0375755349"},
       {"id" => 8, "book_id" => book.id, "identifier_type" => 3, "identifier" => "B01K0T9772"}
@@ -39,7 +39,7 @@ class Services::BooksMigration::BookIdentifierMigratorTest < ActiveSupport::Test
   end
 
   test "skips an unknown identifier_type" do
-    book = Books::Book.create!(title: "Unknown Type Book")
+    book = ::Books::Book.create!(title: "Unknown Type Book")
     assert_no_difference -> { Identifier.count } do
       run_migrator([{"id" => 20, "book_id" => book.id, "identifier_type" => 99, "identifier" => "x"}])
     end
@@ -52,7 +52,7 @@ class Services::BooksMigration::BookIdentifierMigratorTest < ActiveSupport::Test
   end
 
   test "is idempotent on the natural key" do
-    book = Books::Book.create!(title: "Idem GR Book")
+    book = ::Books::Book.create!(title: "Idem GR Book")
     rows = [{"id" => 5, "book_id" => book.id, "identifier_type" => 5, "identifier" => "5527"}]
     run_migrator(rows)
     assert_no_difference -> { Identifier.count } do
@@ -61,14 +61,14 @@ class Services::BooksMigration::BookIdentifierMigratorTest < ActiveSupport::Test
   end
 
   test "suppresses search indexing during the load" do
-    book = Books::Book.create!(title: "Quiet GR Book")
+    book = ::Books::Book.create!(title: "Quiet GR Book")
     assert_no_difference -> { SearchIndexRequest.count } do
       run_migrator([{"id" => 6, "book_id" => book.id, "identifier_type" => 5, "identifier" => "42"}])
     end
   end
 
   test "strips surrounding whitespace from the stored value" do
-    book = Books::Book.create!(title: "Whitespace Book")
+    book = ::Books::Book.create!(title: "Whitespace Book")
     run_migrator([{"id" => 30, "book_id" => book.id, "identifier_type" => 1, "identifier" => "  0375755349  "}])
     assert_equal "0375755349", Identifier.find_by(identifiable: book).value
   end

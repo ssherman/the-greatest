@@ -48,6 +48,21 @@ module Services
       test "lowest_price_cents returns nil when no listing carries a price" do
         assert_nil Product.lowest_price_cents(product([{"condition" => {"value" => "New"}}]))
       end
+
+      # Amazon lists a $0.00 free-with-trial offer alongside the real price on many
+      # Audible titles. Taking it as the lowest price loses the buy link entirely,
+      # because ExternalLink requires price_cents > 0.
+      test "lowest_price_cents ignores a zero-amount promotional listing and returns the real price" do
+        assert_equal 1572, Product.lowest_price_cents(product([new_listing(0.0), new_listing(15.72)]))
+      end
+
+      test "lowest_price_cents returns nil when every listing is zero" do
+        assert_nil Product.lowest_price_cents(product([new_listing(0.0)]))
+      end
+
+      test "lowest_price_cents ignores a zero amount on the any-condition fallback path too" do
+        assert_equal 450, Product.lowest_price_cents(product([used_listing(0.0), used_listing(4.50)]))
+      end
     end
   end
 end
