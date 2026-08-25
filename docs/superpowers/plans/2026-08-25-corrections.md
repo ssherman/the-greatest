@@ -2745,7 +2745,7 @@ git commit -m "Add correction form Stimulus controller and book page link"
 
 **Files:**
 - Create: `app/controllers/admin/corrections_controller.rb`
-- Create: `app/views/admin/corrections/index.html.erb`, `app/views/admin/corrections/_row.html.erb`
+- Create: `app/views/admin/corrections/index.html.erb`, `app/views/admin/corrections/_row.html.erb`, and a MINIMAL read-only `app/views/admin/corrections/show.html.erb` (this task's own "show renders" test needs it; Task 12 replaces it with the full review UI)
 - Modify: `config/routes.rb`, `app/lib/admin/domain_nav.rb`
 - Test: `test/controllers/admin/corrections_controller_test.rb`
 
@@ -2892,7 +2892,11 @@ class Admin::CorrectionsController < Admin::BaseController
   include Admin::DomainScopedAuth
   include Pagy::Method
 
-  before_action :set_correction, only: [:show, :apply, :reject, :resolve]
+  # only: [:show] for now, NOT the full [:show, :apply, :reject, :resolve].
+  # This app sets raise_on_missing_callback_actions = true, so naming actions
+  # that do not exist yet raises on EVERY request to this controller. Task 12
+  # adds those actions and widens this back.
+  before_action :set_correction, only: [:show]
 
   STATUSES = %w[pending resolved rejected].freeze
 
@@ -3181,11 +3185,21 @@ Expected: FAIL — no `apply` action.
 
 - [ ] **Step 3: Add the actions**
 
-In `app/controllers/admin/corrections_controller.rb`, add the write guard and the four actions:
+In `app/controllers/admin/corrections_controller.rb`:
+
+**First, restore the `set_correction` filter's full action list.** Task 11 had to narrow it to `only: [:show]`, because this app sets `raise_on_missing_callback_actions = true` and naming actions that do not exist yet raises on every request. Now that the actions exist, widen it back:
+
+```ruby
+  before_action :set_correction, only: [:show, :apply, :reject, :resolve]
+```
+
+Then add the write guard and the four actions:
 
 ```ruby
   before_action :require_domain_write!, only: [:apply, :reject, :resolve, :bulk_reject]
 ```
+
+`bulk_reject` is deliberately absent from `set_correction` — it operates on a set of ids, not one record.
 
 ```ruby
   def apply
