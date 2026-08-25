@@ -48,10 +48,21 @@ module Actions
             return error("Cannot merge a song with itself. Please enter a different song ID.")
           end
 
-          result = ::Music::Song::Merger.call(source: source_song, target: target_song)
+          source_title = source_song.title
+          source_id = source_song.id
+
+          merger = ::Music::Song::Merger.new(source: source_song, target: target_song)
+          result = merger.call
 
           if result.success?
-            succeed "Successfully merged '#{source_song.title}' (ID: #{source_song.id}) into '#{target_song.title}'. The source song has been deleted."
+            message = "Successfully merged '#{source_title}' (ID: #{source_id}) into '#{target_song.title}'. The source song has been deleted."
+
+            if merger.stats[:post_commit_error].present?
+              warn "#{message} Note: ranking recalculation could not be scheduled " \
+                "(#{merger.stats[:post_commit_error]}); it will need to be re-run."
+            else
+              succeed message
+            end
           else
             error "Failed to merge songs: #{result.errors.join(", ")}"
           end
