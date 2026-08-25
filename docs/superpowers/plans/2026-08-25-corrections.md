@@ -3019,9 +3019,8 @@ git commit -m "Add admin corrections index"
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `test/controllers/admin/corrections_controller_test.rb`:
+Append to `test/controllers/admin/corrections_controller_test.rb`.
 
-```ruby
 The review form submits two things per row: a checkbox in `accepted_fields[]` naming the accepted field, and an input in `accepted[<name>]` carrying the value. Both are needed — every row's input submits a value whether or not its box is ticked, so the checkbox list is what makes unticking mean anything.
 
 ```ruby
