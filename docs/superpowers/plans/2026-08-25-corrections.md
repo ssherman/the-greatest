@@ -4253,6 +4253,14 @@ For each domain, mirror the books tests: the model declares its fields, `#new` r
 
 The last one is the real check, and it is the reason this task exists. Add a music correction fixture (`correctable: <some album> (Music::Album)`) and confirm `test/controllers/admin/corrections_controller_test.rb`'s "scopes to this domain's correctable types" now goes RED when `domain_scope` is replaced with `::Correction.all` — it could not, before this task, because books was the only correctable domain. Then restore.
 
+**Two deferred test gaps close here, and they are the point of this task. Do not skip them:**
+
+1. **`bulk_reject` cross-domain exclusion.** Task 12's "bulk reject ignores ids outside this domain" test does not actually test that — `books_books(:got)` is a `Books::Book`, i.e. the current domain, so it would pass with `domain_scope` replaced by an unscoped query. It was renamed to describe what it really checks. Now write the real one: from the books admin, attempt to `bulk_reject` a MUSIC correction's id and assert it is untouched. Verify it goes RED against an unscoped `domain_scope`. This is a mass-write endpoint; it is the most important thing this task proves.
+
+2. **Index domain scoping.** Same shape — "scopes to this domain's correctable types" becomes genuinely non-vacuous only now.
+
+Both were left weak deliberately, with the gap recorded, because books being the only correctable domain made honest coverage impossible. If either still cannot be made to go RED, stop and report it rather than leaving a passing test that proves nothing.
+
 - [ ] **Step 8: Run everything**
 
 ```bash
