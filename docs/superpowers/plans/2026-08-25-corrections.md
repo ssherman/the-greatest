@@ -1794,7 +1794,7 @@ module Services
           # into a KeyError 500 in the admin, on data the admin cannot fix.
           definition = @record.class.correctable_fields[field.field_name]
           if definition.nil?
-            field.update!(status: :rejected)
+            reject_field(field)
             next
           end
 
@@ -1807,6 +1807,20 @@ module Services
 
         # Before save!, so a cleared derived column re-derives in the same write.
         @record.correction_applied(applied_names)
+      end
+
+      # save!(validate: false), NOT update!. CorrectionField#field_name_is_declared
+      # has no on:/if: guard, so it re-runs on update and fails on precisely the
+      # undeclared field we are trying to reject -- raising RecordInvalid, which the
+      # rescue below then turns into a failure Result. "Reject silently" would have
+      # returned a failure instead.
+      #
+      # Deliberately scoped to THIS path. The ordinary accepted and rejected paths
+      # keep full validation; the model's invariant is untouched for every normal
+      # write.
+      def reject_field(field)
+        field.status = :rejected
+        field.save!(validate: false)
       end
 
       def resolve_correction
