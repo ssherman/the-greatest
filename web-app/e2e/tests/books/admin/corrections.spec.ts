@@ -58,7 +58,12 @@ test.describe('Admin corrections', () => {
     // so the one just submitted -- always the highest id in the table -- is
     // first regardless of what earlier runs of this spec left behind.
     await page.getByTestId('correction-row').first().getByRole('link').click();
-    await expect(page.getByRole('heading', { level: 1 })).toContainText(/Correction #/);
+    // Scoped to main: admin/shared/_sidebar.html.erb renders its own <h1> for the
+    // site name, so an unscoped level-1 heading locator matches two elements on
+    // every admin page and fails Playwright's strict mode before navigation even
+    // settles -- which reads as "the page never loaded" rather than "the locator
+    // is ambiguous".
+    await expect(page.locator('main').getByRole('heading', { level: 1 })).toContainText(/Correction #/);
 
     // Proves Submission persisted exactly what was typed, not just that a
     // correction of some shape exists -- the review form's proposed-value
