@@ -91,6 +91,24 @@ module Actions
           assert result.error?
           assert_equal "This action can only be performed on a single song.", result.message
         end
+
+        test "reports a warning, not a plain success, when the post-commit follow-up fails" do
+          source_id = @source_song.id
+          ::Music::Song::Merger.any_instance.stubs(:schedule_ranking_recalculation)
+            .raises(StandardError.new("redis down"))
+
+          result = MergeSong.call(
+            user: @admin_user,
+            models: [@target_song],
+            fields: {source_song_id: source_id, confirm_merge: "1"}
+          )
+
+          assert result.warning?, result.message
+          assert_not result.success?, "a warning must not also report as a plain success"
+          assert_includes result.message, "could not be scheduled"
+          assert_includes result.message, "redis down"
+          assert_not ::Music::Song.exists?(source_id), "the merge itself must still have committed"
+        end
       end
     end
   end

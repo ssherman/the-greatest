@@ -105,6 +105,24 @@ module Actions
           assert result.success?
           assert_match(/Successfully merged/, result.message)
         end
+
+        test "reports a warning, not a plain success, when the post-commit follow-up fails" do
+          source_id = @source_artist.id
+          ::Music::Artist::Merger.any_instance.stubs(:reindex_target_artist)
+            .raises(StandardError.new("opensearch down"))
+
+          result = MergeArtist.call(
+            user: @admin_user,
+            models: [@target_artist],
+            fields: {source_artist_id: source_id, confirm_merge: "1"}
+          )
+
+          assert result.warning?, result.message
+          assert_not result.success?, "a warning must not also report as a plain success"
+          assert_includes result.message, "could not be scheduled"
+          assert_includes result.message, "opensearch down"
+          assert_not ::Music::Artist.exists?(source_id), "the merge itself must still have committed"
+        end
       end
     end
   end

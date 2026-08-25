@@ -77,21 +77,38 @@ module Actions
         end
 
         test "should merge albums successfully" do
-          merger_result = Struct.new(:success?, :errors).new(true, [])
-          ::Music::Album::Merger.expects(:call)
-            .with(source: @source_album, target: @target_album)
-            .returns(merger_result)
+          source_title = @source_album.title
+          source_id = @source_album.id
 
           result = MergeAlbum.call(
             user: @admin_user,
             models: [@target_album],
-            fields: {source_album_id: @source_album.id, confirm_merge: "1"}
+            fields: {source_album_id: source_id, confirm_merge: "1"}
           )
 
-          assert result.success?
+          assert result.success?, result.message
           assert_includes result.message, "Successfully merged"
-          assert_includes result.message, @source_album.title
+          assert_includes result.message, source_title
           assert_includes result.message, @target_album.title
+          assert_not ::Music::Album.exists?(source_id), "the source album must actually be gone"
+        end
+
+        test "reports a warning, not a plain success, when the post-commit follow-up fails" do
+          source_id = @source_album.id
+          ::Music::Album::Merger.any_instance.stubs(:reindex_target_album)
+            .raises(StandardError.new("opensearch down"))
+
+          result = MergeAlbum.call(
+            user: @admin_user,
+            models: [@target_album],
+            fields: {source_album_id: source_id, confirm_merge: "1"}
+          )
+
+          assert result.warning?, result.message
+          assert_not result.success?, "a warning must not also report as a plain success"
+          assert_includes result.message, "could not be scheduled"
+          assert_includes result.message, "opensearch down"
+          assert_not ::Music::Album.exists?(source_id), "the merge itself must still have committed"
         end
       end
     end

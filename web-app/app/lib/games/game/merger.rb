@@ -12,8 +12,10 @@ module Games
       def initialize(source:, target:)
         @source_game = source
         @target_game = target
+        @source_game_id = source.id
         @stats = {}
         @affected_ranking_configurations = []
+        @transaction_body_completed = false
       end
 
       def call
@@ -26,25 +28,65 @@ module Games
         end
 
         ActiveRecord::Base.transaction do
+          lock_games
           collect_affected_ranking_configurations
           merge_all_associations
           reconcile_scalars
           target_game.save! if target_game.changed?
           destroy_source_game
+          @transaction_body_completed = true
         end
 
         run_post_commit_steps
 
         Result.new(success?: true, data: target_game, errors: [])
       rescue ActiveRecord::RecordInvalid => error
-        Result.new(success?: false, data: nil, errors: [error.message])
+        result_for_raised(error, error.message)
       rescue ActiveRecord::RecordNotUnique => error
-        Result.new(success?: false, data: nil, errors: ["Constraint violation: #{error.message}"])
+        result_for_raised(error, "Constraint violation: #{error.message}")
       rescue => error
-        Result.new(success?: false, data: nil, errors: [error.message])
+        result_for_raised(error, error.message)
       end
 
       private
+
+      # Locks both rows FOR UPDATE before anything moves. Without it two admins
+      # merging the same duplicate can both pass the guards above, and the loser's
+      # destroy! silently affects zero rows -- games_games has no lock_version, so
+      # Rails never checks the affected count -- reporting a completed merge that
+      # moved nothing. Ascending id order stops two merges with swapped source and
+      # target from deadlocking each other. Taking the lock here, before
+      # reconcile_scalars dirties target_game, also keeps lock!'s
+      # no-unsaved-changes requirement satisfied.
+      def lock_games
+        [source_game, target_game].sort_by(&:id).each(&:lock!)
+      end
+
+      # SearchIndexable's after_commit callbacks -- the target's save! and the
+      # source's destroy! -- fire as the transaction block exits, which is AFTER the
+      # commit, and Rails propagates anything they raise out of that block straight
+      # into the rescues above, bypassing run_post_commit_steps entirely. Reporting
+      # success?: false there would tell the admin a merge failed when the source is
+      # already permanently deleted, and their retry would fail with "not found".
+      #
+      # Both halves of merge_committed? are load-bearing. The flag alone would
+      # misread a COMMIT that itself failed as success; the missing row alone would
+      # misread a merge that never started because a concurrent merge had already
+      # consumed the source -- which is what lock_games raises on.
+      def result_for_raised(error, message)
+        return Result.new(success?: false, data: nil, errors: [message]) unless merge_committed?
+
+        Rails.logger.error(
+          "Games::Game::Merger: merge of #{@source_game_id} into #{target_game.id} " \
+          "committed, but a commit callback failed: #{error.class}: #{error.message}"
+        )
+        @stats[:post_commit_error] = error.message
+        Result.new(success?: true, data: target_game, errors: [])
+      end
+
+      def merge_committed?
+        @transaction_body_completed && !::Games::Game.exists?(@source_game_id)
+      end
 
       def merge_all_associations
         merge_identifiers
@@ -235,6 +277,9 @@ module Games
 
       # Games have no alternate_titles column, so there is no name absorption here.
       # Books and authors (increments 2 and 3) do.
+      # When descriptions-subsystem step (e) drops games_games.description (see
+      # docs/superpowers/specs/2026-07-27-descriptions-subsystem-design.md), remove
+      # :description from this list or fill_blank_fields raises inside the transaction.
       BLANK_FILLABLE = %i[description series_id].freeze
 
       def reconcile_scalars

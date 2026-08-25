@@ -48,10 +48,21 @@ module Actions
             return error("Cannot merge an album with itself. Please enter a different album ID.")
           end
 
-          result = ::Music::Album::Merger.call(source: source_album, target: target_album)
+          source_title = source_album.title
+          source_id = source_album.id
+
+          merger = ::Music::Album::Merger.new(source: source_album, target: target_album)
+          result = merger.call
 
           if result.success?
-            succeed "Successfully merged '#{source_album.title}' (ID: #{source_album.id}) into '#{target_album.title}'. The source album has been deleted."
+            message = "Successfully merged '#{source_title}' (ID: #{source_id}) into '#{target_album.title}'. The source album has been deleted."
+
+            if merger.stats[:post_commit_error].present?
+              warn "#{message} Note: search reindexing and ranking recalculation could not be " \
+                "scheduled (#{merger.stats[:post_commit_error]}); they will need to be re-run."
+            else
+              succeed message
+            end
           else
             error "Failed to merge albums: #{result.errors.join(", ")}"
           end

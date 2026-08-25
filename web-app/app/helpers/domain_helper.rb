@@ -12,6 +12,15 @@ module DomainHelper
     end
   end
 
+  # The JavaScript bundle for the current domain's public site, e.g. "books-web".
+  # Bundle names come from config/asset_bundles.json; the pairing between a
+  # domain layout and its bundle is enforced by
+  # test/lint/asset_bundle_coverage_test.rb, because Propshaft raises on a
+  # missing asset and that would be a 500 on every page of the site.
+  def domain_js_bundle
+    "#{current_domain}-web"
+  end
+
   def domain_specific_layout
     domain_settings[:layout]
   end
