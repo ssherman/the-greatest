@@ -28,7 +28,7 @@ module Books
     test "the hamburger is a label pointing at the drawer toggle" do
       get "/"
 
-      assert_select "label[for=?]", "books-nav-drawer"
+      assert_select "#books-nav-drawer-button[for=?]", "books-nav-drawer"
       assert_select "input#books-nav-drawer[type=?]", "checkbox"
     end
 

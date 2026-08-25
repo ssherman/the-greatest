@@ -39,6 +39,7 @@
         data-controller="user-list-state membership-state"
         data-domain="<%= Current.domain %>"
         data-signed-in="<%= signed_in? %>">
+    <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 btn btn-sm btn-primary">Skip to content</a>
     <div class="drawer">
       <%# The checkbox holds open/closed state. `lg:hidden` keeps it out of the
           desktop tab order. It is NOT a Stimulus controller root -- the
@@ -46,8 +47,6 @@
       <input id="books-nav-drawer" type="checkbox" class="drawer-toggle lg:hidden" />
 
       <div class="drawer-content">
-        <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 btn btn-sm btn-primary">Skip to content</a>
-
         <nav class="navbar bg-base-300" aria-label="Main">
           <div class="navbar-start">
             <label for="books-nav-drawer"
