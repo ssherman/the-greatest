@@ -116,6 +116,25 @@ module Services
         assert_predicate result, :success?
         assert_predicate correction.reload.correction_fields.sole, :rejected?
       end
+
+      # Pins the branch order in apply_fields: undeclared must be checked before
+      # @accepted, or a field that is BOTH undeclared and absent from accepted
+      # falls into the ordinary update! branch, which re-runs
+      # field_name_is_declared against the very field_name that fails it, and
+      # raises instead of rejecting.
+      test "rejects an undeclared field that is also absent from accepted, instead of raising" do
+        correction = ::Correction.create!(correctable: @book, notes: "legacy")
+        ::CorrectionField.insert_all([{
+          correction_id: correction.id, field_name: "series_name",
+          old_value: nil, new_value: "Discworld", status: 0,
+          created_at: Time.current, updated_at: Time.current
+        }])
+
+        result = Applier.call(correction: correction, accepted: {}, admin: @admin)
+
+        assert_predicate result, :success?
+        assert_predicate correction.reload.correction_fields.sole, :rejected?
+      end
     end
   end
 end

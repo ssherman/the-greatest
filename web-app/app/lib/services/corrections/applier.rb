@@ -25,7 +25,7 @@ module Services
 
       def call
         unless @correction.pending?
-          return failure(["This correction has already been resolved"])
+          return failure(["This correction has already been resolved or rejected"])
         end
 
         ::Correction.transaction do
@@ -48,18 +48,24 @@ module Services
         applied_names = []
 
         @correction.correction_fields.each do |field|
-          unless @accepted.key?(field.field_name)
-            reject_field(field)
-            next
-          end
-
           # [] with a nil guard, NOT fetch. insert_all in the legacy migrator
           # bypasses validations, and a declaration removed later (say, dropping
           # word_count) strands already-submitted rows -- fetch would turn both
           # into a KeyError 500 in the admin, on data the admin cannot fix.
           definition = @record.class.correctable_fields[field.field_name]
+
+          # Undeclared: checked first and unconditionally, before @accepted is even
+          # consulted. field_name_is_declared has no `on:` guard, so a plain
+          # update! here would re-validate the very row we are rejecting BECAUSE
+          # it is invalid and raise -- reject_field's validate: false is the only
+          # thing standing between this branch and that crash.
           if definition.nil?
             reject_field(field)
+            next
+          end
+
+          unless @accepted.key?(field.field_name)
+            field.update!(status: :rejected)
             next
           end
 
@@ -74,11 +80,14 @@ module Services
         @record.correction_applied(applied_names)
       end
 
-      # validate: false is deliberate: a stranded row's field_name is exactly what
-      # makes CorrectionField#field_name_is_declared fail, and that validation has
-      # no `on:` guard, so it re-fires on this very status update. Re-validating a
-      # row we are rejecting BECAUSE it is invalid would turn "reject it safely"
-      # back into the RecordInvalid this branch exists to avoid.
+      # Only the undeclared-field branch above calls this. validate: false is
+      # deliberate there: a stranded row's field_name is exactly what makes
+      # CorrectionField#field_name_is_declared fail, so a validating save on this
+      # row cannot ever succeed. Every other rejection (declared field the admin
+      # didn't accept) goes through the ordinary update! and keeps full validation
+      # -- CorrectionField's own validations are defence in depth for the field
+      # rows an agent will write through this service later, and only this one
+      # branch has a reason to bypass them.
       def reject_field(field)
         field.status = :rejected
         field.save!(validate: false)
