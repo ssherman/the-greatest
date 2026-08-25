@@ -34,7 +34,12 @@ test.describe('Suggest a correction', () => {
   test('an anonymous visitor can propose a field change', async ({ page }) => {
     await page.goto('/book/war-and-peace/suggest-correction');
 
-    // Wait for the token fetch armed by focusin before submitting.
+    // click() and fill() trigger focus, which fires ensureToken() via the
+    // form's focusin action -- but nothing here awaits the returned promise,
+    // and no assertion inspects the applied token. Submission succeeds
+    // either way (null_session accepts an anonymous write if the token
+    // fetch hasn't landed yet), so this test gives no coverage of token
+    // hydration itself -- only that a field change can be submitted.
     const yearInput = page.locator('#correction_fields_first_published_year');
     await yearInput.click();
     await yearInput.fill('1867');

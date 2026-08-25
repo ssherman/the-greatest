@@ -131,7 +131,8 @@ class CorrectionsControllerTest < ActionDispatch::IntegrationTest
     }
 
     assert_response :unprocessable_entity
-    assert_match "Tell us what&#39;s wrong, or propose a change to at least one field", response.body
+    assert_match(/no-store/, response.headers["Cache-Control"])
+    assert_select "[data-testid=correction-error]", "Tell us what's wrong, or propose a change to at least one field"
   end
 
   test "never caches the create response" do
@@ -150,7 +151,8 @@ class CorrectionsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :too_many_requests
-    assert_match "Thanks — you&#39;ve sent us several corrections just now. Please try again shortly.", response.body
+    assert_match(/no-store/, response.headers["Cache-Control"])
+    assert_select "[data-testid=correction-error]", "Thanks — you've sent us several corrections just now. Please try again shortly."
   end
 
   # The cached page ships no usable token. null_session must accept the write as
