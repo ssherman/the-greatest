@@ -11,3 +11,7 @@ Disallow: /searches
 # /rc/<id>/ prefix would otherwise slip past them.
 Disallow: /*the-greatest/*,*
 Disallow: /*written-by/*,*
+
+# The correction form. Nothing here is content, and it is the surface that has
+# been used to flood the origin.
+Disallow: /book/*/suggest-correction

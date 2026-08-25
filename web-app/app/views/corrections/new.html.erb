@@ -1,0 +1,84 @@
+<%
+  content_for :page_title, "Suggest a correction to #{@record.title} | The Greatest Books"
+%>
+
+<div class="max-w-2xl mx-auto space-y-6" data-controller="corrections--form"
+     data-corrections--form-token-url-value="<%= correction_token_path %>">
+  <div>
+    <h1 class="text-2xl sm:text-3xl font-bold">Suggest a correction</h1>
+    <p class="text-base-content/70 mt-2">
+      <%= link_to @record.title, book_path(slug: @record.slug), class: "link" %>
+    </p>
+  </div>
+
+  <%= form_with url: corrections_path, method: :post, class: "space-y-6",
+        data: {corrections__form_target: "form"} do |f| %>
+    <%= hidden_field_tag :correctable_type, @correctable_type %>
+    <%= hidden_field_tag :correctable_id, @record.id %>
+
+    <%# Honeypot. Bots fill every input they find; a human never sees this one.
+        Positioned off-screen rather than display:none -- some bots skip hidden
+        inputs. Named plausibly for the same reason. %>
+    <div class="absolute left-[-9999px]" aria-hidden="true">
+      <label for="correction_website">Website</label>
+      <%= text_field_tag :website, nil, id: "correction_website", tabindex: -1, autocomplete: "off" %>
+    </div>
+
+    <fieldset class="fieldset">
+      <legend class="fieldset-legend text-base">Tell us what's wrong</legend>
+      <p class="text-sm text-base-content/70 mb-2">
+        If the author, country, genre or series is wrong, describe it here — those aren't
+        fields you can edit below.
+      </p>
+      <%= text_area_tag "correction[notes]", nil, rows: 5, class: "textarea w-full",
+            maxlength: Correction::MAX_NOTES_LENGTH %>
+    </fieldset>
+
+    <fieldset class="fieldset">
+      <legend class="fieldset-legend text-base">Or correct these details</legend>
+
+      <% @fields.each do |definition| %>
+        <% current = Services::Corrections::Targets.for(definition.target).read(@record, definition.name) %>
+
+        <% if definition.type == :string_array %>
+          <label class="label" for="correction_fields_<%= definition.name %>"><%= definition.label %></label>
+          <div data-corrections--form-target="list" data-field="<%= definition.name %>" class="space-y-2">
+            <% Array(current).each do |value| %>
+              <div class="join w-full">
+                <%= text_field_tag "correction[fields][#{definition.name}][]", value,
+                      class: "input join-item w-full" %>
+                <button type="button" class="btn join-item"
+                        data-action="corrections--form#removeListItem">Remove</button>
+              </div>
+            <% end %>
+          </div>
+          <button type="button" class="btn btn-sm mt-2" data-field="<%= definition.name %>"
+                  data-action="corrections--form#addListItem">
+            Add <%= definition.label.singularize.downcase %>
+          </button>
+
+        <% elsif definition.type == :text %>
+          <label class="label" for="correction_fields_<%= definition.name %>"><%= definition.label %></label>
+          <%= text_area_tag "correction[fields][#{definition.name}]", current, rows: 6,
+                id: "correction_fields_#{definition.name}", class: "textarea w-full" %>
+
+        <% else %>
+          <label class="label" for="correction_fields_<%= definition.name %>"><%= definition.label %></label>
+          <%= text_field_tag "correction[fields][#{definition.name}]", current,
+                id: "correction_fields_#{definition.name}", class: "input w-full",
+                inputmode: (definition.type == :integer ? "numeric" : nil) %>
+        <% end %>
+
+        <% if definition.hint.present? %>
+          <p class="text-sm text-base-content/70 mt-1"><%= definition.hint %></p>
+        <% end %>
+      <% end %>
+    </fieldset>
+
+    <div class="flex gap-2">
+      <%= f.submit "Submit correction", class: "btn btn-primary",
+            data: {testid: "correction-submit"} %>
+      <%= link_to "Cancel", book_path(slug: @record.slug), class: "btn btn-ghost" %>
+    </div>
+  <% end %>
+</div>

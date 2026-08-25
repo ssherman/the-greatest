@@ -276,6 +276,12 @@ Rails.application.routes.draw do
   # Per-item review state — global (non-domain-constrained), JSON-only, never cached.
   get "review_state", to: "review_state#show", as: :review_state
 
+  # Uncached, no database query. Exists so the edge-cached correction form can get
+  # a token that belongs to the caller's session rather than to whoever populated
+  # the cache.
+  get "correction_token", to: "correction_token#show", as: :correction_token
+  resources :corrections, only: [:create]
+
   # Review writes — global (non-domain-constrained), Turbo Stream, never cached.
   post "reviews", to: "reviews#create", as: :reviews
   patch "reviews/:id", to: "reviews#update", as: :review
@@ -520,6 +526,12 @@ Rails.application.routes.draw do
 
     scope "(/rc/:ranking_configuration_id)" do
       get "book/:slug", to: "books/books#show", as: :book
+
+      # correctable_type comes from route defaults, never from a param: #new then has
+      # no user input to validate at all. Music and games each add one analogous line
+      # pointing at this same shared controller.
+      get "book/:slug/suggest-correction", to: "corrections#new",
+        defaults: {correctable_type: "Books::Book"}, as: :books_book_correction
     end
 
     scope "(/rc/:ranking_configuration_id)" do
