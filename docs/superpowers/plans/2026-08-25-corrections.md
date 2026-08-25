@@ -2919,11 +2919,17 @@ class Admin::CorrectionsController < Admin::BaseController
     ::Correction.where(correctable_type: Services::Corrections::TypeRegistry.types_for_domain(current_domain))
   end
 
+  # params[:q].to_s, NOT params[:q]. `?q[]=x` makes it an Array, and
+  # sanitize_sql_like calls gsub on it -- a reachable 500 for any admin.
+  # admin/stripe_events_controller.rb, donations_controller.rb and
+  # memberships_controller.rb all carry this same guard; follow their shape.
+  # Coerce ONCE and use the coerced value for both the blank check and the term.
   def filtered_scope
     scope = domain_scope.where(status: @status).includes(:user, :correction_fields, :correctable).recent
-    return scope if params[:q].blank?
+    term = params[:q].to_s.presence
+    return scope if term.nil?
 
-    scope.where("corrections.notes ILIKE ?", "%#{::ActiveRecord::Base.sanitize_sql_like(params[:q])}%")
+    scope.where("corrections.notes ILIKE ?", "%#{::ActiveRecord::Base.sanitize_sql_like(term)}%")
   end
 
   def set_correction
