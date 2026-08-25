@@ -4,6 +4,13 @@ class CorrectionsControllerTest < ActionDispatch::IntegrationTest
   setup do
     host! "dev-new.thegreatestbooks.org"
     @book = books_books(:war_and_peace)
+
+    # The rate limit store is a single MemoryStore instance shared by the whole
+    # process (config/initializers/rate_limit_store.rb) -- without clearing it
+    # here, whichever test runs after enough anonymous submissions trips the
+    # limit instead of the dedicated rate-limit test below. Same fix as
+    # ReviewsControllerTest's setup, for the same reason.
+    Rails.application.config.x.rate_limit_store.clear
   end
 
   test "renders the form for a book" do
@@ -160,5 +167,27 @@ class CorrectionsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to book_path(slug: @book.slug)
   ensure
     ActionController::Base.allow_forgery_protection = original
+  end
+
+  test "emails the owner on a successful submission" do
+    with_env("ADMIN_NOTIFICATION_EMAIL" => "owner@example.org") do
+      assert_emails 1 do
+        submit
+      end
+    end
+  end
+
+  test "sends nothing when the submission fails" do
+    assert_emails 0 do
+      post corrections_path, params: {
+        correctable_type: "Books::Book", correctable_id: @book.id, correction: {notes: ""}
+      }
+    end
+  end
+
+  test "sends nothing for a honeypot submission" do
+    assert_emails 0 do
+      submit(website: "http://spam.example")
+    end
   end
 end

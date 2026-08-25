@@ -67,6 +67,9 @@ class CorrectionsController < ApplicationController
     )
 
     if result.success?
+      # deliver_later, not deliver_now: legacy built and sent this inline in the
+      # request, which blocked the submitter on SendGrid and had no retry.
+      AdminMailer.new_correction(result.data).deliver_later
       redirect_to correctable_path, notice: submitted_message
     else
       @indexable = false

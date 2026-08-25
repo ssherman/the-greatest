@@ -106,4 +106,18 @@ class CorrectionTest < ActiveSupport::TestCase
 
     assert_equal [second_inserted.id, first_inserted.id], ids
   end
+
+  # AdminMailer.new_correction is sent from CorrectionsController#create, not
+  # from a model callback -- deliberately, because Task 15's legacy migration
+  # writes 448 rows straight to the corrections table via insert_all, which
+  # bypasses callbacks entirely. That makes the migration safe by construction
+  # today, but only for as long as nobody moves the send into an after_create.
+  # This proves the model itself stays silent: a regression that added such a
+  # callback would spam the owner 448 times at migration time, and this is the
+  # test that would catch it before that migration ever ran.
+  test "sending the notification is not the model's responsibility" do
+    assert_no_difference -> { ActionMailer::Base.deliveries.size } do
+      Correction.create!(correctable: @book, user: @user, notes: "The year is wrong")
+    end
+  end
 end

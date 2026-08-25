@@ -76,4 +76,41 @@ class AdminMailerTest < ActionMailer::TestCase
       AdminMailer.new_subscription(memberships(:regular_user_monthly)).to
     end
   end
+
+  test "new_correction goes to the admin address" do
+    mail = AdminMailer.new_correction(corrections(:war_and_peace_pending))
+
+    assert_equal ["owner@example.org"], mail.to
+    # Case-insensitive: the subject follows this mailer's existing sentence-case
+    # convention ("New membership on...", "New donation:...") -- "New correction
+    # on...", lowercase c -- so a case-sensitive /Correction/ never matches it.
+    assert_match(/Correction/i, mail.subject)
+  end
+
+  test "new_correction is branded for the record's domain" do
+    mail = AdminMailer.new_correction(corrections(:war_and_peace_pending))
+
+    assert_match(/The Greatest Books/, mail[:from].to_s)
+  end
+
+  test "new_correction replies to a signed-in submitter" do
+    mail = AdminMailer.new_correction(corrections(:war_and_peace_pending))
+
+    assert_equal [users(:regular_user).email], mail.reply_to
+  end
+
+  test "new_correction sets no reply_to for an anonymous submitter" do
+    mail = AdminMailer.new_correction(corrections(:war_and_peace_notes_only))
+
+    assert_nil mail.reply_to
+  end
+
+  test "new_correction includes the notes and the proposed fields" do
+    mail = AdminMailer.new_correction(corrections(:war_and_peace_pending))
+    body = mail.text_part.body.to_s
+
+    assert_match(/first published year/i, body)
+    assert_match(/1867/, body)
+    assert_match(/The first published year looks wrong/, body)
+  end
 end

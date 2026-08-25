@@ -49,6 +49,23 @@ class AdminMailer < ApplicationMailer
     )
   end
 
+  def new_correction(correction)
+    @correction = correction
+    @record = correction.correctable
+    @fields = correction.correction_fields.order(:field_name)
+    domain = Services::Corrections::TypeRegistry.domain_for(correction.correctable_type)
+    @site_name = MailBranding.for(domain).site_name
+
+    branded_mail(
+      domain: domain,
+      to: admin_address,
+      subject: "New correction on #{@site_name}",
+      # Only when a real account submitted it. An anonymous correction has no
+      # address, and an unverified one would not be a reply channel anyway.
+      reply_to: correction.user&.email
+    )
+  end
+
   private
 
   def admin_address
