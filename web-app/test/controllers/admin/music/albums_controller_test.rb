@@ -405,6 +405,22 @@ module Admin
 
         assert_redirected_to admin_album_path(@album)
       end
+
+      test "execute_action rejects an action name outside the allowlist" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        post execute_action_admin_album_path(@album, action_name: "Object")
+
+        assert_response :bad_request
+      end
+
+      test "bulk_action rejects an action name outside the allowlist" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        post bulk_action_admin_albums_path(action_name: "Object", album_ids: [@album.id])
+
+        assert_response :bad_request
+      end
     end
   end
 end

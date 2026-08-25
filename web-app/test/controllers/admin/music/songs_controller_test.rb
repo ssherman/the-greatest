@@ -221,6 +221,22 @@ module Admin
         json_response = JSON.parse(response.body)
         assert_equal [], json_response
       end
+
+      test "execute_action rejects an action name outside the allowlist" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        post execute_action_admin_song_path(@song, action_name: "Object")
+
+        assert_response :bad_request
+      end
+
+      test "bulk_action rejects an action name outside the allowlist" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        post bulk_action_admin_songs_path(action_name: "Object", song_ids: [@song.id])
+
+        assert_response :bad_request
+      end
     end
   end
 end

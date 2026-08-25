@@ -322,6 +322,14 @@ module Admin
 
         assert_not ::Books::Author.exists?(source.id)
       end
+
+      test "execute_action rejects an action name outside the allowlist" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        post execute_action_admin_books_author_path(@author), params: {action_name: "Object"}
+
+        assert_response :bad_request
+      end
     end
   end
 end
