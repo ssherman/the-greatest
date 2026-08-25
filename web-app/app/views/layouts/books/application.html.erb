@@ -40,18 +40,24 @@
         data-domain="<%= Current.domain %>"
         data-signed-in="<%= signed_in? %>">
     <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 btn btn-sm btn-primary">Skip to content</a>
-    <div class="drawer">
+    <div class="drawer"
+         data-controller="books--nav-drawer"
+         data-action="click->books--nav-drawer#closeOnNavigate">
       <%# The checkbox holds open/closed state. `lg:hidden` keeps it out of the
           desktop tab order. It is NOT a Stimulus controller root -- the
           controller mounts on .drawer so it can reach the content wrapper. %>
-      <input id="books-nav-drawer" type="checkbox" class="drawer-toggle lg:hidden" />
+      <input id="books-nav-drawer" type="checkbox" class="drawer-toggle lg:hidden"
+             data-books--nav-drawer-target="toggle" />
 
-      <div class="drawer-content">
+      <div class="drawer-content" data-books--nav-drawer-target="content">
         <nav class="navbar bg-base-300" aria-label="Main">
           <div class="navbar-start">
             <label for="books-nav-drawer"
                    id="books-nav-drawer-button"
                    class="btn btn-ghost drawer-button lg:hidden"
+                   data-books--nav-drawer-target="button"
+                   aria-controls="books-nav-drawer-panel"
+                   aria-expanded="false"
                    aria-label="Open navigation menu">
               <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" />
