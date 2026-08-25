@@ -1,0 +1,60 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+# == Schema Information
+#
+# Table name: corrections
+#
+#  id               :bigint           not null, primary key
+#  correctable_type :string           not null
+#  notes            :text
+#  resolution_notes :text
+#  resolved_at      :datetime
+#  status           :integer          default(0), not null
+#  submitter_ip     :string
+#  created_at       :datetime         not null
+#  updated_at       :datetime         not null
+#  correctable_id   :bigint           not null
+#  resolved_by_id   :bigint
+#  user_id          :bigint
+#
+# Indexes
+#
+#  index_corrections_on_correctable            (correctable_type,correctable_id)
+#  index_corrections_on_resolved_by_id         (resolved_by_id)
+#  index_corrections_on_status_and_created_at  (status,created_at)
+#  index_corrections_on_user_id                (user_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (resolved_by_id => users.id)
+#  fk_rails_...  (user_id => users.id)
+#
+war_and_peace_pending:
+  correctable: war_and_peace (Books::Book)
+  user: regular_user
+  notes: The first published year looks wrong to me.
+  status: 0
+
+war_and_peace_notes_only:
+  correctable: war_and_peace (Books::Book)
+  user:
+  notes: The author is listed incorrectly.
+  status: 0
+  submitter_ip: 203.0.113.7
+
+crime_resolved:
+  correctable: crime_and_punishment (Books::Book)
+  user: regular_user
+  notes: Fixed the subtitle.
+  status: 1
+  resolved_by: admin_user
+  resolved_at: <%= 2.days.ago.to_fs(:db) %>
+
+crime_rejected:
+  correctable: crime_and_punishment (Books::Book)
+  user:
+  notes: buy cheap watches
+  status: 2
+  resolved_by: admin_user
+  resolved_at: <%= 1.day.ago.to_fs(:db) %>
+  resolution_notes: Spam.

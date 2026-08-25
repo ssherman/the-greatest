@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_24_085549) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_25_134658) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -270,6 +270,37 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_24_085549) do
     t.index ["category_id", "item_type", "item_id"], name: "index_category_items_on_category_id_and_item_type_and_item_id", unique: true
     t.index ["category_id"], name: "index_category_items_on_category_id"
     t.index ["item_type", "item_id"], name: "index_category_items_on_item_type_and_item_id"
+  end
+
+  create_table "correction_fields", force: :cascade do |t|
+    t.datetime "applied_at"
+    t.bigint "correction_id", null: false
+    t.datetime "created_at", null: false
+    t.string "field_name", null: false
+    t.jsonb "new_value"
+    t.jsonb "old_value"
+    t.integer "status", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["correction_id", "field_name"], name: "index_correction_fields_on_correction_id_and_field_name", unique: true
+    t.index ["correction_id"], name: "index_correction_fields_on_correction_id"
+  end
+
+  create_table "corrections", force: :cascade do |t|
+    t.bigint "correctable_id", null: false
+    t.string "correctable_type", null: false
+    t.datetime "created_at", null: false
+    t.text "notes"
+    t.text "resolution_notes"
+    t.datetime "resolved_at"
+    t.bigint "resolved_by_id"
+    t.integer "status", default: 0, null: false
+    t.string "submitter_ip"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id"
+    t.index ["correctable_type", "correctable_id"], name: "index_corrections_on_correctable"
+    t.index ["resolved_by_id"], name: "index_corrections_on_resolved_by_id"
+    t.index ["status", "created_at"], name: "index_corrections_on_status_and_created_at"
+    t.index ["user_id"], name: "index_corrections_on_user_id"
   end
 
   create_table "descriptions", force: :cascade do |t|
@@ -1034,6 +1065,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_24_085549) do
   add_foreign_key "books_series_books", "books_series", column: "series_id"
   add_foreign_key "categories", "categories", column: "parent_id"
   add_foreign_key "category_items", "categories"
+  add_foreign_key "correction_fields", "corrections"
+  add_foreign_key "corrections", "users"
+  add_foreign_key "corrections", "users", column: "resolved_by_id"
   add_foreign_key "domain_roles", "users"
   add_foreign_key "donations", "users"
   add_foreign_key "external_links", "users", column: "submitted_by_id"

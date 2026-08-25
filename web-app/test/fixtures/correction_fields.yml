@@ -1,0 +1,46 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+# == Schema Information
+#
+# Table name: correction_fields
+#
+#  id            :bigint           not null, primary key
+#  applied_at    :datetime
+#  field_name    :string           not null
+#  new_value     :jsonb
+#  old_value     :jsonb
+#  status        :integer          default(0), not null
+#  created_at    :datetime         not null
+#  updated_at    :datetime         not null
+#  correction_id :bigint           not null
+#
+# Indexes
+#
+#  index_correction_fields_on_correction_id                 (correction_id)
+#  index_correction_fields_on_correction_id_and_field_name  (correction_id,field_name) UNIQUE
+#
+# Foreign Keys
+#
+#  fk_rails_...  (correction_id => corrections.id)
+#
+war_and_peace_year:
+  correction: war_and_peace_pending
+  field_name: first_published_year
+  old_value: 1869
+  new_value: 1867
+  status: 0
+
+war_and_peace_title:
+  correction: war_and_peace_pending
+  field_name: title
+  old_value: War and Peace
+  new_value: War & Peace
+  status: 0
+
+crime_subtitle_applied:
+  correction: crime_resolved
+  field_name: subtitle
+  old_value:
+  new_value: A Novel in Six Parts
+  status: 1
+  applied_at: <%= 2.days.ago.to_fs(:db) %>
