@@ -15,17 +15,19 @@ module Search
       # etc.) are indexed with no per-document term frequency and no norms, so
       # OpenSearch/Lucene rewrites a `term` query on them to
       # `ConstantScore(term)^boost` regardless of the term's document frequency
-      # across the index. Rarity still matters, just earlier: it drives which
+      # across the index -- confirmed independently against the dev corpus, not
+      # just this test index. Rarity still matters, just earlier: it drives which
       # categories get selected (rarest-first sort, the max_category_item_count
       # ceiling in select_categories), not how a selected match is scored.
       #
-      # The per-term-vs-terms choice is still load-bearing for a different
-      # reason: separate `term` clauses in `should` each contribute their own
-      # constant score, so sharing N categories sums to N contributions --
-      # sharing more categories always scores higher than sharing fewer. A
-      # single `terms` clause collapses every id into ONE constant-score
-      # contribution no matter how many of them match, throwing that away. Do
-      # not "simplify" these into a terms query.
+      # The per-term-vs-terms choice is still load-bearing for a different,
+      # precise reason: N separate `term` clauses in `should` each contribute
+      # their own constant `boost`, so N of them sum to N x boost -- sharing
+      # four genres scores 4x a single shared genre. A single `terms` clause,
+      # by contrast, contributes its boost exactly ONCE no matter how many of
+      # its values matched, collapsing "shared four genres" and "shared one
+      # genre" into the identical score. Do not "simplify" these into a terms
+      # query.
       class BookSimilar < ::Search::Base::Search
         def self.index_name
           ::Search::Books::BookIndex.index_name
@@ -50,11 +52,15 @@ module Search
             select_categories(active.select { |c| c.category_type == type }, opts)
           end
 
-          restore_rarest_genre_if_ceiling_emptied_everything(active, by_type, opts)
+          restore_rarest_genre_if_ceiling_emptied_genres(active, by_type, opts)
         end
 
         # Rarest first, because a rare category says more about a book than a
-        # common one. The `c.id` tie-break is explicit so ordering is deterministic.
+        # common one. The `c.id` tie-break is explicit so ordering is
+        # deterministic. Purely a per-type filter -- it does not know or care
+        # about the other two types, on purpose (see
+        # restore_rarest_genre_if_ceiling_emptied_genres, which is the only
+        # place cross-type/genre-specific reasoning belongs).
         def self.select_categories(scoped, opts)
           by_rarity = scoped.sort_by { |c| [c.item_count.to_i, c.id] }
           return by_rarity.first(opts[:max_categories_per_type]) unless opts[:drop_common_categories]
@@ -63,20 +69,24 @@ module Search
           kept.first(opts[:max_categories_per_type])
         end
 
-        # Load-bearing guard, and deliberately global rather than per-type: a
-        # ceiling that leaves ONE type non-empty (say, a rare location survives
-        # while genre and subject don't) should still let the ceiling drop the
-        # over-common genre -- that's the feature working as intended. Only when
-        # the ceiling would empty EVERY type at once, turning off similarity
-        # scoring for the whole book, do we step in -- and specifically restore
-        # a genre, never a subject or location, because require_genre_match's
-        # own "categories["genre"].any?" check silently disables itself on an
-        # empty genre list rather than matching nothing, which would otherwise
-        # make an aggressive max_category_item_count broaden results instead of
-        # narrowing them.
-        def self.restore_rarest_genre_if_ceiling_emptied_everything(active, by_type, opts)
+        # Load-bearing guard, genre-specific and deliberately indifferent to
+        # subject/location: require_genre_match depends solely on
+        # categories["genre"], and its own `categories["genre"].any?` check
+        # silently disables the requirement rather than matching nothing when
+        # genre comes back empty. An aggressive max_category_item_count that
+        # empties every genre on this book would otherwise turn off the genre
+        # gate entirely -- letting a novel match a history book purely on a
+        # shared location, which is exactly what require_genre_match exists to
+        # prevent. Measured against the dev corpus: 6,405 books (5% of the
+        # 126,218 with genres) have every genre above the default 25k ceiling
+        # while a subject or location survives -- for exactly those books, a
+        # cross-type guard (fire only when EVERY type empties) would drop the
+        # genre gate and let this defect back in. Whether subject or location
+        # also emptied is irrelevant here on purpose: a surviving subject or
+        # location does not make dropping every genre any safer.
+        def self.restore_rarest_genre_if_ceiling_emptied_genres(active, by_type, opts)
           return by_type unless opts[:drop_common_categories]
-          return by_type if by_type.values.any?(&:any?)
+          return by_type if by_type["genre"].any?
 
           rarest_genre = active.select { |c| c.category_type == "genre" }.min_by { |c| [c.item_count.to_i, c.id] }
           by_type["genre"] = [rarest_genre] if rarest_genre

@@ -11,6 +11,7 @@ module Search
           ::Search::Books::BookIndex.create_index
           @book = books_books(:crime_and_punishment)
           @novels = categories(:books_novels_genre).id.to_s      # item_count 300
+          @classics = categories(:books_classics_genre).id.to_s   # item_count 100
           @politics = categories(:books_politics_subject).id.to_s # item_count 200
           @france = categories(:books_france_location).id.to_s    # item_count 50
         end
@@ -44,8 +45,8 @@ module Search
           )
         end
 
-        def ids_for(**options)
-          ::Search::Books::Search::BookSimilar.call(@book, options).map { |hit| hit[:id] }
+        def ids_for(book: @book, **options)
+          ::Search::Books::Search::BookSimilar.call(book, options).map { |hit| hit[:id] }
         end
 
         test "returns nothing when the book has no scoring categories" do
@@ -89,19 +90,30 @@ module Search
         end
 
         test "dropping common categories ignores a match on an over-common genre" do
+          # war_and_peace carries two genres: novels (item_count 300) and
+          # classics (100). A ceiling of 150 culls novels but classics
+          # survives, so the guard does not fire and genre stays required --
+          # just on classics now, which this doc doesn't share.
+          war_and_peace = books_books(:war_and_peace)
           index_book(9001, genre_category_ids: [@novels], similarity_category_count: 1)
 
-          assert_equal ["9001"], ids_for(drop_common_categories: false)
-          # books_novels_genre has item_count 300, so a ceiling of 150 removes it.
-          assert_empty ids_for(drop_common_categories: true, max_category_item_count: 150)
+          assert_equal ["9001"], ids_for(book: war_and_peace, drop_common_categories: false)
+          assert_empty ids_for(book: war_and_peace, drop_common_categories: true, max_category_item_count: 150)
         end
 
         test "keeps the rarest genre when the ceiling would remove every one of them" do
-          index_book(9001, genre_category_ids: [@novels], similarity_category_count: 1)
+          # A ceiling of 1 is below BOTH of war_and_peace's genres (novels 300,
+          # classics 100), so without the guard neither survives and
+          # require_genre_match turns itself off entirely, matching anything.
+          # The guard restores exactly the rarer genre (classics): 9001
+          # (shares classics) is found, while 9002 (shares only novels, the
+          # genre NOT restored) stays excluded -- proving the guard kept one
+          # genre rather than abandoning the ceiling.
+          war_and_peace = books_books(:war_and_peace)
+          index_book(9001, genre_category_ids: [@classics], similarity_category_count: 1)
+          index_book(9002, genre_category_ids: [@novels], similarity_category_count: 1)
 
-          # A ceiling of 1 is below every genre's item_count. Without the guard the
-          # book would have no genres left and require_genre_match would match nothing.
-          assert_equal ["9001"], ids_for(drop_common_categories: true, max_category_item_count: 1)
+          assert_equal ["9001"], ids_for(book: war_and_peace, drop_common_categories: true, max_category_item_count: 1)
         end
 
         test "excludes books sharing a series with the source book" do
