@@ -104,15 +104,25 @@ module Services
         assert_empty result.data[:books]
       end
 
-      test "preloads authors and images so rendering does not query per book" do
+      test "preloads authors and the primary image with its attachment so views do not N+1" do
+        image = Image.new(parent: @war_and_peace, primary: true)
+        image.file.attach(io: StringIO.new("fake image data"), filename: "cover.jpg", content_type: "image/jpeg")
+        image.save!
+
         stub_hits([@war_and_peace, @got])
         books = ::Services::Books::SimilarBooks.call(@book).data[:books]
+        pictured = books.find { |book| book.id == @war_and_peace.id }
+
+        # Without this, a fixture/attachment change could silently empty
+        # primary_image and this test would stop exercising the nested chain
+        # at all while staying green.
+        assert pictured.primary_image.present?
 
         assert_queries_count(0) do
-          books.each do |book|
-            book.book_authors.map { |ba| ba.author.name }
-            book.primary_image&.file&.attached?
-          end
+          books.each { |book| book.book_authors.map { |ba| ba.author.name } }
+          # No `&.` guard: a nil primary_image here should raise, not quietly
+          # skip the file_attachment/blob/variant_records chain being tested.
+          pictured.primary_image.file.attached?
         end
       end
     end
