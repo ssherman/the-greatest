@@ -97,6 +97,28 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
     assert_nil response.headers["Set-Cookie"]
   end
 
+  # The three sites' robots helpers have OPPOSITE defaults: music and games are
+  # opt-out (`@indexable == false ? noindex : index`) while books is opt-in
+  # (`@indexable ? index : noindex`). So a controller that sets nothing gets the
+  # same page indexed on two sites and hidden on the third by accident. Books is
+  # gated behind BOOKS_PUBLIC_INDEXING as well, which is off pre-cutover, so this
+  # only surfaces at cutover -- when nobody will be looking at the policy pages.
+  #
+  # Stubbed rather than driven by ENV: .env loads in the test group, so an
+  # env-dependent assertion here would pass locally and prove nothing about CI.
+  SITES.each_key do |domain|
+    test "the #{domain} policy pages are indexable" do
+      Books::PublicIndexing.stubs(:enabled?).returns(true)
+      host! host_for(domain)
+
+      get "/privacy_policy"
+      assert_select "meta[name=robots][content=?]", "index, follow"
+
+      get "/deletion_policy"
+      assert_select "meta[name=robots][content=?]", "index, follow"
+    end
+  end
+
   # A deletion policy that does not tell you how to request deletion is not a
   # deletion policy. Asserts the mechanism is wired, not the wording.
   test "deletion policy offers a way to make the request" do

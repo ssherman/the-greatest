@@ -16,6 +16,7 @@ class PagesController < ApplicationController
   layout :resolve_layout
 
   before_action :cache_for_show_page
+  before_action :mark_indexable
 
   # The date the text below was last substantively changed. Displayed on the
   # privacy page. A constant rather than a file mtime so that reformatting the
@@ -26,5 +27,17 @@ class PagesController < ApplicationController
   end
 
   def deletion
+  end
+
+  private
+
+  # The three sites' robots helpers have OPPOSITE defaults: music and games are
+  # opt-out (`@indexable == false ? noindex : index`), books is opt-in
+  # (`@indexable ? index : noindex`). Setting nothing therefore indexes these
+  # pages on two sites and hides them on the third -- and because books is also
+  # gated behind BOOKS_PUBLIC_INDEXING, that only shows up at cutover. These are
+  # public, static and canonical, so index them everywhere, deliberately.
+  def mark_indexable
+    @indexable = true
   end
 end
