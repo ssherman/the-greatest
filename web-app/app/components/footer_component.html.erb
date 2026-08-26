@@ -1,0 +1,58 @@
+<%# One <footer> element, not two. daisyUI's own footer examples put the link
+    columns and the copyright bar in two sibling <footer> tags, which gives the
+    page two contentinfo landmarks; .footer is a class, so nesting two divs
+    inside one <footer> gets the same layout with one landmark.
+
+    Links are `link`, not `link link-hover`. daisyUI 5 gives .footer no link
+    styling of its own, so link-hover computes identical to plain text until the
+    pointer is over it -- an affordance a keyboard or touch user never sees. %>
+<footer class="<%= background %> text-base-content">
+  <div class="footer sm:footer-horizontal container mx-auto p-10">
+    <nav aria-label="Browse">
+      <h2 class="footer-title">Browse</h2>
+      <% browse_links.each do |label, path| %>
+        <%= link_to label, path, class: "link" %>
+      <% end %>
+    </nav>
+
+    <nav aria-label="Site">
+      <h2 class="footer-title">Site</h2>
+      <% site_links.each do |label, path| %>
+        <%= link_to label, path, class: "link" %>
+      <% end %>
+    </nav>
+
+    <nav aria-label="Legal">
+      <h2 class="footer-title">Legal</h2>
+      <% legal_links.each do |label, path| %>
+        <%= link_to label, path, class: "link" %>
+      <% end %>
+    </nav>
+  </div>
+
+  <div class="footer footer-center container mx-auto border-t border-base-content/10 px-10 py-6">
+    <aside class="grid gap-4">
+      <% if social_links.any? %>
+        <%# grid-flow-col because .footer > * is display:grid, which would
+            otherwise stack these four vertically. %>
+        <div class="grid grid-flow-col gap-4">
+          <% social_links.each do |account| %>
+            <%# rel="me" identifies these as our own accounts; noopener is the
+                default for target=_blank in current browsers but is spelled out
+                because this markup gets copied. %>
+            <a href="<%= account[:url] %>"
+               aria-label="<%= account[:name] %>"
+               target="_blank"
+               rel="me noopener noreferrer"
+               class="btn btn-ghost btn-sm btn-square">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="h-5 w-5" fill="currentColor" aria-hidden="true">
+                <path d="<%= social_icon_path(account[:icon]) %>" />
+              </svg>
+            </a>
+          <% end %>
+        </div>
+      <% end %>
+      <p>Copyright &copy; <%= Time.current.year %> &mdash; All rights reserved by The Greatest LLC.</p>
+    </aside>
+  </div>
+</footer>
