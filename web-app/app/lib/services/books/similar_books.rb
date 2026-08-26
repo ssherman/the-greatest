@@ -25,7 +25,7 @@ module Services
 
         Result.new(
           success?: true,
-          data: {books: qualified.first(limit), more_available: qualified.size > limit},
+          data: {books: qualified.first(limit), more_available: more_available?(qualified, hits)},
           errors: []
         )
       rescue => e
@@ -44,6 +44,33 @@ module Services
 
       def limit
         @config[:limit]
+      end
+
+      # The `size` BookSimilar asked OpenSearch for -- read from the same merged
+      # config the query itself uses, so this can't drift from what was actually
+      # requested.
+      def requested_hit_count
+        @config[:limit] * @config[:over_fetch]
+      end
+
+      # `more_available` should mean "the full similar page would show more than
+      # this card does." We can't know that for certain without a second query,
+      # so this is a deliberate disjunction, not just "the cap left a surplus":
+      # a fully-populated hit window (hits.size >= requested_hit_count) means the
+      # author cap may have discarded qualifying books that never even made it
+      # into the window we fetched, so we can't rule out more existing beyond it.
+      #
+      # Erring toward "more" here is the correct trade-off, not a coin flip: if
+      # this is wrong, the reader clicks through to a page showing the same
+      # books they already saw -- mildly redundant. The failure mode of the
+      # alternative is a reader who can never reach results that genuinely
+      # exist, because the top of the ranking happened to be dominated by one
+      # author -- exactly the case the cap exists to handle in the first place.
+      # In practice a full window means there are at least `requested_hit_count`
+      # matching books, so the page's larger fetch (limit * over_fetch again,
+      # but with page_limit) will almost always yield more after its own cap.
+      def more_available?(qualified, hits)
+        qualified.size > limit || hits.size >= requested_hit_count
       end
 
       # Root-anchored: inside Services::Books a bare `Books::Book` resolves to

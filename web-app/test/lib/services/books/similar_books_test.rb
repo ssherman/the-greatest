@@ -65,6 +65,36 @@ module Services
         refute ::Services::Books::SimilarBooks.call(@book, limit: 5).data[:more_available]
       end
 
+      test "reports more_available when a full hit window is author-dominated even though the cap left only the limit" do
+        # limit: 1 / over_fetch: 2 makes the "full window" exactly 2 hits, small
+        # enough to fill entirely with the existing king-authored fixtures. got
+        # and clash are both by king, so max_per_author: 1 caps qualified at
+        # exactly the limit -- but the window search returned was completely
+        # full, so lower-scoring hits outside it could easily have qualified.
+        # The old `qualified.size > limit` check alone misses this: 1 > 1 is
+        # false, so it reported no more books existed when it simply never
+        # asked far enough to know.
+        stub_hits([@got, @clash])
+
+        result = ::Services::Books::SimilarBooks.call(@book, limit: 1, over_fetch: 2, max_per_author: 1)
+
+        assert_equal [@got.id], result.data[:books].map(&:id)
+        assert result.data[:more_available]
+      end
+
+      test "does not report more_available when the window was only partially filled" do
+        # Same overrides as above (requested_hit_count == 2), but the search
+        # only returned one hit -- OpenSearch had nothing more to give, so
+        # there is nothing beyond it to point the reader toward, even though
+        # the cap also leaves qualified at the limit.
+        stub_hits([@got])
+
+        result = ::Services::Books::SimilarBooks.call(@book, limit: 1, over_fetch: 2, max_per_author: 1)
+
+        assert_equal [@got.id], result.data[:books].map(&:id)
+        refute result.data[:more_available]
+      end
+
       test "does not report more_available when the cap trimmed the surplus" do
         stub_hits([@got, @clash, @war_and_peace])
 
