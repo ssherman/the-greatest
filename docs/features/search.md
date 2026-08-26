@@ -284,7 +284,7 @@ Builder methods used by all query classes:
 ### Query Types
 
 Each indexed model has up to three query classes following the general/autocomplete/dedup
-pattern below; `Books::Book` additionally has `BookSimilar`, a fourth, differently-shaped
+pattern below; `Books::Book` additionally has `BookSimilar`, a differently-shaped
 query described after them.
 
 #### General Search (public search page)
