@@ -120,9 +120,12 @@ module Services
 
         assert_queries_count(0) do
           books.each { |book| book.book_authors.map { |ba| ba.author.name } }
+          # .key, not .attached? -- attached? is answered by the already-loaded
+          # file_attachment alone and never touches the blob, so dropping
+          # {blob: ...} from the preload chain would still leave this green.
           # No `&.` guard: a nil primary_image here should raise, not quietly
           # skip the file_attachment/blob/variant_records chain being tested.
-          pictured.primary_image.file.attached?
+          pictured.primary_image.file.key
         end
       end
     end

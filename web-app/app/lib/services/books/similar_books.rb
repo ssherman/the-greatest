@@ -29,8 +29,14 @@ module Services
           errors: []
         )
       rescue => e
-        # A search outage costs the card, not the page.
-        Rails.logger.error "SimilarBooks failed for book #{@book.id}: #{e.message}"
+        # A search outage costs the card, not the page. The breadth of this
+        # rescue is deliberate -- it is what makes the pre-reindex deploy window
+        # (see Search::Books::Search::BookSimilar, similarity_category_count
+        # absent from the mapping) degrade gracefully instead of raising. Do not
+        # narrow it. But that same breadth also catches a genuine NoMethodError
+        # in load_books/apply_author_cap, so log enough to tell the three apart:
+        # class and a short backtrace, not just the message.
+        Rails.logger.error "SimilarBooks failed for book #{@book.id}: #{e.class}: #{e.message} #{e.backtrace&.first(5)&.join(" | ")}"
         empty
       end
 

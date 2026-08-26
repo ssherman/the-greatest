@@ -133,8 +133,13 @@ module Search
             }
           end
 
-          book.authors.each do |author|
-            should << {term: {author_ids: {value: author.id.to_s, boost: opts[:author_boost]}}}
+          # book.book_authors, not book.authors: #show and #similar both preload
+          # {book_authors: :author}, a different association that does not
+          # populate `authors`, so reading `book.authors` here would issue an
+          # extra query -- and load full Author rows -- on every uncached book
+          # page render just to read ids already available via book_author.author_id.
+          book.book_authors.each do |book_author|
+            should << {term: {author_ids: {value: book_author.author_id.to_s, boost: opts[:author_boost]}}}
           end
 
           excluded = [book.id.to_s]

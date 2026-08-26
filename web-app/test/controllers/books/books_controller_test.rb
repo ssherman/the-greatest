@@ -382,6 +382,39 @@ module Books
       assert_response :not_found
     end
 
+    # @indexable is computed AFTER the service call and AND'd with the results,
+    # not merely with @ranked_item.present? -- see the two tests below.
+    test "marks the similar page indexable when the book is ranked and similar books were found" do
+      book = books_books(:crime_and_punishment)
+      RankedItem.create!(item: book, ranking_configuration: @rc, rank: 1, score: 100)
+      ::Services::Books::SimilarBooks.stubs(:call).returns(
+        ::Services::Books::SimilarBooks::Result.new(
+          success?: true,
+          data: {books: [books_books(:war_and_peace)], more_available: false},
+          errors: []
+        )
+      )
+
+      get book_similar_url(slug: book.slug)
+
+      assert @controller.view_assigns["indexable"]
+    end
+
+    # A ranked book whose similarity query returns nothing renders only "No
+    # similar books found for this title" -- there is no content on the page
+    # to index, even though the book itself is ranked.
+    test "marks the similar page not indexable when no similar books were found, even for a ranked book" do
+      book = books_books(:crime_and_punishment)
+      RankedItem.create!(item: book, ranking_configuration: @rc, rank: 1, score: 100)
+      ::Services::Books::SimilarBooks.stubs(:call).returns(
+        ::Services::Books::SimilarBooks::Result.new(success?: true, data: {books: [], more_available: false}, errors: [])
+      )
+
+      get book_similar_url(slug: book.slug)
+
+      refute @controller.view_assigns["indexable"]
+    end
+
     # The corrections DDoS came from a route inside scope "(/rc/:ranking_configuration_id)"
     # whose controller never read the segment: every distinct value returned 200 with a
     # 24h public cache, so each one was a fresh cache key and a full render. This action

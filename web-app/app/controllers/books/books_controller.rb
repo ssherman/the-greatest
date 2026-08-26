@@ -76,10 +76,14 @@ class Books::BooksController < ApplicationController
     @ranked_item = if @ranking_configuration
       @ranking_configuration.ranked_items.where.not(rank: nil).find_by(item: @book)
     end
-    @indexable = @ranked_item.present?
 
     @similar_books = ::Services::Books::SimilarBooks
       .call(@book, limit: Rails.application.config.x.book_similarity[:page_limit])
       .data[:books]
+
+    # Computed after the service call, and AND'd with the results: a ranked
+    # book whose similarity query returns nothing renders only "No similar
+    # books found for this title" -- an empty page has no content to index.
+    @indexable = @ranked_item.present? && @similar_books.any?
   end
 end
