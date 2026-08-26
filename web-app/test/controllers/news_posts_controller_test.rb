@@ -543,10 +543,18 @@ class NewsPostsControllerTest < ActionDispatch::IntegrationTest
       get news_path
 
       assert_response :success
-      # `.navbar`, not `nav`: the books layout wraps its bar in <nav class="navbar">
-      # while music and games use <div class="navbar">. Scoped to the bar so the
-      # books footer's own links cannot satisfy it.
-      assert_select ".navbar a[href=?]", "/news", count: 2
+
+      if domain == :books
+        # Books renders its mobile nav in a daisyUI drawer, which is a sibling
+        # of .navbar rather than a child. Asserting each location separately
+        # still catches an edit that updates only one copy.
+        assert_select ".navbar-center a[href=?]", "/news", count: 1
+        assert_select ".drawer-side a[href=?]", "/news", count: 1
+      else
+        # `.navbar`, not `nav`: music and games use <div class="navbar">.
+        # Scoped to the bar so the footer's own links cannot satisfy it.
+        assert_select ".navbar a[href=?]", "/news", count: 2
+      end
     end
   end
 

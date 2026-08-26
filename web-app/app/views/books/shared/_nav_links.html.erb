@@ -1,8 +1,20 @@
+<%# `variant` controls the "Lists" submenu only. :horizontal keeps the floating
+    dropdown styling used by the desktop bar; :vertical drops it so the submenu
+    expands inline inside the drawer panel, which is what makes this read better
+    than the legacy site's floating-menu-over-a-panel. %>
+<% variant = local_assigns.fetch(:variant, :horizontal) %>
 <li><%= link_to "Books", books_root_path %></li>
 <li>
   <details>
     <summary>Lists</summary>
-    <ul class="bg-base-100 rounded-box z-[1] w-max max-w-[calc(100vw-2rem)] p-2 shadow">
+    <%# :vertical (the drawer panel): daisyUI sets white-space: nowrap on
+        `.menu :where(li ul)`, and .drawer-side is overflow-x: hidden, so a
+        label wider than the 320px (w-80) panel is CLIPPED, not wrapped or
+        scrolled. The longest label today, "The Greatest Books of the 21st
+        Century", measures 279px -- about one word of headroom. A longer
+        collection name added later would be silently cut off with no test
+        failure and no build error. %>
+    <ul class="<%= "bg-base-100 rounded-box z-[1] w-max max-w-[calc(100vw-2rem)] p-2 shadow" if variant == :horizontal %>">
       <li><%= link_to "All Lists", books_lists_path %></li>
       <li class="menu-title"><span class="sr-only">Curated collections</span></li>
       <li><%= link_to "The Global Canon", books_global_canon_path %></li>

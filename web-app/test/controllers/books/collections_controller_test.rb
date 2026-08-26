@@ -164,9 +164,9 @@ module Books
       get "/"
 
       # The nav's <li> block is rendered from a shared partial in TWO places
-      # (the narrow-screen dropdown and the wide-screen bar), so a correctly
-      # rendered page has each link exactly twice. Asserting only minimum: 1
-      # would pass even if one of the two copies were missing the link.
+      # (the drawer panel and the desktop bar), so a correctly rendered page
+      # has each link exactly twice. Asserting only minimum: 1 would pass
+      # even if one of the two copies were missing the link.
       Collections::Registry.for(:books).each do |collection|
         assert_select "a[href=?]", "/#{collection.slug}", {count: 2},
           "nav is missing a link to /#{collection.slug} in one or both copies"

@@ -39,94 +39,128 @@
         data-controller="user-list-state membership-state"
         data-domain="<%= Current.domain %>"
         data-signed-in="<%= signed_in? %>">
-    <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 btn btn-sm btn-primary">Skip to content</a>
-    <nav class="navbar bg-base-300" aria-label="Main">
-      <div class="navbar-start">
-        <div class="dropdown">
-          <div tabindex="0" role="button" class="btn btn-ghost lg:hidden">
-            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" />
-            </svg>
-          </div>
-          <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
-            <%= render "books/shared/nav_links" %>
-          </ul>
-        </div>
-        <%= link_to "/", class: "btn btn-ghost text-xl" do %>
-          <span class="text-2xl mr-2">📚</span>
-          <%= domain_name %>
-        <% end %>
-      </div>
-      <div class="navbar-center hidden lg:flex">
-        <ul class="menu menu-horizontal px-1">
-          <%= render "books/shared/nav_links" %>
-        </ul>
-      </div>
-      <div class="navbar-end">
-        <%# Mobile: icon link to the search page %>
-        <%= link_to books_search_path, class: "btn btn-ghost btn-square md:hidden", aria: { label: "Search" } do %>
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-        <% end %>
+    <%# Deliberately OUTSIDE .drawer so it stays the first tab stop -- the drawer's
+        checkbox is focusable and would otherwise precede it. Being outside also
+        puts it beyond the `inert` the nav drawer controller applies to
+        .drawer-content, so the controller inerts this link by id as well. %>
+    <a href="#main" id="books-skip-link" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 btn btn-sm btn-primary">Skip to content</a>
+    <div class="drawer"
+         data-controller="books--nav-drawer"
+         data-action="click->books--nav-drawer#closeOnNavigate">
+      <%# The checkbox holds open/closed state. `lg:hidden` keeps it out of the
+          desktop tab order. It is NOT a Stimulus controller root -- the
+          controller mounts on .drawer so it can reach the content wrapper. %>
+      <input id="books-nav-drawer" type="checkbox" class="drawer-toggle lg:hidden"
+             data-books--nav-drawer-target="toggle" />
 
-        <%# Desktop: full search input. The value is echoed back only on the
-            search page itself -- /lists takes its own `q` for list search, and
-            without this guard that query would surface in the global box. %>
-        <div class="mr-4 hidden md:block">
-          <%= form_with url: books_search_path, method: :get, data: { turbo: false }, class: "flex" do |f| %>
-            <%= f.search_field :q,
-                value: (params[:q] if request.path == books_search_path),
-                placeholder: "Search books...",
-                class: "input w-64",
-                autocomplete: "off",
-                "aria-label": "Search books" %>
-            <button type="submit" class="btn btn-square btn-ghost" aria-label="Search">
+      <div class="drawer-content" data-books--nav-drawer-target="content">
+        <%# sticky, not fixed: sticky reserves its own space, so no compensating
+            padding-top on the body. z-30 sits under .drawer-side's z-40 so the
+            open drawer and its dimmed overlay cover the header. %>
+        <nav class="navbar bg-base-300 sticky top-0 z-30" aria-label="Main">
+          <div class="navbar-start">
+            <label for="books-nav-drawer"
+                   id="books-nav-drawer-button"
+                   class="btn btn-ghost drawer-button lg:hidden"
+                   data-books--nav-drawer-target="button"
+                   aria-controls="books-nav-drawer-panel"
+                   aria-expanded="false"
+                   aria-label="Open navigation menu">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" />
+              </svg>
+            </label>
+            <%= link_to "/", class: "btn btn-ghost text-xl" do %>
+              <span class="text-2xl mr-2">📚</span>
+              <%= domain_name %>
+            <% end %>
+          </div>
+          <div class="navbar-center hidden lg:flex">
+            <ul class="menu menu-horizontal px-1">
+              <%= render "books/shared/nav_links", variant: :horizontal %>
+            </ul>
+          </div>
+          <div class="navbar-end">
+            <%# Mobile: icon link to the search page %>
+            <%= link_to books_search_path, class: "btn btn-ghost btn-square md:hidden", aria: { label: "Search" } do %>
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
-            </button>
-          <% end %>
-        </div>
+            <% end %>
 
-        <button class="btn btn-primary" onclick="login_modal.showModal()" id="navbar_login_button">Login</button>
-      </div>
-    </nav>
+            <%# Desktop: full search input. The value is echoed back only on the
+                search page itself -- /lists takes its own `q` for list search, and
+                without this guard that query would surface in the global box. %>
+            <div class="mr-4 hidden md:block">
+              <%= form_with url: books_search_path, method: :get, data: { turbo: false }, class: "flex" do |f| %>
+                <%= f.search_field :q,
+                    value: (params[:q] if request.path == books_search_path),
+                    placeholder: "Search books...",
+                    class: "input w-64",
+                    autocomplete: "off",
+                    "aria-label": "Search books" %>
+                <button type="submit" class="btn btn-square btn-ghost" aria-label="Search">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </button>
+              <% end %>
+            </div>
 
-    <main id="main" class="container mx-auto px-4 py-8">
-      <%= yield %>
-    </main>
+            <button class="btn btn-primary" onclick="login_modal.showModal()" id="navbar_login_button">Login</button>
+          </div>
+        </nav>
 
-    <footer class="footer footer-center p-10 bg-base-300 text-base-content">
-      <nav class="grid grid-flow-col gap-4">
-        <%= link_to "Genres", books_genres_path, class: "link link-hover" %>
-        <%= link_to "Origins", books_countries_path, class: "link link-hover" %>
-        <%= link_to "Lists", books_lists_path, class: "link link-hover" %>
-      </nav>
-      <aside>
-        <p>Copyright © 2026 - All rights reserved by <%= domain_name %></p>
-      </aside>
-    </footer>
+        <main id="main" class="container mx-auto px-4 py-8 scroll-mt-20">
+          <%= yield %>
+        </main>
 
-    <%= render UserLists::ModalComponent.new %>
-    <%= render Reviews::ModalComponent.new %>
-    <%= render Toast::RegionComponent.new %>
-    <%= render "shared/user_list_icon_template" %>
+        <footer class="footer footer-center p-10 bg-base-300 text-base-content">
+          <nav class="grid grid-flow-col gap-4">
+            <%= link_to "Genres", books_genres_path, class: "link link-hover" %>
+            <%= link_to "Origins", books_countries_path, class: "link link-hover" %>
+            <%= link_to "Lists", books_lists_path, class: "link link-hover" %>
+          </nav>
+          <aside>
+            <p>Copyright © 2026 - All rights reserved by <%= domain_name %></p>
+          </aside>
+        </footer>
 
-    <!-- Login Modal -->
-    <dialog id="login_modal" class="modal">
-      <div class="modal-box">
-        <h3 class="font-bold text-lg mb-4">Sign In</h3>
-        <%= render Authentication::WidgetComponent.new(reload_after_auth: true) %>
-        <div class="modal-action">
-          <form method="dialog">
-            <button class="btn">Close</button>
+        <%= render UserLists::ModalComponent.new %>
+        <%= render Reviews::ModalComponent.new %>
+        <%= render Toast::RegionComponent.new %>
+        <%= render "shared/user_list_icon_template" %>
+
+        <!-- Login Modal -->
+        <dialog id="login_modal" class="modal">
+          <div class="modal-box">
+            <h3 class="font-bold text-lg mb-4">Sign In</h3>
+            <%= render Authentication::WidgetComponent.new(reload_after_auth: true) %>
+            <div class="modal-action">
+              <form method="dialog">
+                <button class="btn">Close</button>
+              </form>
+            </div>
+          </div>
+          <form method="dialog" class="modal-backdrop">
+            <button>close</button>
           </form>
+        </dialog>
+      </div>
+
+      <%# `lg:hidden` is load-bearing, not cosmetic: `display:none` does not
+          clear `:checked`, and `.drawer-toggle:checked ~ .drawer-side` still
+          matches. Without it, opening the drawer on a phone and rotating past
+          the lg breakpoint strands a fixed full-height panel over the desktop
+          layout. Task 2 adds a matchMedia uncheck as the belt to this braces. %>
+      <div class="drawer-side z-40 lg:hidden">
+        <label for="books-nav-drawer" aria-label="Close navigation menu" class="drawer-overlay"></label>
+        <div id="books-nav-drawer-panel" class="bg-base-100 min-h-full w-80 p-4">
+          <ul class="menu w-full">
+            <%= render "books/shared/nav_links", variant: :vertical %>
+          </ul>
         </div>
       </div>
-      <form method="dialog" class="modal-backdrop">
-        <button>close</button>
-      </form>
-    </dialog>
+    </div>
   </body>
 </html>
