@@ -1,0 +1,32 @@
+<%
+  content_for :page_title, "Deletion Policy | #{domain_name}"
+  content_for :meta_description, "How to delete your #{domain_name} account and the personal information associated with it."
+%>
+
+<%# max-w-3xl outside, prose max-w-none inside: the same reading measure
+    news_posts/show.html.erb uses for long-form text. %>
+<article class="max-w-3xl mx-auto">
+  <div class="prose max-w-none">
+    <h1>Deletion Policy</h1>
+
+    <p>
+      If you wish to delete your account and remove all associated personal information from our
+      sites, please send an email request to <%= mail_to SiteContact::ADDRESS %>. Upon receiving
+      your request we will take appropriate steps to remove your information and confirm the deletion
+      of your account.
+    </p>
+
+    <%# One account spans all three sites, so deletion cannot be per-site and a
+        reader who arrives here from one of them should not have to guess. %>
+    <p>
+      One account is shared across thegreatestbooks.org, thegreatestmusic.org and thegreatest.games,
+      so deleting it removes your information from all three. Please send your request from the email
+      address associated with the account so that we can identify it.
+    </p>
+
+    <p>
+      For more on what we collect and why, see our
+      <%= link_to "Privacy Policy", privacy_policy_path %>.
+    </p>
+  </div>
+</article>

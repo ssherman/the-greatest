@@ -402,6 +402,27 @@ Rails.application.routes.draw do
     get "news/:slug", to: "news_posts#show", as: :news_post, constraints: {format: /html/}
   end
 
+  # Privacy and deletion policies. One company, one policy, so like /news these
+  # are one controller and one set of views for every site, with the layout
+  # resolved from Current.domain -- and domain-constrained the same way, since
+  # the fourth host is a placeholder and should not serve an edge-cached,
+  # indexable page.
+  #
+  # The paths are the legacy site's, unchanged: it has served /privacy_policy
+  # and /deletion_policy for years, Facebook's app settings point a data
+  # deletion URL at the latter, and both are the kind of link that is recorded
+  # once somewhere and never revisited.
+  #
+  # html only. These have no json or rss representation, and without the
+  # constraint /privacy_policy.rss is a 406 from an edge-cached path rather than
+  # a clean 404 -- the same reasoning as the news routes above.
+  constraints DomainConstraint.new(
+    [:books, :music, :games].map { |domain| Rails.application.config.domains[domain] }.join(",")
+  ) do
+    get "privacy_policy", to: "pages#privacy", as: :privacy_policy, constraints: {format: /html/}
+    get "deletion_policy", to: "pages#deletion", as: :deletion_policy, constraints: {format: /html/}
+  end
+
   # Legacy books URL. ~15 years of inbound links point at /support.
   get "support", to: redirect("/membership", status: 301)
 

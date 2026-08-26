@@ -1,0 +1,114 @@
+<%
+  content_for :page_title, "Privacy Policy | #{domain_name}"
+  content_for :meta_description, "How The Greatest LLC collects, uses and safeguards your information across its sites."
+%>
+
+<%# One policy for all three sites -- The Greatest LLC operates them together
+    and handles data the same way on each, so a per-site copy would be three
+    documents to keep true instead of one. Only the site name changes, and it
+    comes from domain_name so this reads correctly on whichever host serves it. %>
+<article class="max-w-3xl mx-auto">
+  <div class="prose max-w-none">
+    <h1>Privacy Policy</h1>
+
+    <p class="lead">Last updated: <%= PagesController::LAST_UPDATED.to_fs(:long) %></p>
+
+    <p>
+      Welcome to <%= domain_name %> ("we", "us", "our"). Your privacy is important to us, and we are
+      committed to safeguarding your personal information. This Privacy Policy ("Policy") describes how
+      we collect, use, disclose and safeguard your information when you visit our sites.
+    </p>
+
+    <p>
+      The Greatest LLC operates thegreatestbooks.org, thegreatestmusic.org and thegreatest.games
+      (each a "Site", together the "Sites"), including any related media form, media channel, mobile
+      website or mobile application. This Policy applies to all of them. One account works across
+      every Site, so information you give us on one Site may be visible to you on the others.
+    </p>
+
+    <h2>Information We Collect</h2>
+
+    <h3>Personal Information</h3>
+    <p>
+      When you register for an account you may be asked to provide your name, email address and other
+      identifiable information. You are also able to build a profile, which may include additional
+      personal information such as the titles you have rated, reviewed, or added to your lists.
+    </p>
+
+    <h3>Non-Personal Information</h3>
+    <p>
+      Like most websites, we also collect non-personal information through cookies, log files and
+      third-party analytics tools. This information may include your IP address, browser type,
+      operating system and browsing history on the Sites.
+    </p>
+
+    <h3>Information from Third Parties</h3>
+    <p>
+      We may also receive information from third-party partners, such as advertisers, and from the
+      sign-in provider you choose when you create an account.
+    </p>
+
+    <h2>How We Use Information</h2>
+    <ul>
+      <li>To personalize your experience</li>
+      <li>To improve our Sites</li>
+      <li>To send periodic emails</li>
+      <li>To serve targeted advertisements</li>
+      <li>To process membership payments and donations</li>
+      <li>To fulfill other purposes for which you provided the information</li>
+      <li>For analytics and research</li>
+    </ul>
+
+    <h2>Disclosure of Information</h2>
+    <p>We may disclose information:</p>
+    <ul>
+      <li>To third-party service providers</li>
+      <li>To comply with legal requirements</li>
+      <li>In case of a business transfer such as a merger or acquisition</li>
+      <li>To enforce our Sites' policies</li>
+      <li>To protect our or others' rights and safety</li>
+    </ul>
+
+    <h2>Payments</h2>
+    <p>
+      Membership payments and donations are processed by Stripe. We do not receive or store your card
+      number. Stripe's handling of that information is governed by its own privacy policy.
+    </p>
+
+    <h2>Cookies</h2>
+    <p>
+      We use cookies to compile aggregate data about site traffic and site interactions in order to
+      offer better site experiences and tools in the future. You can choose to have your computer warn
+      you each time a cookie is being sent, or you can turn off all cookies through your browser
+      settings.
+    </p>
+
+    <h2>Third-party Advertising</h2>
+    <p>
+      We may use third-party advertising companies to serve ads when you visit our Sites. These
+      companies may use information about your visits to these and other websites to provide relevant
+      advertisements about goods and services that may interest you.
+    </p>
+
+    <h2>Security</h2>
+    <p>
+      We implement a variety of security measures to maintain the safety of your personal information.
+      However, no electronic storage is 100% secure, and we cannot guarantee absolute data security.
+    </p>
+
+    <h2>Deleting Your Account</h2>
+    <p>
+      You can ask us to delete your account and the personal information associated with it at any
+      time. See our <%= link_to "Deletion Policy", deletion_policy_path %> for how to make that request.
+    </p>
+
+    <h2>Updates to This Policy</h2>
+    <p>
+      We may update this Policy from time to time. Any updates will be effective upon posting the
+      updated Policy on this page, and we will update the "Last updated" date above.
+    </p>
+
+    <h2>Contact Us</h2>
+    <p>For any questions regarding this Policy, you may contact us at <%= mail_to SiteContact::ADDRESS %>.</p>
+  </div>
+</article>
