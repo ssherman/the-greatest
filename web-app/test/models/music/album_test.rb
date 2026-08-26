@@ -29,6 +29,14 @@ module Music
       assert @album.valid?
     end
 
+    test "declares its correctable fields in display order" do
+      assert_equal %w[title release_year description], ::Music::Album.correctable_field_names
+    end
+
+    test "does not expose the doomed description column as a column target" do
+      assert_equal :description, ::Music::Album.correctable_fields["description"].target
+    end
+
     test "should require title" do
       @album.title = nil
       assert_not @album.valid?

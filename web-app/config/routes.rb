@@ -21,6 +21,28 @@ Rails.application.routes.draw do
     # Category pages (outside rc scope - always uses default primary configs for both artists and albums)
     get "categories/:id", to: "music/categories#show", as: :music_category
 
+    # DELIBERATELY OUTSIDE the (/rc/:ranking_configuration_id) scope below -- see
+    # the books block for the full reasoning. The short version: these pages are
+    # edge-cached for a day, they show record fields rather than rankings, and an
+    # unconstrained optional path segment in front of a cached page is an
+    # unbounded supply of distinct cache keys, every one of them a MISS that
+    # renders at origin. That is the flood that took the legacy page down.
+    #
+    # correctable_type comes from route defaults, never from a param: #new then
+    # has no user input to validate at all. Same shared controller as books and
+    # games.
+    get "album/:slug/suggest-correction", to: "corrections#new",
+      defaults: {correctable_type: "Music::Album"}, as: :music_album_correction,
+      constraints: {format: /html/}
+
+    # Same cacheable-GET shape as the form above, nested under the same
+    # /suggest-correction prefix so robots.txt's existing
+    # "Disallow: /*/suggest-correction" rule (unanchored, so it matches this
+    # path too) covers it without a second rule.
+    get "album/:slug/suggest-correction/thanks", to: "corrections#thanks",
+      defaults: {correctable_type: "Music::Album"}, as: :music_album_correction_thanks,
+      constraints: {format: /html/}
+
     # All music routes with optional ranking configuration parameter
     scope "(/rc/:ranking_configuration_id)" do
       # Album routes
@@ -250,6 +272,20 @@ Rails.application.routes.draw do
           get :search
         end
       end
+
+      # Shared controller, routed per domain -- same shape as descriptions and
+      # category items. The domain comes from the route, so the index can scope to
+      # this domain's correctable types.
+      resources :corrections, only: [:index, :show], controller: "/admin/corrections" do
+        member do
+          post :apply
+          post :reject
+          post :resolve
+        end
+        collection do
+          post :bulk_reject
+        end
+      end
     end
   end
   require "sidekiq/web"
@@ -275,6 +311,12 @@ Rails.application.routes.draw do
 
   # Per-item review state — global (non-domain-constrained), JSON-only, never cached.
   get "review_state", to: "review_state#show", as: :review_state
+
+  # Uncached, no database query. Exists so the edge-cached correction form can get
+  # a token that belongs to the caller's session rather than to whoever populated
+  # the cache.
+  get "correction_token", to: "correction_token#show", as: :correction_token
+  resources :corrections, only: [:create]
 
   # Review writes — global (non-domain-constrained), Turbo Stream, never cached.
   post "reviews", to: "reviews#create", as: :reviews
@@ -505,6 +547,20 @@ Rails.application.routes.draw do
 
       resources :reviews, only: [:index, :show, :destroy]
 
+      # Shared controller, routed per domain -- same shape as descriptions and
+      # category items. The domain comes from the route, so the index can scope to
+      # this domain's correctable types.
+      resources :corrections, only: [:index, :show], controller: "/admin/corrections" do
+        member do
+          post :apply
+          post :reject
+          post :resolve
+        end
+        collection do
+          post :bulk_reject
+        end
+      end
+
       resources :news_topics
       resources :news_posts do
         collection do
@@ -521,6 +577,43 @@ Rails.application.routes.draw do
     scope "(/rc/:ranking_configuration_id)" do
       get "book/:slug", to: "books/books#show", as: :book
     end
+
+    # NOT inside the (/rc/:ranking_configuration_id) scope above, and that is the
+    # single most load-bearing decision in the corrections routing.
+    #
+    # These two pages are edge-cached for 24 hours, which is the whole reason this
+    # feature exists: the legacy correction page was uncached and a flood of GETs
+    # took the production site down. But CorrectionsController never calls
+    # load_ranking_configuration -- it has no use for one, it renders record
+    # fields, not rankings -- so an rc-prefixed URL would render 200 for ANY value
+    # of the segment. Every distinct value is a distinct Cloudflare cache key,
+    # every one a MISS, every one a full render at origin: the legacy flood
+    # reproduced with one extra path segment, and a Cache Rule that normalises
+    # query strings cannot see a path segment at all.
+    #
+    # Leaving the scope off means /rc/<anything>/book/:slug/suggest-correction
+    # matches no route and is rejected by the router before a controller, a view
+    # or a database connection is involved. Constraining the segment to /\d+/
+    # would NOT be equivalent -- there are unbounded distinct integers.
+    #
+    # constraints: {format: /html/} closes the same axis on (.:format): .json,
+    # .foo and so on are each another cache key. Same precedent as the news
+    # routes above.
+    #
+    # correctable_type comes from route defaults, never from a param: #new then has
+    # no user input to validate at all. Music and games each add one analogous line
+    # pointing at this same shared controller.
+    get "book/:slug/suggest-correction", to: "corrections#new",
+      defaults: {correctable_type: "Books::Book"}, as: :books_book_correction,
+      constraints: {format: /html/}
+
+    # Same cacheable-GET shape as the form above, nested under the same
+    # /suggest-correction prefix so robots.txt's existing
+    # "Disallow: /*/suggest-correction" rule (unanchored, so it matches this
+    # path too) covers it without a second rule.
+    get "book/:slug/suggest-correction/thanks", to: "corrections#thanks",
+      defaults: {correctable_type: "Books::Book"}, as: :books_book_correction_thanks,
+      constraints: {format: /html/}
 
     scope "(/rc/:ranking_configuration_id)" do
       get "author/:slug", to: "books/authors#show", as: :author
@@ -864,6 +957,20 @@ Rails.application.routes.draw do
           post :index_action
         end
       end
+
+      # Shared controller, routed per domain -- same shape as descriptions and
+      # category items. The domain comes from the route, so the index can scope to
+      # this domain's correctable types.
+      resources :corrections, only: [:index, :show], controller: "/admin/corrections" do
+        member do
+          post :apply
+          post :reject
+          post :resolve
+        end
+        collection do
+          post :bulk_reject
+        end
+      end
     end
 
     scope as: "games" do
@@ -871,6 +978,28 @@ Rails.application.routes.draw do
     end
 
     get "rankings", to: "games/default#rankings", as: :games_rankings
+
+    # DELIBERATELY OUTSIDE the (/rc/:ranking_configuration_id) scope below -- see
+    # the books block for the full reasoning. The short version: these pages are
+    # edge-cached for a day, they show record fields rather than rankings, and an
+    # unconstrained optional path segment in front of a cached page is an
+    # unbounded supply of distinct cache keys, every one of them a MISS that
+    # renders at origin. That is the flood that took the legacy page down.
+    #
+    # correctable_type comes from route defaults, never from a param: #new then
+    # has no user input to validate at all. Same shared controller as books and
+    # music.
+    get "game/:slug/suggest-correction", to: "corrections#new",
+      defaults: {correctable_type: "Games::Game"}, as: :games_game_correction,
+      constraints: {format: /html/}
+
+    # Same cacheable-GET shape as the form above, nested under the same
+    # /suggest-correction prefix so robots.txt's existing
+    # "Disallow: /*/suggest-correction" rule (unanchored, so it matches this
+    # path too) covers it without a second rule.
+    get "game/:slug/suggest-correction/thanks", to: "corrections#thanks",
+      defaults: {correctable_type: "Games::Game"}, as: :games_game_correction_thanks,
+      constraints: {format: /html/}
 
     # All games routes with optional ranking configuration parameter
     scope "(/rc/:ranking_configuration_id)" do
@@ -896,6 +1025,7 @@ Rails.application.routes.draw do
       get "video-games/:year/page/:page", to: "games/ranked_items#index", as: :video_games_by_year_page,
         constraints: {year: /\d{4}(s|-\d{4})?/, page: /\d+/}
       get "game/:slug", to: "games/games#show", as: :game
+
       get "categories/:id", to: "games/categories#show", as: :games_category
       get "categories/:id/page/:page", to: "games/categories#show", as: :games_category_page, constraints: {page: /\d+/}
     end

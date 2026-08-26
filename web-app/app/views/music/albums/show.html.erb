@@ -64,6 +64,14 @@
         <% end %>
       </div>
 
+      <%# A plain link, not a form: this page is edge-cached with the session
+          skipped, so a form here would carry no usable CSRF token. %>
+      <p class="text-sm">
+        <%= link_to "Suggest a correction",
+              music_album_correction_path(slug: @album.slug),
+              class: "link", data: {testid: "suggest-correction-link"} %>
+      </p>
+
       <% if @categories_by_type.any? %>
         <div class="card bg-base-100 shadow-md mb-6">
           <div class="card-body">

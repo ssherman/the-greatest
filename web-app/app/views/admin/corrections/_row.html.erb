@@ -1,0 +1,24 @@
+<%# The data- attributes are stable test hooks: the tests assert on these rather
+    than on any visible text, which a designer must stay free to change. %>
+<tr data-testid="correction-row"
+    data-correction-id="<%= correction.id %>"
+    data-status="<%= correction.status %>"
+    data-correctable-type="<%= correction.correctable_type %>">
+  <td>
+    <% if correction.pending? %>
+      <%= check_box_tag "correction_ids[]", correction.id, false, class: "checkbox checkbox-sm" %>
+    <% end %>
+  </td>
+  <td>
+    <%= link_to correction.correctable&.title || "(deleted)",
+          correction_path_for(correction), class: "link" %>
+  </td>
+  <td class="text-sm">
+    <%= correction.correction_fields.map(&:field_name).map(&:humanize).to_sentence.presence || "—" %>
+    <% if correction.notes.present? %>
+      <span class="badge badge-ghost badge-sm">notes</span>
+    <% end %>
+  </td>
+  <td class="text-sm"><%= correction.user&.email || "Anonymous" %></td>
+  <td class="text-sm"><%= time_ago_in_words(correction.created_at) %> ago</td>
+</tr>

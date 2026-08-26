@@ -1,0 +1,157 @@
+<% content_for :title, "Correction ##{@correction.id}" %>
+
+<div class="space-y-6 max-w-4xl">
+  <div class="flex items-start justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold">Correction #<%= @correction.id %></h1>
+      <p class="text-sm text-base-content/70 mt-1">
+        <%= @correction.user&.email || "Anonymous" %>
+        · <%= @correction.created_at.strftime("%B %-d, %Y at %H:%M") %>
+        <% if @correction.submitter_ip.present? %>· <%= @correction.submitter_ip %><% end %>
+      </p>
+    </div>
+    <span class="badge"><%= @correction.status.titleize %></span>
+  </div>
+
+  <% if @record %>
+    <div class="flex gap-2">
+      <%= link_to "Open in admin", Admin::DomainRouting.path_for(@record), class: "btn btn-sm" %>
+      <%= link_to "View public page", public_path_for(@record), class: "btn btn-sm btn-ghost" %>
+    </div>
+  <% else %>
+    <div class="alert alert-warning">The corrected record no longer exists.</div>
+  <% end %>
+
+  <%# Notes first and full width: 111 of the 236 pending legacy corrections are
+      notes-only, so this is the primary content, not a footnote under a table. %>
+  <div class="card bg-base-100 shadow-md">
+    <div class="card-body">
+      <h2 class="card-title text-lg">Notes</h2>
+      <% if @correction.notes.present? %>
+        <p class="[overflow-wrap:anywhere] whitespace-pre-line"><%= @correction.notes %></p>
+      <% else %>
+        <p class="text-base-content/70">No notes.</p>
+      <% end %>
+    </div>
+  </div>
+
+  <% if @fields.any? && @record %>
+    <%= form_with url: apply_correction_path(@correction), method: :post do %>
+      <div class="card bg-base-100 shadow-md">
+        <div class="card-body">
+          <h2 class="card-title text-lg">Proposed changes</h2>
+          <div class="overflow-x-auto">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Accept</th>
+                  <th>Field</th>
+                  <th>Was</th>
+                  <th>Is now</th>
+                  <th>Proposed</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% @fields.each do |field| %>
+                  <% definition = @record.class.correctable_fields[field.field_name] %>
+                  <% next if definition.nil? %>
+                  <% current = Services::Corrections::Targets.for(definition.target).read(@record, field.field_name) %>
+                  <% stale = current.to_s != field.old_value.to_s %>
+                  <tr data-testid="correction-field-row" data-field="<%= field.field_name %>">
+                    <td>
+                      <%= check_box_tag "accepted_fields[]", field.field_name, @correction.pending?,
+                            class: "checkbox", disabled: !@correction.pending? %>
+                    </td>
+                    <td><%= definition.label %></td>
+                    <td class="text-sm text-base-content/70 [overflow-wrap:anywhere]"><%= field.old_value.inspect %></td>
+                    <td class="text-sm [overflow-wrap:anywhere] <%= "text-warning font-semibold" if stale %>">
+                      <%= current.inspect %>
+                      <%# Flagged, not blocked. With a backlog reaching back to Oct
+                          2024 over books that have since been through the
+                          description migration and Amazon enrichment, a stale
+                          "Was" is the normal case -- the admin's judgement is the
+                          point. %>
+                      <% if stale %>
+                        <span class="badge badge-warning badge-sm" data-testid="stale-flag">changed since</span>
+                      <% end %>
+                    </td>
+                    <td>
+                      <% if definition.type == :string_array %>
+                        <%# One input PER ELEMENT, never one comma-joined input. A
+                            joined input cannot represent a value that contains the
+                            separator: "Good Night, Mr. Tom" went in as one title
+                            and came back out as two, written straight onto the
+                            record. Same repeatable-list shape, and the same
+                            corrections--form Stimulus controller, as the public
+                            form in app/views/corrections/new.html.erb -- one
+                            implementation, not two. %>
+                        <div data-controller="corrections--form">
+                          <%# Always submitted, always blank. Without it, removing
+                              every row sends no accepted[<field>] key at all, which
+                              the applier reads as "not accepted" and REJECTS --
+                              there would be no way to clear a list. ValueCaster
+                              drops the blank. %>
+                          <%= hidden_field_tag "accepted[#{field.field_name}][]", "", id: nil %>
+                          <div data-corrections--form-target="list"
+                               data-field="<%= field.field_name %>"
+                               data-input-name="accepted[<%= field.field_name %>][]"
+                               class="space-y-1">
+                            <% Array(field.new_value).each do |value| %>
+                              <div class="join w-full">
+                                <%= text_field_tag "accepted[#{field.field_name}][]", value,
+                                      id: nil, class: "input join-item w-full",
+                                      disabled: !@correction.pending? %>
+                                <button type="button" class="btn join-item"
+                                        data-action="corrections--form#removeListItem"
+                                        <%= "disabled" unless @correction.pending? %>>Remove</button>
+                              </div>
+                            <% end %>
+                          </div>
+                          <% if @correction.pending? %>
+                            <button type="button" class="btn btn-sm mt-2"
+                                    data-field="<%= field.field_name %>"
+                                    data-action="corrections--form#addListItem">
+                              Add <%= definition.label.singularize.downcase %>
+                            </button>
+                          <% end %>
+                        </div>
+                      <% elsif definition.type == :text %>
+                        <%= text_area_tag "accepted[#{field.field_name}]", field.new_value, rows: 4,
+                              class: "textarea w-full", disabled: !@correction.pending? %>
+                      <% else %>
+                        <%= text_field_tag "accepted[#{field.field_name}]", field.new_value,
+                              class: "input input-sm w-full", disabled: !@correction.pending? %>
+                      <% end %>
+                    </td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+
+          <% if @correction.pending? %>
+            <div class="card-actions mt-4">
+              <%= submit_tag "Apply checked fields", class: "btn btn-primary",
+                    data: {testid: "apply-correction"} %>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    <% end %>
+  <% end %>
+
+  <% if @correction.pending? %>
+    <div class="flex flex-wrap gap-2">
+      <%= form_with url: resolve_correction_path(@correction), method: :post do %>
+        <%= submit_tag "Mark resolved", class: "btn", data: {testid: "resolve-correction"} %>
+      <% end %>
+
+      <%= form_with url: reject_correction_path(@correction), method: :post, class: "flex gap-2" do %>
+        <%= text_field_tag :resolution_notes, nil, placeholder: "Reason (optional)", class: "input" %>
+        <%= submit_tag "Reject", class: "btn btn-warning", data: {testid: "reject-correction"} %>
+      <% end %>
+    </div>
+  <% elsif @correction.resolution_notes.present? %>
+    <div class="alert"><%= @correction.resolution_notes %></div>
+  <% end %>
+</div>

@@ -11,3 +11,14 @@ Disallow: /searches
 # /rc/<id>/ prefix would otherwise slip past them.
 Disallow: /*the-greatest/*,*
 Disallow: /*written-by/*,*
+
+# The correction form and its thanks page. Nothing here is content, and it is the
+# surface that has been used to flood the origin. One unanchored rule covers all
+# three domains at once: /book/*, /album/* and /game/* all end in the same
+# /suggest-correction segment.
+#
+# There is deliberately no /rc/ variant. These routes are the only public pages
+# NOT declared inside `scope "(/rc/:ranking_configuration_id)"` -- see the long
+# comment on the books block in config/routes.rb -- so an rc-prefixed correction
+# URL matches no route at all and there is nothing for a crawler to reach.
+Disallow: /*/suggest-correction
