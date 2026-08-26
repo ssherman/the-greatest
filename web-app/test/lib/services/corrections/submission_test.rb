@@ -88,6 +88,50 @@ module Services
         assert_equal [@user, "198.51.100.4"], [result.data.user, result.data.submitter_ip]
       end
 
+      # Codex P2: a browser sends NO key for a list with zero inputs, so removing
+      # every row would submit nothing and the field would be skipped -- the
+      # reader's intent to clear the list lost, and with no notes they would be
+      # told the correction was empty. The form now always submits a blank, which
+      # is what makes this reach collect_fields at all.
+      test "records clearing every element of an array field" do
+        result = Submission.call(
+          record: @book,
+          field_params: {"alternate_titles" => [""]},
+          notes: nil,
+          user: @user
+        )
+
+        assert_predicate result, :success?
+        field = result.data.correction_fields.sole
+        assert_equal [["Voyna i mir"], []], [field.old_value, field.new_value]
+      end
+
+      # Codex P2: assign_description returns early on blank content, so a blank
+      # description proposal would apply as a no-op while reporting success.
+      # Refused at submission instead, and the submitter is told why.
+      test "refuses a blank description rather than storing an unappliable proposal" do
+        result = Submission.call(
+          record: @book,
+          field_params: {"description" => "  "},
+          notes: nil,
+          user: @user
+        )
+
+        assert_not result.success?
+        assert_includes result.errors.join, "cannot be cleared here"
+      end
+
+      test "still accepts clearing a plain column, which writes correctly" do
+        @book.update!(subtitle: "A Novel")
+
+        result = Submission.call(
+          record: @book, field_params: {"subtitle" => ""}, notes: nil, user: @user
+        )
+
+        assert_predicate result, :success?
+        assert_nil result.data.correction_fields.sole.new_value
+      end
+
       test "succeeds anonymously" do
         result = Submission.call(record: @book, field_params: {}, notes: "wrong", user: nil)
 

@@ -28,6 +28,20 @@ module Services
         def self.write(record, _field_name, value)
           record.assign_description(source: :manual, content: value)
         end
+
+        # false, unlike Column. Describable#assign_description opens with
+        # `return nil if content.blank?`, so writing a blank here changes nothing
+        # -- and the applier would still mark the field applied and resolve the
+        # correction, telling the admin it cleared a description that is still on
+        # the page. Callers refuse a blank proposal instead of performing a write
+        # that silently does nothing.
+        #
+        # Refusing rather than destroying the row is deliberate: descriptions carry
+        # a source and a licence and have their own admin UI. "This description is
+        # wrong" belongs in the notes, where a human decides what replaces it.
+        def self.accepts_blank?
+          false
+        end
       end
     end
   end

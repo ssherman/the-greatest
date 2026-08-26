@@ -92,6 +92,39 @@ module Services
         assert @correction.correction_fields.all?(&:rejected?)
       end
 
+      # Codex P2: an admin can edit the proposed value to blank in the review form,
+      # which Submission's own guard never sees. assign_description no-ops on blank,
+      # so without this the field would be marked applied and the correction
+      # resolved while the description on the page never changed.
+      test "refuses a blank description at apply instead of reporting a false success" do
+        correction = ::Correction.create!(correctable: @book, notes: nil,
+          correction_fields_attributes: [{field_name: "description",
+                                          old_value: "old text", new_value: "new text"}])
+
+        result = Applier.call(correction: correction, accepted: {"description" => "  "}, admin: @admin)
+
+        assert_not result.success?
+        assert_includes result.errors.join, "cannot be cleared"
+        assert_predicate correction.reload, :pending?
+        assert_predicate correction.correction_fields.sole, :pending?
+      end
+
+      # Codex P2: the pending check used to run OUTSIDE the transaction, so two
+      # concurrent applies both passed it and both wrote -- the second silently
+      # overwriting the first admin's edited values and audit fields. lock! now
+      # serialises them. Simulated by resolving the row underneath an in-flight
+      # apply, which is the state the loser observes after waiting on the lock.
+      test "refuses to apply a correction another admin resolved first" do
+        correction = corrections(:war_and_peace_pending)
+        ::Correction.where(id: correction.id).update_all(status: ::Correction.statuses[:resolved])
+
+        result = Applier.call(correction: correction, accepted: {"title" => "War & Peace"}, admin: @admin)
+
+        assert_not result.success?
+        assert_includes result.errors.join, "already been resolved"
+        assert_equal "War and Peace", @book.reload.title
+      end
+
       test "refuses a correction that is not pending" do
         result = Applier.call(correction: corrections(:crime_resolved), accepted: {}, admin: @admin)
 

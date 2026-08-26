@@ -123,6 +123,21 @@ class CorrectionsControllerTest < ActionDispatch::IntegrationTest
     assert_select "a[href=?]", "/game/#{game.slug}/suggest-correction"
   end
 
+  # The array editor is entirely markup contract: the Stimulus controller reads
+  # data-input-name to build new rows, and the always-present blank is what lets a
+  # reader submit "no alternate titles at all". Neither has any server-side
+  # behaviour to catch a regression, and the E2E spec that exercises them is not
+  # part of the CI gate -- so drop either attribute and Add-row silently no-ops or
+  # clearing the list silently does nothing, with nothing going red.
+  test "the array field ships the markup its Stimulus controller and clearing depend on" do
+    get books_book_correction_path(slug: @book.slug)
+
+    assert_select "[data-corrections--form-target=list][data-field=alternate_titles]" \
+      "[data-input-name=?]", "correction[fields][alternate_titles][]"
+    assert_select "input[type=hidden][name=?][value=?]",
+      "correction[fields][alternate_titles][]", ""
+  end
+
   # The whole point of caching this page: it is the surface that took the live
   # site down when it was uncached.
   test "is publicly cacheable" do
@@ -350,8 +365,14 @@ class CorrectionsControllerTest < ActionDispatch::IntegrationTest
     ActionController::Base.allow_forgery_protection = original
   end
 
+  # Both vars, not just ADMIN_NOTIFICATION_EMAIL. Delivery runs the whole mailer,
+  # so MailBranding#from raises MissingFromAddress without MAIL_FROM_ADDRESS --
+  # which a local run hides, because .env supplies it and CI has no .env. Every
+  # other mail-triggering test in this suite sets both (see
+  # test/mailers/admin_mailer_test.rb and the billing tests).
   test "emails the owner on a successful submission" do
-    with_env("ADMIN_NOTIFICATION_EMAIL" => "owner@example.org") do
+    with_env("ADMIN_NOTIFICATION_EMAIL" => "owner@example.org",
+      "MAIL_FROM_ADDRESS" => "contact@example.org") do
       assert_emails 1 do
         submit
       end

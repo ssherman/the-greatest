@@ -20,6 +20,11 @@ module Services
       # of the three it was by the wording.
       ALREADY_RESOLVED = "This correction has already been resolved or rejected"
 
+      # Raised when an accepted value is blank for a target whose write would
+      # no-op on blank. Caught in #call and turned into a normal failure Result,
+      # so the admin sees why instead of a false success.
+      class BlankNotWritable < StandardError; end
+
       def self.call(correction:, accepted:, admin:)
         new(correction: correction, accepted: accepted || {}, admin: admin).call
       end
@@ -31,17 +36,27 @@ module Services
       end
 
       def call
-        unless @correction.pending?
-          return failure([ALREADY_RESOLVED])
-        end
-
         ::Correction.transaction do
+          # lock! (SELECT ... FOR UPDATE) BEFORE the pending check, and both inside
+          # the transaction. Checking outside it, two admins applying the same
+          # correction at once both pass `pending?` before either commits: both
+          # then write the record and both report success, so the second silently
+          # overwrites the first admin's edited values AND their audit fields.
+          # The lock makes the second wait and observe the resolved state.
+          #
+          # Returning from inside the block commits an empty transaction here --
+          # nothing has been written at this point -- which is why this is safe.
+          @correction.lock!
+          return failure([ALREADY_RESOLVED]) unless @correction.pending?
+
           apply_fields
           @record.save!
           resolve_correction
         end
 
         Result.new(success?: true, data: @correction.reload, errors: [])
+      rescue BlankNotWritable => e
+        failure([e.message])
       rescue ActiveRecord::RecordInvalid => e
         # The record's real validation errors, not legacy's single generic
         # "Failed to apply changes" -- an admin cannot fix what they cannot see.
@@ -76,8 +91,18 @@ module Services
             next
           end
 
+          target = Targets.for(definition.target)
           value = ValueCaster.call(@accepted[field.field_name], type: definition.type)
-          Targets.for(definition.target).write(@record, field.field_name, value)
+
+          # Submission refuses a blank proposal for such a target, but an admin can
+          # also edit the proposed value to blank in the review form. Fail loudly
+          # rather than write nothing and report success -- see
+          # PrimaryDescription#accepts_blank?.
+          if value.blank? && !target.accepts_blank?
+            raise BlankNotWritable, "#{definition.label} cannot be cleared"
+          end
+
+          target.write(@record, field.field_name, value)
 
           field.update!(status: :applied, new_value: value, applied_at: Time.current)
           applied_names << field.field_name

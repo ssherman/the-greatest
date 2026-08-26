@@ -13,6 +13,13 @@ module Services
         def self.write(record, field_name, value)
           record.public_send(:"#{field_name}=", value)
         end
+
+        # A column can legitimately be cleared -- blanking a subtitle or a page
+        # range is a real correction, and the write actually takes effect. See
+        # PrimaryDescription#accepts_blank? for the target where it does not.
+        def self.accepts_blank?
+          true
+        end
       end
     end
   end

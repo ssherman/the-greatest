@@ -49,6 +49,13 @@
 
         <% if definition.type == :string_array %>
           <label class="label" for="correction_fields_<%= definition.name %>"><%= definition.label %></label>
+          <%# Always-present blank, matching the admin review form. A browser sends
+              no key at all for a list with zero inputs, so removing every row would
+              otherwise submit nothing for this field -- Submission would skip it
+              rather than record the intended change to [], and a reader with no
+              notes would be told they submitted an empty correction. ValueCaster
+              drops the blank, so this costs nothing when rows are present. %>
+          <%= hidden_field_tag "correction[fields][#{definition.name}][]", "", id: nil %>
           <div data-corrections--form-target="list" data-field="<%= definition.name %>"
                data-input-name="correction[fields][<%= definition.name %>][]" class="space-y-2">
             <% Array(current).each do |value| %>

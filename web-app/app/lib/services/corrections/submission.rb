@@ -75,6 +75,16 @@ module Services
           proposed = ValueCaster.call(@field_params[name], type: definition.type)
           next if current == proposed
 
+          # A target that cannot write a blank must not accept a blank proposal:
+          # storing one produces a correction the admin can only ever reject,
+          # because applying it would report success while changing nothing.
+          # Told to the submitter rather than dropped, so clearing the box is not
+          # silently ignored.
+          if proposed.blank? && !target.accepts_blank?
+            errors << "#{definition.label} cannot be cleared here — please describe the problem in the notes instead"
+            next
+          end
+
           fields << {field_name: name, old_value: current, new_value: proposed}
         end
 
