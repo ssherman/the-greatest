@@ -66,8 +66,12 @@ class Books::BooksController < ApplicationController
 
   def similar
     # find_by!(slug:), never friendly.find -- 137 books have purely numeric slugs
-    # and friendly_id resolves slugs before primary keys.
-    @book = ::Books::Book.find_by!(slug: params[:slug])
+    # and friendly_id resolves slugs before primary keys. book_authors: :author is
+    # preloaded because the view walks it (the same idiom #show preloads above) --
+    # without it, every credited author on this book is its own query.
+    @book = ::Books::Book
+      .includes(book_authors: :author)
+      .find_by!(slug: params[:slug])
 
     @ranked_item = if @ranking_configuration
       @ranking_configuration.ranked_items.where.not(rank: nil).find_by(item: @book)
