@@ -238,6 +238,13 @@ git commit -m "Index book categories split by type for similarity"
 
 ### Task 2: The similarity query and its configuration
 
+> **Two corrections applied during execution — the committed code is the truth, not the
+> snippets below.** (1) `boost_mode: "divide"` is not a valid Lucene `CombineFunction` and
+> OpenSearch 400s on it; normalization uses a `function_score` `script_score` computing
+> `_score / Math.sqrt(count)` with `boost_mode: "replace"`. (2) The ceiling guard restores the
+> rarest **genre** whenever the ceiling empties genres, and lives at the `categories_by_type`
+> level rather than inside `select_categories`. See the ledger's Task 2 rulings.
+
 **Files:**
 - Create: `config/initializers/book_similarity.rb`
 - Create: `app/lib/search/books/search/book_similar.rb`
@@ -1348,12 +1355,28 @@ Raise it a little at a time, restarting the server after each edit, until weak r
 without emptying the page for obscure books. Legacy's `5` is meaningless here — normalization
 changed the scale.
 
-- [ ] **Step 5: Tune `max_category_item_count`**
+- [ ] **Step 5: Tune `max_category_item_count` — the highest-leverage knob**
+
+**Read this before tuning.** The original spec claimed the query gives rare categories more
+weight than common ones via IDF. That was measured false on 2026-08-26: a `term` query on a
+`keyword` field scores as a flat `ConstantScore` equal to its boost, with no rarity component
+(probe: "common" on 10/10 docs and "rare" on 1/10 both explain as `1.0`). The score is just
+`sum of boosts of shared categories` — 5 per genre, 3 per subject, 1 per location.
+
+So **this ceiling is the only thing in the entire design that acts on rarity.** A category
+either enters the query at full boost or does not enter it at all. That makes this knob the
+difference between "similar" meaning something and meaning "also fiction", not a refinement to
+apply last.
 
 25,000 cuts `Fiction` (68,333 books), `Nonfiction` (56,222), `Fictional Location` (36,656),
-`Identity` (31,658) and `United States` (29,274). Lower it if results still feel generic;
-raise it if pages come back sparse. Check an obscure book after each change — this is the knob
-most likely to empty a page.
+`Identity` (31,658) and `United States` (29,274). Lower it if results still feel generic; raise
+it if pages come back sparse. Check an obscure book after each change — this is the knob most
+likely to empty a page.
+
+Note the interaction with the genre guard: when the ceiling would cull *every* genre a book has,
+the rarest one is restored so the genre requirement still applies. 6,405 books (5% of those with
+genres) hit that path at a 25,000 ceiling. Lowering the ceiling grows that population, and for
+those books the ceiling stops doing anything to genres.
 
 - [ ] **Step 6: Tune `max_per_author` for the page**
 
