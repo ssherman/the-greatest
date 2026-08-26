@@ -576,6 +576,12 @@ Rails.application.routes.draw do
 
     scope "(/rc/:ranking_configuration_id)" do
       get "book/:slug", to: "books/books#show", as: :book
+      # Inside the rc scope deliberately: BooksController#similar calls
+      # load_ranking_configuration, so an unrecognised id raises RecordNotFound
+      # instead of returning a cacheable 200 under an unbounded set of URLs.
+      # constraints closes the (.:format) axis the same way the corrections routes do.
+      get "book/:slug/similar", to: "books/books#similar", as: :book_similar,
+        constraints: {format: /html/}
     end
 
     # NOT inside the (/rc/:ranking_configuration_id) scope above, and that is the

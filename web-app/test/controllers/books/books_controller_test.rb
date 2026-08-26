@@ -363,10 +363,97 @@ module Books
       assert_empty @controller.view_assigns["similar_books"]
     end
 
+    # --- The full similar-books page ---
+
+    test "similar responds successfully" do
+      get book_similar_url(slug: books_books(:crime_and_punishment).slug)
+
+      assert_response :success
+    end
+
+    # config.action_dispatch.show_exceptions is :rescuable in the test env, so
+    # ActiveRecord::RecordNotFound (a rescuable exception with a registered 404
+    # response) is rendered rather than raised through an integration test --
+    # confirmed against the identical "404s for an unknown slug" test for #show
+    # above, which uses the same assert_response :not_found shape.
+    test "similar 404s for an unknown slug" do
+      get book_similar_url(slug: "no-such-book")
+
+      assert_response :not_found
+    end
+
+    # The corrections DDoS came from a route inside scope "(/rc/:ranking_configuration_id)"
+    # whose controller never read the segment: every distinct value returned 200 with a
+    # 24h public cache, so each one was a fresh cache key and a full render. This action
+    # calls load_ranking_configuration, so garbage 404s instead of being cached.
+    test "similar 404s for an unknown ranking configuration id" do
+      get book_similar_url(slug: books_books(:crime_and_punishment).slug, ranking_configuration_id: 999_999)
+
+      assert_response :not_found
+    end
+
+    test "similar requests the page limit rather than the card limit" do
+      ::Services::Books::SimilarBooks
+        .expects(:call)
+        .with(anything, limit: Rails.application.config.x.book_similarity[:page_limit])
+        .returns(::Services::Books::SimilarBooks::Result.new(
+          success?: true, data: {books: [], more_available: false}, errors: []
+        ))
+
+      get book_similar_url(slug: books_books(:crime_and_punishment).slug)
+
+      assert_response :success
+    end
+
+    test "similar is not routable with a non-html format" do
+      assert_unroutable "/book/crime-and-punishment/similar.json"
+    end
+
+    test "similar does not N+1 across the grid" do
+      books = ::Books::Book
+        .where(id: [books_books(:war_and_peace).id, books_books(:got).id])
+        .includes(book_authors: :author)
+        .includes(primary_image: {file_attachment: {blob: {variant_records: {image_attachment: :blob}}}})
+        .to_a
+
+      ::Services::Books::SimilarBooks.stubs(:call).returns(
+        ::Services::Books::SimilarBooks::Result.new(
+          success?: true, data: {books: books, more_available: false}, errors: []
+        )
+      )
+
+      # Warm any per-process caching first so the measured run is representative.
+      # (Minitest's integration-test harness keeps AR's query cache enabled across
+      # the whole test, so this warm-up call also absorbs the repeated @book /
+      # @ranking_configuration / @ranked_item lookups behind assert_queries_count's
+      # cached-query filter, leaving only genuinely new queries -- e.g. a per-card
+      # N+1 -- visible below. Verified: adding a third stubbed book to this test
+      # left the measured count at 0, confirming it does not scale per book.)
+      get book_similar_url(slug: books_books(:crime_and_punishment).slug)
+
+      assert_queries_count(0) do
+        get book_similar_url(slug: books_books(:crime_and_punishment).slug)
+      end
+    end
+
     # Deliberately not declared `private`, for the same reason count_queries below
     # is not.
     def detail_value(key)
       css_select("[data-testid='detail-#{key}'] dd").map { |value| value.text.strip }.first
+    end
+
+    # Asserts both halves of the corrections fix at once: the 404 proves nothing was
+    # rendered, and the absent Cache-Control proves Cloudflare has nothing to key on.
+    # A 200 that merely forgot to cache would pass on the header check alone.
+    #
+    # Deliberately not declared `private`, for the same reason count_queries below
+    # is not.
+    def assert_unroutable(path)
+      get path
+
+      assert_response :not_found
+      assert_nil response.headers["Cache-Control"],
+        "#{path} still answers with a cache header, so it is still a cacheable origin hit"
     end
 
     # Deliberately not declared `private`. Minitest only collects public `test_`

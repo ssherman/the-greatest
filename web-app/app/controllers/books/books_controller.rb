@@ -3,8 +3,8 @@ class Books::BooksController < ApplicationController
 
   layout "books/application"
 
-  before_action :load_ranking_configuration, only: [:show]
-  before_action :cache_for_show_page, only: [:show]
+  before_action :load_ranking_configuration, only: [:show, :similar]
+  before_action :cache_for_show_page, only: [:show, :similar]
 
   # Genre, then subject, then location: what kind of book it is, what it is about,
   # then where it is set. The legacy site ordered its sidebar the same way; the
@@ -62,5 +62,20 @@ class Books::BooksController < ApplicationController
     similar = ::Services::Books::SimilarBooks.call(@book)
     @similar_books = similar.data[:books]
     @more_similar_available = similar.data[:more_available]
+  end
+
+  def similar
+    # find_by!(slug:), never friendly.find -- 137 books have purely numeric slugs
+    # and friendly_id resolves slugs before primary keys.
+    @book = ::Books::Book.find_by!(slug: params[:slug])
+
+    @ranked_item = if @ranking_configuration
+      @ranking_configuration.ranked_items.where.not(rank: nil).find_by(item: @book)
+    end
+    @indexable = @ranked_item.present?
+
+    @similar_books = ::Services::Books::SimilarBooks
+      .call(@book, limit: Rails.application.config.x.book_similarity[:page_limit])
+      .data[:books]
   end
 end
