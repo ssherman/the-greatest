@@ -900,6 +900,10 @@ git commit -m "Add SimilarBooks service with per-author cap"
 - Modify: `app/views/books/books/show.html.erb`
 - Test: `test/controllers/books/books_controller_test.rb`
 
+> **`assigns(...)` does not work in this app** — the `rails-controller-testing` gem is not
+> installed. Read instance variables with `@controller.view_assigns["name"]`, which is what
+> every other test in that file already does.
+
 **Interfaces:**
 - Consumes: `::Services::Books::SimilarBooks.call(book) -> Result` from Task 3.
 - Produces: `@similar_books` (Array of `::Books::Book`) and `@more_similar_available` (Boolean)
@@ -923,7 +927,7 @@ test "show assigns similar books" do
   get book_url(slug: books_books(:crime_and_punishment).slug)
 
   assert_response :success
-  assert_equal [books_books(:war_and_peace).id], assigns(:similar_books).map(&:id)
+  assert_equal [books_books(:war_and_peace).id], @controller.view_assigns["similar_books"].map(&:id)
 end
 
 test "show renders when the similarity search fails" do
@@ -932,14 +936,14 @@ test "show renders when the similarity search fails" do
   get book_url(slug: books_books(:crime_and_punishment).slug)
 
   assert_response :success
-  assert_empty assigns(:similar_books)
+  assert_empty @controller.view_assigns["similar_books"]
 end
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `bin/rails test test/controllers/books/books_controller_test.rb`
-Expected: FAIL — `assigns(:similar_books)` is nil.
+Expected: FAIL — `@controller.view_assigns["similar_books"]` is nil.
 
 - [ ] **Step 3: Wire the controller**
 
