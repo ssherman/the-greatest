@@ -65,6 +65,15 @@ module Services
         refute ::Services::Books::SimilarBooks.call(@book, limit: 5).data[:more_available]
       end
 
+      test "does not report more_available when the cap trimmed the surplus" do
+        stub_hits([@got, @clash, @war_and_peace])
+
+        result = ::Services::Books::SimilarBooks.call(@book, max_per_author: 1, limit: 2)
+
+        assert_equal [@got.id, @war_and_peace.id], result.data[:books].map(&:id)
+        refute result.data[:more_available]
+      end
+
       test "skips a hit whose database row is gone" do
         ::Search::Books::Search::BookSimilar.stubs(:call).returns([
           {id: "99999999", score: 10.0, source: nil},
@@ -95,12 +104,15 @@ module Services
         assert_empty result.data[:books]
       end
 
-      test "preloads authors so rendering does not query per book" do
+      test "preloads authors and images so rendering does not query per book" do
         stub_hits([@war_and_peace, @got])
         books = ::Services::Books::SimilarBooks.call(@book).data[:books]
 
         assert_queries_count(0) do
-          books.each { |book| book.book_authors.map { |ba| ba.author.name } }
+          books.each do |book|
+            book.book_authors.map { |ba| ba.author.name }
+            book.primary_image&.file&.attached?
+          end
         end
       end
     end
