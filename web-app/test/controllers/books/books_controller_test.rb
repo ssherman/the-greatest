@@ -422,16 +422,18 @@ module Books
         )
       )
 
-      # Warm any per-process caching first so the measured run is representative.
-      # (Minitest's integration-test harness keeps AR's query cache enabled across
-      # the whole test, so this warm-up call also absorbs the repeated @book /
-      # @ranking_configuration / @ranked_item lookups behind assert_queries_count's
-      # cached-query filter, leaving only genuinely new queries -- e.g. a per-card
-      # N+1 -- visible below. Verified: adding a third stubbed book to this test
-      # left the measured count at 0, confirming it does not scale per book.)
-      get book_similar_url(slug: books_books(:crime_and_punishment).slug)
-
-      assert_queries_count(0) do
+      # No warm-up call here, deliberately. assert_queries_count ignores any query
+      # AR's SQL cache serves as a hit (ActiveRecord::Testing::QueryAssertions::
+      # SQLCounter#call returns early on payload[:cached]), and that cache stays
+      # enabled for this whole test method. A warm-up get would populate it with
+      # every query the page issues -- including a per-card N+1 -- so the measured
+      # get would replay identical SQL and count 0 regardless of whether the N+1
+      # exists. Measuring a single, uncached request is what makes this assertion
+      # able to fail: confirmed by re-running with the stubbed books' `.includes`
+      # removed, which raised this count from 5 to 11 (one extra Image Load and
+      # one extra BookAuthor+Author Load pair per book). Confirmed separately that
+      # 5 does not scale with the grid size: a third stubbed book left it at 5.
+      assert_queries_count(5) do
         get book_similar_url(slug: books_books(:crime_and_punishment).slug)
       end
     end
