@@ -16,7 +16,9 @@ module Books
     test "genre facet counts ranked books per genre" do
       counts = facets.genres.to_h { |row| [row[:record].slug, row[:count]] }
 
-      assert_equal 2, counts["novels"]
+      # 3, not 2: war_and_peace, got, and crime_and_punishment (see
+      # test/fixtures/category_items.yml) all carry novels_genre.
+      assert_equal 3, counts["novels"]
       assert_equal 1, counts["classics"]
     end
 
@@ -86,7 +88,9 @@ module Books
       rows = Books::FilterFacetsQuery.genres(ranking_configuration: @rc)
       counts = rows.to_h { |row| [row[:record].slug, row[:count]] }
 
-      assert_equal 2, counts["novels"]
+      # 3, not 2: war_and_peace, got, and crime_and_punishment (see
+      # test/fixtures/category_items.yml) all carry novels_genre.
+      assert_equal 3, counts["novels"]
       assert_equal 1, counts["classics"]
     end
 

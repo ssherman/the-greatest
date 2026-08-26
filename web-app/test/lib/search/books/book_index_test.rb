@@ -84,6 +84,15 @@ module Search
         assert_not_includes ::Search::Books::BookIndex.model_includes, :original_language
       end
 
+      test "index definition maps the similarity fields" do
+        properties = ::Search::Books::BookIndex.index_definition[:mappings][:properties]
+
+        assert_equal "keyword", properties[:genre_category_ids][:type]
+        assert_equal "keyword", properties[:subject_category_ids][:type]
+        assert_equal "keyword", properties[:location_category_ids][:type]
+        assert_equal "integer", properties[:similarity_category_count][:type]
+      end
+
       private
 
       def cleanup_test_index
