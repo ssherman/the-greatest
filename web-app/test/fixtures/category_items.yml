@@ -54,6 +54,18 @@ clash_classics:
   category: books_classics_genre
   item: clash (Books::Book)
 
+crime_and_punishment_novels:
+  category: books_novels_genre
+  item: crime_and_punishment (Books::Book)
+
+crime_and_punishment_politics:
+  category: books_politics_subject
+  item: crime_and_punishment (Books::Book)
+
+crime_and_punishment_france:
+  category: books_france_location
+  item: crime_and_punishment (Books::Book)
+
 # Games categorizations
 totk_action_category:
   category: games_action_genre

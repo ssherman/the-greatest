@@ -1,0 +1,25 @@
+<%
+  authors = @book.book_authors.map(&:author)
+  author_names = authors.map(&:name).join(", ")
+  content_for :page_title, "Books similar to #{@book.title} | The Greatest Books"
+  content_for :meta_description, "Books similar to #{@book.title}#{" by #{author_names}" if author_names.present?}, ranked by shared genres, subjects and settings."
+%>
+
+<div class="mb-6">
+  <h1 class="text-3xl font-bold">Books similar to <%= @book.title %></h1>
+  <p class="mt-2">
+    <%= link_to "Back to #{@book.title}",
+          book_path(slug: @book.slug, ranking_configuration_id: params[:ranking_configuration_id]),
+          class: "link" %>
+  </p>
+</div>
+
+<% if @similar_books.any? %>
+  <div class="<%= Books::CardComponent::GRID_CONTAINER_CLASS %>">
+    <% @similar_books.each_with_index do |similar_book, index| %>
+      <%= render Books::CardComponent.new(book: similar_book, index: index) %>
+    <% end %>
+  </div>
+<% else %>
+  <p class="text-base-content/70">No similar books found for this title.</p>
+<% end %>

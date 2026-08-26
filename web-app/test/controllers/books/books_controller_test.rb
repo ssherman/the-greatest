@@ -339,10 +339,193 @@ module Books
         css_select("[data-testid='alternate-titles-rest'] li").map { |item| item.text.strip }
     end
 
+    test "show assigns similar books" do
+      ::Services::Books::SimilarBooks.stubs(:call).returns(
+        ::Services::Books::SimilarBooks::Result.new(
+          success?: true,
+          data: {books: [books_books(:war_and_peace)], more_available: false},
+          errors: []
+        )
+      )
+
+      get book_url(slug: books_books(:crime_and_punishment).slug)
+
+      assert_response :success
+      assert_equal [books_books(:war_and_peace).id], @controller.view_assigns["similar_books"].map(&:id)
+    end
+
+    test "show renders when the similarity search fails" do
+      ::Search::Books::Search::BookSimilar.stubs(:call).raises(StandardError, "opensearch down")
+
+      get book_url(slug: books_books(:crime_and_punishment).slug)
+
+      assert_response :success
+      assert_empty @controller.view_assigns["similar_books"]
+    end
+
+    # --- The full similar-books page ---
+
+    test "similar responds successfully" do
+      get book_similar_url(slug: books_books(:crime_and_punishment).slug)
+
+      assert_response :success
+    end
+
+    # config.action_dispatch.show_exceptions is :rescuable in the test env, so
+    # ActiveRecord::RecordNotFound (a rescuable exception with a registered 404
+    # response) is rendered rather than raised through an integration test --
+    # confirmed against the identical "404s for an unknown slug" test for #show
+    # above, which uses the same assert_response :not_found shape.
+    test "similar 404s for an unknown slug" do
+      get book_similar_url(slug: "no-such-book")
+
+      assert_response :not_found
+    end
+
+    # @indexable is computed AFTER the service call and AND'd with the results,
+    # not merely with @ranked_item.present? -- see the two tests below.
+    test "marks the similar page indexable when the book is ranked and similar books were found" do
+      book = books_books(:crime_and_punishment)
+      RankedItem.create!(item: book, ranking_configuration: @rc, rank: 1, score: 100)
+      ::Services::Books::SimilarBooks.stubs(:call).returns(
+        ::Services::Books::SimilarBooks::Result.new(
+          success?: true,
+          data: {books: [books_books(:war_and_peace)], more_available: false},
+          errors: []
+        )
+      )
+
+      get book_similar_url(slug: book.slug)
+
+      assert @controller.view_assigns["indexable"]
+    end
+
+    # A ranked book whose similarity query returns nothing renders only "No
+    # similar books found for this title" -- there is no content on the page
+    # to index, even though the book itself is ranked.
+    test "marks the similar page not indexable when no similar books were found, even for a ranked book" do
+      book = books_books(:crime_and_punishment)
+      RankedItem.create!(item: book, ranking_configuration: @rc, rank: 1, score: 100)
+      ::Services::Books::SimilarBooks.stubs(:call).returns(
+        ::Services::Books::SimilarBooks::Result.new(success?: true, data: {books: [], more_available: false}, errors: [])
+      )
+
+      get book_similar_url(slug: book.slug)
+
+      refute @controller.view_assigns["indexable"]
+    end
+
+    # The corrections DDoS came from a route inside scope "(/rc/:ranking_configuration_id)"
+    # whose controller never read the segment: every distinct value returned 200 with a
+    # 24h public cache, so each one was a fresh cache key and a full render. This action
+    # calls load_ranking_configuration, so garbage 404s instead of being cached.
+    # The rc axis is the one that actually caused the outage, so it earns the same
+    # depth of proof as assert_unroutable: not just a 404, but that nothing here is
+    # cacheable. assert_unroutable's literal shape doesn't fit, though: unlike the
+    # corrections routes' rc-axis case (the route sits OUTSIDE that scope and never
+    # reaches a controller, so no Cache-Control header is set at all), this route
+    # deliberately sits INSIDE the scope and does reach the controller --
+    # load_ranking_configuration raises RecordNotFound, which ApplicationController's
+    # global `rescue_from ActiveRecord::RecordNotFound, with: :render_not_found`
+    # renders, and that handler explicitly calls prevent_caching (Cacheable sets
+    # "private, no-store") before rendering. So the header here is not absent, it
+    # is stronger -- an explicit no-store -- and that is what this asserts instead
+    # of reusing assert_unroutable's assert_nil verbatim (confirmed empirically:
+    # assert_unroutable fails this path with "private, no-store" where it expects
+    # nil).
+    test "similar 404s for an unknown ranking configuration id" do
+      get book_similar_url(slug: books_books(:crime_and_punishment).slug, ranking_configuration_id: 999_999)
+
+      assert_response :not_found
+      assert_equal "private, no-store", response.headers["Cache-Control"]
+    end
+
+    test "similar requests the page limit rather than the card limit" do
+      ::Services::Books::SimilarBooks
+        .expects(:call)
+        .with(anything, limit: Rails.application.config.x.book_similarity[:page_limit])
+        .returns(::Services::Books::SimilarBooks::Result.new(
+          success?: true, data: {books: [], more_available: false}, errors: []
+        ))
+
+      get book_similar_url(slug: books_books(:crime_and_punishment).slug)
+
+      assert_response :success
+    end
+
+    test "similar is not routable with a non-html format" do
+      assert_unroutable "/book/crime-and-punishment/similar.json"
+    end
+
+    test "similar does not N+1 across the grid" do
+      # Hoisted above assert_queries_count, deliberately: evaluating a fixture
+      # accessor inside the measured block issues its own Book Load, and the
+      # block must measure only the request's own queries (see also the comment
+      # on the assertion below).
+      book = books_books(:war_and_peace)
+      # war_and_peace is given a second credited author here so the viewed
+      # book's own book_authors: :author preload is actually exercised. A
+      # single-author book's query count is identical whether that association
+      # is preloaded or lazy-loaded -- Rails still issues exactly one BookAuthor
+      # query and one Author query either way -- so it would leave this test
+      # blind to a regression on @book's preload the same way crime_and_punishment
+      # (no authors at all) left it blind before. With two authors, dropping the
+      # preload turns the single batched Author query into two.
+      Books::BookAuthor.create!(book: book, author: books_authors(:garnett), position: 2)
+
+      similar_books = ::Books::Book
+        .where(id: [books_books(:got).id, books_books(:clash).id])
+        .includes(book_authors: :author)
+        .includes(primary_image: {file_attachment: {blob: {variant_records: {image_attachment: :blob}}}})
+        .to_a
+
+      ::Services::Books::SimilarBooks.stubs(:call).returns(
+        ::Services::Books::SimilarBooks::Result.new(
+          success?: true, data: {books: similar_books, more_available: false}, errors: []
+        )
+      )
+
+      # No warm-up call here, deliberately. assert_queries_count ignores any query
+      # AR's SQL cache serves as a hit (ActiveRecord::Testing::QueryAssertions::
+      # SQLCounter#call returns early on payload[:cached]), and that cache stays
+      # enabled for this whole test method. A warm-up get would populate it with
+      # every query the page issues -- including a per-card N+1 -- so the measured
+      # get would replay identical SQL and count 0 regardless of whether the N+1
+      # exists. Measuring a single, uncached request is what makes this assertion
+      # able to fail: confirmed by re-running with the stubbed grid books'
+      # `.includes` removed, which raised this count from 5 to 10 (got and clash
+      # share an author fixture, so one of the two grid books' Author lookups is
+      # itself an AR query-cache hit -- otherwise this would be 11 -- but an
+      # Image Load and a BookAuthor Load still land fresh for each book), and
+      # separately by dropping @book's own book_authors: :author preload, which
+      # raised it from 5 to 6 (two distinct Author queries, one per credited
+      # author, instead of one batched query). Confirmed the count does not scale
+      # with grid size: a third stubbed grid book left it at 5.
+      assert_queries_count(5) do
+        get book_similar_url(slug: book.slug)
+      end
+
+      assert_response :success
+    end
+
     # Deliberately not declared `private`, for the same reason count_queries below
     # is not.
     def detail_value(key)
       css_select("[data-testid='detail-#{key}'] dd").map { |value| value.text.strip }.first
+    end
+
+    # Asserts both halves of the corrections fix at once: the 404 proves nothing was
+    # rendered, and the absent Cache-Control proves Cloudflare has nothing to key on.
+    # A 200 that merely forgot to cache would pass on the header check alone.
+    #
+    # Deliberately not declared `private`, for the same reason count_queries below
+    # is not.
+    def assert_unroutable(path)
+      get path
+
+      assert_response :not_found
+      assert_nil response.headers["Cache-Control"],
+        "#{path} still answers with a cache header, so it is still a cacheable origin hit"
     end
 
     # Deliberately not declared `private`. Minitest only collects public `test_`

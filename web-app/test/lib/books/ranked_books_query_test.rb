@@ -55,9 +55,12 @@ module Books
     end
 
     test "filters to books carrying a single category" do
+      # classics_genre, not novels_genre: crime_and_punishment carries novels_genre
+      # too (see test/fixtures/category_items.yml), so it would no longer isolate
+      # a single book.
       results = Books::RankedBooksQuery.call(
         ranking_configuration: @rc,
-        categories: [categories(:books_novels_genre)]
+        categories: [categories(:books_classics_genre)]
       )
 
       assert_equal [@first], results.to_a
@@ -71,9 +74,13 @@ module Books
 
       assert_equal [@first], both.to_a
 
+      # classics_genre + politics_subject: war_and_peace carries classics but not
+      # politics, crime_and_punishment carries politics but not classics, so the
+      # AND matches neither. (novels_genre would no longer work here:
+      # crime_and_punishment now carries both novels_genre and politics_subject.)
       neither = Books::RankedBooksQuery.call(
         ranking_configuration: @rc,
-        categories: [categories(:books_novels_genre), categories(:books_politics_subject)]
+        categories: [categories(:books_classics_genre), categories(:books_politics_subject)]
       )
 
       assert_empty neither.to_a
