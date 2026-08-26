@@ -46,8 +46,13 @@ module Search
         def self.categories_by_type(book, opts)
           active = book.categories.select { |c| c.deleted == false }
 
-          # The model's constant, not a copy: if the two lists drift, the model
-          # indexes a category type this query never asks about, silently.
+          # The model's constant, not a copy, so this method automatically tracks
+          # whatever the model scores -- but build_query_definition below does
+          # NOT: it hard-codes categories["genre"]/["subject"]/["location"] by
+          # name, so a fourth type added here would be selected and counted but
+          # silently dropped from the actual query. Not worth a
+          # type -> field -> boost map for a change that isn't coming; this
+          # constant alone does not make the query type-agnostic.
           by_type = ::Books::Book::SIMILARITY_CATEGORY_TYPES.index_with do |type|
             select_categories(active.select { |c| c.category_type == type }, opts)
           end
@@ -153,9 +158,16 @@ module Search
 
         # Turns the raw sum into something closer to cosine similarity: without it
         # a book tagged with 40 categories has 40 chances to score and outranks a
-        # tighter match with 6. Documents indexed before the similarity fields
-        # existed (no doc value for similarity_category_count) divide by 1 rather
-        # than erroring.
+        # tighter match with 6. A missing doc value (indexed before the similarity
+        # fields existed) AND a present-but-zero count (every book with no
+        # genre/subject/location categories at all, per Books::Book#as_indexed_json)
+        # both divide by 1 rather than by zero. Dividing by sqrt(0) is Infinity,
+        # which OpenSearch clamps to Float::MAX_VALUE -- a book matching nothing
+        # but a 50-year era window would then outscore a real genre match by 38
+        # orders of magnitude, and min_score cannot catch it either, since
+        # Float::MAX_VALUE clears any threshold. Reachable whenever the genre
+        # filter is skipped: a source book with no genres, or require_genre_match:
+        # false for any source book.
         #
         # `boost_mode: "divide"` is NOT a real OpenSearch/Lucene CombineFunction --
         # only multiply/replace/sum/avg/max/min exist -- so field_value_factor
@@ -171,7 +183,7 @@ module Search
               query: {bool: bool},
               script_score: {
                 script: {
-                  source: "_score / Math.sqrt(doc['similarity_category_count'].size() == 0 ? 1 : doc['similarity_category_count'].value)"
+                  source: "def count = doc['similarity_category_count'].size() == 0 ? 1 : doc['similarity_category_count'].value; _score / Math.sqrt(count == 0 ? 1 : count)"
                 }
               },
               boost_mode: "replace"

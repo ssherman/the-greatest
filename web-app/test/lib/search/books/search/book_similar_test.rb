@@ -53,6 +53,10 @@ module Search
           # of_mice_and_men carries no category items in the fixtures.
           index_book(9001, genre_category_ids: [@novels], similarity_category_count: 1)
 
+          # Pins the actual contract -- no scoring categories means no query is
+          # even sent to OpenSearch, not merely that the query happens to match
+          # nothing.
+          ::Search::Books::Search::BookSimilar.expects(:search).never
           assert_empty ::Search::Books::Search::BookSimilar.call(books_books(:of_mice_and_men))
         end
 
@@ -80,6 +84,19 @@ module Search
 
           assert_equal ["9002", "9001"], ids_for(normalize_by_category_count: false)
           assert_equal ["9001", "9002"], ids_for(normalize_by_category_count: true)
+        end
+
+        test "does not divide by zero when a candidate carries no similarity categories" do
+          # 9002 has no genre/subject/location categories at all -- exactly
+          # what Books::Book#as_indexed_json produces for a book with none --
+          # and only matches the source book's +/-50yr era window. Dividing by
+          # sqrt(0) is Infinity, clamped by OpenSearch to Float::MAX_VALUE,
+          # which would put 9002 first by 38 orders of magnitude. The zero
+          # count must be treated exactly like a missing one instead.
+          index_book(9001, genre_category_ids: [@novels], similarity_category_count: 2)
+          index_book(9002, similarity_category_count: 0, first_published_year: 1870)
+
+          assert_equal ["9001", "9002"], ids_for(require_genre_match: false)
         end
 
         test "requiring a genre match drops a book that shares only a location" do
@@ -116,6 +133,20 @@ module Search
           assert_equal ["9001"], ids_for(book: war_and_peace, drop_common_categories: true, max_category_item_count: 1)
         end
 
+        test "restores the rarest genre even when a location survives the ceiling" do
+          # crime_and_punishment carries novels (genre 300), politics
+          # (subject 200) and france (location 50). At ceiling 150, novels
+          # and politics are culled but france survives. A genre-specific
+          # guard restores novels regardless (require_genre_match still
+          # applies, 9001 is found); a cross-type guard would see france
+          # survive, decline to restore anything, and the genre filter would
+          # simply be skipped -- 9001 shares no location, so it would match
+          # nothing.
+          index_book(9001, genre_category_ids: [@novels], similarity_category_count: 1)
+
+          assert_equal ["9001"], ids_for(drop_common_categories: true, max_category_item_count: 150)
+        end
+
         test "excludes books sharing a series with the source book" do
           sibling = books_books(:got)
           series = ::Books::Series.create!(title: "Similarity Test Series")
@@ -128,7 +159,7 @@ module Search
         end
 
         test "size is limit times over_fetch" do
-          6.times { |i| index_book(9000 + i, genre_category_ids: [@novels], similarity_category_count: 1) }
+          7.times { |i| index_book(9000 + i, genre_category_ids: [@novels], similarity_category_count: 1) }
 
           assert_equal 6, ids_for(limit: 2, over_fetch: 3).size
         end
