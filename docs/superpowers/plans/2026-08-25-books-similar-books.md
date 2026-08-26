@@ -25,7 +25,10 @@ daisyUI 5 / Tailwind 4, Playwright.
 - **Root-anchor `::Books::Book`.** Inside `module Services; module Books` and
   `module Search; module Books`, a bare `Books::Book` resolves to the enclosing nested module
   and raises a confusing `NameError`. This has bitten this codebase 3+ times. Root-anchor in
-  **tests too**.
+  **tests too** — their `module Services; module Books` wrapper shadows identically.
+  **Constants only.** `::` must be followed by a constant; `::books_books(:war_and_peace)` is a
+  **syntax error**, not a safer method call. Fixture accessors (`books_books`, `categories`)
+  are plain method calls and take no prefix.
 - **`as_indexed_json` must keep the `:category_ids` key.** `CategoryItem#item_supports_category_indexing?`
   (`app/models/category_item.rb:49`) gates reindexing on that exact key. Removing it silently
   stops category edits from reindexing books.
@@ -311,10 +314,10 @@ module Search
         def setup
           cleanup_test_index
           ::Search::Books::BookIndex.create_index
-          @book = ::books_books(:crime_and_punishment)
-          @novels = ::categories(:books_novels_genre).id.to_s      # item_count 300
-          @politics = ::categories(:books_politics_subject).id.to_s # item_count 200
-          @france = ::categories(:books_france_location).id.to_s    # item_count 50
+          @book = books_books(:crime_and_punishment)
+          @novels = categories(:books_novels_genre).id.to_s      # item_count 300
+          @politics = categories(:books_politics_subject).id.to_s # item_count 200
+          @france = categories(:books_france_location).id.to_s    # item_count 50
         end
 
         def teardown
@@ -354,7 +357,7 @@ module Search
           # of_mice_and_men carries no category items in the fixtures.
           index_book(9001, genre_category_ids: [@novels], similarity_category_count: 1)
 
-          assert_empty ::Search::Books::Search::BookSimilar.call(::books_books(:of_mice_and_men))
+          assert_empty ::Search::Books::Search::BookSimilar.call(books_books(:of_mice_and_men))
         end
 
         test "excludes the book itself" do
@@ -407,7 +410,7 @@ module Search
         end
 
         test "excludes books sharing a series with the source book" do
-          sibling = ::books_books(:got)
+          sibling = books_books(:got)
           series = ::Books::Series.create!(name: "Similarity Test Series")
           ::Books::SeriesBook.create!(series: series, book: @book)
           ::Books::SeriesBook.create!(series: series, book: sibling)
@@ -659,11 +662,11 @@ module Services
   module Books
     class SimilarBooksTest < ActiveSupport::TestCase
       def setup
-        @book = ::books_books(:crime_and_punishment)
+        @book = books_books(:crime_and_punishment)
         # got and clash are both by `king`; war_and_peace is by `tolstoy`.
-        @got = ::books_books(:got)
-        @clash = ::books_books(:clash)
-        @war_and_peace = ::books_books(:war_and_peace)
+        @got = books_books(:got)
+        @clash = books_books(:clash)
+        @war_and_peace = books_books(:war_and_peace)
       end
 
       def stub_hits(books)
