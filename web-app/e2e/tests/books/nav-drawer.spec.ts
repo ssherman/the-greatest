@@ -84,6 +84,25 @@ test.describe('Books mobile nav drawer', () => {
     await expect(page.locator('.drawer-content')).toHaveAttribute('inert', '');
   });
 
+  // The skip link sits outside .drawer-content (so it stays the first tab stop),
+  // which puts it outside that inert subtree too. Measured before the fix: it was
+  // tab stop 6 with the drawer open, and its z-50 rendered it above the drawer's
+  // z-40 overlay. The controller inerts it by id alongside .drawer-content.
+  test('the skip link is inert while the drawer is open', async ({ page }) => {
+    await page.goto('/');
+
+    await expect(page.locator('#books-skip-link')).not.toHaveAttribute('inert', /.*/);
+
+    await page.locator('#books-nav-drawer-button').click();
+    await expect(page.locator('#books-nav-drawer-panel')).toBeVisible();
+
+    await expect(page.locator('#books-skip-link')).toHaveAttribute('inert', '');
+    // It must come back when the drawer closes, or keyboard users lose it entirely.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#books-nav-drawer-panel')).not.toBeVisible();
+    await expect(page.locator('#books-skip-link')).not.toHaveAttribute('inert', /.*/);
+  });
+
   // `display:none` does not clear `:checked`. Without the matchMedia uncheck,
   // widening past `lg` while open leaves the panel state stuck on.
   test('crossing the lg breakpoint while open resets the drawer', async ({ page }) => {

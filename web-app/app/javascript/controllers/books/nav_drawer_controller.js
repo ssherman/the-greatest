@@ -13,7 +13,10 @@ import { Controller } from "@hotwired/stimulus"
 //      :root:has(.drawer-toggle:checked). This is the one that bites users.
 //   2. Escape does not close it.
 //   3. Focus is not contained -- tabbing past the last panel link walks into
-//      page content hidden behind the overlay.
+//      page content hidden behind the overlay. The skip link needs handling of
+//      its own: it lives outside .drawer (to stay the first tab stop), so the
+//      `inert` on .drawer-content does not reach it, and its z-50 would render
+//      it above the drawer's z-40 overlay.
 //   4. `display:none` does not clear `:checked`, so crossing the lg breakpoint
 //      while open strands the panel over the desktop layout. The `lg:hidden`
 //      on .drawer-side handles the visual half; this handles the state.
@@ -48,8 +51,17 @@ export default class extends Controller {
     document.removeEventListener("turbo:before-cache", this.onBeforeCache)
     this.toggleTarget.removeEventListener("change", this.onToggleChange)
     this.desktop.removeEventListener("change", this.onBreakpointChange)
-    // Leave no inert wrapper behind if we are torn down while open.
+    // Leave nothing inert behind if we are torn down while open.
     this.contentTarget.removeAttribute("inert")
+    this.skipLink?.removeAttribute("inert")
+  }
+
+  // Not a Stimulus target: targets must be descendants of the controller's
+  // element, and the skip link deliberately sits outside .drawer so it stays
+  // the first tab stop. Looked up by id rather than `a[href="#main"]` so a
+  // second same-href anchor appearing earlier in the document cannot shadow it.
+  get skipLink() {
+    return document.getElementById("books-skip-link")
   }
 
   // Close when a link inside the panel is clicked. Forward navigation would
@@ -96,6 +108,20 @@ export default class extends Controller {
         this.contentTarget.setAttribute("inert", "")
       } else {
         this.contentTarget.removeAttribute("inert")
+      }
+    }
+
+    // The skip link is outside .drawer-content, so the inert above misses it.
+    // Left alone it stays focusable while the panel is modal, and its z-50
+    // paints it above the z-40 overlay -- a live-looking control floating over
+    // a dimmed page. Its target (#main) is inert anyway, so nothing is lost by
+    // taking it out of the tab order until the drawer closes.
+    const skip = this.skipLink
+    if (skip) {
+      if (open) {
+        skip.setAttribute("inert", "")
+      } else {
+        skip.removeAttribute("inert")
       }
     }
   }

@@ -39,7 +39,11 @@
         data-controller="user-list-state membership-state"
         data-domain="<%= Current.domain %>"
         data-signed-in="<%= signed_in? %>">
-    <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 btn btn-sm btn-primary">Skip to content</a>
+    <%# Deliberately OUTSIDE .drawer so it stays the first tab stop -- the drawer's
+        checkbox is focusable and would otherwise precede it. Being outside also
+        puts it beyond the `inert` the nav drawer controller applies to
+        .drawer-content, so the controller inerts this link by id as well. %>
+    <a href="#main" id="books-skip-link" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 btn btn-sm btn-primary">Skip to content</a>
     <div class="drawer"
          data-controller="books--nav-drawer"
          data-action="click->books--nav-drawer#closeOnNavigate">
