@@ -56,5 +56,11 @@ class Books::BooksController < ApplicationController
     # corpus has 37. Served by index_reviews_on_reviewable_with_body. No association is
     # preloaded because a review row renders no author.
     @reviews = @book.reviews.with_body.recent
+
+    # Rescued into an empty success inside the service, so an OpenSearch outage
+    # costs this card rather than the whole page.
+    similar = ::Services::Books::SimilarBooks.call(@book)
+    @similar_books = similar.data[:books]
+    @more_similar_available = similar.data[:more_available]
   end
 end

@@ -339,6 +339,30 @@ module Books
         css_select("[data-testid='alternate-titles-rest'] li").map { |item| item.text.strip }
     end
 
+    test "show assigns similar books" do
+      ::Services::Books::SimilarBooks.stubs(:call).returns(
+        ::Services::Books::SimilarBooks::Result.new(
+          success?: true,
+          data: {books: [books_books(:war_and_peace)], more_available: false},
+          errors: []
+        )
+      )
+
+      get book_url(slug: books_books(:crime_and_punishment).slug)
+
+      assert_response :success
+      assert_equal [books_books(:war_and_peace).id], @controller.view_assigns["similar_books"].map(&:id)
+    end
+
+    test "show renders when the similarity search fails" do
+      ::Search::Books::Search::BookSimilar.stubs(:call).raises(StandardError, "opensearch down")
+
+      get book_url(slug: books_books(:crime_and_punishment).slug)
+
+      assert_response :success
+      assert_empty @controller.view_assigns["similar_books"]
+    end
+
     # Deliberately not declared `private`, for the same reason count_queries below
     # is not.
     def detail_value(key)
