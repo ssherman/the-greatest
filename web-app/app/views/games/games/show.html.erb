@@ -66,6 +66,14 @@
         <% end %>
       </div>
 
+      <%# A plain link, not a form: this page is edge-cached with the session
+          skipped, so a form here would carry no usable CSRF token. %>
+      <p class="text-sm">
+        <%= link_to "Suggest a correction",
+              games_game_correction_path(slug: @game.slug),
+              class: "link", data: {testid: "suggest-correction-link"} %>
+      </p>
+
       <% if @game.platforms.any? %>
         <div class="card bg-base-100 shadow-md mb-6">
           <div class="card-body">

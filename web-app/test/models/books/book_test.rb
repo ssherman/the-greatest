@@ -295,5 +295,38 @@ module Books
 
       assert_nil book.reload.as_indexed_json[:ranked_position]
     end
+
+    test "declares its correctable fields in display order" do
+      assert_equal %w[title subtitle first_published_year page_range word_count alternate_titles description],
+        ::Books::Book.correctable_field_names
+    end
+
+    test "does not expose the doomed description column as a column target" do
+      assert_equal :description, ::Books::Book.correctable_fields["description"].target
+    end
+
+    test "clears book_length when page_range is corrected so it re-derives" do
+      book = books_books(:war_and_peace)
+      book.update!(page_range: "1200", book_length: :very_long)
+
+      book.correction_applied(%w[page_range])
+      assert_nil book.book_length
+    end
+
+    test "clears book_length when word_count is corrected" do
+      book = books_books(:war_and_peace)
+      book.update!(word_count: 500_000, book_length: :very_long)
+
+      book.correction_applied(%w[word_count])
+      assert_nil book.book_length
+    end
+
+    test "leaves book_length alone when an unrelated field is corrected" do
+      book = books_books(:war_and_peace)
+      book.update!(page_range: "1200", book_length: :very_long)
+
+      book.correction_applied(%w[title])
+      assert_equal "very_long", book.book_length
+    end
   end
 end

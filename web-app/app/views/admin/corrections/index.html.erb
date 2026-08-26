@@ -1,0 +1,51 @@
+<% content_for :title, "Corrections" %>
+
+<div class="space-y-4">
+  <h1 class="text-2xl font-bold">Corrections</h1>
+
+  <div role="tablist" class="tabs tabs-border">
+    <% Admin::CorrectionsController::STATUSES.each do |status| %>
+      <%= link_to corrections_index_path(status: status, q: params[:q]),
+            role: "tab",
+            class: "tab #{"tab-active" if @status == status}",
+            data: {testid: "status-tab-#{status}"} do %>
+        <%= status.titleize %>
+        <span class="badge badge-sm ml-2"
+              data-testid="status-count-<%= status %>"><%= @counts[status].to_i %></span>
+      <% end %>
+    <% end %>
+  </div>
+
+  <%= form_with url: corrections_index_path, method: :get, class: "flex gap-2" do %>
+    <%= hidden_field_tag :status, @status %>
+    <%= text_field_tag :q, params[:q], placeholder: "Search notes", class: "input w-full max-w-xs" %>
+    <%= submit_tag "Search", class: "btn" %>
+  <% end %>
+
+  <%= form_with url: bulk_reject_corrections_index_path, method: :post do %>
+    <%= hidden_field_tag :status, @status %>
+    <div class="overflow-x-auto">
+      <table class="table bg-base-100">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Record</th>
+            <th>Proposed</th>
+            <th>From</th>
+            <th>Submitted</th>
+          </tr>
+        </thead>
+        <tbody>
+          <%= render partial: "admin/corrections/row", collection: @corrections, as: :correction %>
+        </tbody>
+      </table>
+    </div>
+
+    <% if @status == "pending" && @corrections.any? %>
+      <%= submit_tag "Reject selected", class: "btn btn-warning mt-3",
+            data: {turbo_confirm: "Reject the selected corrections?", testid: "bulk-reject"} %>
+    <% end %>
+  <% end %>
+
+  <%== @pagy.series_nav %>
+</div>

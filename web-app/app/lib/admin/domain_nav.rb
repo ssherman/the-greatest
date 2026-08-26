@@ -47,6 +47,7 @@ module Admin
           {label: "Rankings: Artist", icon: :rankings_artist, path: -> { URL_HELPERS.admin_artists_ranking_configurations_path }},
           {label: "AI Chats", icon: :chat, path: -> { URL_HELPERS.admin_ai_chats_path }},
           {label: "Categories", icon: :category, path: -> { URL_HELPERS.admin_categories_path }},
+          {label: "Corrections", icon: :chat, path: -> { URL_HELPERS.admin_corrections_path }},
           {label: "News", icon: :chat, path: -> { URL_HELPERS.admin_news_posts_path }},
           {label: "News Topics", icon: :category, path: -> { URL_HELPERS.admin_news_topics_path }}
         ]
@@ -68,6 +69,7 @@ module Admin
           {label: "Series", icon: :series, path: -> { URL_HELPERS.admin_games_series_index_path }},
           {label: "Categories", icon: :category, path: -> { URL_HELPERS.admin_games_categories_path }},
           {label: "Lists", icon: :list, path: -> { URL_HELPERS.admin_games_lists_path }},
+          {label: "Corrections", icon: :chat, path: -> { URL_HELPERS.admin_games_corrections_path }},
           {label: "Rankings", icon: :chart, path: -> { URL_HELPERS.admin_games_ranking_configurations_path }},
           {label: "News", icon: :chat, path: -> { URL_HELPERS.admin_games_news_posts_path }},
           {label: "News Topics", icon: :category, path: -> { URL_HELPERS.admin_games_news_topics_path }}
@@ -90,6 +92,7 @@ module Admin
           {label: "Categories", icon: :category, path: -> { URL_HELPERS.admin_books_categories_path }},
           {label: "Lists", icon: :list, path: -> { URL_HELPERS.admin_books_lists_path }},
           {label: "Reviews", icon: :star, path: -> { URL_HELPERS.admin_books_reviews_path }},
+          {label: "Corrections", icon: :chat, path: -> { URL_HELPERS.admin_books_corrections_path }},
           {label: "News", icon: :chat, path: -> { URL_HELPERS.admin_books_news_posts_path }},
           {label: "News Topics", icon: :category, path: -> { URL_HELPERS.admin_books_news_topics_path }},
           {label: "Rankings", icon: :chart, path: -> { URL_HELPERS.admin_books_ranking_configurations_path }}

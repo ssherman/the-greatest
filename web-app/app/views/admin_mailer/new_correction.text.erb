@@ -1,0 +1,19 @@
+A new correction was submitted on <%= @site_name %>.
+
+Record:    <%= @record&.title || "(deleted)" %>
+Submitted: <%= @correction.created_at.strftime("%B %-d, %Y at %H:%M") %>
+By:        <%= @correction.user&.email || "Anonymous" %>
+
+Notes:
+<%= @correction.notes.presence || "(none)" %>
+
+<% if @fields.any? -%>
+Proposed changes:
+<% @fields.each do |field| -%>
+  <%= field.field_name.humanize %>: <%= field.old_value.inspect %> -> <%= field.new_value.inspect %>
+<% end -%>
+<% else -%>
+Proposed changes: (none — notes only)
+<% end -%>
+
+Review it: <%= correction_url %>

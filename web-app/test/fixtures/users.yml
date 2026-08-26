@@ -157,3 +157,11 @@ games_moderator_user:
   role: 0
   email_verified: true
   original_signup_domain: thegreatestgames.org
+
+books_viewer_user:
+  email: books-fixture-viewer@example.com
+  display_name: Books Viewer
+  name: Books Viewer Full Name
+  role: 0
+  email_verified: true
+  original_signup_domain: thegreatestbooks.org

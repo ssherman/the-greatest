@@ -49,6 +49,24 @@ class AdminMailer < ApplicationMailer
     )
   end
 
+  def new_correction(correction)
+    @correction = correction
+    @record = correction.correctable
+    @fields = correction.correction_fields.order(:field_name)
+    domain = Services::Corrections::TypeRegistry.domain_for(correction.correctable_type)
+    @site_name = MailBranding.for(domain).site_name
+
+    branded_mail(
+      domain: domain,
+      to: admin_address,
+      subject: "New correction on #{@site_name}",
+      # Only when a real account submitted it. An anonymous correction has no
+      # address, and an unverified one would not be a reply channel anyway.
+      reply_to: correction.user&.email
+    )
+  end
+  helper_method :correction_url
+
   private
 
   def admin_address
@@ -56,5 +74,25 @@ class AdminMailer < ApplicationMailer
     raise MissingAdminAddress, "ADMIN_NOTIFICATION_EMAIL is not set" if address.blank?
 
     address
+  end
+
+  # Called from the view, not eagerly in new_correction above: branded_mail sets
+  # default_url_options from the resolved domain, and only does so immediately
+  # before it calls `mail`, which is what triggers template rendering. A _url
+  # helper called any earlier raises "Missing host to link to!" in dev/test
+  # (there is no class-level default there) and silently links to the BOOKS host
+  # in production (config/environments/production.rb sets one, for books only)
+  # -- the exact wrong-domain-branding bug this mailer exists to avoid.
+  #
+  # Reuses Admin::CorrectionsController::ADMIN_PATHS -- the single source of
+  # truth for which route helper prefix each domain's admin namespace uses --
+  # rather than keeping a second copy here that could drift from it. _url, not
+  # _path: this mailer runs inside Sidekiq, with no request to make a relative
+  # path absolute against.
+  def correction_url
+    domain = Services::Corrections::TypeRegistry.domain_for(@correction.correctable_type)
+    helper_name = Admin::CorrectionsController::ADMIN_PATHS.fetch(domain).to_s
+      .delete_suffix("s_path") + "_url"
+    public_send(helper_name, @correction)
   end
 end

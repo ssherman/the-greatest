@@ -192,6 +192,11 @@ namespace :data_migration do
     pp({review_summaries: Services::Reviews::SummaryRecalculator.backfill_all!})
   end
 
+  desc "Migrate legacy changesets into corrections + correction_fields (preserves ids)"
+  task corrections: :environment do
+    pp Services::BooksMigration::CorrectionMigrator.call
+  end
+
   desc "Import legacy users.paid early supporters as source: :legacy memberships"
   task memberships: :environment do
     # Print the arithmetic rather than trusting the count: upsert_row skips
@@ -260,5 +265,5 @@ namespace :data_migration do
     :categories, :category_items, :book_attributes, :book_type_categories, :countries,
     :book_countries, :external_links, :lists, :list_items, :ranking_configurations,
     :ranked_lists, :penalties, :list_penalties, :user_lists, :user_list_items,
-    :saved_searches, :reviews, :news_posts]
+    :saved_searches, :reviews, :corrections, :news_posts]
 end
