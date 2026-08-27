@@ -52,21 +52,9 @@ module Search
         # shares a genre with every other fiction book, require_genre_match stops
         # gating anything, and every score shifts in a way that looks like a tuning
         # effect rather than a bug.
-        # KNOWN GAP, deliberately left: "never scored" is true of the NUMERATOR only.
-        # Books::Book#as_indexed_json still counts these two in
-        # similarity_category_count, which wrap_in_normalization uses as the
-        # denominator, so a correctly-tagged candidate is divided by one more than an
-        # identically-catalogued untagged one -- worth 2.6% at 20 categories and 9.5%
-        # at 6. Measured: 7.8% of candidates carry no type tag and get that edge.
-        #
-        # Not corrected here because correcting it ALONE measurably worsens results:
-        # subtracting 1 from the denominator raises thin books more than thick ones,
-        # so top-5 slots held by books with <=7 categories go from 51% to 63% and the
-        # median drops from 7 to 6 against a corpus median of 14. It is the sqrt
-        # thin-book bias being amplified. Paired with a denominator floor the sign
-        # flips -- floor 10 alone gives 15%, floor 10 plus this correction gives 13%
-        # -- so the two belong in one change, not this one.
-        BOOK_TYPE_CATEGORY_NAMES = %w[Fiction Nonfiction].freeze
+        # Books::Book owns this list because as_indexed_json needs it too -- it is what
+        # keeps these two out of similarity_category_count. Two copies would drift.
+        BOOK_TYPE_CATEGORY_NAMES = ::Books::Book::BOOK_TYPE_CATEGORY_NAMES
 
         # Resolved by name, never hardcoded: these ids differ between environments
         # (2683/3348 in development). Memoised per process because the two rows are
@@ -221,6 +209,22 @@ module Search
         # `boost_mode: "replace"` computes the division ourselves and installs it
         # as the final score outright, rather than the function_score default of
         # multiplying it into the query score again.
+        # normalization_floor clamps the denominator from below. Dividing by sqrt(count)
+        # over-corrects: a book carrying 6 categories that shares four of them beats a
+        # book carrying 20 that shares the same four, so the ranking systematically
+        # preferred whichever book had been catalogued least. Measured before the
+        # floor: the median result carried 7 scoring categories against a corpus
+        # median of 14, and 51% of top-5 slots went to books with 7 or fewer.
+        #
+        # A floor of 10 puts the median result at 13 and those slots at 13%. Higher
+        # floors barely improve on that while churning far more of the ranking (12
+        # gives 12% for 50% churn, 14 gives 11% for 55%), and 10 is also the corpus
+        # p25, so it clamps roughly the thinnest quarter and leaves the rest alone.
+        #
+        # The count < 1 guard survives the floor because normalization_floor is
+        # configurable and may be set to 0: sqrt(0) is Infinity, which OpenSearch
+        # clamps to Float::MAX_VALUE, and min_score cannot catch that because
+        # Float::MAX_VALUE clears any threshold.
         def self.wrap_in_normalization(bool, opts)
           return {bool: bool} unless opts[:normalize_by_category_count]
 
@@ -229,7 +233,8 @@ module Search
               query: {bool: bool},
               script_score: {
                 script: {
-                  source: "def count = doc['similarity_category_count'].size() == 0 ? 1 : doc['similarity_category_count'].value; _score / Math.sqrt(count == 0 ? 1 : count)"
+                  source: "def count = doc['similarity_category_count'].size() == 0 ? 1 : doc['similarity_category_count'].value; if (count < params.floor) { count = params.floor; } return _score / Math.sqrt(count < 1 ? 1 : count);",
+                  params: {floor: opts[:normalization_floor].to_i}
                 }
               },
               boost_mode: "replace"

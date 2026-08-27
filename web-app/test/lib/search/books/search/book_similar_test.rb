@@ -86,12 +86,17 @@ module Search
           # genre_boost is 5.0, so a doc sharing one genre scores 5/sqrt(count):
           # 9001 at 2 categories scores 3.54, 9002 at 40 scores 0.79. A threshold
           # between them must keep the first and drop the second.
+          #
+          # normalization_floor: 1 disables the floor for this test on purpose. This
+          # is about min_score, and leaving the default 10 in place would clamp
+          # 9001's denominator to 10, move its score to 1.58, and silently retune
+          # every threshold below to something that no longer brackets anything.
           index_book(9001, genre_category_ids: [@novels], similarity_category_count: 2)
           index_book(9002, genre_category_ids: [@novels], similarity_category_count: 40)
 
-          assert_equal ["9001", "9002"], ids_for(min_score: 0)
-          assert_equal ["9001"], ids_for(min_score: 2.0)
-          assert_empty ids_for(min_score: 4.0)
+          assert_equal ["9001", "9002"], ids_for(min_score: 0, normalization_floor: 1)
+          assert_equal ["9001"], ids_for(min_score: 2.0, normalization_floor: 1)
+          assert_empty ids_for(min_score: 4.0, normalization_floor: 1)
         end
 
         test "a fiction book does not match nonfiction candidates" do
@@ -127,6 +132,19 @@ module Search
           index_book(9001, genre_category_ids: [@novels, @fiction, @nonfiction], similarity_category_count: 3)
 
           assert_equal ["9001"], ids_for
+        end
+
+        test "the normalization floor stops a thinly-catalogued book outranking a richer match" do
+          # 9001 shares one genre and carries 2 categories: 5.0 / sqrt(2) = 3.54.
+          # 9002 shares a genre AND a subject and carries 12: 8.0 / sqrt(12) = 2.31.
+          # Unfloored, the thinner book with the weaker match wins. A floor of 10
+          # divides 9001 by sqrt(10) instead, dropping it to 1.58.
+          index_book(9001, genre_category_ids: [@novels], similarity_category_count: 2)
+          index_book(9002, genre_category_ids: [@novels], subject_category_ids: [@politics],
+            similarity_category_count: 12)
+
+          assert_equal ["9001", "9002"], ids_for(normalization_floor: 1)
+          assert_equal ["9002", "9001"], ids_for(normalization_floor: 10)
         end
 
         test "excludes unranked books" do
