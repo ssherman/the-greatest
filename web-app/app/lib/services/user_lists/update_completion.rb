@@ -11,34 +11,41 @@ module Services
       end
 
       def call
-        return completion_not_enabled_result unless @item.user_list.completed_on_enabled?
-
-        new_completed_on = parsed_completed_on
-        return invalid_completion_result if new_completed_on == :invalid
-
         UserListItem.transaction do
           item = UserListItem.lock.find(@item.id)
-          old_completed_on = item.completed_on
-          item.update!(completed_on: new_completed_on)
+          if item.user_list.completed_on_enabled?
+            new_completed_on = parsed_completed_on
+            if new_completed_on == :invalid
+              invalid_completion_result
+            else
+              old_completed_on = item.completed_on
+              item.update!(completed_on: new_completed_on)
 
-          MutationResult.new(
-            success?: true,
-            data: {
-              item: item,
-              removed_items: [],
-              listable: item.listable,
-              old_completed_on: old_completed_on,
-              new_completed_on: item.completed_on,
-              transitioned: false
-            },
-            errors: []
-          )
+              MutationResult.new(
+                success?: true,
+                data: {
+                  item: item,
+                  removed_items: [],
+                  listable: item.listable,
+                  old_completed_on: old_completed_on,
+                  new_completed_on: item.completed_on,
+                  transitioned: false
+                },
+                errors: []
+              )
+            end
+          else
+            completion_not_enabled_result
+          end
         end
       rescue ActiveRecord::RecordInvalid => error
-        errors = error.record.errors.full_messages
-        MutationResult.new(success?: false, data: nil, errors: errors.presence || [error.message])
+        MutationResult.record_invalid(error)
       rescue ActiveRecord::RecordNotUnique
-        MutationResult.new(success?: false, data: nil, errors: ["Item already in list"])
+        MutationResult.failure(["Item already in list"])
+      rescue ActiveRecord::RecordNotFound
+        MutationResult.stale_item
+      rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordNotDestroyed => error
+        MutationResult.aborted_mutation(error)
       end
 
       private
@@ -52,11 +59,11 @@ module Services
       end
 
       def invalid_completion_result
-        MutationResult.new(success?: false, data: nil, errors: ["Completion date is invalid"])
+        MutationResult.failure(["Completion date is invalid"])
       end
 
       def completion_not_enabled_result
-        MutationResult.new(success?: false, data: nil, errors: ["Completion dates are not enabled for this list"])
+        MutationResult.failure(["Completion dates are not enabled for this list"])
       end
     end
   end

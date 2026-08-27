@@ -17,21 +17,27 @@ module Services
           target = memberships.find { |membership| membership.user_list_id == user_list.id }
           sources = memberships.reject { |membership| membership.user_list_id == user_list.id }
 
-          return duplicate_result if target.present? && sources.empty?
+          if target.present? && sources.empty?
+            duplicate_result
+          else
+            target ||= UserListItem.new(user_list: user_list, listable: listable)
+            old_completed_on = target.completed_on
+            target.completed_on = today if sources.any? && user_list.completed_on_enabled? && target.completed_on.nil?
 
-          target ||= UserListItem.new(user_list: user_list, listable: listable)
-          old_completed_on = target.completed_on
-          target.completed_on = today if sources.any? && user_list.completed_on_enabled? && target.completed_on.nil?
+            sources.each(&:destroy!)
+            target.save! if target.new_record? || target.changed?
 
-          sources.each(&:destroy!)
-          target.save! if target.new_record? || target.changed?
-
-          success_result(target: target, removed_items: sources, old_completed_on: old_completed_on)
+            success_result(target: target, removed_items: sources, old_completed_on: old_completed_on)
+          end
         end
       rescue ActiveRecord::RecordInvalid => error
-        record_invalid_result(error)
+        MutationResult.record_invalid(error)
       rescue ActiveRecord::RecordNotUnique
         duplicate_result
+      rescue ActiveRecord::RecordNotFound
+        MutationResult.stale_item
+      rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordNotDestroyed => error
+        MutationResult.aborted_mutation(error)
       end
 
       private
@@ -73,12 +79,7 @@ module Services
       end
 
       def duplicate_result
-        MutationResult.new(success?: false, data: nil, errors: ["Item already in list"])
-      end
-
-      def record_invalid_result(error)
-        errors = error.record.errors.full_messages
-        MutationResult.new(success?: false, data: nil, errors: errors.presence || [error.message])
+        MutationResult.failure(["Item already in list"])
       end
     end
   end

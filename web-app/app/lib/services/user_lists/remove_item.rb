@@ -28,6 +28,10 @@ module Services
             errors: []
           )
         end
+      rescue ActiveRecord::RecordNotFound
+        MutationResult.stale_item
+      rescue ActiveRecord::RecordNotSaved, ActiveRecord::RecordNotDestroyed => error
+        MutationResult.aborted_mutation(error)
       end
     end
   end
