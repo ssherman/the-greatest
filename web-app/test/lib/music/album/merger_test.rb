@@ -285,6 +285,44 @@ module Music
         assert_not survivor.verified?, "the generator owns this row; the merger must not edit it"
       end
 
+      # Regression: Music::Album::Merger had no merge_user_list_items at all, while
+      # music_albums declares `has_many :user_list_items, dependent: :destroy`, so
+      # destroying the source silently deleted every user's personal favorites entry
+      # for the merged album.
+      test "moves a personal list entry to the target" do
+        # user_list_items(:regular_user_fav_album_1) already links this user_list to
+        # @target_album; clear it so this test exercises the no-collision branch,
+        # which repoints the source's row instead of dropping it.
+        user_list_items(:regular_user_fav_album_1).destroy!
+        entry = user_list_items(:regular_user_fav_album_2)
+
+        result = Music::Album::Merger.call(source: @source_album, target: @target_album)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        assert_equal @target_album.id, entry.reload.listable_id
+      end
+
+      test "drops a personal list entry when that list already holds the target" do
+        # The fixtures already favorite both albums in this list: fav_album_1 is the
+        # target, fav_album_2 is the source.
+        user_list = user_lists(:regular_user_music_albums_favorites)
+
+        result = Music::Album::Merger.call(source: @source_album, target: @target_album)
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_equal 1, UserListItem.where(user_list: user_list, listable: @target_album).count
+      end
+
+      test "a user who favorited only the source still has that favorite afterwards" do
+        user_list = user_lists(:regular_user_music_albums_favorites)
+        user_list_items(:regular_user_fav_album_1).destroy!
+
+        Music::Album::Merger.call(source: @source_album, target: @target_album)
+
+        assert UserListItem.exists?(user_list: user_list, listable: @target_album),
+          "the merge must carry the user's favorite over, not destroy it with the source"
+      end
+
       test "should preserve verified=true when merging duplicate list_items and source is verified" do
         list = lists(:music_albums_list)
 

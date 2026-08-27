@@ -105,6 +105,7 @@ module Music
         merge_images
         merge_external_links
         merge_list_items
+        merge_user_list_items
         merge_release_year
 
         target_album.save! if target_album.changed?
@@ -175,6 +176,25 @@ module Music
           count += 1
         end
         @stats[:list_items] = count
+      end
+
+      # Personal favorites rows. music_albums declares
+      # `has_many :user_list_items, dependent: :destroy`, so without this the
+      # source's destroy! wipes every user's favorites entry for the merged album.
+      #
+      # position is scoped to the user_list, which does not change, so a moved row
+      # keeps a valid position.
+      def merge_user_list_items
+        count = 0
+        source_album.user_list_items.find_each do |entry|
+          if ::UserListItem.exists?(user_list_id: entry.user_list_id, listable: target_album)
+            entry.destroy!
+          else
+            entry.update!(listable_id: target_album.id)
+            count += 1
+          end
+        end
+        @stats[:user_list_items] = count
       end
 
       def merge_release_year

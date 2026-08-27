@@ -194,6 +194,40 @@ module Music
         assert_not survivor.verified?, "the generator owns this row; the merger must not edit it"
       end
 
+      # Regression: Music::Song::Merger had no merge_user_list_items at all, while
+      # music_songs declares `has_many :user_list_items, dependent: :destroy`, so
+      # destroying the source silently deleted every user's personal favorites entry
+      # for the merged song.
+      test "moves a personal list entry to the target" do
+        # user_list_items(:regular_user_fav_song_1) favorites @source_song only, so
+        # this exercises the no-collision branch, which repoints the row.
+        entry = user_list_items(:regular_user_fav_song_1)
+
+        result = Music::Song::Merger.call(source: @source_song, target: @target_song)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        assert_equal @target_song.id, entry.reload.listable_id
+      end
+
+      test "drops a personal list entry when that list already holds the target" do
+        user_list = user_lists(:regular_user_music_songs_favorites)
+        UserListItem.create!(user_list: user_list, listable: @target_song, position: 2)
+
+        result = Music::Song::Merger.call(source: @source_song, target: @target_song)
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_equal 1, UserListItem.where(user_list: user_list, listable: @target_song).count
+      end
+
+      test "a user who favorited only the source still has that favorite afterwards" do
+        user_list = user_lists(:regular_user_music_songs_favorites)
+
+        Music::Song::Merger.call(source: @source_song, target: @target_song)
+
+        assert UserListItem.exists?(user_list: user_list, listable: @target_song),
+          "the merge must carry the user's favorite over, not destroy it with the source"
+      end
+
       test "should preserve verified=true when merging duplicate list_items and source is verified" do
         list = lists(:music_songs_list)
 
