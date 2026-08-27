@@ -14,6 +14,14 @@ module Search
           @classics = categories(:books_classics_genre).id.to_s   # item_count 100
           @politics = categories(:books_politics_subject).id.to_s # item_count 200
           @france = categories(:books_france_location).id.to_s    # item_count 50
+          @fiction = categories(:books_fiction_genre).id.to_s      # the "special" type genres
+          @nonfiction = categories(:books_nonfiction_genre).id.to_s
+        end
+
+        # Fiction/Nonfiction are not ordinary genres -- they are a book-level type.
+        # Tagging the source book is what arms the type filter.
+        def tag_source_fiction
+          CategoryItem.create!(category: categories(:books_fiction_genre), item: @book)
         end
 
         def teardown
@@ -84,6 +92,41 @@ module Search
           assert_equal ["9001", "9002"], ids_for(min_score: 0)
           assert_equal ["9001"], ids_for(min_score: 2.0)
           assert_empty ids_for(min_score: 4.0)
+        end
+
+        test "a fiction book does not match nonfiction candidates" do
+          tag_source_fiction
+          index_book(9001, genre_category_ids: [@novels, @fiction], similarity_category_count: 2)
+          index_book(9002, genre_category_ids: [@novels, @nonfiction], similarity_category_count: 2)
+
+          assert_equal ["9001", "9002"], ids_for(exclude_opposite_book_type: false).sort
+          assert_equal ["9001"], ids_for(exclude_opposite_book_type: true)
+        end
+
+        test "fiction and nonfiction are never scored as genres" do
+          # Sharing only the type tag is not a similarity. Without this, every
+          # fiction book shares a genre with every other fiction book, and the
+          # require_genre_match gate stops meaning anything.
+          tag_source_fiction
+          index_book(9001, genre_category_ids: [@fiction], similarity_category_count: 1)
+
+          assert_empty ids_for
+        end
+
+        test "a source book with no type tag excludes nothing" do
+          # @book carries no Fiction/Nonfiction tag. The filter must not invent one:
+          # this is the 2.7% of books whose tagging is a data gap, and they still
+          # deserve results.
+          index_book(9001, genre_category_ids: [@novels, @nonfiction], similarity_category_count: 2)
+
+          assert_equal ["9001"], ids_for
+        end
+
+        test "a candidate tagged both types survives the filter" do
+          tag_source_fiction
+          index_book(9001, genre_category_ids: [@novels, @fiction, @nonfiction], similarity_category_count: 3)
+
+          assert_equal ["9001"], ids_for
         end
 
         test "excludes unranked books" do

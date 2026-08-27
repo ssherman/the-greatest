@@ -43,8 +43,31 @@ module Search
         end
 
         # => {"genre" => [Category, ...], "subject" => [...], "location" => [...]}
+        # Fiction and Nonfiction are not genres, they are a book-level TYPE, and they
+        # are treated as such here rather than left to max_category_item_count to
+        # drop by accident. Today they sit at 68,333 and 56,222 against a 15,000
+        # ceiling, so the ceiling does exclude them -- but that is a coincidence of
+        # the current tuning, not a decision. Raising the ceiling while tuning would
+        # silently readmit them as scoring genres, at which point every fiction book
+        # shares a genre with every other fiction book, require_genre_match stops
+        # gating anything, and every score shifts in a way that looks like a tuning
+        # effect rather than a bug.
+        BOOK_TYPE_CATEGORY_NAMES = %w[Fiction Nonfiction].freeze
+
+        # Resolved by name, never hardcoded: these ids differ between environments
+        # (2683/3348 in development). Memoised per process because the two rows are
+        # effectively permanent; an environment missing them yields an empty hash and
+        # every type behaviour below degrades to a no-op.
+        def self.book_type_category_ids
+          @book_type_category_ids ||= ::Books::Category
+            .where(name: BOOK_TYPE_CATEGORY_NAMES, category_type: :genre)
+            .pluck(:name, :id)
+            .to_h
+        end
+
         def self.categories_by_type(book, opts)
-          active = book.categories.select { |c| c.deleted == false }
+          type_ids = book_type_category_ids.values
+          active = book.categories.select { |c| c.deleted == false && type_ids.exclude?(c.id) }
 
           # The model's constant, not a copy, so this method automatically tracks
           # whatever the model scores -- but build_query_definition below does
@@ -145,9 +168,13 @@ module Search
           excluded = [book.id.to_s]
           excluded.concat(same_series_book_ids(book)) if opts[:exclude_same_series]
 
+          must_not = [{ids: {values: excluded}}]
+          opposite = opposite_type_clause(book) if opts[:exclude_opposite_book_type]
+          must_not << opposite if opposite
+
           bool = {
             filter: filter,
-            must_not: [{ids: {values: excluded}}],
+            must_not: must_not,
             should: should,
             # Explicit because a bool carrying a `filter` defaults its should-minimum to 0.
             minimum_should_match: 1
@@ -192,6 +219,41 @@ module Search
                 }
               },
               boost_mode: "replace"
+            }
+          }
+        end
+
+        # Excludes the OPPOSITE type rather than requiring the SAME one, and the
+        # difference is not cosmetic. 2.3% of the ranked candidate pool (572 books)
+        # carries neither tag -- a mostly-data-quality population that includes
+        # religious texts. "Require Fiction" would make every one of them
+        # permanently unreachable through similar books and would also fire on a
+        # source book tagged neither; excluding the opposite removes only the clear
+        # mismatches, leaves untagged and both-tagged candidates eligible, and
+        # no-ops on its own when the source has no type. As the tagging is corrected
+        # the two designs converge, with no migration moment in between.
+        #
+        # nil (no clause at all) when the source is untagged or carries both.
+        def self.opposite_type_clause(book)
+          ids = book_type_category_ids
+          fiction = ids["Fiction"]
+          nonfiction = ids["Nonfiction"]
+          return nil if fiction.nil? || nonfiction.nil?
+
+          own = book.categories.select { |c| c.deleted == false }.map(&:id)
+          same, opposite = if own.include?(fiction) && own.exclude?(nonfiction)
+            [fiction, nonfiction]
+          elsif own.include?(nonfiction) && own.exclude?(fiction)
+            [nonfiction, fiction]
+          end
+          return nil if same.nil?
+
+          # "tagged the opposite type AND not also tagged ours" -- the inner must_not
+          # is what keeps the 1,633 books tagged both from being excluded.
+          {
+            bool: {
+              must: [{term: {genre_category_ids: opposite.to_s}}],
+              must_not: [{term: {genre_category_ids: same.to_s}}]
             }
           }
         end

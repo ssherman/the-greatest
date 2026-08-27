@@ -39,6 +39,16 @@ Rails.application.config.x.book_similarity = ActiveSupport::OrderedOptions.new.m
 
   # The four accuracy behaviours, each independently switchable.
   require_genre_match: true,
+
+  # Fiction/Nonfiction are a book-level TYPE, not a genre: never scored, and used to
+  # exclude candidates of the OPPOSITE type (never to require the same one -- see
+  # BookSimilar.opposite_type_clause for why that distinction matters). Measured
+  # across 192 fiction/nonfiction source books before this existed: 5.2% of #1
+  # results and 7.6% of top-5 slots were the opposite type. Catch-22 returned The
+  # Braindead Megaphone, an essay collection, on shared Dark Humor / Absurdist /
+  # Satire / Postmodern -- tone genres that describe manner, not the reading
+  # experience.
+  exclude_opposite_book_type: true,
   normalize_by_category_count: true,
   drop_common_categories: true,
   exclude_same_series: true,
