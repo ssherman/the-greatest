@@ -40,12 +40,37 @@ class Books::ReadingGoalTest < ActiveSupport::TestCase
   test "date scopes use inclusive boundaries and stable ordering" do
     today = Date.new(2026, 8, 26)
 
-    assert_equal [books_reading_goals(:active_ending_soon).id, books_reading_goals(:active_ending_later).id],
+    assert_equal [
+      books_reading_goals(:active_ending_soon).id,
+      books_reading_goals(:active_ending_later).id,
+      books_reading_goals(:active_ending_later_same_day).id
+    ],
       Books::ReadingGoal.active_on(today).pluck(:id)
-    assert_equal Books::ReadingGoal.upcoming_on(today).pluck(:starts_on, :id),
-      Books::ReadingGoal.upcoming_on(today).pluck(:starts_on, :id).sort
-    assert_equal Books::ReadingGoal.finished_on(today).pluck(:ends_on, :id),
-      Books::ReadingGoal.finished_on(today).pluck(:ends_on, :id).sort.reverse
+    assert_equal [
+      books_reading_goals(:upcoming).id,
+      books_reading_goals(:upcoming_same_day).id,
+      books_reading_goals(:private_goal).id,
+      books_reading_goals(:public_goal_other_user).id
+    ], Books::ReadingGoal.upcoming_on(today).pluck(:id)
+    assert_equal [
+      books_reading_goals(:finished_same_day).id,
+      books_reading_goals(:finished).id
+    ], Books::ReadingGoal.finished_on(today).pluck(:id)
+  end
+
+  test "public and ownership scopes return exact memberships" do
+    assert_equal [books_reading_goals(:public_goal_other_user).id],
+      Books::ReadingGoal.public_goals.pluck(:id)
+    assert_equal [
+      books_reading_goals(:active_ending_soon).id,
+      books_reading_goals(:active_ending_later).id,
+      books_reading_goals(:upcoming).id,
+      books_reading_goals(:finished).id,
+      books_reading_goals(:private_goal).id,
+      books_reading_goals(:active_ending_later_same_day).id,
+      books_reading_goals(:upcoming_same_day).id,
+      books_reading_goals(:finished_same_day).id
+    ], Books::ReadingGoal.owned_by(users(:regular_user)).pluck(:id).sort
   end
 
   test "database constraint rejects a non-positive persisted target" do

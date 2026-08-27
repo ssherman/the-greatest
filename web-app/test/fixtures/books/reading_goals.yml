@@ -75,3 +75,30 @@ public_goal_other_user:
   starts_on: 2027-01-01
   ends_on: 2027-03-31
   public: true
+
+active_ending_later_same_day:
+  id: 7
+  user: regular_user
+  name: August Mysteries
+  target_count: 2
+  starts_on: 2026-08-20
+  ends_on: 2026-08-31
+  public: false
+
+upcoming_same_day:
+  id: 8
+  user: regular_user
+  name: September Poetry
+  target_count: 3
+  starts_on: 2026-09-01
+  ends_on: 2026-09-30
+  public: false
+
+finished_same_day:
+  id: 9
+  user: regular_user
+  name: July Short Stories
+  target_count: 2
+  starts_on: 2026-07-15
+  ends_on: 2026-07-31
+  public: false
