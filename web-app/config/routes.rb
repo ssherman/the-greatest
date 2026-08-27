@@ -329,6 +329,9 @@ Rails.application.routes.draw do
   delete "user_lists/:user_list_id/items/:id",
     to: "user_list_items#destroy",
     as: :user_list_item
+  patch "user_list_items/:id/completion",
+    to: "user_list_items#update_completion",
+    as: :user_list_item_completion
 
   # Type-scoped typeahead for the "add item from list page" search box (02e).
   # Signed-in, never cached; scoped by listable_type (e.g. Music::Album).

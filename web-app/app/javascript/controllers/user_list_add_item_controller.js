@@ -38,8 +38,8 @@ export default class extends Controller {
       // Update the shared user-list-state cache BEFORE reloading the frame, so
       // the new item's "on these lists" widget renders correctly the moment it
       // connects (the widget reads the cache synchronously on connect).
-      this._syncState(data.user_list_item)
-      this._toast("success", `Added “${label}” to ${this.listNameValue}`)
+      this._syncState(data.user_list_item, data.removed_user_list_items || [])
+      this._toast("success", data.message)
       this._resetInput()
       this._refreshList()
     } catch (err) {
@@ -70,7 +70,7 @@ export default class extends Controller {
   // cache (mirrors the modal's _afterMutation) so the per-item widget shows the
   // item as "on this list". Falls back to a server refresh if the cache isn't
   // ready yet (rare: first visit before /user_list_state has returned).
-  _syncState(item) {
+  _syncState(item, removedItems = []) {
     if (!item) return
     const stateCtrl = this._stateController()
     if (!stateCtrl) return
@@ -83,12 +83,16 @@ export default class extends Controller {
     const type = item.listable_type
     const id = item.listable_id
     const current = (stateCtrl.state().memberships?.[type] || {})[String(id)] || []
-    if (current.some((m) => m.list_id === item.user_list_id)) return
+    const removedListIds = removedItems.map((removedItem) => removedItem.user_list_id)
+    const next = current.filter((membership) => !removedListIds.includes(membership.list_id))
+    if (!next.some((membership) => membership.list_id === item.user_list_id)) {
+      next.push({list_id: item.user_list_id, item_id: item.id})
+    }
 
     stateCtrl.applyMutation({
       listableType: type,
       listableId: id,
-      memberships: [...current, { list_id: item.user_list_id, item_id: item.id }]
+      memberships: next
     })
   }
 

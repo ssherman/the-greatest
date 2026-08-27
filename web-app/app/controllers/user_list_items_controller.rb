@@ -4,21 +4,22 @@ class UserListItemsController < ApplicationController
 
   before_action :prevent_caching
   before_action :require_signed_in!
-  before_action :load_user_list
+  before_action :load_user_list, only: [:create, :destroy]
 
   # POST /user_lists/:user_list_id/items
   def create
     listable = @user_list.class.listable_class.find(item_attrs[:listable_id])
-    item = @user_list.user_list_items.new(listable: listable)
-    authorize item, policy_class: UserListItemPolicy
+    candidate = @user_list.user_list_items.new(listable: listable)
+    authorize candidate, policy_class: UserListItemPolicy
+    result = Services::UserLists::AddItem.call(user_list: @user_list, listable: listable)
+    return render_mutation_failure(result) unless result.success?
 
-    if item.save
-      render json: {user_list_item: serialize_item(item)}, status: :created
-    elsif duplicate_item?(item)
-      render_conflict("Item already in list")
-    else
-      render_validation_failed(item)
-    end
+    invalidate_books_goals(result)
+    render json: {
+      user_list_item: serialize_item(result.data[:item]),
+      removed_user_list_items: result.data[:removed_items].map { |item| serialize_item(item) },
+      message: mutation_message(result)
+    }, status: :created
   rescue ActiveRecord::RecordNotUnique
     render_conflict("Item already in list")
   end
@@ -27,8 +28,29 @@ class UserListItemsController < ApplicationController
   def destroy
     item = @user_list.user_list_items.find(params[:id])
     authorize item, policy_class: UserListItemPolicy
-    item.destroy!
-    render json: {ok: true}
+    result = Services::UserLists::RemoveItem.call(item: item)
+    return render_mutation_failure(result) unless result.success?
+
+    invalidate_books_goals(result)
+    render json: {
+      ok: true,
+      removed_user_list_item: serialize_item(result.data[:item]),
+      message: mutation_message(result)
+    }
+  end
+
+  # PATCH /user_list_items/:id/completion
+  def update_completion
+    item = current_user.user_list_items.find(params[:id])
+    authorize item, :update_completion?, policy_class: UserListItemPolicy
+    result = Services::UserLists::UpdateCompletion.call(item: item, completed_on: completion_attrs[:completed_on])
+    unless result.success?
+      redirect_to my_list_path(item.user_list), alert: result.errors.to_sentence, status: :see_other
+      return
+    end
+
+    invalidate_books_goals(result)
+    redirect_to my_list_path(item.user_list), notice: completion_message(result), status: :see_other
   end
 
   private
@@ -43,9 +65,40 @@ class UserListItemsController < ApplicationController
     @item_attrs ||= params.require(:user_list_item).permit(:listable_id)
   end
 
-  def duplicate_item?(item)
-    item.errors.added?(:listable_id, :taken, value: item.listable_id) ||
-      item.errors[:listable_id].any? { |m| m.include?("already in this list") }
+  def completion_attrs
+    @completion_attrs ||= params.require(:user_list_item).permit(:completed_on)
+  end
+
+  def render_mutation_failure(result)
+    return render_conflict("Item already in list") if result.errors == ["Item already in list"]
+
+    body = error_body(:validation_failed, result.errors.first || "Validation failed")
+    body[:error][:details] = {base: result.errors}
+    render json: body, status: :unprocessable_entity
+  end
+
+  def mutation_message(result)
+    item = result.data[:item]
+    return "Removed from #{item.user_list.name}" if item.destroyed?
+
+    if result.data[:transitioned]
+      "Moved to #{item.user_list.name} and marked completed today"
+    elsif item.user_list.completed_on_enabled? && item.completed_on.nil?
+      "Added to #{item.user_list.name}. Mark it completed to make it count toward your reading goals."
+    else
+      "Added to #{item.user_list.name}"
+    end
+  end
+
+  def completion_message(result)
+    result.data[:new_completed_on] ? "Completion date updated" : "Completion date cleared"
+  end
+
+  # Task 5 supplies the invalidator and replaces this staged no-op with its call.
+  def invalidate_books_goals(_result)
+    return nil unless defined?(Services::Books::ReadingGoals::CompletionChangeInvalidator)
+
+    nil
   end
 
   def serialize_item(item)
@@ -54,7 +107,8 @@ class UserListItemsController < ApplicationController
       user_list_id: item.user_list_id,
       listable_type: item.listable_type,
       listable_id: item.listable_id,
-      position: item.position
+      position: item.position,
+      completed_on: item.completed_on&.iso8601
     }
   end
 end
