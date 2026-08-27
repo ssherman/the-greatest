@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_25_134658) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_27_060025) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -212,6 +212,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_25_134658) do
     t.index ["edition_type"], name: "index_books_editions_on_edition_type"
     t.index ["language_id"], name: "index_books_editions_on_language_id"
     t.index ["volume_number"], name: "index_books_editions_on_volume_number"
+  end
+
+  create_table "books_reading_goals", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.date "ends_on", null: false
+    t.string "name", null: false
+    t.boolean "public", default: false, null: false
+    t.date "starts_on", null: false
+    t.integer "target_count", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["user_id", "public", "starts_on", "ends_on"], name: "index_books_reading_goals_for_public_date_lookup"
+    t.index ["user_id"], name: "index_books_reading_goals_on_user_id"
+    t.check_constraint "ends_on >= starts_on", name: "books_reading_goals_dates_ordered"
+    t.check_constraint "target_count > 0", name: "books_reading_goals_target_count_positive"
   end
 
   create_table "books_series", force: :cascade do |t|
@@ -1001,6 +1017,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_25_134658) do
     t.datetime "created_at", null: false
     t.text "description"
     t.integer "list_type", null: false
+    t.boolean "manually_ordered", default: false, null: false
     t.string "name", null: false
     t.integer "position"
     t.boolean "public", default: false, null: false
@@ -1060,6 +1077,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_25_134658) do
   add_foreign_key "books_credits", "books_authors", column: "author_id"
   add_foreign_key "books_editions", "books_books", column: "book_id"
   add_foreign_key "books_editions", "languages"
+  add_foreign_key "books_reading_goals", "users"
   add_foreign_key "books_series", "books_books", column: "representative_book_id", on_delete: :nullify
   add_foreign_key "books_series_books", "books_books", column: "book_id"
   add_foreign_key "books_series_books", "books_series", column: "series_id"

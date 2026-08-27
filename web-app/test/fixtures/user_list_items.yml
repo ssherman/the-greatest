@@ -31,17 +31,23 @@ regular_user_fav_album_1:
   user_list: regular_user_music_albums_favorites
   listable: dark_side_of_the_moon (Music::Album)
   position: 1
+  # Explicit, position-ordered created_at: fixture ids are hash-derived, not
+  # insertion-ordered, so without this Services::UserLists::BackfillManuallyOrdered
+  # sees an arbitrary insertion order and can flag this list as manually ordered.
+  created_at: <%= 3.days.ago.to_fs(:db) %>
 
 regular_user_fav_album_2:
   user_list: regular_user_music_albums_favorites
   listable: abbey_road (Music::Album)
   position: 2
   completed_on: 2026-03-15
+  created_at: <%= 2.days.ago.to_fs(:db) %>
 
 regular_user_fav_album_3:
   user_list: regular_user_music_albums_favorites
   listable: thriller (Music::Album)
   position: 3
+  created_at: <%= 1.day.ago.to_fs(:db) %>
 
 regular_user_listened_album_1:
   user_list: regular_user_music_albums_listened
@@ -73,11 +79,15 @@ regular_user_books_item_1:
   user_list: regular_user_books_favorites
   listable: war_and_peace (Books::Book)
   position: 1
+  # See regular_user_fav_album_1 above: pinned so this list isn't accidentally
+  # flagged by Services::UserLists::BackfillManuallyOrdered.
+  created_at: <%= 2.days.ago.to_fs(:db) %>
 
 regular_user_books_item_2:
   user_list: regular_user_books_favorites
   listable: got (Books::Book)
   position: 2
+  created_at: <%= 1.day.ago.to_fs(:db) %>
 
 regular_user_books_item_3:
   user_list: regular_user_books_read
