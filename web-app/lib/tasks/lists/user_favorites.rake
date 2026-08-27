@@ -44,8 +44,12 @@ namespace :user_favorites_lists do
       "Our Users' Honorable Mention Favorite Books of All Time",
       "Our Users' Favorite Books of All Time"
     ].each do |name|
-      # Skip the list we just renamed into this slot.
-      doomed = ::Books::List.where(name: name).where.not(id: keep&.id).to_a
+      # Never delete a generated list. The previous guard excluded the adopted
+      # list by id, but `keep` only resolves while the pre-rename name still
+      # exists -- which this task's own first action destroys. That made the
+      # protection single-use, and on a second run `where.not(id: nil)` compiles
+      # to `id IS NOT NULL`, matching the adopted list under its new name.
+      doomed = ::Books::List.where(name: name, auto_generated_kind: nil).to_a
       doomed.each do |list|
         items = list.list_items.count
         # RankedList is destroyed by the association added in Task 2; counted here
