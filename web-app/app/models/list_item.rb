@@ -30,6 +30,7 @@ class ListItem < ApplicationRecord
 
   # Callbacks
   before_validation :parse_metadata_if_string
+  before_destroy :prevent_destroy_when_auto_generated
 
   # Validations
   validates :list, presence: true
@@ -37,6 +38,7 @@ class ListItem < ApplicationRecord
   validates :listable_id, uniqueness: {scope: [:list_id, :listable_type], message: "is already in this list"}, allow_nil: true
   validate :listable_type_compatible_with_list_type
   validate :metadata_format
+  validate :list_must_not_be_auto_generated
 
   private
 
@@ -80,6 +82,26 @@ class ListItem < ApplicationRecord
     if expected_type && listable_type != expected_type
       errors.add(:listable_type, "#{listable_type} is not compatible with list type #{list.class.name}")
     end
+  end
+
+  # The generator owns an auto-generated list's items and rewrites them on every
+  # run, so anything edited by hand is destroyed on the next pass. Refuse the
+  # edit rather than lose it silently.
+  #
+  # Services::Lists::GenerateUserFavorites writes through delete_all / insert_all,
+  # which skip callbacks and validations by design -- so this guard needs no
+  # escape hatch for the job itself.
+  def list_must_not_be_auto_generated
+    return if list.nil? || !list.auto_generated?
+
+    errors.add(:base, "Items on an auto-generated list are managed by the generator and cannot be edited")
+  end
+
+  def prevent_destroy_when_auto_generated
+    return if list.nil? || !list.auto_generated?
+
+    errors.add(:base, "Items on an auto-generated list are managed by the generator and cannot be edited")
+    throw :abort
   end
 
   # Scopes

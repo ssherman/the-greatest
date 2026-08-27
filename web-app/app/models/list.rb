@@ -4,6 +4,7 @@
 #
 #  id                    :bigint           not null, primary key
 #  activated_at          :datetime
+#  auto_generated_kind   :integer
 #  category_specific     :boolean
 #  creator_specific      :boolean
 #  description           :text
@@ -34,8 +35,9 @@
 #
 # Indexes
 #
-#  index_lists_on_activated_at     (activated_at)
-#  index_lists_on_submitted_by_id  (submitted_by_id)
+#  index_lists_on_activated_at                  (activated_at)
+#  index_lists_on_submitted_by_id               (submitted_by_id)
+#  index_lists_on_type_and_auto_generated_kind  (type,auto_generated_kind) UNIQUE WHERE (auto_generated_kind IS NOT NULL)
 #
 # Foreign Keys
 #
@@ -48,9 +50,19 @@ class List < ApplicationRecord
   has_many :list_penalties, dependent: :destroy, inverse_of: :list
   has_many :penalties, through: :list_penalties, inverse_of: :lists
   has_many :ai_chats, as: :parent, dependent: :destroy
+  # ranked_lists.list_id carries no foreign key, so without this a destroyed list
+  # silently leaves an orphan RankedList row behind and the admin ranked-lists
+  # view then raises on rl.list.name.
+  has_many :ranked_lists, dependent: :destroy
 
   # Enums
   enum :status, {unapproved: 0, approved: 1, rejected: 2, active: 3}
+  # Set on lists whose items are written by a generator rather than curated by
+  # hand. Identifies the generated list durably across renames -- the legacy
+  # implementation looked its lists up by name, which broke on any edit.
+  # Prefixed so the predicate reads generated_user_favorites? rather than
+  # colliding with a bare user_favorites? on List.
+  enum :auto_generated_kind, {user_favorites: 0}, prefix: :generated
 
   # Callbacks
   before_validation :parse_items_json_if_string
@@ -84,6 +96,10 @@ class List < ApplicationRecord
   # Public Methods
   def has_penalties?
     penalties.any?
+  end
+
+  def auto_generated?
+    auto_generated_kind.present?
   end
 
   def global_penalties

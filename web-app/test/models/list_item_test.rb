@@ -390,4 +390,39 @@ class ListItemTest < ActiveSupport::TestCase
     assert_equal 1972, item.metadata["mb_release_year"]
     assert_equal true, item.metadata["musicbrainz_match"]
   end
+
+  test "rejects creating an item on an auto-generated list" do
+    list = lists(:basic_list)
+    list.update!(auto_generated_kind: :user_favorites)
+
+    item = ListItem.new(list: list, listable: books_books(:war_and_peace), position: 1)
+
+    refute item.valid?
+    assert_includes item.errors[:base].join, "managed by the generator"
+  end
+
+  test "rejects updating an item on an auto-generated list" do
+    list = lists(:basic_list)
+    item = ListItem.create!(list: list, listable: books_books(:war_and_peace), position: 1)
+    list.update!(auto_generated_kind: :user_favorites)
+
+    item.position = 5
+
+    refute item.valid?
+  end
+
+  test "rejects destroying an item on an auto-generated list" do
+    list = lists(:basic_list)
+    item = ListItem.create!(list: list, listable: books_books(:war_and_peace), position: 1)
+    list.update!(auto_generated_kind: :user_favorites)
+
+    refute item.destroy
+    assert ListItem.exists?(item.id)
+  end
+
+  test "allows items on a normal list" do
+    item = ListItem.new(list: lists(:basic_list), listable: books_books(:war_and_peace), position: 1)
+
+    assert item.valid?
+  end
 end
