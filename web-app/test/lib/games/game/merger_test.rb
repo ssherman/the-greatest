@@ -162,6 +162,41 @@ module Games
         assert_equal 1, ListItem.where(list: list, listable: @target).count
       end
 
+      # Record merge is already live for games. Repointing a row on the generated
+      # users' favorites list raises RecordInvalid against the ListItem guard, so
+      # without the skip this is a 500 in production admin the first time a merged
+      # game happens to sit on that list. Nothing is lost by skipping: the
+      # generator rebuilds the list nightly from the user favorites the merge has
+      # already moved.
+      test "merges a game that sits on an auto-generated list without touching that list" do
+        list = lists(:games_list)
+        list_items(:games_item).destroy!
+        item = ListItem.create!(list: list, listable: @source, position: 3)
+        list.update!(auto_generated_kind: :user_favorites)
+
+        result = ::Games::Game::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        # The row was left where it was and died with the source game's cascade;
+        # the merger never wrote a row of its own onto the generated list.
+        assert_not ListItem.exists?(item.id)
+        assert_nil ListItem.find_by(list: list, listable: @target)
+      end
+
+      test "promotes verified on a normal list but skips an auto-generated one" do
+        list = lists(:games_list)
+        list_items(:games_item).destroy!
+        ListItem.create!(list: list, listable: @target, position: 1, verified: false)
+        ListItem.create!(list: list, listable: @source, position: 2, verified: true)
+        list.update!(auto_generated_kind: :user_favorites)
+
+        result = ::Games::Game::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        survivor = ListItem.find_by(list: list, listable: @target)
+        assert_not survivor.verified, "the generator owns this row; the merger must not edit it"
+      end
+
       test "moves a personal list entry to the target" do
         user_list = user_lists(:regular_user_games_favorites)
         # user_list_items(:regular_user_fav_game_1) already links this user_list to @target;

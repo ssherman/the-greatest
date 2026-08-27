@@ -164,6 +164,36 @@ module Music
         assert target_list_item.verified?, "Expected list_item to preserve verified=true"
       end
 
+      # Record merge is already live for music. Writing to the generated users'
+      # favorites list raises RecordInvalid against the ListItem guard, so without
+      # the skip this is a 500 in production admin the first time a merged song
+      # happens to sit on that list. Nothing is lost: the generator rebuilds the
+      # list nightly from the user favorites the merge has already moved.
+      test "merges a song that sits on an auto-generated list without touching that list" do
+        list = lists(:music_songs_list)
+        item = ListItem.create!(list: list, listable: @source_song, position: 5, verified: true)
+        list.update!(auto_generated_kind: :user_favorites)
+
+        result = Music::Song::Merger.call(source: @source_song, target: @target_song)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        assert_nil ListItem.find_by(list: list, listable: @target_song)
+        assert_not ListItem.exists?(item.id), "the source's row dies with the source song"
+      end
+
+      test "does not promote verified on an auto-generated list" do
+        list = lists(:music_songs_list)
+        ListItem.create!(list: list, listable: @target_song, position: 1, verified: false)
+        ListItem.create!(list: list, listable: @source_song, position: 2, verified: true)
+        list.update!(auto_generated_kind: :user_favorites)
+
+        result = Music::Song::Merger.call(source: @source_song, target: @target_song)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        survivor = ListItem.find_by(list: list, listable: @target_song)
+        assert_not survivor.verified?, "the generator owns this row; the merger must not edit it"
+      end
+
       test "should preserve verified=true when merging duplicate list_items and source is verified" do
         list = lists(:music_songs_list)
 

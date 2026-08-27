@@ -153,6 +153,12 @@ module Music
       def merge_list_items
         count = 0
         source_song.list_items.find_each do |list_item|
+          # An auto-generated list's rows belong to the generator, which rewrites
+          # them nightly from the underlying user favorites -- and this merge has
+          # already moved those. Writing here would raise against the ListItem
+          # guard and turn an admin merge into a 500.
+          next if list_item.list.auto_generated?
+
           existing = target_song.list_items.find_by(list_id: list_item.list_id)
 
           if existing
