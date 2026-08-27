@@ -199,6 +199,20 @@ class UserTest < ActiveSupport::TestCase
     end
   end
 
+  test "destroying a user destroys their books reading goals" do
+    user = User.create!(
+      email: "reading-goal-delete@example.com", role: :user, email_verified: true
+    )
+    goal = Books::ReadingGoal.create!(
+      user: user, name: "Delete me", target_count: 1,
+      starts_on: Date.new(2026, 1, 1), ends_on: Date.new(2026, 12, 31)
+    )
+
+    user.destroy!
+
+    refute Books::ReadingGoal.exists?(goal.id)
+  end
+
   test "has the legacy-migration columns" do
     assert_includes User.column_names, "external_provider_uid"
     assert_includes User.column_names, "legacy_migrated"
