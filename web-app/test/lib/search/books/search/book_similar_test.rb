@@ -45,8 +45,15 @@ module Search
           )
         end
 
+        # min_score: 0 unless a test says otherwise. These tests pin which documents
+        # MATCH and in what ORDER, against synthetic docs whose scores are nothing
+        # like production's -- a single shared genre on a 40-category doc scores
+        # 5/sqrt(40) = 0.79. The production default is 3.0, tuned against the real
+        # corpus, and letting it apply here would silently empty half this file the
+        # next time it is retuned. "min_score filters low scorers" below pins the
+        # threshold itself; everything else is deliberately independent of it.
         def ids_for(book: @book, **options)
-          ::Search::Books::Search::BookSimilar.call(book, options).map { |hit| hit[:id] }
+          ::Search::Books::Search::BookSimilar.call(book, {min_score: 0}.merge(options)).map { |hit| hit[:id] }
         end
 
         test "returns nothing when the book has no scoring categories" do
@@ -65,6 +72,18 @@ module Search
           index_book(9001, genre_category_ids: [@novels], similarity_category_count: 1)
 
           assert_equal ["9001"], ids_for
+        end
+
+        test "min_score filters out low scorers" do
+          # genre_boost is 5.0, so a doc sharing one genre scores 5/sqrt(count):
+          # 9001 at 2 categories scores 3.54, 9002 at 40 scores 0.79. A threshold
+          # between them must keep the first and drop the second.
+          index_book(9001, genre_category_ids: [@novels], similarity_category_count: 2)
+          index_book(9002, genre_category_ids: [@novels], similarity_category_count: 40)
+
+          assert_equal ["9001", "9002"], ids_for(min_score: 0)
+          assert_equal ["9001"], ids_for(min_score: 2.0)
+          assert_empty ids_for(min_score: 4.0)
         end
 
         test "excludes unranked books" do
