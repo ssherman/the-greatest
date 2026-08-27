@@ -43,8 +43,33 @@ module Search
         end
 
         # => {"genre" => [Category, ...], "subject" => [...], "location" => [...]}
+        # Fiction and Nonfiction are not genres, they are a book-level TYPE, and they
+        # are treated as such here rather than left to max_category_item_count to
+        # drop by accident. Today they sit at 68,333 and 56,222 against a 15,000
+        # ceiling, so the ceiling does exclude them -- but that is a coincidence of
+        # the current tuning, not a decision. Raising the ceiling while tuning would
+        # silently readmit them as scoring genres, at which point every fiction book
+        # shares a genre with every other fiction book, require_genre_match stops
+        # gating anything, and every score shifts in a way that looks like a tuning
+        # effect rather than a bug.
+        # Books::Book owns this list because as_indexed_json needs it too -- it is what
+        # keeps these two out of similarity_category_count. Two copies would drift.
+        BOOK_TYPE_CATEGORY_NAMES = ::Books::Book::BOOK_TYPE_CATEGORY_NAMES
+
+        # Resolved by name, never hardcoded: these ids differ between environments
+        # (2683/3348 in development). Memoised per process because the two rows are
+        # effectively permanent; an environment missing them yields an empty hash and
+        # every type behaviour below degrades to a no-op.
+        def self.book_type_category_ids
+          @book_type_category_ids ||= ::Books::Category
+            .where(name: BOOK_TYPE_CATEGORY_NAMES, category_type: :genre)
+            .pluck(:name, :id)
+            .to_h
+        end
+
         def self.categories_by_type(book, opts)
-          active = book.categories.select { |c| c.deleted == false }
+          type_ids = book_type_category_ids.values
+          active = book.categories.select { |c| c.deleted == false && type_ids.exclude?(c.id) }
 
           # The model's constant, not a copy, so this method automatically tracks
           # whatever the model scores -- but build_query_definition below does
@@ -145,9 +170,13 @@ module Search
           excluded = [book.id.to_s]
           excluded.concat(same_series_book_ids(book)) if opts[:exclude_same_series]
 
+          must_not = [{ids: {values: excluded}}]
+          opposite = opposite_type_clause(book) if opts[:exclude_opposite_book_type]
+          must_not << opposite if opposite
+
           bool = {
             filter: filter,
-            must_not: [{ids: {values: excluded}}],
+            must_not: must_not,
             should: should,
             # Explicit because a bool carrying a `filter` defaults its should-minimum to 0.
             minimum_should_match: 1
@@ -180,6 +209,22 @@ module Search
         # `boost_mode: "replace"` computes the division ourselves and installs it
         # as the final score outright, rather than the function_score default of
         # multiplying it into the query score again.
+        # normalization_floor clamps the denominator from below. Dividing by sqrt(count)
+        # over-corrects: a book carrying 6 categories that shares four of them beats a
+        # book carrying 20 that shares the same four, so the ranking systematically
+        # preferred whichever book had been catalogued least. Measured before the
+        # floor: the median result carried 7 scoring categories against a corpus
+        # median of 14, and 51% of top-5 slots went to books with 7 or fewer.
+        #
+        # A floor of 10 puts the median result at 13 and those slots at 13%. Higher
+        # floors barely improve on that while churning far more of the ranking (12
+        # gives 12% for 50% churn, 14 gives 11% for 55%), and 10 is also the corpus
+        # p25, so it clamps roughly the thinnest quarter and leaves the rest alone.
+        #
+        # The count < 1 guard survives the floor because normalization_floor is
+        # configurable and may be set to 0: sqrt(0) is Infinity, which OpenSearch
+        # clamps to Float::MAX_VALUE, and min_score cannot catch that because
+        # Float::MAX_VALUE clears any threshold.
         def self.wrap_in_normalization(bool, opts)
           return {bool: bool} unless opts[:normalize_by_category_count]
 
@@ -188,10 +233,46 @@ module Search
               query: {bool: bool},
               script_score: {
                 script: {
-                  source: "def count = doc['similarity_category_count'].size() == 0 ? 1 : doc['similarity_category_count'].value; _score / Math.sqrt(count == 0 ? 1 : count)"
+                  source: "def count = doc['similarity_category_count'].size() == 0 ? 1 : doc['similarity_category_count'].value; if (count < params.floor) { count = params.floor; } return _score / Math.sqrt(count < 1 ? 1 : count);",
+                  params: {floor: opts[:normalization_floor].to_i}
                 }
               },
               boost_mode: "replace"
+            }
+          }
+        end
+
+        # Excludes the OPPOSITE type rather than requiring the SAME one, and the
+        # difference is not cosmetic. 2.3% of the ranked candidate pool (572 books)
+        # carries neither tag -- a mostly-data-quality population that includes
+        # religious texts. "Require Fiction" would make every one of them
+        # permanently unreachable through similar books and would also fire on a
+        # source book tagged neither; excluding the opposite removes only the clear
+        # mismatches, leaves untagged and both-tagged candidates eligible, and
+        # no-ops on its own when the source has no type. As the tagging is corrected
+        # the two designs converge, with no migration moment in between.
+        #
+        # nil (no clause at all) when the source is untagged or carries both.
+        def self.opposite_type_clause(book)
+          ids = book_type_category_ids
+          fiction = ids["Fiction"]
+          nonfiction = ids["Nonfiction"]
+          return nil if fiction.nil? || nonfiction.nil?
+
+          own = book.categories.select { |c| c.deleted == false }.map(&:id)
+          same, opposite = if own.include?(fiction) && own.exclude?(nonfiction)
+            [fiction, nonfiction]
+          elsif own.include?(nonfiction) && own.exclude?(fiction)
+            [nonfiction, fiction]
+          end
+          return nil if same.nil?
+
+          # "tagged the opposite type AND not also tagged ours" -- the inner must_not
+          # is what keeps the 1,633 books tagged both from being excluded.
+          {
+            bool: {
+              must: [{term: {genre_category_ids: opposite.to_s}}],
+              must_not: [{term: {genre_category_ids: same.to_s}}]
             }
           }
         end

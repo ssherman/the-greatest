@@ -312,6 +312,35 @@ module Books
       assert_equal 3, books_books(:crime_and_punishment).as_indexed_json[:similarity_category_count]
     end
 
+    test "as_indexed_json excludes the book-type categories from the scoring count" do
+      # Fiction/Nonfiction never contribute to the score numerator, so counting them
+      # in the denominator divides a correctly-tagged book by more than an
+      # identically-catalogued untagged one.
+      book = books_books(:crime_and_punishment)
+      before = book.as_indexed_json[:similarity_category_count]
+      CategoryItem.create!(category: categories(:books_fiction_genre), item: book)
+      book.reload
+
+      assert_includes book.as_indexed_json[:genre_category_ids], categories(:books_fiction_genre).id
+      assert_equal before, book.as_indexed_json[:similarity_category_count]
+    end
+
+    test "similarity_category_count is the denominator the similarity query divides by" do
+      # Public because lib/tasks/books/similar.rake prints it per result. It counted
+      # the type tags there while the index did not, so the tuning harness displayed
+      # a denominator one or two higher than the one actually in use -- wrong
+      # precisely when comparing normalization_floor variants.
+      book = books_books(:crime_and_punishment)
+
+      assert_equal book.as_indexed_json[:similarity_category_count], book.similarity_category_count
+
+      before = book.similarity_category_count
+      CategoryItem.create!(category: categories(:books_fiction_genre), item: book)
+      book.reload
+
+      assert_equal before, book.similarity_category_count
+    end
+
     test "as_indexed_json still exposes category_ids" do
       # CategoryItem#item_supports_category_indexing? gates reindexing on this exact
       # key. Without it, editing a book's categories silently stops reindexing it.
