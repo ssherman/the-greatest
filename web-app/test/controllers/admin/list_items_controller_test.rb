@@ -605,5 +605,79 @@ module Admin
 
       assert_response :redirect
     end
+
+    # An auto-generated list is read-only in admin. The affordances are hidden,
+    # but the endpoints still have to refuse gracefully rather than 500 on a
+    # stale tab, a bookmarked URL, or a hand-rolled request.
+    test "destroy on an auto-generated list refuses without raising" do
+      list_item = ListItem.create!(list: @album_list, listable: @album, position: 1)
+      @album_list.update!(auto_generated_kind: :user_favorites)
+
+      assert_no_difference "ListItem.count" do
+        delete admin_list_item_path(list_item), as: :turbo_stream
+      end
+
+      assert_response :unprocessable_entity
+    end
+
+    test "destroy on an auto-generated list refuses an html request without raising" do
+      list_item = ListItem.create!(list: @album_list, listable: @album, position: 1)
+      @album_list.update!(auto_generated_kind: :user_favorites)
+
+      assert_no_difference "ListItem.count" do
+        delete admin_list_item_path(list_item)
+      end
+
+      assert_redirected_to admin_albums_list_path(@album_list)
+    end
+
+    test "destroy_all on an auto-generated list refuses without raising" do
+      ListItem.create!(list: @album_list, listable: @album, position: 1)
+      ListItem.create!(list: @album_list, listable: music_albums(:abbey_road), position: 2)
+      @album_list.update!(auto_generated_kind: :user_favorites)
+
+      assert_no_difference "ListItem.count" do
+        delete destroy_all_admin_list_list_items_path(@album_list)
+      end
+
+      assert_redirected_to admin_albums_list_path(@album_list)
+    end
+
+    # update_all skips callbacks and validations, so the ListItem guard never
+    # sees this action -- without an explicit check it silently succeeds.
+    test "clear_positions on an auto-generated list refuses without raising" do
+      item = ListItem.create!(list: @album_list, listable: @album, position: 1)
+      @album_list.update!(auto_generated_kind: :user_favorites)
+
+      delete clear_positions_admin_list_list_items_path(@album_list)
+
+      assert_redirected_to admin_albums_list_path(@album_list)
+      assert_equal 1, item.reload.position
+    end
+
+    test "index renders an auto-generated list's items without edit affordances" do
+      ListItem.create!(list: @album_list, listable: @album, position: 1, verified: true)
+      @album_list.update!(auto_generated_kind: :user_favorites)
+
+      get admin_list_list_items_path(@album_list)
+
+      assert_response :success
+      # Affordance gating, not styling: an admin must not be offered a button
+      # whose endpoint is guaranteed to refuse.
+      assert_select "a[href=?]", edit_admin_list_item_path(ListItem.last), count: 0
+      assert_select "form[action=?]", admin_list_item_path(ListItem.last), count: 0
+    end
+
+    test "create on an auto-generated list refuses without raising" do
+      @album_list.update!(auto_generated_kind: :user_favorites)
+
+      assert_no_difference "ListItem.count" do
+        post admin_list_list_items_path(@album_list),
+          params: {list_item: {listable_id: @album.id, listable_type: "Music::Album", position: 1}},
+          as: :turbo_stream
+      end
+
+      assert_response :unprocessable_entity
+    end
   end
 end

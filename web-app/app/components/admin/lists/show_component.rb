@@ -20,6 +20,14 @@ class Admin::Lists::ShowComponent < ViewComponent::Base
     Admin::Lists::ResearchPromptModalComponent::DOMAIN_CONFIG.key?(list.type)
   end
 
+  # An auto-generated list belongs to the generator: it rewrites the items
+  # nightly, the model refuses hand edits, and deleting the list would take its
+  # public URL, its RankedList row and its penalties with it. Hide every write
+  # affordance rather than invite a click that will only be refused.
+  def items_editable?
+    helpers.current_user_can_write? && !list.auto_generated?
+  end
+
   def metadata_card_visible?
     list.number_of_voters.present? ||
       list.estimated_quality.present? ||

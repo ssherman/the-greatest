@@ -58,6 +58,27 @@ Because fixture loading bypasses ActiveRecord callbacks, fixture users do NOT re
 
 Reordering is implemented via `UserList#reorder_items!(ordered_listable_ids)`, which requires the caller to pass **exactly** the current set of listable IDs (no additions, no removals) and applies the new positions inside a transaction.
 
+### `manually_ordered` — does `position` mean anything?
+`user_lists.manually_ordered` is a boolean (`default: false, null: false`, added by
+`db/migrate/20260827060025_add_manually_ordered_to_user_lists.rb`). Every list has positions,
+because `set_position` assigns them on create — but on most lists those positions record nothing
+except the order the user happened to add things in. The flag separates the two cases:
+
+- `false` — the positions are insertion order. Treat the list as an **unordered set**.
+- `true` — the user actually arranged the list. The positions are a **ranking**.
+
+The only consumer today is `Services::Lists::UserFavoritesTally` (see Generated Community Lists
+below), which splits a ballot's weight evenly across an unordered list and positionally down a
+manually ordered one. Nothing else reads it, and no UI writes it yet — Phase B's drag-and-drop
+reorder is what will set it directly.
+
+`Services::UserLists::BackfillManuallyOrdered` (`rake user_favorites_lists:backfill_manually_ordered`)
+recovers the flag for legacy-imported favorites lists by comparing each list's position order
+against its insertion order in one SQL statement. It only flips `false → true`, so it is safe to
+re-run. Detection is deliberately one-directional: a user who added items in preference order and
+never had to move anything is indistinguishable from one who appended carelessly, so the backfill
+under-claims rather than inventing a ranking.
+
 ### Uniqueness Constraints
 - **One copy of a given item per list** — DB-level `UNIQUE(user_list_id, listable_type, listable_id)` plus a model-level `validates :listable_id, uniqueness:`.
 - **One default list per (user, type)** — enforced at the model level only (`one_default_per_type_per_user`), with no DB partial unique index. A plain `UNIQUE(user_id, type, list_type)` is not usable here because `custom` lists legitimately repeat, and each STI subclass assigns `custom` a different integer, so excluding them would mean hardcoding per-subclass enum values in SQL and migrating every time a domain is added.
@@ -71,6 +92,8 @@ Each `UserList` has a `public` boolean (default false). Individual list visibili
 | File | Purpose |
 |------|---------|
 | `db/migrate/20260422002612_create_user_lists_and_user_list_items.rb` | Schema |
+| `db/migrate/20260827060025_add_manually_ordered_to_user_lists.rb` | `user_lists.manually_ordered` |
+| `app/lib/services/user_lists/backfill_manually_ordered.rb` | One-time backfill of `manually_ordered` from legacy item order |
 | `app/models/user_list.rb` | Base STI class, shared behavior, `DEFAULT_SUBCLASSES`, abstract class methods |
 | `app/models/music/albums/user_list.rb` | Music albums subclass |
 | `app/models/music/songs/user_list.rb` | Music songs subclass |
@@ -294,13 +317,76 @@ Still unbuilt: a public-list **discovery** index and "consumed" badges.
 
 The framework's `Controller` base class uses `this.context` internally for scope/targets resolution — every target getter ends up at `this.context.scope.targets`. Custom controllers must NOT assign `this.context = ...` (a 02a near-miss). Use any other property name (`this.openContext` here).
 
+## Generated Community Lists (`user-lists-03`)
+
+Every night, each domain's favorites `UserList`s are tallied into a single editorial `List` that
+feeds the ranking engine exactly like a hand-curated list. Users vote by keeping a favorites list;
+they never edit the generated list.
+
+**Scoring.** `Services::Lists::UserFavoritesTally` treats each user's favorites list as one ballot
+worth `√N` points in total (N = its item count), so a 250-item list counts for more than a 5-item
+one without counting 50× more. That mass is then split across the ballot's items: evenly when
+`manually_ordered` is false, and by position (`(N − index) ** decay_exponent`, normalised) when it
+is true. Both branches sum to the same total, so curating a list changes *where* a user's influence
+lands and never *how much* they get. Items below `min_voters` distinct voters are dropped and the
+result is truncated to `max_items`; both come from `Rails.application.config.x.user_favorites_list`
+and are tuned in Rails config, not in an admin screen. Voters are counted as a set of user ids, not
+a ballot count, because a user can end up holding two favorites lists.
+
+**Persistence.** `Services::Lists::GenerateUserFavorites` writes the tally into the domain's
+generated `List` with `delete_all` + `insert_all`, and sets `number_of_voters` to the real ballot
+count. It finds the list by `(type, auto_generated_kind)` — never by name, which is what broke the
+legacy implementation the first time someone renamed one. A domain's list is created `unapproved`
+on first run, so it is visible in admin and contributes nothing until someone activates it.
+
+**Identity and ownership.** `lists.auto_generated_kind` is a nullable integer enum
+(`enum :auto_generated_kind, {user_favorites: 0}, prefix: :generated`) with a partial unique index
+on `(type, auto_generated_kind) WHERE auto_generated_kind IS NOT NULL` — one generated list per
+domain. `List#auto_generated?` is the predicate everything else gates on.
+
+**Hand edits are refused,** because the generator rewrites these rows nightly and anything typed in
+would vanish on the next run:
+
+| Layer | Guard |
+|---|---|
+| `ListItem` create/update | `list_must_not_be_auto_generated` validation |
+| `ListItem` destroy | `before_destroy :prevent_destroy_when_auto_generated`, raising `ListItem::AutoGeneratedListItemError` |
+| `List` destroy | `before_destroy :prevent_destroy_when_auto_generated`, raising `List::AutoGeneratedListError` |
+| Admin | items table hides edit/delete; show page hides Add / Delete All Items / Delete All Positions / Delete list, and badges the list "Auto-generated" |
+| `Admin::ListItemsController#clear_positions` | explicit `auto_generated?` check — `update_all` skips callbacks and validations, so nothing else would stop it |
+| Record mergers (games, albums, songs) | `merge_list_items` skips auto-generated lists; the merge has already moved the underlying user favorites |
+
+Two deliberate exemptions: the generator itself writes through `delete_all` / `insert_all`, which
+skip callbacks and validations, so it needs no escape hatch; and `ListItem#prevent_destroy_when_auto_generated`
+returns early when `destroyed_by_association` is set, because `ListItem` is the dependent of **five**
+owners (`List` plus `Books::Book`, `Music::Album`, `Music::Song`, `Games::Game` as `listable`) and
+raising for all of them would make any record that appears on a generated list undeletable. The
+generated list itself is protected one level up, on `List`.
+
+Neither error subclasses `ActiveRecord::RecordNotDestroyed`: `ActiveRecord::Callbacks#destroy`
+rescues that class specifically and converts it to a `false` return, which `#destroy` and
+`Relation#destroy_all` then swallow silently.
+
+`auto_generated_kind` is **not** in `Admin::ListsBaseController#permitted_params` — clearing the
+flag is a console job on purpose.
+
+**Jobs and tasks.**
+
+| Entry point | Purpose |
+|---|---|
+| `GenerateUserFavoritesListsJob` | Nightly, from `config/schedule.yml`. Rebuilds every domain, collecting per-domain failures so one bad domain doesn't skip the rest. Deliberately does **not** recalculate rankings — that stays on the deliberate admin refresh. |
+| `rake user_favorites_lists:generate[Books::UserList]` | Manual rebuild, one domain or all |
+| `rake user_favorites_lists:backfill_manually_ordered` | One-time `manually_ordered` backfill |
+| `rake user_favorites_lists:adopt_legacy_books_list` | One-time: renames and flags the legacy books top-100 (preserving its URL, `RankedList` row, weight and penalties) and deletes the two retired legacy lists |
+
+Design detail lives in `docs/superpowers/specs/2026-08-27-ranked-users-lists-design.md`.
+
 ## What's Not Yet Implemented
 - Write/management UI — create, edit, drag-and-drop reorder, remove items, delete list, `completed_on` editing — Phase B (`user-lists-02f`).
 - Adding an item from within a list page (autocomplete) — `user-lists-02e`.
 - Public-list **discovery** (a browsable index of public lists) and "consumed" badge upgrades —
   the remainder of `user-lists-02d`. Direct-link viewing of a public list shipped with the books
   UI work; see `docs/superpowers/specs/2026-08-02-books-user-lists-ui-design.md`.
-- Dynamic community lists aggregated from user favorites — `user-lists-03`.
 
 ## Related Documentation
 - `docs/specs/completed/user-lists-01-data-model.md` — data-model spec
@@ -309,3 +395,5 @@ The framework's `Controller` base class uses `this.context` internally for scope
 - `docs/specs/user-lists-02f-list-management-and-editing.md` — write surface (Phase B)
 - `docs/features/domain-scoped-authorization.md` — admin/editor role model (admin bypass is relevant here)
 - `docs/superpowers/specs/2026-08-02-books-user-lists-ui-design.md` — books UI wiring + public viewing
+- `docs/superpowers/specs/2026-08-27-ranked-users-lists-design.md` — generated community lists (`user-lists-03`)
+- `docs/features/rankings.md` — how the generated list is weighted once it reaches the ranking engine

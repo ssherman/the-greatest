@@ -162,6 +162,51 @@ module Games
         assert_equal 1, ListItem.where(list: list, listable: @target).count
       end
 
+      # Record merge is already live for games. Repointing a row on the generated
+      # users' favorites list raises RecordInvalid against the ListItem guard, so
+      # without the skip this is a 500 in production admin the first time a merged
+      # game happens to sit on that list. Nothing is lost by skipping: the
+      # generator rebuilds the list nightly from the user favorites the merge has
+      # already moved.
+      test "merges a game that sits on an auto-generated list without touching that list" do
+        list = lists(:games_list)
+        list_items(:games_item).destroy!
+        item = ListItem.create!(list: list, listable: @source, position: 3)
+        list.update!(auto_generated_kind: :user_favorites)
+
+        # This test hand-crafts the auto-generated-list scenario without going
+        # through the real generator; stub out the merger's own regeneration call
+        # so a real rebuild from live user_list_items can't blow away the rows
+        # this test just created.
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+
+        result = ::Games::Game::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        # The row was left where it was and died with the source game's cascade;
+        # the merger never wrote a row of its own onto the generated list.
+        assert_not ListItem.exists?(item.id)
+        assert_nil ListItem.find_by(list: list, listable: @target)
+      end
+
+      test "promotes verified on a normal list but skips an auto-generated one" do
+        list = lists(:games_list)
+        list_items(:games_item).destroy!
+        ListItem.create!(list: list, listable: @target, position: 1, verified: false)
+        ListItem.create!(list: list, listable: @source, position: 2, verified: true)
+        list.update!(auto_generated_kind: :user_favorites)
+
+        # See the stub comment above: isolate this hand-crafted scenario from the
+        # merger's own real regeneration call.
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+
+        result = ::Games::Game::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        survivor = ListItem.find_by(list: list, listable: @target)
+        assert_not survivor.verified, "the generator owns this row; the merger must not edit it"
+      end
+
       test "moves a personal list entry to the target" do
         user_list = user_lists(:regular_user_games_favorites)
         # user_list_items(:regular_user_fav_game_1) already links this user_list to @target;
@@ -429,6 +474,27 @@ module Games
         result = ::Games::Game::Merger.call(source: @source, target: @target)
 
         assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+      end
+
+      # The generated favorites list is derived data: merge_list_items skips
+      # (rather than repoints) a row on that list, so it is one item short until
+      # regenerated. This must happen well inside the 5-minute window before
+      # CalculateRankingsJob reads the list, or the short list gets baked into
+      # the rankings.
+      test "regenerates the generated favorites list after a committed merge" do
+        GenerateUserFavoritesListsJob.expects(:perform_async).with("Games::UserList")
+
+        result = ::Games::Game::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+      end
+
+      test "does not regenerate the generated favorites list when the merge does not commit" do
+        GenerateUserFavoritesListsJob.expects(:perform_async).never
+
+        result = ::Games::Game::Merger.call(source: @source, target: @source)
+
+        assert_not result.success?, "a self-merge must not commit"
       end
 
       test "still reports success when scheduling ranking recalculation fails" do

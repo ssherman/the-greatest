@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_25_134658) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_27_062209) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -532,6 +532,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_25_134658) do
 
   create_table "lists", force: :cascade do |t|
     t.datetime "activated_at"
+    t.integer "auto_generated_kind"
     t.boolean "category_specific"
     t.datetime "created_at", null: false
     t.boolean "creator_specific"
@@ -561,6 +562,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_25_134658) do
     t.boolean "yearly_award"
     t.index ["activated_at"], name: "index_lists_on_activated_at"
     t.index ["submitted_by_id"], name: "index_lists_on_submitted_by_id"
+    t.index ["type", "auto_generated_kind"], name: "index_lists_on_type_and_auto_generated_kind", unique: true, where: "(auto_generated_kind IS NOT NULL)"
   end
 
   create_table "memberships", force: :cascade do |t|
@@ -1001,6 +1003,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_25_134658) do
     t.datetime "created_at", null: false
     t.text "description"
     t.integer "list_type", null: false
+    t.boolean "manually_ordered", default: false, null: false
     t.string "name", null: false
     t.integer "position"
     t.boolean "public", default: false, null: false

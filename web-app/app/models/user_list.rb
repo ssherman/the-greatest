@@ -2,17 +2,18 @@
 #
 # Table name: user_lists
 #
-#  id          :bigint           not null, primary key
-#  description :text
-#  list_type   :integer          not null
-#  name        :string           not null
-#  position    :integer
-#  public      :boolean          default(FALSE), not null
-#  type        :string           not null
-#  view_mode   :integer          default(2), not null
-#  created_at  :datetime         not null
-#  updated_at  :datetime         not null
-#  user_id     :bigint           not null
+#  id               :bigint           not null, primary key
+#  description      :text
+#  list_type        :integer          not null
+#  manually_ordered :boolean          default(FALSE), not null
+#  name             :string           not null
+#  position         :integer
+#  public           :boolean          default(FALSE), not null
+#  type             :string           not null
+#  view_mode        :integer          default(2), not null
+#  created_at       :datetime         not null
+#  updated_at       :datetime         not null
+#  user_id          :bigint           not null
 #
 # Indexes
 #
@@ -43,6 +44,16 @@ class UserList < ApplicationRecord
     "movies" => %w[Movies::UserList],
     "books" => %w[Books::UserList]
   }.freeze
+
+  # Subclasses whose favorites feed a generated List. Music has two, because it
+  # has two listables. Any subclass not listed here has no generated list and
+  # answers NotImplementedError to the three declarations below.
+  GENERATING_SUBCLASSES = %w[
+    Books::UserList
+    Music::Albums::UserList
+    Music::Songs::UserList
+    Games::UserList
+  ].freeze
 
   # Associations
   belongs_to :user
@@ -89,6 +100,23 @@ class UserList < ApplicationRecord
   # UserList subclasses. Returns [] for unknown/unsupported domains (e.g. nope).
   def self.subclasses_for(domain)
     (DOMAIN_SUBCLASSES[domain.to_s] || []).map(&:constantize)
+  end
+
+  def self.generating_subclasses
+    GENERATING_SUBCLASSES.map(&:constantize)
+  end
+
+  # The List subclass this domain's favorites are aggregated into.
+  def self.generated_list_class
+    raise NotImplementedError, "#{name} must override .generated_list_class"
+  end
+
+  def self.generated_list_name
+    raise NotImplementedError, "#{name} must override .generated_list_name"
+  end
+
+  def self.generated_list_description
+    raise NotImplementedError, "#{name} must override .generated_list_description"
   end
 
   def self.default_list_types

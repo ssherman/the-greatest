@@ -4,17 +4,18 @@ require "test_helper"
 #
 # Table name: user_lists
 #
-#  id          :bigint           not null, primary key
-#  description :text
-#  list_type   :integer          not null
-#  name        :string           not null
-#  position    :integer
-#  public      :boolean          default(FALSE), not null
-#  type        :string           not null
-#  view_mode   :integer          default(2), not null
-#  created_at  :datetime         not null
-#  updated_at  :datetime         not null
-#  user_id     :bigint           not null
+#  id               :bigint           not null, primary key
+#  description      :text
+#  list_type        :integer          not null
+#  manually_ordered :boolean          default(FALSE), not null
+#  name             :string           not null
+#  position         :integer
+#  public           :boolean          default(FALSE), not null
+#  type             :string           not null
+#  view_mode        :integer          default(2), not null
+#  created_at       :datetime         not null
+#  updated_at       :datetime         not null
+#  user_id          :bigint           not null
 #
 # Indexes
 #

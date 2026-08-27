@@ -150,6 +150,12 @@ module Games
       def merge_list_items
         count = 0
         source_game.list_items.find_each do |list_item|
+          # An auto-generated list's rows belong to the generator, which rewrites
+          # them nightly from the underlying user favorites -- and this merge has
+          # already moved those. Writing here would raise against the ListItem
+          # guard and turn an admin merge into a 500.
+          next if list_item.list.auto_generated?
+
           existing = target_game.list_items.find_by(list_id: list_item.list_id)
 
           if existing
@@ -354,6 +360,7 @@ module Games
       def run_post_commit_steps
         reindex_target_game
         schedule_ranking_recalculation
+        regenerate_user_favorites_list
       rescue => error
         Rails.logger.error(
           "Games::Game::Merger: merge of #{source_game.id} into #{target_game.id} " \
@@ -384,6 +391,19 @@ module Games
           BulkCalculateWeightsJob.perform_async(config_id)
           CalculateRankingsJob.perform_in(5.minutes, config_id)
         end
+      end
+
+      # The generated "Our Users' Favorites" list is derived data: merge_list_items
+      # above deliberately skips (rather than repoints) a source row that sits on
+      # that list, so the row is destroyed along with the source game and the
+      # generated list falls one item short. Only a full rebuild -- not a repointed
+      # row -- produces the correct combined score, voter_count and position for
+      # the target game, so the list is regenerated here rather than waiting for
+      # the nightly cron. Queuing it now runs it comfortably inside the 5 minutes
+      # before schedule_ranking_recalculation's CalculateRankingsJob would otherwise
+      # read that short list and bake the wrong result into the rankings.
+      def regenerate_user_favorites_list
+        GenerateUserFavoritesListsJob.perform_async("Games::UserList")
       end
 
       def destroy_source_game
