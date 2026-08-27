@@ -127,6 +127,29 @@ module Services
         refute result.success?
         assert_equal 1, list.reload.list_items.count
       end
+
+      # The Result carries only the message, and the nightly job re-raises a
+      # RuntimeError of its own -- so Sidekiq records that backtrace and the real
+      # one is gone unless it is written down here.
+      test "logs the original exception, class and backtrace included" do
+        UserFavoritesTally.stubs(:call).raises(ArgumentError, "boom")
+
+        io = StringIO.new
+        original_logger = Rails.logger
+        Rails.logger = ActiveSupport::Logger.new(io)
+
+        begin
+          result = generate
+        ensure
+          Rails.logger = original_logger
+        end
+
+        refute result.success?
+        assert_includes io.string, "ArgumentError"
+        assert_includes io.string, "boom"
+        # full_message, not just message: the backtrace has to survive.
+        assert_includes io.string, "generate_user_favorites.rb"
+      end
     end
   end
 end

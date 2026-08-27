@@ -33,14 +33,19 @@ class UserFavoritesRakeTaskTest < ActiveSupport::TestCase
       weight: 40
     )
 
-    Rake::Task["user_favorites_lists:adopt_legacy_books_list"].invoke
-    Rake::Task["user_favorites_lists:adopt_legacy_books_list"].reenable
+    # capture_io: the task narrates every step on stdout, and `bin/rails test`
+    # is expected to run clean -- an unswallowed puts here is a dozen new lines
+    # of noise in the suite output.
+    capture_io do
+      Rake::Task["user_favorites_lists:adopt_legacy_books_list"].invoke
+      Rake::Task["user_favorites_lists:adopt_legacy_books_list"].reenable
 
-    # Second invocation: `keep`'s lookup-by-legacy-name can no longer resolve,
-    # since the first run already renamed it. The bug this guards against is
-    # the doomed-list query matching the adopted list under its new name --
-    # which is exactly ::Books::UserList.generated_list_name.
-    Rake::Task["user_favorites_lists:adopt_legacy_books_list"].invoke
+      # Second invocation: `keep`'s lookup-by-legacy-name can no longer resolve,
+      # since the first run already renamed it. The bug this guards against is
+      # the doomed-list query matching the adopted list under its new name --
+      # which is exactly ::Books::UserList.generated_list_name.
+      Rake::Task["user_favorites_lists:adopt_legacy_books_list"].invoke
+    end
 
     keep.reload
     assert_equal ::Books::UserList.generated_list_name, keep.name
@@ -50,18 +55,22 @@ class UserFavoritesRakeTaskTest < ActiveSupport::TestCase
   end
 
   test "adopt_legacy_books_list never deletes a list with auto_generated_kind set, regardless of name" do
+    # Deliberately EMPTY. A generated list that holds items is protected twice
+    # over: by the doomed query's auto_generated_kind filter (the thing under
+    # test) and, incidentally, by the ListItem destroy guard raising from inside
+    # the cascade. With an item present, deleting the filter still leaves the
+    # list standing and this test still passes -- against the exact regression
+    # it exists to catch. Empty, the filter is the only thing protecting it.
     keep = ::Books::List.create!(
       type: "Books::List",
       name: ::Books::UserList.generated_list_name,
-      status: :active
+      status: :active,
+      auto_generated_kind: :user_favorites
     )
-    # The list_item guard forbids creating items on an already-generated list,
-    # so add the item first and mark the list generated afterward -- mirroring
-    # how the real adoption flow rename-and-flags an existing, populated list.
-    keep.list_items.create!(listable: books_books(:war_and_peace), position: 1)
-    keep.update!(auto_generated_kind: :user_favorites)
 
-    Rake::Task["user_favorites_lists:adopt_legacy_books_list"].invoke
+    capture_io do
+      Rake::Task["user_favorites_lists:adopt_legacy_books_list"].invoke
+    end
 
     assert ::Books::List.exists?(keep.id)
   end
@@ -74,7 +83,9 @@ class UserFavoritesRakeTaskTest < ActiveSupport::TestCase
     )
     doomed.list_items.create!(listable: books_books(:crime_and_punishment), position: 1)
 
-    Rake::Task["user_favorites_lists:adopt_legacy_books_list"].invoke
+    capture_io do
+      Rake::Task["user_favorites_lists:adopt_legacy_books_list"].invoke
+    end
 
     assert_not ::Books::List.exists?(doomed.id)
   end

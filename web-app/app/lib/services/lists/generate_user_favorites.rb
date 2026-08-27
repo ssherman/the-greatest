@@ -40,6 +40,14 @@ module Services
           errors: []
         )
       rescue => error
+        # full_message, not just error.message: the Result carries only the
+        # message, and GenerateUserFavoritesListsJob re-raises a RuntimeError of
+        # its own -- so Sidekiq records that job's backtrace and the original is
+        # gone unless it is written down here.
+        Rails.logger.error {
+          "#{self.class.name} failed for #{@user_list_class}: " \
+            "#{error.full_message(highlight: false, order: :top)}"
+        }
         Result.new(success?: false, data: nil, errors: [error.message])
       end
 
