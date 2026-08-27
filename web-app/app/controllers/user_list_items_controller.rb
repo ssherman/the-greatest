@@ -74,12 +74,25 @@ class UserListItemsController < ApplicationController
 
     if candidate
       candidate.valid?
-      return render_validation_failed(candidate) if candidate.errors.any?
+      if candidate.errors.any? && matching_candidate_errors?(candidate, result)
+        return render_conflict("Item already in list") if duplicate_item?(candidate)
+
+        return render_validation_failed(candidate)
+      end
     end
 
     body = error_body(:validation_failed, result.errors.first || "Validation failed")
     body[:error][:details] = {base: result.errors}
     render json: body, status: :unprocessable_entity
+  end
+
+  def matching_candidate_errors?(candidate, result)
+    candidate.errors.full_messages.sort == result.errors.sort
+  end
+
+  def duplicate_item?(item)
+    item.errors.added?(:listable_id, :taken, value: item.listable_id) ||
+      item.errors[:listable_id].any? { |message| message.include?("already in this list") }
   end
 
   def mutation_message(result)

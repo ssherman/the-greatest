@@ -152,6 +152,40 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
     assert_equal({"base" => ["Mutation could not be completed"]}, body.dig("error", "details"))
   end
 
+  test "source-transition service failure keeps its error when an existing target is incidentally duplicate" do
+    read_list = user_lists(:regular_user_books_read)
+    book = books_books(:cannery_row)
+    read_list.user_list_items.create!(listable: book)
+    reading_list = Books::UserList.find_or_create_by!(user: @user, list_type: :reading) do |list|
+      list.name = Books::UserList.default_list_name_for(:reading)
+    end
+    reading_list.user_list_items.create!(listable: book)
+    UserListItem.any_instance.stubs(:destroy!).raises(
+      ActiveRecord::RecordNotDestroyed.new("destroy aborted", UserListItem.new)
+    )
+
+    sign_in_as(@user, stub_auth: true)
+    post user_list_items_path(read_list), params: {user_list_item: {listable_id: book.id}}, as: :json
+
+    assert_response :unprocessable_entity
+    assert_equal({"base" => ["Mutation could not be completed"]},
+      response.parsed_body.dig("error", "details"))
+  end
+
+  test "matching candidate uniqueness service errors return 409 conflict" do
+    @list.user_list_items.create!(listable: @album)
+    sign_in_as(@user, stub_auth: true)
+    Services::UserLists::AddItem.stubs(:call).returns(
+      Services::UserLists::MutationResult.failure(["Listable is already in this list"])
+    )
+
+    post user_list_items_path(@list),
+      params: {user_list_item: {listable_id: @album.id}}, as: :json
+
+    assert_response :conflict
+    assert_equal "conflict", response.parsed_body.dig("error", "code")
+  end
+
   test "concurrent add uniqueness fallback returns 409 conflict" do
     sign_in_as(@user, stub_auth: true)
     Services::UserLists::AddItem.stubs(:call).raises(ActiveRecord::RecordNotUnique.new("duplicate"))
@@ -202,6 +236,21 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
       "completed_on" => "2026-08-01"
     }, response.parsed_body.fetch("removed_user_list_item"))
     assert_includes response.headers["Cache-Control"].to_s, "no-store"
+  end
+
+  test "destroy service failure returns service errors as 422" do
+    item = user_list_items(:regular_user_fav_album_1)
+    Services::UserLists::RemoveItem.stubs(:call).returns(
+      Services::UserLists::MutationResult.failure(["Mutation could not be completed"])
+    )
+
+    sign_in_as(@user, stub_auth: true)
+    delete user_list_item_path(@list, item), as: :json
+
+    assert_response :unprocessable_entity
+    assert_equal({"base" => ["Mutation could not be completed"]},
+      response.parsed_body.dig("error", "details"))
+    assert UserListItem.exists?(item.id)
   end
 
   test "destroy returns 404 for non-owner" do
@@ -292,5 +341,16 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Completion date cleared", flash[:notice]
     assert_nil item.reload.completed_on
     assert_includes response.headers["Cache-Control"].to_s, "no-store"
+  end
+
+  test "updating a completion date redirects with an update notice" do
+    sign_in_as(@user, stub_auth: true)
+    item = user_list_items(:regular_user_books_item_3)
+
+    patch user_list_item_completion_path(item), params: {user_list_item: {completed_on: "2025-03-04"}}
+
+    assert_response :see_other
+    assert_equal "Completion date updated", flash[:notice]
+    assert_equal Date.new(2025, 3, 4), item.reload.completed_on
   end
 end
