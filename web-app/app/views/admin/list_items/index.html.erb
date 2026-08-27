@@ -2,6 +2,9 @@
   <% list = local_assigns.fetch(:list, @list) %>
   <% list_items = local_assigns.fetch(:list_items, @list_items) %>
   <% pagy = local_assigns.fetch(:pagy, @pagy) %>
+  <%# An auto-generated list's items belong to the generator, which rewrites them
+      nightly. The model refuses hand edits, so don't offer buttons that refuse. %>
+  <% items_editable = current_user_can_write? && !list.auto_generated? %>
   <% if list_items&.any? %>
     <div class="overflow-x-auto">
       <table class="table table-sm">
@@ -55,7 +58,7 @@
               </td>
               <td>
                 <div class="join">
-                  <% if current_user_can_write? %>
+                  <% if items_editable %>
                     <%= link_to edit_admin_list_item_path(list_item),
                         class: "btn btn-primary btn-xs join-item",
                         data: {turbo_frame: Admin::EditListItemModalComponent::FRAME_ID} do %>
@@ -64,7 +67,7 @@
                       </svg>
                     <% end %>
                   <% end %>
-                  <% if current_user_can_write? %>
+                  <% if items_editable %>
                     <%= button_to admin_list_item_path(list_item),
                         method: :delete,
                         class: "btn btn-error btn-xs join-item",

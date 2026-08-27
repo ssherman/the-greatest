@@ -11,6 +11,11 @@
         <span class="badge <%= list.approved? ? 'badge-success' : list.active? ? 'badge-primary' : list.rejected? ? 'badge-error' : 'badge-ghost' %>">
           <%= list.status.titleize %>
         </span>
+        <% if list.auto_generated? %>
+          <span class="badge badge-info" title="Rebuilt nightly by the generator; items and the list itself are read-only here.">
+            Auto-generated
+          </span>
+        <% end %>
       </div>
       <div class="flex items-center gap-4 text-sm text-base-content/70">
         <span>ID: <span class="font-mono"><%= list.id %></span></span>
@@ -48,14 +53,16 @@
         <span>Edit</span>
       <% end %>
 
-      <%= button_to domain_config[:list_path_proc].call(list),
-          method: :delete,
-          class: "btn btn-error btn-outline",
-          data: { turbo_confirm: "Are you sure you want to delete #{list.name}? This cannot be undone." } do %>
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-          <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
-        </svg>
-        <span>Delete</span>
+      <% unless list.auto_generated? %>
+        <%= button_to domain_config[:list_path_proc].call(list),
+            method: :delete,
+            class: "btn btn-error btn-outline",
+            data: { turbo_confirm: "Are you sure you want to delete #{list.name}? This cannot be undone." } do %>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+          </svg>
+          <span>Delete</span>
+        <% end %>
       <% end %>
     </div>
   </div>
@@ -231,7 +238,7 @@
             </h2>
             <div class="flex gap-2">
               <% if list.list_items.any? %>
-                <% if helpers.current_user_can_write? %>
+                <% if items_editable? %>
                   <%= button_to clear_positions_admin_list_list_items_path(list),
                       method: :delete,
                       class: "btn btn-warning btn-outline btn-sm",
@@ -239,7 +246,7 @@
                     Delete All Positions
                   <% end %>
                 <% end %>
-                <% if helpers.current_user_can_write? %>
+                <% if items_editable? %>
                   <%= button_to destroy_all_admin_list_list_items_path(list),
                       method: :delete,
                       class: "btn btn-error btn-outline btn-sm",
@@ -248,7 +255,7 @@
                   <% end %>
                 <% end %>
               <% end %>
-              <% if helpers.current_user_can_write? %>
+              <% if items_editable? %>
                 <button class="btn btn-primary btn-sm" onclick="add_item_to_list_modal_dialog.showModal()">
                   + Add <%= domain_config[:item_label] %>
                 </button>
@@ -347,9 +354,11 @@
 
 <% if helpers.current_user_can_write? %>
   <%= render Admin::AttachPenaltyModalComponent.new(list: list) %>
+<% end %>
+<% if items_editable? %>
   <%= render Admin::AddItemToListModalComponent.new(list: list) %>
 <% end %>
 <%= render Admin::Lists::ResearchPromptModalComponent.new(list: list) %>
-<% if helpers.current_user_can_write? %>
+<% if items_editable? %>
   <%= render Admin::EditListItemModalComponent.new %>
 <% end %>

@@ -49,6 +49,15 @@ module Admin
         assert_response :success
       end
 
+      test "show renders for an auto-generated list" do
+        sign_in_as(@admin_user, stub_auth: true)
+        @list.update!(auto_generated_kind: :user_favorites)
+
+        get admin_books_list_path(@list)
+
+        assert_response :success
+      end
+
       test "creates a list for an admin" do
         sign_in_as(@admin_user, stub_auth: true)
         assert_difference("::Books::List.count", 1) do
@@ -71,6 +80,20 @@ module Admin
           delete admin_books_list_path(@list)
         end
         assert_redirected_to admin_books_lists_path
+      end
+
+      # The generated list owns its public URL, its RankedList row and its
+      # penalties; deleting it takes all of that. The admin Delete button is
+      # hidden for it, and the endpoint refuses rather than 500s.
+      test "refuses to destroy an auto-generated list" do
+        sign_in_as(@admin_user, stub_auth: true)
+        @list.update!(auto_generated_kind: :user_favorites)
+
+        assert_no_difference("::Books::List.count") do
+          delete admin_books_list_path(@list)
+        end
+
+        assert_redirected_to admin_books_list_path(@list)
       end
     end
   end
