@@ -2,7 +2,7 @@
 
 - Date: 2026-08-26
 - Branch: `reading-goals-migration`
-- Status: Design approved in chat; written spec pending owner review
+- Status: Approved
 - Scope: Books reading goals, the reusable completion transition they depend on, legacy data migration, and public Cloudflare-cached pages. Goodreads importing and goals for other media are deferred.
 
 ## Summary
