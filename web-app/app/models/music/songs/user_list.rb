@@ -59,6 +59,20 @@ module Music
       def self.listable_display_includes
         [:artists]
       end
+
+      def self.generated_list_class
+        ::Music::Songs::List
+      end
+
+      def self.generated_list_name
+        "Our Users' Favorite Songs of All Time"
+      end
+
+      def self.generated_list_description
+        "The greatest songs as determined by the users of this web site. " \
+          "If you would like to contribute, add your favorite songs to your " \
+          "\"Favorite Songs\" list."
+      end
     end
   end
 end

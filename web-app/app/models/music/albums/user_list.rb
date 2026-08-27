@@ -63,6 +63,20 @@ module Music
       def self.listable_display_includes
         [:artists, :categories, :primary_image, :descriptions]
       end
+
+      def self.generated_list_class
+        ::Music::Albums::List
+      end
+
+      def self.generated_list_name
+        "Our Users' Favorite Albums of All Time"
+      end
+
+      def self.generated_list_description
+        "The greatest albums as determined by the users of this web site. " \
+          "If you would like to contribute, add your favorite albums to your " \
+          "\"Favorite Albums\" list."
+      end
     end
   end
 end

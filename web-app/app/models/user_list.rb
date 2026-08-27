@@ -45,6 +45,16 @@ class UserList < ApplicationRecord
     "books" => %w[Books::UserList]
   }.freeze
 
+  # Subclasses whose favorites feed a generated List. Music has two, because it
+  # has two listables. Any subclass not listed here has no generated list and
+  # answers NotImplementedError to the three declarations below.
+  GENERATING_SUBCLASSES = %w[
+    Books::UserList
+    Music::Albums::UserList
+    Music::Songs::UserList
+    Games::UserList
+  ].freeze
+
   # Associations
   belongs_to :user
   # inverse_of is set explicitly because the order scope disables Rails' automatic
@@ -90,6 +100,23 @@ class UserList < ApplicationRecord
   # UserList subclasses. Returns [] for unknown/unsupported domains (e.g. nope).
   def self.subclasses_for(domain)
     (DOMAIN_SUBCLASSES[domain.to_s] || []).map(&:constantize)
+  end
+
+  def self.generating_subclasses
+    GENERATING_SUBCLASSES.map(&:constantize)
+  end
+
+  # The List subclass this domain's favorites are aggregated into.
+  def self.generated_list_class
+    raise NotImplementedError, "#{name} must override .generated_list_class"
+  end
+
+  def self.generated_list_name
+    raise NotImplementedError, "#{name} must override .generated_list_name"
+  end
+
+  def self.generated_list_description
+    raise NotImplementedError, "#{name} must override .generated_list_description"
   end
 
   def self.default_list_types
