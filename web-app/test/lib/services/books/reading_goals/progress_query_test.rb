@@ -133,8 +133,8 @@ module Services
           assert_queries_count(0) do
             result.items.each do |item|
               item.listable.book_authors.map { |book_author| book_author.author.name }
+              item.listable.primary_image.file.attached?
               item.listable.primary_image.file_attachment.blob.filename
-              ::Books::CardComponent.new(book: item.listable).send(:cover)
             end
           end
         end
