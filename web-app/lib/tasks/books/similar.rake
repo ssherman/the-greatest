@@ -117,11 +117,12 @@ module BooksSimilarCompare
     "#{category.name}(#{commas(category.item_count)})"
   end
 
-  # The denominator the query divides by: script_score reads
-  # similarity_category_count, which Books::Book#as_indexed_json defines as the
-  # active categories whose type is in SIMILARITY_CATEGORY_TYPES.
+  # Delegates rather than recomputing. This held its own copy of the predicate and
+  # drifted the moment Fiction/Nonfiction came out of the stored count, printing a
+  # denominator one or two higher than the query's -- misleading precisely when
+  # comparing normalization_floor variants, which is what this task is for.
   def similarity_category_count(book)
-    book.categories.count { |c| c.deleted == false && ::Books::Book::SIMILARITY_CATEGORY_TYPES.include?(c.category_type) }
+    book.similarity_category_count
   end
 
   def author_names(book)
