@@ -12,7 +12,7 @@ class UserListItemsController < ApplicationController
     candidate = @user_list.user_list_items.new(listable: listable)
     authorize candidate, policy_class: UserListItemPolicy
     result = Services::UserLists::AddItem.call(user_list: @user_list, listable: listable)
-    return render_mutation_failure(result) unless result.success?
+    return render_mutation_failure(result, candidate: candidate) unless result.success?
 
     invalidate_books_goals(result)
     render json: {
@@ -69,8 +69,13 @@ class UserListItemsController < ApplicationController
     @completion_attrs ||= params.require(:user_list_item).permit(:completed_on)
   end
 
-  def render_mutation_failure(result)
+  def render_mutation_failure(result, candidate: nil)
     return render_conflict("Item already in list") if result.errors == ["Item already in list"]
+
+    if candidate
+      candidate.valid?
+      return render_validation_failed(candidate) if candidate.errors.any?
+    end
 
     body = error_body(:validation_failed, result.errors.first || "Validation failed")
     body[:error][:details] = {base: result.errors}
@@ -81,9 +86,11 @@ class UserListItemsController < ApplicationController
     item = result.data[:item]
     return "Removed from #{item.user_list.name}" if item.destroyed?
 
-    if result.data[:transitioned]
+    if marked_completed_today?(result)
       "Moved to #{item.user_list.name} and marked completed today"
-    elsif item.user_list.completed_on_enabled? && item.completed_on.nil?
+    elsif result.data[:transitioned]
+      "Moved to #{item.user_list.name}"
+    elsif books_read_membership?(item)
       "Added to #{item.user_list.name}. Mark it completed to make it count toward your reading goals."
     else
       "Added to #{item.user_list.name}"
@@ -92,6 +99,16 @@ class UserListItemsController < ApplicationController
 
   def completion_message(result)
     result.data[:new_completed_on] ? "Completion date updated" : "Completion date cleared"
+  end
+
+  def marked_completed_today?(result)
+    result.data[:transitioned] &&
+      result.data[:old_completed_on].nil? &&
+      result.data[:new_completed_on] == Date.current
+  end
+
+  def books_read_membership?(item)
+    item.user_list.is_a?(Books::UserList) && item.user_list.read? && item.completed_on.nil?
   end
 
   # Task 5 supplies the invalidator and replaces this staged no-op with its call.

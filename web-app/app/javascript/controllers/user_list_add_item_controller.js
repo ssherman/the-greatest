@@ -83,11 +83,13 @@ export default class extends Controller {
     const type = item.listable_type
     const id = item.listable_id
     const current = (stateCtrl.state().memberships?.[type] || {})[String(id)] || []
-    const removedListIds = removedItems.map((removedItem) => removedItem.user_list_id)
-    const next = current.filter((membership) => !removedListIds.includes(membership.list_id))
-    if (!next.some((membership) => membership.list_id === item.user_list_id)) {
-      next.push({list_id: item.user_list_id, item_id: item.id})
-    }
+    const target = {list_id: item.user_list_id, item_id: item.id}
+    const replacedListIds = new Set([
+      ...removedItems.map((removedItem) => removedItem.user_list_id),
+      target.list_id
+    ])
+    const next = current.filter((membership) => !replacedListIds.has(membership.list_id))
+    next.push(target)
 
     stateCtrl.applyMutation({
       listableType: type,

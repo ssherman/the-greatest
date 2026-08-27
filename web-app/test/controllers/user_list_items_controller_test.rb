@@ -53,6 +53,55 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
     assert_includes body.fetch("message"), "completed today"
   end
 
+  test "moving a stale Reading book preserves an existing Read date without saying completed today" do
+    read_list = user_lists(:regular_user_books_read)
+    book = books_books(:cannery_row)
+    read_list.user_list_items.create!(listable: book, completed_on: Date.new(2020, 1, 2))
+    reading_list = Books::UserList.find_or_create_by!(user: @user, list_type: :reading) do |list|
+      list.name = Books::UserList.default_list_name_for(:reading)
+    end
+    reading_list.user_list_items.create!(listable: book)
+
+    sign_in_as(@user, stub_auth: true)
+    post user_list_items_path(read_list), params: {user_list_item: {listable_id: book.id}}, as: :json
+
+    assert_response :created
+    body = response.parsed_body
+    assert_equal "2020-01-02", body.dig("user_list_item", "completed_on")
+    assert_equal "Moved to Books I've Read", body.fetch("message")
+  end
+
+  test "adding a non-Books completion-capable item does not show reading-goal guidance" do
+    listened_list = user_lists(:regular_user_music_albums_listened)
+
+    sign_in_as(@user, stub_auth: true)
+    post user_list_items_path(listened_list), params: {
+      user_list_item: {listable_id: music_albums(:thriller).id}
+    }, as: :json
+
+    assert_response :created
+    assert_equal "Added to Albums I've Listened To", response.parsed_body.fetch("message")
+  end
+
+  test "adding Read book serializes every same-owner Reading removal" do
+    read_list = user_lists(:regular_user_books_read)
+    book = books_books(:cannery_row)
+    first_reading_list = Books::UserList.find_or_create_by!(user: @user, list_type: :reading) do |list|
+      list.name = Books::UserList.default_list_name_for(:reading)
+    end
+    second_reading_list = Books::UserList.new(user: @user, name: "Second Reading", list_type: :reading)
+    second_reading_list.save!(validate: false)
+    first_reading_item = first_reading_list.user_list_items.create!(listable: book)
+    second_reading_item = second_reading_list.user_list_items.create!(listable: book)
+
+    sign_in_as(@user, stub_auth: true)
+    post user_list_items_path(read_list), params: {user_list_item: {listable_id: book.id}}, as: :json
+
+    assert_response :created
+    assert_equal [first_reading_item.id, second_reading_item.id].sort,
+      response.parsed_body.fetch("removed_user_list_items").pluck("id").sort
+  end
+
   test "direct Read add explains how to make the book count" do
     sign_in_as(@user, stub_auth: true)
 
@@ -82,7 +131,36 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
     post user_list_items_path(@list),
       params: {user_list_item: {listable_id: song.id}}, as: :json
     assert_response :unprocessable_entity
-    assert_equal "validation_failed", JSON.parse(response.body).dig("error", "code")
+    body = response.parsed_body
+    assert_equal "validation_failed", body.dig("error", "code")
+    assert_equal ["Music::Song is not compatible with Music::Albums::UserList"],
+      body.dig("error", "details", "listable_type")
+  end
+
+  test "non-duplicate service failure returns base service errors when the candidate is valid" do
+    sign_in_as(@user, stub_auth: true)
+    Services::UserLists::AddItem.stubs(:call).returns(
+      Services::UserLists::MutationResult.failure(["Mutation could not be completed"])
+    )
+
+    post user_list_items_path(@list),
+      params: {user_list_item: {listable_id: @album.id}}, as: :json
+
+    assert_response :unprocessable_entity
+    body = response.parsed_body
+    assert_equal "validation_failed", body.dig("error", "code")
+    assert_equal({"base" => ["Mutation could not be completed"]}, body.dig("error", "details"))
+  end
+
+  test "concurrent add uniqueness fallback returns 409 conflict" do
+    sign_in_as(@user, stub_auth: true)
+    Services::UserLists::AddItem.stubs(:call).raises(ActiveRecord::RecordNotUnique.new("duplicate"))
+
+    post user_list_items_path(@list),
+      params: {user_list_item: {listable_id: @album.id}}, as: :json
+
+    assert_response :conflict
+    assert_equal "conflict", response.parsed_body.dig("error", "code")
   end
 
   test "non-owner of list returns 404 (existence hidden)" do
@@ -103,6 +181,27 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
     assert_equal true, body.fetch("ok")
     assert_equal item.id, body.dig("removed_user_list_item", "id")
     assert body.fetch("message").present?
+  end
+
+  test "destroy returns a complete removed tuple and prevents caching" do
+    read_list = user_lists(:regular_user_books_read)
+    item = read_list.user_list_items.create!(
+      listable: books_books(:cannery_row), completed_on: Date.new(2026, 8, 1)
+    )
+
+    sign_in_as(@user, stub_auth: true)
+    delete user_list_item_path(read_list, item), as: :json
+
+    assert_response :success
+    assert_equal({
+      "id" => item.id,
+      "user_list_id" => read_list.id,
+      "listable_type" => "Books::Book",
+      "listable_id" => books_books(:cannery_row).id,
+      "position" => item.position,
+      "completed_on" => "2026-08-01"
+    }, response.parsed_body.fetch("removed_user_list_item"))
+    assert_includes response.headers["Cache-Control"].to_s, "no-store"
   end
 
   test "destroy returns 404 for non-owner" do
@@ -181,5 +280,17 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     assert_equal "Completion dates are not enabled for this list", flash[:alert]
     assert_nil item.reload.completed_on
+  end
+
+  test "clearing a completion date redirects with notice and prevents caching" do
+    sign_in_as(@user, stub_auth: true)
+    item = user_list_items(:regular_user_books_item_3)
+
+    patch user_list_item_completion_path(item), params: {user_list_item: {completed_on: ""}}
+
+    assert_response :see_other
+    assert_equal "Completion date cleared", flash[:notice]
+    assert_nil item.reload.completed_on
+    assert_includes response.headers["Cache-Control"].to_s, "no-store"
   end
 end

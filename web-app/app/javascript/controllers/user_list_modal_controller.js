@@ -140,7 +140,7 @@ export default class extends Controller {
     const data = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(data.error?.message || "Failed to add")
     this._afterMutation({
-      added: {list_id: listId, item_id: data.user_list_item.id},
+      added: {list_id: data.user_list_item.user_list_id, item_id: data.user_list_item.id},
       removedListIds: (data.removed_user_list_items || []).map((item) => item.user_list_id)
     })
     this._toast("success", data.message)
@@ -217,8 +217,9 @@ export default class extends Controller {
     const stateCtrl = this._stateController()
     const cur = stateCtrl.state()
     const current = (cur?.memberships?.[this.openContext.listableType] || {})[String(this.openContext.listableId)] || []
-    let next = current.filter((membership) => !removedListIds.includes(membership.list_id))
-    if (added && !next.some((membership) => membership.list_id === added.list_id)) next.push(added)
+    const replacedListIds = new Set([...removedListIds, added?.list_id].filter(Boolean))
+    const next = current.filter((membership) => !replacedListIds.has(membership.list_id))
+    if (added) next.push(added)
     stateCtrl.applyMutation({
       listableType: this.openContext.listableType,
       listableId: this.openContext.listableId,
