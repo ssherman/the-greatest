@@ -114,6 +114,36 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.parsed_body.fetch("message"), "Books I've Read"
   end
 
+  test "direct undated Read add does not enqueue reading goal invalidation" do
+    Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).never
+    sign_in_as(@user, stub_auth: true)
+
+    post user_list_items_path(user_lists(:regular_user_books_read)), params: {
+      user_list_item: {listable_id: books_books(:cannery_row).id}
+    }, as: :json
+
+    assert_response :created
+  end
+
+  test "moving Reading to Read invalidates goals for the new completion date" do
+    read_list = user_lists(:regular_user_books_read)
+    reading_list = Books::UserList.find_or_create_by!(user: @user, list_type: :reading) do |list|
+      list.name = Books::UserList.default_list_name_for(:reading)
+    end
+    book = books_books(:cannery_row)
+    reading_list.user_list_items.create!(listable: book)
+    Services::Books::ReadingGoals::CompletionChangeInvalidator.expects(:call).with(
+      user: @user, old_completed_on: nil, new_completed_on: Date.current
+    )
+
+    sign_in_as(@user, stub_auth: true)
+    post user_list_items_path(read_list), params: {
+      user_list_item: {listable_id: book.id}
+    }, as: :json
+
+    assert_response :created
+  end
+
   test "duplicate add returns 409 conflict" do
     sign_in_as(@user, stub_auth: true)
     post user_list_items_path(@list),
@@ -238,6 +268,22 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.headers["Cache-Control"].to_s, "no-store"
   end
 
+  test "removing a dated Read item invalidates goals for the removed completion date" do
+    read_list = user_lists(:regular_user_books_read)
+    completed_on = Date.new(2026, 8, 1)
+    item = read_list.user_list_items.create!(
+      listable: books_books(:cannery_row), completed_on: completed_on
+    )
+    Services::Books::ReadingGoals::CompletionChangeInvalidator.expects(:call).with(
+      user: @user, old_completed_on: completed_on, new_completed_on: nil
+    )
+
+    sign_in_as(@user, stub_auth: true)
+    delete user_list_item_path(read_list, item), as: :json
+
+    assert_response :success
+  end
+
   test "destroy service failure returns service errors as 422" do
     item = user_list_items(:regular_user_fav_album_1)
     Services::UserLists::RemoveItem.stubs(:call).returns(
@@ -341,6 +387,53 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Completion date cleared", flash[:notice]
     assert_nil item.reload.completed_on
     assert_includes response.headers["Cache-Control"].to_s, "no-store"
+  end
+
+  test "setting a completion date invalidates goals for the new date" do
+    item = user_list_items(:regular_user_books_item_3)
+    item.update!(completed_on: nil)
+    completed_on = Date.new(2025, 3, 4)
+    Services::Books::ReadingGoals::CompletionChangeInvalidator.expects(:call).with(
+      user: @user, old_completed_on: nil, new_completed_on: completed_on
+    )
+
+    sign_in_as(@user, stub_auth: true)
+    patch user_list_item_completion_path(item), params: {
+      user_list_item: {completed_on: completed_on.iso8601}
+    }
+
+    assert_response :see_other
+  end
+
+  test "changing a completion date invalidates goals for both dates" do
+    item = user_list_items(:regular_user_books_item_3)
+    old_completed_on = item.completed_on
+    new_completed_on = Date.new(2025, 3, 4)
+    Services::Books::ReadingGoals::CompletionChangeInvalidator.expects(:call).with(
+      user: @user, old_completed_on: old_completed_on, new_completed_on: new_completed_on
+    )
+
+    sign_in_as(@user, stub_auth: true)
+    patch user_list_item_completion_path(item), params: {
+      user_list_item: {completed_on: new_completed_on.iso8601}
+    }
+
+    assert_response :see_other
+  end
+
+  test "clearing a completion date invalidates goals for the old date" do
+    item = user_list_items(:regular_user_books_item_3)
+    old_completed_on = item.completed_on
+    Services::Books::ReadingGoals::CompletionChangeInvalidator.expects(:call).with(
+      user: @user, old_completed_on: old_completed_on, new_completed_on: nil
+    )
+
+    sign_in_as(@user, stub_auth: true)
+    patch user_list_item_completion_path(item), params: {
+      user_list_item: {completed_on: ""}
+    }
+
+    assert_response :see_other
   end
 
   test "updating a completion date redirects with an update notice" do

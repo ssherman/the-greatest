@@ -124,11 +124,14 @@ class UserListItemsController < ApplicationController
     item.user_list.is_a?(Books::UserList) && item.user_list.read? && item.completed_on.nil?
   end
 
-  # Task 5 supplies the invalidator and replaces this staged no-op with its call.
-  def invalidate_books_goals(_result)
-    return nil unless defined?(Services::Books::ReadingGoals::CompletionChangeInvalidator)
+  def invalidate_books_goals(result)
+    return unless result.data[:listable].is_a?(Books::Book)
 
-    nil
+    Services::Books::ReadingGoals::CompletionChangeInvalidator.call(
+      user: result.data[:item].user_list.user,
+      old_completed_on: result.data[:old_completed_on],
+      new_completed_on: result.data[:new_completed_on]
+    )
   end
 
   def serialize_item(item)
