@@ -437,4 +437,35 @@ class ListItemTest < ActiveSupport::TestCase
 
     assert item.valid?
   end
+
+  # ListItem is the dependent of five owners: List, plus Books::Book,
+  # Music::Album, Music::Song and Games::Game as :listable. A guard that raises
+  # for every one of them makes any record that happens to appear on its
+  # domain's generated list permanently undeletable.
+  test "a book's destroy cascade removes its item from an auto-generated list" do
+    list = lists(:basic_list)
+    book = books_books(:war_and_peace)
+    item = ListItem.create!(list: list, listable: book, position: 1)
+    list.update!(auto_generated_kind: :user_favorites)
+
+    book.destroy!
+
+    assert_not ::Books::Book.exists?(book.id)
+    assert_not ListItem.exists?(item.id)
+  end
+
+  test "an album's destroy cascade removes its item from an auto-generated list" do
+    list = lists(:music_albums_list)
+    album = music_albums(:dark_side_of_the_moon)
+    # Not album.list_items.destroy_all: that loads the association, and the
+    # stale empty cache then makes the cascade below a no-op.
+    ListItem.where(listable: album).destroy_all
+    item = ListItem.create!(list: list, listable: album, position: 1)
+    list.update!(auto_generated_kind: :user_favorites)
+
+    album.destroy!
+
+    assert_not ::Music::Album.exists?(album.id)
+    assert_not ListItem.exists?(item.id)
+  end
 end
