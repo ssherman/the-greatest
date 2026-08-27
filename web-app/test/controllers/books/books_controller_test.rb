@@ -140,6 +140,15 @@ module Books
     test "renders any number of reviews with the same number of queries" do
       book = books_books(:crime_and_punishment)
       Review.create!(user: users(:editor_user), reviewable: book, rating: 5, body: "<p>One.</p>")
+
+      # One throwaway request first. BookSimilar memoises the Fiction/Nonfiction
+      # category ids per process, so the very first #show in a worker pays one extra
+      # query that no later request does. Measuring baseline cold made this test fail
+      # roughly one run in two, depending on whether the seed happened to put another
+      # test that touches BookSimilar ahead of it. Warming costs the guard nothing:
+      # both measurements are still taken warm, so a genuine per-review N+1 shows up
+      # exactly as before.
+      get "/book/#{book.slug}"
       baseline = count_queries { get "/book/#{book.slug}" }
 
       Review.create!(user: users(:admin_user), reviewable: book, rating: 4, body: "<p>Two.</p>")
