@@ -242,6 +242,13 @@ class UserListTest < ActiveSupport::TestCase
     refute user_lists(:regular_user_music_songs_favorites).completed_on_enabled?
   end
 
+  test "completion transition declarations are opt-in per subclass" do
+    assert_equal({}, UserList.completion_transition_sources)
+    assert_equal({read: [:reading]}, Books::UserList.completion_transition_sources)
+    assert_equal [:reading], user_lists(:regular_user_books_read).completion_transition_source_types
+    assert_equal [], @list.completion_transition_source_types
+  end
+
   # --- ranking configuration resolution ---
 
   test "ranking_configuration_class is the matching STI config per subclass" do
