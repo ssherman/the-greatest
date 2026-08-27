@@ -93,3 +93,10 @@ regular_user_books_read:
   name: Books I've Read
   list_type: 1 # read
   public: false
+
+regular_user_books_reading:
+  user: regular_user
+  type: Books::UserList
+  name: Books I'm Reading
+  list_type: 2 # reading
+  public: false
