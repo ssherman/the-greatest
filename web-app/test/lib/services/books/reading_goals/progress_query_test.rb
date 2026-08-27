@@ -10,6 +10,8 @@ module Services
           ends_item = add_read_item(goal.user, books_books(:cannery_row), goal.ends_on)
           add_read_item(goal.user, books_books(:of_mice_and_men), nil)
           add_read_item(users(:editor_user), books_books(:crime_and_punishment), goal.starts_on)
+          add_read_item(goal.user, books_books(:crime_and_punishment), goal.starts_on - 1.day)
+          add_read_item(goal.user, books_books(:got), goal.ends_on + 1.day)
 
           result = ::Services::Books::ReadingGoals::ProgressQuery.call(goal: goal)
 
@@ -23,12 +25,16 @@ module Services
           user_lists(:regular_user_books_favorites).user_list_items.create!(
             listable: books_books(:cannery_row), completed_on: goal.starts_on
           )
-          user_lists(:regular_user_books_reading).user_list_items.create!(
+          reading_list = ::Books::UserList.create!(
+            user: goal.user,
+            name: ::Books::UserList.default_list_name_for(:reading),
+            list_type: :reading
+          )
+          reading_list.user_list_items.create!(
             listable: books_books(:of_mice_and_men), completed_on: goal.starts_on
           )
-          user_lists(:regular_user_music_albums_favorites).user_list_items.create!(
-            listable: music_albums(:wish_you_were_here), completed_on: goal.starts_on
-          )
+          listened_list = user_lists(:regular_user_music_albums_listened)
+          listened_list.user_list_items.create!(listable: music_albums(:nevermind), completed_on: goal.starts_on)
 
           result = ::Services::Books::ReadingGoals::ProgressQuery.call(goal: goal)
 
@@ -74,6 +80,25 @@ module Services
           assert_equal 25, page_two.count
         end
 
+        test "normalizes invalid page values and accepts numeric strings" do
+          goal = reading_goal
+          items = 25.times.map do |index|
+            book = ::Books::Book.create!(title: "Page book #{index}", slug: "page-book-#{index}")
+            add_read_item(goal.user, book, goal.starts_on)
+          end
+
+          first_page_ids = items.map(&:id).sort.last(24).reverse
+          [nil, 0, -1, "invalid"].each do |page|
+            result = ::Services::Books::ReadingGoals::ProgressQuery.call(goal: goal, page: page)
+
+            assert_equal first_page_ids, result.items.map(&:id), "page=#{page.inspect} should use page one"
+          end
+
+          result = ::Services::Books::ReadingGoals::ProgressQuery.call(goal: goal, page: "2")
+
+          assert_equal [items.map(&:id).min], result.items.map(&:id)
+        end
+
         test "returns an empty projection when the owner has no Read list" do
           user = User.create!(email: "reading-goal-empty@example.com", role: :user, email_verified: true)
           ::Books::UserList.find_by!(user: user, list_type: :read).destroy!
@@ -87,6 +112,8 @@ module Services
           assert_empty result.items
           assert_equal 0, result.count
           assert_equal 0.0, result.percentage
+          assert_not result.complete
+          assert_equal 0.0, result.bar_percentage
         end
 
         test "preloads card associations for a full page" do
@@ -95,6 +122,9 @@ module Services
           24.times do |index|
             book = ::Books::Book.create!(title: "Preloaded book #{index}", slug: "preloaded-book-#{index}")
             ::Books::BookAuthor.create!(book: book, author: author, position: 1)
+            image = Image.new(parent: book, primary: true)
+            image.file.attach(io: StringIO.new("fake image data"), filename: "cover-#{index}.jpg", content_type: "image/jpeg")
+            image.save!
             add_read_item(goal.user, book, goal.starts_on)
           end
 
@@ -103,7 +133,8 @@ module Services
           assert_queries_count(0) do
             result.items.each do |item|
               item.listable.book_authors.map { |book_author| book_author.author.name }
-              item.listable.primary_image&.file&.attached?
+              item.listable.primary_image.file_attachment.blob.filename
+              ::Books::CardComponent.new(book: item.listable).send(:cover)
             end
           end
         end

@@ -84,9 +84,3 @@ regular_user_books_item_3:
   listable: clash (Books::Book)
   position: 1
   completed_on: 2026-01-20
-
-regular_user_books_reading_item:
-  user_list: regular_user_books_reading
-  listable: got (Books::Book)
-  position: 1
-  completed_on: 2027-01-01

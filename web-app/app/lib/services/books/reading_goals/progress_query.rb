@@ -42,7 +42,7 @@ module Services
 
           list.user_list_items
             .where(listable_type: "Books::Book", completed_on: goal.starts_on..goal.ends_on)
-            .includes(listable: ::Books::UserList.listable_display_includes)
+            .includes(listable: ::Books::UserList.listable_display_includes + [{primary_image: {file_attachment: :blob}}])
             .reorder(completed_on: :desc, id: :desc)
         end
       end
