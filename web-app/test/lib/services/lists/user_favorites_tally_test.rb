@@ -175,6 +175,45 @@ module Services
         assert_equal 2, tally.ballot_count
       end
 
+      # A user holding two favorites lists of the same type is a data anomaly:
+      # one_default_per_type_per_user normally forbids it, but that validation has
+      # no backing index, so two concurrent first-visit requests can still create
+      # it. save(validate: false) is the only way to reproduce that state here --
+      # the validation being bypassed is precisely the one the race defeats.
+      def add_duplicate_favorites_list(user, books)
+        list = ::Books::UserList.new(
+          user: user, list_type: :favorites, name: "Favorite Books (duplicate)"
+        )
+        list.save(validate: false)
+        books.each_with_index do |book, index|
+          ::UserListItem.create!(user_list: list, listable: book, position: index + 1)
+        end
+        list
+      end
+
+      test "a user holding two favorites lists votes once, from the lower-id list" do
+        counted = books_books(:war_and_peace)
+        ignored = books_books(:got)
+        list = build_ballot([counted])
+        duplicate = add_duplicate_favorites_list(list.user, [ignored])
+        assert_operator duplicate.id, :>, list.id,
+          "this test only means anything if the duplicate is the higher-id list"
+
+        result = tally
+
+        assert_in_delta 1.0, result.entries.sum(&:score), 0.0001,
+          "one user spends sqrt(N) once, not once per favorites list they hold"
+        assert_equal [counted.id], result.entries.map(&:listable_id)
+        assert_nil score_for(result, ignored)
+      end
+
+      test "a user holding two favorites lists counts as one ballot" do
+        list = build_ballot([books_books(:war_and_peace)])
+        add_duplicate_favorites_list(list.user, [books_books(:got)])
+
+        assert_equal 1, tally.ballot_count
+      end
+
       test "ignores lists that are not favorites" do
         user = ::User.create!(email: "reader@example.com")
         read = ::Books::UserList.find_by!(user: user, list_type: :read)

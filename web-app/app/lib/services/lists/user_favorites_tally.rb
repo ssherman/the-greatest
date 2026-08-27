@@ -46,7 +46,13 @@ module Services
           end
         end
 
-        Tally.new(entries: rank(scores, voters), ballot_count: ballots.size)
+        Tally.new(
+          entries: rank(scores, voters),
+          # Users, not lists. load_ballots already keeps at most one ballot per
+          # user, so these are the same number today; counting users says which
+          # of the two this figure is meant to be.
+          ballot_count: ballots.each_value.map { |ballot| ballot[:user_id] }.uniq.size
+        )
       end
 
       private
@@ -71,12 +77,32 @@ module Services
             Arel.sql("user_list_items.listable_id")
           )
 
-        rows.each_with_object({}) do |(user_list_id, user_id, manually_ordered, listable_id), ballots|
-          ballot = ballots[user_list_id] ||= {
+        ballots = rows.each_with_object({}) do |(user_list_id, user_id, manually_ordered, listable_id), acc|
+          ballot = acc[user_list_id] ||= {
             user_id: user_id, manually_ordered: manually_ordered, listable_ids: []
           }
           ballot[:listable_ids] << listable_id
         end
+
+        one_ballot_per_user(ballots)
+      end
+
+      # One user, one ballot -- deterministically the lowest user_list_id.
+      #
+      # UserList's one_default_per_type_per_user validation has no backing index,
+      # so two concurrent first-visit requests can leave a user holding two
+      # favorites lists. That is a data anomaly, not a second opinion: scoring
+      # both would spend a full sqrt(N) of ballot mass twice for someone the tally
+      # counts as one voter. Merging the two lists instead is worse -- N and the
+      # position ordering would both be ambiguous across them -- so the extra list
+      # is dropped. Lowest id rather than newest keeps the tally reproducible.
+      def one_ballot_per_user(ballots)
+        keepers = ballots.each_with_object({}) do |(user_list_id, ballot), lowest|
+          current = lowest[ballot[:user_id]]
+          lowest[ballot[:user_id]] = user_list_id if current.nil? || user_list_id < current
+        end.values
+
+        ballots.slice(*keepers)
       end
 
       # How one ballot's mass divides across its items, in position order. Both
@@ -91,10 +117,10 @@ module Services
         weights.map { |weight| weight / total }
       end
 
-      # Voters are counted as a set of user ids rather than a ballot count:
-      # UserList's one-default-per-type-per-user validation has no backing index,
-      # so two concurrent first-visit requests can leave a user holding two
-      # favorites lists. Without the set that user would vote twice.
+      # voter_count is a set of user ids rather than a hit count. load_ballots'
+      # dedup already guarantees one ballot per user, so the set is belt-and-braces
+      # there; it also states what the number means -- distinct people, matching
+      # ballot_count and the min_voters floor.
       def rank(scores, voters)
         scores
           .reject { |listable_id, _score| voters[listable_id].size < @config[:min_voters] }
