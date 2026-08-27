@@ -127,6 +127,35 @@
       </div>
     <% end %>
 
+    <% if @similar_books.any? %>
+      <div class="card bg-base-100 shadow-md" data-testid="similar-books">
+        <div class="card-body">
+          <h2 class="card-title text-xl">Similar Books</h2>
+          <ul class="space-y-1">
+            <% @similar_books.each do |similar_book| %>
+              <li>
+                <%= link_to similar_book.title,
+                      book_path(slug: similar_book.slug, ranking_configuration_id: params[:ranking_configuration_id]),
+                      class: "link" %>
+                <% names = similar_book.book_authors.map { |ba| ba.author.name }.join(", ") %>
+                <% if names.present? %>
+                  <span class="text-base-content/70">by <%= names %></span>
+                <% end %>
+              </li>
+            <% end %>
+          </ul>
+          <% if @more_similar_available %>
+            <p class="mt-2">
+              <%= link_to "Show more",
+                    book_similar_path(slug: @book.slug, ranking_configuration_id: params[:ranking_configuration_id]),
+                    class: "link",
+                    data: {testid: "similar-books-show-more"} %>
+            </p>
+          <% end %>
+        </div>
+      </div>
+    <% end %>
+
     <% if @list_items.any? %>
       <div class="card bg-base-100 shadow-md">
         <div class="card-body">

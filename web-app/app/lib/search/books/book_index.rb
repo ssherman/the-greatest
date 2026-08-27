@@ -92,6 +92,18 @@ module Search
               category_ids: {
                 type: "keyword"
               },
+              genre_category_ids: {
+                type: "keyword"
+              },
+              subject_category_ids: {
+                type: "keyword"
+              },
+              location_category_ids: {
+                type: "keyword"
+              },
+              similarity_category_count: {
+                type: "integer"
+              },
               book_kind: {
                 type: "keyword"
               },

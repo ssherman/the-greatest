@@ -23,15 +23,36 @@ OpenSearch query against the book index:
 - `filter` on `ranked: true`, `must_not` the book itself, `min_score: 5`, `minimum_should_match: 1`
 - Show page renders 5 results as plain title links in a sidebar
 
-### What the legacy version gets right, by accident
+### Why the per-term clauses matter (corrected 2026-08-26)
 
-Because those are per-term `term` queries rather than a single `terms` query, OpenSearch
-scores each match by **IDF** — sharing a rare category ("Existentialist fiction") already
-scores higher than sharing a common one ("Fiction"). A `terms` query is constant-score by
-default and would throw that away.
+An earlier draft of this spec claimed these per-term clauses earn **IDF** weighting, so that
+sharing a rare category would outscore sharing a common one. **That is false, and it was
+measured false.** A `term` query on a `keyword` field scores as a flat `ConstantScore` equal to
+its boost, with no rarity component at all:
 
-**This is the single most important property to preserve in the port.** Do not "simplify"
-the per-term clauses into a `terms` query.
+```
+index: "common" on 10 of 10 docs, "rare" on 1 of 10, both boost 1.0
+explain: 1.0  ConstantScore(tags:common)
+         1.0  ConstantScore(tags:rare)
+```
+
+Identical. The legacy site never got rarity weighting either -- same keyword mapping, same
+behaviour.
+
+So a candidate's score is `sum of (boost of each shared category)` -- genre matches worth 5
+apiece, subject 3, location 1. It counts matches by type; it does not weigh them by how
+meaningful they are.
+
+**The per-term clauses are still load-bearing, for a different reason.** N separate `term`
+clauses contribute N x boost, so a book sharing four genres outscores one sharing a single
+genre. A single `terms` query contributes its boost **once** regardless of how many values
+matched, collapsing "shared four genres" and "shared one genre" into the same score. Do not
+"simplify" the per-term clauses into a `terms` query.
+
+**Consequence for tuning:** `max_category_item_count` is the **only** mechanism in this design
+that acts on category rarity. Rarity decides which categories enter the query; it has no effect
+on the score once one is in. That makes the ceiling the highest-leverage knob in the tuning
+pass, not a refinement.
 
 ## Goals
 
@@ -140,12 +161,12 @@ New class under `app/lib/search/books/search/`, following `BookGeneral`'s shape:
           "minimum_should_match": 1
         }
       },
-      "field_value_factor": {
-        "field": "similarity_category_count",
-        "modifier": "sqrt",
-        "missing": 1
+      "script_score": {
+        "script": {
+          "source": "_score / Math.sqrt(similarity_category_count, treating it as 1 when either absent OR present-but-zero)"
+        }
       },
-      "boost_mode": "divide"
+      "boost_mode": "replace"
     }
   }
 }
@@ -162,8 +183,9 @@ The `should` array, all carried over from legacy and all boost-configurable:
 | same era, `range` ±`era_years` | `first_published_year` | 0.3 |
 | one `term` per author id | `author_ids` | 0.1 |
 
-Every one of these is one clause **per id**, never a `terms` query — see "What the legacy
-version gets right, by accident" above.
+Every one of these is one clause **per id**, never a `terms` query — see "Why the per-term
+clauses matter" above. A `terms` query would score a candidate the same whether it shared one
+genre or four.
 
 Notes on the structure:
 
@@ -175,8 +197,12 @@ Notes on the structure:
   should-minimum to 0.
 - `_source: false` — only ids and scores are needed. `extract_hits_with_scores` will
   return `source: nil`, which the service ignores.
-- `missing: 1` on `field_value_factor` means documents indexed before the reindex divide
-  by 1, i.e. no normalization, rather than erroring.
+- The script guards an absent `similarity_category_count` (documents indexed before the
+  reindex) **and** a present-but-zero one (every book with no genre/subject/location
+  categories at all, per `Books::Book#as_indexed_json`) by dividing by 1 -- no
+  normalization, rather than erroring or dividing by zero.
+- `boost_mode: "replace"` because `function_score` otherwise multiplies the script's result
+  back into `_score`, squaring the numerator.
 
 ### Returns nothing when the source book has no categories
 
@@ -201,7 +227,9 @@ legacy's "any match".
 ### 2. Normalize by category count (`normalize_by_category_count`)
 
 The score is a raw sum over shared categories, so a book tagged with 40 categories has 40
-chances to score and a book tagged with 6 has 6. Bloated records outrank tight ones.
+chances to score and a book tagged with 6 has 6. Bloated records outrank tight ones. This
+matters more than the original draft assumed: with no rarity weighting in the score, raw match
+count is nearly the whole signal, so nothing else pushes back on a bloated record.
 
 Worked example, viewing *Dune*:
 
@@ -222,29 +250,73 @@ adjustment that makes cosine similarity cosine rather than a raw dot product.
 
 Two knobs, one idea — prefer specific tags:
 
-- `max_categories_per_type` — keep only the N rarest categories of each type
-- `max_category_item_count` — drop any category on more books than this
+- `max_categories_per_type` — keep only the N rarest categories of each type. **Applied
+  unconditionally** — it is not actually gated behind `drop_common_categories`, even
+  though the two are described together here. Turning the flag off only switches off the
+  ceiling below; the per-type cap still runs.
+- `max_category_item_count` — drop any category on more books than this. This one *is*
+  gated behind `drop_common_categories`; off means no ceiling at all, just the cap above.
 
 Rarity comes from `Category#item_count`, which is populated (50,639 of 52,772 book
 categories have a non-zero count). At a ceiling of 25,000 this cuts `Fiction`,
 `Nonfiction`, `Fictional Location`, `Identity` and `United States`.
 
-Selection, per type:
+`select_categories` (`Search::Books::Search::BookSimilar`) does exactly this, per type, and
+nothing more:
 
 ```ruby
-by_rarity = scoped.sort_by { |c| [c.item_count.to_i, c.id] }
-kept = by_rarity.reject { |c| c.item_count.to_i > max_category_item_count }
-kept = by_rarity.first(1) if kept.empty? && by_rarity.any?   # guard
-kept.first(max_categories_per_type)
+def self.select_categories(scoped, opts)
+  by_rarity = scoped.sort_by { |c| [c.item_count.to_i, c.id] }
+  return by_rarity.first(opts[:max_categories_per_type]) unless opts[:drop_common_categories]
+
+  kept = by_rarity.reject { |c| c.item_count.to_i > opts[:max_category_item_count] }
+  kept.first(opts[:max_categories_per_type])
+end
 ```
 
-**The guard is load-bearing.** A book tagged only `Fiction` would otherwise end up with
-zero genres, and with `require_genre_match` on that produces an empty result set. Keeping
-the single rarest category when the ceiling would remove them all prevents that.
+It is called once per type (genre, subject, location) with no visibility into the other
+two, on purpose. An earlier draft of this design had this method restore the rarest
+category itself whenever the ceiling emptied its list — **the shipped code does not do
+that.** `select_categories` is a pure per-type filter with no internal restore; a ceiling
+aggressive enough to empty a type's list just returns an empty list, full stop.
 
-The `c.id` tie-break is explicit so ordering is deterministic. See the testing section —
-tie-breaks that coincide with fixture id order have produced vacuous passing tests in this
-codebase before.
+**The restore lives in a separate method, and it is genre-only:**
+
+```ruby
+def self.restore_rarest_genre_if_ceiling_emptied_genres(active, by_type, opts)
+  return by_type unless opts[:drop_common_categories]
+  return by_type if by_type["genre"].any?
+
+  rarest_genre = active.select { |c| c.category_type == "genre" }.min_by { |c| [c.item_count.to_i, c.id] }
+  by_type["genre"] = [rarest_genre] if rarest_genre
+  by_type
+end
+```
+
+This runs once, after all three types have already been through `select_categories`, and
+touches only `by_type["genre"]` — subject and location get no such restore, and never did.
+That asymmetry is deliberate, not an oversight: only genre feeds `require_genre_match`. A
+book tagged only `Fiction` (item_count 68,333, well over the default 25,000 ceiling) would
+otherwise end up with zero genres, and with `require_genre_match` on, zero genres plus
+"require a genre match" is an empty result set. Subject and location have no equivalent
+gate downstream, so an over-common subject or location simply drops out with no
+compensating rescue — there is nothing there to protect.
+
+**The decision to restore fires whenever the book has at least one genre and the ceiling
+left `by_type["genre"]` empty — full stop.** Whether subject or location survived the
+ceiling is irrelevant to that decision, and so is whether the book has any subject or
+location categories at all. Measured against the dev corpus: 6,405 of the 126,218 books
+with genres have every genre above the default ceiling while a subject or location
+survives — for exactly those books, a version of this guard that only fired when *every*
+type came back empty would decline to restore genre, and `require_genre_match` would let a
+match through on nothing but a shared location or subject, which is precisely what the
+requirement exists to prevent. A book with no genre categories at all gets nothing
+restored, because `require_genre_match` already treats "no genres" as "skip the filter" —
+there is nothing to protect there either.
+
+The `c.id` tie-break, in both methods, is explicit so ordering is deterministic. See the
+testing section — tie-breaks that coincide with fixture id order have produced vacuous
+passing tests in this codebase before.
 
 ### 4. Exclude same-series books (`exclude_same_series`)
 

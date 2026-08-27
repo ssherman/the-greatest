@@ -3,8 +3,8 @@ class Books::BooksController < ApplicationController
 
   layout "books/application"
 
-  before_action :load_ranking_configuration, only: [:show]
-  before_action :cache_for_show_page, only: [:show]
+  before_action :load_ranking_configuration, only: [:show, :similar]
+  before_action :cache_for_show_page, only: [:show, :similar]
 
   # Genre, then subject, then location: what kind of book it is, what it is about,
   # then where it is set. The legacy site ordered its sidebar the same way; the
@@ -56,5 +56,34 @@ class Books::BooksController < ApplicationController
     # corpus has 37. Served by index_reviews_on_reviewable_with_body. No association is
     # preloaded because a review row renders no author.
     @reviews = @book.reviews.with_body.recent
+
+    # Rescued into an empty success inside the service, so an OpenSearch outage
+    # costs this card rather than the whole page.
+    similar = ::Services::Books::SimilarBooks.call(@book)
+    @similar_books = similar.data[:books]
+    @more_similar_available = similar.data[:more_available]
+  end
+
+  def similar
+    # find_by!(slug:), never friendly.find -- 137 books have purely numeric slugs
+    # and friendly_id resolves slugs before primary keys. book_authors: :author is
+    # preloaded because the view walks it (the same idiom #show preloads above) --
+    # without it, every credited author on this book is its own query.
+    @book = ::Books::Book
+      .includes(book_authors: :author)
+      .find_by!(slug: params[:slug])
+
+    @ranked_item = if @ranking_configuration
+      @ranking_configuration.ranked_items.where.not(rank: nil).find_by(item: @book)
+    end
+
+    @similar_books = ::Services::Books::SimilarBooks
+      .call(@book, limit: Rails.application.config.x.book_similarity[:page_limit])
+      .data[:books]
+
+    # Computed after the service call, and AND'd with the results: a ranked
+    # book whose similarity query returns nothing renders only "No similar
+    # books found for this title" -- an empty page has no content to index.
+    @indexable = @ranked_item.present? && @similar_books.any?
   end
 end

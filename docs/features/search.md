@@ -78,6 +78,7 @@ app/lib/search/
       book_general.rb
       author_general.rb
       book_autocomplete.rb
+      book_similar.rb
 
 app/lib/books/
   book_search_query.rb           # Public site search: BookGeneral + hydration + rank
@@ -178,8 +179,19 @@ Each model defines what gets indexed:
 
 **Books::Book**:
 ```ruby
-{ title:, subtitle:, alternate_titles:, author_names:, author_ids:, category_ids:, book_kind: }
+{
+  title:, subtitle:, alternate_titles:, author_names:, author_ids:, category_ids:, book_kind:,
+  genre_category_ids:, subject_category_ids:, location_category_ids:, similarity_category_count:
+}
 ```
+
+The last four fields exist only for `BookSimilar` (below): the three `*_category_ids` are
+`category_ids` split by `category_type` so a similarity query can boost genre/subject/location
+matches independently, and `similarity_category_count` is the count of active genre + subject +
+location categories on the book, used to normalize a candidate's score by how many tags it
+carries. `category_ids` itself is unchanged and still drives `CategoryItem`'s reindex trigger and
+`Books::FilterParams`/saved searches — removing or renaming it silently stops category-change
+reindexing (see `app/models/category_item.rb`).
 
 **Books::Author**:
 ```ruby
@@ -271,7 +283,9 @@ Builder methods used by all query classes:
 
 ### Query Types
 
-Each indexed model has up to three query classes:
+Each indexed model has up to three query classes following the general/autocomplete/dedup
+pattern below; `Books::Book` additionally has `BookSimilar`, a differently-shaped
+query described after them.
 
 #### General Search (public search page)
 
@@ -308,6 +322,27 @@ Default `min_score: 0.1`, `size: 20`.
 Example: `Search::Music::Search::AlbumByTitleAndArtists`
 
 Used during data imports to find existing records. Much stricter — title is a `must` clause, artists are `should` (boost). Default `min_score: 5.0`.
+
+#### Similar Books (books-only)
+
+`Search::Books::Search::BookSimilar`, called from `Services::Books::SimilarBooks`
+(`app/lib/services/books/similar_books.rb`), which backs the "Similar Books" card on the
+book show page and the full similar-books page. Unlike the three query types above, it
+does not take search text — it takes a `Books::Book` and finds other books that share its
+genre, subject and location categories, ranked, and not the book itself (or, when
+`exclude_same_series` is on, any book in the same series).
+
+Every category match is its own `term` clause (never a `terms` clause — one `terms` clause
+would score "shared four genres" and "shared one genre" identically), boosted by type —
+genre highest, then subject, then location — plus small nudges for same original language,
+same era, and same author. The raw sum is then divided by `Math.sqrt(similarity_category_count)`
+via a `function_score`/`script_score`, so a thinly-tagged book that shares most of its
+categories with the source book outranks a heavily-tagged book that shares only a few. A
+genre match is required by default (`require_genre_match`) whenever the source book has any
+genres. All of this is tuned through `Rails.application.config.x.book_similarity`
+(`config/initializers/book_similarity.rb`), overridable per call by keyword — see
+`docs/superpowers/specs/2026-08-25-books-similar-books-design.md` for the full design and
+the reasoning behind each knob.
 
 ### Return Format
 

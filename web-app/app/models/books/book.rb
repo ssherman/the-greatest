@@ -59,6 +59,11 @@ class Books::Book < ApplicationRecord
   # per-edition source arrives, and should go away when one does.
   enum :book_length, {very_short: 0, short: 1, medium: 2, moderate: 3, long: 4, very_long: 5}
 
+  # The category types that participate in similarity scoring. Books carry no
+  # `theme` categories today; counting only the scoring types keeps
+  # similarity_category_count honest if that changes.
+  SIMILARITY_CATEGORY_TYPES = %w[genre subject location].freeze
+
   # What a reader may propose a correction to. Ordered as the public form renders
   # them.
   #
@@ -176,13 +181,20 @@ class Books::Book < ApplicationRecord
   end
 
   def as_indexed_json
+    active = categories.select { |c| c.deleted == false }
+    scored = active.select { |c| SIMILARITY_CATEGORY_TYPES.include?(c.category_type) }
+
     {
       title: title,
       subtitle: subtitle,
       alternate_titles: alternate_titles,
       author_names: authors.map(&:name),
       author_ids: authors.map(&:id),
-      category_ids: categories.select { |c| c.deleted == false }.map(&:id),
+      category_ids: active.map(&:id),
+      genre_category_ids: scored.select { |c| c.category_type == "genre" }.map(&:id),
+      subject_category_ids: scored.select { |c| c.category_type == "subject" }.map(&:id),
+      location_category_ids: scored.select { |c| c.category_type == "location" }.map(&:id),
+      similarity_category_count: scored.size,
       book_kind: book_kind,
       first_published_year: first_published_year,
       original_language_id: original_language_id,

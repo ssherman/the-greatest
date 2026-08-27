@@ -150,7 +150,10 @@ module Books
     end
 
     test "should create search index request on destroy" do
-      book = books_books(:crime_and_punishment)
+      # of_mice_and_men, not crime_and_punishment: it carries no category_items,
+      # so destroying it doesn't also cascade a reindex request per category
+      # (see CategoryItem#queue_item_for_reindexing).
+      book = books_books(:of_mice_and_men)
 
       assert_difference "SearchIndexRequest.count", 1 do
         book.destroy!
@@ -294,6 +297,34 @@ module Books
       )
 
       assert_nil book.reload.as_indexed_json[:ranked_position]
+    end
+
+    test "as_indexed_json splits categories by type" do
+      book = books_books(:crime_and_punishment)
+      json = book.as_indexed_json
+
+      assert_equal [categories(:books_novels_genre).id], json[:genre_category_ids]
+      assert_equal [categories(:books_politics_subject).id], json[:subject_category_ids]
+      assert_equal [categories(:books_france_location).id], json[:location_category_ids]
+    end
+
+    test "as_indexed_json counts only the categories that score" do
+      assert_equal 3, books_books(:crime_and_punishment).as_indexed_json[:similarity_category_count]
+    end
+
+    test "as_indexed_json still exposes category_ids" do
+      # CategoryItem#item_supports_category_indexing? gates reindexing on this exact
+      # key. Without it, editing a book's categories silently stops reindexing it.
+      assert books_books(:crime_and_punishment).as_indexed_json.key?(:category_ids)
+    end
+
+    test "as_indexed_json excludes soft-deleted categories from the split fields" do
+      book = books_books(:crime_and_punishment)
+      categories(:books_novels_genre).update!(deleted: true)
+      book.reload
+
+      assert_empty book.as_indexed_json[:genre_category_ids]
+      assert_equal 2, book.as_indexed_json[:similarity_category_count]
     end
 
     test "declares its correctable fields in display order" do
