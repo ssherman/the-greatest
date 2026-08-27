@@ -40,7 +40,8 @@ Rails.application.config.x.book_similarity = ActiveSupport::OrderedOptions.new.m
   # The four accuracy behaviours, each independently switchable.
   require_genre_match: true,
 
-  # Fiction/Nonfiction are a book-level TYPE, not a genre: never scored, and used to
+  # Fiction/Nonfiction are a book-level TYPE, not a genre: never scored (in the
+  # numerator -- see the KNOWN GAP note in BookSimilar), and used to
   # exclude candidates of the OPPOSITE type (never to require the same one -- see
   # BookSimilar.opposite_type_clause for why that distinction matters). Measured
   # across 192 fiction/nonfiction source books before this existed: 5.2% of #1

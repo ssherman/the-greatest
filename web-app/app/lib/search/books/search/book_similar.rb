@@ -52,6 +52,20 @@ module Search
         # shares a genre with every other fiction book, require_genre_match stops
         # gating anything, and every score shifts in a way that looks like a tuning
         # effect rather than a bug.
+        # KNOWN GAP, deliberately left: "never scored" is true of the NUMERATOR only.
+        # Books::Book#as_indexed_json still counts these two in
+        # similarity_category_count, which wrap_in_normalization uses as the
+        # denominator, so a correctly-tagged candidate is divided by one more than an
+        # identically-catalogued untagged one -- worth 2.6% at 20 categories and 9.5%
+        # at 6. Measured: 7.8% of candidates carry no type tag and get that edge.
+        #
+        # Not corrected here because correcting it ALONE measurably worsens results:
+        # subtracting 1 from the denominator raises thin books more than thick ones,
+        # so top-5 slots held by books with <=7 categories go from 51% to 63% and the
+        # median drops from 7 to 6 against a corpus median of 14. It is the sqrt
+        # thin-book bias being amplified. Paired with a denominator floor the sign
+        # flips -- floor 10 alone gives 15%, floor 10 plus this correction gives 13%
+        # -- so the two belong in one change, not this one.
         BOOK_TYPE_CATEGORY_NAMES = %w[Fiction Nonfiction].freeze
 
         # Resolved by name, never hardcoded: these ids differ between environments

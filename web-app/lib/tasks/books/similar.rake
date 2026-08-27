@@ -276,7 +276,19 @@ module BooksSimilarCompare
 
     return if index.zero? || baseline_ids.nil?
 
-    changed = (qualified.first(5).map(&:id) - baseline_ids).size
-    puts "     top 5: #{changed} of 5 changed vs A"
+    # Compared slot by slot, NOT as a set difference. `current - baseline` reports
+    # zero for a variant that returned a strict subset of A ([1,2,3] vs [1,2,3,4,5])
+    # AND zero for a completely reversed ranking ([5,4,3,2,1] vs [1,2,3,4,5]) -- it
+    # is blind to both truncation and reordering, which are exactly the changes a
+    # tuning run exists to reveal. It hid them while this harness was being used to
+    # choose the shipped defaults.
+    current = qualified.first(5).map(&:id)
+    width = [baseline_ids.size, current.size].max
+    differing = (0...width).count { |i| current[i] != baseline_ids[i] }
+    entered = (current - baseline_ids).size
+    dropped = (baseline_ids - current).size
+
+    puts format("     top 5 vs A: %d of %d slots differ (%d new, %d dropped)",
+      differing, width, entered, dropped)
   end
 end
