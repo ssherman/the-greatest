@@ -267,8 +267,9 @@ module BooksSimilarCompare
     scores = hits.map { |h| h[:score] }.compact.sort.reverse
     removed, scanned = cap_stats(hits, qualified)
 
-    puts format("     window: %d hits, scores %.2f (top) .. %.2f (median) .. %.2f (low) | min_score=%s",
-      hits.size, scores.first || 0, scores[scores.size / 2] || 0, scores.last || 0, merged[:min_score])
+    puts format("     window: %d hits, scores %.2f (top) .. %.2f (median) .. %.2f (low) | min_score=%s | normalization_floor=%s",
+      hits.size, scores.first || 0, scores[scores.size / 2] || 0, scores.last || 0,
+      merged[:min_score], merged[:normalization_floor])
     puts format("     author cap removed %d of the top %d hits (max_per_author=%d) | over_fetch=%d loaded %d rows to show %d",
       removed, scanned, merged[:max_per_author], merged[:over_fetch], hits.size, qualified.size)
     puts format("     timing: opensearch %dms, service total %dms (postgres+cap ~%dms)",

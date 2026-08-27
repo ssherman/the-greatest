@@ -11,11 +11,15 @@
 # `bin/rails books:similar:compare`. Every number below was measured, not guessed;
 # the measurements are recorded next to each one.
 #
-# min_score and max_category_item_count are COUPLED and must be retuned together.
-# The ceiling decides how many `should` clauses the query carries, and the score is
-# their sum divided by sqrt(category count) -- so lowering the ceiling lowers every
-# score. Gatsby's window tops out at 8.16 under a 25,000 ceiling and 6.74 under
-# 15,000. A min_score carried over from a different ceiling means nothing.
+# min_score, max_category_item_count and normalization_floor are all COUPLED and
+# must be retuned together. The ceiling decides how many `should` clauses the query
+# carries and the floor decides what their sum is divided by, so either one moves
+# every score. Gatsby's window tops out at 8.16 under a 25,000 ceiling and 6.74
+# under 15,000; introducing the floor moved the corpus-wide median top score from
+# 6.17 to 5.28 and its 5th percentile from 4.1 to 1.68. A min_score carried over
+# from a different ceiling or floor means nothing -- carrying the pre-floor 3.0
+# forward would have blanked 13.7% of cards instead of 1.8%, silently, because a
+# card with no results renders nothing rather than an error.
 Rails.application.config.x.book_similarity = ActiveSupport::OrderedOptions.new.merge(
   limit: 5,
   page_limit: 25,
@@ -27,15 +31,16 @@ Rails.application.config.x.book_similarity = ActiveSupport::OrderedOptions.new.m
   # which a 2x window absorbs with room to spare.
   over_fetch: 2,
 
-  # 3.0, was 0 (disabled). Measured across a 150-book sample spanning the whole
-  # corpus, not just ranked books: 3.0 trims 7.8% of page slots -- the weak tail of
-  # the 25-result grid -- and emptied ZERO cards. 3.5 trims 18.7% but empties 3
-  # books; 4.0 trims 28.6% and empties 11. A second 200-book sample put 3.0's
-  # empty rate at 2%, so treat ~0-2% as the real figure: those are books whose best
-  # match scores below 3.0, which render "No similar books found" rather than 25
-  # bad ones. Do not raise this without re-running the sweep -- the card fails
-  # quiet, so an over-aggressive value is invisible in production.
-  min_score: 3.0,
+  # 1.5, retuned for the normalization floor. Measured across a 300-book sample
+  # spanning the whole corpus with min_score disabled: 1.5 empties 1.8% of cards and
+  # trims 3.3% of page slots. It sits just under a cliff -- 1.75 jumps to 5.6%
+  # emptied, 2.0 to 9.1%, and the old 3.0 to 13.7%. The pre-floor value was 3.0 and
+  # bought roughly this same profile then (0-2% emptied, 7.8% trimmed); the number
+  # changed because the floor changed the scale, not because the intent did.
+  #
+  # Do not raise this without re-running the sweep. The card fails quiet, so an
+  # over-aggressive value is invisible in production.
+  min_score: 1.5,
 
   # The four accuracy behaviours, each independently switchable.
   require_genre_match: true,
@@ -53,6 +58,12 @@ Rails.application.config.x.book_similarity = ActiveSupport::OrderedOptions.new.m
   normalize_by_category_count: true,
   drop_common_categories: true,
   exclude_same_series: true,
+
+  # Clamps the sqrt normalization denominator from below -- see
+  # BookSimilar.wrap_in_normalization. 10 is the corpus p25; it moves the median
+  # result from 7 scoring categories to 13 against a corpus median of 14, and top-5
+  # slots held by books with <=7 from 51% to 13%.
+  normalization_floor: 10,
 
   max_categories_per_type: 8,
 
