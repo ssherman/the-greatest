@@ -174,6 +174,27 @@ module Music
         Music::Album::Merger.call(source: @source_album, target: @target_album)
       end
 
+      # The generated favorites list is derived data: merge_list_items skips
+      # (rather than repoints) a row on that list, so it is one item short until
+      # regenerated. This must happen well inside the 5-minute window before
+      # CalculateRankingsJob reads the list, or the short list gets baked into
+      # the rankings.
+      test "regenerates the generated favorites list after a committed merge" do
+        GenerateUserFavoritesListsJob.expects(:perform_async).with("Music::Albums::UserList")
+
+        result = Music::Album::Merger.call(source: @source_album, target: @target_album)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+      end
+
+      test "does not regenerate the generated favorites list when the merge does not commit" do
+        GenerateUserFavoritesListsJob.expects(:perform_async).never
+
+        result = Music::Album::Merger.call(source: @source_album, target: @source_album)
+
+        assert_not result.success?, "a self-merge must not commit"
+      end
+
       test "should return error result on exception" do
         Music::Album::Merger.any_instance.stubs(:merge_all_associations).raises(StandardError.new("Test error"))
 
@@ -265,6 +286,12 @@ module Music
         item = ListItem.create!(list: list, listable: @source_album, position: 5, verified: true)
         list.update!(auto_generated_kind: :user_favorites)
 
+        # This test hand-crafts the auto-generated-list scenario without going
+        # through the real generator; stub out the merger's own regeneration call
+        # so a real rebuild from live user_list_items can't blow away the rows
+        # this test just created.
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+
         result = Music::Album::Merger.call(source: @source_album, target: @target_album)
 
         assert result.success?, "Merger failed: #{result.errors.inspect}"
@@ -277,6 +304,10 @@ module Music
         ListItem.create!(list: list, listable: @target_album, position: 1, verified: false)
         ListItem.create!(list: list, listable: @source_album, position: 2, verified: true)
         list.update!(auto_generated_kind: :user_favorites)
+
+        # See the stub comment above: isolate this hand-crafted scenario from the
+        # merger's own real regeneration call.
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
 
         result = Music::Album::Merger.call(source: @source_album, target: @target_album)
 

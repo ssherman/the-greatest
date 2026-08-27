@@ -65,6 +65,7 @@ module Music
       def run_post_commit_steps
         reindex_target_album
         schedule_ranking_recalculation
+        regenerate_user_favorites_list
       rescue => error
         Rails.logger.error(
           "Music::Album::Merger: merge of #{@source_album_id} into #{target_album.id} " \
@@ -227,6 +228,19 @@ module Music
           BulkCalculateWeightsJob.perform_async(config_id)
           CalculateRankingsJob.perform_in(5.minutes, config_id)
         end
+      end
+
+      # The generated "Our Users' Favorites" list is derived data: merge_list_items
+      # above deliberately skips (rather than repoints) a source row that sits on
+      # that list, so the row is destroyed along with the source album and the
+      # generated list falls one item short. Only a full rebuild -- not a repointed
+      # row -- produces the correct combined score, voter_count and position for
+      # the target album, so the list is regenerated here rather than waiting for
+      # the nightly cron. Queuing it now runs it comfortably inside the 5 minutes
+      # before schedule_ranking_recalculation's CalculateRankingsJob would otherwise
+      # read that short list and bake the wrong result into the rankings.
+      def regenerate_user_favorites_list
+        GenerateUserFavoritesListsJob.perform_async("Music::Albums::UserList")
       end
 
       def destroy_source_album
