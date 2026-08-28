@@ -267,4 +267,45 @@ class CategoryTest < ActiveSupport::TestCase
       category.update!(description: "after the rollback")
     end
   end
+
+  # Codex, PR #276. after_rollback fires for an inner savepoint too, and clearing
+  # the latch there discarded a change the outer transaction was still going to
+  # commit -- the row landed with deleted: true and nothing was ever reindexed.
+  test "a savepoint rollback does not discard a search-relevant change made outside it" do
+    category = categories(:music_rock_genre)
+    SearchIndexRequest.delete_all
+
+    assert_difference -> { SearchIndexRequest.where(parent_type: "Music::Album").count }, 2 do
+      Category.transaction do
+        category.update!(deleted: true)
+
+        Category.transaction(requires_new: true) do
+          category.update!(description: "touched inside the savepoint")
+          raise ActiveRecord::Rollback
+        end
+      end
+    end
+
+    assert Category.find(category.id).deleted, "the outer change must actually have committed"
+  end
+
+  # The other half: a change latched INSIDE the savepoint really is rolled back,
+  # so the depth guard must not turn into "never clear".
+  test "a savepoint rollback does discard a search-relevant change made inside it" do
+    category = categories(:music_rock_genre)
+    SearchIndexRequest.delete_all
+
+    assert_no_difference -> { SearchIndexRequest.count } do
+      Category.transaction do
+        category.update!(description: "outer, not search-relevant")
+
+        Category.transaction(requires_new: true) do
+          category.update!(deleted: true)
+          raise ActiveRecord::Rollback
+        end
+      end
+    end
+
+    assert_not Category.find(category.id).deleted, "the inner change must have rolled back"
+  end
 end

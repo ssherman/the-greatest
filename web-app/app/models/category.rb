@@ -120,17 +120,40 @@ class Category < ApplicationRecord
   private
 
   def note_search_relevant_change
-    @search_relevant_change ||= search_relevant_change?
+    return if @search_relevant_change
+    return unless search_relevant_change?
+
+    @search_relevant_change = true
+    @search_relevant_change_depth = self.class.connection.open_transactions
   end
 
+  # after_rollback also fires when an inner savepoint unwinds
+  # (Category.transaction(requires_new: true)). A change latched by an OUTER
+  # transaction outlives that savepoint and still commits, so clearing here
+  # unconditionally would drop a reindex that is still owed -- reintroducing the
+  # exact stale-index defect these callbacks exist to prevent.
+  #
+  # Depth tells the two apart, measured rather than assumed: latching inside the
+  # outer transaction records depth 2, and after_rollback for the savepoint runs
+  # at depth 2 as well (the savepoint is already popped), so the latch survives.
+  # When the outer transaction is the one unwinding, the hook runs at depth 1 and
+  # the latch is correctly forgotten.
   def clear_search_relevant_change
-    @search_relevant_change = false
+    return if @search_relevant_change_depth &&
+      self.class.connection.open_transactions >= @search_relevant_change_depth
+
+    reset_search_relevant_change
   end
 
   def queue_items_for_reindexing
     return unless @search_relevant_change
 
-    @search_relevant_change = false
+    reset_search_relevant_change
     Categories::ItemReindexer.call(category: self)
+  end
+
+  def reset_search_relevant_change
+    @search_relevant_change = false
+    @search_relevant_change_depth = nil
   end
 end
