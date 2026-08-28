@@ -64,9 +64,10 @@ class Categories::ItemReindexerTest < ActiveSupport::TestCase
     # rather than the constant so this stub can reach it.
     Categories::ItemReindexer.stubs(:batch_size).returns(2)
 
-    Categories::ItemReindexer.call(category: @category)
+    result = Categories::ItemReindexer.call(category: @category)
 
     assert_equal 3, SearchIndexRequest.where(parent_type: "Books::Book").count
+    assert_equal 3, result.data[:queued]
   end
 
   test "returns a zero result for a category with no items" do

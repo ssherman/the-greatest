@@ -165,6 +165,11 @@ module Categories
       assert_equal false, hard_deleter.soft
     end
 
+    # Documents the end-to-end outcome only: every row it sees comes from
+    # CategoryItem#after_destroy, which predates this branch, so this test
+    # passes even with the after_update_commit callback reverted entirely.
+    # The Mocha-expectation test below is the control that actually proves
+    # the callback fires.
     test "soft delete queues the category's items for reindexing" do
       category = categories(:books_novels_genre)
       book_ids = CategoryItem.where(category_id: category.id, item_type: "Books::Book").pluck(:item_id)

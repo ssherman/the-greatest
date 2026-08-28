@@ -54,7 +54,15 @@ class Category < ApplicationRecord
   # changes in a way as_indexed_json reads. CategoryItem covers adding and removing
   # an item; without this, editing the category left every item it holds with a stale
   # indexed document until something unrelated reindexed it.
+  #
+  # after_update_commit fires once per transaction and saved_changes reflects only
+  # the LAST save, so a record saved twice in one transaction -- Categories::Updater
+  # restoring a category and then Merger saving alternative_names -- would lose a
+  # search-relevant change made by the earlier save. Latch the decision per save and
+  # read the latch at commit.
+  after_update :note_search_relevant_change
   after_update_commit :queue_items_for_reindexing
+  after_rollback :clear_search_relevant_change
 
   # Validations
   validates :name, presence: true
@@ -111,9 +119,18 @@ class Category < ApplicationRecord
 
   private
 
-  def queue_items_for_reindexing
-    return unless search_relevant_change?
+  def note_search_relevant_change
+    @search_relevant_change ||= search_relevant_change?
+  end
 
+  def clear_search_relevant_change
+    @search_relevant_change = false
+  end
+
+  def queue_items_for_reindexing
+    return unless @search_relevant_change
+
+    @search_relevant_change = false
     Categories::ItemReindexer.call(category: self)
   end
 end

@@ -229,4 +229,42 @@ class CategoryTest < ActiveSupport::TestCase
       end
     end
   end
+
+  test "a search-relevant change survives a later unrelated save in the same transaction" do
+    category = categories(:music_rock_genre)
+    SearchIndexRequest.delete_all
+
+    assert_difference -> { SearchIndexRequest.where(parent_type: "Music::Album").count }, 2 do
+      Category.transaction do
+        category.update!(deleted: true)
+        category.update!(description: "saved again, not search-relevant")
+      end
+    end
+  end
+
+  test "two unrelated saves in one transaction still queue nothing" do
+    category = categories(:music_rock_genre)
+    SearchIndexRequest.delete_all
+
+    assert_no_difference -> { SearchIndexRequest.count } do
+      Category.transaction do
+        category.update!(description: "first")
+        category.update!(slug: "rock-two-saves")
+      end
+    end
+  end
+
+  test "a rolled back search-relevant change does not leak into the next save" do
+    category = categories(:music_rock_genre)
+    SearchIndexRequest.delete_all
+
+    Category.transaction do
+      category.update!(deleted: true)
+      raise ActiveRecord::Rollback
+    end
+
+    assert_no_difference -> { SearchIndexRequest.count } do
+      category.update!(description: "after the rollback")
+    end
+  end
 end
