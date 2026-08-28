@@ -102,9 +102,11 @@ module Services
         assert_includes io.string, GenerateUserFavorites::STANDARD_PENALTY_NAME
       end
 
-      # An admin who deliberately detaches the generated list from a configuration,
-      # or drops its penalty, must not have that undone every night.
-      test "does not re-wire an existing list" do
+      # The RankedList and the penalty are INVARIANTS this class maintains, not
+      # create-time decoration. Production already holds a generated books list
+      # created before the wiring existed -- unapproved, unranked, unpenalised --
+      # and only a re-run can repair it.
+      test "wires an existing list that has neither a ranked list nor a penalty" do
         build_ballot([books_books(:war_and_peace)])
         list = generate.data[:list]
         list.ranked_lists.destroy_all
@@ -112,10 +114,57 @@ module Services
 
         generate
 
-        assert_empty list.reload.ranked_lists
-        assert_empty list.penalties
+        assert_equal ::Books::RankingConfiguration.default_primary, list.reload.ranked_lists.sole.ranking_configuration
+        assert_equal [@penalty], list.penalties.to_a
       end
 
+      test "repairs a list that has the penalty but no ranked list" do
+        build_ballot([books_books(:war_and_peace)])
+        list = generate.data[:list]
+        list.ranked_lists.destroy_all
+
+        generate
+
+        assert_equal ::Books::RankingConfiguration.default_primary, list.reload.ranked_lists.sole.ranking_configuration
+        assert_equal [@penalty], list.penalties.to_a
+      end
+
+      test "repairs a list that has the ranked list but no penalty" do
+        build_ballot([books_books(:war_and_peace)])
+        list = generate.data[:list]
+        list.list_penalties.destroy_all
+
+        generate
+
+        assert_equal [@penalty], list.reload.penalties.to_a
+        assert_equal 1, list.ranked_lists.count
+      end
+
+      test "does not duplicate the ranked list or the penalty on a rerun" do
+        build_ballot([books_books(:war_and_peace)])
+        list = generate.data[:list]
+
+        assert_no_difference [-> { ::RankedList.count }, -> { ::ListPenalty.count }] do
+          generate
+          generate
+        end
+        assert_equal 1, list.reload.ranked_lists.count
+        assert_equal 1, list.list_penalties.count
+      end
+
+      # The queue is a throughput bottleneck: only an actually-created RankedList
+      # earns a weight calculation.
+      test "does not requeue a weight calculation when the ranked list already exists" do
+        build_ballot([books_books(:war_and_peace)])
+        generate
+
+        BulkCalculateWeightsJob.expects(:perform_async).never
+        generate
+      end
+
+      # status is the admin's control surface -- ItemRankings::Calculator#prepare_lists
+      # reads only `status: :active`, so deactivating IS how someone takes this list
+      # out of the rankings, and that intent must survive the nightly run.
       test "does not change the status of an existing list" do
         build_ballot([books_books(:war_and_peace)])
         list = generate.data[:list]
@@ -124,6 +173,16 @@ module Services
         generate
 
         assert_equal "unapproved", list.reload.status
+      end
+
+      test "does not reactivate a rejected list" do
+        build_ballot([books_books(:war_and_peace)])
+        list = generate.data[:list]
+        list.update!(status: :rejected)
+
+        generate
+
+        assert_equal "rejected", list.reload.status
       end
 
       test "writes items in tally order with sequential positions" do

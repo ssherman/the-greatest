@@ -26,8 +26,9 @@ class UserFavoritesRakeTaskTest < ActiveSupport::TestCase
   # expected to run clean -- an unswallowed puts here is a dozen new lines of
   # noise in the suite output.
   def rebuild
-    capture_io { Rake::Task["user_favorites_lists:rebuild"].invoke }
+    out, _err = capture_io { Rake::Task["user_favorites_lists:rebuild"].invoke }
     Rake::Task["user_favorites_lists:rebuild"].reenable
+    out
   end
 
   def generated_books_list
@@ -78,7 +79,11 @@ class UserFavoritesRakeTaskTest < ActiveSupport::TestCase
     assert_equal keep.id, generated_books_list.id
   end
 
-  test "rebuild leaves an admin's changes to an existing generated list alone" do
+  # rebuild is an explicit operator action -- "make this correct now" -- so unlike
+  # the nightly job it DOES override a deactivation. This is the production repair
+  # path: the parent PR created the books list unapproved, unranked and unpenalised.
+  test "rebuild activates and wires an unapproved generated list" do
+    ::Global::Penalty.create!(name: Services::Lists::GenerateUserFavorites::STANDARD_PENALTY_NAME)
     keep = ::Books::List.create!(
       type: "Books::List",
       name: ::Books::UserList.generated_list_name,
@@ -86,10 +91,26 @@ class UserFavoritesRakeTaskTest < ActiveSupport::TestCase
       auto_generated_kind: :user_favorites
     )
 
-    rebuild
+    out = rebuild
 
-    assert_equal "unapproved", keep.reload.status
-    assert_empty keep.ranked_lists
+    assert_equal "active", keep.reload.status
+    assert_equal ::Books::RankingConfiguration.default_primary, keep.ranked_lists.sole.ranking_configuration
+    assert_equal [Services::Lists::GenerateUserFavorites::STANDARD_PENALTY_NAME], keep.penalties.map(&:name)
+    assert_match(/unapproved/, out)
+  end
+
+  test "rebuild says nothing about status when the list is already active" do
+    keep = ::Books::List.create!(
+      type: "Books::List",
+      name: ::Books::UserList.generated_list_name,
+      status: :active,
+      auto_generated_kind: :user_favorites
+    )
+
+    out = rebuild
+
+    assert_equal "active", keep.reload.status
+    refute_match(/Activated/, out)
   end
 
   test "rebuild creates the generated list wired up when there is none" do

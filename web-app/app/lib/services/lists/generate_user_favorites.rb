@@ -81,52 +81,73 @@ module Services
           new_list.status = :active
         end
 
-        # Wiring runs on CREATE ONLY, never on the nightly rerun. An admin who
-        # deliberately detaches this list from a configuration, or drops its
-        # penalty, must not have that undone every night.
-        wire_new_list(list) if list.previously_new_record?
+        # Wiring runs on EVERY invocation, not just on create -- but it never
+        # touches `status`.
+        #
+        # The RankedList joining this list to the domain's primary configuration,
+        # and the standard penalty, are INVARIANTS this class maintains. Detaching
+        # the RankedList or dropping the penalty is not a plausible way for an
+        # admin to say "keep this list out of the rankings"; setting `status` is,
+        # and ItemRankings::Calculator#prepare_lists filters on exactly
+        # `status: :active`. So maintaining those two costs nothing real and buys
+        # two things create-only wiring could not:
+        #
+        #   * the upgrade path -- a list created before the wiring existed (which
+        #     is what production holds: unapproved, with no RankedList and no
+        #     penalty) is repaired by the next run instead of staying inert;
+        #   * the retry path -- if the process died after find_or_create_by!
+        #     committed but before the penalty or the RankedList landed, a Sidekiq
+        #     retry now finishes the job rather than reporting success on a
+        #     half-wired list.
+        #
+        # `status` is deliberately excluded: it is the admin's real control
+        # surface, and that intent has to survive the nightly run. The
+        # user_favorites_lists:rebuild task forces it back to :active, because
+        # running that IS an operator saying "make this correct now".
+        ensure_wiring(list)
 
         list
       end
 
       # Everything a hand-created list would be given in the admin UI, so a fresh
-      # database is correct with no follow-up commands. Each step degrades to a
-      # no-op rather than raising: a half-wired list that exists beats no list at
-      # all, and both gaps are legitimate states.
-      def wire_new_list(list)
-        attach_standard_penalty(list)
-        join_primary_ranking_configuration(list)
+      # database is correct with no follow-up commands. Each step is idempotent and
+      # degrades to a no-op rather than raising: a half-wired list that exists beats
+      # no list at all, and both gaps are legitimate states.
+      def ensure_wiring(list)
+        ensure_standard_penalty(list)
+        ensure_primary_ranking_configuration(list)
       end
 
-      def attach_standard_penalty(list)
+      def ensure_standard_penalty(list)
         penalty = ::Global::Penalty.find_by(name: STANDARD_PENALTY_NAME)
 
         if penalty.nil?
           Rails.logger.warn {
             "#{self.class.name}: no Global::Penalty named #{STANDARD_PENALTY_NAME.inspect}; " \
-              "created #{list.class} #{list.id} without it, so it will weigh ~100 instead of ~40 " \
+              "#{list.class} #{list.id} is left without it, so it will weigh ~100 instead of ~40 " \
               "until the penalty is attached by hand"
           }
           return
         end
 
-        list.list_penalties.create!(penalty: penalty)
+        list.list_penalties.find_or_create_by!(penalty: penalty)
       end
 
-      def join_primary_ranking_configuration(list)
+      def ensure_primary_ranking_configuration(list)
         # Runs AFTER the penalty is attached, so the weight calculation below sees it.
         ranking_configuration = @user_list_class.ranking_configuration_class&.default_primary
         # A domain with no primary configuration is not yet set up for ranking.
         # Legitimate, and not this class's problem to fix.
         return if ranking_configuration.nil?
 
-        ::RankedList.create!(list: list, ranking_configuration: ranking_configuration)
+        ranked_list = ::RankedList.find_or_create_by!(list: list, ranking_configuration: ranking_configuration)
 
         # A new RankedList has no weight until a weight calculation runs, and this
         # is how one is normally triggered (Actions::Admin::BulkCalculateWeights and
-        # the record mergers both do exactly this). Create-only, so the nightly run
-        # never touches a queue that is already a throughput bottleneck.
-        BulkCalculateWeightsJob.perform_async(ranking_configuration.id)
+        # the record mergers both do exactly this). Only an actually-created
+        # RankedList earns one, so the nightly run still never touches a queue that
+        # is already a throughput bottleneck.
+        BulkCalculateWeightsJob.perform_async(ranking_configuration.id) if ranked_list.previously_new_record?
       end
 
       def item_rows(list, entries)
