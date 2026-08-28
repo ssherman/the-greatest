@@ -64,6 +64,19 @@ class Books::Book < ApplicationRecord
   # similarity_category_count honest if that changes.
   SIMILARITY_CATEGORY_TYPES = %w[genre subject location].freeze
 
+  # Fiction and Nonfiction are a book-level TYPE, not a genre. They still index into
+  # genre_category_ids -- Search::Books::Search::BookSimilar needs the ids there to
+  # filter a fiction book away from nonfiction candidates -- but they are excluded
+  # from similarity_category_count, because that count is the DENOMINATOR the
+  # similarity script divides by and these two can never contribute to its numerator.
+  # Counting them divided a correctly-tagged book by more than an identically
+  # catalogued untagged one: worth 2.6% at 20 scoring categories and 9.5% at 6,
+  # against the 7.8% of books carrying no type tag at all.
+  #
+  # Matched by name, and scoped to genre so a subject that happens to be called
+  # "Fiction" is unaffected -- the same pair BookSimilar resolves to ids.
+  BOOK_TYPE_CATEGORY_NAMES = %w[Fiction Nonfiction].freeze
+
   # What a reader may propose a correction to. Ordered as the public form renders
   # them.
   #
@@ -180,6 +193,20 @@ class Books::Book < ApplicationRecord
     Rails.application.routes.url_helpers.book_path(record.slug)
   end
 
+  # The denominator Search::Books::Search::BookSimilar divides by. Public and used
+  # by two callers on purpose: as_indexed_json stores it, and the tuning harness in
+  # lib/tasks/books/similar.rake prints it beside every result. The harness had its
+  # own copy of this predicate, which silently stopped matching the moment the type
+  # tags came out of the count -- it displayed a denominator one or two higher than
+  # the one the query used, exactly when comparing normalization_floor variants.
+  def similarity_category_count
+    categories.count do |c|
+      c.deleted == false &&
+        SIMILARITY_CATEGORY_TYPES.include?(c.category_type) &&
+        !(c.category_type == "genre" && BOOK_TYPE_CATEGORY_NAMES.include?(c.name))
+    end
+  end
+
   def as_indexed_json
     active = categories.select { |c| c.deleted == false }
     scored = active.select { |c| SIMILARITY_CATEGORY_TYPES.include?(c.category_type) }
@@ -194,7 +221,7 @@ class Books::Book < ApplicationRecord
       genre_category_ids: scored.select { |c| c.category_type == "genre" }.map(&:id),
       subject_category_ids: scored.select { |c| c.category_type == "subject" }.map(&:id),
       location_category_ids: scored.select { |c| c.category_type == "location" }.map(&:id),
-      similarity_category_count: scored.size,
+      similarity_category_count: similarity_category_count,
       book_kind: book_kind,
       first_published_year: first_published_year,
       original_language_id: original_language_id,

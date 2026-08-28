@@ -13,3 +13,8 @@ billing_reconcile_all:
   class: Billing::ReconcileAllCustomersJob
   cron: "0 5 * * *"
   description: "Reconcile every Stripe customer against local membership rows"
+
+user_favorites_lists:
+  class: GenerateUserFavoritesListsJob
+  cron: "0 3 * * *"
+  description: "Rebuild each domain's generated users' favorites list"

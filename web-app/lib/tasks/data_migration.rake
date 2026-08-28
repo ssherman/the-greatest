@@ -260,10 +260,21 @@ namespace :data_migration do
   # running news_posts before :users raises RecordInvalid. Leaving it out meant
   # a development rebuild through this task silently produced an empty news
   # section.
+  # user_favorites_lists:rebuild goes LAST, and its position is load-bearing in
+  # both directions. It reads user_lists and user_list_items, so it has to follow
+  # them -- run earlier and it generates an empty list from ballots that are not
+  # there yet. It also deletes the three superseded legacy lists that a database
+  # loaded before ListMigrator stopped importing them still holds, which only
+  # makes sense once :lists has run.
+  #
+  # It lives outside this namespace deliberately: the generated lists are a live
+  # cross-domain feature, not a books migration step, and the same task is what
+  # an admin runs by hand.
   desc "Run all Phase-1 migrators in dependency order"
   task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers, :edition_amazon_identifiers,
     :categories, :category_items, :book_attributes, :book_type_categories, :countries,
     :book_countries, :external_links, :lists, :list_items, :ranking_configurations,
     :ranked_lists, :penalties, :list_penalties, :user_lists, :user_list_items,
-    :saved_searches, :reviews, :corrections, :news_posts]
+    :saved_searches, :reviews, :corrections, :news_posts,
+    "user_favorites_lists:rebuild"]
 end

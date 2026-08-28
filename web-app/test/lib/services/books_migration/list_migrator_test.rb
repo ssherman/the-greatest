@@ -103,6 +103,40 @@ module Services
         assert_nil list.activated_at
       end
 
+      test "skips the superseded users' favorites lists, importing everything else" do
+        rows = ListMigrator::SUPERSEDED_LIST_NAMES.each_with_index.map do |name, i|
+          legacy_row("id" => 996001 + i, "name" => name)
+        end
+        rows << legacy_row("id" => 996100, "name" => "A Real Legacy List")
+
+        result = run_migrator(rows)
+
+        assert result[:success], result[:error]
+        assert_equal 1, result[:data][:count]
+        assert_equal "A Real Legacy List", List.find(996100).name
+        ListMigrator::SUPERSEDED_LIST_NAMES.each_with_index do |name, i|
+          assert_not List.exists?(996001 + i), "imported superseded list #{name.inspect}"
+        end
+      end
+
+      # The child migrators (list_items, ranked_lists, list_penalties) skip rows
+      # whose parent is one of these ids and fail loud on any other missing
+      # parent, so the id set has to be resolved the same way build_rows drops
+      # them: by name, from the legacy lists table. LegacyBooks::Record skips
+      # connects_to in test, so LegacyBooks::List reads the ordinary test
+      # database here -- which is why creating real rows exercises the query.
+      test "superseded_legacy_list_ids resolves the superseded names, and only those" do
+        superseded = ListMigrator::SUPERSEDED_LIST_NAMES.map do |name|
+          ::Books::List.create!(name: name)
+        end
+        ordinary = ::Books::List.create!(name: "An Ordinary Legacy List")
+
+        ids = ListMigrator.superseded_legacy_list_ids
+
+        superseded.each { |list| assert_includes ids, list.id }
+        assert_not_includes ids, ordinary.id
+      end
+
       test "is idempotent on id" do
         run_migrator([legacy_row("id" => 994001)])
 

@@ -2,17 +2,18 @@
 #
 # Table name: user_lists
 #
-#  id          :bigint           not null, primary key
-#  description :text
-#  list_type   :integer          not null
-#  name        :string           not null
-#  position    :integer
-#  public      :boolean          default(FALSE), not null
-#  type        :string           not null
-#  view_mode   :integer          default(2), not null
-#  created_at  :datetime         not null
-#  updated_at  :datetime         not null
-#  user_id     :bigint           not null
+#  id               :bigint           not null, primary key
+#  description      :text
+#  list_type        :integer          not null
+#  manually_ordered :boolean          default(FALSE), not null
+#  name             :string           not null
+#  position         :integer
+#  public           :boolean          default(FALSE), not null
+#  type             :string           not null
+#  view_mode        :integer          default(2), not null
+#  created_at       :datetime         not null
+#  updated_at       :datetime         not null
+#  user_id          :bigint           not null
 #
 # Indexes
 #
@@ -65,6 +66,20 @@ module Books
 
     def self.listable_display_includes
       [{book_authors: :author}, :categories, :primary_image, :descriptions]
+    end
+
+    def self.generated_list_class
+      ::Books::List
+    end
+
+    def self.generated_list_name
+      "Our Users' Favorite Books of All Time"
+    end
+
+    def self.generated_list_description
+      "The greatest books as determined by the users of this web site. " \
+        "If you would like to contribute, add your favorite books to your " \
+        "\"My Favorite Books\" list."
     end
   end
 end

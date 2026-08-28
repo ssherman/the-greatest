@@ -65,6 +65,7 @@ module Music
       def run_post_commit_steps
         reindex_target_album
         schedule_ranking_recalculation
+        regenerate_user_favorites_list
       rescue => error
         Rails.logger.error(
           "Music::Album::Merger: merge of #{@source_album_id} into #{target_album.id} " \
@@ -105,6 +106,7 @@ module Music
         merge_images
         merge_external_links
         merge_list_items
+        merge_user_list_items
         merge_release_year
 
         target_album.save! if target_album.changed?
@@ -154,6 +156,12 @@ module Music
       def merge_list_items
         count = 0
         source_album.list_items.find_each do |list_item|
+          # An auto-generated list's rows belong to the generator, which rewrites
+          # them nightly from the underlying user favorites -- and this merge has
+          # already moved those. Writing here would raise against the ListItem
+          # guard and turn an admin merge into a 500.
+          next if list_item.list.auto_generated?
+
           existing = target_album.list_items.find_by(list_id: list_item.list_id)
 
           if existing
@@ -169,6 +177,25 @@ module Music
           count += 1
         end
         @stats[:list_items] = count
+      end
+
+      # Personal favorites rows. music_albums declares
+      # `has_many :user_list_items, dependent: :destroy`, so without this the
+      # source's destroy! wipes every user's favorites entry for the merged album.
+      #
+      # position is scoped to the user_list, which does not change, so a moved row
+      # keeps a valid position.
+      def merge_user_list_items
+        count = 0
+        source_album.user_list_items.find_each do |entry|
+          if ::UserListItem.exists?(user_list_id: entry.user_list_id, listable: target_album)
+            entry.destroy!
+          else
+            entry.update!(listable_id: target_album.id)
+            count += 1
+          end
+        end
+        @stats[:user_list_items] = count
       end
 
       def merge_release_year
@@ -201,6 +228,19 @@ module Music
           BulkCalculateWeightsJob.perform_async(config_id)
           CalculateRankingsJob.perform_in(5.minutes, config_id)
         end
+      end
+
+      # The generated "Our Users' Favorites" list is derived data: merge_list_items
+      # above deliberately skips (rather than repoints) a source row that sits on
+      # that list, so the row is destroyed along with the source album and the
+      # generated list falls one item short. Only a full rebuild -- not a repointed
+      # row -- produces the correct combined score, voter_count and position for
+      # the target album, so the list is regenerated here rather than waiting for
+      # the nightly cron. Queuing it now runs it comfortably inside the 5 minutes
+      # before schedule_ranking_recalculation's CalculateRankingsJob would otherwise
+      # read that short list and bake the wrong result into the rankings.
+      def regenerate_user_favorites_list
+        GenerateUserFavoritesListsJob.perform_async("Music::Albums::UserList")
       end
 
       def destroy_source_album

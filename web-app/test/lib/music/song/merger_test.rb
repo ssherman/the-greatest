@@ -164,6 +164,80 @@ module Music
         assert target_list_item.verified?, "Expected list_item to preserve verified=true"
       end
 
+      # Record merge is already live for music. Writing to the generated users'
+      # favorites list raises RecordInvalid against the ListItem guard, so without
+      # the skip this is a 500 in production admin the first time a merged song
+      # happens to sit on that list. Nothing is lost: the generator rebuilds the
+      # list nightly from the user favorites the merge has already moved.
+      test "merges a song that sits on an auto-generated list without touching that list" do
+        list = lists(:music_songs_list)
+        item = ListItem.create!(list: list, listable: @source_song, position: 5, verified: true)
+        list.update!(auto_generated_kind: :user_favorites)
+
+        # This test hand-crafts the auto-generated-list scenario without going
+        # through the real generator; stub out the merger's own regeneration call
+        # so a real rebuild from live user_list_items can't blow away the rows
+        # this test just created.
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+
+        result = Music::Song::Merger.call(source: @source_song, target: @target_song)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        assert_nil ListItem.find_by(list: list, listable: @target_song)
+        assert_not ListItem.exists?(item.id), "the source's row dies with the source song"
+      end
+
+      test "does not promote verified on an auto-generated list" do
+        list = lists(:music_songs_list)
+        ListItem.create!(list: list, listable: @target_song, position: 1, verified: false)
+        ListItem.create!(list: list, listable: @source_song, position: 2, verified: true)
+        list.update!(auto_generated_kind: :user_favorites)
+
+        # See the stub comment above: isolate this hand-crafted scenario from the
+        # merger's own real regeneration call.
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+
+        result = Music::Song::Merger.call(source: @source_song, target: @target_song)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        survivor = ListItem.find_by(list: list, listable: @target_song)
+        assert_not survivor.verified?, "the generator owns this row; the merger must not edit it"
+      end
+
+      # Regression: Music::Song::Merger had no merge_user_list_items at all, while
+      # music_songs declares `has_many :user_list_items, dependent: :destroy`, so
+      # destroying the source silently deleted every user's personal favorites entry
+      # for the merged song.
+      test "moves a personal list entry to the target" do
+        # user_list_items(:regular_user_fav_song_1) favorites @source_song only, so
+        # this exercises the no-collision branch, which repoints the row.
+        entry = user_list_items(:regular_user_fav_song_1)
+
+        result = Music::Song::Merger.call(source: @source_song, target: @target_song)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        assert_equal @target_song.id, entry.reload.listable_id
+      end
+
+      test "drops a personal list entry when that list already holds the target" do
+        user_list = user_lists(:regular_user_music_songs_favorites)
+        UserListItem.create!(user_list: user_list, listable: @target_song, position: 2)
+
+        result = Music::Song::Merger.call(source: @source_song, target: @target_song)
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_equal 1, UserListItem.where(user_list: user_list, listable: @target_song).count
+      end
+
+      test "a user who favorited only the source still has that favorite afterwards" do
+        user_list = user_lists(:regular_user_music_songs_favorites)
+
+        Music::Song::Merger.call(source: @source_song, target: @target_song)
+
+        assert UserListItem.exists?(user_list: user_list, listable: @target_song),
+          "the merge must carry the user's favorite over, not destroy it with the source"
+      end
+
       test "should preserve verified=true when merging duplicate list_items and source is verified" do
         list = lists(:music_songs_list)
 
@@ -337,6 +411,12 @@ module Music
           rank: 1
         )
 
+        # Isolates the merger's own scheduling. The merger's regeneration call runs
+        # inline under Sidekiq's test mode, and creating a generated list for the
+        # first time queues a BulkCalculateWeightsJob of its own -- which would land
+        # on these expectations. Regeneration has its own test below.
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+
         BulkCalculateWeightsJob.expects(:perform_async).with(config.id)
         CalculateRankingsJob.expects(:perform_in).with(5.minutes, config.id)
 
@@ -350,6 +430,8 @@ module Music
         RankedItem.create!(item: @source_song, ranking_configuration: config1, rank: 1)
         RankedItem.create!(item: @target_song, ranking_configuration: config2, rank: 1)
 
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+
         BulkCalculateWeightsJob.expects(:perform_async).with(config1.id)
         BulkCalculateWeightsJob.expects(:perform_async).with(config2.id)
         CalculateRankingsJob.expects(:perform_in).with(5.minutes, config1.id)
@@ -359,10 +441,33 @@ module Music
       end
 
       test "should not schedule jobs if no ranked_items exist" do
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+
         BulkCalculateWeightsJob.expects(:perform_async).never
         CalculateRankingsJob.expects(:perform_in).never
 
         Music::Song::Merger.call(source: @source_song, target: @target_song)
+      end
+
+      # The generated favorites list is derived data: merge_list_items skips
+      # (rather than repoints) a row on that list, so it is one item short until
+      # regenerated. This must happen well inside the 5-minute window before
+      # CalculateRankingsJob reads the list, or the short list gets baked into
+      # the rankings.
+      test "regenerates the generated favorites list after a committed merge" do
+        GenerateUserFavoritesListsJob.expects(:perform_async).with("Music::Songs::UserList")
+
+        result = Music::Song::Merger.call(source: @source_song, target: @target_song)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+      end
+
+      test "does not regenerate the generated favorites list when the merge does not commit" do
+        GenerateUserFavoritesListsJob.expects(:perform_async).never
+
+        result = Music::Song::Merger.call(source: @source_song, target: @source_song)
+
+        assert_not result.success?, "a self-merge must not commit"
       end
 
       test "should return error result on exception" do
