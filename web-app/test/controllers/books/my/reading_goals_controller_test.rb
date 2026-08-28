@@ -4,7 +4,13 @@ class Books::My::ReadingGoalsControllerTest < ActionDispatch::IntegrationTest
   setup do
     @host = Rails.application.config.domains[:books]
     @user = users(:regular_user)
+    @original_view_paths = Books::My::ReadingGoalsController.view_paths
     Books::My::ReadingGoalsController.prepend_view_path Rails.root.join("test/views")
+  end
+
+  teardown do
+    Books::My::ReadingGoalsController.view_paths = @original_view_paths
+    assert_equal @original_view_paths, Books::My::ReadingGoalsController.view_paths
   end
 
   test "new supplies the required current-year defaults and is no-store" do
