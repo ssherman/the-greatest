@@ -96,10 +96,44 @@ module Books
         @transaction_body_completed && !::Books::Book.exists?(@source_book_id)
       end
 
-      # Filled in by later tasks.
       def merge_all_associations
+        merge_editions
+        merge_external_links
+        merge_ai_chats
+        merge_images
       end
 
+      # books_editions has no unique index on book_id, so there is no collision
+      # case. MUST run before reconcile_scalars fills default_edition_id, or the
+      # survivor's FK points at a row owned by the record about to be deleted.
+      def merge_editions
+        @stats[:editions] = source_book.editions.update_all(book_id: target_book.id)
+      end
+
+      def merge_external_links
+        @stats[:external_links] = source_book.external_links.update_all(parent_id: target_book.id)
+      end
+
+      def merge_ai_chats
+        @stats[:ai_chats] = source_book.ai_chats.update_all(parent_id: target_book.id)
+      end
+
+      def merge_images
+        has_target_primary = target_book.primary_image.present?
+        count = 0
+
+        source_book.images.find_each do |image|
+          image.update!(
+            parent_id: target_book.id,
+            primary: has_target_primary ? false : image.primary
+          )
+          count += 1
+        end
+
+        @stats[:images] = count
+      end
+
+      # Filled in by later tasks.
       def reconcile_scalars
       end
 

@@ -59,6 +59,71 @@ module Books
           "the identifier move must have rolled back"
         assert ::Books::Book.exists?(@source.id)
       end
+
+      test "moves editions to the target" do
+        edition = ::Books::Edition.create!(book: @source, title: "Pevear translation")
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, edition.reload.book_id
+      end
+
+      test "moves external links to the target" do
+        link = ExternalLink.create!(
+          parent: @source, name: "Wikipedia", url: "https://example.com/cp", source: :wikipedia
+        )
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, link.reload.parent_id
+      end
+
+      test "moves ai chats to the target" do
+        chat = AiChat.create!(parent: @source, chat_type: :general, model: "gpt-4", provider: :openai)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, chat.reload.parent_id
+      end
+
+      test "moves images to the target" do
+        image = attach_image(@source, primary: false)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, image.reload.parent_id
+      end
+
+      test "demotes a moved primary image when the target already has one" do
+        attach_image(@target, primary: true)
+        moved = attach_image(@source, primary: true)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        moved.reload
+        assert_equal @target.id, moved.parent_id
+        assert_not moved.primary, "two primary images on one book is the bug this prevents"
+      end
+
+      test "keeps a moved primary image when the target has none" do
+        moved = attach_image(@source, primary: true)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert moved.reload.primary
+      end
+
+      private
+
+      def attach_image(book, primary:)
+        book.images.create!(primary: primary) do |image|
+          image.file.attach(
+            io: StringIO.new("fake image data"),
+            filename: "cover.jpg",
+            content_type: "image/jpeg"
+          )
+        end
+      end
     end
   end
 end
