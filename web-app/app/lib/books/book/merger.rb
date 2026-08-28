@@ -105,6 +105,8 @@ module Books
         merge_book_countries
         merge_series_books
         merge_category_items
+        merge_list_items
+        merge_user_list_items
         merge_descriptions
       end
 
@@ -195,6 +197,42 @@ module Books
           count += 1
         end
         @stats[:category_items] = count
+      end
+
+      def merge_list_items
+        count = 0
+        source_book.list_items.find_each do |list_item|
+          # An auto-generated list's rows belong to the generator, which rewrites
+          # them nightly from the underlying user favorites -- and this merge has
+          # already moved those. Writing here would raise against the ListItem
+          # guard and turn an admin merge into a 500.
+          next if list_item.list.auto_generated?
+
+          existing = target_book.list_items.find_by(list_id: list_item.list_id)
+
+          if existing
+            existing.update!(verified: true) if list_item.verified? && !existing.verified?
+          else
+            list_item.update!(listable_id: target_book.id)
+          end
+          count += 1
+        end
+        @stats[:list_items] = count
+      end
+
+      # position is scoped to the user_list, which does not change, so a moved row
+      # keeps a valid position.
+      def merge_user_list_items
+        count = 0
+        source_book.user_list_items.find_each do |entry|
+          if UserListItem.exists?(user_list_id: entry.user_list_id, listable: target_book)
+            entry.destroy!
+          else
+            entry.update!(listable_id: target_book.id)
+            count += 1
+          end
+        end
+        @stats[:user_list_items] = count
       end
 
       # Two unique indexes apply: one on

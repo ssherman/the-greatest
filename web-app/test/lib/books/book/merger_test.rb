@@ -240,6 +240,87 @@ module Books
         assert_not moved.preferred?, "two preferred rows for one kind+locale violates the index"
       end
 
+      test "moves a list item to the target" do
+        list = lists(:basic_list)
+        item = ListItem.create!(list: list, listable: @source, position: 3)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, item.reload.listable_id
+      end
+
+      test "promotes verified when the target is already on the list unverified" do
+        list = lists(:basic_list)
+        survivor = ListItem.create!(list: list, listable: @target, position: 1, verified: false)
+        dropped = ListItem.create!(list: list, listable: @source, position: 2, verified: true)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert survivor.reload.verified, "verified must survive the collision"
+        assert_not ListItem.exists?(dropped.id)
+      end
+
+      # merge_list_items writes through update!/create!, which the ListItem
+      # validation rejects once the list is auto_generated. Without the skip this
+      # is a 500 in production admin the first time a merged book happens to sit
+      # on that list.
+      test "merges a book that sits on an auto-generated list without touching that list" do
+        list = lists(:basic_list)
+        item = ListItem.create!(list: list, listable: @source, position: 3)
+        list.update!(auto_generated_kind: :user_favorites)
+
+        # This test hand-crafts the auto-generated-list scenario without going
+        # through the real generator; stub the merger's own regeneration call so a
+        # real rebuild from live user_list_items can't blow away this row.
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+
+        result = ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        # The row was left where it was and died with the source's cascade; the
+        # merger never wrote a row of its own onto the generated list.
+        assert_not ListItem.exists?(item.id)
+        assert_nil ListItem.find_by(list: list, listable: @target)
+      end
+
+      test "does not promote verified on an auto-generated list" do
+        list = lists(:basic_list)
+        ListItem.create!(list: list, listable: @target, position: 1, verified: false)
+        ListItem.create!(list: list, listable: @source, position: 2, verified: true)
+        list.update!(auto_generated_kind: :user_favorites)
+
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+
+        result = ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        survivor = ListItem.find_by(list: list, listable: @target)
+        assert_not survivor.verified, "the generator owns this row; the merger must not edit it"
+      end
+
+      test "moves a personal list entry to the target" do
+        user_list = user_lists(:regular_user_books_favorites)
+        # This fixture row already links the list to @target; clear it so this test
+        # exercises the no-collision branch, which repoints rather than drops.
+        user_list_items(:regular_user_books_item_1).destroy!
+        entry = UserListItem.create!(user_list: user_list, listable: @source, position: 5)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, entry.reload.listable_id
+      end
+
+      test "drops a personal list entry when the target is already in that list" do
+        user_list = user_lists(:regular_user_books_favorites)
+        # user_list_items(:regular_user_books_item_1) already links this list to @target.
+        duplicate = UserListItem.create!(user_list: user_list, listable: @source, position: 2)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_not UserListItem.exists?(duplicate.id)
+        assert_equal 1, UserListItem.where(user_list: user_list, listable: @target).count
+      end
+
       private
 
       def attach_image(book, primary:)
