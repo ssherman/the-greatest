@@ -422,10 +422,9 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "music and games layouts retain the My Lists hydration hook" do
-    sign_in_as(@user, stub_auth: true)
-
     [Rails.application.config.domains[:music], Rails.application.config.domains[:games]].each do |domain|
       host! domain
+      sign_in_as(@user, stub_auth: true)
       get my_lists_path
 
       assert_response :success
