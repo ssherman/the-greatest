@@ -176,5 +176,18 @@ module Categories
       queued = SearchIndexRequest.where(parent_type: "Books::Book", action: :index_item).distinct.pluck(:parent_id)
       assert_equal book_ids.sort, queued.sort
     end
+
+    test "soft delete fires the reindex callback rather than bypassing it" do
+      category = categories(:books_novels_genre)
+
+      # The end-to-end test above cannot see this: soft_delete destroys the join
+      # rows in the same transaction, so by the time after_update_commit fires
+      # there is nothing left to queue and every row it observes came from
+      # CategoryItem#after_destroy. Asserting on the call itself is what makes
+      # a revert to update_column -- which fires no callbacks at all -- go red.
+      Categories::ItemReindexer.expects(:call).with(category: category).at_least_once
+
+      Categories::Deleter.new(category: category, soft: true).delete
+    end
   end
 end
