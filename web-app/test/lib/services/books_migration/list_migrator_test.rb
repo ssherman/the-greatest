@@ -119,6 +119,24 @@ module Services
         end
       end
 
+      # The child migrators (list_items, ranked_lists, list_penalties) skip rows
+      # whose parent is one of these ids and fail loud on any other missing
+      # parent, so the id set has to be resolved the same way build_rows drops
+      # them: by name, from the legacy lists table. LegacyBooks::Record skips
+      # connects_to in test, so LegacyBooks::List reads the ordinary test
+      # database here -- which is why creating real rows exercises the query.
+      test "superseded_legacy_list_ids resolves the superseded names, and only those" do
+        superseded = ListMigrator::SUPERSEDED_LIST_NAMES.map do |name|
+          ::Books::List.create!(name: name)
+        end
+        ordinary = ::Books::List.create!(name: "An Ordinary Legacy List")
+
+        ids = ListMigrator.superseded_legacy_list_ids
+
+        superseded.each { |list| assert_includes ids, list.id }
+        assert_not_includes ids, ordinary.id
+      end
+
       test "is idempotent on id" do
         run_migrator([legacy_row("id" => 994001)])
 

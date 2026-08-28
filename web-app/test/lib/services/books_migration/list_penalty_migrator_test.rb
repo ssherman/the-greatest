@@ -47,14 +47,29 @@ class Services::BooksMigration::ListPenaltyMigratorTest < ActiveSupport::TestCas
 
   # ListMigrator deliberately drops the superseded users' favorites lists, so a
   # legacy list_con_list can legitimately point at a list that was never imported.
-  test "skips a list_con_list whose list was not migrated" do
+  test "skips a list_con_list belonging to a superseded users' favorites list" do
     missing = List.maximum(:id).to_i + 999_999
+    Services::BooksMigration::ListMigrator.stubs(:superseded_legacy_list_ids).returns(Set[missing])
     result = nil
     assert_no_difference -> { ListPenalty.count } do
       result = run_migrator([lcl(5, "list_id" => missing)])
     end
     assert result[:success], result[:error]
     assert_equal 0, result[:data][:count]
+  end
+
+  # Scoped to the three superseded ids and nothing else: a ListMigrator that died
+  # partway leaves a non-empty @list_ids, and a blanket skip would then drop the
+  # penalties of every list it never reached without a word.
+  test "fails loud when the parent list is missing for any other reason" do
+    missing = List.maximum(:id).to_i + 999_999
+    result = nil
+    assert_no_difference -> { ListPenalty.count } do
+      result = run_migrator([lcl(8, "list_id" => missing)])
+    end
+    refute result[:success]
+    assert_match(/list_con_list id=8/, result[:error])
+    assert_match(/#{missing}/, result[:error])
   end
 
   test "fails loud when no Books::List has been migrated at all" do

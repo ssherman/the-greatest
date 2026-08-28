@@ -40,6 +40,25 @@ module Services
         "Our Users' Favorite Books of All Time"
       ].freeze
 
+      # The legacy ids of the lists SUPERSEDED_LIST_NAMES drops -- the ONLY
+      # parents the child migrators (list_items, ranked_lists, list_penalties)
+      # may find missing without failing loud.
+      #
+      # Resolved by name against the same legacy table build_rows drops on, so
+      # the exclusion and the children's allowance can never disagree. Each child
+      # migrator memoizes the result once per run in preload_context; there is
+      # deliberately no class-level memo, which would outlive the run and go
+      # stale.
+      #
+      # The alternative -- "skip any missing parent" -- is what this replaces,
+      # and it was unsafe: BulkUpsertMigrator commits each batch independently,
+      # so a ListMigrator that failed after its first batch leaves a NON-EMPTY
+      # set of imported lists, and a blanket skip then silently discards the
+      # children of every ordinary list it never reached while reporting success.
+      def self.superseded_legacy_list_ids
+        LegacyBooks::List.where(name: SUPERSEDED_LIST_NAMES).pluck(:id).to_set
+      end
+
       private
 
       def legacy_model

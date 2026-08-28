@@ -46,14 +46,31 @@ module Services
       # ListMigrator deliberately drops the superseded users' favorites lists, and
       # list_items.list_id carries a real foreign key -- so importing their items
       # would abort the whole run with a foreign-key violation, not just orphan a row.
-      test "skips a list_item whose list was not migrated" do
+      test "skips a list_item belonging to a superseded users' favorites list" do
         missing = List.maximum(:id).to_i + 999_999
+        ListMigrator.stubs(:superseded_legacy_list_ids).returns(Set[missing])
         result = nil
         assert_no_difference -> { ListItem.count } do
           result = run_migrator([legacy_row("id" => 8000042, "list_id" => missing)])
         end
         assert result[:success], result[:error]
         assert_equal 0, result[:data][:count]
+      end
+
+      # The skip above is scoped to the three superseded ids and nothing else.
+      # BulkUpsertMigrator commits each batch on its own, so a ListMigrator that
+      # died partway leaves a non-empty @list_ids -- and a blanket "parent missing?
+      # skip it" would then silently drop the children of every list it never
+      # reached and still report success.
+      test "fails loud when the parent list is missing for any other reason" do
+        missing = List.maximum(:id).to_i + 999_999
+        result = nil
+        assert_no_difference -> { ListItem.count } do
+          result = run_migrator([legacy_row("id" => 8000043, "list_id" => missing)])
+        end
+        refute result[:success]
+        assert_match(/8000043/, result[:error])
+        assert_match(/#{missing}/, result[:error])
       end
 
       test "fails loud when no Books::List has been migrated at all" do
