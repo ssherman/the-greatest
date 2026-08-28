@@ -199,6 +199,47 @@ module Books
           item_id: @target.id).count
       end
 
+      test "moves a description the target does not already have" do
+        description = Description.create!(
+          describable: @source, kind: :blurb, locale: "en", source: :ai_generated, content: "A summary."
+        )
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, description.reload.describable_id
+      end
+
+      test "drops a source description that collides on kind, locale, source and source_name" do
+        Description.create!(
+          describable: @target, kind: :blurb, locale: "en", source: :ai_generated, content: "Target's."
+        )
+        duplicate = Description.create!(
+          describable: @source, kind: :blurb, locale: "en", source: :ai_generated, content: "Source's."
+        )
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_not Description.exists?(duplicate.id)
+      end
+
+      test "demotes a moved preferred description when the target already has one for that key" do
+        Description.create!(
+          describable: @target, kind: :blurb, locale: "en", source: :ai_generated,
+          content: "Target's.", rank: :preferred
+        )
+        moved = Description.create!(
+          describable: @source, kind: :blurb, locale: "en", source: :manual,
+          content: "Source's.", rank: :preferred
+        )
+
+        result = ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        moved.reload
+        assert_equal @target.id, moved.describable_id
+        assert_not moved.preferred?, "two preferred rows for one kind+locale violates the index"
+      end
+
       private
 
       def attach_image(book, primary:)
