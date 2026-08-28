@@ -16,13 +16,23 @@ module Services
         def call
           write = nil
           committed_result = nil
+          caller_transaction_open = goal.class.current_transaction.open?
           goal.class.transaction do |transaction|
-            write = capture_and_save
+            write = capture_and_save(reject_privacy_revocation: caller_transaction_open)
             if write[:persisted]
               transaction.after_commit do
                 committed_result = invalidate_cache(write)
               end
             end
+          end
+
+          if write[:privacy_revocation_rejected]
+            return result(
+              success: false,
+              persisted: false,
+              purge_confirmed: nil,
+              errors: ["Privacy revocation cannot run inside an existing transaction"]
+            )
           end
 
           unless write[:persisted]
@@ -47,7 +57,7 @@ module Services
         # writes use the same order -- owner, then goal -- so neither path can
         # observe half of the other's before/after count window or deadlock by
         # acquiring the same two coordination locks in reverse.
-        def capture_and_save
+        def capture_and_save(reject_privacy_revocation:)
           lock_current_owner
           goal.reload(lock: true) if goal.persisted?
 
@@ -56,7 +66,10 @@ module Services
           goal.assign_attributes(attributes)
           privacy_revocation = before_public && !goal.public?
 
-          if goal.save
+          if privacy_revocation && reject_privacy_revocation
+            goal.restore_attributes
+            {persisted: false, privacy_revocation_rejected: true}
+          elsif goal.save
             after_urls = goal.public? ? cached_urls : []
             {
               persisted: true,

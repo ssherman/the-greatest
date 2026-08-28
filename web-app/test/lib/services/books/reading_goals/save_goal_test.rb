@@ -78,51 +78,26 @@ module Services
           end
         end
 
-        test "defers privacy revocation until an enclosing transaction commits" do
+        test "rejects privacy revocation inside an enclosing transaction" do
           goal = public_goal
-          calls = []
-          purge = Object.new
-          purge.define_singleton_method(:purge_urls) do |domain, urls|
-            calls << [domain, urls]
-            {success: true}
-          end
-          Cloudflare::PurgeService.stubs(:new).returns(purge)
+          original_name = goal.name
+          Cloudflare::PurgeService.expects(:new).never
+          ::Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).never
 
           result = with_purge_token do
             ::Books::ReadingGoal.transaction do
-              nested_result = SaveGoal.call(goal: goal, attributes: {public: false})
-              assert nested_result.success?
-              assert_nil nested_result.data[:purge_confirmed]
-              assert_empty calls
-              nested_result
+              SaveGoal.call(goal: goal, attributes: {name: "Rejected", public: false})
             end
           end
 
-          assert_equal [[:books, [goal_url(goal)]]], calls
-          refute goal.reload.public?
-          assert result.success?
-        end
-
-        test "drops privacy revocation when an enclosing transaction rolls back" do
-          goal = public_goal
-          calls = []
-          purge = Object.new
-          purge.define_singleton_method(:purge_urls) do |domain, urls|
-            calls << [domain, urls]
-            {success: true}
-          end
-          Cloudflare::PurgeService.stubs(:new).returns(purge)
-
-          with_purge_token do
-            ::Books::ReadingGoal.transaction do
-              SaveGoal.call(goal: goal, attributes: {public: false})
-              assert_empty calls
-              raise ActiveRecord::Rollback
-            end
-          end
-
-          assert_empty calls
+          refute result.success?
+          refute result.data[:persisted]
+          assert_nil result.data[:purge_confirmed]
+          assert_equal ["Privacy revocation cannot run inside an existing transaction"], result.errors
+          assert goal.public?
+          assert_equal original_name, goal.name
           assert goal.reload.public?
+          assert_equal original_name, goal.name
         end
 
         test "a concurrently deleted goal returns a failure without purging" do
