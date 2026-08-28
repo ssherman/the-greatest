@@ -12,7 +12,7 @@ module Services
       end
 
       def call
-        UserListItem.transaction do
+        UserListItem.transaction(requires_new: true) do
           memberships = locked_memberships
           target = memberships.find { |membership| membership.user_list_id == user_list.id }
           sources = memberships.reject { |membership| membership.user_list_id == user_list.id }

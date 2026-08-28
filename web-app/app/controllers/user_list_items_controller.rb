@@ -11,10 +11,11 @@ class UserListItemsController < ApplicationController
     listable = @user_list.class.listable_class.find(item_attrs[:listable_id])
     candidate = @user_list.user_list_items.new(listable: listable)
     authorize candidate, policy_class: UserListItemPolicy
-    result = Services::UserLists::AddItem.call(user_list: @user_list, listable: listable)
+    result = mutate_with_books_goal_invalidation(listable: listable, owner: @user_list.user) do
+      Services::UserLists::AddItem.call(user_list: @user_list, listable: listable)
+    end
     return render_mutation_failure(result, candidate: candidate) unless result.success?
 
-    invalidate_books_goals(result)
     render json: {
       user_list_item: serialize_item(result.data[:item]),
       removed_user_list_items: result.data[:removed_items].map { |item| serialize_item(item) },
@@ -28,10 +29,11 @@ class UserListItemsController < ApplicationController
   def destroy
     item = @user_list.user_list_items.find(params[:id])
     authorize item, policy_class: UserListItemPolicy
-    result = Services::UserLists::RemoveItem.call(item: item)
+    result = mutate_with_books_goal_invalidation(listable: item.listable, owner: @user_list.user) do
+      Services::UserLists::RemoveItem.call(item: item)
+    end
     return render_mutation_failure(result) unless result.success?
 
-    invalidate_books_goals(result)
     render json: {
       ok: true,
       removed_user_list_item: serialize_item(result.data[:item]),
@@ -43,13 +45,14 @@ class UserListItemsController < ApplicationController
   def update_completion
     item = current_user.user_list_items.find(params[:id])
     authorize item, :update_completion?, policy_class: UserListItemPolicy
-    result = Services::UserLists::UpdateCompletion.call(item: item, completed_on: completion_attrs[:completed_on])
+    result = mutate_with_books_goal_invalidation(listable: item.listable, owner: item.user_list.user) do
+      Services::UserLists::UpdateCompletion.call(item: item, completed_on: completion_attrs[:completed_on])
+    end
     unless result.success?
       redirect_to my_list_path(item.user_list), alert: result.errors.to_sentence, status: :see_other
       return
     end
 
-    invalidate_books_goals(result)
     redirect_to my_list_path(item.user_list), notice: completion_message(result), status: :see_other
   end
 
@@ -124,14 +127,29 @@ class UserListItemsController < ApplicationController
     item.user_list.is_a?(Books::UserList) && item.user_list.read? && item.completed_on.nil?
   end
 
-  def invalidate_books_goals(result)
-    return unless result.data[:listable].is_a?(Books::Book)
+  # SaveGoal and DestroyGoal use the same owner-first lock order before taking a
+  # reading-goal lock. Keeping the Task 3 mutation and post-write count capture
+  # inside this owner lock prevents another completion request from interleaving
+  # between them. The Sidekiq push is deliberately after with_lock returns.
+  def mutate_with_books_goal_invalidation(listable:, owner:)
+    return yield unless listable.is_a?(Books::Book)
 
-    Services::Books::ReadingGoals::CompletionChangeInvalidator.call(
-      user: result.data[:item].user_list.user,
-      old_completed_on: result.data[:old_completed_on],
-      new_completed_on: result.data[:new_completed_on]
-    )
+    result = nil
+    urls = []
+    owner.with_lock do
+      result = yield
+      if result.success?
+        urls = Services::Books::ReadingGoals::CompletionChangeInvalidator.call(
+          user: owner,
+          old_completed_on: result.data[:old_completed_on],
+          new_completed_on: result.data[:new_completed_on],
+          enqueue: false
+        )
+      end
+    end
+
+    Books::ReadingGoals::PurgeCachedPagesJob.perform_async("books", urls) if urls.any?
+    result
   end
 
   def serialize_item(item)

@@ -11,7 +11,7 @@ module Services
       end
 
       def call
-        UserListItem.transaction do
+        UserListItem.transaction(requires_new: true) do
           item = UserListItem.lock.find(@item.id)
           if item.user_list.completed_on_enabled?
             new_completed_on = parsed_completed_on

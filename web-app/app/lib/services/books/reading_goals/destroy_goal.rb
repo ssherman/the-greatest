@@ -13,8 +13,7 @@ module Services
         end
 
         def call
-          urls = goal.public? ? cached_urls : []
-          goal.destroy!
+          urls = capture_and_destroy
           ::Books::ReadingGoals::PurgeCachedPagesJob.perform_async("books", urls) if urls.any?
 
           Result.new(success?: true, data: {goal: goal}, errors: [])
@@ -25,6 +24,20 @@ module Services
         private
 
         attr_reader :goal
+
+        # Match SaveGoal and completion writes: owner first, then goal. The
+        # reload under lock makes a stale caller observe the database's current
+        # privacy and range before the row disappears.
+        def capture_and_destroy
+          goal.class.transaction do
+            owner_id = goal.class.where(id: goal.id).pick(:user_id)
+            ::User.lock.find(owner_id)
+            goal.reload(lock: true)
+            urls = goal.public? ? cached_urls : []
+            goal.destroy!
+            urls
+          end
+        end
 
         def cached_urls
           count = ProgressQuery.call(goal: goal).count

@@ -80,6 +80,54 @@ module Services
         assert UserListItem.exists?(source.id)
       end
 
+      test "a database uniqueness failure under the owner lock leaves the outer transaction usable" do
+        source = @reading_list.user_list_items.create!(listable: @book)
+        duplicate_attributes = {
+          user_list_id: @read_list.id,
+          listable_type: @book.class.base_class.name,
+          listable_id: @book.id,
+          position: 1,
+          created_at: Time.current,
+          updated_at: Time.current
+        }
+        force_duplicate = proc do
+          UserListItem.insert_all!([duplicate_attributes])
+          UserListItem.insert_all!([duplicate_attributes])
+        end
+        UserListItem.set_callback(:save, :before, force_duplicate)
+
+        @user.with_lock do
+          result = AddItem.call(user_list: @read_list, listable: @book)
+
+          refute result.success?
+          assert_equal ["Item already in list"], result.errors
+          assert UserListItem.exists?(source.id)
+          assert_equal [source.id], UserListItem.where(id: source.id).pluck(:id)
+        end
+      ensure
+        UserListItem.skip_callback(:save, :before, force_duplicate) if force_duplicate
+      end
+
+      test "a completed add inside the owner lock is visible to the reading goal query" do
+        @reading_list.user_list_items.create!(listable: @book)
+        goal = ::Books::ReadingGoal.create!(
+          user: @user,
+          name: "Locked goal",
+          target_count: 1,
+          starts_on: Date.new(2026, 1, 1),
+          ends_on: Date.new(2026, 12, 31),
+          public: true
+        )
+
+        @user.with_lock do
+          before_count = Services::Books::ReadingGoals::ProgressQuery.call(goal: goal).count
+          result = AddItem.call(user_list: @read_list, listable: @book, today: Date.new(2026, 8, 26))
+
+          assert result.success?
+          assert_equal before_count + 1, Services::Books::ReadingGoals::ProgressQuery.call(goal: goal).count
+        end
+      end
+
       test "a target save abort rolls back source removal" do
         source = @reading_list.user_list_items.create!(listable: @book)
         UserListItem.any_instance.stubs(:save!).raises(ActiveRecord::RecordNotSaved.new("save aborted", UserListItem.new))

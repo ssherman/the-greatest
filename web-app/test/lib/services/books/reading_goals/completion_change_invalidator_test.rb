@@ -103,6 +103,21 @@ module Services
           end
         end
 
+        test "can return URLs without enqueueing for a caller-owned transaction" do
+          goal = public_goal(starts_on: Date.new(2026, 1, 1), ends_on: Date.new(2026, 12, 31))
+          add_read_item(Date.new(2026, 6, 1))
+          ::Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).never
+
+          urls = CompletionChangeInvalidator.call(
+            user: @user,
+            old_completed_on: nil,
+            new_completed_on: Date.new(2026, 6, 1),
+            enqueue: false
+          )
+
+          assert_equal [goal_url(goal)], urls
+        end
+
         private
 
         def public_goal(**attributes)

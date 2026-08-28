@@ -28,7 +28,12 @@ module Services
           goal = public_goal
           25.times { |index| add_read_item(goal.starts_on, title: "Before #{index}") }
           expected = [goal_url(goal), "#{goal_url(goal)}/page/2"]
-          ::Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).with("books", expected)
+          transaction_depth = ActiveRecord::Base.connection.open_transactions
+          ::Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).with do |domain, urls|
+            assert_equal transaction_depth, ActiveRecord::Base.connection.open_transactions,
+              "enqueue must happen after the goal transaction exits"
+            domain == "books" && urls == expected
+          end
 
           result = SaveGoal.call(
             goal: goal,
@@ -37,6 +42,76 @@ module Services
 
           assert result.success?
           assert_equal Date.new(2027, 1, 1), goal.reload.starts_on
+        end
+
+        test "reloads a stale private instance before revoking a currently public goal" do
+          goal = public_goal(public: false)
+          ::Books::ReadingGoal.where(id: goal.id).update_all(public: true) # rubocop:disable Rails/SkipsModelValidations
+          purge = mock("purge")
+          purge.expects(:purge_urls).with(:books, [goal_url(goal)]).returns(success: true)
+          Cloudflare::PurgeService.stubs(:new).returns(purge)
+          ::Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).never
+
+          result = with_purge_token do
+            SaveGoal.call(goal: goal, attributes: {public: false})
+          end
+
+          assert result.success?
+          refute goal.reload.public?
+          assert result.data[:purge_confirmed]
+        end
+
+        test "uses the current database range when a stale instance hides an old second page" do
+          goal = public_goal(starts_on: Date.new(2027, 1, 1), ends_on: Date.new(2027, 12, 31))
+          goal.update_columns(starts_on: Date.new(2026, 1, 1), ends_on: Date.new(2026, 12, 31))
+          stale_goal = ::Books::ReadingGoal.find(goal.id)
+          stale_goal.starts_on = Date.new(2027, 1, 1)
+          stale_goal.ends_on = Date.new(2027, 12, 31)
+          stale_goal.clear_changes_information
+          25.times { |index| add_read_item(Date.new(2026, 6, 1), title: "Stale range #{index}") }
+          expected = [goal_url(goal), "#{goal_url(goal)}/page/2"]
+          ::Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).with("books", expected)
+
+          result = SaveGoal.call(goal: stale_goal, attributes: {name: "Current-range update"})
+
+          assert result.success?
+          assert_equal Date.new(2026, 1, 1), stale_goal.reload.starts_on
+        end
+
+        test "a stale public instance does not add old pages to a current private to public update" do
+          goal = public_goal(starts_on: Date.new(2026, 1, 1), ends_on: Date.new(2026, 12, 31))
+          25.times { |index| add_read_item(Date.new(2026, 6, 1), title: "Old private range #{index}") }
+          stale_goal = ::Books::ReadingGoal.find(goal.id)
+          goal.update_columns(public: false, starts_on: Date.new(2027, 1, 1), ends_on: Date.new(2027, 12, 31))
+          ::Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async)
+            .with("books", [goal_url(goal)])
+
+          result = SaveGoal.call(goal: stale_goal, attributes: {public: true})
+
+          assert result.success?
+          assert stale_goal.reload.public?
+          assert_equal Date.new(2027, 1, 1), stale_goal.starts_on
+        end
+
+        test "locks the current owner before the reading goal" do
+          goal = public_goal
+          ::Books::ReadingGoals::PurgeCachedPagesJob.stubs(:perform_async)
+          locks = capture_row_locks do
+            SaveGoal.call(goal: goal, attributes: {name: "Locked update"})
+          end
+
+          assert_equal ["users", "books_reading_goals"], locks
+        end
+
+        test "locks a new goal's owner while saving and counting" do
+          goal = ::Books::ReadingGoal.new(user: @user)
+          ::Books::ReadingGoals::PurgeCachedPagesJob.stubs(:perform_async)
+          locks = capture_row_locks do
+            SaveGoal.call(goal: goal, attributes: valid_attributes(public: true))
+          end
+
+          assert_equal ["users"], locks
+          assert goal.persisted?
         end
 
         test "does not purge when validation fails" do
@@ -69,10 +144,12 @@ module Services
           urls = Array.new(101) { |index| "https://books.test/reading_goals/#{goal.id}/variant/#{index}" }
           CachedUrls.expects(:call).with(goal: goal, count: 0).returns(urls)
           batches = []
+          transaction_depth = ActiveRecord::Base.connection.open_transactions
           purge = Object.new
           purge.define_singleton_method(:purge_urls) do |domain, batch|
             raise "wrong domain" unless domain == :books
             raise "origin is still public" if goal.reload.public?
+            raise "goal transaction is still open" unless ActiveRecord::Base.connection.open_transactions == transaction_depth
 
             batches << batch
             {success: true}
@@ -128,6 +205,53 @@ module Services
           end
         end
 
+        test "a partial synchronous revocation failure retries the full old URL set" do
+          goal = public_goal
+          urls = Array.new(101) { |index| "https://books.test/reading_goals/#{goal.id}/variant/#{index}" }
+          CachedUrls.expects(:call).with(goal: goal, count: 0).returns(urls)
+          purge = mock("purge")
+          purge.expects(:purge_urls).with(:books, urls.first(100)).returns(success: true)
+          purge.expects(:purge_urls).with(:books, urls.last(1)).returns(success: false, error: "second batch failed")
+          Cloudflare::PurgeService.stubs(:new).returns(purge)
+
+          Sidekiq::Testing.fake! do
+            result = with_purge_token do
+              SaveGoal.call(goal: goal, attributes: {public: false})
+            end
+
+            refute result.success?
+            refute goal.reload.public?
+            assert result.data[:persisted]
+            refute result.data[:purge_confirmed]
+            assert_equal ["books", urls],
+              ::Books::ReadingGoals::PurgeCachedPagesJob.jobs.last.fetch("args")
+          end
+        end
+
+        test "a synchronous purge exception persists privacy and retries the full old URL set" do
+          goal = public_goal
+          urls = Array.new(101) { |index| "https://books.test/reading_goals/#{goal.id}/variant/#{index}" }
+          CachedUrls.expects(:call).with(goal: goal, count: 0).returns(urls)
+          purge = mock("purge")
+          purge.expects(:purge_urls).with(:books, urls.first(100)).returns(success: true)
+          purge.expects(:purge_urls).with(:books, urls.last(1)).raises(StandardError.new("connection reset"))
+          Cloudflare::PurgeService.stubs(:new).returns(purge)
+
+          Sidekiq::Testing.fake! do
+            result = with_purge_token do
+              SaveGoal.call(goal: goal, attributes: {public: false})
+            end
+
+            refute result.success?
+            refute goal.reload.public?
+            assert result.data[:persisted]
+            refute result.data[:purge_confirmed]
+            assert_includes result.errors, "connection reset"
+            assert_equal ["books", urls],
+              ::Books::ReadingGoals::PurgeCachedPagesJob.jobs.last.fetch("args")
+          end
+        end
+
         private
 
         def valid_attributes(**attributes)
@@ -161,6 +285,21 @@ module Services
 
         def without_purge_token
           with_env("CLOUDFLARE_CACHE_PURGE_TOKEN" => nil) { yield }
+        end
+
+        def capture_row_locks
+          locks = []
+          subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+            sql = payload[:sql]
+            next unless sql.include?("FOR UPDATE")
+
+            locks << "users" if sql.match?(/FROM "users"/)
+            locks << "books_reading_goals" if sql.match?(/FROM "books_reading_goals"/)
+          end
+          yield
+          locks
+        ensure
+          ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
         end
       end
     end

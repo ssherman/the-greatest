@@ -10,7 +10,7 @@ module Services
       end
 
       def call
-        UserListItem.transaction do
+        UserListItem.transaction(requires_new: true) do
           item = UserListItem.lock.find(@item.id)
           old_completed_on = item.completed_on
           item.destroy!

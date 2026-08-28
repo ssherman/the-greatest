@@ -2,18 +2,20 @@ module Services
   module Books
     module ReadingGoals
       class CompletionChangeInvalidator
-        def self.call(user:, old_completed_on:, new_completed_on:)
+        def self.call(user:, old_completed_on:, new_completed_on:, enqueue: true)
           new(
             user: user,
             old_completed_on: old_completed_on,
-            new_completed_on: new_completed_on
+            new_completed_on: new_completed_on,
+            enqueue: enqueue
           ).call
         end
 
-        def initialize(user:, old_completed_on:, new_completed_on:)
+        def initialize(user:, old_completed_on:, new_completed_on:, enqueue:)
           @user = user
           @old_completed_on = old_completed_on
           @new_completed_on = new_completed_on
+          @enqueue = enqueue
         end
 
         def call
@@ -29,13 +31,13 @@ module Services
               CachedUrls.call(goal: goal, count: after_count)
           end.uniq
 
-          ::Books::ReadingGoals::PurgeCachedPagesJob.perform_async("books", urls) if urls.any?
+          ::Books::ReadingGoals::PurgeCachedPagesJob.perform_async("books", urls) if enqueue && urls.any?
           urls
         end
 
         private
 
-        attr_reader :user, :old_completed_on, :new_completed_on
+        attr_reader :user, :old_completed_on, :new_completed_on, :enqueue
 
         def affected_goals
           scope = user.books_reading_goals.public_goals

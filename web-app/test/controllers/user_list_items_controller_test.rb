@@ -34,6 +34,17 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
     assert body.fetch("message").present?
   end
 
+  test "a non-Books mutation never calls the reading goal invalidator" do
+    Services::Books::ReadingGoals::CompletionChangeInvalidator.expects(:call).never
+    Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).never
+    sign_in_as(@user, stub_auth: true)
+
+    post user_list_items_path(@list),
+      params: {user_list_item: {listable_id: @album.id}}, as: :json
+
+    assert_response :created
+  end
+
   test "adding Reading book to Read removes Reading and returns both membership changes" do
     read_list = user_lists(:regular_user_books_read)
     reading_list = Books::UserList.find_or_create_by!(user: @user, list_type: :reading) do |list|
@@ -133,8 +144,8 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
     book = books_books(:cannery_row)
     reading_list.user_list_items.create!(listable: book)
     Services::Books::ReadingGoals::CompletionChangeInvalidator.expects(:call).with(
-      user: @user, old_completed_on: nil, new_completed_on: Date.current
-    )
+      user: @user, old_completed_on: nil, new_completed_on: Date.current, enqueue: false
+    ).returns([])
 
     sign_in_as(@user, stub_auth: true)
     post user_list_items_path(read_list), params: {
@@ -169,6 +180,8 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
 
   test "non-duplicate service failure returns base service errors when the candidate is valid" do
     sign_in_as(@user, stub_auth: true)
+    Services::Books::ReadingGoals::CompletionChangeInvalidator.expects(:call).never
+    Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).never
     Services::UserLists::AddItem.stubs(:call).returns(
       Services::UserLists::MutationResult.failure(["Mutation could not be completed"])
     )
@@ -193,6 +206,8 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
     UserListItem.any_instance.stubs(:destroy!).raises(
       ActiveRecord::RecordNotDestroyed.new("destroy aborted", UserListItem.new)
     )
+    Services::Books::ReadingGoals::CompletionChangeInvalidator.expects(:call).never
+    Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).never
 
     sign_in_as(@user, stub_auth: true)
     post user_list_items_path(read_list), params: {user_list_item: {listable_id: book.id}}, as: :json
@@ -275,13 +290,30 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
       listable: books_books(:cannery_row), completed_on: completed_on
     )
     Services::Books::ReadingGoals::CompletionChangeInvalidator.expects(:call).with(
-      user: @user, old_completed_on: completed_on, new_completed_on: nil
-    )
+      user: @user, old_completed_on: completed_on, new_completed_on: nil, enqueue: false
+    ).returns([])
 
     sign_in_as(@user, stub_auth: true)
     delete user_list_item_path(read_list, item), as: :json
 
     assert_response :success
+  end
+
+  test "resolves the Books owner before destroying the dated Read item" do
+    read_list = user_lists(:regular_user_books_read)
+    completed_on = Date.new(2026, 8, 1)
+    item = read_list.user_list_items.create!(
+      listable: books_books(:cannery_row), completed_on: completed_on
+    )
+    Services::Books::ReadingGoals::CompletionChangeInvalidator.expects(:call).with(
+      user: @user, old_completed_on: completed_on, new_completed_on: nil, enqueue: false
+    ).returns([])
+
+    sign_in_as(@user, stub_auth: true)
+    delete user_list_item_path(read_list, item), as: :json
+
+    assert_response :success
+    refute UserListItem.exists?(item.id)
   end
 
   test "destroy service failure returns service errors as 422" do
@@ -353,6 +385,8 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
     sign_in_as(@user, stub_auth: true)
     item = user_list_items(:regular_user_books_item_3)
     original_completed_on = item.completed_on
+    Services::Books::ReadingGoals::CompletionChangeInvalidator.expects(:call).never
+    Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).never
 
     patch user_list_item_completion_path(item), params: {
       user_list_item: {completed_on: "March 4, 2025"}
@@ -394,8 +428,8 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
     item.update!(completed_on: nil)
     completed_on = Date.new(2025, 3, 4)
     Services::Books::ReadingGoals::CompletionChangeInvalidator.expects(:call).with(
-      user: @user, old_completed_on: nil, new_completed_on: completed_on
-    )
+      user: @user, old_completed_on: nil, new_completed_on: completed_on, enqueue: false
+    ).returns([])
 
     sign_in_as(@user, stub_auth: true)
     patch user_list_item_completion_path(item), params: {
@@ -410,8 +444,8 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
     old_completed_on = item.completed_on
     new_completed_on = Date.new(2025, 3, 4)
     Services::Books::ReadingGoals::CompletionChangeInvalidator.expects(:call).with(
-      user: @user, old_completed_on: old_completed_on, new_completed_on: new_completed_on
-    )
+      user: @user, old_completed_on: old_completed_on, new_completed_on: new_completed_on, enqueue: false
+    ).returns([])
 
     sign_in_as(@user, stub_auth: true)
     patch user_list_item_completion_path(item), params: {
@@ -421,12 +455,54 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
     assert_response :see_other
   end
 
+  test "serializes a Books mutation and URL capture under the owner lock then enqueues afterward" do
+    item = user_list_items(:regular_user_books_item_3)
+    old_completed_on = item.completed_on
+    new_completed_on = Date.new(2025, 3, 4)
+    url = "https://books.test/reading_goals/123"
+    owner_locked = false
+    capture_depth = nil
+    connection = ActiveRecord::Base.connection
+
+    sign_in_as(@user, stub_auth: true)
+    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+      sql = payload[:sql]
+      owner_locked = true if sql.match?(/FROM "users"/) && sql.include?("FOR UPDATE")
+    end
+    Services::Books::ReadingGoals::CompletionChangeInvalidator.expects(:call).with do |arguments|
+      assert owner_locked, "the owner row must be locked before URL capture"
+      assert_equal new_completed_on, item.reload.completed_on
+      capture_depth = connection.open_transactions
+      arguments == {
+        user: @user,
+        old_completed_on: old_completed_on,
+        new_completed_on: new_completed_on,
+        enqueue: false
+      }
+    end.returns([url])
+    Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).with do |domain, urls|
+      assert_equal "books", domain
+      assert_equal [url], urls
+      assert_operator capture_depth, :>, connection.open_transactions,
+        "enqueue must happen after the owner-lock transaction exits"
+      true
+    end
+
+    patch user_list_item_completion_path(item), params: {
+      user_list_item: {completed_on: new_completed_on.iso8601}
+    }
+
+    assert_response :see_other
+  ensure
+    ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
+  end
+
   test "clearing a completion date invalidates goals for the old date" do
     item = user_list_items(:regular_user_books_item_3)
     old_completed_on = item.completed_on
     Services::Books::ReadingGoals::CompletionChangeInvalidator.expects(:call).with(
-      user: @user, old_completed_on: old_completed_on, new_completed_on: nil
-    )
+      user: @user, old_completed_on: old_completed_on, new_completed_on: nil, enqueue: false
+    ).returns([])
 
     sign_in_as(@user, stub_auth: true)
     patch user_list_item_completion_path(item), params: {

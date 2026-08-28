@@ -14,21 +14,15 @@ module Services
         end
 
         def call
-          before_public = goal.persisted? && goal.public?
-          before_urls = before_public ? cached_urls : []
-
-          goal.assign_attributes(attributes)
-          privacy_revocation = before_public && !goal.public?
-
-          unless goal.save
+          write = capture_and_save
+          unless write[:persisted]
             return result(success: false, persisted: false, purge_confirmed: nil, errors: goal.errors.full_messages)
           end
 
-          if privacy_revocation
-            revoke_public_cache(before_urls)
+          if write[:privacy_revocation]
+            revoke_public_cache(write[:before_urls])
           else
-            after_urls = goal.public? ? cached_urls : []
-            enqueue((before_urls + after_urls).uniq)
+            enqueue(write[:urls])
             result(success: true, persisted: true, purge_confirmed: nil, errors: [])
           end
         end
@@ -36,6 +30,43 @@ module Services
         private
 
         attr_reader :goal, :attributes
+
+        # Every Books completion mutation takes the owner's row first. Goal
+        # writes use the same order -- owner, then goal -- so neither path can
+        # observe half of the other's before/after count window or deadlock by
+        # acquiring the same two coordination locks in reverse.
+        def capture_and_save
+          goal.class.transaction do
+            lock_current_owner
+            goal.reload(lock: true) if goal.persisted?
+
+            before_public = goal.persisted? && goal.public?
+            before_urls = before_public ? cached_urls : []
+            goal.assign_attributes(attributes)
+            privacy_revocation = before_public && !goal.public?
+
+            if goal.save
+              after_urls = goal.public? ? cached_urls : []
+              {
+                persisted: true,
+                privacy_revocation: privacy_revocation,
+                before_urls: before_urls,
+                urls: (before_urls + after_urls).uniq
+              }
+            else
+              {persisted: false}
+            end
+          end
+        end
+
+        def lock_current_owner
+          owner_id = if goal.persisted?
+            goal.class.where(id: goal.id).pick(:user_id)
+          else
+            goal.user_id
+          end
+          ::User.lock.find(owner_id)
+        end
 
         def cached_urls
           count = ProgressQuery.call(goal: goal).count
