@@ -101,6 +101,10 @@ module Books
         merge_external_links
         merge_ai_chats
         merge_images
+        merge_identifiers
+        merge_book_countries
+        merge_series_books
+        merge_category_items
       end
 
       # books_editions has no unique index on book_id, so there is no collision
@@ -131,6 +135,65 @@ module Books
         end
 
         @stats[:images] = count
+      end
+
+      def merge_identifiers
+        count = 0
+        source_book.identifiers.find_each do |identifier|
+          existing = target_book.identifiers.find_by(
+            identifier_type: identifier.identifier_type,
+            value: identifier.value
+          )
+
+          if existing
+            identifier.destroy!
+          else
+            identifier.update!(identifiable_id: target_book.id)
+            count += 1
+          end
+        end
+        @stats[:identifiers] = count
+      end
+
+      # destroy!, never delete_all: Books::BookCountry declares
+      # counter_cache: :book_count on country, and a raw delete leaves
+      # books_countries.book_count overcounting permanently.
+      def merge_book_countries
+        count = 0
+        source_book.book_countries.find_each do |link|
+          if target_book.book_countries.exists?(country_id: link.country_id)
+            link.destroy!
+          else
+            link.update!(book_id: target_book.id)
+            count += 1
+          end
+        end
+        @stats[:book_countries] = count
+      end
+
+      def merge_series_books
+        count = 0
+        source_book.series_books.find_each do |link|
+          if target_book.series_books.exists?(series_id: link.series_id)
+            link.destroy!
+          else
+            link.update!(book_id: target_book.id)
+            count += 1
+          end
+        end
+        @stats[:series_books] = count
+      end
+
+      # Copy-or-skip rather than move: a CategoryItem carries no state worth
+      # preserving beyond the link itself, so the source's own row simply dies
+      # with it. This is the music pattern.
+      def merge_category_items
+        count = 0
+        source_book.category_items.find_each do |category_item|
+          target_book.category_items.find_or_create_by!(category_id: category_item.category_id)
+          count += 1
+        end
+        @stats[:category_items] = count
       end
 
       # Filled in by later tasks.

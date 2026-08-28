@@ -113,6 +113,92 @@ module Books
         assert moved.reload.primary
       end
 
+      test "moves an identifier the target does not already have" do
+        identifier = Identifier.create!(
+          identifiable: @source, identifier_type: :books_work_isbn10, value: "0140449132"
+        )
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, identifier.reload.identifiable_id
+      end
+
+      test "drops a source identifier the target already has" do
+        Identifier.create!(
+          identifiable: @target, identifier_type: :books_work_isbn10, value: "0140449132"
+        )
+        duplicate = Identifier.create!(
+          identifiable: @source, identifier_type: :books_work_isbn10, value: "0140449132"
+        )
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_not Identifier.exists?(duplicate.id)
+        assert_equal 1, Identifier.where(
+          identifiable_type: "Books::Book", identifiable_id: @target.id,
+          identifier_type: "books_work_isbn10", value: "0140449132"
+        ).count
+      end
+
+      test "moves a country the target does not already have" do
+        link = ::Books::BookCountry.create!(book: @source, country: books_countries(:japanese))
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, link.reload.book_id
+      end
+
+      test "drops a source country the target already has and keeps the counter honest" do
+        country = books_countries(:french) # war_and_peace already links to this
+        duplicate = ::Books::BookCountry.create!(book: @source, country: country)
+        before = country.reload.book_count
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_not ::Books::BookCountry.exists?(duplicate.id)
+        assert_equal before - 1, country.reload.book_count,
+          "the drop must go through destroy! so the counter_cache decrements"
+      end
+
+      test "moves a series link the target does not already have" do
+        link = books_series_books(:asoiaf_novella) # belongs to crime_and_punishment
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, link.reload.book_id
+      end
+
+      test "drops a source series link the target already has" do
+        series = books_series(:asoiaf)
+        ::Books::SeriesBook.create!(series: series, book: @target, position: 9)
+        duplicate = books_series_books(:asoiaf_novella)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_not ::Books::SeriesBook.exists?(duplicate.id)
+        assert_equal 1, ::Books::SeriesBook.where(series: series, book: @target).count
+      end
+
+      test "copies a category the target does not already have" do
+        category = ::Books::Category.create!(name: "Russian Realism", category_type: :genre)
+        CategoryItem.create!(category: category, item: @source)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert CategoryItem.exists?(category_id: category.id, item: @target)
+      end
+
+      test "does not duplicate a category the target already has" do
+        category = ::Books::Category.create!(name: "Russian Realism", category_type: :genre)
+        CategoryItem.create!(category: category, item: @target)
+        CategoryItem.create!(category: category, item: @source)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal 1, CategoryItem.where(category_id: category.id, item_type: "Books::Book",
+          item_id: @target.id).count
+      end
+
       private
 
       def attach_image(book, primary:)
