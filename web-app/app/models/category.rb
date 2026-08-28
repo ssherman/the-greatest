@@ -50,6 +50,12 @@ class Category < ApplicationRecord
   has_many :category_items, dependent: :destroy, inverse_of: :category
   has_many :ai_chats, as: :parent, dependent: :destroy
 
+  # Search indexing: requeue this category's items when the category row itself
+  # changes in a way as_indexed_json reads. CategoryItem covers adding and removing
+  # an item; without this, editing the category left every item it holds with a stale
+  # indexed document until something unrelated reindexed it.
+  after_update_commit :queue_items_for_reindexing
+
   # Validations
   validates :name, presence: true
   validates :type, presence: true
@@ -77,6 +83,14 @@ class Category < ApplicationRecord
     update!(deleted: true)
   end
 
+  # Which attribute changes actually invalidate an indexed document. Overridden per
+  # STI subclass to mirror exactly what that domain's as_indexed_json reads -- every
+  # indexed model filters category_ids by `deleted`, and only Books::Book reads any
+  # more than that. Public so tests can assert on it directly.
+  def search_relevant_change?
+    saved_change_to_deleted?
+  end
+
   # "Americana (Genre)". One definition, because the admin autocomplete JSON
   # and the multi-select picker a later increment adds both render it.
   # category_type is nullable, so the Unknown branch is reachable rather than
@@ -93,5 +107,13 @@ class Category < ApplicationRecord
   # Check if category should regenerate friendly_id when name changes
   def should_generate_new_friendly_id?
     slug.blank? || name_changed?
+  end
+
+  private
+
+  def queue_items_for_reindexing
+    return unless search_relevant_change?
+
+    Categories::ItemReindexer.call(category: self)
   end
 end

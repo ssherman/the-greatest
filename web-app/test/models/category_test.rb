@@ -181,4 +181,52 @@ class CategoryTest < ActiveSupport::TestCase
 
     assert_equal "Fiction (Unknown)", category.reload.name_with_type
   end
+
+  test "flipping deleted queues every item for reindexing" do
+    category = categories(:music_rock_genre)
+    album_ids = CategoryItem.where(category_id: category.id, item_type: "Music::Album").pluck(:item_id)
+    assert_equal 2, album_ids.size, "fixture drift: music_rock_genre should hold 2 albums"
+    SearchIndexRequest.delete_all
+
+    category.soft_delete!
+
+    queued = SearchIndexRequest.where(parent_type: "Music::Album", action: :index_item).pluck(:parent_id)
+    assert_equal album_ids.sort, queued.sort
+  end
+
+  test "un-deleting a category also queues its items" do
+    category = categories(:music_deleted_genre)
+    SearchIndexRequest.delete_all
+
+    category.update!(deleted: false)
+
+    assert category.search_relevant_change?
+  end
+
+  test "editing description, slug or parent queues nothing" do
+    category = categories(:music_rock_genre)
+    SearchIndexRequest.delete_all
+
+    assert_no_difference -> { SearchIndexRequest.count } do
+      category.update!(description: "a different description")
+      category.update!(slug: "rock-renamed-slug")
+      category.update!(parent: categories(:music_progressive_rock_genre))
+    end
+  end
+
+  test "creating a category queues nothing" do
+    assert_no_difference -> { SearchIndexRequest.count } do
+      Music::Category.create!(name: "Shoegaze", category_type: "genre")
+    end
+  end
+
+  test "a deleted flip inside without_search_indexing queues nothing" do
+    category = categories(:music_rock_genre)
+
+    assert_no_difference -> { SearchIndexRequest.count } do
+      Services::BooksMigration.without_search_indexing do
+        category.soft_delete!
+      end
+    end
+  end
 end
