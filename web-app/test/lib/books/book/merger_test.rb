@@ -376,6 +376,88 @@ module Books
           "the survivor's own corrections must be untouched, and none moved onto it"
       end
 
+      test "moves a book relationship to the target" do
+        relationship = ::Books::BookRelationship.create!(
+          book: @source, related_book: books_books(:got), relation_type: :related_to
+        )
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, relationship.reload.book_id
+      end
+
+      test "drops a relationship that would make the target relate to itself" do
+        relationship = ::Books::BookRelationship.create!(
+          book: @source, related_book: @target, relation_type: :related_to
+        )
+
+        result = ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "a self-relation must be dropped, not roll the merge back"
+        assert_not ::Books::BookRelationship.exists?(relationship.id)
+      end
+
+      test "drops a relationship the target already holds" do
+        other = books_books(:got)
+        ::Books::BookRelationship.create!(
+          book: @target, related_book: other, relation_type: :related_to
+        )
+        duplicate = ::Books::BookRelationship.create!(
+          book: @source, related_book: other, relation_type: :related_to
+        )
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_not ::Books::BookRelationship.exists?(duplicate.id)
+      end
+
+      test "moves an inverse book relationship to the target" do
+        relationship = ::Books::BookRelationship.create!(
+          book: books_books(:got), related_book: @source, relation_type: :related_to
+        )
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, relationship.reload.related_book_id
+      end
+
+      test "drops an inverse relationship that would make the target relate to itself" do
+        relationship = ::Books::BookRelationship.create!(
+          book: @target, related_book: @source, relation_type: :related_to
+        )
+
+        result = ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "a self-relation must be dropped, not roll the merge back"
+        assert_not ::Books::BookRelationship.exists?(relationship.id)
+      end
+
+      test "drops an inverse relationship the target already holds" do
+        other = books_books(:got)
+        ::Books::BookRelationship.create!(
+          book: other, related_book: @target, relation_type: :related_to
+        )
+        duplicate = ::Books::BookRelationship.create!(
+          book: other, related_book: @source, relation_type: :related_to
+        )
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_not ::Books::BookRelationship.exists?(duplicate.id)
+      end
+
+      # books_series.representative_book_id is on_delete: nullify. Without an
+      # explicit repoint the merge silently blanks the series' representative
+      # instead of pointing it at the survivor.
+      test "repoints a series whose representative book was the source" do
+        series = books_series(:asoiaf)
+        series.update!(representative_book: @source)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, series.reload.representative_book_id
+      end
+
       private
 
       def attach_image(book, primary:)

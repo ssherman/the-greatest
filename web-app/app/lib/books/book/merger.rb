@@ -109,6 +109,9 @@ module Books
         merge_user_list_items
         merge_descriptions
         merge_reviews
+        merge_book_relationships
+        merge_inverse_book_relationships
+        repoint_series_representative
       end
 
       # books_editions has no unique index on book_id, so there is no collision
@@ -288,6 +291,72 @@ module Books
         @stats[:reviews_dropped] = dropped
 
         Services::Reviews::SummaryRecalculator.recalculate("Books::Book", target_book.id)
+      end
+
+      # Repoints book_id. Two rows must be dropped instead: one that already points
+      # AT the target (repointing it makes the survivor relate to itself, which
+      # no_self_reference rejects and the whole merge would roll back on), and one
+      # the target already holds, which the (book_id, related_book_id,
+      # relation_type) unique index would reject.
+      def merge_book_relationships
+        count = 0
+        source_book.book_relationships.find_each do |relationship|
+          if relationship.related_book_id == target_book.id
+            relationship.destroy!
+            next
+          end
+
+          collides = ::Books::BookRelationship.exists?(
+            book_id: target_book.id,
+            related_book_id: relationship.related_book_id,
+            relation_type: relationship.relation_type
+          )
+
+          if collides
+            relationship.destroy!
+          else
+            relationship.update!(book_id: target_book.id)
+            count += 1
+          end
+        end
+        @stats[:book_relationships] = count
+      end
+
+      # The mirror image: repoints related_book_id, with the same two drops.
+      # Direction is meaningful, so a relationship that survives in one direction
+      # is not a duplicate of one in the other and both are kept.
+      def merge_inverse_book_relationships
+        count = 0
+        source_book.inverse_book_relationships.find_each do |relationship|
+          if relationship.book_id == target_book.id
+            relationship.destroy!
+            next
+          end
+
+          collides = ::Books::BookRelationship.exists?(
+            book_id: relationship.book_id,
+            related_book_id: target_book.id,
+            relation_type: relationship.relation_type
+          )
+
+          if collides
+            relationship.destroy!
+          else
+            relationship.update!(related_book_id: target_book.id)
+            count += 1
+          end
+        end
+        @stats[:inverse_book_relationships] = count
+      end
+
+      # An INBOUND foreign key with on_delete: nullify. Books::Book declares no
+      # inverse association for it, so it is queried directly -- and if the merger
+      # does nothing, source.destroy! silently blanks the series' representative
+      # instead of following the merge.
+      def repoint_series_representative
+        @stats[:series_representative] = ::Books::Series
+          .where(representative_book_id: source_book.id)
+          .update_all(representative_book_id: target_book.id)
       end
 
       # Filled in by later tasks.
