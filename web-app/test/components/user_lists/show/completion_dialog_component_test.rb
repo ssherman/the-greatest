@@ -6,7 +6,7 @@ class UserLists::Show::CompletionDialogComponentTest < ViewComponent::TestCase
   test "renders an accessible PATCH dialog with the completion-date controls" do
     render_inline(UserLists::Show::CompletionDialogComponent.new)
 
-    assert_selector "dialog#completion-date-dialog[data-controller='user-list-completion'][aria-labelledby='completion-date-dialog-title']"
+    assert_selector "dialog#completion-date-dialog[data-user-list-completion-target='dialog'][aria-labelledby='completion-date-dialog-title']"
     assert_selector "#completion-date-dialog h2#completion-date-dialog-title", text: "Edit completion date"
     assert_selector "#completion-date-dialog form[data-user-list-completion-target='form'] input[type='hidden'][name='_method'][value='patch']", visible: :all
     assert_selector "#completion-date-dialog label", text: "Completion date"

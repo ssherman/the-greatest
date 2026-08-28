@@ -235,6 +235,21 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "the completion-date controller scopes the read-list triggers and singleton dialog" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_read)
+    item = user_list_items(:regular_user_books_item_3)
+    sign_in_as(@user, stub_auth: true)
+
+    get my_list_path(list)
+
+    assert_response :success
+    assert_select "[data-controller='user-list-completion']", count: 1 do
+      assert_select "turbo-frame#list_items button[data-action='user-list-completion#open'][data-item-id='#{item.id}']", count: 1
+      assert_select "dialog#completion-date-dialog[data-user-list-completion-target='dialog']", count: 1
+    end
+  end
+
   test "completion-date editor is absent from non-capable Books lists" do
     host! Rails.application.config.domains[:books]
     sign_in_as(@user, stub_auth: true)

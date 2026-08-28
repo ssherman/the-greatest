@@ -4,11 +4,7 @@ import { Controller } from "@hotwired/stimulus"
 // The trigger provides only the item id plus its display values; the form action
 // and editable date are populated immediately before native dialog opens.
 export default class extends Controller {
-  static targets = ["form", "title", "date"]
-
-  connect() {
-    this.restoreFocus = this.restoreFocus.bind(this)
-  }
+  static targets = ["dialog", "form", "title", "date"]
 
   open(event) {
     this.opener = event.currentTarget
@@ -17,7 +13,7 @@ export default class extends Controller {
     this.formTarget.action = `/user_list_items/${itemId}/completion`
     this.titleTarget.textContent = `Edit completion date for ${itemTitle}`
     this.dateTarget.value = completedOn || ""
-    this.element.showModal()
+    this.dialogTarget.showModal()
     this.dateTarget.focus()
   }
 
@@ -27,7 +23,7 @@ export default class extends Controller {
   }
 
   cancel() {
-    this.element.close()
+    this.dialogTarget.close()
   }
 
   restoreFocus() {
