@@ -178,6 +178,21 @@ reindex arriving from any other source waits behind the flood, because the scope
 `oldest_first`. Books is pre-launch, so this is accepted and documented rather than
 mitigated with priority lanes.
 
+### An interrupted requeue leaves no signal
+
+The insert runs synchronously in `after_update_commit`, outside any transaction, so it
+is not atomic with anything. If a deploy restarts the Puma worker partway through, or a
+slice raises (the exception propagates out of the commit and 500s the admin request
+*after* the category update has already committed), some items are requeued and the rest
+stay stale with nothing recording which is which.
+
+Accepted, not fixed. The window is 3.2 seconds at the absolute worst case and under
+200ms for anything in a live domain, and recovery is a full reindex
+(`bin/rails search:books:recreate_and_reindex_all`). Building a progress ledger, or
+moving to a job purely to get retries, would cost more than the failure it prevents.
+**If a large category retype ever 500s or coincides with a deploy, re-run the reindex —
+the queue will not tell you it was truncated.**
+
 The indexer does **not** use the serial Sidekiq capsule; that capsule is for
 external-API jobs. It runs on the default queue at concurrency 5.
 
