@@ -408,16 +408,29 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, 'data-theme="books"'
   end
 
-  test "books layout carries the user-list state controller and modal" do
+  test "books layout carries the My Books hydration hook, state controller, and modal" do
     host! Rails.application.config.domains[:books]
     sign_in_as(@user, stub_auth: true)
     get my_lists_path
     assert_response :success
 
     assert_includes response.body, 'data-controller="user-list-state membership-state"'
-    assert_includes response.body, 'id="navbar_my_lists"'
+    assert_includes response.body, 'id="navbar_my_books"'
+    refute_includes response.body, 'id="navbar_my_lists"'
     assert_includes response.body, 'id="user_list_modal"'
     assert_includes response.body, 'id="user-list-icons"'
+  end
+
+  test "music and games layouts retain the My Lists hydration hook" do
+    sign_in_as(@user, stub_auth: true)
+
+    [Rails.application.config.domains[:music], Rails.application.config.domains[:games]].each do |domain|
+      host! domain
+      get my_lists_path
+
+      assert_response :success
+      assert_includes response.body, 'id="navbar_my_lists"'
+    end
   end
 
   test "show renders a books list on the books domain" do
