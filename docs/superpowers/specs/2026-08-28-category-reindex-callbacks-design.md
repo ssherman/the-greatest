@@ -132,6 +132,19 @@ Behaviour:
 Books::Book Books::Author]` array becomes a constant on that class, so the service
 references one list instead of a second copy that can drift.
 
+**Honours migration suppression.** `app/models/concerns/SearchIndexable` — included by
+`Books::Book`, `Books::Author`, `Music::Album`, `Music::Artist`, `Music::Song` and
+`Games::Game` — returns early when
+`Services::BooksMigration.search_indexing_suppressed?`, a thread-local set by
+`Services::BooksMigration.without_search_indexing`. Every books migrator runs inside that
+block. `Categories::ItemReindexer` returns an early success Result under the same flag,
+for the same reason: a bulk migration must not queue one request per row. Discovered
+during planning; not in the original design.
+
+(`CategoryItem`'s own callbacks do *not* check the flag. That is pre-existing and works
+only because `CategoryItemMigrator` uses `upsert_all`, which fires no callbacks. Out of
+scope here.)
+
 **No dedupe against already-pending requests.** `Search::IndexerJob` already dedupes by
 `[parent_type, parent_id, action]` within each batch and deletes every processed row
 including duplicates. Duplicates cost only queue rows that drain within the hour, and
@@ -192,6 +205,8 @@ no new user-facing page or flow.
   the item-type filter, the correct `action`, and the Result shape.
 - `test/lib/categories/deleter_test.rb` — extend to assert requests appear after a soft
   delete.
+- Suppression: a `deleted` flip inside `Services::BooksMigration.without_search_indexing`
+  queues nothing.
 
 For every new test, delete the line under test and confirm the test goes red before
 trusting it (`assert_empty` and friends have passed against deleted code in this repo
