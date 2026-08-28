@@ -34,9 +34,10 @@
           <%= text_field_tag nil, books_reading_goal_url(goal),
                 id: "reading-goal-share-url-#{goal.id}",
                 readonly: true,
+                tabindex: -1,
                 class: "sr-only",
                 data: {"clipboard-copy-target": "source"} %>
-          <button type="button" class="btn btn-sm"
+          <button type="button" class="btn btn-primary btn-sm"
                   data-action="clipboard-copy#copy"
                   data-clipboard-copy-target="button">Copy Share Link</button>
         </div>

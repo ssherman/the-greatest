@@ -40,4 +40,20 @@ class Books::ReadingGoals::GoalCardComponentTest < ViewComponent::TestCase
         text: "Copy Share Link"
     end
   end
+
+  test "keeps the hidden share source out of sequential focus order" do
+    goal = books_reading_goals(:public_goal_other_user)
+
+    render_inline Books::ReadingGoals::GoalCardComponent.new(goal: goal, progress: @progress)
+
+    assert_selector "input[readonly][tabindex='-1'][data-clipboard-copy-target='source']"
+  end
+
+  test "copy button starts with the shared feedback controller class" do
+    goal = books_reading_goals(:public_goal_other_user)
+
+    render_inline Books::ReadingGoals::GoalCardComponent.new(goal: goal, progress: @progress)
+
+    assert_selector "button.btn-primary[data-action='clipboard-copy#copy'][data-clipboard-copy-target='button']"
+  end
 end
