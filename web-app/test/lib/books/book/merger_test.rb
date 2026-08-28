@@ -458,6 +458,79 @@ module Books
         assert_equal @target.id, series.reload.representative_book_id
       end
 
+      test "transfers authors when the target has none, renumbering position from 1" do
+        target = books_books(:crime_and_punishment) # has no authors
+        source = books_books(:got)                  # has king at position 1
+        ::Books::BookAuthor.create!(
+          book: source, author: books_authors(:tolstoy), position: 7
+        )
+
+        result = ::Books::Book::Merger.call(source: source, target: target)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        positions = target.reload.book_authors.order(:position).pluck(:position)
+        assert_equal [1, 2], positions, "positions must be renumbered 1..n"
+        assert_equal 2, target.authors.count
+      end
+
+      test "does not transfer authors when the target already has one" do
+        # @target (war_and_peace) already has tolstoy.
+        ::Books::BookAuthor.create!(
+          book: @source, author: books_authors(:king), position: 1
+        )
+
+        merger = ::Books::Book::Merger.new(source: @source, target: @target)
+        result = merger.call
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        assert_equal [books_authors(:tolstoy)], @target.reload.authors.to_a
+        assert_equal 1, merger.stats[:book_authors_not_transferred]
+      end
+
+      test "transfers credits when the target has none" do
+        target = books_books(:crime_and_punishment)
+        source = books_books(:got)
+        credit = ::Books::Credit.create!(
+          author: books_authors(:garnett), creditable: source, role: :translator
+        )
+
+        result = ::Books::Book::Merger.call(source: source, target: target)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        assert_equal target.id, credit.reload.creditable_id
+      end
+
+      test "does not transfer credits when the target already has one" do
+        ::Books::Credit.create!(
+          author: books_authors(:garnett), creditable: @target, role: :translator
+        )
+        ::Books::Credit.create!(
+          author: books_authors(:tolstoy), creditable: @source, role: :editor
+        )
+
+        merger = ::Books::Book::Merger.new(source: @source, target: @target)
+        result = merger.call
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        assert_equal 1, @target.reload.credits.count
+        assert_equal 1, merger.stats[:credits_not_transferred]
+      end
+
+      test "gates authors and credits independently" do
+        # Target has an author but no credits: authors stay, credits move.
+        credit = ::Books::Credit.create!(
+          author: books_authors(:garnett), creditable: @source, role: :translator
+        )
+        ::Books::BookAuthor.create!(book: @source, author: books_authors(:king), position: 1)
+
+        merger = ::Books::Book::Merger.new(source: @source, target: @target)
+        result = merger.call
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        assert_equal 1, merger.stats[:book_authors_not_transferred]
+        assert_equal @target.id, credit.reload.creditable_id
+      end
+
       private
 
       def attach_image(book, primary:)

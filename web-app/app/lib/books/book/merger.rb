@@ -97,6 +97,7 @@ module Books
       end
 
       def merge_all_associations
+        capture_gate_state
         merge_editions
         merge_external_links
         merge_ai_chats
@@ -112,6 +113,8 @@ module Books
         merge_book_relationships
         merge_inverse_book_relationships
         repoint_series_representative
+        merge_book_authors
+        merge_credits
       end
 
       # books_editions has no unique index on book_id, so there is no collision
@@ -357,6 +360,50 @@ module Books
         @stats[:series_representative] = ::Books::Series
           .where(representative_book_id: source_book.id)
           .update_all(representative_book_id: target_book.id)
+      end
+
+      # Ordering constraint: captured BEFORE any write, so the gate decision and
+      # the report of what was not transferred read the same state.
+      def capture_gate_state
+        @target_had_authors = target_book.book_authors.exists?
+        @target_had_credits = target_book.credits.exists?
+      end
+
+      # Duplicate books are usually bad imports, and a bad import's book_authors
+      # usually point at duplicate AUTHOR rows. Transferring them leaves the
+      # survivor showing two rows for the same person -- on the public page, in
+      # author_names in the search index, and in author rankings, which derive from
+      # an author's books. So the transfer happens only onto a book that has no
+      # authors at all. Merging the duplicate AUTHOR first makes this moot, because
+      # book_authors then dedupe on author_id automatically.
+      def merge_book_authors
+        if @target_had_authors
+          @stats[:book_authors] = 0
+          @stats[:book_authors_not_transferred] = source_book.book_authors.count
+          return
+        end
+
+        moved = 0
+        source_book.book_authors.order(:position).each.with_index(1) do |book_author, position|
+          book_author.update!(book_id: target_book.id, position: position)
+          moved += 1
+        end
+
+        @stats[:book_authors] = moved
+        @stats[:book_authors_not_transferred] = 0
+      end
+
+      # Gated independently of authors: a book can legitimately have authors but no
+      # credits, or the reverse.
+      def merge_credits
+        if @target_had_credits
+          @stats[:credits] = 0
+          @stats[:credits_not_transferred] = source_book.credits.count
+          return
+        end
+
+        @stats[:credits] = source_book.credits.update_all(creditable_id: target_book.id)
+        @stats[:credits_not_transferred] = 0
       end
 
       # Filled in by later tasks.
