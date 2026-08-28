@@ -336,8 +336,27 @@ a ballot count, because a user can end up holding two favorites lists.
 **Persistence.** `Services::Lists::GenerateUserFavorites` writes the tally into the domain's
 generated `List` with `delete_all` + `insert_all`, and sets `number_of_voters` to the real ballot
 count. It finds the list by `(type, auto_generated_kind)` — never by name, which is what broke the
-legacy implementation the first time someone renamed one. A domain's list is created `unapproved`
-on first run, so it is visible in admin and contributes nothing until someone activates it.
+legacy implementation the first time someone renamed one.
+
+**Self-wiring on create.** A domain's list is created `active`, and on **create only** is joined to
+its domain's `ranking_configuration_class.default_primary` via a `RankedList` and given the global
+penalty named `"Voters: not critics, authors, or experts"` (looked up by name — the id differs per
+environment). It is created active because a domain with no favorites data produces an *empty* list,
+which contributes nothing to rankings whatever its status; there was nothing to protect against by
+starting it switched off, and the manual flip had to be redone after every environment rebuild.
+
+The penalty is load-bearing, not cosmetic: without it the list computes at roughly weight 100, which
+would make a list of user votes one of the heaviest in a corpus of critic-authored lists. It only
+carries a value if the penalty has a `PenaltyApplication` for that ranking configuration —
+`Rankings::WeightCalculatorV1#calculate_static_penalties_with_details` skips a penalty with no
+application — and creating that application is an editorial decision the generator deliberately
+leaves alone. A newly created `RankedList` has `weight: nil` until a weight calculation runs, so the
+generator queues `BulkCalculateWeightsJob` for the configuration it just joined.
+
+Both wiring steps degrade to a logged no-op rather than raising: a domain with no primary ranking
+configuration is a legitimate not-yet-configured state, and a missing penalty logs a warning naming
+the weight consequence. Wiring is create-only (`previously_new_record?`), so an admin who
+deliberately detaches the list or drops its penalty does not have that undone on the next nightly run.
 
 **Identity and ownership.** `lists.auto_generated_kind` is a nullable integer enum
 (`enum :auto_generated_kind, {user_favorites: 0}, prefix: :generated`) with a partial unique index
@@ -377,7 +396,21 @@ flag is a console job on purpose.
 | `GenerateUserFavoritesListsJob` | Nightly, from `config/schedule.yml`. Rebuilds every domain, collecting per-domain failures so one bad domain doesn't skip the rest. Deliberately does **not** recalculate rankings — that stays on the deliberate admin refresh. |
 | `rake user_favorites_lists:generate[Books::UserList]` | Manual rebuild, one domain or all |
 | `rake user_favorites_lists:backfill_manually_ordered` | One-time `manually_ordered` backfill |
-| `rake user_favorites_lists:adopt_legacy_books_list` | One-time: renames and flags the legacy books top-100 (preserving its URL, `RankedList` row, weight and penalties) and deletes the two retired legacy lists |
+| `rake user_favorites_lists:rebuild` | Everything, in the one order that works: backfill `manually_ordered`, delete any surviving legacy list, regenerate every domain. Idempotent, safe in any environment, and appended to `data_migration:all` so a books import leaves the generated lists correct with no follow-up commands. |
+
+`rebuild` replaced a one-time `adopt_legacy_books_list` task that renamed the legacy books top-100
+in place and flagged it as the generated list. Adoption failed twice in practice: it hit the
+`(type, auto_generated_kind)` unique index whenever a generated list already existed, and its own
+guard was single-use, because the first run destroyed the pre-rename name the guard looked itself up
+by. `Services::BooksMigration::ListMigrator` now excludes the three superseded legacy lists
+(`SUPERSEDED_LIST_NAMES`) from the import outright, so nothing is left to adopt. The three migrators
+keyed to lists — `ListItemMigrator`, `RankedListMigrator`, `ListPenaltyMigrator` — **skip** a row
+whose list was not imported rather than raising; each keeps a "you forgot `data_migration:lists`"
+guard by failing loud when *no* `Books::List` exists at all.
+
+`rebuild` scopes its deletion by `auto_generated_kind: nil`, never by excluding a remembered id.
+One of the three retired names is exactly `::Books::UserList.generated_list_name`, so a name match
+alone would take the generated list with it.
 
 Design detail lives in `docs/superpowers/specs/2026-08-27-ranked-users-lists-design.md`.
 

@@ -45,11 +45,40 @@ class Services::BooksMigration::ListPenaltyMigratorTest < ActiveSupport::TestCas
     end
   end
 
-  test "fails loud when the list is not a migrated Books::List" do
+  # ListMigrator deliberately drops the superseded users' favorites lists, so a
+  # legacy list_con_list can legitimately point at a list that was never imported.
+  test "skips a list_con_list belonging to a superseded users' favorites list" do
     missing = List.maximum(:id).to_i + 999_999
-    result = run_migrator([lcl(5, "list_id" => missing)])
+    Services::BooksMigration::ListMigrator.stubs(:superseded_legacy_list_ids).returns(Set[missing])
+    result = nil
+    assert_no_difference -> { ListPenalty.count } do
+      result = run_migrator([lcl(5, "list_id" => missing)])
+    end
+    assert result[:success], result[:error]
+    assert_equal 0, result[:data][:count]
+  end
+
+  # Scoped to the three superseded ids and nothing else: a ListMigrator that died
+  # partway leaves a non-empty @list_ids, and a blanket skip would then drop the
+  # penalties of every list it never reached without a word.
+  test "fails loud when the parent list is missing for any other reason" do
+    missing = List.maximum(:id).to_i + 999_999
+    result = nil
+    assert_no_difference -> { ListPenalty.count } do
+      result = run_migrator([lcl(8, "list_id" => missing)])
+    end
     refute result[:success]
-    assert_match(/list_con_list id=5/, result[:error])
+    assert_match(/list_con_list id=8/, result[:error])
+    assert_match(/#{missing}/, result[:error])
+  end
+
+  test "fails loud when no Books::List has been migrated at all" do
+    # Stubbed rather than emptied: the lists fixtures are referenced by
+    # list_items rows, so deleting them all is a foreign-key violation.
+    ::Books::List.stubs(:pluck).with(:id).returns([])
+    result = run_migrator([lcl(7)])
+    refute result[:success]
+    assert_match(/data_migration:lists/, result[:error])
   end
 
   test "is idempotent on [list_id, penalty_id]" do

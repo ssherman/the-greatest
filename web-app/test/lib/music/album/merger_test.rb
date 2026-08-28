@@ -146,6 +146,12 @@ module Music
           rank: 1
         )
 
+        # Isolates the merger's own scheduling. The merger's regeneration call runs
+        # inline under Sidekiq's test mode, and creating a generated list for the
+        # first time queues a BulkCalculateWeightsJob of its own -- which would land
+        # on these expectations. Regeneration has its own test below.
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+
         BulkCalculateWeightsJob.expects(:perform_async).with(config.id)
         CalculateRankingsJob.expects(:perform_in).with(5.minutes, config.id)
 
@@ -159,6 +165,8 @@ module Music
         RankedItem.create!(item: @source_album, ranking_configuration: config1, rank: 1)
         RankedItem.create!(item: @target_album, ranking_configuration: config2, rank: 1)
 
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+
         BulkCalculateWeightsJob.expects(:perform_async).with(config1.id)
         BulkCalculateWeightsJob.expects(:perform_async).with(config2.id)
         CalculateRankingsJob.expects(:perform_in).with(5.minutes, config1.id)
@@ -168,6 +176,8 @@ module Music
       end
 
       test "should not schedule jobs if no ranked_items exist" do
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+
         BulkCalculateWeightsJob.expects(:perform_async).never
         CalculateRankingsJob.expects(:perform_in).never
 

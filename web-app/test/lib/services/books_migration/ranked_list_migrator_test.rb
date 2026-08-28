@@ -38,11 +38,42 @@ module Services
         assert_equal Time.utc(2021, 2, 3, 4, 5, 6), rl.updated_at
       end
 
-      test "fails loud when the list is not migrated" do
+      # ListMigrator deliberately drops the superseded users' favorites lists, so a
+      # legacy ranked_list can legitimately point at a list that was never imported.
+      # Skipping keeps data_migration:all green; the "run :lists first" ordering
+      # mistake is still caught, by the empty-set guard below.
+      test "skips a ranked_list belonging to a superseded users' favorites list" do
         missing = List.maximum(:id).to_i + 999_999
-        result = run_migrator([legacy_row("id" => 7000042, "list_id" => missing)])
+        ListMigrator.stubs(:superseded_legacy_list_ids).returns(Set[missing])
+        result = nil
+        assert_no_difference -> { RankedList.count } do
+          result = run_migrator([legacy_row("id" => 7000042, "list_id" => missing)])
+        end
+        assert result[:success], result[:error]
+        assert_equal 0, result[:data][:count]
+      end
+
+      # Scoped to the three superseded ids and nothing else: a ListMigrator that
+      # died partway leaves a non-empty @list_ids, and a blanket skip would then
+      # drop the ranked_lists of every list it never reached without a word.
+      test "fails loud when the parent list is missing for any other reason" do
+        missing = List.maximum(:id).to_i + 999_999
+        result = nil
+        assert_no_difference -> { RankedList.count } do
+          result = run_migrator([legacy_row("id" => 7000044, "list_id" => missing)])
+        end
         refute result[:success]
-        assert_match(/7000042/, result[:error])
+        assert_match(/7000044/, result[:error])
+        assert_match(/#{missing}/, result[:error])
+      end
+
+      test "fails loud when no Books::List has been migrated at all" do
+        # Stubbed rather than emptied: the lists fixtures are referenced by
+        # list_items rows, so deleting them all is a foreign-key violation.
+        ::Books::List.stubs(:pluck).with(:id).returns([])
+        result = run_migrator([legacy_row])
+        refute result[:success]
+        assert_match(/data_migration:lists/, result[:error])
       end
 
       test "fails loud when the ranking configuration is not mapped" do
