@@ -108,6 +108,7 @@ module Books
         merge_list_items
         merge_user_list_items
         merge_descriptions
+        merge_reviews
       end
 
       # books_editions has no unique index on book_id, so there is no collision
@@ -267,6 +268,26 @@ module Books
           count += 1
         end
         @stats[:descriptions] = count
+      end
+
+      # Review has an after_commit :recalculate_summary, so a per-record update!
+      # would fire N recalculations. delete_all/update_all skip it and the merger
+      # recalculates once, explicitly, inside the transaction.
+      #
+      # A subquery, not a plucked id list: this codebase has already hit
+      # PostgreSQL's 65,535 bind-parameter cap with a large IN.
+      def merge_reviews
+        dropped = Review.where(reviewable: source_book)
+          .where(user_id: Review.where(reviewable: target_book).select(:user_id))
+          .delete_all
+
+        moved = Review.where(reviewable: source_book)
+          .update_all(reviewable_id: target_book.id)
+
+        @stats[:reviews] = moved
+        @stats[:reviews_dropped] = dropped
+
+        Services::Reviews::SummaryRecalculator.recalculate("Books::Book", target_book.id)
       end
 
       # Filled in by later tasks.

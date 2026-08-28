@@ -321,6 +321,61 @@ module Books
         assert_equal 1, UserListItem.where(user_list: user_list, listable: @target).count
       end
 
+      test "moves a review to the target" do
+        # password_user reviews NEITHER fixture book, so this genuinely exercises the
+        # repoint branch. regular_user reviews both, which would exercise the drop.
+        review = Review.create!(user: users(:password_user), reviewable: @source, rating: 4)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal @target.id, review.reload.reviewable_id
+      end
+
+      test "drops a source review when the same user already reviewed the target" do
+        # The fixtures already ARE this scenario: regular_user reviews both books.
+        kept = reviews(:regular_user_war_and_peace)
+        dropped = reviews(:regular_user_crime_and_punishment)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_not Review.exists?(dropped.id)
+        assert Review.exists?(kept.id)
+        assert_equal 1, Review.where(user: users(:regular_user), reviewable: @target).count
+      end
+
+      test "recalculates the target's review summary after moving reviews" do
+        Services::Reviews::SummaryRecalculator.expects(:recalculate)
+          .with("Books::Book", @target.id)
+          .at_least_once
+
+        result = ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+      end
+
+      # DELIBERATE, not an oversight. Books::Book includes Correctable, whose
+      # dependent: :destroy lets the duplicate's corrections die with it, and the
+      # merger adds no code to move them. A correction on a duplicate is very often
+      # "this is a dupe of X" -- the merge IS the resolution -- and repointing would
+      # leave stale duplicate reports in the pending admin queue for a book that is
+      # no longer a duplicate of anything. The owner decided this explicitly.
+      # This test exists so the decision cannot be silently reversed, and so a
+      # reviewer who spots the missing merge_corrections finds the reasoning here.
+      # See docs/superpowers/specs/2026-08-23-record-merge-design.md.
+      test "lets the source's corrections die with it rather than moving them" do
+        source_correction_ids = Correction.where(correctable: @source).pluck(:id)
+        target_count_before = Correction.where(correctable: @target).count
+        assert_operator source_correction_ids.size, :>, 0,
+          "fixture precondition: the source must carry corrections for this test to mean anything"
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_empty Correction.where(id: source_correction_ids),
+          "the duplicate's corrections must die with it"
+        assert_equal target_count_before, Correction.where(correctable: @target).count,
+          "the survivor's own corrections must be untouched, and none moved onto it"
+      end
+
       private
 
       def attach_image(book, primary:)
