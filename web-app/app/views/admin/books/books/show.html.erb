@@ -14,6 +14,14 @@
         <%= link_to "Edit", edit_admin_books_book_path(@book), class: "btn btn-primary" %>
       <% end %>
       <% if current_user_can_delete? %>
+        <button type="button"
+                class="btn btn-warning btn-outline"
+                data-testid="merge-book-button"
+                onclick="document.getElementById('merge-book-modal').showModal()">
+          <span>Merge</span>
+        </button>
+      <% end %>
+      <% if current_user_can_delete? %>
         <%= button_to "Delete", admin_books_book_path(@book), method: :delete, class: "btn btn-error", form: {data: {turbo_confirm: "Delete this book? This cannot be undone."}} %>
       <% end %>
     </div>
@@ -227,3 +235,77 @@
     <%= render Admin::AddCategoryModalComponent.new(item: @book) %>
   <% end %>
 </div>
+
+<!-- Merge Book Modal -->
+<dialog id="merge-book-modal" class="modal">
+  <div class="modal-box max-w-2xl">
+    <h3 class="font-bold text-lg">Merge Another Book Into This One</h3>
+    <p class="py-4">
+      Search for a duplicate book to merge into <strong><%= @book.title %></strong>.
+      Editions, identifiers, countries, series, categories, list entries, readers'
+      personal list entries, reviews, images, links, descriptions and AI chats move
+      across.
+    </p>
+    <p class="pb-4">
+      Where <strong><%= @book.title %></strong> already has its own equivalent
+      &mdash; the same identifier, the same series, the same kind of description, a
+      review by the same reader &mdash; the duplicate's copy is discarded rather
+      than kept alongside it. <strong><%= @book.title %></strong> may also take
+      details from the duplicate: any field it was missing, the earlier publication
+      year, and the duplicate's title and alternate titles, which are added to its
+      own alternate titles.
+    </p>
+    <p class="pb-4">
+      <strong>Authors and credits are the exception.</strong> They move across only
+      if <strong><%= @book.title %></strong> has none of its own, because a
+      duplicate's authors are usually duplicate author records and merging them in
+      would show the same person twice. If they are left behind you will be told so.
+      Merge the duplicate <em>author</em> first if you want them combined.
+      The duplicate's pending corrections are discarded &mdash; a merge is how a
+      duplicate report gets actioned. The duplicate book will be permanently deleted.
+    </p>
+
+    <%= form_with url: execute_action_admin_books_book_path(@book),
+                  method: :post,
+                  class: "space-y-4",
+                  data: {
+                    controller: "modal-form",
+                    modal_form_modal_id_value: "merge-book-modal"
+                  } do |f| %>
+      <%= f.hidden_field :action_name, value: "MergeBook" %>
+
+      <div>
+        <%= f.label :source_book_id, class: "label" do %>
+          <span class="font-semibold">Source Book <span class="text-error">*</span></span>
+        <% end %>
+        <%= render AutocompleteComponent.new(
+          name: "source_book_id",
+          url: search_admin_books_books_path(exclude_id: @book.id),
+          placeholder: "Search for book to merge...",
+          required: true
+        ) %>
+        <label class="label">
+          <span>Search for the duplicate book you want to merge into this one</span>
+        </label>
+      </div>
+
+      <div>
+        <label class="label cursor-pointer justify-start gap-2">
+          <%= f.check_box :confirm_merge, class: "checkbox", required: true %>
+          <span>I understand this action cannot be undone</span>
+        </label>
+        <label class="label">
+          <span class="text-warning">The source book will be permanently deleted after merging</span>
+        </label>
+      </div>
+
+      <div class="modal-action">
+        <button type="button" class="btn" onclick="document.getElementById('merge-book-modal').close()">Cancel</button>
+        <%= f.submit "Merge Book", class: "btn btn-warning" %>
+      </div>
+    <% end %>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>

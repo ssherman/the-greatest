@@ -1,6 +1,6 @@
 class Admin::Books::BooksController < Admin::Books::BaseController
-  before_action :set_book, only: [:show, :edit, :update, :destroy]
-  before_action :authorize_book, only: [:show, :edit, :update, :destroy]
+  before_action :set_book, only: [:show, :edit, :update, :destroy, :execute_action]
+  before_action :authorize_book, only: [:show, :edit, :update, :destroy, :execute_action]
 
   def index
     authorize ::Books::Book
@@ -59,7 +59,37 @@ class Admin::Books::BooksController < Admin::Books::BaseController
     redirect_to admin_books_books_path, notice: "Book deleted."
   end
 
+  def execute_action
+    fields_hash = params.except(:controller, :action, :id, :action_name)
+
+    validate_action_name!
+    action_class = "Actions::Admin::Books::#{params[:action_name]}".constantize
+    # The delete gate for destructive actions. execute_action? itself only
+    # requires write access, because this endpoint is shared.
+    authorize @book, :destroy? if action_class.destructive?
+    result = action_class.call(
+      user: current_user,
+      models: [@book],
+      fields: fields_hash
+    )
+
+    respond_to do |format|
+      format.turbo_stream do
+        render turbo_stream: turbo_stream.replace(
+          "flash",
+          partial: "admin/shared/flash",
+          locals: {result: result}
+        )
+      end
+      format.html { redirect_to admin_books_book_path(@book), notice: result.message }
+    end
+  end
+
   private
+
+  def allowed_action_names
+    %w[MergeBook]
+  end
 
   def set_book
     @book = ::Books::Book.find(params[:id])
