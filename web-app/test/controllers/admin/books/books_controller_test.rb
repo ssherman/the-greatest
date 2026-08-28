@@ -232,6 +232,86 @@ module Admin
         end
         assert_includes @book.reload.images.map(&:id), Image.order(:created_at).last.id
       end
+
+      # execute_action / merge
+
+      test "an admin can merge a book via execute_action" do
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+        sign_in_as(@admin_user, stub_auth: true)
+        target = books_books(:war_and_peace)
+        source = books_books(:crime_and_punishment)
+
+        post execute_action_admin_books_book_path(target), params: {
+          action_name: "MergeBook",
+          source_book_id: source.id.to_s,
+          confirm_merge: "1"
+        }
+
+        assert_redirected_to admin_books_book_path(target)
+        assert_not ::Books::Book.exists?(source.id)
+      end
+
+      test "merge via turbo_stream replaces the flash target and still performs the merge" do
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+        sign_in_as(@admin_user, stub_auth: true)
+        target = books_books(:war_and_peace)
+        source = books_books(:crime_and_punishment)
+
+        post execute_action_admin_books_book_path(target), params: {
+          action_name: "MergeBook",
+          source_book_id: source.id.to_s,
+          confirm_merge: "1"
+        }, as: :turbo_stream
+
+        assert_response :success
+        assert_match(/turbo-stream/, response.content_type)
+        assert_includes response.body, 'target="flash"'
+        assert_not ::Books::Book.exists?(source.id)
+      end
+
+      # This is the entire point of the destructive? gate, and it is invisible if
+      # only the happy path is covered.
+      test "a books domain editor cannot merge" do
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+        @regular_user.domain_roles.create!(domain: :books, permission_level: :editor)
+        sign_in_as(@regular_user, stub_auth: true)
+        target = books_books(:war_and_peace)
+        source = books_books(:crime_and_punishment)
+
+        post execute_action_admin_books_book_path(target), params: {
+          action_name: "MergeBook",
+          source_book_id: source.id.to_s,
+          confirm_merge: "1"
+        }
+
+        assert_redirected_to books_root_path
+        assert ::Books::Book.exists?(source.id), "an editor must not be able to delete via merge"
+      end
+
+      test "a books domain moderator can merge" do
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+        @regular_user.domain_roles.create!(domain: :books, permission_level: :moderator)
+        sign_in_as(@regular_user, stub_auth: true)
+        target = books_books(:war_and_peace)
+        source = books_books(:crime_and_punishment)
+
+        post execute_action_admin_books_book_path(target), params: {
+          action_name: "MergeBook",
+          source_book_id: source.id.to_s,
+          confirm_merge: "1"
+        }
+
+        assert_not ::Books::Book.exists?(source.id)
+      end
+
+      test "execute_action rejects an action name outside the allowlist" do
+        sign_in_as(@admin_user, stub_auth: true)
+
+        post execute_action_admin_books_book_path(books_books(:war_and_peace)),
+          params: {action_name: "Object"}
+
+        assert_response :bad_request
+      end
     end
   end
 end
