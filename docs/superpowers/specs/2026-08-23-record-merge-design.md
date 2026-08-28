@@ -1,8 +1,16 @@
 # Record Merge: Games, Books, Authors
 
-**Date:** 2026-08-23
-**Status:** Design approved, ready for implementation planning
+**Date:** 2026-08-23, revised 2026-08-28
+**Status:** Increments 1 (games) and 2 (authors) shipped and deployed. Increment 3 (books) scoped
+2026-08-28 against the shipped code and ready for implementation planning.
 **Branch:** `worktree-record-merge`
+
+**Reading this document after 2026-08-28:** increments 1 and 2 taught things the original draft did
+not know, and the sections below have been revised in place rather than appended to. Where a passage
+is marked "corrected during increment 1" or "extended during increment 2", the correction is the
+current instruction and the text it replaced is kept only to explain why. The one trap is under
+**Admin plumbing**: the original `execute_action?`-gated-on-`can_delete?` instruction is wrong and
+would cause a functional regression — read departure 3 first.
 
 ## Problem
 
@@ -126,6 +134,12 @@ and including curated list entries (whose `position` is lost, only `verified` su
 the next one; state one general collision caveat that is true of every dedup path. See
 `app/views/admin/games/games/show.html.erb` for the wording that survived review.
 
+The book modal needs two things the games wording has no equivalent for: that a **review** by a user
+who has reviewed both books keeps the survivor's and discards the duplicate's, and that authors and
+credits transfer **only onto a book that has none** — with the success message naming what was left
+behind. Neither is a general collision caveat; both are book-specific rules an admin has to know
+before pressing the button.
+
 Also out of scope: any merge preview or dry-run, field-level conflict resolution UI, and undo.
 
 ## Conflict patterns
@@ -150,7 +164,7 @@ Three patterns recur. Each association below is labelled with one.
 | `book_countries` | Repoint-or-drop | on `country_id` |
 | `series_books` | Repoint-or-drop | on `series_id` |
 | `category_items` | Copy-or-skip | `find_or_create_by(category_id:)` on the survivor; the source's rows then die with it (the music pattern) |
-| `list_items` | Repoint-or-merge | Promote survivor to `verified: true` if either was |
+| `list_items` | Repoint-or-merge | Promote survivor to `verified: true` if either was; **skip auto-generated lists entirely**, see below |
 | `user_list_items` | Repoint-or-drop | on `user_list_id`; `position` is list-scoped so it stays valid |
 | `reviews` | Repoint-or-drop | on `user_id`; see below |
 | `review_summary` | Derived | Dies with source; survivor's recomputed |
@@ -159,12 +173,20 @@ Three patterns recur. Each association below is labelled with one.
 | `external_links`, `ai_chats` | Repoint | |
 | `book_relationships` | Repoint-or-drop | Skip self-referential; `find_or_create_by` on (`related_book_id`, `relation_type`) |
 | `inverse_book_relationships` | Repoint-or-drop | Repoint `related_book_id`; drop if self-referential or duplicate |
+| `corrections` | **Dropped** | Deliberately dies with the source — decided 2026-08-28, see below |
 | `ranked_items` | Derived | Collected for recalc, then die with source |
 | `Books::Series#representative_book_id` | Repoint | Inbound FK, `on_delete: nullify` — repoint or it silently blanks |
 
 **Scalars.** Blank-filled: `subtitle`, `sort_title`, `book_length`, `page_range`, `word_count`,
 `description`, `original_language_id`, `default_edition_id`. Earliest wins:
 `first_published_year`. Absorbed: `alternate_titles`.
+
+Two columns are deliberately **excluded** from blank-fill. `book_kind` is a NOT NULL enum with a
+default, so it is never blank — the same reasoning that keeps `kind` out of the author merger's
+list. And `amazon_enriched_at` marks that the Amazon lookup already ran: the survivor keeps its own
+value and the duplicate's is discarded, because the merge hands the survivor a batch of newly
+absorbed editions that Amazon has never seen. Filling a blank stamp from the duplicate would mark
+the survivor "done" and let the enrichment sweep skip exactly the book that most needs it.
 
 **Reviews** use a specific shape to avoid a callback storm. `Review` has an
 `after_commit :recalculate_summary`, so a per-record `update!` would fire N recalculations:
@@ -186,6 +208,44 @@ bind-parameter cap with a large `IN`. `SummaryRecalculator` is documented as the
 `nulls_not_distinct`, and a partial one enforcing a single `rank = 1` per (type, id, kind, locale).
 Moved rows are forced to `rank: 0` where the survivor already holds a preferred row for that
 kind+locale.
+
+**Auto-generated lists are skipped, and the generated list is rebuilt after commit.** Both were
+learned after increments 1 and 2 shipped and are already live in the games and music mergers
+(commits `7ce4d6d5`, `d4f7d4de`). `merge_list_items` writes through `update!`/`create!`, which
+`ListItem`'s own validation rejects once the list is `auto_generated?` — so a book that happens to
+sit on "Our Users' Favorite Books of All Time" would turn an admin merge into a 500. Skipping loses
+nothing directly, because the generator rewrites that list from the underlying user favorites, which
+the merge has already repointed. But the skipped row then dies with the source, leaving the generated
+list one item short, and `schedule_ranking_recalculation`'s `CalculateRankingsJob.perform_in(5.minutes, …)`
+would read that short list before the nightly 03:00 regeneration ever runs. So `run_post_commit_steps`
+also calls `GenerateUserFavoritesListsJob.perform_async("Books::UserList")`, which queues comfortably
+inside that five-minute window. Only a full rebuild produces the correct combined score, voter count
+and position for the survivor; a repointed row would not.
+
+**`corrections` are deliberately dropped.** `Books::Book` includes `Correctable`, which declares
+`has_many :corrections, as: :correctable, dependent: :destroy`, so the source's corrections are
+destroyed with it. That is the decision, not an oversight — recorded here so it is not re-raised as
+a data-loss defect later.
+
+Measured against the 455 book corrections in development: 29 (6.4%) mention duplication or merging
+("Same as 10369", "Already listed as 'Out of Africa' by Isak Dinesen #402", "Delete. Duplicate of
+…/books/123"), 20 of them still pending. That base rate understates the picture at merge time, since
+a duplicate report is frequently *why* an admin is merging the record — the corrections attached to a
+record about to be merged skew far more duplicate-heavy than the corpus does. A merge is the admin
+actioning those reports, and moving them to the survivor would leave stale "this is a duplicate"
+rows in the pending queue for a book that is no longer a duplicate of anything.
+
+The accepted cost is real and worth naming: the other 93.6% are substantive ("the nationality should
+be Irish", "cover image is from a different book", "the publication date should be 1908"), and a
+handful are **mixed** — one row carrying both a duplicate report and a genuine fix ("Shouldn't it be
+merged with the main 1001 Nights entry? Either way, date should be CE not BCE"). Those fixes are lost
+when the source is destroyed. No rule separates them: the duplicate reports are free-text notes, and
+notes-only corrections are otherwise substantive, so neither `status` nor the presence of
+`correction_fields` is a usable discriminator.
+
+`Music::Album` and `Games::Game` are `Correctable` too, and the correction form is routed and live on
+both domains. Their mergers destroy corrections the same way, which under this decision is **correct
+behaviour, not a bug** — there is no backport to do.
 
 ## `Games::Game` merger
 
@@ -241,8 +301,15 @@ author recalculation for free: `CalculateRankingsJob` already cascades into that
 
 ## Ordering constraints
 
-Most of the merge is order-independent. These five are not:
+Most of the merge is order-independent. These six are not:
 
+0. **Both rows are locked first.** `lock_books` takes `FOR UPDATE` on the source and the survivor in
+   ascending id order, as the first statement inside the transaction. Without it two admins merging
+   the same duplicate can both pass the guards and the loser's `destroy!` silently affects zero rows
+   — `books_books` has no `lock_version`, so Rails never checks the affected count — reporting a
+   completed merge that moved nothing. Ascending id order is what stops two merges with swapped
+   source and target from deadlocking. It must precede `reconcile_scalars`, because `lock!` refuses
+   a record with unsaved changes.
 1. **Ranking configuration ids are collected first.** Once `source.destroy!` cascades its
    `ranked_items`, the affected set is unrecoverable.
 2. **Editions move before `default_edition_id` is filled**, or the survivor's default edition FK
@@ -257,12 +324,20 @@ Most of the merge is order-independent. These five are not:
 
 ## Transaction boundary
 
-Inside one `ActiveRecord::Base.transaction`: every association move, the scalar reconciliation, the
-review summary recalculation, `target.save!`, and `source.destroy!`.
+Inside one `ActiveRecord::Base.transaction`: the row locks, every association move, the scalar
+reconciliation, the review summary recalculation, `target.save!`, and `source.destroy!`.
 
 Outside, after commit: the survivor's `SearchIndexRequest`, the fan-out of reindex requests for an
-author merge's affected books, and all ranking jobs. Jobs stay outside because `perform_async` writes
-to Redis, which a rollback cannot undo — the job would wake describing a merge that never happened.
+author merge's affected books, the generated-favorites rebuild, and all ranking jobs. Jobs stay
+outside because `perform_async` writes to Redis, which a rollback cannot undo — the job would wake
+describing a merge that never happened.
+
+**Book merge fans out no reindex requests beyond the survivor's own.** Author merge needs the
+fan-out because `Books::Book#as_indexed_json` embeds `author_names` and `author_ids`, so moving
+authorship changes every one of those books' documents. The converse does not hold:
+`Books::Author#as_indexed_json` carries only `name`, `alternate_names` and `category_ids`, so a book
+merge changes no author document. This asymmetry is deliberate — absence of a fan-out in the book
+merger is the correct design, not a copy-paste omission from the author merger.
 
 Unindexing the source is automatic: `SearchIndexable` fires `unindex_item` on destroy.
 
@@ -299,11 +374,30 @@ for these steps. So they are wrapped separately:
 def run_post_commit_steps
   reindex_target
   schedule_ranking_recalculation
+  regenerate_user_favorites_list
 rescue => error
   Rails.logger.error("... committed, but post-commit follow-up failed: #{error.class}: #{error.message}")
   @stats[:post_commit_error] = error.message
 end
 ```
+
+**Extended during increment 2 — a commit callback can raise *after* the commit too.**
+`SearchIndexable`'s `after_commit` hooks (the survivor's `save!`, the source's `destroy!`) fire as the
+transaction block exits, which is after the commit, and Rails propagates anything they raise straight
+out of that block into the method-level rescue ladder. Reporting `success?: false` there tells the
+admin a merge failed when the source is already permanently deleted, and their retry then fails with
+"not found" — the same failure mode, arriving through a different door. So each rescue routes through
+a shared `result_for_raised`, which reports success when the merge in fact committed:
+
+```ruby
+def merge_committed?
+  @transaction_body_completed && !::Books::Book.exists?(@source_book_id)
+end
+```
+
+Both halves are load-bearing. The flag alone would misread a COMMIT that itself failed (a deferred
+constraint) as success. The missing row alone would misread a merge that never started because a
+concurrent merge had already consumed the source — which is precisely what `lock_books` raises on.
 
 **`success?` means "the merge committed"** — not "reindexing and ranking also succeeded". That is the
 contract the admin UI reports. The shipped modal (`app/views/admin/games/games/show.html.erb`) does
@@ -315,16 +409,27 @@ Increments 2 and 3 follow the corrected pattern.
 
 ## Admin plumbing
 
-No books or games controller has `execute_action`, and `Actions::Admin::` has no books or games
-namespace. Each of the three resources gains:
+As of 2026-08-23, no books or games controller had `execute_action` and `Actions::Admin::` had no
+books or games namespace. Increments 1 and 2 added both for games and authors; only
+`Admin::Books::BooksController` still lacks it. Each of the three resources gains:
 
 1. `member do post :execute_action end` in `config/routes.rb`
 2. An `execute_action` method modelled on `Admin::Music::AlbumsController#execute_action`,
-   constantizing into its own domain's namespace
-3. `:execute_action` added to the existing `before_action :authorize_*` list
-4. `execute_action?` on the policy, gated on `can_delete?`
+   constantizing into its own domain's namespace, plus an `allowed_action_names` override —
+   `validate_action_name!` itself is already inherited from `Admin::BaseController`
+3. `:execute_action` added to **both** existing `before_action` lists, the record setter and the
+   `authorize_*`
+4. `execute_action?` on the policy
 
-Plus `exclude_id` support in `Admin::Games::GamesController#search`.
+**On item 4, read departure 3 above before writing it.** `execute_action?` is
+`global_role? || domain_role&.can_write?` — write access is the floor for a shared endpoint. It is
+**not** gated on `can_delete?`; that was this document's original instruction and increment 1
+established it was wrong. The delete gate lives in the controller, as
+`authorize @record, :destroy? if action_class.destructive?`, immediately after the action class is
+resolved and before it is invoked. `Books::BookPolicy` is currently bare and inherits nothing named
+`execute_action?`, so omitting it raises `NoMethodError` rather than failing open.
+
+Plus `exclude_id` support in `Admin::Games::GamesController#search`. Books and authors already have it.
 
 **Action classes:** `Actions::Admin::Books::MergeBook`, `Actions::Admin::Books::MergeAuthor`,
 `Actions::Admin::Games::MergeGame`. Each validates that the source id is present and the confirm
@@ -386,6 +491,16 @@ books data exists only in development.
   true whether the merge moved it or the fixture already had it. Every assertion must be verified by
   deleting the line under test and confirming it goes red.
 - **Root-anchor constants in tests**, per the namespace hazard above.
+- **Reindex tests need a scalar confound neutralised first.** Both learned in increment 2. Scalar
+  reconciliation nearly always dirties the survivor — absorbing the duplicate's title into
+  `alternate_titles` alone does it — and the resulting `target.save!` fires `SearchIndexable`'s own
+  `after_commit`, creating exactly the `index_item` row the test means to attribute to the merger's
+  explicit reindex. Without a `neutralize_scalar_confound` helper (see
+  `test/lib/books/author/merger_test.rb`) those tests pass against a merger that does no reindexing
+  at all. Book merge absorbs `alternate_titles`, so it carries the identical confound.
+- **Stub `GenerateUserFavoritesListsJob.perform_async` in any test that hand-builds an
+  auto-generated-list scenario.** Sidekiq runs inline in this suite, so the real job rebuilds that
+  fixture list from live `user_list_items` and wipes the `ListItem` rows the test just crafted.
 - **`ps aux | grep "[r]ails test"` before running the suite** — this worktree shares
   `the_greatest_test` with the main checkout and with any other agent's worktree.
 - Minitest is 6.x: `assert_nil`, never `assert_equal nil`.
@@ -418,6 +533,24 @@ Everything hard, on a proven pattern: reviews plus summary recalculation, editio
 `default_edition_id`, series representative, countries, bidirectional relationships, and the
 authors/credits gate.
 
+Increment 3 was scoped on 2026-08-28, after increments 1 and 2 had shipped and the mergers had moved
+on from this document. An audit of the codebase against the table above found the plumbing exactly as
+predicted — `Books::BookPolicy` is bare (no `execute_action?`, so Pundit would raise `NoMethodError`),
+`Admin::Books::BooksController` has no `execute_action`, and `resources :books` has no
+`member post :execute_action`. `exclude_id` is already supported on the books search endpoint, and
+`test/lint/merge_actions_destructive_test.rb` discovers `MergeBook` by filesystem glob, so neither
+needs work.
+
+It also found five things this document did not yet say, all now folded into the sections above: the
+auto-generated-list skip and the generated-favorites rebuild; `lock_books` and the
+`result_for_raised`/`merge_committed?` pattern; the absence of an author reindex fan-out; the
+`corrections` decision; and `amazon_enriched_at`'s exclusion from blank-fill.
+
+Two non-obvious facts confirmed against the schema while scoping, worth not re-deriving:
+`Books::Book` declares no friendly_id `:history`, so there are no `friendly_id_slugs` rows to migrate
+or clean up; and `books_editions` carries no unique index on `book_id`, so editions are a plain
+repoint with no collision case.
+
 ## Files
 
 **New:**
@@ -436,8 +569,17 @@ authors/credits gate.
 - `app/controllers/admin/books/books_controller.rb` — `execute_action`
 - `app/controllers/admin/books/authors_controller.rb` — `execute_action`
 - `app/policies/games/game_policy.rb`, `app/policies/books/book_policy.rb`,
-  `app/policies/books/author_policy.rb` — `execute_action?` gated on `can_delete?`
+  `app/policies/books/author_policy.rb` — `execute_action?` (see the correction under Admin plumbing:
+  `can_write?`, with the delete gate in the controller)
 - `app/policies/music/{album,artist,song}_policy.rb` — same correction
 - `app/views/admin/games/games/show.html.erb`, `app/views/admin/books/books/show.html.erb`,
   `app/views/admin/books/authors/show.html.erb` — Merge button and modal
 - `CLAUDE.md` — spec location corrected to `docs/superpowers/specs/` (done)
+
+**Remaining for increment 3**, everything else above having shipped in increments 1 and 2:
+`app/lib/books/book/merger.rb` + test, `app/lib/actions/admin/books/merge_book.rb` + test,
+`e2e/tests/books/admin/books-merge.spec.ts`, a `member post :execute_action` on `resources :books`,
+`execute_action` + `allowed_action_names` on `Admin::Books::BooksController` + its controller test,
+`execute_action?` on `Books::BookPolicy`, the Merge button and modal in
+`app/views/admin/books/books/show.html.erb`, and an update to `docs/features/record-merge.md` —
+which currently says books are "not yet built" in two places.
