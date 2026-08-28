@@ -346,7 +346,7 @@ module Books
       test "recalculates the target's review summary after moving reviews" do
         Services::Reviews::SummaryRecalculator.expects(:recalculate)
           .with("Books::Book", @target.id)
-          .at_least_once
+          .once
 
         result = ::Books::Book::Merger.call(source: @source, target: @target)
 
@@ -628,7 +628,7 @@ module Books
         )
       end
 
-      test "does not queue indexing while migration suppression is on" do
+      test "does not queue its own index request while migration suppression is on" do
         neutralize_scalar_confound
         Services::BooksMigration.stubs(:search_indexing_suppressed?).returns(true)
 

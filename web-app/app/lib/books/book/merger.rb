@@ -31,6 +31,11 @@ module Books
         @source_book = source
         @target_book = target
         @source_book_id = source.id
+        # Every count in @stats means "transferred/affected by this merge" --
+        # rows that ended up moved, updated, or newly linked onto the target --
+        # never merely "seen". A row dropped because the target already had an
+        # equivalent does not count. Nothing consumes these stats today; keep
+        # them consistent so a future consumer doesn't have to guess per key.
         @stats = {}
         @affected_ranking_configurations = []
         @transaction_body_completed = false
@@ -136,8 +141,15 @@ module Books
       end
 
       # books_editions has no unique index on book_id, so there is no collision
-      # case. MUST run before reconcile_scalars fills default_edition_id, or the
-      # survivor's FK points at a row owned by the record about to be deleted.
+      # case. MUST run before destroy_source_book: books_editions.book_id is
+      # dependent: :destroy on Books::Book, and default_edition_id is a FK to
+      # books_editions with on_delete: :nullify. If an edition were still owned
+      # by the source when it's destroyed, the cascade would delete it and
+      # nullify default_edition_id on ANY row pointing at it -- including the
+      # survivor's, even after save! already committed that value. Relative to
+      # reconcile_scalars filling default_edition_id, order doesn't matter: the
+      # transaction has exactly one persistence point, target_book.save!, which
+      # runs after both merge_all_associations and reconcile_scalars.
       def merge_editions
         @stats[:editions] = source_book.editions.update_all(book_id: target_book.id)
       end
@@ -214,19 +226,21 @@ module Books
 
       # Copy-or-skip rather than move: a CategoryItem carries no state worth
       # preserving beyond the link itself, so the source's own row simply dies
-      # with it. This is the music pattern.
+      # with it. This is the music pattern. Counted like the other stats: only
+      # when the target didn't already have this category (see @stats above).
       def merge_category_items
         count = 0
         source_book.category_items.find_each do |category_item|
+          already_present = target_book.category_items.exists?(category_id: category_item.category_id)
           target_book.category_items.find_or_create_by!(category_id: category_item.category_id)
-          count += 1
+          count += 1 unless already_present
         end
         @stats[:category_items] = count
       end
 
       def merge_list_items
         count = 0
-        source_book.list_items.find_each do |list_item|
+        source_book.list_items.includes(:list).find_each do |list_item|
           # An auto-generated list's rows belong to the generator, which rewrites
           # them nightly from the underlying user favorites -- and this merge has
           # already moved those. Writing here would raise against the ListItem
@@ -239,8 +253,8 @@ module Books
             existing.update!(verified: true) if list_item.verified? && !existing.verified?
           else
             list_item.update!(listable_id: target_book.id)
+            count += 1
           end
-          count += 1
         end
         @stats[:list_items] = count
       end
@@ -430,9 +444,11 @@ module Books
         absorb_alternate_titles
       end
 
-      # default_edition_id is in BLANK_FILLABLE, which is why merge_editions must
-      # already have run: otherwise the survivor's FK points at a row owned by the
-      # record about to be deleted.
+      # default_edition_id is in BLANK_FILLABLE. Filling it here has no ordering
+      # dependency on merge_editions -- the transaction's only persistence point,
+      # target_book.save!, runs after both this and merge_all_associations. What
+      # merge_editions must precede is destroy_source_book: see the comment on
+      # merge_editions for the FK cascade this avoids.
       def fill_blank_fields
         filled = []
 
@@ -470,6 +486,7 @@ module Books
           .compact_blank
 
         merged = (existing + incoming).uniq - [target_book.title]
+        @stats[:alternate_titles_added] = []
         return if merged == existing
 
         @stats[:alternate_titles_added] = merged - existing

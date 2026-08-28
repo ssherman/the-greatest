@@ -228,6 +228,21 @@ duplicate reports are free-text notes indistinguishable in structure from any ot
 Music and games behave identically for the same reason, and that is correct behavior for them too,
 not a gap to backport a fix into.
 
+**Every book merge queues a full rebuild of the generated favorites list.** After the transaction
+commits, alongside the reindex and ranking jobs, the merger calls
+`GenerateUserFavoritesListsJob.perform_async("Books::UserList")`, which rebuilds the domain-wide
+generated list "Our Users' Favorite Books of All Time" from scratch. This is not optional cleanup —
+see the next bullet for why the merge cannot leave that list alone.
+
+**`merge_list_items` deliberately skips the auto-generated favorites list rather than repointing
+its rows.** That list's `list_items` belong to the generator, which rewrites them nightly from the
+underlying user favorites — and this merge has already moved those via `merge_user_list_items`.
+Writing to a `ListItem` on an auto-generated list directly would raise against the model's own
+guard and turn an admin merge into a 500, so the merger skips it instead. Skipping it does leave
+that one list a row short until it's rebuilt, which is exactly what the queued
+`GenerateUserFavoritesListsJob` above fixes — only a full rebuild produces the correct combined
+score, voter_count and position for the survivor.
+
 **Book merge queues no author reindex fan-out.** This is the converse of the author merger's own
 special case above: `Books::Author#as_indexed_json` embeds no book data, so unlike a book's search
 document (which embeds `author_names` and `author_ids`, and so needs every affected book

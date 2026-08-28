@@ -80,7 +80,10 @@ module Actions
           result = call_with(source_book_id: @source.id.to_s, confirm_merge: "1")
 
           assert result.success?
-          assert_match(/author/i, result.message)
+          assert_match(
+            "The duplicate's 1 author did not transfer, because this book already has its own.",
+            result.message
+          )
         end
 
         test "warns rather than failing when a post-commit step fails" do

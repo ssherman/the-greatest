@@ -74,7 +74,8 @@ module Actions
           message = "Successfully merged '#{source_title}' (ID: #{source_id}) into " \
             "'#{target_book.title}'. The source book has been deleted."
 
-          message += " #{not_transferred_note(merger)}" if not_transferred_note(merger).present?
+          note = not_transferred_note(merger)
+          message += " #{note}" if note.present?
 
           if merger.stats[:post_commit_error].present?
             warn "#{message} Note: search reindexing, ranking recalculation and the " \
@@ -97,7 +98,7 @@ module Actions
           parts << "#{credits} credit#{"s" unless credits == 1}" if credits.positive?
           return "" if parts.empty?
 
-          "The duplicate's #{parts.join(" and ")} were not transferred, because this book " \
+          "The duplicate's #{parts.join(" and ")} did not transfer, because this book " \
             "already has its own."
         end
       end

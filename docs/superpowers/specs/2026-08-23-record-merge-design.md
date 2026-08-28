@@ -1,8 +1,8 @@
 # Record Merge: Games, Books, Authors
 
 **Date:** 2026-08-23, revised 2026-08-28
-**Status:** Increments 1 (games) and 2 (authors) shipped and deployed. Increment 3 (books) scoped
-2026-08-28 against the shipped code and ready for implementation planning.
+**Status:** Increments 1 (games), 2 (authors), and 3 (books) all shipped and deployed. Increment 3
+shipped 2026-08-28.
 **Branch:** `worktree-record-merge`
 
 **Reading this document after 2026-08-28:** increments 1 and 2 taught things the original draft did
@@ -585,10 +585,4 @@ repoint with no collision case.
   `app/views/admin/books/authors/show.html.erb` — Merge button and modal
 - `CLAUDE.md` — spec location corrected to `docs/superpowers/specs/` (done)
 
-**Remaining for increment 3**, everything else above having shipped in increments 1 and 2:
-`app/lib/books/book/merger.rb` + test, `app/lib/actions/admin/books/merge_book.rb` + test,
-`e2e/tests/books/admin/books-merge.spec.ts`, a `member post :execute_action` on `resources :books`,
-`execute_action` + `allowed_action_names` on `Admin::Books::BooksController` + its controller test,
-`execute_action?` on `Books::BookPolicy`, the Merge button and modal in
-`app/views/admin/books/books/show.html.erb`, and an update to `docs/features/record-merge.md` —
-which currently says books are "not yet built" in two places.
+**Increment 3 shipped 2026-08-28.**

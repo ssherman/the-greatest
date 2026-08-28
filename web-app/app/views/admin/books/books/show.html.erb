@@ -261,7 +261,8 @@
       duplicate's authors are usually duplicate author records and merging them in
       would show the same person twice. If they are left behind you will be told so.
       Merge the duplicate <em>author</em> first if you want them combined.
-      The duplicate book will be permanently deleted.
+      The duplicate's pending corrections are discarded &mdash; a merge is how a
+      duplicate report gets actioned. The duplicate book will be permanently deleted.
     </p>
 
     <%= form_with url: execute_action_admin_books_book_path(@book),
