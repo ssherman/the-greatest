@@ -137,7 +137,7 @@ module Categories
 
     test "should use database transaction for soft delete" do
       # Mock an error during the transaction to test rollback
-      @uk_location.stubs(:update_column).raises(ActiveRecord::RecordInvalid)
+      @uk_location.stubs(:update!).raises(ActiveRecord::RecordInvalid)
 
       deleter = Categories::Deleter.new(category: @uk_location, soft: true)
 
@@ -163,6 +163,18 @@ module Categories
 
       assert_equal true, soft_deleter.soft
       assert_equal false, hard_deleter.soft
+    end
+
+    test "soft delete queues the category's items for reindexing" do
+      category = categories(:books_novels_genre)
+      book_ids = CategoryItem.where(category_id: category.id, item_type: "Books::Book").pluck(:item_id)
+      assert_equal 3, book_ids.size, "fixture drift: books_novels_genre should hold 3 books"
+      SearchIndexRequest.delete_all
+
+      Categories::Deleter.new(category: category, soft: true).delete
+
+      queued = SearchIndexRequest.where(parent_type: "Books::Book", action: :index_item).distinct.pluck(:parent_id)
+      assert_equal book_ids.sort, queued.sort
     end
   end
 end
