@@ -476,11 +476,68 @@ module Books
         target_book.alternate_titles = merged
       end
 
-      # Filled in by a later task.
+      # Ordering constraint 1: runs first, before any association is touched. Once
+      # source.destroy! cascades its ranked_items there is no way to recover which
+      # ranking configurations the source used to belong to.
       def collect_affected_ranking_configurations
+        source_configs = RankedItem.where(item_type: "Books::Book", item_id: source_book.id)
+          .pluck(:ranking_configuration_id)
+        target_configs = RankedItem.where(item_type: "Books::Book", item_id: target_book.id)
+          .pluck(:ranking_configuration_id)
+
+        @affected_ranking_configurations = (source_configs + target_configs).uniq
       end
 
+      # The merge is committed by this point. Reindexing, ranking recalculation and
+      # the generated-list rebuild are follow-up work: if they fail, the merge still
+      # happened, so a failure here must not be reported as a failed merge.
+      # `success?` means "the merge committed", and that is what the admin UI
+      # reports.
       def run_post_commit_steps
+        reindex_target_book
+        schedule_ranking_recalculation
+        regenerate_user_favorites_list
+      rescue => error
+        Rails.logger.error(
+          "Books::Book::Merger: merge of #{@source_book_id} into #{target_book.id} " \
+          "committed, but post-commit follow-up failed: #{error.class}: #{error.message}"
+        )
+        @stats[:post_commit_error] = error.message
+      end
+
+      # SearchIndexable already respects this flag on its own callbacks; the merger
+      # matches it rather than writing requests during a bulk migration.
+      #
+      # No fan-out beyond this one request. Author merge reindexes its books
+      # because Books::Book#as_indexed_json embeds author_names and author_ids; the
+      # converse does not hold, since Books::Author#as_indexed_json carries no book
+      # data. Unindexing the source is automatic -- SearchIndexable fires
+      # unindex_item on destroy.
+      def reindex_target_book
+        return if Services::BooksMigration.search_indexing_suppressed?
+
+        SearchIndexRequest.create!(parent: target_book, action: :index_item)
+      end
+
+      # perform_async writes to Redis, which a rollback cannot undo -- hence
+      # post-commit, never inside the transaction. Author rankings come along for
+      # free: CalculateRankingsJob already cascades into
+      # Books::CalculateAuthorRankingsJob for any Books::RankingConfiguration.
+      def schedule_ranking_recalculation
+        @affected_ranking_configurations.each do |config_id|
+          BulkCalculateWeightsJob.perform_async(config_id)
+          CalculateRankingsJob.perform_in(5.minutes, config_id)
+        end
+      end
+
+      # merge_list_items deliberately skips (rather than repoints) a source row on
+      # the auto-generated favorites list, so that row is destroyed along with the
+      # source and the generated list falls one item short. Only a full rebuild
+      # produces the correct combined score, voter_count and position for the
+      # survivor. Queuing it now runs it comfortably inside the 5 minutes before
+      # CalculateRankingsJob would otherwise read that short list.
+      def regenerate_user_favorites_list
+        GenerateUserFavoritesListsJob.perform_async("Books::UserList")
       end
 
       def destroy_source_book

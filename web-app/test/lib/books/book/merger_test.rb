@@ -615,6 +615,78 @@ module Books
           "the default edition must belong to the survivor, not to a deleted book"
       end
 
+      test "queues a reindex for the target after the merge commits" do
+        neutralize_scalar_confound
+
+        merger = ::Books::Book::Merger.new(source: @source, target: @target)
+        result = merger.call
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_nil merger.stats[:post_commit_error]
+        assert SearchIndexRequest.exists?(
+          parent_type: "Books::Book", parent_id: @target.id, action: "index_item"
+        )
+      end
+
+      test "does not queue indexing while migration suppression is on" do
+        neutralize_scalar_confound
+        Services::BooksMigration.stubs(:search_indexing_suppressed?).returns(true)
+
+        result = ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "merge must succeed, not roll back: #{result.errors.inspect}"
+        assert_not SearchIndexRequest.exists?(
+          parent_type: "Books::Book", parent_id: @target.id, action: "index_item"
+        )
+      end
+
+      test "schedules ranking recalculation for every affected configuration" do
+        config = ranking_configurations(:books_global)
+        RankedItem.create!(item: @source, ranking_configuration: config, rank: 5)
+
+        BulkCalculateWeightsJob.expects(:perform_async).with(config.id)
+        CalculateRankingsJob.expects(:perform_in).with(5.minutes, config.id)
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+
+        result = ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+      end
+
+      test "collects the source's ranking configurations before the destroy cascade" do
+        config = ranking_configurations(:books_global)
+        # Only the SOURCE is ranked. If the ids were collected after the destroy,
+        # its ranked_items would already be gone and this job would never fire.
+        RankedItem.create!(item: @source, ranking_configuration: config, rank: 5)
+
+        BulkCalculateWeightsJob.expects(:perform_async).with(config.id).once
+        CalculateRankingsJob.stubs(:perform_in)
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+      end
+
+      test "rebuilds the generated favorites list after the merge commits" do
+        GenerateUserFavoritesListsJob.expects(:perform_async).with("Books::UserList")
+
+        result = ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+      end
+
+      test "a post-commit failure is recorded but does not fail the merge" do
+        source_id = @source.id
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+          .raises(StandardError.new("redis is down"))
+
+        merger = ::Books::Book::Merger.new(source: @source, target: @target)
+        result = merger.call
+
+        assert result.success?, "the merge committed; reporting failure would be a lie"
+        assert_equal "redis is down", merger.stats[:post_commit_error]
+        assert_not ::Books::Book.exists?(source_id)
+      end
+
       private
 
       def attach_image(book, primary:)
@@ -625,6 +697,31 @@ module Books
             content_type: "image/jpeg"
           )
         end
+      end
+
+      # Scalar reconciliation nearly always dirties the target -- absorbing the
+      # duplicate's title alone does it -- and the resulting target.save! fires
+      # SearchIndexable's own after_commit, creating exactly the index_item row the
+      # reindex tests mean to attribute to the merger's explicit reindex. Pre-set
+      # the two scalars the merge would otherwise change so target.changed? stays
+      # false and the only index request can be the merger's own.
+      #
+      # A second, independent confound: crime_and_punishment carries two
+      # categories war_and_peace does not (politics, france), so
+      # merge_category_items' find_or_create_by! creates real CategoryItem rows on
+      # the target. CategoryItem#queue_item_for_reindexing (an after_save,
+      # unrelated to SearchIndexable) queues its own index_item request for every
+      # one of those -- and, unlike SearchIndexable, it does not check
+      # Services::BooksMigration.search_indexing_suppressed? at all. Silencing it
+      # here keeps the only possible index request the merger's own explicit
+      # reindex_target_book call.
+      def neutralize_scalar_confound
+        @target.update_columns(
+          alternate_titles: [@source.title],
+          first_published_year: @source.first_published_year
+        )
+        @target.reload
+        CategoryItem.any_instance.stubs(:queue_item_for_reindexing)
       end
     end
   end
