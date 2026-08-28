@@ -510,6 +510,25 @@ Rails.application.routes.draw do
   end
 
   constraints DomainConstraint.new(Rails.application.config.domains[:books]) do
+    get "my/reading-goals", to: "books/my/reading_goals#index", as: :books_my_reading_goals
+    get "my/reading-goals/new", to: "books/my/reading_goals#new", as: :new_books_my_reading_goal
+    post "my/reading-goals", to: "books/my/reading_goals#create"
+    get "my/reading-goals/:id/edit", to: "books/my/reading_goals#edit", as: :edit_books_my_reading_goal,
+      constraints: {id: /\d+/}
+    patch "my/reading-goals/:id", to: "books/my/reading_goals#update", as: :books_my_reading_goal,
+      constraints: {id: /\d+/}
+    delete "my/reading-goals/:id", to: "books/my/reading_goals#destroy", constraints: {id: /\d+/}
+
+    get "reading_goal_state/:id", to: "books/reading_goal_state#show", as: :books_reading_goal_state,
+      constraints: {id: /\d+/}
+    get "reading_goals", to: redirect("/my/reading-goals", status: 301)
+    get "reading_goals/new", to: redirect("/my/reading-goals/new", status: 301)
+    get "reading_goals/:id/edit", to: redirect("/my/reading-goals/%{id}/edit", status: 301), constraints: {id: /\d+/}
+    get "reading_goals/:id/page/1", to: redirect("/reading_goals/%{id}", status: 301), constraints: {id: /\d+/}
+    get "reading_goals/:id/page/:page", to: "books/reading_goals#show", as: :books_reading_goal_page,
+      constraints: {id: /\d+/, page: /[1-9]\d*/}
+    get "reading_goals/:id", to: "books/reading_goals#show", as: :books_reading_goal, constraints: {id: /\d+/}
+
     # Admin interface for books domain
     namespace :admin, module: "admin/books", as: "admin_books" do
       root to: "dashboard#index"
