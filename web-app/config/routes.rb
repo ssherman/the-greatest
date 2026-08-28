@@ -525,6 +525,9 @@ Rails.application.routes.draw do
         resources :book_relationships, only: [:create]
         resources :credits, only: [:create]
         resources :category_items, only: [:index, :create], controller: "/admin/category_items"
+        member do
+          post :execute_action
+        end
         collection do
           get :search
         end
