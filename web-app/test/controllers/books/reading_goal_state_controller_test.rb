@@ -30,4 +30,18 @@ class Books::ReadingGoalStateControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
     assert_includes response.headers.fetch("Cache-Control"), "no-store"
   end
+
+  test "public goal exposes a non-manageable state to a stranger and manageable state to an admin" do
+    goal = books_reading_goals(:public_goal_other_user)
+
+    sign_in_as users(:editor_user), stub_auth: true
+    get "/reading_goal_state/#{goal.id}", headers: {"HOST" => Rails.application.config.domains[:books]}, as: :json
+    assert_response :success
+    assert_equal false, response.parsed_body.fetch("can_manage")
+
+    sign_in_as users(:admin_user), stub_auth: true
+    get "/reading_goal_state/#{goal.id}", headers: {"HOST" => Rails.application.config.domains[:books]}, as: :json
+    assert_response :success
+    assert_equal true, response.parsed_body.fetch("can_manage")
+  end
 end

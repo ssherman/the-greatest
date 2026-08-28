@@ -3,8 +3,8 @@ class Books::My::ReadingGoalsController < ApplicationController
 
   layout "books/application"
 
-  before_action :require_signed_in!
   before_action :prevent_caching
+  before_action :require_signed_in!
   before_action :set_reading_goal, only: [:edit, :update, :destroy]
 
   def index

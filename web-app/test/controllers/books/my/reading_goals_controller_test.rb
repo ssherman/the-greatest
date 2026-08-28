@@ -4,7 +4,7 @@ class Books::My::ReadingGoalsControllerTest < ActionDispatch::IntegrationTest
   setup do
     @host = Rails.application.config.domains[:books]
     @user = users(:regular_user)
-    Books::My::ReadingGoalsController.any_instance.stubs(:default_render) { |controller| controller.head :ok }
+    Books::My::ReadingGoalsController.prepend_view_path Rails.root.join("test/views")
   end
 
   test "new supplies the required current-year defaults and is no-store" do
@@ -16,6 +16,7 @@ class Books::My::ReadingGoalsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.headers.fetch("Cache-Control"), "no-store"
     goal = @controller.view_assigns.fetch("reading_goal")
     assert_equal "My #{Date.current.year} Reading Goal", goal.name
+    assert_equal "My yearly reading goal", goal.description
     assert_equal 12, goal.target_count
     assert_equal Date.new(Date.current.year, 1, 1), goal.starts_on
     assert_equal Date.new(Date.current.year, 12, 31), goal.ends_on
@@ -30,6 +31,44 @@ class Books::My::ReadingGoalsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     goals = @controller.view_assigns.fetch("upcoming_reading_goals")
     assert goals.all? { |goal| goal.user_id == @user.id }
+  end
+
+  test "index groups goals in the model scope ordering" do
+    sign_in_as @user, stub_auth: true
+
+    get books_my_reading_goals_path, headers: {"HOST" => @host}
+
+    assert_equal [2, 7], @controller.view_assigns.fetch("active_reading_goals").map(&:id)
+    assert_equal [3, 8, 5], @controller.view_assigns.fetch("upcoming_reading_goals").map(&:id)
+    assert_equal [1, 9, 4], @controller.view_assigns.fetch("finished_reading_goals").map(&:id)
+  end
+
+  test "admin index retains management scope for every goal" do
+    sign_in_as users(:admin_user), stub_auth: true
+
+    get books_my_reading_goals_path, headers: {"HOST" => @host}
+
+    groups = %w[active_reading_goals upcoming_reading_goals finished_reading_goals]
+    assert_includes groups.flat_map { |group| @controller.view_assigns.fetch(group).map(&:id) },
+      books_reading_goals(:public_goal_other_user).id
+  end
+
+  test "anonymous owner route redirects with no-store" do
+    get books_my_reading_goals_path, headers: {"HOST" => @host}
+
+    assert_redirected_to "/"
+    assert_includes response.headers.fetch("Cache-Control"), "no-store"
+  end
+
+  test "validation failure is unprocessable and no-store" do
+    sign_in_as @user, stub_auth: true
+
+    post books_my_reading_goals_path, headers: {"HOST" => @host}, params: {
+      reading_goal: {name: "", target_count: 0, starts_on: Date.current, ends_on: Date.current, public: false}
+    }
+
+    assert_response :unprocessable_entity
+    assert_includes response.headers.fetch("Cache-Control"), "no-store"
   end
 
   test "create, update, and destroy delegate through the goal write services" do
@@ -74,11 +113,17 @@ class Books::My::ReadingGoalsControllerTest < ActionDispatch::IntegrationTest
     assert_includes flash[:alert], "edge cache purge confirmation failed"
   end
 
-  test "owner updates and destroys while strangers receive no-store 404" do
+  test "unauthorized update and destroy are no-store 404s" do
     goal = books_reading_goals(:private_goal)
     sign_in_as users(:editor_user), stub_auth: true
 
-    get edit_books_my_reading_goal_path(goal), headers: {"HOST" => @host}
+    patch books_my_reading_goal_path(goal), headers: {"HOST" => @host}, params: {
+      reading_goal: {name: goal.name, target_count: goal.target_count, starts_on: goal.starts_on, ends_on: goal.ends_on, public: false}
+    }
+    assert_response :not_found
+    assert_includes response.headers.fetch("Cache-Control"), "no-store"
+
+    delete books_my_reading_goal_path(goal), headers: {"HOST" => @host}
     assert_response :not_found
     assert_includes response.headers.fetch("Cache-Control"), "no-store"
   end

@@ -5,7 +5,7 @@ class Books::ReadingGoalsControllerTest < ActionDispatch::IntegrationTest
     @host = Rails.application.config.domains[:books]
     @public_goal = books_reading_goals(:public_goal_other_user)
     @private_goal = books_reading_goals(:private_goal)
-    Books::ReadingGoalsController.any_instance.stubs(:default_render) { |controller| controller.head :ok }
+    Books::ReadingGoalsController.prepend_view_path Rails.root.join("test/views")
   end
 
   test "anonymous public show is cacheable, viewer-neutral, and has no session cookie" do
@@ -39,7 +39,31 @@ class Books::ReadingGoalsControllerTest < ActionDispatch::IntegrationTest
     assert_response :moved_permanently
     assert_redirected_to books_reading_goal_page_path(@public_goal, 2)
 
-    get books_reading_goal_path(@public_goal, page: "01"), headers: {"HOST" => @host}
+    ["01", "0", "-1", "books"].each do |page|
+      get books_reading_goal_path(@public_goal, page: page), headers: {"HOST" => @host}
+      assert_response :not_found, "expected page=#{page.inspect} to be rejected"
+    end
+
+    ["page[]=2", "page[requested]=2"].each do |query|
+      get "#{books_reading_goal_path(@public_goal)}?#{query}", headers: {"HOST" => @host}
+      assert_response :not_found, "expected #{query.inspect} to be rejected"
+    end
+  end
+
+  test "legacy page one redirects and invalid page path segments do not route" do
+    get "/reading_goals/#{@public_goal.id}/page/1", headers: {"HOST" => @host}
+    assert_response :moved_permanently
+    assert_redirected_to books_reading_goal_path(@public_goal)
+
+    ["0", "01", "books"].each do |page|
+      get "/reading_goals/#{@public_goal.id}/page/#{page}", headers: {"HOST" => @host}
+      assert_response :not_found, "expected path page=#{page.inspect} to be rejected"
+    end
+  end
+
+  test "reading-goal routes do not resolve on another domain host" do
+    get books_reading_goal_path(@public_goal), headers: {"HOST" => Rails.application.config.domains[:music]}
+
     assert_response :not_found
   end
 
