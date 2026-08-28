@@ -14,17 +14,29 @@ module Services
         end
 
         def call
-          write = capture_and_save
+          write = nil
+          committed_result = nil
+          goal.class.transaction do |transaction|
+            write = capture_and_save
+            if write[:persisted]
+              transaction.after_commit do
+                committed_result = invalidate_cache(write)
+              end
+            end
+          end
+
           unless write[:persisted]
             return result(success: false, persisted: false, purge_confirmed: nil, errors: goal.errors.full_messages)
           end
 
-          if write[:privacy_revocation]
-            revoke_public_cache(write[:before_urls])
-          else
-            enqueue(write[:urls])
-            result(success: true, persisted: true, purge_confirmed: nil, errors: [])
-          end
+          committed_result || result(success: true, persisted: true, purge_confirmed: nil, errors: [])
+        rescue ActiveRecord::RecordNotFound
+          result(
+            success: false,
+            persisted: false,
+            purge_confirmed: nil,
+            errors: ["Reading goal no longer exists"]
+          )
         end
 
         private
@@ -36,26 +48,33 @@ module Services
         # observe half of the other's before/after count window or deadlock by
         # acquiring the same two coordination locks in reverse.
         def capture_and_save
-          goal.class.transaction do
-            lock_current_owner
-            goal.reload(lock: true) if goal.persisted?
+          lock_current_owner
+          goal.reload(lock: true) if goal.persisted?
 
-            before_public = goal.persisted? && goal.public?
-            before_urls = before_public ? cached_urls : []
-            goal.assign_attributes(attributes)
-            privacy_revocation = before_public && !goal.public?
+          before_public = goal.persisted? && goal.public?
+          before_urls = before_public ? cached_urls : []
+          goal.assign_attributes(attributes)
+          privacy_revocation = before_public && !goal.public?
 
-            if goal.save
-              after_urls = goal.public? ? cached_urls : []
-              {
-                persisted: true,
-                privacy_revocation: privacy_revocation,
-                before_urls: before_urls,
-                urls: (before_urls + after_urls).uniq
-              }
-            else
-              {persisted: false}
-            end
+          if goal.save
+            after_urls = goal.public? ? cached_urls : []
+            {
+              persisted: true,
+              privacy_revocation: privacy_revocation,
+              before_urls: before_urls,
+              urls: (before_urls + after_urls).uniq
+            }
+          else
+            {persisted: false}
+          end
+        end
+
+        def invalidate_cache(write)
+          if write[:privacy_revocation]
+            revoke_public_cache(write[:before_urls])
+          else
+            enqueue(write[:urls])
+            result(success: true, persisted: true, purge_confirmed: nil, errors: [])
           end
         end
 

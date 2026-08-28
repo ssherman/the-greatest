@@ -1,6 +1,8 @@
 require "test_helper"
 
 class UserListItemsControllerTest < ActionDispatch::IntegrationTest
+  self.use_transactional_tests = false
+
   setup do
     @user = users(:regular_user)
     @other_user = users(:editor_user)
@@ -8,6 +10,7 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
     @other_list = user_lists(:admin_user_games_favorites)
     @album = music_albums(:wish_you_were_here)
     @existing_album = music_albums(:dark_side_of_the_moon)
+    Books::ReadingGoals::PurgeCachedPagesJob.clear
     host! Rails.application.config.domains[:music]
   end
 
@@ -495,6 +498,63 @@ class UserListItemsControllerTest < ActionDispatch::IntegrationTest
     assert_response :see_other
   ensure
     ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
+  end
+
+  test "defers the Books purge job until an enclosing transaction commits" do
+    item = user_list_items(:regular_user_books_item_3)
+    old_completed_on = item.completed_on
+    new_completed_on = Date.new(2025, 3, 4)
+    url = "https://books.test/reading_goals/123"
+    Services::Books::ReadingGoals::CompletionChangeInvalidator.expects(:call).with(
+      user: @user,
+      old_completed_on: old_completed_on,
+      new_completed_on: new_completed_on,
+      enqueue: false
+    ).returns([url])
+
+    sign_in_as(@user, stub_auth: true)
+    Sidekiq::Testing.fake! do
+      User.transaction do
+        patch user_list_item_completion_path(item), params: {
+          user_list_item: {completed_on: new_completed_on.iso8601}
+        }
+
+        assert_response :see_other
+        assert_empty Books::ReadingGoals::PurgeCachedPagesJob.jobs
+      end
+
+      assert_equal ["books", [url]],
+        Books::ReadingGoals::PurgeCachedPagesJob.jobs.last.fetch("args")
+    end
+  end
+
+  test "drops the Books purge job when an enclosing transaction rolls back" do
+    item = user_list_items(:regular_user_books_item_3)
+    old_completed_on = item.completed_on
+    new_completed_on = Date.new(2025, 3, 4)
+    url = "https://books.test/reading_goals/123"
+    Services::Books::ReadingGoals::CompletionChangeInvalidator.expects(:call).with(
+      user: @user,
+      old_completed_on: old_completed_on,
+      new_completed_on: new_completed_on,
+      enqueue: false
+    ).returns([url])
+
+    sign_in_as(@user, stub_auth: true)
+    Sidekiq::Testing.fake! do
+      User.transaction do
+        patch user_list_item_completion_path(item), params: {
+          user_list_item: {completed_on: new_completed_on.iso8601}
+        }
+
+        assert_response :see_other
+        assert_empty Books::ReadingGoals::PurgeCachedPagesJob.jobs
+        raise ActiveRecord::Rollback
+      end
+
+      assert_empty Books::ReadingGoals::PurgeCachedPagesJob.jobs
+      assert_equal old_completed_on, item.reload.completed_on
+    end
   end
 
   test "clearing a completion date invalidates goals for the old date" do

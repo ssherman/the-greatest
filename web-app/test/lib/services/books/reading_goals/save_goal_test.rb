@@ -4,9 +4,12 @@ module Services
   module Books
     module ReadingGoals
       class SaveGoalTest < ActiveSupport::TestCase
+        self.use_transactional_tests = false
+
         setup do
           @user = users(:regular_user)
           @host = Rails.application.config.domains[:books]
+          ::Books::ReadingGoals::PurgeCachedPagesJob.clear
         end
 
         test "creates a public goal and asynchronously purges its public page" do
@@ -42,6 +45,98 @@ module Services
 
           assert result.success?
           assert_equal Date.new(2027, 1, 1), goal.reload.starts_on
+        end
+
+        test "defers an async purge until an enclosing transaction commits" do
+          goal = public_goal
+
+          Sidekiq::Testing.fake! do
+            ::Books::ReadingGoal.transaction do
+              result = SaveGoal.call(goal: goal, attributes: {name: "Committed later"})
+
+              assert result.success?
+              assert_empty ::Books::ReadingGoals::PurgeCachedPagesJob.jobs
+            end
+
+            assert_equal ["books", [goal_url(goal)]],
+              ::Books::ReadingGoals::PurgeCachedPagesJob.jobs.last.fetch("args")
+          end
+        end
+
+        test "drops an async purge when an enclosing transaction rolls back" do
+          goal = public_goal
+
+          Sidekiq::Testing.fake! do
+            ::Books::ReadingGoal.transaction do
+              SaveGoal.call(goal: goal, attributes: {name: "Rolled back"})
+              assert_empty ::Books::ReadingGoals::PurgeCachedPagesJob.jobs
+              raise ActiveRecord::Rollback
+            end
+
+            assert_empty ::Books::ReadingGoals::PurgeCachedPagesJob.jobs
+            refute_equal "Rolled back", goal.reload.name
+          end
+        end
+
+        test "defers privacy revocation until an enclosing transaction commits" do
+          goal = public_goal
+          calls = []
+          purge = Object.new
+          purge.define_singleton_method(:purge_urls) do |domain, urls|
+            calls << [domain, urls]
+            {success: true}
+          end
+          Cloudflare::PurgeService.stubs(:new).returns(purge)
+
+          result = with_purge_token do
+            ::Books::ReadingGoal.transaction do
+              nested_result = SaveGoal.call(goal: goal, attributes: {public: false})
+              assert nested_result.success?
+              assert_nil nested_result.data[:purge_confirmed]
+              assert_empty calls
+              nested_result
+            end
+          end
+
+          assert_equal [[:books, [goal_url(goal)]]], calls
+          refute goal.reload.public?
+          assert result.success?
+        end
+
+        test "drops privacy revocation when an enclosing transaction rolls back" do
+          goal = public_goal
+          calls = []
+          purge = Object.new
+          purge.define_singleton_method(:purge_urls) do |domain, urls|
+            calls << [domain, urls]
+            {success: true}
+          end
+          Cloudflare::PurgeService.stubs(:new).returns(purge)
+
+          with_purge_token do
+            ::Books::ReadingGoal.transaction do
+              SaveGoal.call(goal: goal, attributes: {public: false})
+              assert_empty calls
+              raise ActiveRecord::Rollback
+            end
+          end
+
+          assert_empty calls
+          assert goal.reload.public?
+        end
+
+        test "a concurrently deleted goal returns a failure without purging" do
+          goal = public_goal
+          ::Books::ReadingGoal.where(id: goal.id).delete_all
+          ::Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).never
+          Cloudflare::PurgeService.expects(:new).never
+
+          result = SaveGoal.call(goal: goal, attributes: {name: "Too late"})
+
+          refute result.success?
+          refute result.data[:persisted]
+          assert_nil result.data[:purge_confirmed]
+          assert_equal ["Reading goal no longer exists"], result.errors
         end
 
         test "reloads a stale private instance before revoking a currently public goal" do

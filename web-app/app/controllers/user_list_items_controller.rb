@@ -148,7 +148,11 @@ class UserListItemsController < ApplicationController
       end
     end
 
-    Books::ReadingGoals::PurgeCachedPagesJob.perform_async("books", urls) if urls.any?
+    if urls.any?
+      ActiveRecord::Base.current_transaction.after_commit do
+        Books::ReadingGoals::PurgeCachedPagesJob.perform_async("books", urls)
+      end
+    end
     result
   end
 

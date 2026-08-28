@@ -4,9 +4,12 @@ module Services
   module Books
     module ReadingGoals
       class DestroyGoalTest < ActiveSupport::TestCase
+        self.use_transactional_tests = false
+
         setup do
           @user = users(:regular_user)
           @host = Rails.application.config.domains[:books]
+          ::Books::ReadingGoals::PurgeCachedPagesJob.clear
         end
 
         test "destroys a public goal and then enqueues all of its old URLs" do
@@ -35,6 +38,49 @@ module Services
 
           assert result.success?
           assert goal.destroyed?
+        end
+
+        test "defers the purge until an enclosing transaction commits" do
+          goal = reading_goal(public: true)
+
+          Sidekiq::Testing.fake! do
+            ::Books::ReadingGoal.transaction do
+              result = DestroyGoal.call(goal: goal)
+
+              assert result.success?
+              assert_empty ::Books::ReadingGoals::PurgeCachedPagesJob.jobs
+            end
+
+            assert_equal ["books", ["https://#{@host}/reading_goals/#{goal.id}"]],
+              ::Books::ReadingGoals::PurgeCachedPagesJob.jobs.last.fetch("args")
+          end
+        end
+
+        test "drops the purge when an enclosing transaction rolls back" do
+          goal = reading_goal(public: true)
+
+          Sidekiq::Testing.fake! do
+            ::Books::ReadingGoal.transaction do
+              DestroyGoal.call(goal: goal)
+              assert_empty ::Books::ReadingGoals::PurgeCachedPagesJob.jobs
+              raise ActiveRecord::Rollback
+            end
+
+            assert_empty ::Books::ReadingGoals::PurgeCachedPagesJob.jobs
+            assert ::Books::ReadingGoal.exists?(goal.id)
+          end
+        end
+
+        test "a concurrently deleted goal returns a failure without purging" do
+          goal = reading_goal(public: true)
+          ::Books::ReadingGoal.where(id: goal.id).delete_all
+          ::Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).never
+
+          result = DestroyGoal.call(goal: goal)
+
+          refute result.success?
+          assert_equal goal, result.data[:goal]
+          assert_equal ["Reading goal no longer exists"], result.errors
         end
 
         test "reloads a stale private instance before destroying a currently public goal" do
