@@ -1,0 +1,64 @@
+<%
+  content_for :page_title, "#{@reading_goal.name} | The Greatest Books"
+  owner_name = @reading_goal.user.display_name.presence || @reading_goal.user.name.presence || "Reader"
+%>
+
+<div class="space-y-8"
+     data-controller="books--reading-goal-state"
+     data-books--reading-goal-state-goal-id-value="<%= @reading_goal.id %>"
+     data-books--reading-goal-state-state-url-value="<%= books_reading_goal_state_path(@reading_goal) %>">
+  <header class="space-y-4">
+    <div class="flex flex-wrap items-start justify-between gap-4">
+      <div class="space-y-2">
+        <h1 class="text-3xl sm:text-4xl font-bold text-balance"><%= @reading_goal.name %></h1>
+        <p class="text-base-content/70">A reading goal by <%= owner_name %></p>
+      </div>
+
+      <%# This cacheable response must stay viewer-neutral. The authenticated,
+          no-store state endpoint supplies the URL and reveals this anchor. %>
+      <a class="btn hidden" data-books--reading-goal-state-target="manage">Manage</a>
+    </div>
+
+    <% if @reading_goal.description.present? %>
+      <p class="max-w-3xl text-lg leading-relaxed"><%= @reading_goal.description %></p>
+    <% end %>
+
+    <p class="text-base-content/70">
+      <%= @reading_goal.starts_on.to_fs(:long) %> – <%= @reading_goal.ends_on.to_fs(:long) %>
+    </p>
+
+    <div class="max-w-2xl">
+      <%= render Books::ReadingGoals::ProgressComponent.new(
+            count: @progress.count,
+            target_count: @reading_goal.target_count,
+            percentage: @progress.percentage,
+            bar_percentage: @progress.bar_percentage
+          ) %>
+    </div>
+  </header>
+
+  <section class="space-y-5" aria-labelledby="completed-books-heading">
+    <h2 id="completed-books-heading" class="text-2xl font-bold">Completed books</h2>
+
+    <% if @progress.items.any? %>
+      <div class="<%= Books::CardComponent::GRID_CONTAINER_CLASS %>">
+        <% @progress.items.each_with_index do |item, index| %>
+          <%= render Books::ReadingGoals::BookCardComponent.new(item: item, index: index) %>
+        <% end %>
+      </div>
+
+      <% if @pagy.pages > 1 %>
+        <nav class="flex justify-center" aria-label="Reading goal pages">
+          <%== @pagy.series_nav(slots: 5) %>
+        </nav>
+      <% end %>
+    <% else %>
+      <div class="rounded-box border border-base-300 bg-base-100 p-8 text-center">
+        <p class="font-semibold">No completed books yet</p>
+        <p class="mt-2 text-base-content/70">
+          Books on this reader's Read list count here once they have a completion date in this goal's range.
+        </p>
+      </div>
+    <% end %>
+  </section>
+</div>

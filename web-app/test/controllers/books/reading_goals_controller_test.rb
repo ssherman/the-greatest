@@ -5,13 +5,6 @@ class Books::ReadingGoalsControllerTest < ActionDispatch::IntegrationTest
     @host = Rails.application.config.domains[:books]
     @public_goal = books_reading_goals(:public_goal_other_user)
     @private_goal = books_reading_goals(:private_goal)
-    @original_view_paths = Books::ReadingGoalsController.view_paths
-    Books::ReadingGoalsController.prepend_view_path Rails.root.join("test/views")
-  end
-
-  teardown do
-    Books::ReadingGoalsController.view_paths = @original_view_paths
-    assert_equal @original_view_paths, Books::ReadingGoalsController.view_paths
   end
 
   test "anonymous public show is cacheable, viewer-neutral, and has no session cookie" do
@@ -23,6 +16,9 @@ class Books::ReadingGoalsControllerTest < ActionDispatch::IntegrationTest
     assert_nil response.headers["Set-Cookie"]
     refute_includes response.body, edit_books_my_reading_goal_path(@public_goal)
     refute_includes response.body, "data-signed-in"
+    assert_select "[data-controller~='books--reading-goal-state']" \
+      "[data-books--reading-goal-state-state-url-value='#{books_reading_goal_state_path(@public_goal)}']"
+    assert_select "a[data-books--reading-goal-state-target='manage']:not([href])", count: 1
   end
 
   test "private owner and admin show are no-store while strangers receive no-store 404" do

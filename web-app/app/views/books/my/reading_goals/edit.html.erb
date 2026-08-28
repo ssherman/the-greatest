@@ -1,0 +1,10 @@
+<% content_for :page_title, "Edit #{@reading_goal.name} | The Greatest Books" %>
+
+<div class="mx-auto max-w-2xl space-y-6">
+  <div>
+    <h1 class="text-3xl sm:text-4xl font-bold">Edit Reading Goal</h1>
+    <p class="mt-2 text-base-content/70">Update the target, date range, or sharing settings.</p>
+  </div>
+
+  <%= render "form", reading_goal: @reading_goal %>
+</div>
