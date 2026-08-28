@@ -3,6 +3,24 @@ module Books
     class Merger
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
+      # The survivor's own non-blank value always wins; these are only filled when
+      # it has none.
+      #
+      # book_kind is deliberately absent: it is a NOT NULL enum with a default, so
+      # it is never blank. amazon_enriched_at is deliberately absent too -- it
+      # marks that the Amazon lookup already ran, and the merge hands the survivor
+      # a batch of newly absorbed editions Amazon has never seen. Filling a blank
+      # stamp would mark the survivor "done" and let the enrichment sweep skip
+      # exactly the book that most needs it.
+      #
+      # When descriptions-subsystem step D7 drops books_books.description, remove
+      # :description from this list or fill_blank_fields raises inside the
+      # transaction.
+      BLANK_FILLABLE = %i[
+        subtitle sort_title book_length page_range word_count
+        description original_language_id default_edition_id
+      ].freeze
+
       attr_reader :source_book, :target_book, :stats
 
       def self.call(source:, target:)
@@ -406,10 +424,59 @@ module Books
         @stats[:credits_not_transferred] = 0
       end
 
-      # Filled in by later tasks.
       def reconcile_scalars
+        fill_blank_fields
+        reconcile_first_published_year
+        absorb_alternate_titles
       end
 
+      # default_edition_id is in BLANK_FILLABLE, which is why merge_editions must
+      # already have run: otherwise the survivor's FK points at a row owned by the
+      # record about to be deleted.
+      def fill_blank_fields
+        filled = []
+
+        BLANK_FILLABLE.each do |field|
+          next if target_book.public_send(field).present?
+
+          value = source_book.public_send(field)
+          next if value.blank?
+
+          target_book.public_send(:"#{field}=", value)
+          filled << field
+        end
+
+        @stats[:filled_fields] = filled
+      end
+
+      def reconcile_first_published_year
+        source_year = source_book.first_published_year
+        return if source_year.blank?
+
+        target_year = target_book.first_published_year
+        return if target_year.present? && target_year <= source_year
+
+        target_book.first_published_year = source_year
+      end
+
+      # Absorbing the duplicate's title is often the whole point of the merge: the
+      # deleted spelling should stay findable. alternate_titles is GIN-indexed and
+      # feeds as_indexed_json, so the search index picks this up on the target's
+      # post-commit reindex.
+      def absorb_alternate_titles
+        existing = Array(target_book.alternate_titles)
+        incoming = ([source_book.title] + Array(source_book.alternate_titles))
+          .map { |value| value.to_s.strip }
+          .compact_blank
+
+        merged = (existing + incoming).uniq - [target_book.title]
+        return if merged == existing
+
+        @stats[:alternate_titles_added] = merged - existing
+        target_book.alternate_titles = merged
+      end
+
+      # Filled in by a later task.
       def collect_affected_ranking_configurations
       end
 

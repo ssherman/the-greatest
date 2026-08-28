@@ -531,6 +531,90 @@ module Books
         assert_equal @target.id, credit.reload.creditable_id
       end
 
+      test "fills a blank field on the target from the source" do
+        @source.update!(subtitle: "A Novel in Six Parts")
+
+        merger = ::Books::Book::Merger.new(source: @source, target: @target)
+        merger.call
+
+        assert_equal "A Novel in Six Parts", @target.reload.subtitle
+        assert_includes merger.stats[:filled_fields], :subtitle
+      end
+
+      test "never overwrites a non-blank field on the target" do
+        @target.update!(subtitle: "The survivor's own subtitle")
+        @source.update!(subtitle: "The duplicate's subtitle")
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal "The survivor's own subtitle", @target.reload.subtitle
+      end
+
+      test "takes the earlier first_published_year" do
+        # crime_and_punishment is 1866, war_and_peace is 1869.
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal 1866, @target.reload.first_published_year
+      end
+
+      test "keeps the target's year when the source's is later" do
+        @source.update!(first_published_year: 1999)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal 1869, @target.reload.first_published_year
+      end
+
+      test "keeps the target's year when the source has none" do
+        @source.update!(first_published_year: nil)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_equal 1869, @target.reload.first_published_year
+      end
+
+      test "absorbs the source title and its alternates into the target's alternate titles" do
+        @source.update!(alternate_titles: ["Prestuplenie i nakazanie"])
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        titles = @target.reload.alternate_titles
+        assert_includes titles, "Crime and Punishment"
+        assert_includes titles, "Prestuplenie i nakazanie"
+        assert_includes titles, "Voyna i mir", "the target's own alternates must survive"
+      end
+
+      test "never lists the target's own title among its alternate titles" do
+        @source.update!(title: "War and Peace", slug: "war-and-peace-duplicate")
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_not_includes @target.reload.alternate_titles, "War and Peace"
+      end
+
+      test "does not blank-fill amazon_enriched_at" do
+        @source.update!(amazon_enriched_at: Time.current)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_nil @target.reload.amazon_enriched_at,
+          "filling this would let the enrichment sweep skip a book carrying " \
+          "newly absorbed editions Amazon has never seen"
+      end
+
+      test "fills default_edition_id only after the source's editions have moved" do
+        edition = ::Books::Edition.create!(book: @source, title: "Pevear translation")
+        @source.update!(default_edition: edition)
+        @target.update!(default_edition: nil)
+
+        ::Books::Book::Merger.call(source: @source, target: @target)
+
+        @target.reload
+        assert_equal edition.id, @target.default_edition_id
+        assert_equal @target.id, edition.reload.book_id,
+          "the default edition must belong to the survivor, not to a deleted book"
+      end
+
       private
 
       def attach_image(book, primary:)
