@@ -8,13 +8,14 @@ the source. It replaces the old workflow of deleting the duplicate outright, whi
 discarded everything attached to it — identifiers, list entries, personal-list entries, images,
 categories, and more.
 
-`Music::{Album,Artist,Song}::Merger` shipped this pattern first. This increment ports it to games
-(`::Games::Game::Merger`, `app/lib/games/game/merger.rb`) and authors (`::Books::Author::Merger`,
-`app/lib/books/author/merger.rb`), with departures the music mergers don't have — moving
-associations the music mergers drop on the floor, and checking search-indexing suppression before
-writing an index request. Books are planned as increment 3 of the same design; **this doc covers
-games and authors**, which is what exists today. For the full three-domain design, including the
-per-association table for books, see `docs/superpowers/specs/2026-08-23-record-merge-design.md`.
+`Music::{Album,Artist,Song}::Merger` shipped this pattern first. It has since been ported to games
+(`::Games::Game::Merger`, `app/lib/games/game/merger.rb`), authors (`::Books::Author::Merger`,
+`app/lib/books/author/merger.rb`), and books (`::Books::Book::Merger`,
+`app/lib/books/book/merger.rb`) — every domain, and both book-side record types, now have a
+merger. Each port carries departures the music mergers don't have — moving associations the music
+mergers drop on the floor, and checking search-indexing suppression before writing an index
+request. For the full three-domain design, including the per-association table for books, see
+`docs/superpowers/specs/2026-08-23-record-merge-design.md`.
 
 An admin reaches it from a game's admin show page via a "Merge" button, gated on delete permission
 (moderator role and above) rather than the lower write permission other actions on that page use —
@@ -22,16 +23,18 @@ merge deletes a record, so it needs the same permission delete does. The button 
 searches for the duplicate to merge in, then submits to the game's `execute_action` route, which
 dispatches to `Actions::Admin::Games::MergeGame` and from there to the merger. An author's admin
 show page offers the same button, dispatching via the author's own `execute_action` route to
-`Actions::Admin::Books::MergeAuthor` instead.
+`Actions::Admin::Books::MergeAuthor` instead, and a book's admin show page offers it too, dispatching
+to `Actions::Admin::Books::MergeBook`.
 
 ## Calling the merger
 
 ```ruby
 result = ::Games::Game::Merger.call(source: duplicate_game, target: canonical_game)
 result = ::Books::Author::Merger.call(source: duplicate_author, target: canonical_author)
+result = ::Books::Book::Merger.call(source: duplicate_book, target: canonical_book)
 ```
 
-Both return the same `Result = Struct.new(:success?, :data, :errors, keyword_init: true)`:
+All three return the same `Result = Struct.new(:success?, :data, :errors, keyword_init: true)`:
 
 - `success?` — `true` if the merge committed.
 - `data` — the target game (with merged data) on success, `nil` on failure.
@@ -64,8 +67,8 @@ Every association the merger moves falls into one of three patterns:
 ## Transaction boundary
 
 One `ActiveRecord::Base.transaction` wraps: collecting the affected ranking configurations (for
-mergers whose rankings derive from lists — games, and the planned books merger; the author merger
-has no such step, see "Author-specific rules" below), every association move, scalar
+mergers whose rankings derive from lists — games and books; the author merger has no such step,
+see "Author-specific rules" below), every association move, scalar
 reconciliation, `target.save!`, and `source.destroy!`. Reindexing the
 target and scheduling ranking jobs both happen **after** that transaction commits, never inside
 it — `perform_async`/`perform_in` write to Redis immediately, and a transaction rollback cannot
@@ -158,6 +161,81 @@ only (see "Merge requires delete permission" in the design doc).
   so the personal-saved-list caveat in the games modal has no author equivalent and is absent from
   the author modal by design, not by omission.
 
+## Books-specific rules
+
+- **`book_authors` and `credits` transfer only onto a book that has none of its own — otherwise
+  they are dropped, not repointed.** Whether the survivor already had authors or credits is
+  captured once, before any write, so the gate decision and the report of what didn't transfer
+  read the same state. The reason is what duplicate books usually *are*: a bad import whose
+  `book_authors` point at duplicate **author** rows, not the same author rows the survivor's do.
+  Transferring them unconditionally would leave the survivor crediting the same person twice — on
+  the public page, in `author_names` in the search index, and in author rankings, which derive
+  from an author's books. Merging the duplicate author first sidesteps the gate entirely, because
+  `book_authors` then dedupe on `author_id` automatically once both books share one author row.
+  `credits` are gated independently of authors, since a book can legitimately have one without the
+  other.
+- **Reviews move with `delete_all` + `update_all`, plus one explicit recalculation.** `Review` has
+  an `after_commit :recalculate_summary`, so repointing reviews one at a time would fire a
+  recalculation per row — an N-recalculation callback storm for a book with any real review count.
+  The merger instead deletes the colliding rows (one user reviewed both books) via a subquery,
+  bulk-repoints the rest with `update_all`, and calls
+  `Services::Reviews::SummaryRecalculator.recalculate("Books::Book", target_book.id)` itself, once,
+  inside the transaction. Both bulk operations skip the model callback on purpose; the explicit
+  call is what replaces it.
+- **Editions must move before the source is destroyed — not, as it might seem, before
+  `default_edition_id` is filled.** The merger has exactly one persistence point,
+  `target_book.save!`, and it runs after both the association moves and scalar reconciliation, so
+  the relative order of "move editions" and "fill `default_edition_id`" has no observable effect on
+  its own. What actually matters: `books_editions.book_id` is `dependent: :destroy` on
+  `Books::Book`, and `books_books.default_edition_id` is a foreign key to `books_editions` with
+  `on_delete: :nullify` at the database level. If an edition were still owned by the source when
+  the source is destroyed, the database would delete it and nullify *any* row's
+  `default_edition_id` that pointed at it — including the survivor's, even though `save!` had
+  already committed that value. Moving the editions across first empties the source's `editions`
+  association before the destroy cascades, so there is nothing left for it to delete.
+- **`books_series.representative_book_id` has no inverse association on `Books::Book` and must be
+  repointed by hand.** It's an inbound foreign key — `Books::Series` points at a representative
+  book, not the other way around — declared `on_delete: :nullify`. Left alone, destroying the
+  source would silently blank the series' representative instead of following the book to its new
+  home, and nothing on the `Books::Book` side would surface that it had happened.
+- **`Books::BookCountry` moves via `destroy!`, not `delete_all`, on its drop branch.** It declares
+  `counter_cache: :book_count` on `Books::Country`. A raw `delete_all` bypasses the callback that
+  decrements that counter, permanently overcounting the country once the link is gone.
+- **The duplicate's title is absorbed into `alternate_titles`.** Folding one title spelling into
+  another is often the point of the merge, and the deleted spelling should stay findable. The
+  source's `title` and its own `alternate_titles` are added to the survivor's, deduped, with the
+  survivor's own title excluded. `alternate_titles` is GIN-indexed and feeds `as_indexed_json`, so
+  the survivor's post-commit reindex picks it up.
+- **`book_kind` and `amazon_enriched_at` are deliberately excluded from blank-fill.** `book_kind`
+  is a NOT NULL enum with a default, so it is never blank — there's nothing for blank-fill to do.
+  `amazon_enriched_at` is excluded on purpose even though it can be blank: it marks that the Amazon
+  lookup already ran for that book, and a merge hands the survivor a batch of newly absorbed
+  editions Amazon has never seen. Filling a blank timestamp from the duplicate would mark the
+  survivor "done" and let the enrichment sweep skip exactly the book that most needs it.
+
+**Corrections are deliberately dropped, not migrated.** `Books::Book` includes `Correctable`
+(`has_many :corrections, as: :correctable, dependent: :destroy`), so the source's corrections die
+with it — this is a decision, not an oversight. Measured against the 455 book corrections in
+development, 29 (6.4%) mention duplication or merging ("Same as 10369", "Delete. Duplicate of
+…/books/123"), and that rate understates the picture at merge time: a duplicate report is
+frequently *why* an admin merges a record in the first place, so the corrections attached to a book
+about to be merged skew more duplicate-heavy than the corpus average. A merge is the admin actioning
+those reports; repointing them would leave stale "this is a duplicate" rows in the pending queue for
+a book that is no longer a duplicate of anything. The accepted cost is real: the other 93.6% are
+substantive fixes (nationality, cover image, publication date), and those are lost along with the
+duplicate reports when the source is destroyed — there's no rule that separates the two, since
+duplicate reports are free-text notes indistinguishable in structure from any other correction.
+Music and games behave identically for the same reason, and that is correct behavior for them too,
+not a gap to backport a fix into.
+
+**Book merge queues no author reindex fan-out.** This is the converse of the author merger's own
+special case above: `Books::Author#as_indexed_json` embeds no book data, so unlike a book's search
+document (which embeds `author_names` and `author_ids`, and so needs every affected book
+re-indexed), an author's document is unaffected by which books it's credited on. There is nothing
+to fan out to. Author **rankings** still recalculate, though — not because the book merger
+schedules them, but because `CalculateRankingsJob` already cascades into
+`Books::CalculateAuthorRankingsJob` for any affected `Books::RankingConfiguration`.
+
 ## Scalar reconciliation
 
 The target's own non-blank values always win — there is no field-level "pick a winner" UI.
@@ -184,8 +262,11 @@ This is often the point of the merge — folding "J.R.R. Tolkien" into "J. R. R.
 leave the deleted spelling findable. `alternate_names` is GIN-indexed and feeds `as_indexed_json`,
 so the survivor's post-commit reindex picks it up.
 
-Games have no `alternate_titles` column, so unlike authors above, and unlike the design's plan for
-books, there is no name absorption here.
+Games have no `alternate_titles` column, so unlike authors and books, there is no name absorption
+here. Books blank-fill `subtitle`, `sort_title`, `book_length`, `page_range`, `word_count`,
+`description`, `original_language_id` and `default_edition_id`; `book_kind` and
+`amazon_enriched_at` are excluded, for the reasons given under "Books-specific rules" above. Books
+also absorb the duplicate's title, the same way authors absorb names — see "Books-specific rules".
 
 ## Testing
 
@@ -207,10 +288,19 @@ run a real ranking calculation in every test. And the two reindex tests call a
 attribute to the merger's explicit reindex. Without the helper they pass against a merger that
 does no reindexing at all.
 
+`test/lib/books/book/merger_test.rb` carries the same `neutralize_scalar_confound` shape as the
+author test, with a second, independent confound layered in: two of the fixture books used across
+these tests differ by category, so `merge_category_items`' `find_or_create_by!` creates real
+`CategoryItem` rows on the target, and `CategoryItem#queue_item_for_reindexing` — an `after_save`
+unrelated to `SearchIndexable`, and one that does not check
+`Services::BooksMigration.search_indexing_suppressed?` at all — queues its own `index_item` request
+for each one. The reindex tests stub that hook too, so the only index request left standing is the
+merger's own explicit call.
+
 ## Related documentation
 
 - `docs/superpowers/specs/2026-08-23-record-merge-design.md` — the full three-domain design:
-  per-association tables for the `Books::Book` merger (not yet built) and the `Books::Author`
-  merger, the reasoning behind each departure from the music pattern, and the increment breakdown.
+  per-association tables for the `Books::Book` merger and the `Books::Author` merger, the reasoning
+  behind each departure from the music pattern, and the increment breakdown.
 - `app/lib/music/album/merger.rb`, `app/lib/music/artist/merger.rb`, `app/lib/music/song/merger.rb`
   — the prior art this pattern is ported from.

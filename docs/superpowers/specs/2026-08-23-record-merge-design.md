@@ -157,7 +157,7 @@ Three patterns recur. Each association below is labelled with one.
 
 | Association | Pattern | Detail |
 |---|---|---|
-| `editions` | Repoint | **Must precede `default_edition_id`** |
+| `editions` | Repoint | **Must precede `destroy_source_book`** — see "Ordering constraints" below |
 | `book_authors` | Gated | Transfer only if survivor has zero authors; then renumber `position` 1..n |
 | `credits` | Gated | Transfer only if survivor has zero credits |
 | `identifiers` | Repoint-or-drop | on (`identifier_type`, `value`) |
@@ -312,8 +312,17 @@ Most of the merge is order-independent. These six are not:
    a record with unsaved changes.
 1. **Ranking configuration ids are collected first.** Once `source.destroy!` cascades its
    `ranked_items`, the affected set is unrecoverable.
-2. **Editions move before `default_edition_id` is filled**, or the survivor's default edition FK
-   points at a row owned by the record about to be deleted.
+2. **Editions move before the source is destroyed.** The transaction has exactly one persistence
+   point, `target_book.save!`, and it runs after both `merge_all_associations` (which includes
+   `merge_editions`) and `reconcile_scalars` (which fills `default_edition_id`) — so the relative
+   order of those two calls has no observable effect; swapping them changes nothing. What is
+   load-bearing is that `merge_editions` precedes `destroy_source_book`. `books_editions.book_id`
+   is `dependent: :destroy` on `Books::Book`, and `books_books.default_edition_id` is a foreign key
+   to `books_editions` with `on_delete: :nullify` at the database level. If an edition were still
+   owned by the source when `destroy_source_book` cascaded, the DB would delete it and nullify
+   *any* row's `default_edition_id` pointing at it — including the survivor's, even though
+   `target_book.save!` already committed that value. Moving the editions first empties that
+   cascade before it runs, so there is nothing left for the source's destroy to delete.
 3. **Author merge collects `source.book_ids` before repointing `book_authors`**, or there is no way
    to know which books changed authorship.
 4. **"Did the survivor have authors/credits?" is captured before any writes**, so the gate decision
