@@ -220,6 +220,47 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "February 01, 2026"
   end
 
+  test "an owner can edit each Books Read completion date in every view mode" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_read)
+    item = user_list_items(:regular_user_books_item_3)
+    sign_in_as(@user, stub_auth: true)
+
+    %w[list_view table_view grid_view].each do |mode|
+      get my_list_path(list, view_mode: mode)
+
+      assert_response :success
+      assert_select "dialog#completion-date-dialog", count: 1
+      assert_select "button[data-action='user-list-completion#open'][data-item-id='#{item.id}'][data-item-title='#{item.listable.title}'][data-completed-on='2026-01-20']", count: 1
+    end
+  end
+
+  test "completion-date editor is absent from non-capable Books lists" do
+    host! Rails.application.config.domains[:books]
+    sign_in_as(@user, stub_auth: true)
+
+    [user_lists(:regular_user_books_favorites), reading_books_list].each do |list|
+      get my_list_path(list)
+
+      assert_response :success
+      assert_select "dialog#completion-date-dialog", count: 0
+      assert_select "button[data-action='user-list-completion#open']", count: 0
+    end
+  end
+
+  test "a non-owner cannot see the completion-date editor on a public Books Read list" do
+    host! Rails.application.config.domains[:books]
+    list = user_lists(:regular_user_books_read)
+    list.update!(public: true)
+    sign_in_as(users(:admin_user), stub_auth: true)
+
+    get my_list_path(list)
+
+    assert_response :success
+    assert_select "dialog#completion-date-dialog", count: 0
+    assert_select "button[data-action='user-list-completion#open']", count: 0
+  end
+
   # --- ranking sort ---
 
   test "sort=ranking orders by primary ranking with unranked items last" do
@@ -690,6 +731,16 @@ class MyListsControllerTest < ActionDispatch::IntegrationTest
          position: start_position + i, created_at: now, updated_at: now}
       end
     )
+  end
+
+  def reading_books_list
+    list = Books::UserList.create!(
+      user: @user,
+      name: "Books I'm Reading",
+      list_type: :reading
+    )
+    list.user_list_items.create!(listable: books_books(:war_and_peace))
+    list
   end
 
   def capture_sql

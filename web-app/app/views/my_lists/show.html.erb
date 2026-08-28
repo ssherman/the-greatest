@@ -96,7 +96,7 @@
             </thead>
             <tbody>
               <% @items.each_with_index do |item, index| %>
-                <%= render UserLists::Show::ItemComponent.new(item: item, view_mode: @view_mode, position: item.position, index: index) %>
+                <%= render UserLists::Show::ItemComponent.new(item: item, view_mode: @view_mode, position: item.position, index: index, completion_editable: @owner && show_completed) %>
               <% end %>
             </tbody>
           </table>
@@ -105,7 +105,7 @@
         <% container_class = (@view_mode == "grid_view") ? UserLists::Show::ItemComponent.grid_container_class(@list.class.listable_class) : "space-y-6" %>
         <div class="<%= container_class %>">
           <% @items.each_with_index do |item, index| %>
-            <%= render UserLists::Show::ItemComponent.new(item: item, view_mode: @view_mode, position: item.position, index: index) %>
+            <%= render UserLists::Show::ItemComponent.new(item: item, view_mode: @view_mode, position: item.position, index: index, completion_editable: @owner && show_completed) %>
           <% end %>
         </div>
       <% end %>
@@ -114,5 +114,9 @@
         <div class="flex justify-center mt-6"><%== @pagy.series_nav(anchor_string: 'data-turbo-frame="list_items"') %></div>
       <% end %>
     <% end %>
+  <% end %>
+
+  <% if @owner && show_completed %>
+    <%= render UserLists::Show::CompletionDialogComponent.new %>
   <% end %>
 </div>

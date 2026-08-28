@@ -39,6 +39,9 @@ application.register("toast", ToastController)
 import UserListAddItemController from "../controllers/user_list_add_item_controller"
 application.register("user-list-add-item", UserListAddItemController)
 
+import UserListCompletionController from "../controllers/user_list_completion_controller"
+application.register("user-list-completion", UserListCompletionController)
+
 import UserListModalController from "../controllers/user_list_modal_controller"
 application.register("user-list-modal", UserListModalController)
 
