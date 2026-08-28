@@ -3,7 +3,9 @@ module Services
     # Legacy `list_con_lists` -> list_penalties, STATIC-target list_cons only (ListPenalty
     # forbids dynamic penalties; dynamic-side + genre-static->dynamic-global rows drop).
     # list_id comes from ranked_lists (joined in legacy_each; lists preserve their id, so
-    # it is the Books::List id directly) -> fail-loud if not a migrated Books::List.
+    # it is the Books::List id directly) -> SKIPPED if not a migrated Books::List, because
+    # ListMigrator deliberately drops ListMigrator::SUPERSEDED_LIST_NAMES. The "you forgot
+    # data_migration:lists" ordering mistake is caught by the empty-set guard instead.
     # penalty_id via the "Penalty" map. Deduped in-memory on [list_id, penalty_id] because
     # two ranked_lists can map the same penalty onto the same list and upsert_all cannot
     # touch a conflict key twice in one statement. Idempotent on the target unique index.
@@ -36,6 +38,7 @@ module Services
         @static_penalty_ids = Penalty.static.pluck(:id).to_set
         @static_list_con_ids = @penalty_map.select { |_legacy_id, new_id| @static_penalty_ids.include?(new_id) }.keys
         @list_ids = ::Books::List.pluck(:id).to_set
+        raise "no migrated Books::List; run data_migration:lists first" if @list_ids.empty?
         @seen = Set.new
       end
 
@@ -60,9 +63,8 @@ module Services
         return [] unless @static_penalty_ids.include?(penalty_id) # dynamic-target rows drop (ListPenalty is static-only)
 
         list_id = attrs["list_id"]
-        unless @list_ids.include?(list_id)
-          raise "no migrated Books::List for legacy list_con_lists.list_id=#{list_id.inspect} (list_con_list id=#{attrs["id"]})"
-        end
+        # Skip, don't raise: the superseded users' favorites lists are never imported.
+        return [] unless @list_ids.include?(list_id)
 
         key = [list_id, penalty_id]
         return [] if @seen.include?(key)

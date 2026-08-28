@@ -103,6 +103,22 @@ module Services
         assert_nil list.activated_at
       end
 
+      test "skips the superseded users' favorites lists, importing everything else" do
+        rows = ListMigrator::SUPERSEDED_LIST_NAMES.each_with_index.map do |name, i|
+          legacy_row("id" => 996001 + i, "name" => name)
+        end
+        rows << legacy_row("id" => 996100, "name" => "A Real Legacy List")
+
+        result = run_migrator(rows)
+
+        assert result[:success], result[:error]
+        assert_equal 1, result[:data][:count]
+        assert_equal "A Real Legacy List", List.find(996100).name
+        ListMigrator::SUPERSEDED_LIST_NAMES.each_with_index do |name, i|
+          assert_not List.exists?(996001 + i), "imported superseded list #{name.inspect}"
+        end
+      end
+
       test "is idempotent on id" do
         run_migrator([legacy_row("id" => 994001)])
 

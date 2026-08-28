@@ -6,7 +6,12 @@ module Services
     # NULL-in-unique-index rows and (since [list_id, book_id] is unique in the source) no
     # intra-batch ON CONFLICT double-touch. listable has no DB FK (polymorphic), so a
     # book_id with no migrated Books::Book is a fail-loud raise naming the legacy
-    # list_item id (preloaded id set). metadata <- pending_book_data parsed from either
+    # list_item id (preloaded id set). A list_id with no migrated Books::List is SKIPPED
+    # instead: ListMigrator deliberately drops ListMigrator::SUPERSEDED_LIST_NAMES, and
+    # list_items.list_id DOES carry a foreign key, so importing their ~7,000 items would
+    # abort the whole run rather than merely orphan them. The "you forgot
+    # data_migration:lists" ordering mistake is caught by the empty-set guard instead.
+    # metadata <- pending_book_data parsed from either
     # JSON or YAML (legacy serialize drift) into a plain Hash (plain jsonb; a raw string
     # would store as a jsonb string scalar). verified defaults false. Legacy
     # created_at/updated_at preserved.
@@ -35,9 +40,14 @@ module Services
 
       def preload_context
         @book_ids = ::Books::Book.pluck(:id).to_set
+        @list_ids = ::Books::List.pluck(:id).to_set
+        raise "no migrated Books::List; run data_migration:lists first" if @list_ids.empty?
       end
 
       def build_rows(attrs)
+        # Skip, don't raise: the superseded users' favorites lists are never imported.
+        return [] unless @list_ids.include?(attrs["list_id"])
+
         book_id = attrs["book_id"]
         unless @book_ids.include?(book_id)
           raise "no migrated Books::Book for legacy list_items.book_id=#{book_id.inspect} (list_item id=#{attrs["id"]})"

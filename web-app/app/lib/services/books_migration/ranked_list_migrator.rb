@@ -4,9 +4,11 @@ module Services
     # bulk upsert on the natural-key unique index [list_id, ranking_configuration_id].
     # ranking_configuration_id is remapped through the RC LegacyIdMap; legacy_each is scoped
     # to the mapped (= active) legacy RC ids, so archived-RC ranked_lists are skipped and
-    # every yielded row's rc maps. list_id has NO DB FK (only ranking_configuration_id does),
-    # so a list_id with no migrated Books::List is a fail-loud raise naming the legacy
-    # ranked_list id (preloaded id set). weight and legacy created_at/updated_at preserved.
+    # every yielded row's rc maps. A list_id with no migrated Books::List is SKIPPED, not
+    # raised on: ListMigrator deliberately drops ListMigrator::SUPERSEDED_LIST_NAMES, so
+    # rows pointing at those lists are expected. The "you forgot data_migration:lists"
+    # ordering mistake is still caught, by the empty-set guard in preload_context.
+    # weight and legacy created_at/updated_at preserved.
     class RankedListMigrator < BulkUpsertMigrator
       private
 
@@ -34,6 +36,7 @@ module Services
         @rc_map = LegacyIdMap.where(model: "Books::RankingConfiguration").pluck(:legacy_id, :new_id).to_h
         raise "no migrated ranking_configurations; run data_migration:ranking_configurations first" if @rc_map.empty?
         @list_ids = ::Books::List.pluck(:id).to_set
+        raise "no migrated Books::List; run data_migration:lists first" if @list_ids.empty?
       end
 
       # Active RCs only: only ranked_lists whose rc was migrated (mapped) are yielded.
@@ -48,9 +51,8 @@ module Services
         end
 
         list_id = attrs["list_id"]
-        unless @list_ids.include?(list_id)
-          raise "no migrated Books::List for legacy ranked_lists.list_id=#{list_id.inspect} (ranked_list id=#{attrs["id"]})"
-        end
+        # Skip, don't raise: the superseded users' favorites lists are never imported.
+        return [] unless @list_ids.include?(list_id)
 
         [{
           list_id: list_id,
