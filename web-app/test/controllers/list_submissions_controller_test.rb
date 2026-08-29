@@ -9,11 +9,6 @@ class ListSubmissionsControllerTest < ActionDispatch::IntegrationTest
              url: "https://example.com/greatest", description: "A list."},
       list_type: "Books::List"
     }
-    # AdminMailer.new_list_submission is built in Task 9. Stubbing it here keeps
-    # this task independently testable -- Mocha defines the method on the stub, so
-    # these tests pass before the mailer exists and keep passing after.
-    AdminMailer.stubs(:new_list_submission).returns(stub(deliver_later: true))
-
     # The rate limit store is a single MemoryStore instance shared by the whole
     # process (config/initializers/rate_limit_store.rb) -- without clearing it
     # here, whichever test runs after enough anonymous submissions trips the
@@ -121,7 +116,6 @@ class ListSubmissionsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "create notifies the owner" do
-    AdminMailer.unstub(:new_list_submission)
     AdminMailer.expects(:new_list_submission).once.returns(stub(deliver_later: true))
 
     post "/list_submissions", params: @params

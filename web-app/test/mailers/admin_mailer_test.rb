@@ -128,4 +128,75 @@ class AdminMailerTest < ActionMailer::TestCase
     assert_match(/1867/, body)
     assert_match(/The first published year looks wrong/, body)
   end
+
+  test "new_list_submission is addressed to the admin and names the list" do
+    list = Books::List.create!(name: "Greatest Books Ever", status: :unapproved,
+      submitted_at: Time.current, url: "https://example.com/greatest")
+
+    mail = AdminMailer.new_list_submission(list)
+
+    assert_equal [ENV["ADMIN_NOTIFICATION_EMAIL"]], mail.to
+    assert_match "Greatest Books Ever", mail.subject
+    assert_match "Greatest Books Ever", mail.body.encoded
+  end
+
+  test "new_list_submission replies to a signed-in submitter" do
+    user = users(:regular_user)
+    list = Books::List.create!(name: "With account", status: :unapproved,
+      submitted_at: Time.current, submitted_by: user)
+
+    mail = AdminMailer.new_list_submission(list)
+
+    assert_equal [user.email], mail.reply_to
+  end
+
+  test "new_list_submission replies to an anonymous submitted email" do
+    list = Books::List.create!(name: "Anon with email", status: :unapproved,
+      submitted_at: Time.current, submitter_email: "reader@example.com")
+
+    mail = AdminMailer.new_list_submission(list)
+
+    assert_equal ["reader@example.com"], mail.reply_to
+  end
+
+  test "new_list_submission has no reply_to for a fully anonymous submission" do
+    list = Books::List.create!(name: "Fully anon", status: :unapproved,
+      submitted_at: Time.current)
+
+    mail = AdminMailer.new_list_submission(list)
+
+    assert_nil mail.reply_to
+  end
+
+  # list.submitter_email is attacker-controlled, unvalidated public input --
+  # List has no format validation on it (app/models/list.rb) and the submission
+  # service caps only its length -- and new_list_submission puts it straight
+  # into reply_to:. This pins that an embedded CR/LF can never terminate the
+  # Reply-To header and start a new one (a Bcc:, a second Subject:, ...).
+  #
+  # Confirmed empirically before writing this: the Mail gem quoted-printable
+  # -encodes a header value containing control characters instead of emitting
+  # them raw, so a literal LF/CRLF here reaches the wire as the literal
+  # characters "=0A"/"=0D=0A" -- never as an actual line break. Both hostile
+  # shapes below produced that encoding; if the gem's behaviour ever changes
+  # this test fails and reply_to needs an address-format guard before use.
+  test "an embedded LF in submitter_email cannot inject a Bcc header" do
+    list = Books::List.create!(name: "Hostile LF", status: :unapproved,
+      submitted_at: Time.current, submitter_email: "a@b.com\nBcc: victim@example.com")
+
+    mail = AdminMailer.new_list_submission(list)
+    header_section = mail.encoded[0...mail.encoded.index("\r\n\r\n")]
+
+    refute_match(/^Bcc:/i, header_section)
+  end
+
+  test "an embedded CRLF in submitter_email cannot inject a second Subject header" do
+    list = Books::List.create!(name: "Hostile CRLF", status: :unapproved,
+      submitted_at: Time.current, submitter_email: "a@b.com\r\nSubject: spam")
+
+    mail = AdminMailer.new_list_submission(list)
+    header_section = mail.encoded[0...mail.encoded.index("\r\n\r\n")]
+
+    assert_equal 1, header_section.scan(/^Subject:/i).count
+  end
 end
