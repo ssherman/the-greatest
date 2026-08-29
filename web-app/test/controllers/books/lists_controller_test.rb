@@ -263,6 +263,13 @@ module Books
       assert_select "form[action=?]", "/rc/#{@rc.id}/lists"
     end
 
+    test "index links to the submission form" do
+      get "/lists"
+
+      assert_response :success
+      assert_select "a[href=?]", "/lists/new"
+    end
+
     private
 
     def seed_lists(count)
