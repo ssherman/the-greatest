@@ -1,0 +1,25 @@
+books_pending:
+  user: regular_user
+  email: <%= "user@example.com" %>
+  message: "The publication year on War and Peace looks wrong."
+  domain: 2
+  status: 0
+
+books_anonymous:
+  email: anonymous@example.org
+  message: "Love the site. Any chance of an RSS feed?"
+  domain: 2
+  status: 0
+
+music_pending:
+  email: listener@example.org
+  message: "A duplicate album on the Radiohead page."
+  domain: 0
+  status: 0
+
+books_replied:
+  email: answered@example.org
+  message: "Already dealt with."
+  domain: 2
+  status: 1
+  replied_at: <%= 1.day.ago.to_fs(:db) %>

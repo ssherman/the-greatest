@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_27_062209) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_29_050243) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -270,6 +270,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_27_062209) do
     t.index ["category_id", "item_type", "item_id"], name: "index_category_items_on_category_id_and_item_type_and_item_id", unique: true
     t.index ["category_id"], name: "index_category_items_on_category_id"
     t.index ["item_type", "item_id"], name: "index_category_items_on_item_type_and_item_id"
+  end
+
+  create_table "contact_messages", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "domain", null: false
+    t.string "email", null: false
+    t.text "message", null: false
+    t.datetime "replied_at"
+    t.integer "status", default: 0, null: false
+    t.string "submitter_ip"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id"
+    t.index ["domain", "created_at"], name: "index_contact_messages_on_domain_and_created_at"
+    t.index ["status", "created_at"], name: "index_contact_messages_on_status_and_created_at"
+    t.index ["user_id"], name: "index_contact_messages_on_user_id"
   end
 
   create_table "correction_fields", force: :cascade do |t|
@@ -1068,6 +1083,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_27_062209) do
   add_foreign_key "books_series_books", "books_series", column: "series_id"
   add_foreign_key "categories", "categories", column: "parent_id"
   add_foreign_key "category_items", "categories"
+  add_foreign_key "contact_messages", "users"
   add_foreign_key "correction_fields", "corrections"
   add_foreign_key "corrections", "users"
   add_foreign_key "corrections", "users", column: "resolved_by_id"
