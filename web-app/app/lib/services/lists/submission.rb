@@ -77,7 +77,11 @@ module Services
       def cap_errors
         errors = CAPS.filter_map do |field, cap|
           value = @attributes[field]
-          next if value.blank? || value.to_s.length <= cap
+          # value.nil?, NOT value.blank? -- String#blank? is true for an
+          # all-whitespace string of ANY length, so `blank?` here would let
+          # 100,001 spaces of raw_content skip the cap entirely and save
+          # unbounded. An empty string still short-circuits on length 0 <= cap.
+          next if value.nil? || value.to_s.length <= cap
 
           "#{field.to_s.humanize} is too long (maximum is #{cap} characters)"
         end

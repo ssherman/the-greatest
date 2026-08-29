@@ -71,6 +71,15 @@ module Services
         assert_includes result.errors.join, "too long"
       end
 
+      test "rejects whitespace padded raw content over the cap" do
+        result = Submission.call(list_class: ::Books::List,
+          attributes: @attributes.merge(raw_content: " " * 100_001),
+          user: nil, submitter_email: nil, submitter_ip: nil)
+
+        assert_not result.success?
+        assert_includes result.errors.join, "too long"
+      end
+
       test "rejects a duplicate url in any status" do
         ::Books::List.create!(name: "Already here", status: :active,
           url: "https://example.com/greatest")
