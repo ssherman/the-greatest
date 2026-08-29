@@ -64,10 +64,15 @@ authenticate anything.
 
 **The email is required, for everyone.** Legacy labels it "Your Email (optional)" and accepts a
 blank one, which produces a message nobody can answer — the `Reply-To` is empty and the sender is
-untraceable. A contact form whose entire purpose is a reply channel should not accept submissions
-that cannot be replied to, and an unanswerable message is also worthless to an agent that drafts
-replies. Hence `null: false` on the column and a presence validation. The cost is one more required
-field for anonymous visitors.
+untraceable. The owner has hit this directly: replies that cannot be sent. A contact form whose
+entire purpose is a reply channel should not accept submissions that cannot be replied to, and an
+unanswerable message is also worthless to an agent that drafts replies. Hence `null: false` on the
+column, plus presence and format validations. The cost is one more required field for anonymous
+visitors.
+
+The format validation catches the honest typo (`shane@gmail`, a missing TLD), not the deliberate
+fake — nothing here verifies that an anonymous address exists, and nothing should try to for a
+contact form. Signed-in submissions carry a Firebase-verified address and need no such caveat.
 
 **The modal stays open on success and shows a confirmation in place.** Legacy closes the modal and
 raises a Notiflix toast. This app has no toast on public pages and public layouts render no flash,
