@@ -40,6 +40,17 @@ class ContactMessage < ApplicationRecord
   # Required for anonymous submitters too, unlike legacy. A message with no
   # reply address cannot be answered, which is the entire point of the form.
   # The format check catches the honest typo, not a deliberate fake.
-  validates :email, presence: true, format: {with: URI::MailTo::EMAIL_REGEXP}
+  #
+  # URI::MailTo::EMAIL_REGEXP alone is not enough here: it accepts a domain with
+  # no dot, so "shane@gmail" passes it -- the exact typo this validation exists
+  # to catch. A dotless domain is legal in the RFC and useless for a public
+  # contact form, whose reply has to route over public DNS.
+  #
+  # Deliberately looser on the LOCAL part than the URI regex. For a reply-to
+  # address, wrongly rejecting a real address is the more expensive error, and
+  # this is a typo check, not RFC compliance.
+  EMAIL_FORMAT = /\A[^@\s]+@[^@\s]+\.[a-z]{2,}\z/i
+
+  validates :email, presence: true, format: {with: EMAIL_FORMAT}
   validates :message, presence: true, length: {maximum: MAX_MESSAGE_LENGTH}
 end
