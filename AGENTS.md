@@ -100,10 +100,10 @@ If it prints another checkout, stop and tell the user — do not kill their serv
 another port to work around it (routes are host-constrained, so `localhost:<port>` 404s everywhere).
 There is deliberately no per-worktree port or hostname; do not propose adding one.
 
-**A worktree needs five gitignored files that git will not bring:** `.env`, `web-app/.env`,
-`web-app/config/master.key`, `web-app/e2e/.env`, `web-app/node_modules`. Claude Code's worktree
-tool copies them in. A hand-made worktree goes in `.worktrees/<name>` and must copy all five from
-`/home/shane/dev/the-greatest` first, or the app will not boot.
+**A worktree needs five gitignored files git will not bring:** `.env`, `web-app/.env`,
+`web-app/config/master.key`, `web-app/e2e/.env`, `web-app/node_modules`. Claude Code's worktree tool
+copies them in; a hand-made worktree goes in `.worktrees/<name>` and must copy all five from the main
+checkout (`git worktree list --porcelain | head -1 | cut -d' ' -f2`) or the app will not boot.
 
 ## Non-negotiable conventions
 
