@@ -169,7 +169,7 @@ music_songs_list:
   name: Music Songs Test List
   description: A music songs list
   source: Music Songs Source
-  status: 1
+  status: 3
   estimated_quality: 70
 
 music_songs_list_with_items_json:
