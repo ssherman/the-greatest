@@ -1,0 +1,37 @@
+<% content_for :title, "Contact" %>
+
+<div class="space-y-4">
+  <h1 class="text-2xl font-bold">Contact</h1>
+
+  <div role="tablist" class="tabs tabs-border">
+    <% Admin::ContactMessagesController::STATUSES.each do |status| %>
+      <%= link_to contact_messages_index_path(status: status),
+            role: "tab",
+            class: "tab #{"tab-active" if @status == status}",
+            data: {testid: "status-tab-#{status}"} do %>
+        <%= status.titleize %>
+        <span class="badge badge-sm ml-2"
+              data-testid="status-count-<%= status %>"><%= @counts[status].to_i %></span>
+      <% end %>
+    <% end %>
+  </div>
+
+  <div class="overflow-x-auto">
+    <table class="table bg-base-100">
+      <thead>
+        <tr>
+          <th>From</th>
+          <th>Message</th>
+          <th>Received</th>
+        </tr>
+      </thead>
+      <tbody>
+        <%= render partial: "admin/contact_messages/row", collection: @contact_messages, as: :contact_message %>
+      </tbody>
+    </table>
+  </div>
+
+  <%# series_nav, NOT pagy_nav -- this app is on a Pagy version whose nav is
+      built from the pagy object. Every other admin index uses this form. %>
+  <%== @pagy.series_nav %>
+</div>

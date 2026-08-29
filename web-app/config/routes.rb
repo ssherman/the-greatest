@@ -286,6 +286,12 @@ Rails.application.routes.draw do
           post :bulk_reject
         end
       end
+
+      resources :contact_messages, only: [:index, :show], controller: "/admin/contact_messages" do
+        member do
+          post :resolve
+        end
+      end
     end
   end
   require "sidekiq/web"
@@ -588,6 +594,12 @@ Rails.application.routes.draw do
         end
         collection do
           post :bulk_reject
+        end
+      end
+
+      resources :contact_messages, only: [:index, :show], controller: "/admin/contact_messages" do
+        member do
+          post :resolve
         end
       end
 
@@ -1005,6 +1017,12 @@ Rails.application.routes.draw do
         end
         collection do
           post :bulk_reject
+        end
+      end
+
+      resources :contact_messages, only: [:index, :show], controller: "/admin/contact_messages" do
+        member do
+          post :resolve
         end
       end
     end

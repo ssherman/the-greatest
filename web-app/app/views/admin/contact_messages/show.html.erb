@@ -1,0 +1,33 @@
+<% content_for :title, "Contact message" %>
+
+<div class="space-y-4">
+  <%= link_to "← Back to Contact", contact_messages_index_path, class: "link" %>
+
+  <h1 class="text-2xl font-bold">Message from <%= @contact_message.email %></h1>
+
+  <ul class="text-sm opacity-70">
+    <li>Received <%= @contact_message.created_at.strftime("%B %-d, %Y at %H:%M") %></li>
+    <li><%= @contact_message.user ? "Signed in as ##{@contact_message.user.id}" : "Anonymous" %></li>
+    <li>Status: <%= @contact_message.status.titleize %></li>
+  </ul>
+
+  <div class="card bg-base-100">
+    <div class="card-body">
+      <p class="whitespace-pre-wrap [overflow-wrap:anywhere]"><%= @contact_message.message %></p>
+    </div>
+  </div>
+
+  <div class="flex flex-wrap gap-2">
+    <%= link_to "Reply by email",
+          "mailto:#{@contact_message.email}",
+          class: "btn btn-primary" %>
+    <%= button_to "Mark replied",
+          resolve_path_for(@contact_message),
+          params: {status: "replied"},
+          class: "btn" %>
+    <%= button_to "Mark spam",
+          resolve_path_for(@contact_message),
+          params: {status: "spam"},
+          class: "btn btn-ghost" %>
+  </div>
+</div>
