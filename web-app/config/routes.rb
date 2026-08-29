@@ -318,6 +318,12 @@ Rails.application.routes.draw do
   get "correction_token", to: "correction_token#show", as: :correction_token
   resources :corrections, only: [:create]
 
+  # Uncached, no database query. Exists so the edge-cached footer form can get a
+  # token that belongs to the caller's session, and the signed-in visitor's own
+  # email, without either being baked into cacheable HTML.
+  get "contact_state", to: "contact_state#show", as: :contact_state
+  resources :contact_messages, only: [:create]
+
   # Review writes — global (non-domain-constrained), Turbo Stream, never cached.
   post "reviews", to: "reviews#create", as: :reviews
   patch "reviews/:id", to: "reviews#update", as: :review

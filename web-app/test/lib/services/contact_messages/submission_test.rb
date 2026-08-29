@@ -61,6 +61,33 @@ module Services
 
         Submission.call(email: "reader@example.org", message: "", domain: :books)
       end
+
+      # Current.domain is derived from the request Host header, and
+      # contact_messages is a global (non-domain-constrained) route, so a
+      # domain ContactMessage's enum does not recognize can reach here. Without
+      # the guard, ContactMessage.new raises ArgumentError instead of returning
+      # a failed Result like every other invalid submission.
+      test "fails without raising for a domain ContactMessage does not recognize" do
+        result = Submission.call(
+          email: "reader@example.org", message: "Hello", domain: :not_a_real_domain
+        )
+
+        assert_not_predicate result, :success?
+        assert_nil result.data
+        assert_not_empty result.errors
+      end
+
+      test "persists nothing for an unrecognized domain" do
+        assert_no_difference "ContactMessage.count" do
+          Submission.call(email: "reader@example.org", message: "Hello", domain: :not_a_real_domain)
+        end
+      end
+
+      test "sends no email for an unrecognized domain" do
+        AdminMailer.expects(:contact_message).never
+
+        Submission.call(email: "reader@example.org", message: "Hello", domain: :not_a_real_domain)
+      end
     end
   end
 end

@@ -1,0 +1,51 @@
+<%# Rendered inside #contact_modal_body. Identical HTML for every visitor: the
+    email is filled in by contact--form from /contact_state, never here, because
+    this markup is served from the Cloudflare cache. %>
+<h3 class="text-lg font-bold">Contact us</h3>
+
+<% if local_assigns[:error].present? %>
+  <p class="text-error mt-2" data-testid="contact-error"><%= error %></p>
+<% end %>
+
+<%# scope: :contact_message -- the controller reads params.fetch(:contact_message, {}),
+    so an unscoped form (bare "email"/"message" fields) would post parameters it
+    never looks at and every real submission would fail validation. %>
+<%= form_with url: contact_messages_path, scope: :contact_message,
+      data: {contact__form_target: "form", action: "submit->contact--form#submitting"},
+      class: "mt-4 space-y-4" do |form| %>
+  <fieldset class="fieldset">
+    <legend class="fieldset-legend">Your email</legend>
+    <label class="label" for="contact_email">Your email</label>
+    <%= form.email_field :email,
+          required: true,
+          id: "contact_email",
+          class: "input w-full",
+          autocomplete: "email",
+          data: {contact__form_target: "email"} %>
+  </fieldset>
+
+  <fieldset class="fieldset">
+    <legend class="fieldset-legend">Message</legend>
+    <label class="label" for="contact_message_body">Message</label>
+    <%= form.text_area :message,
+          required: true,
+          id: "contact_message_body",
+          rows: 8,
+          maxlength: ContactMessage::MAX_MESSAGE_LENGTH,
+          class: "textarea w-full" %>
+  </fieldset>
+
+  <%# Honeypot. Hidden from people, filled by bots. Not `type=hidden`, which a
+      bot skips; visually removed and taken out of the tab order instead. Kept
+      OUTSIDE the :contact_message scope above -- the controller reads this at
+      params[:website], never params[:contact_message][:website]. %>
+  <div class="hidden" aria-hidden="true">
+    <label for="contact_website">Website</label>
+    <input type="text" name="website" id="contact_website" tabindex="-1" autocomplete="off">
+  </div>
+
+  <div class="modal-action">
+    <button type="button" class="btn" data-action="contact--form#close">Cancel</button>
+    <%= form.submit "Send", class: "btn btn-primary" %>
+  </div>
+<% end %>

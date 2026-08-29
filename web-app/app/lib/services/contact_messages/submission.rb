@@ -24,6 +24,18 @@ module Services
       end
 
       def call
+        # @domain traces back to Current.domain, which the request's Host header
+        # sets -- untrusted input, and contact_messages is a global
+        # (non-domain-constrained) route, so a host this app serves but
+        # ContactMessage has no enum value for can reach here. The enum setter
+        # raises ArgumentError on an unrecognized value before validations ever
+        # run, which would 500 instead of failing like any other invalid
+        # submission -- breaking the "always returns a Result" contract this
+        # service exists to provide. Guard before construction.
+        unless ::ContactMessage.domains.key?(@domain.to_s)
+          return Result.new(success?: false, data: nil, errors: ["Domain is not recognized"])
+        end
+
         # Root-anchored: a bare ContactMessage resolves against Services::
         # first, which has produced confusing NameErrors in this codebase.
         contact_message = ::ContactMessage.new(
