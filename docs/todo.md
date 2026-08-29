@@ -1,0 +1,22 @@
+- old archived ranking configurations
+- google ads
+- google analytics
+- recommendations
+- goodreads import
+- reading goals
+- google books integration
+- books DataImporter
+- authors DataImporter
+- add list wizard
+- move worker to a new server
+- linked dynamic lists (the greatest of 2020, etc)
+- rankings details page
+- custom user ranking configurations (paid feature)
+- API framework
+- books admin api
+- books public api
+- authors admin api
+- authors public api
+- [x] add new lists page
+- contact form
+- endless scroll
