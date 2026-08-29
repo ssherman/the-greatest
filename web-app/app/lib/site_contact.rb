@@ -1,7 +1,10 @@
 # frozen_string_literal: true
 
-# The public contact address, in one place because the footer of every page on
-# three sites and both policy pages all name it.
+# The public contact address, in one place because AdminMailer's contact-form
+# notification and both policy pages all name it. The footer used to render it
+# too, as a plain mailto; it now opens the contact form instead (see
+# ContactMessagesController), which reads this same address as the mail's
+# `to:`, never from anything user-supplied.
 #
 # Deliberately NOT called Contact: a contact form is the next piece of work here,
 # and it will want that constant for a model.
@@ -17,9 +20,4 @@
 # you nothing about CI.
 module SiteContact
   ADDRESS = "contact@thegreatestbooks.org"
-
-  # Rendered as a plain mailto. This address WILL be scraped -- that is the
-  # accepted trade-off for shipping now, and the contact form replacing it is
-  # queued as its own task.
-  MAILTO = "mailto:#{ADDRESS}"
 end

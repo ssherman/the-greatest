@@ -148,6 +148,24 @@ class AdminMailerTest < ActionMailer::TestCase
     assert_equal [message.email], mail.reply_to
   end
 
+  # A textarea submits CRLF. Unsaved on purpose (same pattern as
+  # AdminMailerPreview's sample_membership/sample_donation) -- the subject is
+  # built before delivery, so this never touches the database.
+  test "contact_message collapses a multi-line body into a single clean subject line" do
+    message = ContactMessage.new(
+      domain: "books",
+      email: "reader@example.org",
+      message: "Hi,\r\n\r\nI wanted to say thanks for building this site.",
+      created_at: Time.current
+    )
+
+    mail = AdminMailer.contact_message(message)
+
+    assert_equal "Contact via The Greatest Books: Hi, I wanted to say thanks for building this site.",
+      mail.subject
+    assert_no_match(/[\r\n]/, mail.subject)
+  end
+
   # Books is MailBranding's DEFAULT_DOMAIN fallback, so a books-only assertion
   # cannot tell a resolved domain from one that fell through to nil. A music
   # message has no such cover.

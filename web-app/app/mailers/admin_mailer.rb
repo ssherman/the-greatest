@@ -77,7 +77,12 @@ class AdminMailer < ApplicationMailer
     branded_mail(
       domain: contact_message.domain,
       to: SiteContact::ADDRESS,
-      subject: "Contact via #{@site_name}: #{contact_message.message.truncate(60)}",
+      # squish before truncate: a textarea submits raw CRLFs, and Mail encodes
+      # them into the header rather than rejecting them (there is no
+      # header-injection risk), so "Hi,\n\nI wanted..." became a subject with
+      # literal =0D=0A sequences in it. Collapsing whitespace first makes
+      # truncate cut a single line instead of the raw multi-line text.
+      subject: "Contact via #{@site_name}: #{contact_message.message.squish.truncate(60)}",
       reply_to: contact_message.email
     )
   end

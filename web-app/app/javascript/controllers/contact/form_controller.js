@@ -20,9 +20,18 @@ export default class extends Controller {
   connect() {
     this.stateFetched = false
     this._inflight = null
+    // Captured once, from the cached page's own markup, before anything can
+    // have replaced it. This is what open() restores after a successful send
+    // swaps #contact_modal_body for the thanks panel -- otherwise reopening
+    // the dialog shows "Thanks" again with no way to send a second message.
+    this._pristineFormHTML = this._bodyElement()?.innerHTML ?? null
   }
 
   open() {
+    const body = this._bodyElement()
+    if (body && this._pristineFormHTML && !body.querySelector("form")) {
+      body.innerHTML = this._pristineFormHTML
+    }
     this.dialogTarget.showModal()
     this.ensureState()
   }
@@ -83,10 +92,24 @@ export default class extends Controller {
     this.emailTarget.readOnly = true
   }
 
-  // The turbo-stream response replaces #contact_modal_body, which destroys the
-  // form element this controller had already hydrated. Re-arm so a second
-  // submission in the same modal session fetches state again.
+  // ensureState() is a no-op once stateFetched is true, and open() calls it on
+  // every reopen regardless. A successful submission destroys the hydrated
+  // form (the turbo-stream response swaps #contact_modal_body for the thanks
+  // panel), and open() later puts back the PRISTINE form captured in
+  // connect() -- stale token, no email, same as first page load. Reset the
+  // flag here so that restored form actually gets re-hydrated the next time
+  // the dialog opens, instead of ensureState() silently skipping it as
+  // already-fetched.
+  //
+  // A failed submission re-renders the form from the server directly, from an
+  // uncached response, with a fresh token already baked in -- nothing needs
+  // fetching for that path. This reset only does anything for the
+  // reopen-after-success case above.
   submitting() {
     this.stateFetched = false
+  }
+
+  _bodyElement() {
+    return this.hasDialogTarget ? this.dialogTarget.querySelector("#contact_modal_body") : null
   }
 }

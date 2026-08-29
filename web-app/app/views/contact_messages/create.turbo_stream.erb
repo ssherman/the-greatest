@@ -6,7 +6,8 @@
     <% if @sent %>
       <%= render "contact_messages/thanks" %>
     <% else %>
-      <%= render "contact_messages/form", error: @error %>
+      <%= render "contact_messages/form", error: @error,
+            email_value: @email_value, message_body: @message_body %>
     <% end %>
   </div>
 <% end %>

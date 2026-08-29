@@ -63,14 +63,23 @@ class ContactMessagesController < ApplicationController
       render_sent
     else
       @error = result.errors.to_sentence
-      render :create, formats: [:turbo_stream], status: :unprocessable_entity
+      render_form_again(status: :unprocessable_entity)
     end
   end
 
   private
 
+  # params[:contact_message] is untrusted shape, not just untrusted content: a
+  # request built by hand (curl -d "contact_message=x") can send it as a plain
+  # scalar instead of a hash. permit only exists on Parameters, so calling it
+  # on that String raises NoMethodError -- a 500 on a public, unauthenticated
+  # endpoint. Fall back to an empty (permitted) Parameters, which fails the
+  # same way any other blank submission does: an ordinary validation error.
   def contact_params
-    params.fetch(:contact_message, {}).permit(:email, :message)
+    candidate = params[:contact_message]
+    return ActionController::Parameters.new.permit(:email, :message) unless candidate.is_a?(ActionController::Parameters)
+
+    candidate.permit(:email, :message)
   end
 
   def honeypot_filled? = params[:website].present?
@@ -84,6 +93,21 @@ class ContactMessagesController < ApplicationController
   # thing either way, and so the two declarations cannot drift apart.
   def render_rate_limited
     @error = "Thanks — you've sent us several messages just now. Please try again shortly."
-    render :create, formats: [:turbo_stream], status: :too_many_requests
+    render_form_again(status: :too_many_requests)
+  end
+
+  # Both failure paths (validation and rate limit) land here so a visitor's
+  # typed message survives either one -- previously the re-rendered form came
+  # back empty and a 400-word message or a rate-limited retry was just gone.
+  # Safe to echo back: this response is uncached (prevent_caching), unlike the
+  # footer's initial render.
+  #
+  # The email is never the raw posted value for a signed-in visitor -- same
+  # rule as Services::ContactMessages::Submission#reply_address: the posted
+  # field is not evidence for them, only for an anonymous submitter.
+  def render_form_again(status:)
+    @email_value = current_user&.email.presence || contact_params[:email]
+    @message_body = contact_params[:message]
+    render :create, formats: [:turbo_stream], status: status
   end
 end
