@@ -109,6 +109,20 @@ class ListSubmissionsControllerTest < ActionDispatch::IntegrationTest
     assert_response :bad_request
   end
 
+  # The form renders no type picker on a single-type domain (see
+  # _form.html.erb's @submittable_types.many? guard), so a genuine browser
+  # POST from books carries no list_type param at all and takes the
+  # @submittable_types.one? fallback in set_list_class. Every other create
+  # test in this file sends an explicit list_type, books included -- this is
+  # the only one that exercises the branch real books traffic actually takes.
+  test "books creates a list when no type is submitted" do
+    assert_difference "Books::List.count", 1 do
+      post "/list_submissions", params: {list: {name: "No type given", url: "https://example.com/no-type-books"}}
+    end
+
+    assert_redirected_to "/lists/thanks"
+  end
+
   test "thanks renders" do
     get "/lists/thanks"
 
@@ -271,6 +285,32 @@ class ListSubmissionsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to "/lists/thanks"
   end
 
+  # LISTS_PATHS/domain_lists_path (added by this task) is only ever exercised
+  # on books via the books "thanks renders" test above -- games and music's
+  # own entries were never reached by GET "/lists/thanks" anywhere in this
+  # file, so a missing or misnamed key for either domain would leave the
+  # suite green and 500 the terminal page of a real submission.
+  test "games thanks renders" do
+    host! "dev.thegreatest.games"
+
+    get "/lists/thanks"
+
+    assert_response :success
+  end
+
+  # See the comment on "books creates a list when no type is submitted"
+  # above -- games is the other single-type domain whose form never renders
+  # a type picker, so this is the branch real games traffic takes.
+  test "games creates a list when no type is submitted" do
+    host! "dev.thegreatest.games"
+
+    assert_difference "Games::List.count", 1 do
+      post "/list_submissions", params: {list: {name: "No type given", url: "https://example.com/no-type-games"}}
+    end
+
+    assert_redirected_to "/lists/thanks"
+  end
+
   # Same DDoS-hardening rationale as the books block above -- games' lists/new
   # and lists/thanks sit right next to a scope "(/rc/:ranking_configuration_id)"
   # block that wraps the show/index routes, so it is easy to mis-place them a
@@ -327,6 +367,17 @@ class ListSubmissionsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_redirected_to "/lists/thanks"
+  end
+
+  # Same gap as games' "thanks renders" above -- music's LISTS_PATHS entry
+  # was never exercised by an actual GET "/lists/thanks" anywhere in this
+  # file before this test.
+  test "music thanks renders" do
+    host! "dev.thegreatestmusic.org"
+
+    get "/lists/thanks"
+
+    assert_response :success
   end
 
   test "music rejects a submission with no type chosen" do
