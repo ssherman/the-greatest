@@ -137,6 +137,16 @@ module Music
         assert_response :success
         assert_select "a[href=?]", "/albums/lists/#{list.id}", count: 0
       end
+
+      test "source link is nofollow" do
+        list = lists(:music_albums_list)
+        list.update!(url: "https://example.com/greatest-albums")
+
+        get "/albums/lists/#{list.id}"
+
+        assert_response :success
+        assert_select "a[href=?][rel~=?]", "https://example.com/greatest-albums", "nofollow"
+      end
     end
   end
 end
