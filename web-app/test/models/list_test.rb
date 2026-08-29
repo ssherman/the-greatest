@@ -20,6 +20,9 @@
 #  source                :string
 #  source_country_origin :string
 #  status                :integer          default(0), not null
+#  submitted_at          :datetime
+#  submitter_email       :string
+#  submitter_ip          :string
 #  type                  :string           not null
 #  url                   :string
 #  voter_count_estimated :boolean
@@ -36,6 +39,7 @@
 # Indexes
 #
 #  index_lists_on_activated_at                  (activated_at)
+#  index_lists_on_submitted_at                  (submitted_at)
 #  index_lists_on_submitted_by_id               (submitted_by_id)
 #  index_lists_on_type_and_auto_generated_kind  (type,auto_generated_kind) UNIQUE WHERE (auto_generated_kind IS NOT NULL)
 #
@@ -414,5 +418,27 @@ class ListTest < ActiveSupport::TestCase
       List.where(id: list.id).destroy_all
     end
     assert List.exists?(list.id)
+  end
+
+  test "carries the public submission fields" do
+    list = lists(:basic_list)
+    list.update!(
+      submitted_at: Time.current,
+      submitter_email: "reader@example.com",
+      submitter_ip: "203.0.113.7"
+    )
+
+    list.reload
+    assert_not_nil list.submitted_at
+    assert_equal "reader@example.com", list.submitter_email
+    assert_equal "203.0.113.7", list.submitter_ip
+  end
+
+  test "submission fields default to nil for an admin-created list" do
+    list = Books::List.create!(name: "Admin made", status: :unapproved)
+
+    assert_nil list.submitted_at
+    assert_nil list.submitter_email
+    assert_nil list.submitter_ip
   end
 end
