@@ -323,6 +323,11 @@ Rails.application.routes.draw do
   get "correction_token", to: "form_token#show", as: :correction_token
   resources :corrections, only: [:create]
 
+  # One global POST for all three domains: it is never cached, and the domain
+  # comes from the host through Current.domain regardless. One route means the
+  # honeypot, both rate limits and the registry check are wired in one place.
+  post "list_submissions", to: "list_submissions#create", as: :list_submissions
+
   # Review writes — global (non-domain-constrained), Turbo Stream, never cached.
   post "reviews", to: "reviews#create", as: :reviews
   patch "reviews/:id", to: "reviews#update", as: :review
@@ -698,6 +703,17 @@ Rails.application.routes.draw do
     # Site search. Declared above the legacy collection catch-alls further down
     # so a future collection slug cannot swallow it.
     get "search", to: "books/searches#index", as: :books_search
+
+    # Deliberately NOT inside the (/rc/:ranking_configuration_id) scope, and
+    # constrained to html, for the same reason the corrections routes are:
+    # ListSubmissionsController never calls load_ranking_configuration, so an
+    # rc-prefixed or .json URL would render 200 for any value of that segment,
+    # and every distinct value is another Cloudflare cache key and another full
+    # render at origin. The router rejects them before a controller is involved.
+    get "lists/new", to: "list_submissions#new", as: :new_books_list_submission,
+      constraints: {format: /html/}
+    get "lists/thanks", to: "list_submissions#thanks", as: :books_list_submission_thanks,
+      constraints: {format: /html/}
 
     get "lists", to: "books/lists#index", as: :books_lists
     get "lists/page/:page", to: "books/lists#index", as: :books_lists_page, constraints: {page: /\d+/}

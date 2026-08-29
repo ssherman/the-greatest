@@ -1,0 +1,155 @@
+<%# The controller lives on the form element itself rather than a wrapping div
+    (Stimulus resolves a target against the controller's own element when it
+    matches, same as any descendant) -- one element, one place the wiring can
+    drift from the shared--form-token controller's actual method and value
+    names (ensureToken, tokenUrlValue), which corrections/new.html.erb wires the
+    same way. %>
+<%= form_with url: list_submissions_path, method: :post,
+      data: {
+        controller: "shared--form-token",
+        shared__form_token_token_url_value: form_token_path,
+        shared__form_token_target: "form",
+        action: "focusin->shared--form-token#ensureToken"
+      },
+      class: "space-y-6" do |f| %>
+
+  <% if @error.present? %>
+    <div class="alert alert-error" role="alert">
+      <span><%= @error %></span>
+    </div>
+  <% end %>
+
+  <%# Honeypot. Hidden from people, irresistible to bots. Not type="hidden" --
+      bots skip those; this is a real input positioned out of view. %>
+  <div class="absolute left-[-9999px]" aria-hidden="true">
+    <label for="website">Website</label>
+    <input type="text" name="website" id="website" tabindex="-1" autocomplete="off">
+  </div>
+
+  <% if @submittable_types.many? %>
+    <div class="card bg-base-100 shadow-xl">
+      <div class="card-body">
+        <h2 class="card-title">List Type</h2>
+        <div class="flex flex-col sm:flex-row gap-4">
+          <% @submittable_types.each_with_index do |type, index| %>
+            <label class="label cursor-pointer justify-start gap-3 flex-1 p-4 border border-base-300 rounded-lg hover:border-primary has-[:checked]:border-primary has-[:checked]:bg-primary/5">
+              <%= radio_button_tag :list_type, type.name, index.zero?, class: "radio radio-primary" %>
+              <span class="font-semibold"><%= Services::Lists::SubmissionRegistry.label_for(type) %></span>
+            </label>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  <% end %>
+
+  <div class="card bg-base-100 shadow-xl">
+    <div class="card-body">
+      <h2 class="card-title">About the list</h2>
+
+      <%# Every input carries an explicit aria-label matching its legend. daisyUI 5's
+          fieldset/fieldset-legend pattern is visual only -- a <legend> does not label
+          the input the way <label for> does, so without this a screen reader
+          announces an unlabelled field and Playwright's getByLabel finds nothing. %>
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">List name <span class="text-error">*</span></legend>
+        <%= f.text_field "list[name]", value: @list.name, required: true, autofocus: true,
+              class: "input w-full", "aria-label": "List name",
+              placeholder: "e.g. Rolling Stone's 500 Greatest Albums" %>
+        <p class="label">The official name of the list.</p>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Source or publication</legend>
+        <%= f.text_field "list[source]", value: @list.source, class: "input w-full",
+              "aria-label": "Source or publication",
+              placeholder: "e.g. Rolling Stone, NME, Pitchfork" %>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Link to the list</legend>
+        <%= f.url_field "list[url]", value: @list.url, class: "input w-full",
+              "aria-label": "Link to the list",
+              placeholder: "https://example.com/best-albums" %>
+        <p class="label">Leave blank if it isn't online.</p>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Description</legend>
+        <%= f.text_area "list[description]", value: @list.description, rows: 4,
+              class: "textarea w-full", "aria-label": "Description",
+              placeholder: "What makes this list notable? How was it compiled?" %>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Paste the list</legend>
+        <%= f.text_area "list[raw_content]", value: @list.raw_content, rows: 12,
+              class: "textarea w-full font-mono text-sm", "aria-label": "Paste the list",
+              placeholder: "1. Marvin Gaye - What's Going On\n2. The Beach Boys - Pet Sounds\n..." %>
+        <p class="label">Optional, but it gets your list added much faster. One entry per line.</p>
+      </fieldset>
+
+      <%# Always rendered, for everyone. This page is edge-cached with the session
+          skipped, so current_user is nil while it renders and the HTML is identical
+          for every visitor. A conditional here would bake one visitor's state into
+          the copy served to everyone else. #create ignores this when someone is
+          signed in. %>
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Your email</legend>
+        <%= email_field_tag :submitter_email, nil, class: "input w-full",
+              "aria-label": "Your email", placeholder: "you@example.com" %>
+        <p class="label">Optional. Only used if we need to ask you about the list. If you're signed in we'll use your account email.</p>
+      </fieldset>
+    </div>
+  </div>
+
+  <details class="card bg-base-100 shadow-xl">
+    <summary class="card-body cursor-pointer font-semibold">More detail (optional)</summary>
+    <div class="card-body pt-0">
+      <p class="text-sm text-base-content/70">
+        Only if you know them — we'll work the rest out during review.
+      </p>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">Year published</legend>
+          <%= f.number_field "list[year_published]", value: @list.year_published,
+                class: "input w-full", "aria-label": "Year published",
+                min: 1900, max: Date.current.year + 1 %>
+        </fieldset>
+
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">Number of voters</legend>
+          <%= f.number_field "list[number_of_voters]", value: @list.number_of_voters,
+                class: "input w-full", "aria-label": "Number of voters", min: 1 %>
+        </fieldset>
+
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">Years covered</legend>
+          <%= f.number_field "list[num_years_covered]", value: @list.num_years_covered,
+                class: "input w-full", "aria-label": "Years covered", min: 1 %>
+        </fieldset>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-4">
+        <% {
+             location_specific: "Focuses on one country or region",
+             category_specific: "Focuses on one genre or style",
+             yearly_award: "An annual award that recurs each year",
+             voter_count_estimated: "The voter count is an estimate",
+             voter_names_unknown: "The voters are anonymous",
+             voter_count_unknown: "The number of voters is unknown"
+           }.each do |field, description| %>
+          <label class="label cursor-pointer justify-start gap-3 items-start p-3 border border-base-300 rounded-lg">
+            <%= f.check_box "list[#{field}]", checked: @list.public_send(field),
+                  class: "checkbox checkbox-primary shrink-0 mt-0.5" %>
+            <span class="text-sm"><%= description %></span>
+          </label>
+        <% end %>
+      </div>
+    </div>
+  </details>
+
+  <div class="flex justify-end">
+    <%= f.submit "Submit list", class: "btn btn-primary" %>
+  </div>
+<% end %>

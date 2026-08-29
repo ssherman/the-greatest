@@ -1,0 +1,10 @@
+<% content_for :page_title, "Thanks | #{domain_settings[:name]}" %>
+
+<div class="container mx-auto px-4 py-16 max-w-2xl text-center">
+  <h1 class="text-4xl font-bold text-base-content mb-4">Thanks — we've got it</h1>
+  <p class="text-base-content/70 mb-8">
+    Your list is in the review queue. If we add it, it'll show up on the lists page.
+    We read every submission, but we can't reply to all of them.
+  </p>
+  <%= link_to "Back to all lists", books_lists_path, class: "btn btn-primary" %>
+</div>
