@@ -1052,14 +1052,27 @@ Rails.application.routes.draw do
       defaults: {correctable_type: "Games::Game"}, as: :games_game_correction_thanks,
       constraints: {format: /html/}
 
+    # Deliberately NOT inside the (/rc/:ranking_configuration_id) scope below,
+    # and constrained to html, for the same reason the corrections routes above
+    # are: ListSubmissionsController never calls load_ranking_configuration, so
+    # an rc-prefixed or .json URL would render 200 for any value of that
+    # segment, and every distinct value is another Cloudflare cache key and
+    # another full render at origin. The router rejects them before a
+    # controller is involved.
+    get "lists/new", to: "list_submissions#new", as: :new_games_list_submission,
+      constraints: {format: /html/}
+    get "lists/thanks", to: "list_submissions#thanks", as: :games_list_submission_thanks,
+      constraints: {format: /html/}
+
     # All games routes with optional ranking configuration parameter
     scope "(/rc/:ranking_configuration_id)" do
       get "lists/page/1", to: redirect("/lists", status: 301)
       get "lists/:id/page/1", to: redirect("/lists/%{id}", status: 301), constraints: {id: /\d+/}
       get "lists", to: "games/lists#index", as: :games_lists
       get "lists/page/:page", to: "games/lists#index", as: :games_lists_page, constraints: {page: /\d+/}
-      get "lists/:id", to: "games/lists#show", as: :games_list
-      get "lists/:id/page/:page", to: "games/lists#show", as: :games_list_page, constraints: {page: /\d+/}
+      get "lists/:id", to: "games/lists#show", as: :games_list, constraints: {id: /\d+/}
+      get "lists/:id/page/:page", to: "games/lists#show", as: :games_list_page,
+        constraints: {id: /\d+/, page: /\d+/}
       get "video-games", to: "games/ranked_items#index", as: :video_games
       get "video-games/page/:page", to: "games/ranked_items#index", as: :video_games_page, constraints: {page: /\d+/}
       # Year-filtered games (must come before generic patterns)

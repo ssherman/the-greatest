@@ -248,4 +248,48 @@ class ListSubmissionsControllerTest < ActionDispatch::IntegrationTest
   test "a format-suffixed list submission form url does not resolve" do
     assert_unroutable "/lists/new.json"
   end
+
+  test "games renders the form without a type picker" do
+    host! "dev.thegreatest.games"
+
+    get "/lists/new"
+
+    assert_response :success
+    assert_select "input[name=list_type][type=radio]", count: 0
+  end
+
+  test "games creates a games list" do
+    host! "dev.thegreatest.games"
+
+    assert_difference "Games::List.count", 1 do
+      post "/list_submissions", params: {
+        list: {name: "Greatest Games", url: "https://example.com/games"},
+        list_type: "Games::List"
+      }
+    end
+
+    assert_redirected_to "/lists/thanks"
+  end
+
+  # Same DDoS-hardening rationale as the books block above -- games' lists/new
+  # and lists/thanks sit right next to a scope "(/rc/:ranking_configuration_id)"
+  # block that wraps the show/index routes, so it is easy to mis-place them a
+  # line too low and reopen the unbounded cache-key hole.
+  test "an rc-prefixed games list submission form url does not resolve" do
+    host! "dev.thegreatest.games"
+
+    assert_unroutable "/rc/99999/lists/new"
+  end
+
+  test "a non-numeric rc-prefixed games list submission thanks url does not resolve" do
+    host! "dev.thegreatest.games"
+
+    assert_unroutable "/rc/anything/lists/thanks"
+  end
+
+  test "a format-suffixed games list submission form url does not resolve" do
+    host! "dev.thegreatest.games"
+
+    assert_unroutable "/lists/new.json"
+  end
 end

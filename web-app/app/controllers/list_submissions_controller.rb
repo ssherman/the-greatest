@@ -165,6 +165,17 @@ class ListSubmissionsController < ApplicationController
   end
   helper_method :thanks_path
 
+  LISTS_PATHS = {
+    books: :books_lists_path,
+    music: :music_lists_path,
+    games: :games_lists_path
+  }.freeze
+
+  def domain_lists_path
+    public_send(LISTS_PATHS.fetch(Current.domain))
+  end
+  helper_method :domain_lists_path
+
   def domain_layout
     "#{Current.domain}/application"
   end
