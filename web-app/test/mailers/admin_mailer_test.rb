@@ -168,6 +168,18 @@ class AdminMailerTest < ActionMailer::TestCase
     assert_nil mail.reply_to
   end
 
+  # submitter_email is anonymous, unvalidated input capped only at 255 chars --
+  # a value that isn't a parseable address would otherwise be emitted raw into
+  # Reply-To: and risk SendGrid rejecting the whole owner notification.
+  test "new_list_submission has no reply_to for an unparseable submitter email" do
+    list = Books::List.create!(name: "Not an email", status: :unapproved,
+      submitted_at: Time.current, submitter_email: "not an email")
+
+    mail = AdminMailer.new_list_submission(list)
+
+    assert_nil mail.reply_to
+  end
+
   # list.submitter_email is attacker-controlled, unvalidated public input --
   # List has no format validation on it (app/models/list.rb) and the submission
   # service caps only its length -- and new_list_submission puts it straight

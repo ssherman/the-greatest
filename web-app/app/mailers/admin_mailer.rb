@@ -79,12 +79,20 @@ class AdminMailer < ApplicationMailer
       to: admin_address,
       subject: "New list submission on #{@site_name}: #{list.name}",
       # Account address first: it is verified and already on file. The typed one
-      # is neither, but it is better than no reply channel at all.
-      reply_to: list.submitted_by&.email || list.submitter_email.presence
+      # is neither, but it is better than no reply channel at all -- guarded,
+      # because header injection is already handled downstream (the Mail gem
+      # escapes CR/LF), but an unparseable address like "not an email" would
+      # still be emitted raw and risk SendGrid rejecting the whole message.
+      reply_to: list.submitted_by&.email || valid_submitter_email(list)
     )
   end
 
   private
+
+  def valid_submitter_email(list)
+    email = list.submitter_email.presence
+    email if email&.match?(URI::MailTo::EMAIL_REGEXP)
+  end
 
   def admin_address
     address = ENV["ADMIN_NOTIFICATION_EMAIL"]
