@@ -24,5 +24,25 @@ module Music
       assert_response :success
       assert_select "a[href=?]", "/lists/new"
     end
+
+    test "index does not show a non-active album list even when weighted" do
+      list = ::Music::Albums::List.create!(name: "Approved But Not Active", status: :approved)
+      ::RankedList.create!(list: list, ranking_configuration: ranking_configurations(:music_albums_global), weight: 999)
+
+      get "/lists"
+
+      assert_response :success
+      assert_no_match "Approved But Not Active", response.body
+    end
+
+    test "index does not show a non-active song list even when weighted" do
+      list = ::Music::Songs::List.create!(name: "Approved But Not Active Song List", status: :approved)
+      ::RankedList.create!(list: list, ranking_configuration: ranking_configurations(:music_songs_global), weight: 999)
+
+      get "/lists"
+
+      assert_response :success
+      assert_no_match "Approved But Not Active Song List", response.body
+    end
   end
 end

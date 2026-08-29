@@ -9,14 +9,14 @@ class Music::ListsController < ApplicationController
   def index
     @albums_ranked_lists = @albums_ranking_configuration.ranked_lists
       .joins(:list)
-      .where(lists: {type: "Music::Albums::List"})
+      .where(lists: {type: "Music::Albums::List", status: ::List.statuses[:active]})
       .includes(list: :list_items)
       .order(weight: :desc)
       .limit(50)
 
     @songs_ranked_lists = @songs_ranking_configuration.ranked_lists
       .joins(:list)
-      .where(lists: {type: "Music::Songs::List"})
+      .where(lists: {type: "Music::Songs::List", status: ::List.statuses[:active]})
       .includes(list: :list_items)
       .order(weight: :desc)
       .limit(50)
