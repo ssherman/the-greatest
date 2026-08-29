@@ -78,6 +78,14 @@ class List < ApplicationRecord
   # colliding with a bare user_favorites? on List.
   enum :auto_generated_kind, {user_favorites: 0}, prefix: :generated
 
+  # Set by Services::Lists::Submission only. The simplifier is a Nokogiri parse
+  # and auto_simplify_content runs it inline on every new record carrying
+  # raw_content -- on an anonymous public endpoint that is a CPU lever, and
+  # production raw_content reaches 1.5 MB. Deferring is safe because
+  # Services::Lists::ImportService recomputes simplified_content unconditionally
+  # before it parses, so nothing downstream needs it at insert time.
+  attr_accessor :skip_content_simplification
+
   # Callbacks
   before_validation :parse_items_json_if_string
   before_save :auto_simplify_content, if: :should_simplify_content?
@@ -168,6 +176,8 @@ class List < ApplicationRecord
   private
 
   def should_simplify_content?
+    return false if skip_content_simplification
+
     raw_content.present? && (new_record? || raw_content_changed?)
   end
 

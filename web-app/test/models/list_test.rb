@@ -441,4 +441,24 @@ class ListTest < ActiveSupport::TestCase
     assert_nil list.submitter_email
     assert_nil list.submitter_ip
   end
+
+  test "simplifies raw content on save by default" do
+    list = Books::List.create!(
+      name: "Simplify me", status: :unapproved,
+      raw_content: "<ul><li>One</li><li>Two</li></ul>"
+    )
+
+    assert_not_nil list.simplified_content
+  end
+
+  test "skips simplification when skip_content_simplification is set" do
+    list = Books::List.new(
+      name: "Skip me", status: :unapproved,
+      raw_content: "<ul><li>One</li><li>Two</li></ul>"
+    )
+    list.skip_content_simplification = true
+    list.save!
+
+    assert_nil list.simplified_content
+  end
 end
