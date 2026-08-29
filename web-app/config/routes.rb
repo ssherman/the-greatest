@@ -7,12 +7,29 @@ Rails.application.routes.draw do
     # All music routes are prefixed with 'music_' for route helpers to avoid
     # conflicts when other domains (games, movies) add similar resources
     scope as: "music" do
-      # Lists overview and public submission
-      resources :lists, only: [:index, :new, :create], controller: "music/lists"
+      # Lists overview. Submission moved to the shared ListSubmissionsController,
+      # routed just below -- outside this `as: "music"` scope on purpose,
+      # because that scope prefixes explicit `as:` names too and the shared
+      # controller's helpers must match every other domain's unprefixed
+      # new_<domain>_list_submission_path / <domain>_list_submission_thanks_path
+      # shape.
+      resources :lists, only: [:index], controller: "music/lists"
 
       # Search
       get "search", to: "music/searches#index"
     end
+
+    # Deliberately NOT inside the (/rc/:ranking_configuration_id) scope further
+    # down, and constrained to html, for the same reason the corrections
+    # routes further down are: ListSubmissionsController never calls
+    # load_ranking_configuration, so an rc-prefixed or .json URL would render
+    # 200 for any value of that segment, and every distinct value is another
+    # Cloudflare cache key and another full render at origin. The router
+    # rejects them before a controller is involved.
+    get "lists/new", to: "list_submissions#new", as: :new_music_list_submission,
+      constraints: {format: /html/}
+    get "lists/thanks", to: "list_submissions#thanks", as: :music_list_submission_thanks,
+      constraints: {format: /html/}
 
     # Artist rankings (outside rc scope - always uses default primary configs for both albums and songs)
     get "artists", to: "music/artists/ranked_items#index", as: :artists

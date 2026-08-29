@@ -292,4 +292,60 @@ class ListSubmissionsControllerTest < ActionDispatch::IntegrationTest
 
     assert_unroutable "/lists/new.json"
   end
+
+  test "music renders a type picker with both list types" do
+    host! "dev.thegreatestmusic.org"
+
+    get "/lists/new"
+
+    assert_response :success
+    assert_select "input[name=list_type][value=?]", "Music::Albums::List"
+    assert_select "input[name=list_type][value=?]", "Music::Songs::List"
+  end
+
+  test "music creates an album list when albums is chosen" do
+    host! "dev.thegreatestmusic.org"
+
+    assert_difference "Music::Albums::List.count", 1 do
+      post "/list_submissions", params: {
+        list: {name: "Greatest Albums", url: "https://example.com/albums"},
+        list_type: "Music::Albums::List"
+      }
+    end
+
+    assert_redirected_to "/lists/thanks"
+  end
+
+  test "music creates a song list when songs is chosen" do
+    host! "dev.thegreatestmusic.org"
+
+    assert_difference "Music::Songs::List.count", 1 do
+      post "/list_submissions", params: {
+        list: {name: "Greatest Songs", url: "https://example.com/songs"},
+        list_type: "Music::Songs::List"
+      }
+    end
+
+    assert_redirected_to "/lists/thanks"
+  end
+
+  test "music rejects a submission with no type chosen" do
+    host! "dev.thegreatestmusic.org"
+
+    post "/list_submissions", params: {list: {name: "No type"}}
+
+    assert_response :bad_request
+  end
+
+  # Music has no rc-scoped equivalent of the lists routes to accidentally
+  # collide with (its "lists" route lives in a plain `scope as: "music"`
+  # block, not under `scope "(/rc/:ranking_configuration_id)"`), so an
+  # rc-prefixed hardening test would pin nothing this change could break.
+  # The format axis is still unconstrained by default on any GET, so that
+  # one test carries over.
+  test "a format-suffixed music list submission form url does not resolve" do
+    host! "dev.thegreatestmusic.org"
+
+    assert_unroutable "/lists/new.json"
+  end
 end
