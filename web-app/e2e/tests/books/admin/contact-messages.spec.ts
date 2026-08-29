@@ -12,7 +12,21 @@ import { test, expect } from '@playwright/test';
 // cleanup: there being no delete route, moving the row out of the pending
 // tab is the only "clean up after yourself" available here, and it is also
 // exactly the behaviour this spec exists to cover.
-const MARKER = `E2E admin contact-messages spec ${Date.now()}`;
+const RUN_ID = Date.now();
+
+// The row partial truncates the message to 80 characters
+// (app/views/admin/contact_messages/_row.html.erb), so a marker that fits
+// entirely inside that window would let the show page's "renders the FULL
+// body" claim below pass even if the show page regressed to truncating at
+// 80 too -- exactly the bug this test exists to catch. PREFIX is padded
+// past 80 characters on purpose so TAIL exists only beyond the truncation
+// boundary: the index row can only ever show PREFIX (or less), and the show
+// page assertion goes red the moment it stops rendering past character 80.
+// If you ever touch this marker, keep TAIL past character 80 or this
+// guarantee silently breaks again.
+const PREFIX = `E2E admin contact-messages spec ${RUN_ID} `.padEnd(90, '.');
+const TAIL = `TAIL-${RUN_ID}`;
+const MARKER = `${PREFIX}${TAIL}`;
 
 test.describe('Books admin — contact messages', () => {
   test('a submitted message appears in the pending queue, shows its body, and can be marked replied', async ({ page }) => {
@@ -37,9 +51,11 @@ test.describe('Books admin — contact messages', () => {
     await page.goto('/admin/contact_messages');
     await expect(page.getByTestId('status-tab-pending')).toHaveClass(/tab-active/);
 
-    // Found by the marker text, never by position -- other specs and real
-    // traffic can add pending rows of their own.
-    const row = page.locator('[data-testid="contact-message-row"]', { hasText: MARKER });
+    // Found by RUN_ID, never by position -- other specs and real traffic can
+    // add pending rows of their own. RUN_ID sits well inside PREFIX, so it
+    // survives the row's 80-character truncation even though the full
+    // MARKER (with TAIL) does not.
+    const row = page.locator('[data-testid="contact-message-row"]', { hasText: String(RUN_ID) });
     await expect(row).toBeVisible();
     const messageId = await row.getAttribute('data-contact-message-id');
     expect(messageId, 'expected the row to carry a data-contact-message-id').toBeTruthy();
@@ -48,9 +64,11 @@ test.describe('Books admin — contact messages', () => {
     await expect(page).toHaveURL(new RegExp(`/admin/contact_messages/${messageId}$`));
 
     // Proves the show page renders the FULL body, not just the row's
-    // 80-character truncation -- non-vacuous because MARKER already fits
-    // under that truncation, so this also confirms it round-tripped intact.
-    await expect(page.getByText(MARKER)).toBeVisible();
+    // 80-character truncation: TAIL exists only past character 80 of the
+    // message, so this fails if the show page ever truncates the same way
+    // the row does. Asserting on TAIL alone, not the whole MARKER, is what
+    // makes that failure mode reachable.
+    await expect(page.getByText(TAIL)).toBeVisible();
 
     await page.getByRole('button', { name: 'Mark replied' }).click();
 

@@ -9,8 +9,9 @@ Replaces the `mailto:` that shipped with the footer.
    `contact_messages/_form`. The markup is identical for every visitor, because
    the footer appears on every Cloudflare-cached page.
 2. The `contact--form` Stimulus controller opens the dialog and fetches
-   `GET /contact_state` (uncached, no database query), which returns the
-   signed-in visitor's email and a CSRF token for their own session.
+   `GET /contact_state` (uncached; no query beyond `current_user` loading the
+   session's own user), which returns the signed-in visitor's email and a
+   CSRF token for their own session.
 3. `POST /contact_messages` persists a `ContactMessage`, enqueues
    `AdminMailer#contact_message`, and answers with a turbo-stream that swaps
    `#contact_modal_body` to a confirmation.
