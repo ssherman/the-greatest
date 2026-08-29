@@ -213,7 +213,7 @@ test.describe.serial('Books reading goals lifecycle', () => {
     await expectGoalProjection(page, baselineCount + 1, FIRST_BOOK.title, today);
     await expect(page.getByRole('link', { name: 'Manage', exact: true })).toHaveAttribute(
       'href',
-      `/my/reading_goals/${publicGoalId}/edit`,
+      `/my/reading-goals/${publicGoalId}/edit`,
     );
 
     await visitReadList(page);
@@ -271,7 +271,7 @@ test.describe.serial('Books reading goals lifecycle', () => {
     expect((await completionResponse).status()).toBe(303);
     await expectGoalProjection(page, baselineCount + 1, SECOND_BOOK.title, inRangeDate);
 
-    await page.goto('/my/reading_goals/new');
+    await page.goto('/my/reading-goals/new');
     await page.getByLabel('Name').fill(privateGoalName);
     await page.getByRole('button', { name: 'Create Reading Goal', exact: true }).click();
 
@@ -334,7 +334,7 @@ test.describe.serial('Books reading goals lifecycle', () => {
     ).toHaveText(['Lists', 'Reading Goals', 'Reviews', 'Saved Searches']);
 
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto('/my/reading_goals');
+    await page.goto('/my/reading-goals');
     await deleteGoal(page, publicGoalName);
     await deleteGoal(page, privateGoalName);
 
