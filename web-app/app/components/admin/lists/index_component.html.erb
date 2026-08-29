@@ -39,6 +39,15 @@
               {},
               class: "select",
               onchange: "this.form.requestSubmit()" %>
+          <%= f.select :submitted,
+              options_for_select([
+                ["All sources", ""],
+                ["User submitted", "submitted"],
+                ["Added by admin", "admin"]
+              ], selected_submitted),
+              {},
+              class: "select",
+              onchange: "this.form.requestSubmit()" %>
         <% end %>
       </div>
 

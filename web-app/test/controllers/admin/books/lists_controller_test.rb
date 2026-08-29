@@ -95,6 +95,55 @@ module Admin
 
         assert_redirected_to admin_books_list_path(@list)
       end
+
+      test "index filters to user submitted lists" do
+        sign_in_as(@admin_user, stub_auth: true)
+        submitted = ::Books::List.create!(name: "From a reader", status: :unapproved,
+          submitted_at: Time.current, submitter_email: "reader@example.com")
+        admin_made = ::Books::List.create!(name: "From an import", status: :unapproved)
+
+        get admin_books_lists_path(submitted: "submitted")
+
+        assert_response :success
+        assert_match submitted.name, response.body
+        assert_no_match admin_made.name, response.body
+      end
+
+      test "index filters to admin created lists" do
+        sign_in_as(@admin_user, stub_auth: true)
+        submitted = ::Books::List.create!(name: "From a reader", status: :unapproved,
+          submitted_at: Time.current)
+        admin_made = ::Books::List.create!(name: "From an import", status: :unapproved)
+
+        get admin_books_lists_path(submitted: "admin")
+
+        assert_response :success
+        assert_match admin_made.name, response.body
+        assert_no_match submitted.name, response.body
+      end
+
+      test "index shows every list when the submitted filter is absent" do
+        sign_in_as(@admin_user, stub_auth: true)
+        submitted = ::Books::List.create!(name: "From a reader", status: :unapproved,
+          submitted_at: Time.current)
+        admin_made = ::Books::List.create!(name: "From an import", status: :unapproved)
+
+        get admin_books_lists_path
+
+        assert_response :success
+        assert_match submitted.name, response.body
+        assert_match admin_made.name, response.body
+      end
+
+      test "index shows the submitter for an anonymous submission" do
+        sign_in_as(@admin_user, stub_auth: true)
+        ::Books::List.create!(name: "Anon list", status: :unapproved, submitted_at: Time.current)
+
+        get admin_books_lists_path(submitted: "submitted")
+
+        assert_response :success
+        assert_match "Anonymous", response.body
+      end
     end
   end
 end
