@@ -15,9 +15,6 @@ application.register("authentication", AuthenticationController)
 import AutocompleteController from "../controllers/autocomplete_controller"
 application.register("autocomplete", AutocompleteController)
 
-import Corrections__FormController from "../controllers/corrections/form_controller"
-application.register("corrections--form", Corrections__FormController)
-
 import MembershipStateController from "../controllers/membership_state_controller"
 application.register("membership-state", MembershipStateController)
 
@@ -32,6 +29,9 @@ application.register("reviews--spoiler", Reviews__SpoilerController)
 
 import Reviews__WidgetController from "../controllers/reviews/widget_controller"
 application.register("reviews--widget", Reviews__WidgetController)
+
+import Shared__FormTokenController from "../controllers/shared/form_token_controller"
+application.register("shared--form-token", Shared__FormTokenController)
 
 import ToastController from "../controllers/toast_controller"
 application.register("toast", ToastController)

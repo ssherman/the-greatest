@@ -6,8 +6,8 @@ class CorrectionsController < ApplicationController
 
   # The form page is edge-cached, so its <meta name="csrf-token"> belongs to
   # whoever populated the cache. The Stimulus controller fetches a real token from
-  # /correction_token on first interaction -- but if that fetch never happened (JS
-  # off, blocked, slow), null_session accepts the write as ANONYMOUS rather than
+  # /form_token on first interaction -- but if that fetch never happened (JS off,
+  # blocked, slow), null_session accepts the write as ANONYMOUS rather than
   # raising and showing the submitter a 422 they cannot act on.
   #
   # This is sound, not a compromise. CSRF exists to stop a forged request riding a

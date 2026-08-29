@@ -312,10 +312,15 @@ Rails.application.routes.draw do
   # Per-item review state — global (non-domain-constrained), JSON-only, never cached.
   get "review_state", to: "review_state#show", as: :review_state
 
-  # Uncached, no database query. Exists so the edge-cached correction form can get
-  # a token that belongs to the caller's session rather than to whoever populated
-  # the cache.
-  get "correction_token", to: "correction_token#show", as: :correction_token
+  # Uncached, no database query. Serves every edge-cached public form: a cached
+  # page's <meta name="csrf-token"> belongs to whoever populated the cache.
+  #
+  # /correction_token is kept because corrections form pages are edge-cached for
+  # 24 hours and already-cached copies still point at it. Removing it would make
+  # those pages fall back to null_session, which works, but silently loses
+  # attribution for signed-in submitters until the cache turns over.
+  get "form_token", to: "form_token#show", as: :form_token
+  get "correction_token", to: "form_token#show", as: :correction_token
   resources :corrections, only: [:create]
 
   # Review writes — global (non-domain-constrained), Turbo Stream, never cached.
