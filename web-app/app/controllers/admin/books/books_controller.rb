@@ -55,7 +55,13 @@ class Admin::Books::BooksController < Admin::Books::BaseController
   end
 
   def destroy
-    @book.destroy!
+    ::Books::Book.transaction do |transaction|
+      urls = Services::Books::ReadingGoals::DestructionInvalidator.for_book(book: @book)
+      @book.destroy!
+      transaction.after_commit do
+        ::Books::ReadingGoals::PurgeCachedPagesJob.perform_async("books", urls) if urls.any?
+      end
+    end
     redirect_to admin_books_books_path, notice: "Book deleted."
   end
 
