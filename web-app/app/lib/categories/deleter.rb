@@ -21,7 +21,10 @@ module Categories
 
     def soft_delete
       Category.transaction do
-        @category.update_column(:deleted, true)
+        # update! rather than update_column: update_column fires no callbacks, which
+        # would silently skip Category#queue_items_for_reindexing and reintroduce the
+        # stale-index defect this service is meant to be safe for.
+        @category.update!(deleted: true)
         @category.category_items.destroy_all
       end
     end

@@ -137,7 +137,7 @@ module Categories
 
     test "should use database transaction for soft delete" do
       # Mock an error during the transaction to test rollback
-      @uk_location.stubs(:update_column).raises(ActiveRecord::RecordInvalid)
+      @uk_location.stubs(:update!).raises(ActiveRecord::RecordInvalid)
 
       deleter = Categories::Deleter.new(category: @uk_location, soft: true)
 
@@ -163,6 +163,36 @@ module Categories
 
       assert_equal true, soft_deleter.soft
       assert_equal false, hard_deleter.soft
+    end
+
+    # Documents the end-to-end outcome only: every row it sees comes from
+    # CategoryItem#after_destroy, which predates this branch, so this test
+    # passes even with the after_update_commit callback reverted entirely.
+    # The Mocha-expectation test below is the control that actually proves
+    # the callback fires.
+    test "soft delete queues the category's items for reindexing" do
+      category = categories(:books_novels_genre)
+      book_ids = CategoryItem.where(category_id: category.id, item_type: "Books::Book").pluck(:item_id)
+      assert_equal 3, book_ids.size, "fixture drift: books_novels_genre should hold 3 books"
+      SearchIndexRequest.delete_all
+
+      Categories::Deleter.new(category: category, soft: true).delete
+
+      queued = SearchIndexRequest.where(parent_type: "Books::Book", action: :index_item).distinct.pluck(:parent_id)
+      assert_equal book_ids.sort, queued.sort
+    end
+
+    test "soft delete fires the reindex callback rather than bypassing it" do
+      category = categories(:books_novels_genre)
+
+      # The end-to-end test above cannot see this: soft_delete destroys the join
+      # rows in the same transaction, so by the time after_update_commit fires
+      # there is nothing left to queue and every row it observes came from
+      # CategoryItem#after_destroy. Asserting on the call itself is what makes
+      # a revert to update_column -- which fires no callbacks at all -- go red.
+      Categories::ItemReindexer.expects(:call).with(category: category).at_least_once
+
+      Categories::Deleter.new(category: category, soft: true).delete
     end
   end
 end

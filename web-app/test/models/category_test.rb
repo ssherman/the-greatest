@@ -181,4 +181,131 @@ class CategoryTest < ActiveSupport::TestCase
 
     assert_equal "Fiction (Unknown)", category.reload.name_with_type
   end
+
+  test "flipping deleted queues every item for reindexing" do
+    category = categories(:music_rock_genre)
+    album_ids = CategoryItem.where(category_id: category.id, item_type: "Music::Album").pluck(:item_id)
+    assert_equal 2, album_ids.size, "fixture drift: music_rock_genre should hold 2 albums"
+    SearchIndexRequest.delete_all
+
+    category.soft_delete!
+
+    queued = SearchIndexRequest.where(parent_type: "Music::Album", action: :index_item).pluck(:parent_id)
+    assert_equal album_ids.sort, queued.sort
+  end
+
+  test "un-deleting a category also queues its items" do
+    category = categories(:music_deleted_genre)
+    SearchIndexRequest.delete_all
+
+    category.update!(deleted: false)
+
+    assert category.search_relevant_change?
+  end
+
+  test "editing description, slug or parent queues nothing" do
+    category = categories(:music_rock_genre)
+    SearchIndexRequest.delete_all
+
+    assert_no_difference -> { SearchIndexRequest.count } do
+      category.update!(description: "a different description")
+      category.update!(slug: "rock-renamed-slug")
+      category.update!(parent: categories(:music_progressive_rock_genre))
+    end
+  end
+
+  test "creating a category queues nothing" do
+    assert_no_difference -> { SearchIndexRequest.count } do
+      Music::Category.create!(name: "Shoegaze", category_type: "genre")
+    end
+  end
+
+  test "a deleted flip inside without_search_indexing queues nothing" do
+    category = categories(:music_rock_genre)
+
+    assert_no_difference -> { SearchIndexRequest.count } do
+      Services::BooksMigration.without_search_indexing do
+        category.soft_delete!
+      end
+    end
+  end
+
+  test "a search-relevant change survives a later unrelated save in the same transaction" do
+    category = categories(:music_rock_genre)
+    SearchIndexRequest.delete_all
+
+    assert_difference -> { SearchIndexRequest.where(parent_type: "Music::Album").count }, 2 do
+      Category.transaction do
+        category.update!(deleted: true)
+        category.update!(description: "saved again, not search-relevant")
+      end
+    end
+  end
+
+  test "two unrelated saves in one transaction still queue nothing" do
+    category = categories(:music_rock_genre)
+    SearchIndexRequest.delete_all
+
+    assert_no_difference -> { SearchIndexRequest.count } do
+      Category.transaction do
+        category.update!(description: "first")
+        category.update!(slug: "rock-two-saves")
+      end
+    end
+  end
+
+  test "a rolled back search-relevant change does not leak into the next save" do
+    category = categories(:music_rock_genre)
+    SearchIndexRequest.delete_all
+
+    Category.transaction do
+      category.update!(deleted: true)
+      raise ActiveRecord::Rollback
+    end
+
+    assert_no_difference -> { SearchIndexRequest.count } do
+      category.update!(description: "after the rollback")
+    end
+  end
+
+  # Codex, PR #276. after_rollback fires for an inner savepoint too, and clearing
+  # the latch there discarded a change the outer transaction was still going to
+  # commit -- the row landed with deleted: true and nothing was ever reindexed.
+  test "a savepoint rollback does not discard a search-relevant change made outside it" do
+    category = categories(:music_rock_genre)
+    SearchIndexRequest.delete_all
+
+    assert_difference -> { SearchIndexRequest.where(parent_type: "Music::Album").count }, 2 do
+      Category.transaction do
+        category.update!(deleted: true)
+
+        Category.transaction(requires_new: true) do
+          category.update!(description: "touched inside the savepoint")
+          raise ActiveRecord::Rollback
+        end
+      end
+    end
+
+    assert Category.find(category.id).deleted, "the outer change must actually have committed"
+  end
+
+  # The other half: a change latched INSIDE the savepoint really is rolled back,
+  # so the depth guard must not turn into "never clear".
+  test "a savepoint rollback does discard a search-relevant change made inside it" do
+    category = categories(:music_rock_genre)
+    SearchIndexRequest.delete_all
+
+    assert_no_difference -> { SearchIndexRequest.count } do
+      Category.transaction do
+        category.update!(description: "outer, not search-relevant")
+
+        Category.transaction(requires_new: true) do
+          category.update!(deleted: true)
+          raise ActiveRecord::Rollback
+        end
+      end
+    end
+
+    assert_not Category.find(category.id).deleted, "the inner change must have rolled back"
+  end
 end

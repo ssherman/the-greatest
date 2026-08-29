@@ -60,11 +60,11 @@ module Categories
       # Transfer all category items to the new category
       transfer_category_items_to(renamed_category)
 
-      # Soft delete the old category
-      Deleter.new(category: @category, soft: true).delete
-
       # Reset attributes on original category to avoid confusion
       @category.restore_attributes
+
+      # Soft delete the old category
+      Deleter.new(category: @category, soft: true).delete
 
       renamed_category
     end

@@ -3,11 +3,23 @@
 class Search::IndexerJob
   include Sidekiq::Job
 
+  # The model types this job drains, and the single source of truth for that list.
+  # Categories::ItemReindexer filters against it so it never queues a request for a
+  # model nothing indexes -- such a row would never be drained and would sit in the
+  # queue forever. Books::Series has as_indexed_json but is deliberately absent.
+  INDEXED_MODEL_TYPES = %w[
+    Music::Artist
+    Music::Album
+    Music::Song
+    Games::Game
+    Books::Book
+    Books::Author
+  ].freeze
+
   def perform
     Rails.logger.info "Starting search indexing job"
 
-    # Process each indexed model type
-    %w[Music::Artist Music::Album Music::Song Games::Game Books::Book Books::Author].each do |model_type|
+    INDEXED_MODEL_TYPES.each do |model_type|
       process_requests_for_type(model_type)
     end
 

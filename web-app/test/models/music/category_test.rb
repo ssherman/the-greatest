@@ -112,5 +112,24 @@ module Music
       assert_equal music_horror, Music::Category.friendly.find("horror")
       assert_equal movies_horror, Movies::Category.friendly.find("horror")
     end
+
+    test "changing category_type queues nothing for music" do
+      category = categories(:music_rock_genre)
+      assert_equal 2, CategoryItem.where(category_id: category.id).count, "fixture drift"
+      SearchIndexRequest.delete_all
+
+      assert_no_difference -> { SearchIndexRequest.count } do
+        category.update!(category_type: "subject")
+      end
+    end
+
+    test "renaming queues nothing for music" do
+      category = categories(:music_rock_genre)
+      SearchIndexRequest.delete_all
+
+      assert_no_difference -> { SearchIndexRequest.count } do
+        category.update!(name: "Rock and Roll")
+      end
+    end
   end
 end
