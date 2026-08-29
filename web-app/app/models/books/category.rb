@@ -37,5 +37,29 @@ module Books
 
     scope :by_book_ids, ->(book_ids) { joins(:category_items).where(category_items: {item_type: "Books::Book", item_id: book_ids}) }
     scope :by_author_ids, ->(author_ids) { joins(:category_items).where(category_items: {item_type: "Books::Author", item_id: author_ids}) }
+
+    # Books reads more of the category row than any other domain.
+    # Books::Book#as_indexed_json splits genre_category_ids / subject_category_ids /
+    # location_category_ids by category_type, and similarity_category_count -- the
+    # denominator the similarity query divides by -- excludes the Fiction and
+    # Nonfiction genre rows by NAME.
+    #
+    # Name is compared as membership rather than as a string on purpose: it only ever
+    # reaches the indexed document through BOOK_TYPE_CATEGORY_NAMES.include?, so
+    # fixing a typo on a 30,000-item category requeues nothing, while renaming one
+    # into or out of Fiction/Nonfiction requeues everything it holds.
+    def search_relevant_change?
+      super || saved_change_to_category_type? || book_type_membership_changed?
+    end
+
+    private
+
+    def book_type_membership_changed?
+      return false unless saved_change_to_name?
+
+      before, after = saved_change_to_name
+      ::Books::Book::BOOK_TYPE_CATEGORY_NAMES.include?(before) !=
+        ::Books::Book::BOOK_TYPE_CATEGORY_NAMES.include?(after)
+    end
   end
 end
