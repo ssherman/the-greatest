@@ -983,7 +983,7 @@ end
 bin/rails test test/lib/services/lists/submission_test.rb
 ```
 
-Expected: PASS, 12 runs.
+Expected: PASS, 11 runs.
 
 Note: `.pluck(:url)` over the whole type is acceptable at current scale (758 active books lists, 1,772 unapproved overall). If it ever needs narrowing, add a host prefix filter — do not move the normalisation into SQL.
 
@@ -1194,11 +1194,15 @@ class ListSubmissionsControllerTest < ActionDispatch::IntegrationTest
     assert_select "form[action=?]", "/list_submissions"
   end
 
+  # Read the books layout's robots helper and match this assertion to the markup it
+  # ACTUALLY emits before running the test -- the selector below is the expected
+  # shape, not verified output. Books defaults to noindex unless @indexable is
+  # truthy, so this passes on books either way; the assertion exists to pin it.
   test "new is not indexable" do
     get "/lists/new"
 
     assert_response :success
-    assert_select "meta[name=robots][content*=noindex]"
+    assert_select "meta[name=robots][content*=?]", "noindex"
   end
 
   test "new does not render a type picker on books" do
@@ -1468,7 +1472,10 @@ class ListSubmissionsController < ApplicationController
   end
 
   def list_params
-    params.fetch(:list, {}).permit(*Services::Lists::Submission::PERMITTED)
+    # ActionController::Parameters.new, not {} -- Hash has no #permit, so a POST
+    # with no list key at all would 500 instead of returning a validation error.
+    params.fetch(:list, ActionController::Parameters.new)
+      .permit(*Services::Lists::Submission::PERMITTED)
   end
 
   def render_rate_limited
@@ -1561,22 +1568,29 @@ Note: `THANKS_PATHS` names music and games helpers that Task 11/12 create. Until
     <div class="card-body">
       <h2 class="card-title">About the list</h2>
 
+      <%# Every input carries an explicit aria-label matching its legend. daisyUI 5's
+          fieldset/fieldset-legend pattern is visual only -- a <legend> does not label
+          the input the way <label for> does, so without this a screen reader
+          announces an unlabelled field and Playwright's getByLabel finds nothing. %>
       <fieldset class="fieldset">
         <legend class="fieldset-legend">List name <span class="text-error">*</span></legend>
         <%= f.text_field "list[name]", value: @list.name, required: true, autofocus: true,
-              class: "input w-full", placeholder: "e.g. Rolling Stone's 500 Greatest Albums" %>
+              class: "input w-full", "aria-label": "List name",
+              placeholder: "e.g. Rolling Stone's 500 Greatest Albums" %>
         <p class="label">The official name of the list.</p>
       </fieldset>
 
       <fieldset class="fieldset">
         <legend class="fieldset-legend">Source or publication</legend>
         <%= f.text_field "list[source]", value: @list.source, class: "input w-full",
+              "aria-label": "Source or publication",
               placeholder: "e.g. Rolling Stone, NME, Pitchfork" %>
       </fieldset>
 
       <fieldset class="fieldset">
         <legend class="fieldset-legend">Link to the list</legend>
         <%= f.url_field "list[url]", value: @list.url, class: "input w-full",
+              "aria-label": "Link to the list",
               placeholder: "https://example.com/best-albums" %>
         <p class="label">Leave blank if it isn't online.</p>
       </fieldset>
@@ -1584,14 +1598,14 @@ Note: `THANKS_PATHS` names music and games helpers that Task 11/12 create. Until
       <fieldset class="fieldset">
         <legend class="fieldset-legend">Description</legend>
         <%= f.text_area "list[description]", value: @list.description, rows: 4,
-              class: "textarea w-full",
+              class: "textarea w-full", "aria-label": "Description",
               placeholder: "What makes this list notable? How was it compiled?" %>
       </fieldset>
 
       <fieldset class="fieldset">
         <legend class="fieldset-legend">Paste the list</legend>
         <%= f.text_area "list[raw_content]", value: @list.raw_content, rows: 12,
-              class: "textarea w-full font-mono text-sm",
+              class: "textarea w-full font-mono text-sm", "aria-label": "Paste the list",
               placeholder: "1. Marvin Gaye - What's Going On\n2. The Beach Boys - Pet Sounds\n..." %>
         <p class="label">Optional, but it gets your list added much faster. One entry per line.</p>
       </fieldset>
@@ -1604,7 +1618,7 @@ Note: `THANKS_PATHS` names music and games helpers that Task 11/12 create. Until
       <fieldset class="fieldset">
         <legend class="fieldset-legend">Your email</legend>
         <%= email_field_tag :submitter_email, nil, class: "input w-full",
-              placeholder: "you@example.com" %>
+              "aria-label": "Your email", placeholder: "you@example.com" %>
         <p class="label">Optional. Only used if we need to ask you about the list. If you're signed in we'll use your account email.</p>
       </fieldset>
     </div>
@@ -1621,19 +1635,20 @@ Note: `THANKS_PATHS` names music and games helpers that Task 11/12 create. Until
         <fieldset class="fieldset">
           <legend class="fieldset-legend">Year published</legend>
           <%= f.number_field "list[year_published]", value: @list.year_published,
-                class: "input w-full", min: 1900, max: Date.current.year + 1 %>
+                class: "input w-full", "aria-label": "Year published",
+                min: 1900, max: Date.current.year + 1 %>
         </fieldset>
 
         <fieldset class="fieldset">
           <legend class="fieldset-legend">Number of voters</legend>
           <%= f.number_field "list[number_of_voters]", value: @list.number_of_voters,
-                class: "input w-full", min: 1 %>
+                class: "input w-full", "aria-label": "Number of voters", min: 1 %>
         </fieldset>
 
         <fieldset class="fieldset">
           <legend class="fieldset-legend">Years covered</legend>
           <%= f.number_field "list[num_years_covered]", value: @list.num_years_covered,
-                class: "input w-full", min: 1 %>
+                class: "input w-full", "aria-label": "Years covered", min: 1 %>
         </fieldset>
       </div>
 
