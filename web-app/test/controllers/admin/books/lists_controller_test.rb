@@ -144,6 +144,17 @@ module Admin
         assert_response :success
         assert_match "Anonymous", response.body
       end
+
+      test "sort links retain the submitted filter when set" do
+        sign_in_as(@admin_user, stub_auth: true)
+        ::Books::List.create!(name: "From a reader", status: :unapproved,
+          submitted_at: Time.current, submitter_email: "reader@example.com")
+
+        get admin_books_lists_path(submitted: "submitted")
+
+        assert_response :success
+        assert_match(/href="[^"]*submitted=submitted[^"]*"/, response.body)
+      end
     end
   end
 end
