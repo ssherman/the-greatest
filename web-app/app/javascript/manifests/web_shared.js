@@ -15,6 +15,9 @@ application.register("authentication", AuthenticationController)
 import AutocompleteController from "../controllers/autocomplete_controller"
 application.register("autocomplete", AutocompleteController)
 
+import Contact__FormController from "../controllers/contact/form_controller"
+application.register("contact--form", Contact__FormController)
+
 import Corrections__FormController from "../controllers/corrections/form_controller"
 application.register("corrections--form", Corrections__FormController)
 
