@@ -125,6 +125,15 @@ turns it into an SEO-spam vector on live sites. This ships first, on its own.
 so it is plainly meant to be live — set it to `active`. The only other two `RankedList` rows on
 non-active lists are `Books::List` #789 and #886, which already 404 today.
 
+**Verified against the test suite.** The `music_songs_list` fixture is `status: 1` (`approved`) while
+`music_albums_list` is already `status: 3` (`active`) — an asymmetry that looks accidental. Scoping
+the songs `show` breaks 6 tests until that fixture is flipped to `3`. With the flip applied, the
+**full suite is green: 8,199 runs, 164,699 assertions, 0 failures, 0 errors.** The fixture is
+referenced by `ranked_lists.yml`, `list_items.yml`, `list_penalties.yml`, `ai_chats.yml` and eight
+test files, and none of them depend on its status. Books and games need no fixture change — both
+already scope `show` to `:active`, and `Games::ListsControllerTest` already carries a
+"show 404s for a non-active list" test that is the template for the music ones.
+
 ## Data model
 
 One migration on `lists`. No new table.
@@ -192,15 +201,36 @@ Defined inside each domain's own `DomainConstraint` block — three near-identic
 shape corrections uses, which gives clean per-domain helpers rather than one name that has to work
 across four sites.
 
+The two **cacheable GETs** are per-domain, so each site gets its own helper and its own cache key:
+
 ```ruby
 # inside the books constraint; games and music are analogous
-get  "lists/new",    to: "list_submissions#new",    as: :new_books_list_submission
-post "lists/submit", to: "list_submissions#create", as: :books_list_submissions
-get  "lists/thanks", to: "list_submissions#thanks", as: :books_list_submission_thanks
+get "lists/new",    to: "list_submissions#new",    as: :new_books_list_submission,
+    constraints: {format: /html/}
+get "lists/thanks", to: "list_submissions#thanks", as: :books_list_submission_thanks,
+    constraints: {format: /html/}
 ```
 
-`POST /lists/submit` rather than `POST /lists`: the latter would give two different helpers for one
-path (`books_lists_path` already names `GET /lists`), which reads as a typo at every call site.
+Two things carried over verbatim from the corrections routes, both load-bearing for the same reason:
+
+- **Not inside the `(/rc/:ranking_configuration_id)` scope.** `ListSubmissionsController` never calls
+  `load_ranking_configuration`, so an rc-prefixed URL would render 200 for *any* value of that
+  segment — every value a distinct Cloudflare cache key, every one a MISS, every one a full render at
+  origin. That is the legacy flood reproduced with one extra path segment, and a Cache Rule that
+  normalises query strings cannot see a path segment at all. Leaving the scope off means the router
+  rejects those URLs before a controller, view or database connection is involved.
+- **`constraints: {format: /html/}`** closes the same axis on `(.:format)`: `.json`, `.foo` and so on
+  are each another cache key.
+
+The **POST is a single global route**, exactly as `resources :corrections, only: [:create]` is:
+
+```ruby
+post "list_submissions", to: "list_submissions#create", as: :list_submissions
+```
+
+It needs no per-domain variant — it is never cached, and the domain comes from the host through
+`Current.domain` regardless. One route means one place the honeypot, rate limits and registry
+validation are wired.
 
 Two route repairs are required:
 
