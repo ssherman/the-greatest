@@ -146,7 +146,7 @@ class ListSubmissionsController < ApplicationController
 
   def render_rate_limited
     @indexable = false
-    @list = List.new
+    @list = @list_class.new(list_params)
     @error = "Thanks — you've sent us several lists just now. Please try again shortly."
     render :new, status: :too_many_requests
   end

@@ -102,7 +102,7 @@
           signed in. %>
       <fieldset class="fieldset">
         <legend class="fieldset-legend">Your email</legend>
-        <%= email_field_tag :submitter_email, nil, class: "input w-full",
+        <%= email_field_tag :submitter_email, params[:submitter_email], class: "input w-full",
               "aria-label": "Your email", placeholder: "you@example.com" %>
         <p class="label">Optional. Only used if we need to ask you about the list. If you're signed in we'll use your account email.</p>
       </fieldset>

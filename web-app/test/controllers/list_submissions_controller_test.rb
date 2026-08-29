@@ -97,6 +97,18 @@ class ListSubmissionsControllerTest < ActionDispatch::IntegrationTest
     assert_match(/already have this list/i, response.body)
   end
 
+  # The email field hardcoded value: nil, dropping a typed anonymous email on
+  # every error re-render.
+  test "create re-render preserves a typed anonymous email" do
+    Books::List.create!(name: "Already here", status: :active,
+      url: "https://example.com/greatest")
+
+    post "/list_submissions", params: @params.merge(submitter_email: "reader@example.com")
+
+    assert_response :unprocessable_entity
+    assert_select "input[name=submitter_email][value=?]", "reader@example.com"
+  end
+
   test "create rejects a list type the domain does not accept" do
     post "/list_submissions", params: @params.merge(list_type: "Music::Albums::List")
 
@@ -143,6 +155,23 @@ class ListSubmissionsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :too_many_requests
     assert_select ".alert-error", "Thanks — you've sent us several lists just now. Please try again shortly."
+  end
+
+  # A throttled submitter's re-rendered form must not discard what they typed --
+  # the caps deliberately allow a 100,000-character paste, and losing it on a
+  # carrier-grade-NAT IP that just happened to exhaust the anonymous bucket
+  # punishes exactly the contributor this feature exists for.
+  test "a throttled submission preserves what the submitter typed" do
+    ListSubmissionsController::ANONYMOUS_RATE.times do |i|
+      post "/list_submissions", params: @params.deep_merge(list: {url: "https://example.com/anon-#{i}"}),
+        headers: {"CF-Connecting-IP" => "198.51.100.9"}
+    end
+
+    post "/list_submissions", params: @params.deep_merge(list: {name: "A Pasted List Worth Keeping"}),
+      headers: {"CF-Connecting-IP" => "198.51.100.9"}
+
+    assert_response :too_many_requests
+    assert_match "A Pasted List Worth Keeping", response.body
   end
 
   # request.remote_ip is a constant "127.0.0.1" for every request in this test
