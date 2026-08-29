@@ -49,6 +49,8 @@ tmp/db-snapshots/
 
 # Harness-managed git worktrees
 .claude/worktrees/
+# Hand-made git worktrees (the superpowers fallback location)
+.worktrees/
 
 # Superpowers SDD scratch (ledger, briefs, review packages)
 .superpowers/
