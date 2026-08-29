@@ -31,9 +31,16 @@
       <div class="card-body">
         <h2 class="card-title">List Type</h2>
         <div class="flex flex-col sm:flex-row gap-4">
-          <% @submittable_types.each_with_index do |type, index| %>
+          <%# checked against @list_class (the submitted type on a failed
+              create), falling back to the first type only on a fresh #new
+              where @list_class is nil (set_list_class is only: [:create]).
+              A literal index.zero? would revert the picker to the first type
+              on every re-render, silently creating the WRONG record type when
+              a submitter picks anything but the first option and then fixes a
+              validation error. %>
+          <% @submittable_types.each do |type| %>
             <label class="label cursor-pointer justify-start gap-3 flex-1 p-4 border border-base-300 rounded-lg hover:border-primary has-[:checked]:border-primary has-[:checked]:bg-primary/5">
-              <%= radio_button_tag :list_type, type.name, index.zero?, class: "radio radio-primary" %>
+              <%= radio_button_tag :list_type, type.name, (@list_class || @submittable_types.first) == type, class: "radio radio-primary" %>
               <span class="font-semibold"><%= Services::Lists::SubmissionRegistry.label_for(type) %></span>
             </label>
           <% end %>
@@ -52,7 +59,7 @@
           announces an unlabelled field and Playwright's getByLabel finds nothing. %>
       <fieldset class="fieldset">
         <legend class="fieldset-legend">List name <span class="text-error">*</span></legend>
-        <%= f.text_field "list[name]", value: @list.name, required: true, autofocus: true,
+        <%= f.text_field "list[name]", value: @list.name, required: true,
               class: "input w-full", "aria-label": "List name",
               placeholder: "e.g. Rolling Stone's 500 Greatest Albums" %>
         <p class="label">The official name of the list.</p>

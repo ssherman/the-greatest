@@ -133,8 +133,15 @@ class ListSubmissionsController < ApplicationController
   def list_params
     # ActionController::Parameters.new, not {} -- Hash has no #permit, so a POST
     # with no list key at all would 500 instead of returning a validation error.
-    params.fetch(:list, ActionController::Parameters.new)
-      .permit(*Services::Lists::Submission::PERMITTED)
+    #
+    # is_a?(ActionController::Parameters) guards a SCALAR list param too:
+    # #fetch only wraps Hash/Array values in Parameters, so list=x (a plain
+    # String) or list[]=x (an Array) comes back as-is, and String/Array have no
+    # #permit -- an anonymous POST could otherwise 500 this public endpoint on
+    # any of the three live sites, in a loop.
+    submitted = params.fetch(:list, ActionController::Parameters.new)
+    submitted = ActionController::Parameters.new unless submitted.is_a?(ActionController::Parameters)
+    submitted.permit(*Services::Lists::Submission::PERMITTED)
   end
 
   def render_rate_limited
