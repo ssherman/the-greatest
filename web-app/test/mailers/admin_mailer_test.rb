@@ -128,4 +128,40 @@ class AdminMailerTest < ActionMailer::TestCase
     assert_match(/1867/, body)
     assert_match(/The first published year looks wrong/, body)
   end
+
+  test "contact_message goes to the public contact address" do
+    mail = AdminMailer.contact_message(contact_messages(:books_pending))
+
+    assert_equal [SiteContact::ADDRESS], mail.to
+  end
+
+  test "contact_message names the site in the subject" do
+    mail = AdminMailer.contact_message(contact_messages(:books_pending))
+
+    assert_match(/The Greatest Books/, mail.subject)
+  end
+
+  test "contact_message replies to the sender" do
+    message = contact_messages(:books_anonymous)
+    mail = AdminMailer.contact_message(message)
+
+    assert_equal [message.email], mail.reply_to
+  end
+
+  # Books is MailBranding's DEFAULT_DOMAIN fallback, so a books-only assertion
+  # cannot tell a resolved domain from one that fell through to nil. A music
+  # message has no such cover.
+  test "contact_message is branded for a music message, not books' fallback" do
+    mail = AdminMailer.contact_message(contact_messages(:music_pending))
+
+    assert_match(/The Greatest Music/, mail[:from].to_s)
+    assert_no_match(/The Greatest Books/, mail[:from].to_s)
+  end
+
+  test "contact_message includes the message body" do
+    message = contact_messages(:books_anonymous)
+    mail = AdminMailer.contact_message(message)
+
+    assert_match(/RSS feed/, mail.text_part.body.to_s)
+  end
 end

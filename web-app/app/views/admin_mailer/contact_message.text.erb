@@ -1,0 +1,10 @@
+A message was sent from the contact form on <%= @site_name %>.
+
+From:      <%= @contact_message.email %>
+Account:   <%= @contact_message.user ? "signed in (##{@contact_message.user.id})" : "anonymous" %>
+Submitted: <%= @contact_message.created_at.strftime("%B %-d, %Y at %H:%M") %>
+
+Message:
+<%= @contact_message.message %>
+
+Reply to this email to answer the sender directly.

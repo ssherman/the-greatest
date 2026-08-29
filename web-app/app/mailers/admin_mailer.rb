@@ -67,6 +67,21 @@ class AdminMailer < ApplicationMailer
   end
   helper_method :correction_url
 
+  # Goes to the PUBLIC contact address, not admin_address. That variable is for
+  # sales and donation alerts; the footer already advertises this address, so
+  # the form and the mailto land in the same inbox.
+  def contact_message(contact_message)
+    @contact_message = contact_message
+    @site_name = MailBranding.for(contact_message.domain).site_name
+
+    branded_mail(
+      domain: contact_message.domain,
+      to: SiteContact::ADDRESS,
+      subject: "Contact via #{@site_name}: #{contact_message.message.truncate(60)}",
+      reply_to: contact_message.email
+    )
+  end
+
   private
 
   def admin_address
