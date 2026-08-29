@@ -1,6 +1,8 @@
 # The contact inbox, scoped to one site. Split per domain rather than combined,
 # following Admin::CorrectionsController: each admin reads its own site's queue.
 class Admin::ContactMessagesController < Admin::BaseController
+  include Admin::DomainScopedAuth
+
   STATUSES = %w[pending replied spam].freeze
 
   # The single source of truth for which route helper prefix each domain's admin
@@ -12,6 +14,11 @@ class Admin::ContactMessagesController < Admin::BaseController
   }.freeze
 
   before_action :set_contact_message, only: [:show, :resolve]
+
+  # DomainScopedAuth#authenticate_admin! only proves domain ACCESS, which a
+  # viewer passes -- without this, including the concern above would newly let
+  # a read-only domain viewer mark messages replied or spam.
+  before_action :require_domain_write!, only: [:resolve]
 
   def index
     @status = STATUSES.include?(params[:status]) ? params[:status] : "pending"

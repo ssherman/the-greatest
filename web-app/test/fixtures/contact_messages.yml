@@ -23,3 +23,9 @@ books_replied:
   domain: 2
   status: 1
   replied_at: <%= 1.day.ago.to_fs(:db) %>
+
+games_pending:
+  email: player@example.org
+  message: "The release year on Breath of the Wild is off by one."
+  domain: 1
+  status: 0

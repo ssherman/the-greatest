@@ -110,5 +110,47 @@ module Admin
 
       assert_response :redirect
     end
+
+    # Proves Admin::DomainScopedAuth is actually included: a books DomainRole at
+    # viewer level clears authenticate_admin! here (it would not clear the base
+    # Admin::BaseController#authenticate_admin!, which admits only global
+    # admins/editors) -- this is what makes the sidebar's Contact link a real
+    # destination for a domain-scoped admin rather than a dead end.
+    test "a books domain viewer can load the index" do
+      sign_in_as(users(:books_viewer_user), stub_auth: true)
+
+      get admin_books_contact_messages_path
+
+      assert_response :success
+    end
+
+    # require_domain_write! is what keeps DomainScopedAuth from being a
+    # regression: authenticate_admin! alone proves domain ACCESS, which a
+    # viewer has, so without this guard a read-only viewer could mark messages
+    # replied or spam. Asserting the status is unchanged, not just the
+    # redirect, is what would catch a guard that redirected AFTER the update.
+    test "a books domain viewer cannot resolve" do
+      sign_in_as(users(:books_viewer_user), stub_auth: true)
+      message = contact_messages(:books_pending)
+
+      post resolve_admin_books_contact_message_path(message), params: {status: "replied"}
+
+      assert_response :redirect
+      assert_predicate message.reload, :pending?
+    end
+
+    # The other half of that guard: a domain user who genuinely holds WRITE
+    # access (editor, not viewer) must still be able to resolve. Without this,
+    # "a books domain viewer cannot resolve" alone could not tell a correct
+    # require_domain_write! from one that denies everyone.
+    test "a games domain editor can resolve a games message" do
+      host! Rails.application.config.domains[:games]
+      sign_in_as(users(:games_editor_user), stub_auth: true)
+      message = contact_messages(:games_pending)
+
+      post resolve_admin_games_contact_message_path(message), params: {status: "replied"}
+
+      assert_predicate message.reload, :replied?
+    end
   end
 end
