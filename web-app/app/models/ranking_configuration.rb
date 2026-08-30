@@ -164,6 +164,16 @@ class RankingConfiguration < ApplicationRecord
     end
   end
 
+  # The lowest weight a list on this configuration can actually land on.
+  # min_list_weight is a stored setting and can be negative (books carries
+  # -50), but WeightCalculatorV1#build_final_calculation caps total penalty at
+  # 100% before flooring, so weight_after_penalty never drops below 0 --
+  # making any negative min_list_weight unreachable. Mirrors that floor rather
+  # than the raw column so callers never state an impossible minimum.
+  def weight_floor
+    [min_list_weight, 0].max
+  end
+
   def median_voter_count
     # Get all lists associated with this ranking configuration
     list_ids = ranked_lists.pluck(:list_id)

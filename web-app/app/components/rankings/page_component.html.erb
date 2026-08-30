@@ -126,7 +126,7 @@
     Every list starts at 100 and loses ground for anything that makes it less
     representative &mdash; a tiny voting panel, an undocumented process, a narrow
     remit. Sources we have judged high quality get their total reduction cut by a
-    third. Weight never falls below 0.
+    third. Weight never falls below <%= weight_floor %>.
   </p>
   <div class="mb-10">
     <%= render Rankings::WeightExampleComponent.new(example: data.worked_example) %>
@@ -142,9 +142,25 @@
     <%= render Rankings::PenaltyTableComponent.new(groups: data.penalty_groups) %>
   </div>
 
+  <% if automatic_adjustments.any? %>
+    <h2 class="text-2xl font-bold mb-4">Adjustments we make automatically</h2>
+    <p class="leading-relaxed mb-4">
+      Most of the adjustments above are applied by hand when we catalogue a list.
+      A few are computed from the list itself every time we recalculate, so they
+      update without anyone touching them.
+    </p>
+    <ul class="list-disc list-outside ps-5 space-y-2 mb-10">
+      <% automatic_adjustments.each do |penalty| %>
+        <li>
+          <strong><%= penalty.name %>.</strong> <%= penalty.description %>
+        </li>
+      <% end %>
+    </ul>
+  <% end %>
+
   <h2 class="text-2xl font-bold mb-4">How something earns its score</h2>
   <div class="mb-10">
-    <%= render Rankings::ScoreCurveComponent.new(curve: data.score_curve, media_nouns: data.media_nouns) %>
+    <%= render Rankings::ScoreCurveComponent.new(curve: data.score_curve, media_nouns: configuration.media_noun_plural) %>
   </div>
 
   <% if date_penalty? %>
@@ -165,7 +181,11 @@
 
   <h2 class="text-2xl font-bold mb-4">The current settings</h2>
   <div class="mb-10">
-    <%= render Rankings::ConfigurationFactsComponent.new(configurations: data.configurations) %>
+    <%= render Rankings::ConfigurationFactsComponent.new(
+      configurations: data.configurations,
+      median_list_counts: data.median_list_counts,
+      median_voter_counts: data.median_voter_counts
+    ) %>
   </div>
 
   <h2 class="text-2xl font-bold mb-4">Read the code</h2>

@@ -55,7 +55,31 @@ module Services
 
         other = result.data.penalty_groups.find { |g| g.title == "Other" }
         assert_not_nil other, "expected an Other group"
-        assert_includes other.penalties, penalty
+        entry = other.penalties.find { |e| e.penalty == penalty }
+        assert_not_nil entry, "expected #{penalty.name} in the Other group"
+        assert_equal 10, entry.value
+      end
+
+      test "each penalty entry carries its penalty_applications.value for the primary configuration" do
+        result = ExplainerData.call(configurations: [@configuration])
+
+        entry = result.data.penalty_groups.flat_map(&:penalties).find { |e| e.penalty == penalties(:books_penalty) }
+
+        assert_not_nil entry
+        assert_equal 20, entry.value # penalty_applications.yml: books_penalty_app value 20
+      end
+
+      test "a penalty attached only to a non-primary configuration carries a nil value" do
+        # music_penalty is attached to both music_albums_global (value 22) and
+        # music_songs_global (value 20). Passing songs as the primary means the
+        # penalty groups span both configurations, but the value must come
+        # from the primary (songs) alone rather than either arbitrarily.
+        result = ExplainerData.call(configurations: [ranking_configurations(:music_songs_global)])
+
+        entry = result.data.penalty_groups.flat_map(&:penalties).find { |e| e.penalty == penalties(:music_penalty) }
+
+        assert_not_nil entry
+        assert_equal 20, entry.value # penalty_applications.yml: music_songs_penalty_app value 20
       end
 
       test "score curve shows position is worth far less than presence" do
@@ -128,7 +152,72 @@ module Services
         assert_equal 1, result.data.ranked_items_count
       end
 
+      test "median_list_counts carries each configuration's own median rather than the primary's" do
+        pad_books_list_lengths(list_count: 3, items_per_list: 6)
+
+        result = ExplainerData.call(configurations: [@configuration])
+
+        counts = result.data.median_list_counts
+        assert_equal result.data.median_list_count, counts[@configuration]
+      end
+
+      test "median_list_counts differs per configuration in a multi-configuration domain" do
+        albums = ranking_configurations(:music_albums_global)
+        songs = ranking_configurations(:music_songs_global)
+        # Distinguishable, deliberately different median list lengths per config.
+        create_lists_of_length(::Music::Albums::List, count: 3, item_count: 4)
+        create_lists_of_length(::Music::Songs::List, count: 3, item_count: 9)
+
+        result = ExplainerData.call(configurations: [albums, songs])
+
+        counts = result.data.median_list_counts
+        assert_equal 2, counts.size
+        assert_not_equal counts[albums], counts[songs]
+      end
+
+      test "median_voter_counts is gathered per configuration rather than queried by the component" do
+        # None of the shared fixtures carry number_of_voters, so without a
+        # real value here this would only ever assert nil == nil.
+        list = ::Books::List.create!(name: "Voter Count Padding List", status: :approved, number_of_voters: 42)
+        ::RankedList.create!(list: list, ranking_configuration: @configuration, weight: 10)
+
+        result = ExplainerData.call(configurations: [@configuration])
+
+        counts = result.data.median_voter_counts
+        assert_equal [@configuration], counts.keys
+        assert_equal 42, counts[@configuration]
+      end
+
+      test "automatic_adjustments contains only dynamic penalties, and reuses the loaded penalty set" do
+        result = ExplainerData.call(configurations: [@configuration])
+
+        assert result.data.automatic_adjustments.any?
+        assert result.data.automatic_adjustments.all?(&:dynamic?)
+
+        loaded_penalties = result.data.penalty_groups.flat_map(&:penalties).map(&:penalty)
+        result.data.automatic_adjustments.each do |penalty|
+          assert_includes loaded_penalties, penalty
+        end
+      end
+
+      test "automatic_adjustments is empty when nothing attached is dynamic" do
+        static_only = ranking_configurations(:games_global)
+        PenaltyApplication.where(ranking_configuration: static_only)
+          .joins(:penalty).where.not(penalties: {dynamic_type: nil}).destroy_all
+
+        result = ExplainerData.call(configurations: [static_only])
+
+        assert_empty result.data.automatic_adjustments
+      end
+
       private
+
+      def create_lists_of_length(list_class, count:, item_count:)
+        count.times do |n|
+          list = list_class.create!(name: "#{list_class.name} Length Padding #{n}", status: :approved)
+          item_count.times { |position| list.list_items.create!(position: position + 1) }
+        end
+      end
 
       def pad_books_list_lengths(list_count: 5, items_per_list: 20)
         list_count.times do |n|

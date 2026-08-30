@@ -38,6 +38,13 @@ module Rankings
       assert_text(/high-quality source/i)
     end
 
+    test "describes the final weight without the self-referential 'worth that much to the entries on it'" do
+      render_inline(WeightExampleComponent.new(example: @example))
+
+      assert_text "Every entry on this list starts from that weight."
+      assert_no_text(/worth that much to the entries on it/)
+    end
+
     test "omits the quality bonus line when it was not applied" do
       @example.quality_bonus_applied = false
       @example.penalty_after_bonus = 45.0

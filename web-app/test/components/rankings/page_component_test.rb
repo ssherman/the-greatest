@@ -45,6 +45,68 @@ module Rankings
       assert_no_selector "a[href='/global-canon']"
     end
 
+    test "states the weight floor as the configuration's actual reachable minimum" do
+      config = ranking_configurations(:books_global)
+      config.update!(min_list_weight: -50)
+      data = Services::RankingConfiguration::ExplainerData.call(configurations: [config]).data
+
+      render_inline(PageComponent.new(data: data, domain: :books))
+
+      assert_text(/Weight never falls below 0/)
+      assert_no_text "-50"
+    end
+
+    test "states a positive weight floor when the configuration's minimum is reachable" do
+      # Music and games carry min_list_weight: 1, and unlike books' inert -50
+      # that floor IS reachable -- a fully-penalised list lands on 1, not 0.
+      config = ranking_configurations(:music_albums_global)
+      config.update!(min_list_weight: 1)
+      data = Services::RankingConfiguration::ExplainerData.call(configurations: [config]).data
+
+      render_inline(PageComponent.new(data: data, domain: :music))
+
+      assert_text(/Weight never falls below 1/)
+    end
+
+    test "renders 'Adjustments we make automatically' when dynamic penalties are attached" do
+      render_inline(PageComponent.new(data: @data, domain: :books))
+
+      assert_selector "h2", text: "Adjustments we make automatically"
+      # books_global's fixtures attach two dynamic penalties: dynamic_penalty and books_penalty.
+      assert_text penalties(:dynamic_penalty).name
+    end
+
+    test "omits 'Adjustments we make automatically' when nothing attached is dynamic" do
+      config = ranking_configurations(:books_global)
+      PenaltyApplication.where(ranking_configuration: config)
+        .joins(:penalty).where.not(penalties: {dynamic_type: nil}).destroy_all
+      data = Services::RankingConfiguration::ExplainerData.call(configurations: [config]).data
+
+      render_inline(PageComponent.new(data: data, domain: :books))
+
+      assert_no_selector "h2", text: "Adjustments we make automatically"
+    end
+
+    test "names the specific configuration in the score curve section rather than every media type on the page" do
+      # music_albums_global is the primary configuration here, so the score
+      # curve is computed from albums alone -- the intro sentence naming the
+      # table must say "albums", not the page's broader "albums and songs"
+      # media_nouns (data.media_nouns), even though that phrase legitimately
+      # appears elsewhere on this same page (e.g. the opening summary).
+      music = Services::RankingConfiguration::ExplainerData.call(
+        configurations: [
+          ranking_configurations(:music_albums_global),
+          ranking_configurations(:music_songs_global)
+        ]
+      ).data
+      assert_equal "albums and songs", music.media_nouns # sanity: the page-wide noun really is plural here
+
+      render_inline(PageComponent.new(data: music, domain: :music))
+
+      assert_text "This is computed from the albums configuration."
+      assert_no_text "This is computed from the albums and songs configuration."
+    end
+
     test "renders the live stat counts" do
       # Under the shared fixtures, active_lists_count is 0 for books_global (the
       # books_ranked_list fixture's list is not active-status), which would make

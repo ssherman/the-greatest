@@ -12,6 +12,12 @@ module Services
 
       PenaltyGroup = Struct.new(:category, :title, :penalties, keyword_init: true)
 
+      # One penalty plus the value it actually reduces weight by on the
+      # primary configuration. `value` is nil when the penalty is attached to
+      # a non-primary configuration only (e.g. music songs but not albums) --
+      # the page has no single number to show and renders a dash instead.
+      PenaltyEntry = Struct.new(:penalty, :value, keyword_init: true)
+
       WorkedExample = Struct.new(
         :list, :weight, :item_count, :penalties,
         :penalty_before_bonus, :penalty_after_bonus, :quality_bonus_applied,
@@ -26,7 +32,8 @@ module Services
       Data = Struct.new(
         :configurations, :primary_configuration, :media_nouns,
         :active_lists_count, :ranked_items_count, :median_list_count,
-        :penalty_groups, :worked_example, :score_curve,
+        :median_list_counts, :median_voter_counts,
+        :penalty_groups, :automatic_adjustments, :worked_example, :score_curve,
         keyword_init: true
       )
 
@@ -65,7 +72,10 @@ module Services
           active_lists_count: active_lists_count,
           ranked_items_count: ranked_items_count,
           median_list_count: median_list_count,
+          median_list_counts: median_list_counts,
+          median_voter_counts: median_voter_counts,
           penalty_groups: penalty_groups,
+          automatic_adjustments: automatic_adjustments,
           worked_example: worked_example,
           score_curve: score_curve
         )
@@ -83,40 +93,85 @@ module Services
         configurations.sum { |config| config.ranked_items.where.not(rank: nil).count }
       end
 
+      # Memoized: called once directly (for the summary stat tile) and again
+      # from score_curve, and List.median_list_count is a real query.
       def median_list_count
-        ::List.median_list_count(type: list_type_for(primary))
+        @median_list_count ||= ::List.median_list_count(type: list_type_for(primary))
+      end
+
+      # Music passes two configurations (albums, songs) with very different
+      # typical lengths -- 100 vs 275.5 in dev -- so the facts table needs
+      # each column's own median rather than borrowing the primary's.
+      def median_list_counts
+        configurations.index_with do |configuration|
+          (configuration == primary) ? median_list_count : ::List.median_list_count(type: list_type_for(configuration))
+        end
+      end
+
+      def median_voter_counts
+        configurations.index_with(&:median_voter_count)
       end
 
       def list_type_for(configuration)
         configuration.type.sub("RankingConfiguration", "List")
       end
 
-      # Ordered by CATEGORY_TITLES so the page's sections are stable, with the
-      # uncategorized remainder last under "Other". Empty groups are dropped --
-      # a heading with nothing under it reads as a bug.
-      def penalty_groups
-        penalties = Penalty
+      # Every penalty attached to any configuration on this page, loaded once.
+      # Both penalty_groups and automatic_adjustments read from this so
+      # neither re-queries -- automatic_adjustments in particular must add no
+      # new query, since it exists purely to re-slice data already in hand.
+      def penalties
+        @penalties ||= Penalty
           .joins(:penalty_applications)
           .where(penalty_applications: {ranking_configuration_id: configurations.map(&:id)})
           .distinct
           .order(:name)
           .to_a
+      end
 
+      # penalty_applications.value differs per configuration (music songs and
+      # albums can attach the same penalty at different values), so the page
+      # states the primary configuration's value specifically. One query,
+      # independent of how many penalties exist.
+      def penalty_values_by_id
+        @penalty_values_by_id ||= PenaltyApplication
+          .where(ranking_configuration_id: primary.id)
+          .pluck(:penalty_id, :value)
+          .to_h
+      end
+
+      # Ordered by CATEGORY_TITLES so the page's sections are stable, with the
+      # uncategorized remainder last under "Other". Empty groups are dropped --
+      # a heading with nothing under it reads as a bug.
+      def penalty_groups
         ordered = Penalty::CATEGORY_TITLES.keys.map do |category|
           PenaltyGroup.new(
             category: category,
             title: Penalty.category_title(category),
-            penalties: penalties.select { |penalty| penalty.category == category }
+            penalties: penalty_entries_for(category)
           )
         end
 
         ordered << PenaltyGroup.new(
           category: nil,
           title: "Other",
-          penalties: penalties.select { |penalty| penalty.category.nil? }
+          penalties: penalty_entries_for(nil)
         )
 
         ordered.reject { |group| group.penalties.empty? }
+      end
+
+      def penalty_entries_for(category)
+        penalties.select { |penalty| penalty.category == category }.map do |penalty|
+          PenaltyEntry.new(penalty: penalty, value: penalty_values_by_id[penalty.id])
+        end
+      end
+
+      # Penalties computed automatically from the list itself (voter count,
+      # western share, years covered) rather than applied by hand. Reuses the
+      # already-loaded penalty set -- no new query.
+      def automatic_adjustments
+        penalties.select(&:dynamic?)
       end
 
       # Reads the stored calculation rather than recomputing, so the page can

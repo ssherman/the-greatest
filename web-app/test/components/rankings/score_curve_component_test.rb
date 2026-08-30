@@ -30,5 +30,11 @@ module Rankings
 
       assert_text(/albums and songs/)
     end
+
+    test "names the configuration's own media noun in the sentence introducing the table" do
+      render_inline(ScoreCurveComponent.new(curve: @curve, media_nouns: "albums"))
+
+      assert_text "This is computed from the albums configuration."
+    end
   end
 end

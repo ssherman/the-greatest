@@ -23,8 +23,8 @@
       </tr>
       <tr>
         <th scope="row">Lowest possible weight</th>
-        <% configurations.each do %>
-          <td><%= weight_floor %></td>
+        <% configurations.each do |configuration| %>
+          <td><%= weight_floor(configuration) %></td>
         <% end %>
       </tr>
       <tr>
@@ -40,9 +40,15 @@
         <% end %>
       </tr>
       <tr>
+        <th scope="row">Typical list length</th>
+        <% configurations.each do |configuration| %>
+          <td><%= number_with_delimiter(typical_list_length(configuration)) %></td>
+        <% end %>
+      </tr>
+      <tr>
         <th scope="row">Typical voters per list</th>
         <% configurations.each do |configuration| %>
-          <td><%= configuration.median_voter_count || "not recorded" %></td>
+          <td><%= typical_voter_count(configuration) || "not recorded" %></td>
         <% end %>
       </tr>
       <tr>

@@ -31,4 +31,12 @@ class Rankings::PageComponent < ViewComponent::Base
   def date_penalty_percentage = configuration.max_list_dates_penalty_percentage
 
   def date_penalty? = configuration.apply_list_dates_penalty?
+
+  # The floor stated in "How a list earns its weight" -- derived the same way
+  # ConfigurationFactsComponent derives it per column, but for the primary
+  # configuration alone, since this sentence is talking about the page's one
+  # worked example rather than every configuration on the page.
+  def weight_floor = configuration.weight_floor
+
+  def automatic_adjustments = data.automatic_adjustments
 end
