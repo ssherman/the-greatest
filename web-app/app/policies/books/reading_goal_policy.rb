@@ -8,13 +8,12 @@ module Books
 
     def create? = user.present?
     def new? = create?
-    def update? = owner? || global_admin?
+    def update? = owner?
     def edit? = update?
     def destroy? = update?
 
     class Scope < ApplicationPolicy::Scope
       def resolve
-        return scope.all if user&.admin?
         return scope.none unless user
 
         scope.where(user: user)

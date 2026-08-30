@@ -19,21 +19,21 @@ module Books
       refute ReadingGoalPolicy.new(@other_user, @private_goal).show?
     end
 
-    test "permits creation for signed in users and changes only for owner or admin" do
+    test "permits creation for signed in users and changes only for the owner" do
       assert ReadingGoalPolicy.new(@owner, @private_goal).create?
       assert ReadingGoalPolicy.new(@other_user, @private_goal).new?
       refute ReadingGoalPolicy.new(nil, @private_goal).create?
 
       [:edit?, :update?, :destroy?].each do |action|
         assert ReadingGoalPolicy.new(@owner, @private_goal).public_send(action)
-        assert ReadingGoalPolicy.new(@admin, @private_goal).public_send(action)
+        refute ReadingGoalPolicy.new(@admin, @private_goal).public_send(action)
         refute ReadingGoalPolicy.new(@other_user, @private_goal).public_send(action)
       end
     end
 
-    test "scope gives admins every goal and other users only their own goals" do
-      assert_equal Books::ReadingGoal.count,
-        ReadingGoalPolicy::Scope.new(@admin, Books::ReadingGoal).resolve.count
+    test "scope gives every signed-in user only their own goals" do
+      assert_equal [@public_goal.id],
+        ReadingGoalPolicy::Scope.new(@admin, Books::ReadingGoal).resolve.pluck(:id)
       assert_equal [@private_goal.id],
         ReadingGoalPolicy::Scope.new(@owner, Books::ReadingGoal).resolve.where(id: @private_goal.id).pluck(:id)
       assert_empty ReadingGoalPolicy::Scope.new(nil, Books::ReadingGoal).resolve

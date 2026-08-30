@@ -42,14 +42,15 @@ class Books::My::ReadingGoalsControllerTest < ActionDispatch::IntegrationTest
     assert_equal [1, 9, 4], @controller.view_assigns.fetch("finished_reading_goals").map(&:id)
   end
 
-  test "admin index retains management scope for every goal" do
+  test "admin index only shows the admin's own goals" do
     sign_in_as users(:admin_user), stub_auth: true
 
     get books_my_reading_goals_path, headers: {"HOST" => @host}
 
     groups = %w[active_reading_goals upcoming_reading_goals finished_reading_goals]
-    assert_includes groups.flat_map { |group| @controller.view_assigns.fetch(group).map(&:id) },
-      books_reading_goals(:public_goal_other_user).id
+    goal_ids = groups.flat_map { |group| @controller.view_assigns.fetch(group).map(&:id) }
+    assert_includes goal_ids, books_reading_goals(:public_goal_other_user).id
+    refute_includes goal_ids, books_reading_goals(:private_goal).id
   end
 
   test "anonymous owner route redirects with no-store" do
@@ -94,8 +95,15 @@ class Books::My::ReadingGoalsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "unconfirmed public-to-private purge reports the persisted privacy warning" do
-    goal = books_reading_goals(:public_goal_other_user)
-    sign_in_as users(:admin_user), stub_auth: true
+    goal = Books::ReadingGoal.create!(
+      user: @user,
+      name: "Owner public goal",
+      target_count: 12,
+      starts_on: Date.current,
+      ends_on: Date.current + 1.year,
+      public: true
+    )
+    sign_in_as @user, stub_auth: true
     Services::Books::ReadingGoals::SaveGoal.stubs(:call).returns(
       Services::Books::ReadingGoals::SaveGoal::Result.new(
         success?: false,
@@ -119,6 +127,19 @@ class Books::My::ReadingGoalsControllerTest < ActionDispatch::IntegrationTest
     patch books_my_reading_goal_path(goal), headers: {"HOST" => @host}, params: {
       reading_goal: {name: goal.name, target_count: goal.target_count, starts_on: goal.starts_on, ends_on: goal.ends_on, public: false}
     }
+    assert_response :not_found
+    assert_includes response.headers.fetch("Cache-Control"), "no-store"
+
+    delete books_my_reading_goal_path(goal), headers: {"HOST" => @host}
+    assert_response :not_found
+    assert_includes response.headers.fetch("Cache-Control"), "no-store"
+  end
+
+  test "admin cannot edit or destroy another user's goal through the personal route" do
+    goal = books_reading_goals(:private_goal)
+    sign_in_as users(:admin_user), stub_auth: true
+
+    get edit_books_my_reading_goal_path(goal), headers: {"HOST" => @host}
     assert_response :not_found
     assert_includes response.headers.fetch("Cache-Control"), "no-store"
 
