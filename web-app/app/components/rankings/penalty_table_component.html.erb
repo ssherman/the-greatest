@@ -1,0 +1,36 @@
+<div class="space-y-6">
+  <% groups.each do |group| %>
+    <div>
+      <h3 class="text-lg font-semibold mb-2"><%= group.title %></h3>
+
+      <details class="rounded-box bg-base-200 p-4">
+        <summary class="cursor-pointer font-medium">
+          <%= pluralize(group.penalties.size, "adjustment") %>
+        </summary>
+
+        <div class="overflow-x-auto mt-4">
+          <table class="table w-full">
+            <thead>
+              <tr>
+                <th scope="col">Adjustment</th>
+                <th scope="col">What it means</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% group.penalties.each do |penalty| %>
+                <tr>
+                  <th scope="row" class="align-top font-medium whitespace-normal">
+                    <%= penalty.name %>
+                  </th>
+                  <td class="align-top [overflow-wrap:anywhere]">
+                    <%= penalty.description %>
+                  </td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+  <% end %>
+</div>
