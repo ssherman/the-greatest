@@ -139,7 +139,7 @@
     are computed automatically from the list itself.
   </p>
   <div class="mb-10">
-    <%= render Rankings::PenaltyTableComponent.new(groups: data.penalty_groups) %>
+    <%= render Rankings::PenaltyTableComponent.new(groups: data.penalty_groups, configurations: data.configurations) %>
   </div>
 
   <% if automatic_adjustments.any? %>

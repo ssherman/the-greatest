@@ -20,17 +20,28 @@ class Rankings::PenaltyTableComponent < ViewComponent::Base
 
   OTHER_INTRO = "Adjustments that have not yet been sorted into a category."
 
-  def initialize(groups:)
+  def initialize(groups:, configurations:)
     @groups = groups
+    @configurations = configurations
   end
 
   def render? = @groups.any?
 
   private
 
-  attr_reader :groups
+  attr_reader :groups, :configurations
 
   def intro(group)
     INTROS.fetch(group.category, OTHER_INTRO)
+  end
+
+  # With one configuration the reduction column is generic ("Reduction"),
+  # matching the page as it has always looked. With several -- music passes
+  # albums and songs, which genuinely differ -- each gets its own column so a
+  # value is never shown under the wrong media's heading.
+  def multi_configuration? = configurations.size > 1
+
+  def value_column_heading(configuration)
+    multi_configuration? ? configuration.media_noun_plural.capitalize : "Reduction"
   end
 end

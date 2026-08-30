@@ -57,29 +57,66 @@ module Services
         assert_not_nil other, "expected an Other group"
         entry = other.penalties.find { |e| e.penalty == penalty }
         assert_not_nil entry, "expected #{penalty.name} in the Other group"
-        assert_equal 10, entry.value
+        assert_equal 10, entry.values[@configuration]
       end
 
-      test "each penalty entry carries its penalty_applications.value for the primary configuration" do
+      test "each penalty entry carries its penalty_applications.value for the configuration passed in" do
         result = ExplainerData.call(configurations: [@configuration])
 
         entry = result.data.penalty_groups.flat_map(&:penalties).find { |e| e.penalty == penalties(:books_penalty) }
 
         assert_not_nil entry
-        assert_equal 20, entry.value # penalty_applications.yml: books_penalty_app value 20
+        assert_equal 20, entry.values[@configuration] # penalty_applications.yml: books_penalty_app value 20
       end
 
-      test "a penalty attached only to a non-primary configuration carries a nil value" do
+      test "a penalty attached only to a non-primary configuration carries a nil value there" do
         # music_penalty is attached to both music_albums_global (value 22) and
-        # music_songs_global (value 20). Passing songs as the primary means the
-        # penalty groups span both configurations, but the value must come
-        # from the primary (songs) alone rather than either arbitrarily.
-        result = ExplainerData.call(configurations: [ranking_configurations(:music_songs_global)])
+        # music_songs_global (value 20). Passing songs alone means the penalty
+        # groups span both configurations (it is attached to albums too), but
+        # only songs has a column, and its own value must come through.
+        songs = ranking_configurations(:music_songs_global)
+        result = ExplainerData.call(configurations: [songs])
 
         entry = result.data.penalty_groups.flat_map(&:penalties).find { |e| e.penalty == penalties(:music_penalty) }
 
         assert_not_nil entry
-        assert_equal 20, entry.value # penalty_applications.yml: music_songs_penalty_app value 20
+        assert_equal 20, entry.values[songs] # penalty_applications.yml: music_songs_penalty_app value 20
+      end
+
+      test "penalty entries carry a distinct value per configuration when several are passed" do
+        # music_penalty is attached to both configurations at different
+        # values (albums 22, songs 20) -- the exact bug this table exists to
+        # fix: a single "Reduction" column cannot state both correctly.
+        albums = ranking_configurations(:music_albums_global)
+        songs = ranking_configurations(:music_songs_global)
+
+        result = ExplainerData.call(configurations: [albums, songs])
+
+        entry = result.data.penalty_groups.flat_map(&:penalties).find { |e| e.penalty == penalties(:music_penalty) }
+
+        assert_not_nil entry
+        assert_equal({albums => 22, songs => 20}, entry.values)
+      end
+
+      test "a penalty applied to only one of several configurations shows a value there and a dash elsewhere" do
+        # Every shared penalty_applications fixture attached to music_albums_global
+        # is also attached to music_songs_global, so this builds a
+        # configuration-specific attachment locally rather than padding shared
+        # fixtures (which has regressed Books::ListsQueryTest before).
+        albums = ranking_configurations(:music_albums_global)
+        songs = ranking_configurations(:music_songs_global)
+        albums_only = Penalty.create!(type: "Global::Penalty", name: "Albums Only Penalty",
+          category: :list_integrity, description: "Attached to albums only, for this test.")
+        PenaltyApplication.create!(penalty: albums_only, ranking_configuration: albums, value: 15)
+
+        result = ExplainerData.call(configurations: [albums, songs])
+
+        entry = result.data.penalty_groups.flat_map(&:penalties).find { |e| e.penalty == albums_only }
+
+        assert_not_nil entry
+        assert_equal 15, entry.values[albums]
+        assert_nil entry.values[songs]
+        assert_equal [albums, songs], entry.values.keys
       end
 
       test "score curve shows position is worth far less than presence" do

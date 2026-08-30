@@ -15,7 +15,9 @@
               <tr>
                 <th scope="col">Adjustment</th>
                 <th scope="col">What it means</th>
-                <th scope="col" class="text-right">Reduction</th>
+                <% configurations.each do |configuration| %>
+                  <th scope="col" class="text-right"><%= value_column_heading(configuration) %></th>
+                <% end %>
               </tr>
             </thead>
             <tbody>
@@ -27,13 +29,15 @@
                   <td class="align-top [overflow-wrap:anywhere]">
                     <%= entry.penalty.description %>
                   </td>
-                  <td class="align-top text-right whitespace-nowrap">
-                    <% if entry.value %>
-                      &minus;<%= entry.value %>%
-                    <% else %>
-                      &mdash;
-                    <% end %>
-                  </td>
+                  <% configurations.each do |configuration| %>
+                    <td class="align-top text-right whitespace-nowrap">
+                      <% if entry.values[configuration] %>
+                        &minus;<%= entry.values[configuration] %>%
+                      <% else %>
+                        &mdash;
+                      <% end %>
+                    </td>
+                  <% end %>
                 </tr>
               <% end %>
             </tbody>

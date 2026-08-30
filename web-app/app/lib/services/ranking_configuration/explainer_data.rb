@@ -12,11 +12,13 @@ module Services
 
       PenaltyGroup = Struct.new(:category, :title, :penalties, keyword_init: true)
 
-      # One penalty plus the value it actually reduces weight by on the
-      # primary configuration. `value` is nil when the penalty is attached to
-      # a non-primary configuration only (e.g. music songs but not albums) --
-      # the page has no single number to show and renders a dash instead.
-      PenaltyEntry = Struct.new(:penalty, :value, keyword_init: true)
+      # One penalty plus the value it reduces weight by on each configuration
+      # on the page. `values` is a Hash keyed by configuration; a
+      # configuration missing from the Hash's non-nil values (i.e. whose
+      # entry is nil) has this penalty attached to some other configuration
+      # on the page but not this one -- the page has no number to show for
+      # that column and renders a dash instead.
+      PenaltyEntry = Struct.new(:penalty, :values, keyword_init: true)
 
       WorkedExample = Struct.new(
         :list, :weight, :item_count, :penalties,
@@ -131,13 +133,16 @@ module Services
 
       # penalty_applications.value differs per configuration (music songs and
       # albums can attach the same penalty at different values), so the page
-      # states the primary configuration's value specifically. One query,
-      # independent of how many penalties exist.
-      def penalty_values_by_id
-        @penalty_values_by_id ||= PenaltyApplication
-          .where(ranking_configuration_id: primary.id)
-          .pluck(:penalty_id, :value)
-          .to_h
+      # states every configuration's value, one column each. One query,
+      # independent of how many configurations or penalties exist -- a Hash
+      # of Hashes keyed first by ranking_configuration_id, then penalty_id.
+      def penalty_values_by_configuration_id
+        @penalty_values_by_configuration_id ||= PenaltyApplication
+          .where(ranking_configuration_id: configurations.map(&:id))
+          .pluck(:ranking_configuration_id, :penalty_id, :value)
+          .each_with_object(Hash.new { |h, k| h[k] = {} }) do |(config_id, penalty_id, value), memo|
+            memo[config_id][penalty_id] = value
+          end
       end
 
       # Ordered by CATEGORY_TITLES so the page's sections are stable, with the
@@ -163,7 +168,10 @@ module Services
 
       def penalty_entries_for(category)
         penalties.select { |penalty| penalty.category == category }.map do |penalty|
-          PenaltyEntry.new(penalty: penalty, value: penalty_values_by_id[penalty.id])
+          values = configurations.index_with do |configuration|
+            penalty_values_by_configuration_id[configuration.id][penalty.id]
+          end
+          PenaltyEntry.new(penalty: penalty, values: values)
         end
       end
 
