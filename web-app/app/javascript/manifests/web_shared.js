@@ -15,9 +15,6 @@ application.register("authentication", AuthenticationController)
 import AutocompleteController from "../controllers/autocomplete_controller"
 application.register("autocomplete", AutocompleteController)
 
-import Corrections__FormController from "../controllers/corrections/form_controller"
-application.register("corrections--form", Corrections__FormController)
-
 import MembershipStateController from "../controllers/membership_state_controller"
 application.register("membership-state", MembershipStateController)
 
@@ -32,6 +29,15 @@ application.register("reviews--spoiler", Reviews__SpoilerController)
 
 import Reviews__WidgetController from "../controllers/reviews/widget_controller"
 application.register("reviews--widget", Reviews__WidgetController)
+
+import Shared__FormTokenController from "../controllers/shared/form_token_controller"
+application.register("shared--form-token", Shared__FormTokenController)
+// Deprecated alias. Public correction form pages are edge-cached for 24 hours and
+// their cached HTML still carries data-controller="corrections--form". Without this
+// they lose the alternate-titles Add/Remove buttons -- not just token attribution --
+// until the cache turns over. DELETE THIS LINE once the edge cache has cycled past
+// the deploy that introduced it (>24h).
+application.register("corrections--form", Shared__FormTokenController)
 
 import ToastController from "../controllers/toast_controller"
 application.register("toast", ToastController)

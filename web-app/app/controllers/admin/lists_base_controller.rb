@@ -8,6 +8,7 @@ class Admin::ListsBaseController < Admin::BaseController
     authorize list_class, policy_class: policy_class
     load_lists_for_index
     @selected_status = params[:status].presence || "all"
+    @selected_submitted = params[:submitted].presence
     @search_query = params[:q].presence
   end
 
@@ -71,6 +72,7 @@ class Admin::ListsBaseController < Admin::BaseController
       .includes(:submitted_by)
       .left_joins(:list_items)
       .then { |scope| apply_status_filter(scope) }
+      .then { |scope| apply_submitted_filter(scope) }
       .then { |scope| apply_search_filter(scope) }
       .select("#{list_class.table_name}.*, COUNT(DISTINCT list_items.id) as #{items_count_name}")
       .group("#{list_class.table_name}.id")
@@ -86,6 +88,17 @@ class Admin::ListsBaseController < Admin::BaseController
     return scope unless List.statuses.key?(status_value)
 
     scope.where(status: status_value)
+  end
+
+  # "Unapproved" alone is not a submission queue: 1,721 of 1,772 unapproved lists
+  # are import backlog with no submitter. submitted_at is set only by the public
+  # form, so it is the marker that separates the two.
+  def apply_submitted_filter(scope)
+    case params[:submitted]
+    when "submitted" then scope.where.not(submitted_at: nil)
+    when "admin" then scope.where(submitted_at: nil)
+    else scope
+    end
   end
 
   def apply_search_filter(scope)

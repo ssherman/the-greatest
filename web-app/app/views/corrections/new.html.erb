@@ -2,9 +2,9 @@
   content_for :page_title, "Suggest a correction to #{@record.title} | #{domain_settings[:name]}"
 %>
 
-<div class="max-w-2xl mx-auto space-y-6" data-controller="corrections--form"
-     data-corrections--form-token-url-value="<%= correction_token_path %>"
-     data-action="focusin->corrections--form#ensureToken">
+<div class="max-w-2xl mx-auto space-y-6" data-controller="shared--form-token"
+     data-shared--form-token-token-url-value="<%= form_token_path %>"
+     data-action="focusin->shared--form-token#ensureToken">
   <div>
     <h1 class="text-2xl sm:text-3xl font-bold">Suggest a correction</h1>
     <p class="text-base-content/70 mt-2">
@@ -19,7 +19,7 @@
   <% end %>
 
   <%= form_with url: corrections_path, method: :post, class: "space-y-6",
-        data: {corrections__form_target: "form"} do |f| %>
+        data: {shared__form_token_target: "form"} do |f| %>
     <%= hidden_field_tag :correctable_type, @correctable_type %>
     <%= hidden_field_tag :correctable_id, @record.id %>
 
@@ -56,19 +56,19 @@
               notes would be told they submitted an empty correction. ValueCaster
               drops the blank, so this costs nothing when rows are present. %>
           <%= hidden_field_tag "correction[fields][#{definition.name}][]", "", id: nil %>
-          <div data-corrections--form-target="list" data-field="<%= definition.name %>"
+          <div data-shared--form-token-target="list" data-field="<%= definition.name %>"
                data-input-name="correction[fields][<%= definition.name %>][]" class="space-y-2">
             <% Array(current).each do |value| %>
               <div class="join w-full">
                 <%= text_field_tag "correction[fields][#{definition.name}][]", value,
                       class: "input join-item w-full" %>
                 <button type="button" class="btn join-item"
-                        data-action="corrections--form#removeListItem">Remove</button>
+                        data-action="shared--form-token#removeListItem">Remove</button>
               </div>
             <% end %>
           </div>
           <button type="button" class="btn btn-sm mt-2" data-field="<%= definition.name %>"
-                  data-action="corrections--form#addListItem">
+                  data-action="shared--form-token#addListItem">
             Add <%= definition.label.singularize.downcase %>
           </button>
 

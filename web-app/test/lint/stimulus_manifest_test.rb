@@ -21,6 +21,10 @@ require "test_helper"
 # referenced from somewhere this scanner cannot see would need one, and no such
 # case exists. If you are about to add one, you are almost certainly looking at
 # a real defect instead.
+#
+# ONE narrow, temporary exception exists: DEPRECATED_ALIASES below, for a
+# controller referenced only by HTML already sitting in Cloudflare's edge cache
+# -- outside this repo, so outside anything this scanner reads.
 class StimulusManifestTest < ActiveSupport::TestCase
   test "every controller referenced in markup is registered" do
     unregistered = referenced_controllers.keys - registered_controllers
@@ -32,12 +36,31 @@ class StimulusManifestTest < ActiveSupport::TestCase
   end
 
   test "every registered controller is referenced in markup" do
-    unreferenced = registered_controllers - referenced_controllers.keys
+    unreferenced = registered_controllers - referenced_controllers.keys - DEPRECATED_ALIASES
 
     assert_empty unreferenced,
       "These controllers are registered but no markup references them. They are " \
       "compiled into a bundle every visitor downloads for nothing. Delete the " \
       "controller and its registration:\n#{unreferenced.map { |id| "  #{id}" }.join("\n")}"
+  end
+
+  # Pins the deprecated alias itself: it must keep pointing at the same
+  # controller class as shared--form-token, or a stale cached page gets a
+  # different, wrong controller instead of simply losing one until the cache
+  # turns over.
+  test "the corrections--form alias registers the same controller as shared--form-token" do
+    source = manifest_source("app/javascript/manifests/web_shared.js")
+
+    canonical = source[/application\.register\(\s*["']shared--form-token["']\s*,\s*(\w+)\s*\)/, 1]
+    alias_target = source[/application\.register\(\s*["']corrections--form["']\s*,\s*(\w+)\s*\)/, 1]
+
+    assert canonical, "expected web_shared.js to register shared--form-token"
+    assert_equal canonical, alias_target,
+      "corrections--form is a deliberate, temporary alias (see the comment beside " \
+      "its registration in web_shared.js) for correction form pages already sitting " \
+      "in Cloudflare's edge cache with data-controller=\"corrections--form\" baked " \
+      "into their HTML. It must register the same controller class as " \
+      "shared--form-token."
   end
 
   test "admin-only controllers are absent from every web manifest" do
@@ -93,6 +116,16 @@ class StimulusManifestTest < ActiveSupport::TestCase
   }.freeze
 
   ADMIN_MANIFEST = "app/javascript/manifests/admin.js"
+
+  # See the header comment above. Public correction form pages are edge-cached
+  # for 24 hours and their cached HTML still carries
+  # data-controller="corrections--form", which is not in this repo and so
+  # invisible to markup_files below. web_shared.js keeps a registration for it
+  # pointing at the same controller as shared--form-token (see its comment)
+  # purely so that stale HTML keeps working. Delete this entry, and that
+  # registration, once the edge cache has cycled past the deploy that
+  # introduced the alias (>24h).
+  DEPRECATED_ALIASES = ["corrections--form"].freeze
 
   # Stimulus identifier => sorted list of Rails.root-relative paths referencing it.
   #

@@ -18,7 +18,7 @@ class Music::Albums::ListsController < ApplicationController
 
     ranked_lists_query = @ranking_configuration.ranked_lists
       .joins(:list)
-      .where(lists: {type: "Music::Albums::List"})
+      .where(lists: {type: "Music::Albums::List", status: ::List.statuses[:active]})
       .includes(list: :list_items)
       .order(sort_order)
 
@@ -26,7 +26,7 @@ class Music::Albums::ListsController < ApplicationController
   end
 
   def show
-    @list = Music::Albums::List.find(params[:id])
+    @list = Music::Albums::List.where(status: :active).find_by!(id: params[:id])
     @ranked_list = @ranking_configuration.ranked_lists.find_by(list: @list)
 
     # Paginate list items with eager loading

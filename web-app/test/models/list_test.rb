@@ -20,6 +20,9 @@
 #  source                :string
 #  source_country_origin :string
 #  status                :integer          default(0), not null
+#  submitted_at          :datetime
+#  submitter_email       :string
+#  submitter_ip          :string
 #  type                  :string           not null
 #  url                   :string
 #  voter_count_estimated :boolean
@@ -36,6 +39,7 @@
 # Indexes
 #
 #  index_lists_on_activated_at                  (activated_at)
+#  index_lists_on_submitted_at                  (submitted_at)
 #  index_lists_on_submitted_by_id               (submitted_by_id)
 #  index_lists_on_type_and_auto_generated_kind  (type,auto_generated_kind) UNIQUE WHERE (auto_generated_kind IS NOT NULL)
 #
@@ -414,5 +418,76 @@ class ListTest < ActiveSupport::TestCase
       List.where(id: list.id).destroy_all
     end
     assert List.exists?(list.id)
+  end
+
+  test "carries the public submission fields" do
+    list = lists(:basic_list)
+    list.update!(
+      submitted_at: Time.current,
+      submitter_email: "reader@example.com",
+      submitter_ip: "203.0.113.7"
+    )
+
+    list.reload
+    assert_not_nil list.submitted_at
+    assert_equal "reader@example.com", list.submitter_email
+    assert_equal "203.0.113.7", list.submitter_ip
+  end
+
+  test "submission fields default to nil for an admin-created list" do
+    list = Books::List.create!(name: "Admin made", status: :unapproved)
+
+    assert_nil list.submitted_at
+    assert_nil list.submitter_email
+    assert_nil list.submitter_ip
+  end
+
+  test "simplifies raw content on save by default" do
+    list = Books::List.create!(
+      name: "Simplify me", status: :unapproved,
+      raw_content: "<ul><li>One</li><li>Two</li></ul>"
+    )
+
+    assert_not_nil list.simplified_content
+  end
+
+  test "skips simplification when skip_content_simplification is set" do
+    list = Books::List.new(
+      name: "Skip me", status: :unapproved,
+      raw_content: "<ul><li>One</li><li>Two</li></ul>"
+    )
+    list.skip_content_simplification = true
+    list.save!
+
+    assert_nil list.simplified_content
+  end
+
+  # ActiveModel raises RangeError when SERIALIZING an out-of-range integer, not
+  # when casting it -- so without these validations `valid?` returns true and
+  # `save` then raises an unhandled exception. On the public submission endpoint
+  # that is a 500 any client can trigger with a crafted POST.
+  test "rejects integers above the postgres 4-byte column range" do
+    %i[year_published number_of_voters num_years_covered].each do |field|
+      list = Books::List.new(:name => "Too big", :status => :unapproved, field => 99_999_999_999)
+
+      assert_not list.valid?, "#{field} should reject a value above 2^31-1"
+      assert_includes list.errors.attribute_names, field
+    end
+  end
+
+  test "rejects integers below the postgres 4-byte column range" do
+    list = Books::List.new(name: "Too small", status: :unapproved, year_published: -99_999_999_999)
+
+    assert_not list.valid?
+    assert_includes list.errors.attribute_names, :year_published
+  end
+
+  test "still accepts ordinary integer values" do
+    list = Books::List.new(
+      name: "Ordinary", status: :unapproved,
+      year_published: 2024, number_of_voters: 500, num_years_covered: 50
+    )
+
+    assert list.valid?, list.errors.full_messages.to_sentence
   end
 end

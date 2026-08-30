@@ -1,2 +1,2 @@
 <% content_for :title, "Game Lists" %>
-<%= render Admin::Lists::IndexComponent.new(lists: @lists, pagy: @pagy, domain_config: domain_config, selected_status: @selected_status, search_query: @search_query) %>
+<%= render Admin::Lists::IndexComponent.new(lists: @lists, pagy: @pagy, domain_config: domain_config, selected_status: @selected_status, selected_submitted: @selected_submitted, search_query: @search_query) %>

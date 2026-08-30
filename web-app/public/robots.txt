@@ -22,3 +22,9 @@ Disallow: /*written-by/*,*
 # comment on the books block in config/routes.rb -- so an rc-prefixed correction
 # URL matches no route at all and there is nothing for a crawler to reach.
 Disallow: /*/suggest-correction
+
+# The list submission form and its confirmation page. Both are edge-cached and
+# set @indexable = false, but the books layout is opt-in for robots meta while
+# music and games are opt-out, so this is the belt to that braces.
+Disallow: /lists/new
+Disallow: /lists/thanks
