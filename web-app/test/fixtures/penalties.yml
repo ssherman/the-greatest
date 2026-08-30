@@ -5,6 +5,7 @@
 # Table name: penalties
 #
 #  id           :bigint           not null, primary key
+#  category     :integer
 #  description  :text
 #  dynamic_type :integer
 #  name         :string           not null
@@ -15,8 +16,9 @@
 #
 # Indexes
 #
-#  index_penalties_on_type     (type)
-#  index_penalties_on_user_id  (user_id)
+#  index_penalties_on_category  (category)
+#  index_penalties_on_type      (type)
+#  index_penalties_on_user_id   (user_id)
 #
 # Foreign Keys
 #
@@ -28,22 +30,26 @@ global_penalty:
   type: Global::Penalty
   name: "Limited Time Coverage"
   description: "List only covers a limited time period"
+  category: 2 # list_time_scope
 
 cross_media_penalty:
   type: Global::Penalty
   name: "Non-Expert Voters"
   description: "Voters are not critics, authors, or experts"
+  category: 0 # voter_expertise
 
 dynamic_penalty:
   type: Global::Penalty
   name: "Dynamic Test Penalty"
   description: "A dynamic penalty for testing"
   dynamic_type: 0 # number_of_voters
+  category: 1 # voter_participation
 
 static_penalty:
   type: Global::Penalty
   name: "Static Test Penalty"
   description: "A static penalty for testing"
+  category: 4 # list_integrity
 
 # Media-specific penalties (global, no user)
 books_penalty:
@@ -51,6 +57,7 @@ books_penalty:
   name: "Western Canon Bias"
   description: "List focuses heavily on Western Canon books"
   dynamic_type: 1 # percentage_western
+  category: 3 # list_subject_scope
 
 movies_penalty:
   type: Movies::Penalty

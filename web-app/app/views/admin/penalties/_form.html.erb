@@ -114,6 +114,27 @@
             </label>
           <% end %>
         </div>
+
+        <div>
+          <%= f.label :category, class: "label" do %>
+            <span class="font-semibold">Category</span>
+          <% end %>
+          <%= f.select :category,
+              options_for_select(
+                [["Uncategorized", nil]] + Penalty.categories.keys.map { |k| [Penalty.category_title(k), k] },
+                @penalty.category
+              ),
+              {},
+              class: "select w-full #{@penalty.errors[:category].any? ? 'select-error' : ''}" %>
+          <label class="label">
+            <span>Groups this penalty on the public rankings page. Uncategorized penalties appear under "Other".</span>
+          </label>
+          <% if @penalty.errors[:category].any? %>
+            <label class="label">
+              <span class="text-error"><%= @penalty.errors[:category].first %></span>
+            </label>
+          <% end %>
+        </div>
       </div>
     </div>
   </div>
