@@ -1,4 +1,30 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+
+// The index sorts newest first, and the auto-generated "Our Users' Favorite
+// Games of All Time" list sits at the top with zero items until somebody
+// favorites a game. Four tests here used to open `.card h3 a` first() and
+// assert against whatever that was, so they broke the moment an empty list
+// sorted above a populated one. Walk the index instead and stop at the first
+// list that actually has games on it.
+async function openPopulatedList(page: Page) {
+  await page.goto('/lists');
+
+  const hrefs = await page.locator('.card h3 a').evaluateAll((links) =>
+    links.map((a) => (a as HTMLAnchorElement).getAttribute('href')).filter(Boolean) as string[]
+  );
+
+  for (const href of hrefs) {
+    await page.goto(href);
+    const hasGames = await page
+      .locator('.grid div.card .card-title a')
+      .first()
+      .isVisible()
+      .catch(() => false);
+    if (hasGames) return;
+  }
+
+  throw new Error(`No list on /lists rendered any game cards (checked ${hrefs.length})`);
+}
 
 test.describe('Games Lists', () => {
   test('lists index page loads successfully', async ({ page }) => {
@@ -41,10 +67,7 @@ test.describe('Games Lists', () => {
   });
 
   test('list show page displays game cards in grid', async ({ page }) => {
-    await page.goto('/lists');
-
-    const firstListCard = page.locator('.card h3 a').first();
-    await firstListCard.click();
+    await openPopulatedList(page);
     await expect(page).toHaveURL(/\/lists\/\d+/);
 
     // Should show game cards (from CardComponent, scoped to the grid so the
@@ -54,10 +77,7 @@ test.describe('Games Lists', () => {
   });
 
   test('list show page game cards have rank badges', async ({ page }) => {
-    await page.goto('/lists');
-
-    const firstListCard = page.locator('.card h3 a').first();
-    await firstListCard.click();
+    await openPopulatedList(page);
     await expect(page).toHaveURL(/\/lists\/\d+/);
 
     // First game card should have a #1 rank badge
@@ -65,11 +85,7 @@ test.describe('Games Lists', () => {
   });
 
   test('clicking a game card from list navigates to game show page', async ({ page }) => {
-    await page.goto('/lists');
-
-    // Navigate to the first list
-    const firstListCard = page.locator('.card h3 a').first();
-    await firstListCard.click();
+    await openPopulatedList(page);
     await expect(page).toHaveURL(/\/lists\/\d+/);
 
     // Get the href of the first game card's title link
@@ -116,8 +132,7 @@ test.describe('Games Lists', () => {
   });
 
   test('the list page shows the full weight breakdown', async ({ page }) => {
-    await page.goto('/lists');
-    await page.locator('.card h3 a').first().click();
+    await openPopulatedList(page);
 
     await expect(page.getByRole('heading', { name: 'How good is this list?' })).toBeVisible();
     await expect(page.getByText('Base weight')).toBeVisible();

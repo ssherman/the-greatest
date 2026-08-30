@@ -45,9 +45,17 @@ test.describe('Books curated collections', () => {
   test('every Lists menu label fits on one line', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/');
-    await page.locator('.navbar-center summary', { hasText: 'Lists' }).click();
+    // Scoped to the Lists <details> rather than any details in the bar: My Books
+    // is a second dropdown, so `.navbar-center details ul` matches both submenus
+    // and fails strict mode. Filtering on the summary text picks the right one --
+    // "My Books" does not contain "Lists".
+    const listsMenu = page
+      .locator('.navbar-center details')
+      .filter({ has: page.locator('summary', { hasText: 'Lists' }) });
 
-    const menu = page.locator('.navbar-center details ul');
+    await listsMenu.locator('summary').click();
+
+    const menu = listsMenu.locator('ul');
     await expect(menu).toBeVisible();
 
     const report = await menu.evaluate((ul) => {
