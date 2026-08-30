@@ -101,6 +101,33 @@ module Services
         assert_nil result.data.worked_example
       end
 
+      test "active_lists_count counts ranked lists whose list is active and excludes ones that are not" do
+        create_worked_example_ranked_list # builds one ACTIVE ranked list on @configuration
+        inactive_list = ::Books::List.create!(name: "Inactive Padding List", status: :approved)
+        ::RankedList.create!(list: inactive_list, ranking_configuration: @configuration, weight: 5)
+
+        result = ExplainerData.call(configurations: [@configuration])
+
+        # Exactly one active ranked list exists on @configuration: the one
+        # create_worked_example_ranked_list builds. The shared books_ranked_list
+        # fixture (status: approved) and the inactive_list created above are
+        # both non-active, so if the status filter were ever dropped this
+        # count would be 3, not 1.
+        assert_equal 1, result.data.active_lists_count
+      end
+
+      test "ranked_items_count counts ranked items with a rank and excludes unranked ones" do
+        ::RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: @configuration, rank: 1, score: 99.0)
+        ::RankedItem.create!(item: books_books(:crime_and_punishment), ranking_configuration: @configuration, rank: nil, score: nil)
+
+        result = ExplainerData.call(configurations: [@configuration])
+
+        # Two ranked_items exist on @configuration; only one carries a rank.
+        # If the where.not(rank: nil) filter were ever dropped this count
+        # would be 2, not 1.
+        assert_equal 1, result.data.ranked_items_count
+      end
+
       private
 
       def pad_books_list_lengths(list_count: 5, items_per_list: 20)
