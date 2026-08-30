@@ -258,3 +258,23 @@ penalty was applying to nothing. Whether production is in the same state is unve
 from here. If it is, running `CalculateWeights` plus a ranking refresh in production will
 move the public rankings — a visible change that should be deliberate and probably
 announced, not a side effect of shipping this page.
+
+**Verify persistence, do not trust the success message.** Books' `ranked_lists.weight`
+had drifted to roughly **2x** the value the algorithm computes — legacy-scale weights
+written by the books migration in May 2026 and never recalculated. While clearing it,
+one `Services::RankingConfiguration::CalculateWeights` run returned
+`{success: true, message: "...249 ranked lists..."}` while rows kept their old `weight`
+and their May `updated_at`; a second, identical run persisted 620 rows correctly. The
+mechanism was not identified and is not reproduced here. Music and games show zero drift
+(0 of 38, 0 of 21, 0 of 20 rows disagreeing), consistent with the cause being migration
+scale rather than a live calculator fault.
+
+The operational rule that follows: after running weight calculation anywhere that
+matters, **assert that `ranked_lists.weight` equals
+`calculated_weight_details.final_calculation.final_weight`** before treating the run as
+done, and re-run rankings only once that holds. A one-line check:
+
+```ruby
+rc.ranked_lists.count { |r| r.calculated_weight_details.to_h.dig("final_calculation", "final_weight") != r.weight }
+# => must be 0
+```
