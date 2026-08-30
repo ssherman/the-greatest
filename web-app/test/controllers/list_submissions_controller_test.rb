@@ -258,6 +258,24 @@ class ListSubmissionsControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
   end
 
+  # The form's HTML min/max is not a server-side control. Postgres integer columns
+  # are 4 bytes and ActiveModel raises RangeError while SERIALIZING an oversized
+  # value -- after validation has already passed -- so before List gained a range
+  # validation this was an unhandled 500 on an anonymous public endpoint,
+  # reachable in a loop by any client that skips the form.
+  test "an out of range integer is a client error, not a server error" do
+    %i[year_published number_of_voters num_years_covered].each do |field|
+      assert_no_difference "Books::List.count" do
+        post "/list_submissions", params: {
+          list: {:name => "Overflow #{field}", :url => "https://example.com/of-#{field}", field => 99_999_999_999},
+          list_type: "Books::List"
+        }
+      end
+
+      assert_response :unprocessable_entity, "#{field} should be a 422, not a 500"
+    end
+  end
+
   # These three exist to stop the anti-DDoS hole this whole feature was built to
   # close from coming back through the routing table -- see the comment above
   # the routes in config/routes.rb. The pages are edge-cached; ListSubmissionsController

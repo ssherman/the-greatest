@@ -461,4 +461,33 @@ class ListTest < ActiveSupport::TestCase
 
     assert_nil list.simplified_content
   end
+
+  # ActiveModel raises RangeError when SERIALIZING an out-of-range integer, not
+  # when casting it -- so without these validations `valid?` returns true and
+  # `save` then raises an unhandled exception. On the public submission endpoint
+  # that is a 500 any client can trigger with a crafted POST.
+  test "rejects integers above the postgres 4-byte column range" do
+    %i[year_published number_of_voters num_years_covered].each do |field|
+      list = Books::List.new(:name => "Too big", :status => :unapproved, field => 99_999_999_999)
+
+      assert_not list.valid?, "#{field} should reject a value above 2^31-1"
+      assert_includes list.errors.attribute_names, field
+    end
+  end
+
+  test "rejects integers below the postgres 4-byte column range" do
+    list = Books::List.new(name: "Too small", status: :unapproved, year_published: -99_999_999_999)
+
+    assert_not list.valid?
+    assert_includes list.errors.attribute_names, :year_published
+  end
+
+  test "still accepts ordinary integer values" do
+    list = Books::List.new(
+      name: "Ordinary", status: :unapproved,
+      year_published: 2024, number_of_voters: 500, num_years_covered: 50
+    )
+
+    assert list.valid?, list.errors.full_messages.to_sentence
+  end
 end

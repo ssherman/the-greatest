@@ -97,7 +97,21 @@ class List < ApplicationRecord
   validates :type, presence: true
   validates :status, presence: true
   validates :url, format: {with: %r{\Ahttps?://}i, message: "must be an http or https url"}, allow_blank: true
-  validates :num_years_covered, numericality: {greater_than: 0, only_integer: true}, allow_nil: true
+  # ActiveModel raises RangeError when SERIALIZING an out-of-range integer, not
+  # when casting it -- so without a ceiling `valid?` returns true and `save` then
+  # raises an unhandled exception. On the public submission endpoint that is a 500
+  # any client can trigger with a crafted POST, bypassing the form's HTML min/max.
+  #
+  # This lives on the model rather than in Services::Lists::Submission, unlike the
+  # length caps: those are service-only because admin paste legitimately reaches
+  # 1.5 MB of raw_content, whereas no path -- admin included -- needs a year or a
+  # voter count outside a 4-byte column. Admin currently 500s here the same way.
+  PG_INTEGER_RANGE = (-2_147_483_648..2_147_483_647)
+
+  validates :year_published, :number_of_voters,
+    numericality: {only_integer: true, in: PG_INTEGER_RANGE}, allow_nil: true
+  validates :num_years_covered,
+    numericality: {only_integer: true, greater_than: 0, in: PG_INTEGER_RANGE}, allow_nil: true
   validate :items_json_format
 
   # Scopes
