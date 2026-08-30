@@ -120,7 +120,10 @@ test.describe('Books mobile nav drawer', () => {
     await page.setViewportSize({ width: 844, height: 390 });
     await page.goto('/');
     await page.locator('#books-nav-drawer-button').click();
-    await page.locator('#books-nav-drawer-panel').getByText('Lists', { exact: true }).click();
+    // The panel's <summary>, not any element reading "Lists": the My Books
+    // submenu carries its own "Lists" link to /my/lists, so a bare text match
+    // resolves to two elements and fails strict mode.
+    await page.locator('#books-nav-drawer-panel summary', { hasText: 'Lists' }).click();
 
     const lastLink = page.locator('#books-nav-drawer-panel a').last();
     await lastLink.scrollIntoViewIfNeeded();
