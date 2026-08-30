@@ -52,6 +52,25 @@ class User < ApplicationRecord
   has_many :memberships, dependent: :nullify
   has_many :books_reading_goals, class_name: "Books::ReadingGoal", dependent: :destroy
 
+  # Every foreign key into users needs one of these. Postgres rejects a DELETE
+  # that would orphan a referencing row, so a missing has_many turns
+  # Admin::UsersController#destroy into an ActiveRecord::InvalidForeignKey 500
+  # rather than anything an admin can act on. corrections and donations were
+  # already in that state before these were added.
+  #
+  # :nullify, not :destroy, wherever the row outlives its submitter: a contact
+  # message carries its own snapshotted email, a correction is a suggestion
+  # about the data rather than about the person, and a donation is a financial
+  # record. news_posts is the exception -- its user_id is NOT NULL and its
+  # belongs_to is required, so nullify would only trade the foreign-key error
+  # for a not-null one.
+  has_many :contact_messages, dependent: :nullify
+  has_many :corrections, dependent: :nullify
+  has_many :resolved_corrections, class_name: "Correction", foreign_key: :resolved_by_id, dependent: :nullify
+  has_many :donations, dependent: :nullify
+  has_many :granted_memberships, class_name: "Membership", foreign_key: :granted_by_id, dependent: :nullify
+  has_many :news_posts, dependent: :destroy
+
   enum :role, [:user, :admin, :editor]
   enum :external_provider, [:facebook, :twitter, :google, :apple, :password]
 
