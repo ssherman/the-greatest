@@ -1,0 +1,192 @@
+<div class="max-w-3xl">
+  <h1 class="text-3xl md:text-4xl font-bold mb-6">How Our Rankings Work</h1>
+
+  <p class="text-lg leading-relaxed mb-4">
+    We do not pick the greatest <%= data.media_nouns %> ourselves. We collect
+    published lists &mdash; critics' rankings, reader polls, prize long-lists,
+    library surveys &mdash; and combine them.
+  </p>
+
+  <p class="leading-relaxed mb-8">
+    The part that matters is that we do not count them equally. A carefully
+    judged ranking by <%= data.media_nouns %> critics and an anonymous listicle
+    are not the same evidence, so we weigh each list by how much we can trust it.
+    The result is that <strong><%= data.media_nouns %> many good lists agree on
+    beat <%= data.media_nouns %> that top a single list</strong>.
+  </p>
+
+  <div class="stats stats-vertical md:stats-horizontal bg-base-200 w-full mb-10">
+    <div class="stat">
+      <div class="stat-title">Lists we count</div>
+      <div class="stat-value"><%= number_with_delimiter(data.active_lists_count) %></div>
+    </div>
+    <div class="stat">
+      <div class="stat-title">Ranked <%= data.media_nouns %></div>
+      <div class="stat-value"><%= number_with_delimiter(data.ranked_items_count) %></div>
+    </div>
+    <div class="stat">
+      <div class="stat-title">Typical list length</div>
+      <div class="stat-value"><%= number_with_delimiter(data.median_list_count) %></div>
+    </div>
+  </div>
+
+  <h2 class="text-2xl font-bold mb-4">Why we think this is accurate</h2>
+  <ul class="list-disc list-outside ps-5 space-y-2 mb-10">
+    <li>
+      <strong>It is a consensus, not an opinion.</strong> No single list can
+      outvote <%= number_with_delimiter(data.active_lists_count) %> of them.
+    </li>
+    <li>
+      <strong>Every list's weight is public.</strong> Nothing about the scoring is
+      hidden &mdash; you can see what each list was worth and why.
+    </li>
+    <li>
+      <strong>The code is open source.</strong> Both the ranking algorithm and this
+      entire site can be read, checked, and argued with.
+    </li>
+    <li>
+      <strong>We correct for known biases</strong> rather than pretending they are
+      not there, and we say plainly where the corrections fall short.
+    </li>
+  </ul>
+
+  <% if western_section? %>
+    <h2 class="text-2xl font-bold mb-4">Why the list still skews western</h2>
+    <p class="leading-relaxed mb-4">
+      This is the most common complaint we get, and it is a fair one. Our top 100
+      is roughly <strong>94% western</strong>. Here is exactly why, and what we do
+      about it.
+    </p>
+    <p class="leading-relaxed mb-4">
+      The lists we ingest are themselves overwhelmingly western &mdash; the median
+      source list is about <strong>92% western</strong>. Weighting redistributes
+      influence <em>among</em> those lists, so when almost all of them lean the
+      same way, weighting cannot pull the result somewhere they never went.
+    </p>
+    <p class="leading-relaxed mb-2">Three structural forces keep it that way:</p>
+    <ol class="list-decimal list-outside ps-5 space-y-2 mb-4">
+      <li>
+        <strong>Translation flows one way.</strong> English-language books are
+        translated into other languages far more than the reverse, so they appear
+        on more lists worldwide.
+      </li>
+      <li>
+        <strong>Anglophone markets under-translate.</strong> Only a sliver of books
+        published each year in the US or UK are translations, which limits what
+        most voters have ever had the chance to read.
+      </li>
+      <li>
+        <strong>The canon has inertia.</strong> Big "best of" lists, prize juries
+        and school syllabi inherited a western core decades ago and tend to
+        reinforce it.
+      </li>
+    </ol>
+    <p class="leading-relaxed mb-4">
+      What we do: a list that presents itself as general but turns out to be 90% or
+      more western has its weight reduced automatically. That currently applies to
+      <strong>303 of our <%= number_with_delimiter(data.active_lists_count) %>
+      lists</strong>. Lists that declare a regional focus up front are exempt
+      &mdash; being a list of great Japanese novels is honest, not a bias.
+    </p>
+    <p class="leading-relaxed mb-4">
+      <strong>And that is not enough.</strong> Trimming the worst offenders by a
+      few points cannot fix a field where nearly every source leans the same
+      direction. So we built a different tool instead.
+    </p>
+    <div class="rounded-box bg-base-200 p-4 md:p-6 mb-4">
+      <h3 class="text-lg font-semibold mb-2">The Global Canon</h3>
+      <p class="mb-4">
+        Rather than reweighting the lists, the
+        <%= link_to "Global Canon", "/global-canon", class: "link link-primary" %>
+        rebuilds the selection with a cap on how many books any one country may
+        contribute. It comes out around <strong>45% western</strong> instead of
+        94%. If the main list's tilt is what bothers you, that page is the answer,
+        not a footnote.
+      </p>
+      <div class="flex flex-wrap gap-2">
+        <%= link_to "The Global Canon", "/global-canon", class: "btn btn-primary btn-sm" %>
+        <%= link_to "Non-Western Canon", "/non-western", class: "btn btn-outline btn-sm" %>
+        <%= link_to "African Books", "/africa", class: "btn btn-outline btn-sm" %>
+        <%= link_to "Asian Books", "/asia", class: "btn btn-outline btn-sm" %>
+        <%= link_to "Latin American Books", "/latin-america", class: "btn btn-outline btn-sm" %>
+      </div>
+    </div>
+    <p class="leading-relaxed mb-10">
+      The thing that would genuinely move this is better source material. If you
+      know a high-participation reading poll, library survey or prize long-list
+      from outside the usual western circuits,
+      <%= link_to "send it to us", SiteContact::MAILTO, class: "link link-primary" %>.
+      More than any adjustment we can make to the maths, that is what changes the
+      answer.
+    </p>
+  <% end %>
+
+  <h2 class="text-2xl font-bold mb-4">How a list earns its weight</h2>
+  <p class="leading-relaxed mb-4">
+    Every list starts at 100 and loses ground for anything that makes it less
+    representative &mdash; a tiny voting panel, an undocumented process, a narrow
+    remit. Sources we have judged high quality get their total reduction cut by a
+    third. Weight never falls below 0.
+  </p>
+  <div class="mb-10">
+    <%= render Rankings::WeightExampleComponent.new(example: data.worked_example) %>
+  </div>
+
+  <h2 class="text-2xl font-bold mb-4">What we adjust for</h2>
+  <p class="leading-relaxed mb-6">
+    These are the things that reduce a list's weight, grouped by what they are
+    really measuring. Some are applied by hand when a list is catalogued; others
+    are computed automatically from the list itself.
+  </p>
+  <div class="mb-10">
+    <%= render Rankings::PenaltyTableComponent.new(groups: data.penalty_groups) %>
+  </div>
+
+  <h2 class="text-2xl font-bold mb-4">How something earns its score</h2>
+  <div class="mb-10">
+    <%= render Rankings::ScoreCurveComponent.new(curve: data.score_curve, media_nouns: data.media_nouns) %>
+  </div>
+
+  <% if date_penalty? %>
+    <h2 class="text-2xl font-bold mb-4">Correcting for recency</h2>
+    <p class="leading-relaxed mb-10">
+      A list published this year cannot tell you what will still matter in fifty
+      years &mdash; it has not had the chance to find out. So when a list names
+      something released in the same year the list came out, that placement counts
+      for up to <strong><%= date_penalty_percentage %>%</strong> less. The
+      reduction shrinks the older the work was when the list named it, and
+      disappears entirely once the gap reaches
+      <strong><%= date_penalty_age %> years</strong>. Classics are not penalized by
+      this &mdash; they are what it protects. Yearly awards always take the full
+      reduction, because "best of 2019" is a statement about one year, not about
+      all time.
+    </p>
+  <% end %>
+
+  <h2 class="text-2xl font-bold mb-4">The current settings</h2>
+  <div class="mb-10">
+    <%= render Rankings::ConfigurationFactsComponent.new(configurations: data.configurations) %>
+  </div>
+
+  <h2 class="text-2xl font-bold mb-4">Read the code</h2>
+  <p class="leading-relaxed mb-4">
+    Both the ranking algorithm and this entire site are open source. If you think
+    the maths is wrong, you can go and check.
+  </p>
+  <ul class="list-disc list-outside ps-5 space-y-1 mb-6">
+    <li>
+      <%= link_to "The ranking algorithm (weighted_list_rank)", Rankings::PageComponent::ALGORITHM_REPO,
+          target: "_blank", rel: "noopener", class: "link link-primary" %>
+    </li>
+    <li>
+      <%= link_to "The Greatest (this site's full source)", Rankings::PageComponent::SITE_REPO,
+          target: "_blank", rel: "noopener", class: "link link-primary" %>
+    </li>
+  </ul>
+  <p class="leading-relaxed">
+    Suggestions, corrections and new lists are all welcome &mdash;
+    <%= link_to "join us on Discord", Rankings::PageComponent::DISCORD_URL,
+        target: "_blank", rel: "noopener", class: "link link-primary" %>
+    or <%= link_to "get in touch", SiteContact::MAILTO, class: "link link-primary" %>.
+  </p>
+</div>
