@@ -26,7 +26,7 @@ module Rankings
     test "renders nothing when there are no groups" do
       render_inline(PenaltyTableComponent.new(groups: []))
 
-      assert_no_selector "h3"
+      assert_empty rendered_content.strip
     end
 
     test "renders a details element per group so the tables start collapsed" do
