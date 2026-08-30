@@ -96,6 +96,25 @@ module Music
 
         assert_no_frame_trapped_links "/songs/lists/#{list.id}"
       end
+
+      test "show 404s for a non-active list" do
+        list = lists(:music_songs_list)
+        list.update!(status: :unapproved)
+
+        get "/songs/lists/#{list.id}"
+
+        assert_response :not_found
+      end
+
+      test "index excludes non-active lists" do
+        list = lists(:music_songs_list)
+        list.update!(status: :unapproved)
+
+        get "/songs/lists"
+
+        assert_response :success
+        assert_select "a[href=?]", "/songs/lists/#{list.id}", count: 0
+      end
     end
   end
 end

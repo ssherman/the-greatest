@@ -1,12 +1,13 @@
 import { Controller } from "@hotwired/stimulus"
 
-// The correction form page is edge-cached, so the authenticity_token rendered
-// into it belongs to whoever populated the cache, or to nobody. This fetches a
-// real one for this visitor's session and writes it into the form.
+// Edge-cached public form pages ship a <meta name="csrf-token"> and a hidden
+// authenticity_token that belong to whoever populated the cache, or to nobody.
+// This fetches a real one for this visitor's session and writes it into the
+// form.
 //
-// Fetched on FIRST INTERACTION, not on connect: this page is public and has been
-// used to flood the origin, and /correction_token is the only uncached endpoint
-// it still touches. A crawler or a flood that never focuses an input never
+// Fetched on FIRST INTERACTION, not on connect: these pages are public and have
+// been used to flood the origin, and /form_token is the only uncached endpoint
+// they still touch. A crawler or a flood that never focuses an input never
 // reaches it.
 //
 // If the fetch fails there is deliberately no error shown and no submit blocked:
@@ -40,7 +41,7 @@ export default class extends Controller {
         credentials: "same-origin"
       })
     } catch (err) {
-      console.warn("corrections--form: token fetch failed", err)
+      console.warn("shared--form-token: token fetch failed", err)
       return
     }
 
@@ -72,7 +73,7 @@ export default class extends Controller {
     row.className = "join w-full"
 
     // The input name comes from the list element, never from a literal here.
-    // Two callers post different shapes: the public form posts
+    // Two callers post different shapes: the public correction form posts
     // correction[fields][<field>][] and the admin review form posts
     // accepted[<field>][]. Reading it from the markup that already declares it
     // is what lets one controller serve both without the two drifting.
@@ -87,7 +88,7 @@ export default class extends Controller {
     const button = document.createElement("button")
     button.type = "button"
     button.className = "btn join-item"
-    button.dataset.action = "corrections--form#removeListItem"
+    button.dataset.action = "shared--form-token#removeListItem"
     button.textContent = "Remove"
 
     // createElement + textContent throughout rather than innerHTML: `field` comes

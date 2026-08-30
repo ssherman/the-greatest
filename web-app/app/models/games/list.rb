@@ -4,6 +4,7 @@
 #
 #  id                    :bigint           not null, primary key
 #  activated_at          :datetime
+#  auto_generated_kind   :integer
 #  category_specific     :boolean
 #  creator_specific      :boolean
 #  description           :text
@@ -19,6 +20,9 @@
 #  source                :string
 #  source_country_origin :string
 #  status                :integer          default(0), not null
+#  submitted_at          :datetime
+#  submitter_email       :string
+#  submitter_ip          :string
 #  type                  :string           not null
 #  url                   :string
 #  voter_count_estimated :boolean
@@ -34,8 +38,10 @@
 #
 # Indexes
 #
-#  index_lists_on_activated_at     (activated_at)
-#  index_lists_on_submitted_by_id  (submitted_by_id)
+#  index_lists_on_activated_at                  (activated_at)
+#  index_lists_on_submitted_at                  (submitted_at)
+#  index_lists_on_submitted_by_id               (submitted_by_id)
+#  index_lists_on_type_and_auto_generated_kind  (type,auto_generated_kind) UNIQUE WHERE (auto_generated_kind IS NOT NULL)
 #
 # Foreign Keys
 #

@@ -49,7 +49,7 @@
 
     <% if @list.url.present? %>
       <div class="mt-4">
-        <%= link_to @list.url, target: "_blank", rel: "noopener noreferrer",
+        <%= link_to @list.url, target: "_blank", rel: "noopener noreferrer nofollow",
             class: "btn btn-primary btn-sm" do %>
           View Original List
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">

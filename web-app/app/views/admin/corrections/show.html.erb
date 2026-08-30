@@ -82,17 +82,17 @@
                             separator: "Good Night, Mr. Tom" went in as one title
                             and came back out as two, written straight onto the
                             record. Same repeatable-list shape, and the same
-                            corrections--form Stimulus controller, as the public
+                            shared--form-token Stimulus controller, as the public
                             form in app/views/corrections/new.html.erb -- one
                             implementation, not two. %>
-                        <div data-controller="corrections--form">
+                        <div data-controller="shared--form-token">
                           <%# Always submitted, always blank. Without it, removing
                               every row sends no accepted[<field>] key at all, which
                               the applier reads as "not accepted" and REJECTS --
                               there would be no way to clear a list. ValueCaster
                               drops the blank. %>
                           <%= hidden_field_tag "accepted[#{field.field_name}][]", "", id: nil %>
-                          <div data-corrections--form-target="list"
+                          <div data-shared--form-token-target="list"
                                data-field="<%= field.field_name %>"
                                data-input-name="accepted[<%= field.field_name %>][]"
                                class="space-y-1">
@@ -102,7 +102,7 @@
                                       id: nil, class: "input join-item w-full",
                                       disabled: !@correction.pending? %>
                                 <button type="button" class="btn join-item"
-                                        data-action="corrections--form#removeListItem"
+                                        data-action="shared--form-token#removeListItem"
                                         <%= "disabled" unless @correction.pending? %>>Remove</button>
                               </div>
                             <% end %>
@@ -110,7 +110,7 @@
                           <% if @correction.pending? %>
                             <button type="button" class="btn btn-sm mt-2"
                                     data-field="<%= field.field_name %>"
-                                    data-action="corrections--form#addListItem">
+                                    data-action="shared--form-token#addListItem">
                               Add <%= definition.label.singularize.downcase %>
                             </button>
                           <% end %>
