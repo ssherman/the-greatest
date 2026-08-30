@@ -61,6 +61,13 @@
     background-color: var(--color-base-100);
   }
 
+  /* Only .stats sits directly on the page as its own panel -- .table is
+     always nested inside a bordered rounded-box wrapper already, so bordering
+     it too would double up. */
+  .stats {
+    border: 1px solid var(--color-base-300);
+  }
+
   .fieldset-legend {
     font-size: 1rem;
   }

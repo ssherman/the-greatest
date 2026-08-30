@@ -9,3 +9,16 @@
 @plugin "daisyui";
 
 @plugin "@tailwindcss/typography";
+
+/* daisyUI's .stats ships with no background of its own (see the books
+   stylesheet for the fuller rationale). .table is left alone here: unlike
+   books, music renders .table directly on several public pages
+   (artists#show, searches#index, ...) and this rule is scoped to the one
+   new consumer -- the rankings page's stats row -- not a site-wide table
+   restyle. */
+@layer components {
+  .stats {
+    background-color: var(--color-base-100);
+    border: 1px solid var(--color-base-300);
+  }
+}

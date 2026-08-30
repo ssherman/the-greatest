@@ -11,3 +11,13 @@
 }
 
 @plugin "@tailwindcss/typography";
+
+/* See music/application.css: .stats ships with no background of its own,
+   and games has no public .table usage outside admin, so this stays scoped
+   to .stats rather than restyling .table site-wide. */
+@layer components {
+  .stats {
+    background-color: var(--color-base-100);
+    border: 1px solid var(--color-base-300);
+  }
+}
