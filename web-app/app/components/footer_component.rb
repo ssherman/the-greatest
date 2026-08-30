@@ -63,11 +63,12 @@ class FooterComponent < ViewComponent::Base
     end
   end
 
+  # Contact is NOT here. It is a button that opens the contact dialog, not a
+  # link, so the template renders it separately -- see the Site column.
   def site_links
     links = [["News", helpers.news_path]]
     links << ["Ranking Details", rankings_path] if rankings_path
     links << ["Support", helpers.membership_path]
-    links << ["Contact", SiteContact::MAILTO]
     links
   end
 

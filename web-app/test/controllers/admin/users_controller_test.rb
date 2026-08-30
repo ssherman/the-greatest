@@ -172,6 +172,43 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
     assert_nil external_link.submitted_by_id
   end
 
+  # The admin delete button raised ActiveRecord::InvalidForeignKey for any user
+  # who had submitted a correction, made a donation, resolved a correction,
+  # granted a membership, written a news post, or (once this branch landed) sent
+  # a contact message. Every one of those foreign keys is exercised here, on one
+  # user, so the button is proven rather than each association in isolation --
+  # the model tests cover them one at a time.
+  test "should destroy user who touched every table that references users" do
+    user_to_delete = User.create!(email: "everything@example.com", role: :admin, email_verified: false)
+
+    message = ContactMessage.create!(user: user_to_delete, email: "everything@example.com",
+      message: "A question about the rankings.", domain: :books)
+    submitted = corrections(:dark_side_pending)
+    submitted.update!(user: user_to_delete)
+    resolved = corrections(:crime_resolved)
+    resolved.update!(resolved_by: user_to_delete)
+    donation = Donation.create!(user: user_to_delete, amount_cents: 500, status: :succeeded, domain: :books)
+    granted = memberships(:editor_user_comped)
+    granted.update!(granted_by: user_to_delete)
+    post = NewsPost.create!(user: user_to_delete, title: "Hello", body: "Body", domain: :books)
+
+    assert_difference("User.count", -1) do
+      delete admin_user_url(user_to_delete)
+    end
+    assert_redirected_to admin_users_url
+
+    # Kept, minus the person: these rows outlive the account.
+    assert_nil message.reload.user_id
+    assert_nil submitted.reload.user_id
+    assert_nil resolved.reload.resolved_by_id
+    assert_nil donation.reload.user_id
+    assert_nil granted.reload.granted_by_id
+
+    # Deleted with the account: news_posts.user_id is NOT NULL, so the post
+    # cannot outlive its author.
+    assert_empty NewsPost.where(id: post.id)
+  end
+
   test "should destroy user with a saved search" do
     user_to_delete = User.create!(
       email: "searchowner@example.com",

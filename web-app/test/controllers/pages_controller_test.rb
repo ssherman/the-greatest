@@ -46,7 +46,10 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
       assert_select "footer a[href=?]", "/privacy_policy"
       assert_select "footer a[href=?]", "/deletion_policy"
       assert_select "footer a[href=?]", "/news"
-      assert_select "footer a[href=?]", "mailto:#{SiteContact::ADDRESS}"
+      # Contact is a button that opens the contact dialog now, not a mailto
+      # link -- see FooterComponentTest for the modal's own coverage.
+      assert_select "footer button", text: "Contact"
+      assert_select "footer a[href^='mailto:']", count: 0
     end
   end
 

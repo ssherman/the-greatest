@@ -303,6 +303,12 @@ Rails.application.routes.draw do
           post :bulk_reject
         end
       end
+
+      resources :contact_messages, only: [:index, :show], controller: "/admin/contact_messages" do
+        member do
+          post :resolve
+        end
+      end
     end
   end
   require "sidekiq/web"
@@ -339,6 +345,12 @@ Rails.application.routes.draw do
   get "form_token", to: "form_token#show", as: :form_token
   get "correction_token", to: "form_token#show", as: :correction_token
   resources :corrections, only: [:create]
+
+  # Uncached, no database query. Exists so the edge-cached footer form can get a
+  # token that belongs to the caller's session, and the signed-in visitor's own
+  # email, without either being baked into cacheable HTML.
+  get "contact_state", to: "contact_state#show", as: :contact_state
+  resources :contact_messages, only: [:create]
 
   # One global POST for all three domains: it is never cached, and the domain
   # comes from the host through Current.domain regardless. One route means the
@@ -631,6 +643,12 @@ Rails.application.routes.draw do
         end
         collection do
           post :bulk_reject
+        end
+      end
+
+      resources :contact_messages, only: [:index, :show], controller: "/admin/contact_messages" do
+        member do
+          post :resolve
         end
       end
 
@@ -1061,6 +1079,12 @@ Rails.application.routes.draw do
         end
         collection do
           post :bulk_reject
+        end
+      end
+
+      resources :contact_messages, only: [:index, :show], controller: "/admin/contact_messages" do
+        member do
+          post :resolve
         end
       end
     end

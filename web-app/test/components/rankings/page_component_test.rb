@@ -45,6 +45,47 @@ module Rankings
       assert_no_selector "a[href='/global-canon']"
     end
 
+    # Regression: SiteContact::MAILTO was deleted by the contact-form merge,
+    # and this page referenced it twice. Both references must be gone for
+    # good, on every domain the page renders on -- not just books.
+    test "renders no mailto link anywhere on the page" do
+      render_inline(PageComponent.new(data: @data, domain: :books))
+
+      assert_no_selector "a[href^='mailto:']"
+    end
+
+    test "the western tilt section's lists ask links to the books list submission form, not email" do
+      render_inline(PageComponent.new(data: @data, domain: :books))
+
+      assert_selector "a[href='/lists/new']", text: "send it to us"
+    end
+
+    test "the closing paragraph's 'get in touch' opens the contact modal rather than emailing" do
+      render_inline(PageComponent.new(data: @data, domain: :books))
+
+      assert_selector "button[data-action='contact--form#open']", text: "get in touch"
+    end
+
+    test "music's 'get in touch' also opens the contact modal" do
+      music = Services::RankingConfiguration::ExplainerData.call(
+        configurations: [ranking_configurations(:music_albums_global)]
+      ).data
+
+      render_inline(PageComponent.new(data: music, domain: :music))
+
+      assert_selector "button[data-action='contact--form#open']", text: "get in touch"
+    end
+
+    test "games's 'get in touch' also opens the contact modal" do
+      games = Services::RankingConfiguration::ExplainerData.call(
+        configurations: [ranking_configurations(:games_global)]
+      ).data
+
+      render_inline(PageComponent.new(data: games, domain: :games))
+
+      assert_selector "button[data-action='contact--form#open']", text: "get in touch"
+    end
+
     test "states the weight floor as the configuration's actual reachable minimum" do
       config = ranking_configurations(:books_global)
       config.update!(min_list_weight: -50)

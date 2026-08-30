@@ -1,0 +1,13 @@
+<%# Every outcome swaps the same target. A bare `head :unprocessable_entity`
+    blanks the page, and public layouts render no flash, so this is the only
+    way to tell the submitter what happened. %>
+<%= turbo_stream.replace "contact_modal_body" do %>
+  <div id="contact_modal_body">
+    <% if @sent %>
+      <%= render "contact_messages/thanks" %>
+    <% else %>
+      <%= render "contact_messages/form", error: @error,
+            email_value: @email_value, message_body: @message_body %>
+    <% end %>
+  </div>
+<% end %>

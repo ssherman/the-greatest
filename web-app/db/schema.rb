@@ -288,6 +288,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_30_134311) do
     t.index ["item_type", "item_id"], name: "index_category_items_on_item_type_and_item_id"
   end
 
+  create_table "contact_messages", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "domain", null: false
+    t.string "email", null: false
+    t.text "message", null: false
+    t.datetime "replied_at"
+    t.integer "status", default: 0, null: false
+    t.string "submitter_ip"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id"
+    t.index ["domain", "created_at"], name: "index_contact_messages_on_domain_and_created_at"
+    t.index ["status", "created_at"], name: "index_contact_messages_on_status_and_created_at"
+    t.index ["user_id"], name: "index_contact_messages_on_user_id"
+  end
+
   create_table "correction_fields", force: :cascade do |t|
     t.datetime "applied_at"
     t.bigint "correction_id", null: false
@@ -1091,6 +1106,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_30_134311) do
   add_foreign_key "books_series_books", "books_series", column: "series_id"
   add_foreign_key "categories", "categories", column: "parent_id"
   add_foreign_key "category_items", "categories"
+  add_foreign_key "contact_messages", "users"
   add_foreign_key "correction_fields", "corrections"
   add_foreign_key "corrections", "users"
   add_foreign_key "corrections", "users", column: "resolved_by_id"

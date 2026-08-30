@@ -1,0 +1,65 @@
+<%# Rendered inside #contact_modal_body. Identical HTML for every visitor on the
+    initial page load: the email is filled in by contact--form from
+    /contact_state, never here, because that render is served from the
+    Cloudflare cache.
+
+    email_value and message_body ARE per-visitor when present, which is safe:
+    the only caller that ever passes them is
+    contact_messages/create.turbo_stream.erb, whose response is uncached
+    (prevent_caching) and answers exactly one request. The footer's cached
+    render passes neither local, so this stays cache-safe -- do not add a
+    fallback here (e.g. `local_assigns[:email_value] || current_user&.email`)
+    that would run on that cached render too. %>
+<h3 class="text-lg font-bold">Contact us</h3>
+
+<% if local_assigns[:error].present? %>
+  <p class="text-error mt-2" data-testid="contact-error"><%= error %></p>
+<% end %>
+
+<%# scope: :contact_message -- the controller reads params.fetch(:contact_message, {}),
+    so an unscoped form (bare "email"/"message" fields) would post parameters it
+    never looks at and every real submission would fail validation. %>
+<%= form_with url: contact_messages_path, scope: :contact_message,
+      data: {contact__form_target: "form", action: "submit->contact--form#submitting"},
+      class: "mt-4 space-y-4" do |form| %>
+  <fieldset class="fieldset">
+    <%# One label doing double duty as the visible field name, styled like a
+        legend -- same pattern as saved_searches/_form.html.erb. A separate
+        <legend> plus a same-text <label> rendered the name twice: daisyUI 5's
+        `.label` is meant for helper text below the input, not a second title,
+        and both were visible. %>
+    <%= form.label :email, "Your email", for: "contact_email", class: "fieldset-legend" %>
+    <%= form.email_field :email,
+          required: true,
+          id: "contact_email",
+          class: "input w-full",
+          autocomplete: "email",
+          value: local_assigns[:email_value],
+          data: {contact__form_target: "email"} %>
+  </fieldset>
+
+  <fieldset class="fieldset">
+    <%= form.label :message, "Message", for: "contact_message_body", class: "fieldset-legend" %>
+    <%= form.text_area :message,
+          required: true,
+          id: "contact_message_body",
+          rows: 8,
+          maxlength: ContactMessage::MAX_MESSAGE_LENGTH,
+          class: "textarea w-full",
+          value: local_assigns[:message_body] %>
+  </fieldset>
+
+  <%# Honeypot. Hidden from people, filled by bots. Not `type=hidden`, which a
+      bot skips; visually removed and taken out of the tab order instead. Kept
+      OUTSIDE the :contact_message scope above -- the controller reads this at
+      params[:website], never params[:contact_message][:website]. %>
+  <div class="hidden" aria-hidden="true">
+    <label for="contact_website">Website</label>
+    <input type="text" name="website" id="contact_website" tabindex="-1" autocomplete="off">
+  </div>
+
+  <div class="modal-action">
+    <button type="button" class="btn" data-action="contact--form#close">Cancel</button>
+    <%= form.submit "Send", class: "btn btn-primary" %>
+  </div>
+<% end %>

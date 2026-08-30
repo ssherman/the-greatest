@@ -39,4 +39,14 @@ class Rankings::PageComponent < ViewComponent::Base
   def weight_floor = configuration.weight_floor
 
   def automatic_adjustments = data.automatic_adjustments
+
+  # Written as direct helper calls, following FooterComponent#rankings_path,
+  # so that grepping a route helper finds this file.
+  def list_submission_path
+    case domain
+    when :books then helpers.new_books_list_submission_path
+    when :music then helpers.new_music_list_submission_path
+    when :games then helpers.new_games_list_submission_path
+    end
+  end
 end

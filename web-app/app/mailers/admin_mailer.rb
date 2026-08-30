@@ -67,6 +67,26 @@ class AdminMailer < ApplicationMailer
   end
   helper_method :correction_url
 
+  # Goes to the PUBLIC contact address, not admin_address. That variable is for
+  # sales and donation alerts; the footer already advertises this address, so
+  # the form and the mailto land in the same inbox.
+  def contact_message(contact_message)
+    @contact_message = contact_message
+    @site_name = MailBranding.for(contact_message.domain).site_name
+
+    branded_mail(
+      domain: contact_message.domain,
+      to: SiteContact::ADDRESS,
+      # squish before truncate: a textarea submits raw CRLFs, and Mail encodes
+      # them into the header rather than rejecting them (there is no
+      # header-injection risk), so "Hi,\n\nI wanted..." became a subject with
+      # literal =0D=0A sequences in it. Collapsing whitespace first makes
+      # truncate cut a single line instead of the raw multi-line text.
+      subject: "Contact via #{@site_name}: #{contact_message.message.squish.truncate(60)}",
+      reply_to: contact_message.email
+    )
+  end
+
   def new_list_submission(list)
     @list = list
     # domain_for, not Current.domain: this runs in Sidekiq, where Current.domain

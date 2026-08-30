@@ -115,7 +115,7 @@
       The thing that would move this is better source material. If you
       know a high-participation reading poll, library survey or prize long-list
       from outside the usual western circuits,
-      <%= link_to "send it to us", SiteContact::MAILTO, class: "link link-primary" %>.
+      <%= link_to "send it to us", list_submission_path, class: "link link-primary" %>.
       More than any adjustment we can make to the maths, that is what changes the
       answer.
     </p>
@@ -207,6 +207,6 @@
     Suggestions, corrections and new lists are all welcome.
     <%= link_to "Join us on Discord", Rankings::PageComponent::DISCORD_URL,
         target: "_blank", rel: "noopener", class: "link link-primary" %>
-    or <%= link_to "get in touch", SiteContact::MAILTO, class: "link link-primary" %>.
+    or <button type="button" class="link link-primary text-left" data-action="contact--form#open">get in touch</button>.
   </p>
 </div>
