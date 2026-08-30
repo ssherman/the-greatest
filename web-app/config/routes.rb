@@ -694,6 +694,8 @@ Rails.application.routes.draw do
     # so a future collection slug cannot swallow it.
     get "search", to: "books/searches#index", as: :books_search
 
+    get "rankings", to: "books/default#rankings", as: :books_rankings
+
     get "lists", to: "books/lists#index", as: :books_lists
     get "lists/page/:page", to: "books/lists#index", as: :books_lists_page, constraints: {page: /\d+/}
     get "lists/:id", to: "books/lists#show", as: :books_list, constraints: {id: /\d+/}

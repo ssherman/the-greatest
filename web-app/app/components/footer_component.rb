@@ -63,9 +63,6 @@ class FooterComponent < ViewComponent::Base
     end
   end
 
-  # "Ranking Details" is deliberately absent for books: music and games each
-  # define a /rankings page and books does not, so listing it there would link
-  # every books page to a 404.
   def site_links
     links = [["News", helpers.news_path]]
     links << ["Ranking Details", rankings_path] if rankings_path
@@ -97,6 +94,7 @@ class FooterComponent < ViewComponent::Base
 
   def rankings_path
     case domain
+    when :books then helpers.books_rankings_path
     when :music then helpers.music_rankings_path
     when :games then helpers.games_rankings_path
     end

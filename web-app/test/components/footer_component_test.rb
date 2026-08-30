@@ -77,16 +77,7 @@ class FooterComponentTest < ViewComponent::TestCase
     assert_selector "a[href='/lists']", text: "Lists"
   end
 
-  # There is no /rankings page on books -- only music and games define one. A
-  # footer table copied between domains is exactly how a link to a 404 gets in.
-  test "books footer does not link to a rankings page it does not have" do
-    render_footer(:books)
-
-    assert_selector "a[href='/genres']" # positive control: the footer did render
-    assert_no_selector "a[href='/rankings']"
-  end
-
-  [:music, :games].each do |domain|
+  DOMAINS.each do |domain|
     test "#{domain} footer links to its rankings explainer" do
       render_footer(domain)
 
