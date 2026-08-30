@@ -36,12 +36,13 @@ test.describe('Books footer', () => {
     }
   });
 
-  test('the contact link opens a mail client', async ({ page }) => {
+  test('the contact control opens the form rather than a mail client', async ({ page }) => {
     await page.goto('/privacy_policy');
 
-    const contact = page.locator('footer').getByRole('link', { name: 'Contact', exact: true });
+    const footer = page.locator('footer');
 
-    await expect(contact).toHaveAttribute('href', `mailto:${CONTACT}`);
+    await expect(footer.getByRole('button', { name: 'Contact', exact: true })).toBeVisible();
+    await expect(footer.locator(`a[href="mailto:${CONTACT}"]`)).toHaveCount(0);
   });
 
   test('the policy body names the contact address', async ({ page }) => {

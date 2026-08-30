@@ -6,7 +6,9 @@
     Links are `link`, not `link link-hover`. daisyUI 5 gives .footer no link
     styling of its own, so link-hover computes identical to plain text until the
     pointer is over it -- an affordance a keyboard or touch user never sees. %>
-<footer class="<%= background %> text-base-content">
+<footer class="<%= background %> text-base-content"
+        data-controller="contact--form"
+        data-contact--form-state-url-value="<%= helpers.contact_state_path %>">
   <div class="footer sm:footer-horizontal container mx-auto p-10">
     <nav aria-label="Browse">
       <h2 class="footer-title">Browse</h2>
@@ -20,6 +22,9 @@
       <% site_links.each do |label, path| %>
         <%= link_to label, path, class: "link" %>
       <% end %>
+      <%# A button, not a link: it opens the contact dialog below. Styled `link`
+          so it reads identically to its siblings. %>
+      <button type="button" class="link text-left" data-action="contact--form#open">Contact</button>
     </nav>
 
     <nav aria-label="Legal">
@@ -55,4 +60,18 @@
       <p>Copyright &copy; <%= Time.current.year %> &mdash; All rights reserved by The Greatest LLC.</p>
     </aside>
   </div>
+
+  <%# Identical HTML for every visitor -- the email is filled in by
+      contact--form from /contact_state, never rendered here, because this
+      markup is served from the Cloudflare edge cache. %>
+  <dialog id="contact_modal" class="modal" data-contact--form-target="dialog">
+    <div class="modal-box">
+      <div id="contact_modal_body">
+        <%= render "contact_messages/form" %>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button>close</button>
+    </form>
+  </dialog>
 </footer>

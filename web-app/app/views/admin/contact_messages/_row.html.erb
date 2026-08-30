@@ -1,0 +1,17 @@
+<%# The data- attributes are stable test hooks: the tests assert on these rather
+    than on any visible text, which a designer must stay free to change. This
+    app has no assigns, so the rendered row is the only evidence a test has. %>
+<tr data-testid="contact-message-row"
+    data-contact-message-id="<%= contact_message.id %>"
+    data-status="<%= contact_message.status %>"
+    data-domain="<%= contact_message.domain %>">
+  <td><%= contact_message.email %></td>
+  <td class="max-w-md">
+    <%# overflow-wrap: anywhere, not break-words -- this is visitor-supplied
+        text and a long unbroken string blows out the table otherwise. %>
+    <%= link_to contact_message.message.truncate(80),
+          contact_message_path_for(contact_message),
+          class: "link [overflow-wrap:anywhere]" %>
+  </td>
+  <td><%= contact_message.created_at.strftime("%b %-d, %Y") %></td>
+</tr>

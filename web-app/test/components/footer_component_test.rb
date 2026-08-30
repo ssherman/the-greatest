@@ -45,10 +45,35 @@ class FooterComponentTest < ViewComponent::TestCase
       assert_empty hrefs.select { |href| href.nil? || href.empty? || href == "#" }
     end
 
-    test "#{domain} footer links to the contact address" do
+    test "#{domain} footer opens the contact form rather than a mail client" do
       render_footer(domain)
 
-      assert_selector "a[href='mailto:#{SiteContact::ADDRESS}']", text: "Contact"
+      assert_selector "button", text: "Contact"
+      assert_no_selector "footer a[href^='mailto:']"
+    end
+
+    test "#{domain} footer carries the contact dialog and its turbo target" do
+      render_footer(domain)
+
+      assert_selector "dialog#contact_modal"
+      assert_selector "#contact_modal_body"
+    end
+
+    # The footer is on every edge-cached page. If any per-visitor value were
+    # rendered here, Cloudflare would serve one person's data to the next.
+    #
+    # Stubs the ViewComponent test controller rather than Current.user --
+    # Current declares only `domain` (see app/models/current.rb), so
+    # Current.user doesn't exist. vc_test_controller is what
+    # FooterComponent's helpers.current_user actually resolves through in
+    # this test harness.
+    test "#{domain} footer renders identical HTML signed in and signed out" do
+      signed_out = render_footer(domain).to_html
+
+      vc_test_controller.stubs(:current_user).returns(users(:regular_user))
+      signed_in = render_footer(domain).to_html
+
+      assert_equal signed_out, signed_in
     end
   end
 

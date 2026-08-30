@@ -247,4 +247,77 @@ class UserTest < ActiveSupport::TestCase
 
     assert_equal memberships(:regular_user_monthly), user.granting_membership
   end
+
+  # Every foreign key into users needs a matching has_many carrying a dependent:
+  # option. Without one, Postgres rejects the DELETE and
+  # Admin::UsersController#destroy raises ActiveRecord::InvalidForeignKey --
+  # a 500 on a button an admin can press. corrections and donations were in
+  # exactly that state on main; contact_messages would have been the sixth.
+  #
+  # These assert on the ROWS, not on the association names, so they still hold
+  # if an association is renamed.
+
+  test "destroying a user keeps their contact messages and clears the sender" do
+    user = users(:regular_user)
+    message = contact_messages(:books_pending)
+
+    user.destroy!
+
+    assert_nil message.reload.user_id
+    assert_equal "user@example.com", message.email,
+      "the snapshotted address is what makes the message answerable after the account is gone"
+  end
+
+  test "destroying a user keeps the corrections they submitted" do
+    user = users(:regular_user)
+    correction = corrections(:war_and_peace_pending)
+
+    user.destroy!
+
+    assert_nil correction.reload.user_id
+  end
+
+  test "destroying a user keeps the corrections they resolved" do
+    user = users(:admin_user)
+    correction = corrections(:crime_resolved)
+
+    user.destroy!
+
+    assert_nil correction.reload.resolved_by_id
+    assert_predicate correction, :persisted?
+  end
+
+  test "destroying a user keeps their donations" do
+    user = users(:regular_user)
+    donation = donations(:regular_user_gift)
+
+    user.destroy!
+
+    assert_nil donation.reload.user_id
+  end
+
+  test "destroying a user keeps the memberships they granted" do
+    user = users(:admin_user)
+    membership = memberships(:editor_user_comped)
+
+    user.destroy!
+
+    assert_nil membership.reload.granted_by_id
+    assert_predicate membership, :persisted?
+  end
+
+  # Shane's call, 2026-08-30: news_posts.user_id is NOT NULL and belongs_to is
+  # required, so nullify would only trade InvalidForeignKey for
+  # NotNullViolation. Destroying the posts means deleting an author removes
+  # their published articles from the site -- accepted deliberately over
+  # blocking the deletion.
+  test "destroying a user destroys the news posts they authored" do
+    user = users(:admin_user)
+    post_ids = NewsPost.where(user_id: user.id).pluck(:id)
+    assert_not_empty post_ids, "fixture guard: admin_user must author posts for this to mean anything"
+
+    user.destroy!
+
+    assert_empty NewsPost.where(id: post_ids)
+  end
 end
