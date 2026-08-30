@@ -17,6 +17,7 @@ class Admin::Lists::TableComponent < ViewComponent::Base
       sort: column,
       direction: direction,
       status: helpers.params[:status],
+      submitted: helpers.params[:submitted],
       q: helpers.params[:q]
     }.compact.to_query
   end

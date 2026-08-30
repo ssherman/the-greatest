@@ -24,4 +24,10 @@ class UserListItemPolicyTest < ActiveSupport::TestCase
     refute UserListItemPolicy.new(@other, @item).destroy?
     refute UserListItemPolicy.new(nil, @item).destroy?
   end
+
+  test "update_completion? mirrors create?" do
+    assert UserListItemPolicy.new(@owner, @item).update_completion?
+    refute UserListItemPolicy.new(@other, @item).update_completion?
+    refute UserListItemPolicy.new(nil, @item).update_completion?
+  end
 end

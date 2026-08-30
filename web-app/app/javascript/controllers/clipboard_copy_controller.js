@@ -4,21 +4,25 @@ import { Controller } from "@hotwired/stimulus"
 export default class extends Controller {
   static targets = ["source", "button"]
 
-  async copy() {
+  async copy(event) {
+    const button = event?.currentTarget || this.buttonTarget
     const text = this.sourceTarget.value || this.sourceTarget.textContent
     try {
       await navigator.clipboard.writeText(text)
-      this.showFeedback()
+      this.showFeedback(button)
     } catch {
       // Fallback for older browsers
       this.sourceTarget.select()
-      document.execCommand("copy")
-      this.showFeedback()
+      try {
+        document.execCommand("copy")
+      } finally {
+        button.focus()
+      }
+      this.showFeedback(button)
     }
   }
 
-  showFeedback() {
-    const button = this.buttonTarget
+  showFeedback(button = this.buttonTarget) {
     const originalText = button.textContent
     button.textContent = "Copied!"
     button.classList.add("btn-success")

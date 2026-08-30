@@ -1,0 +1,14 @@
+<% content_for :page_title, "Submit a List | #{domain_settings[:name]}" %>
+<% content_for :meta_description, "Submit a list for review and help us expand our rankings." %>
+
+<div class="container mx-auto px-4 py-8 max-w-4xl">
+  <div class="mb-8">
+    <h1 class="text-4xl font-bold text-base-content mb-2">Submit a List</h1>
+    <p class="text-base-content/70">
+      Know a great list we're missing? Send it over and we'll review it. We especially
+      welcome lists covering under-represented countries, genres and perspectives.
+    </p>
+  </div>
+
+  <%= render "form" %>
+</div>

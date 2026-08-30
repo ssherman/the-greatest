@@ -93,6 +93,60 @@ class Admin::UsersControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to admin_users_url
   end
 
+  test "destroy purges cached public reading goals belonging to the user" do
+    user_to_delete = User.create!(
+      email: "reading-goal-owner-to-delete@example.com",
+      role: :user,
+      email_verified: false
+    )
+    goal = Books::ReadingGoal.create!(
+      user: user_to_delete,
+      name: "Deleted owner's public goal",
+      target_count: 12,
+      starts_on: Date.new(2026, 1, 1),
+      ends_on: Date.new(2026, 12, 31),
+      public: true
+    )
+    expected_urls = ["https://#{Rails.application.config.domains[:books]}/reading_goals/#{goal.id}"]
+    ::Books::ReadingGoals::PurgeCachedPagesJob.clear
+
+    Sidekiq::Testing.fake! do
+      delete admin_user_url(user_to_delete)
+
+      assert_equal [["books", expected_urls]],
+        ::Books::ReadingGoals::PurgeCachedPagesJob.jobs.map { |job| job.fetch("args") }
+    end
+  end
+
+  test "destroy does not enqueue a goal purge before its transaction commits" do
+    user_to_delete = User.create!(
+      email: "rollback-reading-goal-owner@example.com",
+      role: :user,
+      email_verified: false
+    )
+    Books::ReadingGoal.create!(
+      user: user_to_delete,
+      name: "Rollback deleted owner's public goal",
+      target_count: 12,
+      starts_on: Date.new(2026, 1, 1),
+      ends_on: Date.new(2026, 12, 31),
+      public: true
+    )
+    ::Books::ReadingGoals::PurgeCachedPagesJob.clear
+
+    Sidekiq::Testing.fake! do
+      User.transaction(requires_new: true) do
+        delete admin_user_url(user_to_delete)
+
+        assert_empty ::Books::ReadingGoals::PurgeCachedPagesJob.jobs
+        raise ActiveRecord::Rollback
+      end
+
+      assert_empty ::Books::ReadingGoals::PurgeCachedPagesJob.jobs
+      assert User.exists?(user_to_delete.id)
+    end
+  end
+
   test "should destroy user with submitted external links" do
     user_to_delete = User.create!(
       email: "linksubmitter@example.com",

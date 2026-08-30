@@ -118,6 +118,35 @@ module Music
 
         assert_no_frame_trapped_links "/albums/lists/#{list.id}"
       end
+
+      test "show 404s for a non-active list" do
+        list = lists(:music_albums_list)
+        list.update!(status: :unapproved)
+
+        get "/albums/lists/#{list.id}"
+
+        assert_response :not_found
+      end
+
+      test "index excludes non-active lists" do
+        list = lists(:music_albums_list)
+        list.update!(status: :unapproved)
+
+        get "/albums/lists"
+
+        assert_response :success
+        assert_select "a[href=?]", "/albums/lists/#{list.id}", count: 0
+      end
+
+      test "source link is nofollow" do
+        list = lists(:music_albums_list)
+        list.update!(url: "https://example.com/greatest-albums")
+
+        get "/albums/lists/#{list.id}"
+
+        assert_response :success
+        assert_select "a[href=?][rel~=?]", "https://example.com/greatest-albums", "nofollow"
+      end
     end
   end
 end

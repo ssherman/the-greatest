@@ -1,0 +1,11 @@
+A new list has been submitted to <%= @site_name %>.
+
+Name: <%= @list.name %>
+Type: <%= @list.type %>
+Source: <%= @list.source.presence || "(not given)" %>
+URL: <%= @list.url.presence || "(not given)" %>
+Submitted by: <%= @list.submitted_by&.email || @list.submitter_email.presence || "Anonymous" %>
+Pasted content: <%= @list.raw_content.present? ? "#{@list.raw_content.length} characters" : "none" %>
+
+Description:
+<%= @list.description.presence || "(none)" %>

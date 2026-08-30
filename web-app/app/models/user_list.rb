@@ -146,6 +146,10 @@ class UserList < ApplicationRecord
     []
   end
 
+  def self.completion_transition_sources
+    {}
+  end
+
   # The RankingConfiguration STI subclass used to sort a list "by ranking".
   # Base returns nil (no ranking sort available); subclasses that support it override.
   def self.ranking_configuration_class
@@ -166,6 +170,10 @@ class UserList < ApplicationRecord
   # True when this list's list_type supports a completion date.
   def completed_on_enabled?
     self.class.completed_on_list_types.include?(list_type.to_sym)
+  end
+
+  def completion_transition_source_types
+    self.class.completion_transition_sources.fetch(list_type.to_sym, [])
   end
 
   def reorder_items!(ordered_listable_ids)

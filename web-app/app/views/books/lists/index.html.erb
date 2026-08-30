@@ -20,11 +20,15 @@
       <%= f.submit "Search", class: "btn btn-primary join-item" %>
     <% end %>
 
-    <div class="join" role="group" aria-label="Sort lists">
-      <%= link_to "Weight", books_lists_path_with_rc(q: @query),
-            class: "btn join-item #{"btn-active" if @sort == "weight"}" %>
-      <%= link_to "Recently added", books_lists_path_with_rc(sort: "newest", q: @query),
-            class: "btn join-item #{"btn-active" if @sort == "newest"}" %>
+    <div class="flex items-center gap-4">
+      <div class="join" role="group" aria-label="Sort lists">
+        <%= link_to "Weight", books_lists_path_with_rc(q: @query),
+              class: "btn join-item #{"btn-active" if @sort == "weight"}" %>
+        <%= link_to "Recently added", books_lists_path_with_rc(sort: "newest", q: @query),
+              class: "btn join-item #{"btn-active" if @sort == "newest"}" %>
+      </div>
+
+      <%= link_to "Submit a list", new_books_list_submission_path, class: "btn btn-primary btn-sm" %>
     </div>
   </div>
 

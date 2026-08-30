@@ -132,7 +132,7 @@ class CorrectionsControllerTest < ActionDispatch::IntegrationTest
   test "the array field ships the markup its Stimulus controller and clearing depend on" do
     get books_book_correction_path(slug: @book.slug)
 
-    assert_select "[data-corrections--form-target=list][data-field=alternate_titles]" \
+    assert_select "[data-shared--form-token-target=list][data-field=alternate_titles]" \
       "[data-input-name=?]", "correction[fields][alternate_titles][]"
     assert_select "input[type=hidden][name=?][value=?]",
       "correction[fields][alternate_titles][]", ""

@@ -53,11 +53,12 @@ export default class extends Controller {
   // Reveals/hides the signed-in-only nav links. They ship hidden in cached
   // HTML and are revealed client-side once sign-in is detected — same approach
   // as the Login/Logout toggle — so the navbar stays CDN-cacheable.
-  // querySelectorAll covers both the mobile and desktop menu copies.
-  // navbar_my_searches and navbar_my_reviews are books-only entries; the
-  // selector is harmless on domains whose layout doesn't render them.
+  // querySelectorAll covers both the mobile and desktop menu copies. Books
+  // groups its personal links under one hook; Music and Games retain their
+  // existing My Lists hook.
   _updateMyListsNav(visible) {
-    document.querySelectorAll("#navbar_my_lists, #navbar_my_searches, #navbar_my_reviews").forEach((el) => {
+    const selector = this.domain === "books" ? "#navbar_my_books" : "#navbar_my_lists"
+    document.querySelectorAll(selector).forEach((el) => {
       el.classList.toggle("hidden", !visible)
     })
   }

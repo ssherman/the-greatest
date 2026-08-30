@@ -17,15 +17,16 @@ class MyReviewsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-  # The books layout ships this entry hidden and reveals it client-side once
-  # sign-in is detected (see user_list_state_controller.js), mirroring
-  # navbar_my_lists -- without it, a signed-in user who rates a book has no
-  # way to find their way back to this page.
-  test "the books layout carries the My Reviews navbar entry" do
+  # The books layout ships its personal-links group hidden and reveals it
+  # client-side once sign-in is detected (see user_list_state_controller.js).
+  # Without it, a signed-in user who rates a book has no way to find their way
+  # back to this page.
+  test "the books layout carries the My Books navbar group" do
     sign_in_as(@user, stub_auth: true)
     get my_reviews_path
     assert_response :success
-    assert_includes response.body, 'id="navbar_my_reviews"'
+    assert_includes response.body, 'id="navbar_my_books"'
+    refute_includes response.body, 'id="navbar_my_lists"'
   end
 
   test "404s on a domain with no reviewable types" do

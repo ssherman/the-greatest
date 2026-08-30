@@ -7,12 +7,29 @@ Rails.application.routes.draw do
     # All music routes are prefixed with 'music_' for route helpers to avoid
     # conflicts when other domains (games, movies) add similar resources
     scope as: "music" do
-      # Lists overview and public submission
-      resources :lists, only: [:index, :new, :create], controller: "music/lists"
+      # Lists overview. Submission moved to the shared ListSubmissionsController,
+      # routed just below -- outside this `as: "music"` scope on purpose,
+      # because that scope prefixes explicit `as:` names too and the shared
+      # controller's helpers must match every other domain's unprefixed
+      # new_<domain>_list_submission_path / <domain>_list_submission_thanks_path
+      # shape.
+      resources :lists, only: [:index], controller: "music/lists"
 
       # Search
       get "search", to: "music/searches#index"
     end
+
+    # Deliberately NOT inside the (/rc/:ranking_configuration_id) scope further
+    # down, and constrained to html, for the same reason the corrections
+    # routes further down are: ListSubmissionsController never calls
+    # load_ranking_configuration, so an rc-prefixed or .json URL would render
+    # 200 for any value of that segment, and every distinct value is another
+    # Cloudflare cache key and another full render at origin. The router
+    # rejects them before a controller is involved.
+    get "lists/new", to: "list_submissions#new", as: :new_music_list_submission,
+      constraints: {format: /html/}
+    get "lists/thanks", to: "list_submissions#thanks", as: :music_list_submission_thanks,
+      constraints: {format: /html/}
 
     # Artist rankings (outside rc scope - always uses default primary configs for both albums and songs)
     get "artists", to: "music/artists/ranked_items#index", as: :artists
@@ -318,10 +335,15 @@ Rails.application.routes.draw do
   # Per-item review state — global (non-domain-constrained), JSON-only, never cached.
   get "review_state", to: "review_state#show", as: :review_state
 
-  # Uncached, no database query. Exists so the edge-cached correction form can get
-  # a token that belongs to the caller's session rather than to whoever populated
-  # the cache.
-  get "correction_token", to: "correction_token#show", as: :correction_token
+  # Uncached, no database query. Serves every edge-cached public form: a cached
+  # page's <meta name="csrf-token"> belongs to whoever populated the cache.
+  #
+  # /correction_token is kept because corrections form pages are edge-cached for
+  # 24 hours and already-cached copies still point at it. Removing it would make
+  # those pages fall back to null_session, which works, but silently loses
+  # attribution for signed-in submitters until the cache turns over.
+  get "form_token", to: "form_token#show", as: :form_token
+  get "correction_token", to: "form_token#show", as: :correction_token
   resources :corrections, only: [:create]
 
   # Uncached, no database query. Exists so the edge-cached footer form can get a
@@ -329,6 +351,11 @@ Rails.application.routes.draw do
   # email, without either being baked into cacheable HTML.
   get "contact_state", to: "contact_state#show", as: :contact_state
   resources :contact_messages, only: [:create]
+
+  # One global POST for all three domains: it is never cached, and the domain
+  # comes from the host through Current.domain regardless. One route means the
+  # honeypot, both rate limits and the registry check are wired in one place.
+  post "list_submissions", to: "list_submissions#create", as: :list_submissions
 
   # Review writes — global (non-domain-constrained), Turbo Stream, never cached.
   post "reviews", to: "reviews#create", as: :reviews
@@ -341,6 +368,9 @@ Rails.application.routes.draw do
   delete "user_lists/:user_list_id/items/:id",
     to: "user_list_items#destroy",
     as: :user_list_item
+  patch "user_list_items/:id/completion",
+    to: "user_list_items#update_completion",
+    as: :user_list_item_completion
 
   # Type-scoped typeahead for the "add item from list page" search box (02e).
   # Signed-in, never cached; scoped by listable_type (e.g. Music::Album).
@@ -519,6 +549,25 @@ Rails.application.routes.draw do
   end
 
   constraints DomainConstraint.new(Rails.application.config.domains[:books]) do
+    get "my/reading-goals", to: "books/my/reading_goals#index", as: :books_my_reading_goals
+    get "my/reading-goals/new", to: "books/my/reading_goals#new", as: :new_books_my_reading_goal
+    post "my/reading-goals", to: "books/my/reading_goals#create"
+    get "my/reading-goals/:id/edit", to: "books/my/reading_goals#edit", as: :edit_books_my_reading_goal,
+      constraints: {id: /\d+/}
+    patch "my/reading-goals/:id", to: "books/my/reading_goals#update", as: :books_my_reading_goal,
+      constraints: {id: /\d+/}
+    delete "my/reading-goals/:id", to: "books/my/reading_goals#destroy", constraints: {id: /\d+/}
+
+    get "reading_goal_state/:id", to: "books/reading_goal_state#show", as: :books_reading_goal_state,
+      constraints: {id: /\d+/}
+    get "reading_goals", to: redirect("/my/reading-goals", status: 301)
+    get "reading_goals/new", to: redirect("/my/reading-goals/new", status: 301)
+    get "reading_goals/:id/edit", to: redirect("/my/reading-goals/%{id}/edit", status: 301), constraints: {id: /\d+/}
+    get "reading_goals/:id/page/1", to: redirect("/reading_goals/%{id}", status: 301), constraints: {id: /\d+/}
+    get "reading_goals/:id/page/:page", to: "books/reading_goals#show", as: :books_reading_goal_page,
+      constraints: {id: /\d+/, page: /[1-9]\d*/}
+    get "reading_goals/:id", to: "books/reading_goals#show", as: :books_reading_goal, constraints: {id: /\d+/}
+
     # Admin interface for books domain
     namespace :admin, module: "admin/books", as: "admin_books" do
       root to: "dashboard#index"
@@ -711,6 +760,17 @@ Rails.application.routes.draw do
     # Site search. Declared above the legacy collection catch-alls further down
     # so a future collection slug cannot swallow it.
     get "search", to: "books/searches#index", as: :books_search
+
+    # Deliberately NOT inside the (/rc/:ranking_configuration_id) scope, and
+    # constrained to html, for the same reason the corrections routes are:
+    # ListSubmissionsController never calls load_ranking_configuration, so an
+    # rc-prefixed or .json URL would render 200 for any value of that segment,
+    # and every distinct value is another Cloudflare cache key and another full
+    # render at origin. The router rejects them before a controller is involved.
+    get "lists/new", to: "list_submissions#new", as: :new_books_list_submission,
+      constraints: {format: /html/}
+    get "lists/thanks", to: "list_submissions#thanks", as: :books_list_submission_thanks,
+      constraints: {format: /html/}
 
     get "lists", to: "books/lists#index", as: :books_lists
     get "lists/page/:page", to: "books/lists#index", as: :books_lists_page, constraints: {page: /\d+/}
@@ -1055,14 +1115,27 @@ Rails.application.routes.draw do
       defaults: {correctable_type: "Games::Game"}, as: :games_game_correction_thanks,
       constraints: {format: /html/}
 
+    # Deliberately NOT inside the (/rc/:ranking_configuration_id) scope below,
+    # and constrained to html, for the same reason the corrections routes above
+    # are: ListSubmissionsController never calls load_ranking_configuration, so
+    # an rc-prefixed or .json URL would render 200 for any value of that
+    # segment, and every distinct value is another Cloudflare cache key and
+    # another full render at origin. The router rejects them before a
+    # controller is involved.
+    get "lists/new", to: "list_submissions#new", as: :new_games_list_submission,
+      constraints: {format: /html/}
+    get "lists/thanks", to: "list_submissions#thanks", as: :games_list_submission_thanks,
+      constraints: {format: /html/}
+
     # All games routes with optional ranking configuration parameter
     scope "(/rc/:ranking_configuration_id)" do
       get "lists/page/1", to: redirect("/lists", status: 301)
       get "lists/:id/page/1", to: redirect("/lists/%{id}", status: 301), constraints: {id: /\d+/}
       get "lists", to: "games/lists#index", as: :games_lists
       get "lists/page/:page", to: "games/lists#index", as: :games_lists_page, constraints: {page: /\d+/}
-      get "lists/:id", to: "games/lists#show", as: :games_list
-      get "lists/:id/page/:page", to: "games/lists#show", as: :games_list_page, constraints: {page: /\d+/}
+      get "lists/:id", to: "games/lists#show", as: :games_list, constraints: {id: /\d+/}
+      get "lists/:id/page/:page", to: "games/lists#show", as: :games_list_page,
+        constraints: {id: /\d+/, page: /\d+/}
       get "video-games", to: "games/ranked_items#index", as: :video_games
       get "video-games/page/:page", to: "games/ranked_items#index", as: :video_games_page, constraints: {page: /\d+/}
       # Year-filtered games (must come before generic patterns)

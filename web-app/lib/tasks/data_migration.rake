@@ -130,6 +130,20 @@ namespace :data_migration do
     pp Services::BooksMigration::UserListItemMigrator.call
   end
 
+  desc "Migrate legacy reading goals after Books user-list items"
+  task reading_goals: :environment do
+    result = Services::BooksMigration::ReadingGoalMigrator.call
+    pp result
+    abort "reading_goals migration failed: #{result[:error]}" unless result[:success]
+  end
+
+  desc "Verify imported reading goals and report intentional live-projection repairs"
+  task verify_reading_goals: :environment do
+    result = Services::BooksMigration::ReadingGoalVerification.call
+    pp result.data
+    abort "reading_goals verification failed: #{result.errors.join("; ")}" unless result.success?
+  end
+
   desc "Enqueue cover-image import jobs for legacy Book primary_images (reads old R2 via S3 API; needs LEGACY_R2_* env)"
   task book_images: :environment do
     pp Services::BooksMigration::BookImageMigrator.call
@@ -275,6 +289,6 @@ namespace :data_migration do
     :categories, :category_items, :book_attributes, :book_type_categories, :countries,
     :book_countries, :external_links, :lists, :list_items, :ranking_configurations,
     :ranked_lists, :penalties, :list_penalties, :user_lists, :user_list_items,
-    :saved_searches, :reviews, :corrections, :news_posts,
+    :reading_goals, :saved_searches, :reviews, :corrections, :news_posts,
     "user_favorites_lists:rebuild"]
 end

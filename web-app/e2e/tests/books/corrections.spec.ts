@@ -59,7 +59,7 @@ test.describe('Suggest a correction', () => {
   test('an alternate title row can be added and removed', async ({ page }) => {
     await page.goto('/book/war-and-peace/suggest-correction');
 
-    const list = page.locator('[data-corrections--form-target="list"][data-field="alternate_titles"]');
+    const list = page.locator('[data-shared--form-token-target="list"][data-field="alternate_titles"]');
     const before = await list.locator('input').count();
 
     await page.getByRole('button', { name: /^Add alternate title$/ }).click();

@@ -15,11 +15,12 @@ class UserLists::Show::ItemComponent < ViewComponent::Base
   # position is the item's stored slot in the list (drives the "#N" badge);
   # index is its zero-based place on the rendered page (drives cover
   # eager-loading). They move independently once a list spans more than one page.
-  def initialize(item:, view_mode:, position:, index: nil)
+  def initialize(item:, view_mode:, position:, index: nil, completion_editable: false)
     @item = item
     @view_mode = view_mode.to_s
     @position = position
     @index = index
+    @completion_editable = completion_editable
   end
 
   def self.card_capable?(listable_class)
@@ -48,7 +49,7 @@ class UserLists::Show::ItemComponent < ViewComponent::Base
 
   private
 
-  attr_reader :item, :view_mode, :position, :index
+  attr_reader :item, :view_mode, :position, :index, :completion_editable
 
   def listable
     item.listable
@@ -97,6 +98,10 @@ class UserLists::Show::ItemComponent < ViewComponent::Base
 
   def completed_on_badge?
     completed_on_column? && item.completed_on.present?
+  end
+
+  def completion_editable?
+    completion_editable
   end
 
   # Songs get their richer list-item row outside table_view; everything else in

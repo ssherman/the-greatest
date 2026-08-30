@@ -3,10 +3,20 @@ import { test, expect } from '@playwright/test';
 const publicListId = process.env.PLAYWRIGHT_PUBLIC_BOOKS_LIST_ID!;
 
 test.describe('Books My Lists', () => {
-  test('the My Lists nav link is revealed when signed in', async ({ page }) => {
+  test('the My Books desktop group is revealed when signed in and orders personal links', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page.locator('#navbar_my_lists').first()).not.toHaveClass(/hidden/);
+    const myBooks = page.locator('.navbar-center #navbar_my_books');
+    await expect(myBooks).not.toHaveClass(/hidden/);
+    await expect(myBooks.locator('details > summary')).toHaveText('My Books');
+
+    await myBooks.locator('summary').click();
+    await expect(myBooks.getByRole('link')).toHaveText([
+      'Lists',
+      'Reading Goals',
+      'Reviews',
+      'Saved Searches',
+    ]);
   });
 
   test('the dashboard lists the four books defaults', async ({ page }) => {
@@ -48,6 +58,26 @@ test.describe('Books My Lists', () => {
     const response = await page.request.get((await link.getAttribute('href'))!);
     expect(response.status()).toBe(200);
     expect(response.headers()['content-type']).toContain('text/csv');
+  });
+});
+
+test.describe('Books My Lists mobile navigation', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('the My Books drawer group is inline and orders personal links', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#books-nav-drawer-button').click();
+
+    const myBooks = page.locator('#books-nav-drawer-panel #navbar_my_books');
+    await expect(myBooks).not.toHaveClass(/hidden/);
+    await expect(myBooks.getByText('My Books', { exact: true })).toBeVisible();
+    await expect(myBooks.locator('details, summary')).toHaveCount(0);
+    await expect(myBooks.getByRole('link')).toHaveText([
+      'Lists',
+      'Reading Goals',
+      'Reviews',
+      'Saved Searches',
+    ]);
   });
 });
 

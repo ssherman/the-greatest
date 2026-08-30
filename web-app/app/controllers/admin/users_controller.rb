@@ -29,7 +29,13 @@ class Admin::UsersController < Admin::BaseController
   end
 
   def destroy
-    @user.destroy!
+    User.transaction do |transaction|
+      urls = Services::Books::ReadingGoals::DestructionInvalidator.for_user(user: @user)
+      @user.destroy!
+      transaction.after_commit do
+        ::Books::ReadingGoals::PurgeCachedPagesJob.perform_async("books", urls) if urls.any?
+      end
+    end
     redirect_to admin_users_path, notice: "User deleted successfully."
   end
 

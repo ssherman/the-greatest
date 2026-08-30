@@ -1,0 +1,29 @@
+<dialog id="completion-date-dialog"
+        class="modal"
+        aria-labelledby="completion-date-dialog-title"
+        data-user-list-completion-target="dialog"
+        data-action="close->user-list-completion#restoreFocus">
+  <div class="modal-box">
+    <h2 id="completion-date-dialog-title"
+        class="text-lg font-bold"
+        data-user-list-completion-target="title">Edit completion date</h2>
+
+    <%= form_with url: "#", scope: :user_list_item, method: :patch,
+          data: {user_list_completion_target: "form"} do |form| %>
+      <label class="mt-4 block" for="completion-date-input">
+        Completion date
+      </label>
+      <%= form.date_field :completed_on,
+            id: "completion-date-input",
+            class: "input mt-2 w-full",
+            data: {user_list_completion_target: "date"} %>
+
+      <div class="modal-action">
+        <button type="button" class="btn btn-ghost" data-action="user-list-completion#clear">Clear date</button>
+        <button type="button" class="btn btn-ghost" data-action="user-list-completion#cancel">Cancel</button>
+        <%= form.button "Save", class: "btn btn-primary" %>
+      </div>
+    <% end %>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
