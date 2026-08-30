@@ -91,6 +91,15 @@ class RankingConfiguration < ApplicationRecord
   before_save :ensure_only_one_primary_per_type, if: :primary?
 
   # Instance methods
+
+  # The plural noun this configuration ranks, for page copy. Defined per
+  # subclass rather than derived from the class name because "Music::Albums"
+  # would produce "albumses" and because the string is display text, which
+  # belongs on the model.
+  def media_noun_plural
+    raise NotImplementedError, "#{self.class.name} must define #media_noun_plural"
+  end
+
   def default_primary?
     self.class.default_primary&.id == id
   end
