@@ -1,0 +1,49 @@
+<div class="space-y-6">
+  <% groups.each do |group| %>
+    <div>
+      <h3 class="text-lg font-semibold mb-2"><%= group.title %></h3>
+      <p class="leading-relaxed mb-3"><%= intro(group) %></p>
+
+      <details class="rounded-box bg-base-100 border border-base-300 p-4">
+        <summary class="cursor-pointer font-medium">
+          <%= pluralize(group.penalties.size, "adjustment") %>
+        </summary>
+
+        <div class="overflow-x-auto mt-4">
+          <table class="table w-full">
+            <thead>
+              <tr>
+                <th scope="col">Adjustment</th>
+                <th scope="col">What it means</th>
+                <% configurations.each do |configuration| %>
+                  <th scope="col" class="text-right"><%= value_column_heading(configuration) %></th>
+                <% end %>
+              </tr>
+            </thead>
+            <tbody>
+              <% group.penalties.each do |entry| %>
+                <tr>
+                  <th scope="row" class="align-top font-medium whitespace-normal">
+                    <%= entry.penalty.name %>
+                  </th>
+                  <td class="align-top [overflow-wrap:anywhere]">
+                    <%= entry.penalty.description %>
+                  </td>
+                  <% configurations.each do |configuration| %>
+                    <td class="align-top text-right whitespace-nowrap">
+                      <% if entry.values[configuration] %>
+                        &minus;<%= entry.values[configuration] %>%
+                      <% else %>
+                        &mdash;
+                      <% end %>
+                    </td>
+                  <% end %>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+  <% end %>
+</div>

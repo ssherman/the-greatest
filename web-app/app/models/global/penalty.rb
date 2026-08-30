@@ -3,6 +3,7 @@
 # Table name: penalties
 #
 #  id           :bigint           not null, primary key
+#  category     :integer
 #  description  :text
 #  dynamic_type :integer
 #  name         :string           not null
@@ -13,8 +14,9 @@
 #
 # Indexes
 #
-#  index_penalties_on_type     (type)
-#  index_penalties_on_user_id  (user_id)
+#  index_penalties_on_category  (category)
+#  index_penalties_on_type      (type)
+#  index_penalties_on_user_id   (user_id)
 #
 # Foreign Keys
 #

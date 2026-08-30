@@ -3,6 +3,7 @@
 # Table name: penalties
 #
 #  id           :bigint           not null, primary key
+#  category     :integer
 #  description  :text
 #  dynamic_type :integer
 #  name         :string           not null
@@ -13,8 +14,9 @@
 #
 # Indexes
 #
-#  index_penalties_on_type     (type)
-#  index_penalties_on_user_id  (user_id)
+#  index_penalties_on_category  (category)
+#  index_penalties_on_type      (type)
+#  index_penalties_on_user_id   (user_id)
 #
 # Foreign Keys
 #
@@ -45,6 +47,31 @@ class Penalty < ApplicationRecord
     creator_specific: 8
   }, allow_nil: true
 
+  # How this penalty is grouped on the public /rankings page. Nullable: an
+  # uncategorized penalty renders under "Other" rather than vanishing.
+  enum :category, {
+    voter_expertise: 0,
+    voter_participation: 1,
+    list_time_scope: 2,
+    list_subject_scope: 3,
+    list_integrity: 4
+  }, allow_nil: true
+
+  # Section headings for the public page. These are reader-facing questions
+  # rather than schema names -- "Who voted" lands where "voter_expertise" does
+  # not. Ordered as the page renders them.
+  CATEGORY_TITLES = {
+    "voter_expertise" => "Who voted",
+    "voter_participation" => "How many voted",
+    "list_time_scope" => "How much time the list covers",
+    "list_subject_scope" => "How narrow the list's subject is",
+    "list_integrity" => "How the list was made"
+  }.freeze
+
+  def self.category_title(category)
+    CATEGORY_TITLES.fetch(category.to_s, "Other")
+  end
+
   # Validations
   validates :name, presence: true
   validates :type, presence: true
@@ -53,6 +80,7 @@ class Penalty < ApplicationRecord
   scope :dynamic, -> { where.not(dynamic_type: nil) }
   scope :static, -> { where(dynamic_type: nil) }
   scope :by_dynamic_type, ->(dynamic_type) { where(dynamic_type: dynamic_type) }
+  scope :by_category, ->(category) { where(category: category) }
 
   # Public Methods
   def dynamic?

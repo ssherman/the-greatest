@@ -1,0 +1,39 @@
+<p class="mb-4">
+  This is computed from the <%= media_nouns %> configuration. Being named on a
+  list is worth that list's full weight. Where something places <em>on</em>
+  that list adds a bonus on top, but a much smaller one than most people
+  expect.
+</p>
+
+<div class="overflow-x-auto mb-4">
+  <table class="table w-full">
+    <thead>
+      <tr>
+        <th scope="col">Position on a <%= curve.list_length %>-entry list</th>
+        <th scope="col" class="text-right">Score</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <th scope="row">#1</th>
+        <td class="text-right"><%= curve.top_score %></td>
+      </tr>
+      <tr>
+        <th scope="row">#<%= curve.list_length / 2 %></th>
+        <td class="text-right"><%= curve.middle_score %></td>
+      </tr>
+      <tr>
+        <th scope="row">#<%= curve.list_length %></th>
+        <td class="text-right"><%= curve.bottom_score %></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<p>
+  Topping a list is worth <strong><%= curve.ratio %>&times;</strong> what placing
+  last on it is. That ratio barely moves whether the list holds ten
+  entries or five hundred. This is deliberate. Agreement between many lists is a
+  stronger signal than one editor's ordering, so <%= media_nouns %> that many
+  good lists name will outrank <%= media_nouns %> that top a single list.
+</p>

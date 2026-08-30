@@ -46,6 +46,6 @@
 #
 module Books
   class RankingConfiguration < ::RankingConfiguration
-    # Books-specific logic can be added here
+    def media_noun_plural = "books"
   end
 end

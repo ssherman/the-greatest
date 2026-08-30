@@ -66,6 +66,6 @@ class Admin::PenaltiesController < Admin::BaseController
   end
 
   def penalty_params
-    params.require(:penalty).permit(:name, :description, :dynamic_type)
+    params.require(:penalty).permit(:name, :description, :dynamic_type, :category)
   end
 end

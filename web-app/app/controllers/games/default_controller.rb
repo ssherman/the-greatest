@@ -8,16 +8,16 @@ class Games::DefaultController < ApplicationController
   def index
   end
 
+  EXAMPLE_LIST_ID = 11_376
+
   def rankings
-    @ranking_configuration = Games::RankingConfiguration.default_primary
+    result = Services::RankingConfiguration::ExplainerData.call(
+      configurations: [Games::RankingConfiguration.default_primary],
+      example_list_id: EXAMPLE_LIST_ID
+    )
 
-    penalties = @ranking_configuration&.penalties&.to_a || []
+    raise ActiveRecord::RecordNotFound, result.errors.join(", ") unless result.success?
 
-    @static_penalties = penalties.select(&:static?)
-    @dynamic_penalties = penalties.select(&:dynamic?)
-
-    @active_lists_count = @ranking_configuration&.ranked_lists&.count || 0
-    @ranked_items_count = @ranking_configuration&.ranked_items&.where&.not(rank: nil)&.count || 0
-    @median_list_count = List.median_list_count(type: "Games::List")
+    @data = result.data
   end
 end

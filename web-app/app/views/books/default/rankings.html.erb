@@ -1,0 +1,6 @@
+<%
+  content_for :page_title, "How Our Rankings Work | The Greatest Books"
+  content_for :meta_description, "How we rank the greatest books: hundreds of weighted lists, what lowers a list's weight, and why the result still skews western."
+%>
+
+<%= render Rankings::PageComponent.new(data: @data, domain: :books) %>

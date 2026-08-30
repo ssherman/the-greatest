@@ -3,6 +3,7 @@
 # Table name: penalties
 #
 #  id           :bigint           not null, primary key
+#  category     :integer
 #  description  :text
 #  dynamic_type :integer
 #  name         :string           not null
@@ -13,8 +14,9 @@
 #
 # Indexes
 #
-#  index_penalties_on_type     (type)
-#  index_penalties_on_user_id  (user_id)
+#  index_penalties_on_category  (category)
+#  index_penalties_on_type      (type)
+#  index_penalties_on_user_id   (user_id)
 #
 # Foreign Keys
 #
@@ -181,5 +183,43 @@ class PenaltyTest < ActiveSupport::TestCase
 
     music_penalties = Music::Penalty.all
     assert music_penalties.all? { |p| p.instance_of?(Music::Penalty) }
+  end
+
+  test "category enum accepts the five groups" do
+    penalty = penalties(:global_penalty)
+    Penalty.categories.each_key do |category|
+      penalty.category = category
+      assert penalty.valid?, "#{category} should be a valid category"
+    end
+  end
+
+  test "category is optional" do
+    penalty = penalties(:global_penalty)
+    penalty.category = nil
+    assert penalty.valid?
+    assert_nil penalty.category
+  end
+
+  test "by_category scope filters to one group" do
+    penalties(:global_penalty).update!(category: :list_time_scope)
+    penalties(:cross_media_penalty).update!(category: :voter_expertise)
+
+    results = Penalty.by_category(:list_time_scope)
+
+    assert_includes results, penalties(:global_penalty)
+    assert_not_includes results, penalties(:cross_media_penalty)
+  end
+
+  test "category_title returns a human heading for each group" do
+    assert_equal "Who voted", Penalty.category_title("voter_expertise")
+    assert_equal "How many voted", Penalty.category_title("voter_participation")
+    assert_equal "How much time the list covers", Penalty.category_title("list_time_scope")
+    assert_equal "How narrow the list's subject is", Penalty.category_title("list_subject_scope")
+    assert_equal "How the list was made", Penalty.category_title("list_integrity")
+  end
+
+  test "category_title falls back to Other for an unknown or nil category" do
+    assert_equal "Other", Penalty.category_title(nil)
+    assert_equal "Other", Penalty.category_title("something_else")
   end
 end

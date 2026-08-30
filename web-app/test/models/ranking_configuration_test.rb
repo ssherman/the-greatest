@@ -388,6 +388,19 @@ class RankingConfigurationTest < ActiveSupport::TestCase
     assert_same calculator1, calculator2, "Should cache the calculator instance"
   end
 
+  test "weight_floor mirrors the calculator's floor, not the raw stored minimum" do
+    config = ranking_configurations(:books_global)
+
+    config.min_list_weight = -50 # unreachable: total penalty caps at 100%, so weight never drops below 0
+    assert_equal 0, config.weight_floor
+
+    config.min_list_weight = 1 # reachable: music and games carry this, and a fully-penalised list lands here
+    assert_equal 1, config.weight_floor
+
+    config.min_list_weight = 0
+    assert_equal 0, config.weight_floor
+  end
+
   test "median_voter_count calculates correctly" do
     config = ranking_configurations(:music_albums_global)
 

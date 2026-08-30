@@ -47,7 +47,7 @@
 module Music
   module Songs
     class RankingConfiguration < ::RankingConfiguration
-      # Music Songs-specific logic can be added here
+      def media_noun_plural = "songs"
     end
   end
 end

@@ -1,0 +1,69 @@
+<div class="overflow-x-auto">
+  <table class="table w-full">
+    <thead>
+      <tr>
+        <th scope="col">Setting</th>
+        <% configurations.each do |configuration| %>
+          <th scope="col"><%= configuration.media_noun_plural.capitalize %></th>
+        <% end %>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <th scope="row">Configuration</th>
+        <% configurations.each do |configuration| %>
+          <td><%= configuration.name %></td>
+        <% end %>
+      </tr>
+      <tr>
+        <th scope="row">Starting weight</th>
+        <% configurations.each do %>
+          <td>100</td>
+        <% end %>
+      </tr>
+      <tr>
+        <th scope="row">Lowest possible weight</th>
+        <% configurations.each do |configuration| %>
+          <td><%= weight_floor(configuration) %></td>
+        <% end %>
+      </tr>
+      <tr>
+        <th scope="row">Position bonus curve</th>
+        <% configurations.each do |configuration| %>
+          <td><%= configuration.exponent.to_f %></td>
+        <% end %>
+      </tr>
+      <tr>
+        <th scope="row">Bonus pool</th>
+        <% configurations.each do |configuration| %>
+          <td><%= configuration.bonus_pool_percentage.to_f %></td>
+        <% end %>
+      </tr>
+      <tr>
+        <th scope="row">Typical list length</th>
+        <% configurations.each do |configuration| %>
+          <td><%= number_with_delimiter(typical_list_length(configuration)) %></td>
+        <% end %>
+      </tr>
+      <tr>
+        <th scope="row">Typical voters per list</th>
+        <% configurations.each do |configuration| %>
+          <td><%= typical_voter_count(configuration) || "not recorded" %></td>
+        <% end %>
+      </tr>
+      <tr>
+        <th scope="row">Recency adjustment</th>
+        <% configurations.each do |configuration| %>
+          <td>
+            <% if configuration.apply_list_dates_penalty? %>
+              up to <%= configuration.max_list_dates_penalty_percentage %>%,
+              fading out over <%= configuration.max_list_dates_penalty_age %> years
+            <% else %>
+              off
+            <% end %>
+          </td>
+        <% end %>
+      </tr>
+    </tbody>
+  </table>
+</div>

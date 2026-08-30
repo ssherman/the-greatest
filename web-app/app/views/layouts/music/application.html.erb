@@ -47,7 +47,8 @@
     gtag('config', 'G-ZMR7L9F20R');
   </script>
 
-  <body data-controller="user-list-state membership-state"
+  <body data-controller="user-list-state membership-state contact--form"
+        data-contact--form-state-url-value="<%= contact_state_path %>"
         data-domain="<%= Current.domain %>"
         data-signed-in="<%= signed_in? %>">
     <div class="navbar bg-base-200">

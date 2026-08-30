@@ -761,6 +761,8 @@ Rails.application.routes.draw do
     # so a future collection slug cannot swallow it.
     get "search", to: "books/searches#index", as: :books_search
 
+    get "rankings", to: "books/default#rankings", as: :books_rankings
+
     # Deliberately NOT inside the (/rc/:ranking_configuration_id) scope, and
     # constrained to html, for the same reason the corrections routes are:
     # ListSubmissionsController never calls load_ranking_configuration, so an

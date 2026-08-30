@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_29_171537) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_30_134311) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -857,6 +857,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_29_171537) do
   end
 
   create_table "penalties", force: :cascade do |t|
+    t.integer "category"
     t.datetime "created_at", null: false
     t.text "description"
     t.integer "dynamic_type"
@@ -864,6 +865,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_29_171537) do
     t.string "type", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id"
+    t.index ["category"], name: "index_penalties_on_category"
     t.index ["type"], name: "index_penalties_on_type"
     t.index ["user_id"], name: "index_penalties_on_user_id"
   end

@@ -26,19 +26,19 @@ class Music::DefaultController < ApplicationController
     end
   end
 
+  EXAMPLE_LIST_ID = 10_015
+
   def rankings
-    @album_rc = Music::Albums::RankingConfiguration.default_primary
-    @song_rc = Music::Songs::RankingConfiguration.default_primary
+    result = Services::RankingConfiguration::ExplainerData.call(
+      configurations: [
+        Music::Albums::RankingConfiguration.default_primary,
+        Music::Songs::RankingConfiguration.default_primary
+      ],
+      example_list_id: EXAMPLE_LIST_ID
+    )
 
-    album_penalties = @album_rc&.penalties&.to_a || []
-    song_penalties = @song_rc&.penalties&.to_a || []
-    all_penalties = (album_penalties + song_penalties).uniq(&:name)
+    raise ActiveRecord::RecordNotFound, result.errors.join(", ") unless result.success?
 
-    @static_penalties = all_penalties.select(&:static?)
-    @dynamic_penalties = all_penalties.select(&:dynamic?)
-
-    @active_lists_count = (@album_rc&.ranked_lists&.count || 0) + (@song_rc&.ranked_lists&.count || 0)
-    @ranked_items_count = (@album_rc&.ranked_items&.where&.not(rank: nil)&.count || 0) + (@song_rc&.ranked_items&.where&.not(rank: nil)&.count || 0)
-    @median_list_count = List.median_list_count(type: "Music::Albums::List")
+    @data = result.data
   end
 end

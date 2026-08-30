@@ -6,9 +6,11 @@
     Links are `link`, not `link link-hover`. daisyUI 5 gives .footer no link
     styling of its own, so link-hover computes identical to plain text until the
     pointer is over it -- an affordance a keyboard or touch user never sees. %>
-<footer class="<%= background %> text-base-content"
-        data-controller="contact--form"
-        data-contact--form-state-url-value="<%= helpers.contact_state_path %>">
+<%# data-controller="contact--form" lives on <body> (see the layouts), not
+    here -- <main> is a sibling of this footer, not a descendant, so a trigger
+    on the page body needs the controller scoped above both. The dialog markup
+    stays in this component; only the controller root moved. %>
+<footer class="<%= background %> text-base-content">
   <div class="footer sm:footer-horizontal container mx-auto p-10">
     <nav aria-label="Browse">
       <h2 class="footer-title">Browse</h2>

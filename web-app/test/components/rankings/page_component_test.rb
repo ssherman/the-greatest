@@ -1,0 +1,189 @@
+require "test_helper"
+
+module Rankings
+  class PageComponentTest < ViewComponent::TestCase
+    setup do
+      @data = Services::RankingConfiguration::ExplainerData.call(
+        configurations: [ranking_configurations(:books_global)]
+      ).data
+    end
+
+    test "renders the main heading" do
+      render_inline(PageComponent.new(data: @data, domain: :books))
+
+      assert_selector "h1", text: "How Our Rankings Work"
+    end
+
+    test "links to both open source repositories" do
+      render_inline(PageComponent.new(data: @data, domain: :books))
+
+      assert_selector "a[href='https://github.com/ssherman/weighted_list_rank']"
+      assert_selector "a[href='https://github.com/ssherman/the-greatest/']"
+    end
+
+    test "describes the recency adjustment as hitting recent items, not old ones" do
+      render_inline(PageComponent.new(data: @data, domain: :books))
+
+      assert_text(/same year/i)
+      assert_no_text(/classic .{0,40}unfairly penalized/i)
+    end
+
+    test "books renders the western tilt section" do
+      render_inline(PageComponent.new(data: @data, domain: :books))
+
+      assert_text(/western/i)
+      assert_selector "a[href='/global-canon']"
+    end
+
+    test "music does not render the western tilt section" do
+      music = Services::RankingConfiguration::ExplainerData.call(
+        configurations: [ranking_configurations(:music_albums_global)]
+      ).data
+
+      render_inline(PageComponent.new(data: music, domain: :music))
+
+      assert_no_selector "a[href='/global-canon']"
+    end
+
+    # Regression: SiteContact::MAILTO was deleted by the contact-form merge,
+    # and this page referenced it twice. Both references must be gone for
+    # good, on every domain the page renders on -- not just books.
+    test "renders no mailto link anywhere on the page" do
+      render_inline(PageComponent.new(data: @data, domain: :books))
+
+      assert_no_selector "a[href^='mailto:']"
+    end
+
+    test "the western tilt section's lists ask links to the books list submission form, not email" do
+      render_inline(PageComponent.new(data: @data, domain: :books))
+
+      assert_selector "a[href='/lists/new']", text: "send it to us"
+    end
+
+    test "the closing paragraph's 'get in touch' opens the contact modal rather than emailing" do
+      render_inline(PageComponent.new(data: @data, domain: :books))
+
+      assert_selector "button[data-action='contact--form#open']", text: "get in touch"
+    end
+
+    test "music's 'get in touch' also opens the contact modal" do
+      music = Services::RankingConfiguration::ExplainerData.call(
+        configurations: [ranking_configurations(:music_albums_global)]
+      ).data
+
+      render_inline(PageComponent.new(data: music, domain: :music))
+
+      assert_selector "button[data-action='contact--form#open']", text: "get in touch"
+    end
+
+    test "games's 'get in touch' also opens the contact modal" do
+      games = Services::RankingConfiguration::ExplainerData.call(
+        configurations: [ranking_configurations(:games_global)]
+      ).data
+
+      render_inline(PageComponent.new(data: games, domain: :games))
+
+      assert_selector "button[data-action='contact--form#open']", text: "get in touch"
+    end
+
+    test "states the weight floor as the configuration's actual reachable minimum" do
+      config = ranking_configurations(:books_global)
+      config.update!(min_list_weight: -50)
+      data = Services::RankingConfiguration::ExplainerData.call(configurations: [config]).data
+
+      render_inline(PageComponent.new(data: data, domain: :books))
+
+      assert_text(/Weight never falls below 0/)
+      assert_no_text "-50"
+    end
+
+    test "states a positive weight floor when the configuration's minimum is reachable" do
+      # Music and games carry min_list_weight: 1, and unlike books' inert -50
+      # that floor IS reachable -- a fully-penalised list lands on 1, not 0.
+      config = ranking_configurations(:music_albums_global)
+      config.update!(min_list_weight: 1)
+      data = Services::RankingConfiguration::ExplainerData.call(configurations: [config]).data
+
+      render_inline(PageComponent.new(data: data, domain: :music))
+
+      assert_text(/Weight never falls below 1/)
+    end
+
+    test "renders 'Adjustments we make automatically' when dynamic penalties are attached" do
+      render_inline(PageComponent.new(data: @data, domain: :books))
+
+      assert_selector "h2", text: "Adjustments we make automatically"
+      # books_global's fixtures attach two dynamic penalties: dynamic_penalty and books_penalty.
+      assert_text penalties(:dynamic_penalty).name
+    end
+
+    test "omits 'Adjustments we make automatically' when nothing attached is dynamic" do
+      config = ranking_configurations(:books_global)
+      PenaltyApplication.where(ranking_configuration: config)
+        .joins(:penalty).where.not(penalties: {dynamic_type: nil}).destroy_all
+      data = Services::RankingConfiguration::ExplainerData.call(configurations: [config]).data
+
+      render_inline(PageComponent.new(data: data, domain: :books))
+
+      assert_no_selector "h2", text: "Adjustments we make automatically"
+    end
+
+    test "names the specific configuration in the score curve section rather than every media type on the page" do
+      # music_albums_global is the primary configuration here, so the score
+      # curve is computed from albums alone -- the intro sentence naming the
+      # table must say "albums", not the page's broader "albums and songs"
+      # media_nouns (data.media_nouns), even though that phrase legitimately
+      # appears elsewhere on this same page (e.g. the opening summary).
+      music = Services::RankingConfiguration::ExplainerData.call(
+        configurations: [
+          ranking_configurations(:music_albums_global),
+          ranking_configurations(:music_songs_global)
+        ]
+      ).data
+      assert_equal "albums and songs", music.media_nouns # sanity: the page-wide noun really is plural here
+
+      render_inline(PageComponent.new(data: music, domain: :music))
+
+      assert_text "This is computed from the albums configuration."
+      assert_no_text "This is computed from the albums and songs configuration."
+    end
+
+    test "renders the live stat counts" do
+      # Under the shared fixtures, active_lists_count is 0 for books_global (the
+      # books_ranked_list fixture's list is not active-status), which would make
+      # assert_text number_with_delimiter(0) a vacuous substring match against
+      # any "0" on the page. Build enough ACTIVE ranked lists here that the
+      # count is a distinctive, non-zero number instead -- following the same
+      # approach explainer_data_test.rb uses for the same underlying problem.
+      create_active_ranked_lists(count: 11)
+
+      data = Services::RankingConfiguration::ExplainerData.call(
+        configurations: [ranking_configurations(:books_global)]
+      ).data
+      assert_equal 11, data.active_lists_count
+
+      render_inline(PageComponent.new(data: data, domain: :books))
+
+      # ViewComponent::TestCase does not mix in ActionView's number helpers, so
+      # number_with_delimiter (as used in the component template) is not
+      # available here; ActiveSupport::NumberHelper is the same formatting
+      # logic without the view context dependency.
+      #
+      # Scoped to .stat-value rather than a bare assert_text: the same count
+      # is also echoed in the "consensus" bullet and (on books) the western-tilt
+      # prose, so an unscoped assert_text stays green even with the stat tile
+      # deleted -- it would just be matching one of those other occurrences.
+      formatted = ActiveSupport::NumberHelper.number_to_delimited(data.active_lists_count)
+      assert_selector ".stat-value", text: formatted, exact_text: true
+    end
+
+    private
+
+    def create_active_ranked_lists(count:)
+      count.times do |n|
+        list = ::Books::List.create!(name: "Stat Count Padding List #{n}", status: :active)
+        ::RankedList.create!(list: list, ranking_configuration: ranking_configurations(:books_global), weight: 50)
+      end
+    end
+  end
+end

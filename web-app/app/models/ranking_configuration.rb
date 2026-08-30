@@ -91,6 +91,15 @@ class RankingConfiguration < ApplicationRecord
   before_save :ensure_only_one_primary_per_type, if: :primary?
 
   # Instance methods
+
+  # The plural noun this configuration ranks, for page copy. Defined per
+  # subclass rather than derived from the class name because "Music::Albums"
+  # would produce "albumses" and because the string is display text, which
+  # belongs on the model.
+  def media_noun_plural
+    raise NotImplementedError, "#{self.class.name} must define #media_noun_plural"
+  end
+
   def default_primary?
     self.class.default_primary&.id == id
   end
@@ -153,6 +162,16 @@ class RankingConfiguration < ApplicationRecord
     else
       raise "Unknown ranking configuration type: #{type}"
     end
+  end
+
+  # The lowest weight a list on this configuration can actually land on.
+  # min_list_weight is a stored setting and can be negative (books carries
+  # -50), but WeightCalculatorV1#build_final_calculation caps total penalty at
+  # 100% before flooring, so weight_after_penalty never drops below 0 --
+  # making any negative min_list_weight unreachable. Mirrors that floor rather
+  # than the raw column so callers never state an impossible minimum.
+  def weight_floor
+    [min_list_weight, 0].max
   end
 
   def median_voter_count

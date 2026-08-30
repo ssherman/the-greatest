@@ -46,6 +46,6 @@
 #
 module Games
   class RankingConfiguration < ::RankingConfiguration
-    # Games-specific logic can be added here
+    def media_noun_plural = "games"
   end
 end

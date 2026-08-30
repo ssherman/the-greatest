@@ -1,0 +1,43 @@
+<div class="rounded-box bg-base-100 border border-base-300 p-4 md:p-6">
+  <p class="mb-4">
+    Take <strong><%= example.list.name %></strong>, a list of
+    <%= number_with_delimiter(example.item_count) %> entries. Every list starts at
+    <strong><%= base_weight %></strong>. These adjustments applied:
+  </p>
+
+  <div class="overflow-x-auto">
+    <table class="table w-full">
+      <tbody>
+        <% example.penalties.each do |penalty| %>
+          <tr>
+            <th scope="row" class="font-medium whitespace-normal [overflow-wrap:anywhere]">
+              <%= penalty[:name] %>
+            </th>
+            <td class="text-right whitespace-nowrap">
+              &minus;<%= penalty[:value].to_f.round(1) %>%
+            </td>
+          </tr>
+        <% end %>
+        <tr>
+          <th scope="row" class="font-semibold">Total</th>
+          <td class="text-right font-semibold whitespace-nowrap">
+            &minus;<%= total_before_bonus %>%
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <% if quality_bonus_applied? %>
+    <p class="mt-4">
+      This is a high-quality source, so its total is cut by a third, from
+      <strong><%= total_before_bonus %>%</strong> to
+      <strong><%= total_after_bonus %>%</strong>.
+    </p>
+  <% end %>
+
+  <p class="mt-4">
+    That leaves it a weight of <strong><%= example.weight %></strong> out of
+    <%= base_weight %>. Every entry on this list starts from that weight.
+  </p>
+</div>
