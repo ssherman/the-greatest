@@ -1,0 +1,104 @@
+# == Schema Information
+#
+# Table name: books_reading_goals
+#
+#  id           :bigint           not null, primary key
+#  description  :text
+#  ends_on      :date             not null
+#  name         :string           not null
+#  public       :boolean          default(FALSE), not null
+#  starts_on    :date             not null
+#  target_count :integer          not null
+#  created_at   :datetime         not null
+#  updated_at   :datetime         not null
+#  user_id      :bigint           not null
+#
+# Indexes
+#
+#  index_books_reading_goals_for_public_date_lookup  (user_id,public,starts_on,ends_on)
+#  index_books_reading_goals_on_user_id              (user_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (user_id => users.id)
+#
+active_ending_soon:
+  id: 1
+  user: regular_user
+  name: Finish Summer Reading
+  target_count: 5
+  starts_on: 2026-08-01
+  ends_on: 2026-08-26
+  public: false
+
+active_ending_later:
+  id: 2
+  user: regular_user
+  name: August Classics
+  target_count: 3
+  starts_on: 2026-08-26
+  ends_on: 2026-08-31
+  public: false
+
+upcoming:
+  id: 3
+  user: regular_user
+  name: Fall Reading List
+  target_count: 10
+  starts_on: 2026-09-01
+  ends_on: 2026-11-30
+  public: false
+
+finished:
+  id: 4
+  user: regular_user
+  name: July Reading List
+  target_count: 4
+  starts_on: 2026-07-01
+  ends_on: 2026-07-31
+  public: false
+
+private_goal:
+  id: 5
+  user: regular_user
+  name: Private Winter Reading
+  target_count: 2
+  starts_on: 2026-12-01
+  ends_on: 2026-12-31
+  public: false
+
+public_goal_other_user:
+  id: 6
+  user: admin_user
+  name: Community Book Club
+  target_count: 6
+  starts_on: 2027-01-01
+  ends_on: 2027-03-31
+  public: true
+
+active_ending_later_same_day:
+  id: 7
+  user: regular_user
+  name: August Mysteries
+  target_count: 2
+  starts_on: 2026-08-20
+  ends_on: 2026-08-31
+  public: false
+
+upcoming_same_day:
+  id: 8
+  user: regular_user
+  name: September Poetry
+  target_count: 3
+  starts_on: 2026-09-01
+  ends_on: 2026-09-30
+  public: false
+
+finished_same_day:
+  id: 9
+  user: regular_user
+  name: July Short Stories
+  target_count: 2
+  starts_on: 2026-07-15
+  ends_on: 2026-07-31
+  public: false

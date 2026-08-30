@@ -88,7 +88,8 @@ class SavedSearchesControllerTest < ActionDispatch::IntegrationTest
     get saved_searches_path
 
     assert_includes response.body, 'data-theme="books"'
-    assert_includes response.body, 'id="navbar_my_searches"'
+    assert_includes response.body, 'id="navbar_my_books"'
+    refute_includes response.body, 'id="navbar_my_lists"'
   end
 
   test "no link on the index is trapped in a frame" do

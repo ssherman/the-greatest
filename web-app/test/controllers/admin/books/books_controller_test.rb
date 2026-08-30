@@ -203,6 +203,66 @@ module Admin
         assert_redirected_to admin_books_books_path
       end
 
+      test "destroy purges every cached page of public goals that counted the book" do
+        completed_on = Date.new(2026, 8, 29)
+        goal = ::Books::ReadingGoal.create!(
+          user: @regular_user,
+          name: "Deletion goal",
+          target_count: 12,
+          starts_on: completed_on,
+          ends_on: completed_on,
+          public: true
+        )
+        read_list = user_lists(:regular_user_books_read)
+        book = ::Books::Book.create!(title: "Counted book", book_kind: "standalone")
+        read_list.user_list_items.create!(listable: book, completed_on: completed_on)
+        24.times do |index|
+          counted_book = ::Books::Book.create!(title: "Goal page book #{index}", book_kind: "standalone")
+          read_list.user_list_items.create!(listable: counted_book, completed_on: completed_on)
+        end
+        expected_urls = [
+          "https://#{Rails.application.config.domains[:books]}/reading_goals/#{goal.id}",
+          "https://#{Rails.application.config.domains[:books]}/reading_goals/#{goal.id}/page/2"
+        ]
+        ::Books::ReadingGoals::PurgeCachedPagesJob.clear
+        sign_in_as(@admin_user, stub_auth: true)
+
+        Sidekiq::Testing.fake! do
+          delete admin_books_book_path(book)
+
+          assert_equal [["books", expected_urls]],
+            ::Books::ReadingGoals::PurgeCachedPagesJob.jobs.map { |job| job.fetch("args") }
+        end
+      end
+
+      test "destroy does not enqueue a goal purge before its transaction commits" do
+        completed_on = Date.new(2026, 8, 29)
+        book = ::Books::Book.create!(title: "Rollback counted book", book_kind: "standalone")
+        user_lists(:regular_user_books_read).user_list_items.create!(listable: book, completed_on: completed_on)
+        ::Books::ReadingGoal.create!(
+          user: @regular_user,
+          name: "Rollback deletion goal",
+          target_count: 12,
+          starts_on: completed_on,
+          ends_on: completed_on,
+          public: true
+        )
+        ::Books::ReadingGoals::PurgeCachedPagesJob.clear
+        sign_in_as(@admin_user, stub_auth: true)
+
+        Sidekiq::Testing.fake! do
+          ::Books::Book.transaction(requires_new: true) do
+            delete admin_books_book_path(book)
+
+            assert_empty ::Books::ReadingGoals::PurgeCachedPagesJob.jobs
+            raise ActiveRecord::Rollback
+          end
+
+          assert_empty ::Books::ReadingGoals::PurgeCachedPagesJob.jobs
+          assert ::Books::Book.exists?(book.id)
+        end
+      end
+
       test "destroy is forbidden for a regular user" do
         sign_in_as(@regular_user, stub_auth: true)
         assert_no_difference("::Books::Book.count") do

@@ -14,6 +14,16 @@
           <% if item.completed_on.present? %>
             <span class="badge badge-ghost badge-sm"><%= item.completed_on.to_fs(:long) %></span>
           <% end %>
+          <% if completion_editable? %>
+            <button type="button"
+                    class="btn btn-ghost btn-xs mt-1"
+                    data-action="user-list-completion#open"
+                    data-item-id="<%= item.id %>"
+                    data-item-title="<%= title %>"
+                    data-completed-on="<%= item.completed_on&.iso8601 %>">
+              Edit completion date for <%= title %>
+            </button>
+          <% end %>
         </td>
       <% end %>
       <td class="text-right" data-listable-type="<%= listable.class.name %>" data-listable-id="<%= listable.id %>">
@@ -22,7 +32,21 @@
     </tr>
   <% end %>
 <% elsif view_mode == "grid_view" %>
-  <%= render listable_card %>
+  <% if completion_editable? %>
+    <div class="flex flex-col gap-2">
+      <%= render listable_card %>
+      <button type="button"
+              class="btn btn-ghost btn-sm self-start"
+              data-action="user-list-completion#open"
+              data-item-id="<%= item.id %>"
+              data-item-title="<%= title %>"
+              data-completed-on="<%= item.completed_on&.iso8601 %>">
+        Edit completion date for <%= title %>
+      </button>
+    </div>
+  <% else %>
+    <%= render listable_card %>
+  <% end %>
 <% else %>
   <%# List ("default") view: number + title-by heading, thumbnail, description. %>
   <div class="flex flex-col gap-2 border-b border-base-300 pb-6"
@@ -59,6 +83,17 @@
             · <span class="badge badge-ghost badge-sm">Completed <%= item.completed_on.to_fs(:long) %></span>
           <% end %>
         </p>
+
+        <% if completion_editable? %>
+          <button type="button"
+                  class="btn btn-ghost btn-sm mt-2"
+                  data-action="user-list-completion#open"
+                  data-item-id="<%= item.id %>"
+                  data-item-title="<%= title %>"
+                  data-completed-on="<%= item.completed_on&.iso8601 %>">
+            Edit completion date for <%= title %>
+          </button>
+        <% end %>
 
         <div class="mt-3">
           <%= render UserLists::CardWidgetComponent.new(listable: listable) %>
