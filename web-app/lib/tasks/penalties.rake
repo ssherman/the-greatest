@@ -5,7 +5,7 @@ module Penalties
   #
   # Keyed by id, not name: names are long, editable in admin, and several differ
   # only in a trailing clause. Descriptions are written for a site visitor AND
-  # for whoever is tagging a list in admin -- one text serves both, which is why
+  # for whoever is tagging a list in admin. One text serves both, which is why
   # there is no separate public_description column.
   #
   # Each entry also carries the id's expected `name`, taken verbatim from the
@@ -20,7 +20,7 @@ module Penalties
             description: "Most of the people who voted live in one country, so the list reflects one nation's taste rather than a broad readership."},
       9 => {name: "Voters: diversity of voters is very low",
             category: :voter_expertise,
-            description: "The voting panel was narrow -- similar backgrounds, similar training, or similar taste -- so the result reflects a small slice of the audience."},
+            description: "The voting panel was narrow, drawing from similar backgrounds, similar training, or similar taste, so the result reflects a small slice of the audience."},
       10 => {name: "Voters: not critics, authors, or experts",
              category: :voter_expertise,
              description: "Voted on by the general public rather than critics, experts or scholars. Popular opinion is worth something, but it is not expert judgement."},
@@ -43,7 +43,7 @@ module Penalties
              description: "We could not find out who voted. Named voters can be held to their choices; anonymous ones cannot."},
       13 => {name: "Voters: Voter Count",
              category: :voter_participation,
-             description: "Applied automatically when fewer people voted than on a typical list. The fewer the voters, the larger the reduction -- a poll of five is far easier to skew than a poll of five hundred."},
+             description: "Applied automatically when fewer people voted than on a typical list. The fewer the voters, the larger the reduction. A poll of five is far easier to skew than a poll of five hundred."},
       14 => {name: "Voters: Unknown Count",
              category: :voter_participation,
              description: "The list does not say how many people voted, so we cannot tell whether it reflects a crowd or one person's opinion."},
@@ -69,7 +69,7 @@ module Penalties
              description: "Confined to roughly a century, so anything published outside it was never eligible."},
       33 => {name: "List: only covers 5 years",
              category: :list_time_scope,
-             description: "Confined to roughly five years of publishing -- a very narrow slice of what exists."},
+             description: "Confined to roughly five years of publishing, a very narrow slice of what exists."},
       35 => {name: "List: only covers 75 years",
              category: :list_time_scope,
              description: "Confined to roughly a seventy-five-year window, so anything published outside it was never eligible."},
@@ -89,10 +89,10 @@ module Penalties
             description: "Restricted to one language, so work in every other language was never eligible."},
       7 => {name: "List: only covers items with a weird criteria",
             category: :list_subject_scope,
-            description: "Built around an unusual angle rather than quality -- entries were chosen to fit a concept, not because they are the best."},
+            description: "Built around an unusual angle rather than quality. Entries were chosen to fit a concept, not because they are the best."},
       15 => {name: "List: only covers 1 specific location",
              category: :list_subject_scope,
-             description: "Applied automatically to lists that declare a regional focus. Their scope is narrow, but it is stated honestly up front -- which is also why they are exempt from the western-canon adjustment."},
+             description: "Applied automatically to lists that declare a regional focus. Their scope is narrow, but it is stated honestly up front, which is also why they are exempt from the western-canon adjustment."},
       16 => {name: "List: only covers 1 specific genre",
              category: :list_subject_scope,
              description: "Applied automatically to single-genre lists. The best work in one genre is competing in a far smaller field than the best work overall."},
@@ -125,7 +125,7 @@ module Penalties
              description: "Restricted to one large region, such as Asia or Latin America."},
       39 => {name: "List: only covers 1 specific state of a country",
              category: :list_subject_scope,
-             description: "Restricted to a single state or province -- a very small pool to pick from."},
+             description: "Restricted to a single state or province, a very small pool to pick from."},
       42 => {name: "List: only covers 1 specific city",
              category: :list_subject_scope,
              description: "Restricted to a single city, the smallest geographic pool we track."},
@@ -140,7 +140,7 @@ module Penalties
              description: "Restricted to books that are part of a series, so standalone works were never eligible."},
       48 => {name: "List: only covers books with a weird criteria(books to help you survive the digital age, etc)",
              category: :list_subject_scope,
-             description: "Built around an unusual premise rather than quality -- entries were chosen to fit the concept."},
+             description: "Built around an unusual premise rather than quality. Entries were chosen to fit the concept."},
 
       # --- How the list was made -------------------------------------------
       1 => {name: "List: Creator of the list, sells the items on the list",
@@ -151,7 +151,7 @@ module Penalties
             description: "Very long. Past a few hundred entries a list stops being a judgement and starts being an inventory."},
       3 => {name: "List: criteria is not just best/favorite",
             category: :list_integrity,
-            description: "Ranked by something other than quality -- most influential, most surprising, most underrated. Useful, but not a verdict on how good the entries are."},
+            description: "Ranked by something other than quality, such as most influential, most surprising, or most underrated. Useful, but not a verdict on how good the entries are."},
       4 => {name: "List: is a follow up/honorable mention to a different list",
             category: :list_integrity,
             description: "A sequel or overflow list. Its entries are the ones that did not make the original."},
@@ -166,7 +166,7 @@ module Penalties
              description: "We could not find reliable information about how this list was made or who made it."},
       45 => {name: "List: Covers aggregated lists that might already be included on the site",
              category: :list_integrity,
-             description: "Itself an aggregation of other lists, several of which we may already count -- so it risks counting the same opinions twice."},
+             description: "Itself an aggregation of other lists, several of which we may already count, so it risks counting the same opinions twice."},
       49 => {name: "List: Podcast/Etc that covers 1 book a week/month",
              category: :list_integrity,
              description: "A podcast or column featuring one book at a time. The picks are discussion topics, not a ranking."}
@@ -176,13 +176,13 @@ module Penalties
     # stays put. Missing ids are skipped rather than raising: this task runs
     # against dev and production, and the two may not hold identical rows.
     #
-    # Development ids are not provably production ids -- the 27 Books::Penalty
+    # Development ids are not provably production ids. The 27 Books::Penalty
     # rows exist only in dev, so an id that drifted between the two databases
     # would otherwise silently relabel a live penalty with another penalty's
     # public description. `name:` guards against that: a row is only touched
     # when its stored name matches what this entry expects for that id.
     # Mismatches are skipped and reported rather than raised, so one bad id
-    # does not abort the whole backfill -- the caller decides what to do with
+    # does not abort the whole backfill. The caller decides what to do with
     # a non-empty `mismatched` list.
     def self.call
       updated = 0
@@ -230,7 +230,7 @@ namespace :penalties do
     puts "Penalties still uncategorized: #{uncategorized}"
 
     # A mismatch means an id we expected to be one penalty is actually
-    # another -- the run must not be able to look successful when that
+    # another. The run must not be able to look successful when that
     # happens, so a bad production run is loud rather than silently wrong.
     exit(1) if result[:mismatched].any?
   end
