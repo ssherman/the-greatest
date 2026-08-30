@@ -1,0 +1,36 @@
+<% content_for :page_title, "Reading Goals | The Greatest Books" %>
+
+<div class="space-y-10">
+  <header class="flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h1 class="text-3xl sm:text-4xl font-bold">Reading Goals</h1>
+      <p class="mt-2 text-base-content/70">Track completed books across any date range.</p>
+    </div>
+    <%= link_to "New Reading Goal", new_books_my_reading_goal_path, class: "btn btn-primary" %>
+  </header>
+
+  <% [
+       ["Active goals", @active_reading_goals, "You have no active reading goals."],
+       ["Upcoming goals", @upcoming_reading_goals, "You have no upcoming reading goals."],
+       ["Finished goals", @finished_reading_goals, "You have no finished reading goals."]
+     ].each do |heading, goals, empty_message| %>
+    <section class="space-y-4" aria-labelledby="<%= heading.parameterize %>">
+      <h2 id="<%= heading.parameterize %>" class="text-2xl font-bold"><%= heading %></h2>
+
+      <% if goals.any? %>
+        <div class="grid gap-4 lg:grid-cols-2">
+          <% goals.each do |goal| %>
+            <%= render Books::ReadingGoals::GoalCardComponent.new(
+                  goal: goal,
+                  progress: Services::Books::ReadingGoals::ProgressQuery.call(goal: goal)
+                ) %>
+          <% end %>
+        </div>
+      <% else %>
+        <div class="rounded-box border border-base-300 bg-base-100 p-6 text-base-content/70">
+          <%= empty_message %>
+        </div>
+      <% end %>
+    </section>
+  <% end %>
+</div>

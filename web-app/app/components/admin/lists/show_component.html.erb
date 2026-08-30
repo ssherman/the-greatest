@@ -118,12 +118,12 @@
               </div>
             <% end %>
 
-            <% if list.submitted_by.present? %>
+            <% if list.submitted_at.present? %>
               <div>
                 <label class="label">
                   <span class="font-semibold">Submitted By</span>
                 </label>
-                <p><%= list.submitted_by.email %></p>
+                <p><%= list.submitted_by&.email || list.submitter_email.presence || "Anonymous" %></p>
               </div>
             <% end %>
 

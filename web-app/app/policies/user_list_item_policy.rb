@@ -10,6 +10,10 @@ class UserListItemPolicy < ApplicationPolicy
     owner?
   end
 
+  def update_completion?
+    owner?
+  end
+
   private
 
   def owner?

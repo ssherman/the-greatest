@@ -1,0 +1,30 @@
+<h1>New list submission on <%= @site_name %></h1>
+
+<table>
+  <tr><td><strong>Name</strong></td><td><%= @list.name %></td></tr>
+  <tr><td><strong>Type</strong></td><td><%= @list.type %></td></tr>
+  <tr><td><strong>Source</strong></td><td><%= @list.source.presence || "(not given)" %></td></tr>
+  <tr>
+    <td><strong>URL</strong></td>
+    <td>
+      <% if @list.url.present? %>
+        <%= link_to @list.url, @list.url, rel: "noopener nofollow" %>
+      <% else %>
+        (not given)
+      <% end %>
+    </td>
+  </tr>
+  <tr>
+    <td><strong>Submitted by</strong></td>
+    <td><%= @list.submitted_by&.email || @list.submitter_email.presence || "Anonymous" %></td>
+  </tr>
+  <tr>
+    <td><strong>Pasted content</strong></td>
+    <td><%= @list.raw_content.present? ? "#{@list.raw_content.length} characters" : "none" %></td>
+  </tr>
+</table>
+
+<% if @list.description.present? %>
+  <h2>Description</h2>
+  <p><%= @list.description %></p>
+<% end %>

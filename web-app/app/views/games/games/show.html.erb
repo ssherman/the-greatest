@@ -147,7 +147,7 @@
             <div class="space-y-3">
               <% @list_items.each do |list_item| %>
                 <% list = list_item.list %>
-                <%= link_to games_list_path(list), class: "block p-3 bg-base-200 rounded-lg hover:bg-base-300 transition-colors", data: { turbo_frame: "_top" } do %>
+                <%= link_to games_list_path(id: list), class: "block p-3 bg-base-200 rounded-lg hover:bg-base-300 transition-colors", data: { turbo_frame: "_top" } do %>
                   <h3 class="font-semibold text-base-content">
                     <%= list.name %>
                   </h3>

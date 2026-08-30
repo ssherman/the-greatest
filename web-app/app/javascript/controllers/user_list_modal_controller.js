@@ -139,8 +139,11 @@ export default class extends Controller {
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(data.error?.message || "Failed to add")
-    this._afterMutation({added: {list_id: listId, item_id: data.user_list_item?.id}})
-    this._toast("success", `Added to ${this._listName(listId)}`)
+    this._afterMutation({
+      added: {list_id: data.user_list_item.user_list_id, item_id: data.user_list_item.id},
+      removedListIds: (data.removed_user_list_items || []).map((item) => item.user_list_id)
+    })
+    this._toast("success", data.message)
   }
 
   async _remove(listId) {
@@ -156,12 +159,12 @@ export default class extends Controller {
       headers: headers,
       credentials: "same-origin"
     })
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      throw new Error(data.error?.message || "Failed to remove")
-    }
-    this._afterMutation({removedListId: listId})
-    this._toast("success", `Removed from ${this._listName(listId)}`)
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error?.message || "Failed to remove")
+    this._afterMutation({
+      removedListIds: [data.removed_user_list_item?.user_list_id || listId]
+    })
+    this._toast("success", data.message)
   }
 
   async createList(event) {
@@ -209,14 +212,14 @@ export default class extends Controller {
     }
   }
 
-  // `added`: {list_id, item_id} | `removedListId`: integer
-  _afterMutation({added, removedListId}) {
+  // `added`: {list_id, item_id} | `removedListIds`: integer[]
+  _afterMutation({added, removedListIds = []}) {
     const stateCtrl = this._stateController()
     const cur = stateCtrl.state()
     const current = (cur?.memberships?.[this.openContext.listableType] || {})[String(this.openContext.listableId)] || []
-    let next = current.slice()
+    const replacedListIds = new Set([...removedListIds, added?.list_id].filter(Boolean))
+    const next = current.filter((membership) => !replacedListIds.has(membership.list_id))
     if (added) next.push(added)
-    if (removedListId) next = next.filter((m) => m.list_id !== removedListId)
     stateCtrl.applyMutation({
       listableType: this.openContext.listableType,
       listableId: this.openContext.listableId,

@@ -321,6 +321,89 @@ module Books
         assert_equal 1, UserListItem.where(user_list: user_list, listable: @target).count
       end
 
+      test "purges a public reading goal when a dated Books Read entry moves" do
+        completed_on = Date.new(2027, 1, 1)
+        goal = create_reading_goal(completed_on: completed_on)
+        create_reading_goal(completed_on: completed_on, name: "Private goal", public: false)
+        entry = add_read_entry(@source, completed_on: completed_on)
+        expected_urls = [reading_goal_url(goal)]
+        ::Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async)
+          .with("books", expected_urls)
+
+        result = ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        assert_equal @target.id, entry.reload.listable_id
+      end
+
+      test "purges a public reading goal when a dated Books Read entry is deduplicated" do
+        completed_on = Date.new(2027, 1, 1)
+        goal = create_reading_goal(completed_on: completed_on)
+        duplicate = add_read_entry(@source, completed_on: completed_on)
+        add_read_entry(@target, completed_on: completed_on)
+        ::Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async)
+          .with("books", [reading_goal_url(goal)])
+
+        result = ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        assert_not UserListItem.exists?(duplicate.id)
+      end
+
+      test "does not purge reading goals for undated Read or non-Read memberships" do
+        completed_on = Date.new(2027, 1, 1)
+        create_reading_goal(completed_on: completed_on)
+        add_read_entry(@source, completed_on: nil)
+        reading_list = ::Books::UserList.create!(
+          user: users(:regular_user),
+          name: ::Books::UserList.default_list_name_for(:reading),
+          list_type: :reading
+        )
+        reading_list.user_list_items.create!(listable: @source, completed_on: completed_on)
+        ::Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).never
+
+        result = ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+      end
+
+      test "does not purge reading goals when the merge rolls back" do
+        completed_on = Date.new(2027, 1, 1)
+        create_reading_goal(completed_on: completed_on)
+        entry = add_read_entry(@source, completed_on: completed_on)
+        ::Books::Book::Merger.any_instance.stubs(:reconcile_scalars)
+          .raises(StandardError.new("boom"))
+        ::Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async).never
+
+        result = ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert_not result.success?
+        assert_equal @source.id, entry.reload.listable_id
+      end
+
+      test "captures page two before a 25-item public goal loses a deduplicated entry" do
+        completed_on = Date.new(2027, 1, 1)
+        goal = create_reading_goal(completed_on: completed_on)
+        add_read_entry(@source, completed_on: completed_on)
+        add_read_entry(@target, completed_on: completed_on)
+        23.times do |index|
+          book = ::Books::Book.create!(
+            title: "Merger goal book #{index}",
+            slug: "merger-goal-book-#{index}"
+          )
+          add_read_entry(book, completed_on: completed_on)
+        end
+        expected_urls = [reading_goal_url(goal), "#{reading_goal_url(goal)}/page/2"]
+        assert_equal 25, Services::Books::ReadingGoals::ProgressQuery.call(goal: goal).count
+        ::Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async)
+          .with("books", expected_urls)
+
+        result = ::Books::Book::Merger.call(source: @source, target: @target)
+
+        assert result.success?, "Merger failed: #{result.errors.inspect}"
+        assert_equal 24, Services::Books::ReadingGoals::ProgressQuery.call(goal: goal).count
+      end
+
       test "moves a review to the target" do
         # password_user reviews NEITHER fixture book, so this genuinely exercises the
         # repoint branch. regular_user reviews both, which would exercise the drop.
@@ -687,7 +770,62 @@ module Books
         assert_not ::Books::Book.exists?(source_id)
       end
 
+      test "a reading goal cache enqueue failure does not fail the committed merge" do
+        completed_on = Date.new(2027, 1, 1)
+        create_reading_goal(completed_on: completed_on)
+        add_read_entry(@source, completed_on: completed_on)
+        source_id = @source.id
+        ::Books::ReadingGoals::PurgeCachedPagesJob.stubs(:perform_async)
+          .raises(StandardError.new("purge redis is down"))
+
+        merger = ::Books::Book::Merger.new(source: @source, target: @target)
+        result = merger.call
+
+        assert result.success?, "the merge committed; reporting failure would be a lie"
+        assert_equal "purge redis is down", merger.stats[:post_commit_error]
+        assert_not ::Books::Book.exists?(source_id)
+      end
+
+      test "purges reading goal caches when an earlier post-commit step fails" do
+        completed_on = Date.new(2027, 1, 1)
+        goal = create_reading_goal(completed_on: completed_on)
+        add_read_entry(@source, completed_on: completed_on)
+        GenerateUserFavoritesListsJob.stubs(:perform_async)
+          .raises(StandardError.new("favorites redis is down"))
+        ::Books::ReadingGoals::PurgeCachedPagesJob.expects(:perform_async)
+          .with("books", [reading_goal_url(goal)])
+
+        merger = ::Books::Book::Merger.new(source: @source, target: @target)
+        result = merger.call
+
+        assert result.success?, "the merge committed; reporting failure would be a lie"
+        assert_equal "favorites redis is down", merger.stats[:post_commit_error]
+      end
+
       private
+
+      def create_reading_goal(completed_on:, **attributes)
+        ::Books::ReadingGoal.create!({
+          user: users(:regular_user),
+          name: "Merger reading goal",
+          target_count: 12,
+          starts_on: completed_on,
+          ends_on: completed_on,
+          public: true
+        }.merge(attributes))
+      end
+
+      def add_read_entry(book, completed_on:)
+        user_lists(:regular_user_books_read).user_list_items.create!(
+          listable: book,
+          completed_on: completed_on
+        )
+      end
+
+      def reading_goal_url(goal)
+        host = Rails.application.config.domains[:books]
+        "https://#{host}/reading_goals/#{goal.id}"
+      end
 
       def attach_image(book, primary:)
         book.images.create!(primary: primary) do |image|

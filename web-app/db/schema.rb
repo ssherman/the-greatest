@@ -214,6 +214,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_30_134311) do
     t.index ["volume_number"], name: "index_books_editions_on_volume_number"
   end
 
+  create_table "books_reading_goals", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.date "ends_on", null: false
+    t.string "name", null: false
+    t.boolean "public", default: false, null: false
+    t.date "starts_on", null: false
+    t.integer "target_count", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["user_id", "public", "starts_on", "ends_on"], name: "index_books_reading_goals_for_public_date_lookup"
+    t.index ["user_id"], name: "index_books_reading_goals_on_user_id"
+    t.check_constraint "ends_on >= starts_on", name: "books_reading_goals_dates_ordered"
+    t.check_constraint "target_count > 0", name: "books_reading_goals_target_count_positive"
+  end
+
   create_table "books_series", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.text "description"
@@ -550,7 +566,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_30_134311) do
     t.string "source"
     t.string "source_country_origin"
     t.integer "status", default: 0, null: false
+    t.datetime "submitted_at"
     t.bigint "submitted_by_id"
+    t.string "submitter_email"
+    t.string "submitter_ip"
     t.string "type", null: false
     t.datetime "updated_at", null: false
     t.string "url"
@@ -561,6 +580,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_30_134311) do
     t.integer "year_published"
     t.boolean "yearly_award"
     t.index ["activated_at"], name: "index_lists_on_activated_at"
+    t.index ["submitted_at"], name: "index_lists_on_submitted_at"
     t.index ["submitted_by_id"], name: "index_lists_on_submitted_by_id"
     t.index ["type", "auto_generated_kind"], name: "index_lists_on_type_and_auto_generated_kind", unique: true, where: "(auto_generated_kind IS NOT NULL)"
   end
@@ -1065,6 +1085,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_30_134311) do
   add_foreign_key "books_credits", "books_authors", column: "author_id"
   add_foreign_key "books_editions", "books_books", column: "book_id"
   add_foreign_key "books_editions", "languages"
+  add_foreign_key "books_reading_goals", "users"
   add_foreign_key "books_series", "books_books", column: "representative_book_id", on_delete: :nullify
   add_foreign_key "books_series_books", "books_books", column: "book_id"
   add_foreign_key "books_series_books", "books_series", column: "series_id"

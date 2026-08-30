@@ -38,6 +38,7 @@ module Books
         # them consistent so a future consumer doesn't have to guess per key.
         @stats = {}
         @affected_ranking_configurations = []
+        @reading_goal_cached_urls = []
         @transaction_body_completed = false
       end
 
@@ -130,6 +131,7 @@ module Books
         merge_series_books
         merge_category_items
         merge_list_items
+        capture_reading_goal_cached_urls
         merge_user_list_items
         merge_descriptions
         merge_reviews
@@ -257,6 +259,26 @@ module Books
           end
         end
         @stats[:list_items] = count
+      end
+
+      # Capture the URLs before merge_user_list_items moves or destroys any source
+      # memberships. A move changes the rendered book identity without changing
+      # the count; a collision can also shrink the final page away entirely.
+      def capture_reading_goal_cached_urls
+        @reading_goal_cached_urls = source_book.user_list_items
+          .joins(:user_list)
+          .merge(::Books::UserList.read)
+          .includes(user_list: :user)
+          .where.not(completed_on: nil)
+          .flat_map do |entry|
+            entry.user_list.user.books_reading_goals.public_goals
+              .where("starts_on <= ? AND ends_on >= ?", entry.completed_on, entry.completed_on)
+              .order(:id)
+              .flat_map do |goal|
+                count = Services::Books::ReadingGoals::ProgressQuery.call(goal: goal).count
+                Services::Books::ReadingGoals::CachedUrls.call(goal: goal, count: count)
+              end
+          end.uniq
       end
 
       # position is scoped to the user_list, which does not change, so a moved row
@@ -505,16 +527,30 @@ module Books
         @affected_ranking_configurations = (source_configs + target_configs).uniq
       end
 
-      # The merge is committed by this point. Reindexing, ranking recalculation and
-      # the generated-list rebuild are follow-up work: if they fail, the merge still
-      # happened, so a failure here must not be reported as a failed merge.
+      # The merge is committed by this point. Reindexing, ranking recalculation,
+      # generated-list rebuild and cache invalidation are follow-up work: if they
+      # fail, the merge still happened, so a failure here must not be reported as a
+      # failed merge.
       # `success?` means "the merge committed", and that is what the admin UI
       # reports.
       def run_post_commit_steps
+        run_existing_post_commit_steps
+        purge_reading_goal_cached_pages
+      rescue => error
+        record_post_commit_error(error)
+      end
+
+      # Cache invalidation remains independently attemptable when one of these
+      # pre-existing follow-ups fails after the merge has committed.
+      def run_existing_post_commit_steps
         reindex_target_book
         schedule_ranking_recalculation
         regenerate_user_favorites_list
       rescue => error
+        record_post_commit_error(error)
+      end
+
+      def record_post_commit_error(error)
         Rails.logger.error(
           "Books::Book::Merger: merge of #{@source_book_id} into #{target_book.id} " \
           "committed, but post-commit follow-up failed: #{error.class}: #{error.message}"
@@ -555,6 +591,12 @@ module Books
       # CalculateRankingsJob would otherwise read that short list.
       def regenerate_user_favorites_list
         GenerateUserFavoritesListsJob.perform_async("Books::UserList")
+      end
+
+      def purge_reading_goal_cached_pages
+        return if @reading_goal_cached_urls.empty?
+
+        ::Books::ReadingGoals::PurgeCachedPagesJob.perform_async("books", @reading_goal_cached_urls)
       end
 
       def destroy_source_book

@@ -1,0 +1,95 @@
+<%= form_with model: reading_goal, scope: :reading_goal,
+      url: reading_goal.persisted? ? books_my_reading_goal_path(reading_goal) : books_my_reading_goals_path,
+      class: "space-y-6" do |form| %>
+  <div class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body gap-5">
+      <fieldset class="fieldset">
+        <%= form.label :name, "Name", class: "fieldset-legend" %>
+        <%= form.text_field :name, required: true,
+              class: "input w-full #{'input-error' if reading_goal.errors[:name].any?}",
+              aria: {describedby: "reading-goal-name-errors"} %>
+        <div id="reading-goal-name-errors" class="space-y-1 text-sm text-error">
+          <% reading_goal.errors.full_messages_for(:name).each do |message| %>
+            <p role="alert"><%= message %></p>
+          <% end %>
+        </div>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <%= form.label :description, "Description", class: "fieldset-legend" %>
+        <%= form.text_area :description, rows: 4,
+              class: "textarea w-full #{'textarea-error' if reading_goal.errors[:description].any?}",
+              aria: {describedby: "reading-goal-description-help reading-goal-description-errors"} %>
+        <p id="reading-goal-description-help" class="text-sm text-base-content/70">Optional.</p>
+        <div id="reading-goal-description-errors" class="space-y-1 text-sm text-error">
+          <% reading_goal.errors.full_messages_for(:description).each do |message| %>
+            <p role="alert"><%= message %></p>
+          <% end %>
+        </div>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <%= form.label :target_count, "Target books", class: "fieldset-legend" %>
+        <%= form.number_field :target_count, min: 1, required: true,
+              class: "input w-full #{'input-error' if reading_goal.errors[:target_count].any?}",
+              aria: {describedby: "reading-goal-target-help reading-goal-target-count-errors"} %>
+        <p id="reading-goal-target-help" class="text-sm text-base-content/70">
+          Enter a positive number of books.
+        </p>
+        <div id="reading-goal-target-count-errors" class="space-y-1 text-sm text-error">
+          <% reading_goal.errors.full_messages_for(:target_count).each do |message| %>
+            <p role="alert"><%= message %></p>
+          <% end %>
+        </div>
+      </fieldset>
+
+      <div class="grid gap-5 sm:grid-cols-2">
+        <fieldset class="fieldset">
+          <%= form.label :starts_on, "Start date", class: "fieldset-legend" %>
+          <%= form.date_field :starts_on, required: true,
+                class: "input w-full #{'input-error' if reading_goal.errors[:starts_on].any?}",
+                aria: {describedby: "reading-goal-starts-on-errors"} %>
+          <div id="reading-goal-starts-on-errors" class="space-y-1 text-sm text-error">
+            <% reading_goal.errors.full_messages_for(:starts_on).each do |message| %>
+              <p role="alert"><%= message %></p>
+            <% end %>
+          </div>
+        </fieldset>
+
+        <fieldset class="fieldset">
+          <%= form.label :ends_on, "End date", class: "fieldset-legend" %>
+          <%= form.date_field :ends_on, required: true,
+                class: "input w-full #{'input-error' if reading_goal.errors[:ends_on].any?}",
+                aria: {describedby: "reading-goal-ends-on-errors"} %>
+          <div id="reading-goal-ends-on-errors" class="space-y-1 text-sm text-error">
+            <% reading_goal.errors.full_messages_for(:ends_on).each do |message| %>
+              <p role="alert"><%= message %></p>
+            <% end %>
+          </div>
+        </fieldset>
+      </div>
+
+      <fieldset class="fieldset">
+        <label class="label cursor-pointer justify-start gap-3">
+          <%= form.check_box :public, class: "checkbox",
+                aria: {describedby: "reading-goal-public-help reading-goal-public-errors"} %>
+          <span>Public</span>
+        </label>
+        <p id="reading-goal-public-help" class="text-sm text-base-content/70">
+          Public goals can be shared with anyone who has the link.
+        </p>
+        <div id="reading-goal-public-errors" class="space-y-1 text-sm text-error">
+          <% reading_goal.errors.full_messages_for(:public).each do |message| %>
+            <p role="alert"><%= message %></p>
+          <% end %>
+        </div>
+      </fieldset>
+    </div>
+  </div>
+
+  <div class="flex flex-wrap gap-2">
+    <%= form.submit reading_goal.persisted? ? "Save Changes" : "Create Reading Goal",
+          class: "btn btn-primary" %>
+    <%= link_to "Cancel", books_my_reading_goals_path, class: "btn btn-ghost" %>
+  </div>
+<% end %>

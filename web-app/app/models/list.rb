@@ -20,6 +20,9 @@
 #  source                :string
 #  source_country_origin :string
 #  status                :integer          default(0), not null
+#  submitted_at          :datetime
+#  submitter_email       :string
+#  submitter_ip          :string
 #  type                  :string           not null
 #  url                   :string
 #  voter_count_estimated :boolean
@@ -36,6 +39,7 @@
 # Indexes
 #
 #  index_lists_on_activated_at                  (activated_at)
+#  index_lists_on_submitted_at                  (submitted_at)
 #  index_lists_on_submitted_by_id               (submitted_by_id)
 #  index_lists_on_type_and_auto_generated_kind  (type,auto_generated_kind) UNIQUE WHERE (auto_generated_kind IS NOT NULL)
 #
@@ -74,6 +78,14 @@ class List < ApplicationRecord
   # colliding with a bare user_favorites? on List.
   enum :auto_generated_kind, {user_favorites: 0}, prefix: :generated
 
+  # Set by Services::Lists::Submission only. The simplifier is a Nokogiri parse
+  # and auto_simplify_content runs it inline on every new record carrying
+  # raw_content -- on an anonymous public endpoint that is a CPU lever, and
+  # production raw_content reaches 1.5 MB. Deferring is safe because
+  # Services::Lists::ImportService recomputes simplified_content unconditionally
+  # before it parses, so nothing downstream needs it at insert time.
+  attr_accessor :skip_content_simplification
+
   # Callbacks
   before_validation :parse_items_json_if_string
   before_save :auto_simplify_content, if: :should_simplify_content?
@@ -85,7 +97,21 @@ class List < ApplicationRecord
   validates :type, presence: true
   validates :status, presence: true
   validates :url, format: {with: %r{\Ahttps?://}i, message: "must be an http or https url"}, allow_blank: true
-  validates :num_years_covered, numericality: {greater_than: 0, only_integer: true}, allow_nil: true
+  # ActiveModel raises RangeError when SERIALIZING an out-of-range integer, not
+  # when casting it -- so without a ceiling `valid?` returns true and `save` then
+  # raises an unhandled exception. On the public submission endpoint that is a 500
+  # any client can trigger with a crafted POST, bypassing the form's HTML min/max.
+  #
+  # This lives on the model rather than in Services::Lists::Submission, unlike the
+  # length caps: those are service-only because admin paste legitimately reaches
+  # 1.5 MB of raw_content, whereas no path -- admin included -- needs a year or a
+  # voter count outside a 4-byte column. Admin currently 500s here the same way.
+  PG_INTEGER_RANGE = (-2_147_483_648..2_147_483_647)
+
+  validates :year_published, :number_of_voters,
+    numericality: {only_integer: true, in: PG_INTEGER_RANGE}, allow_nil: true
+  validates :num_years_covered,
+    numericality: {only_integer: true, greater_than: 0, in: PG_INTEGER_RANGE}, allow_nil: true
   validate :items_json_format
 
   # Scopes
@@ -164,6 +190,8 @@ class List < ApplicationRecord
   private
 
   def should_simplify_content?
+    return false if skip_content_simplification
+
     raw_content.present? && (new_record? || raw_content_changed?)
   end
 

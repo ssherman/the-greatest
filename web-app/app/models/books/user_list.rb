@@ -56,6 +56,10 @@ module Books
       [:read]
     end
 
+    def self.completion_transition_sources
+      {read: [:reading]}
+    end
+
     def self.ranking_configuration_class
       Books::RankingConfiguration
     end

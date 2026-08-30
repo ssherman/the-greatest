@@ -145,4 +145,31 @@ class UserLists::Show::ItemComponentTest < ViewComponent::TestCase
     assert_selector "tr td", text: "Leo Tolstoy"
     assert_selector "tr td", text: "1869"
   end
+
+  test "renders a completion-date edit trigger for an editable read-list book in every view" do
+    item = user_list_items(:regular_user_books_item_3)
+
+    %w[list_view table_view grid_view].each do |view_mode|
+      render_inline(Component.new(item: item, view_mode: view_mode, position: 1, completion_editable: true))
+
+      assert_selector "button[data-action='user-list-completion#open'][data-item-id='#{item.id}'][data-item-title='#{item.listable.title}'][data-completed-on='2026-01-20']",
+        text: "Edit completion date for #{item.listable.title}"
+    end
+  end
+
+  test "does not render a completion-date edit trigger without owner edit permission" do
+    item = user_list_items(:regular_user_books_item_3)
+    render_inline(Component.new(item: item, view_mode: "list_view", position: 1))
+
+    assert_no_selector "button[data-action='user-list-completion#open']"
+  end
+
+  test "completion-date edit trigger carries only the item identity and display data" do
+    item = user_list_items(:regular_user_books_item_3)
+    render_inline(Component.new(item: item, view_mode: "table_view", position: 1, completion_editable: true))
+
+    assert_selector "button[data-action='user-list-completion#open'][data-item-id='#{item.id}'][data-item-title='#{item.listable.title}'][data-completed-on='2026-01-20']"
+    assert_no_selector "button[data-action='user-list-completion#open'][data-user-list-id]"
+    assert_no_selector "button[data-action='user-list-completion#open'][data-listable-id]"
+  end
 end
