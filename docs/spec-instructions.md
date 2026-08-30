@@ -7,7 +7,7 @@
 >
 > **Current practice: use the superpowers defaults.** Specs go in `docs/superpowers/specs/`
 > named `YYYY-MM-DD-<topic>-design.md`, produced by the `superpowers:brainstorming` →
-> `superpowers:writing-plans` flow. See the "Specs and planning" section of `CLAUDE.md`.
+> `superpowers:writing-plans` flow. See the "Specs and planning" section of `AGENTS.md`.
 >
 > Every instruction below that tells you to create or move a spec under `docs/specs/` is dead.
 
