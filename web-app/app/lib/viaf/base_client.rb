@@ -26,7 +26,7 @@ module Viaf
       @rate_limiter.wait!
 
       response = connection.get(path) do |req|
-        req.params = params
+        req.params.update(params)
         req.headers["Accept"] = "application/json"
         req.headers["User-Agent"] = config.user_agent
       end
@@ -75,14 +75,25 @@ module Viaf
     end
 
     def blocked_message(response)
-      if response.body.to_s.downcase.include?(BLOCKED_MARKER)
+      if blocked_body?(response)
         "Cloudflare blocked this request. Do not retry; back off."
       else
         "Forbidden (403). Treating as blocked; do not retry."
       end
     end
 
+    def blocked_body?(response)
+      response.body.to_s.downcase.include?(BLOCKED_MARKER)
+    end
+
     def parse_success(response, path, response_time)
+      # Cloudflare can also serve its interstitial with a 200 status (e.g. a
+      # managed challenge page). Check for the marker before attempting to
+      # parse JSON so this raises BlockedError, never ParseError.
+      if blocked_body?(response)
+        raise Exceptions::BlockedError.new(blocked_message(response), response.status, response.body)
+      end
+
       parsed = begin
         JSON.parse(response.body)
       rescue JSON::ParserError => e
