@@ -24,8 +24,8 @@ class ExternalRecordTest < ActiveSupport::TestCase
   test "valid with required attributes" do
     record = ExternalRecord.new(
       source: :viaf,
-      source_id: "17244851",
-      payload: {"viaf_id" => "17244851"},
+      source_id: "96987389",
+      payload: {"viaf_id" => "96987389"},
       fetched_at: Time.current
     )
 
@@ -48,11 +48,11 @@ class ExternalRecordTest < ActiveSupport::TestCase
 
   test "source_id is unique per source" do
     ExternalRecord.create!(
-      source: :viaf, source_id: "7770001", payload: {}, fetched_at: Time.current
+      source: :viaf, source_id: "96987389", payload: {}, fetched_at: Time.current
     )
 
     duplicate = ExternalRecord.new(
-      source: :viaf, source_id: "7770001", payload: {}, fetched_at: Time.current
+      source: :viaf, source_id: "96987389", payload: {}, fetched_at: Time.current
     )
 
     assert_not duplicate.valid?

@@ -18,16 +18,3 @@
 #  index_external_records_on_source_and_fetched_at  (source,fetched_at)
 #  index_external_records_on_source_and_source_id   (source,source_id) UNIQUE
 #
-tolstoy_viaf:
-  source: 0
-  source_id: "96987389"
-  schema_version: 1
-  fetched_at: <%= 1.day.ago.to_fs(:db) %>
-  payload: >
-    {"viaf_id":"96987389","name_type":"Personal","birth_date":"1828-09-09",
-     "death_date":"1910-11-20","date_type":"lived","gender":"b",
-     "source_ids":{"LC":"n79068416","ISNI":"0000000122424494","WKP":"Q7243"},
-     "main_headings":[{"source":"LC","name":"Tolstoy, Leo"}],
-     "names":["Tolstoi, Lev Nikolaevich"],
-     "nationality":["RU"],"language":["rus"],
-     "occupation":["authors"],"field_of_activity":["literature"]}
