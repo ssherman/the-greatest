@@ -13,6 +13,10 @@ module Services
     class GenerateDynamicLists
       Result = Struct.new(:success?, :data, :errors, keyword_init: true)
 
+      # Global, so it works in all four domains. Applied in every primary
+      # configuration today: books 50, games 40, albums 50, songs 50.
+      HONORABLE_MENTION_PENALTY_NAME = "List: is a follow up/honorable mention to a different list"
+
       def self.call(ranking_configuration:, recalculate_primary: true)
         new(ranking_configuration: ranking_configuration,
           recalculate_primary: recalculate_primary).call
@@ -33,6 +37,11 @@ module Services
         ::List.transaction do
           top_list = write_list(:year_top, top_items)
           overflow_list = write_list(:year_honorable_mention, overflow_items)
+          assert_fields(top_list)
+          assert_fields(overflow_list)
+          assert_penalties(top_list, overflow_list)
+          ensure_ranked_list(top_list)
+          ensure_ranked_list(overflow_list)
           @config.update!(
             primary_mapped_list_id: top_list.id,
             secondary_mapped_list_id: overflow_list.id
@@ -159,7 +168,77 @@ module Services
       # reads `status: :active` -- so deactivating a source self-corrects this on
       # the next run.
       def source_list_count
-        @config.ranked_lists.joins(:list).where(lists: {status: :active}).count
+        @source_list_count ||= @config.ranked_lists.joins(:list).where(lists: {status: :active}).count
+      end
+
+      # Every field here changes the list's weight in the primary configuration.
+      # Re-asserted on every run rather than set once by hand: the two lists this
+      # replaces were hand-created a year apart and drifted, leaving 2023's and
+      # 2024's overflow lists at weight 0 with 1,837 items between them.
+      def assert_fields(list)
+        list.update!(
+          num_years_covered: 1,
+          number_of_voters: source_list_count,
+          voter_count_unknown: false,
+          voter_count_estimated: false,
+          # The contributing publications are known, but not enumerated as named
+          # voters. Costs 5% and is true.
+          voter_names_unknown: true,
+          high_quality_source: true,
+          year_published: @config.year,
+          category_specific: false,
+          location_specific: false,
+          creator_specific: false
+        )
+      end
+
+      # Attaches tags only. The value of a tag is a per-configuration editorial
+      # judgement, so this never creates a PenaltyApplication -- the same division
+      # of labour GenerateUserFavorites settled on.
+      def assert_penalties(top_list, overflow_list)
+        one_year = one_year_penalty
+        if one_year
+          [top_list, overflow_list].each do |list|
+            list.list_penalties.find_or_create_by!(penalty: one_year)
+          end
+        end
+
+        honorable_mention = ::Global::Penalty.find_by(name: HONORABLE_MENTION_PENALTY_NAME)
+        if honorable_mention
+          overflow_list.list_penalties.find_or_create_by!(penalty: honorable_mention)
+        else
+          Rails.logger.warn {
+            "#{self.class.name}: no Global::Penalty named " \
+              "#{HONORABLE_MENTION_PENALTY_NAME.inspect}; list #{overflow_list.id} " \
+              "will not be penalised as an honorable mention"
+          }
+        end
+      end
+
+      def one_year_penalty
+        name = @config.one_year_penalty_name
+        # Games, albums and songs penalise time scope with the dynamic
+        # Global::Penalty "List: number of years covered", which fires off the
+        # num_years_covered value assert_fields sets. No tag needed, and no warning.
+        return nil if name.blank?
+
+        penalty = ::Penalty.find_by(name: name)
+        if penalty.nil?
+          Rails.logger.warn {
+            "#{self.class.name}: no Penalty named #{name.inspect}; the #{@config.year} " \
+              "#{@config.generated_list_noun} rollups will not carry a one-year penalty"
+          }
+        end
+        penalty
+      end
+
+      def ensure_ranked_list(list)
+        main = @config.class.default_primary
+        # A domain with no primary configuration is not set up for ranking yet.
+        # Legitimate, and not this class's problem to fix.
+        return if main.nil?
+
+        ::RankedList.find_or_create_by!(list: list, ranking_configuration: main)
       end
     end
   end

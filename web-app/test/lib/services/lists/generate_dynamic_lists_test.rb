@@ -207,6 +207,127 @@ module Services
 
         assert_equal "unapproved", top.reload.status
       end
+
+      test "asserts every weight-affecting field on both lists" do
+        rank(@books)
+
+        result = generate
+
+        [result.data[:top_list], result.data[:overflow_list]].each do |list|
+          assert_equal 1, list.num_years_covered
+          assert_equal 2025, list.year_published
+          assert_equal false, list.voter_count_unknown
+          assert_equal false, list.voter_count_estimated
+          assert_equal true, list.voter_names_unknown
+          assert_equal true, list.high_quality_source
+          assert_equal false, list.category_specific
+          assert_equal false, list.location_specific
+          assert_equal false, list.creator_specific
+        end
+      end
+
+      test "number_of_voters counts active source lists only" do
+        rank(@books)
+        active = lists(:basic_list)
+        active.update!(status: :active)
+        inactive = lists(:another_list)
+        inactive.update!(status: :unapproved)
+        ::RankedList.create!(list: active, ranking_configuration: @config)
+        ::RankedList.create!(list: inactive, ranking_configuration: @config)
+
+        result = generate
+
+        assert_equal 1, result.data[:source_list_count]
+        assert_equal 1, result.data[:top_list].number_of_voters
+      end
+
+      # This is the 2024/2023 shape from production: penalties totalled 190%, capped
+      # at 100%, and the list weighed 0 while holding 1,114 items.
+      test "repairs a list left with unknown voter count and no quality flag" do
+        rank(@books)
+        broken = ::Books::List.create!(
+          name: "Hand-made overflow", status: :active,
+          auto_generated_kind: :year_honorable_mention, auto_generated_year: 2025,
+          voter_count_unknown: true, high_quality_source: false
+        )
+
+        generate
+
+        broken.reload
+        assert_equal false, broken.voter_count_unknown
+        assert_equal true, broken.high_quality_source
+      end
+
+      test "tags both lists with the domain's one-year penalty" do
+        rank(@books)
+        penalty = penalties(:books_one_year_penalty)
+
+        result = generate
+
+        assert_includes result.data[:top_list].penalties, penalty
+        assert_includes result.data[:overflow_list].penalties, penalty
+      end
+
+      test "tags only the overflow list as an honorable mention" do
+        rank(@books)
+        penalty = penalties(:honorable_mention_penalty)
+
+        result = generate
+
+        assert_includes result.data[:overflow_list].penalties, penalty
+        assert_not_includes result.data[:top_list].penalties, penalty
+      end
+
+      test "does not duplicate penalty tags across runs" do
+        rank(@books)
+        generate
+
+        overflow = generate.data[:overflow_list]
+
+        assert_equal overflow.penalties.count, overflow.penalties.distinct.count
+      end
+
+      test "warns and continues when the domain's one-year penalty is missing" do
+        rank(@books)
+        penalties(:books_one_year_penalty).destroy!
+
+        result = generate
+
+        assert result.success?, result.errors.inspect
+        assert_empty result.data[:top_list].penalties.where(type: "Books::Penalty")
+      end
+
+      # Attaching the tag is a fact about the list. Choosing what it is worth is an
+      # editorial judgement, so the generator never creates a PenaltyApplication.
+      test "never creates a penalty application" do
+        rank(@books)
+        before = ::PenaltyApplication.count
+
+        generate
+
+        assert_equal before, ::PenaltyApplication.count
+      end
+
+      test "joins both lists to the domain's primary configuration" do
+        rank(@books)
+
+        result = generate
+
+        main = ::Books::RankingConfiguration.default_primary
+        [result.data[:top_list], result.data[:overflow_list]].each do |list|
+          assert_equal main, list.ranked_lists.sole.ranking_configuration
+        end
+      end
+
+      test "repairs a missing ranked list on a later run" do
+        rank(@books)
+        top = generate.data[:top_list]
+        top.ranked_lists.delete_all
+
+        generate
+
+        assert_equal 1, top.reload.ranked_lists.count
+      end
     end
   end
 end

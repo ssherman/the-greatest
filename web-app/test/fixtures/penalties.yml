@@ -89,3 +89,15 @@ user_books_penalty:
   name: "User Books Penalty"
   description: "A user-created books penalty"
   user: regular_user
+
+books_one_year_penalty:
+  type: Books::Penalty
+  name: "List: only covers 1 year (yearly book awards, best of the year, etc)"
+  description: "Covers a single year"
+  category: 2 # list_time_scope
+
+honorable_mention_penalty:
+  type: Global::Penalty
+  name: "List: is a follow up/honorable mention to a different list"
+  description: "A follow-up to another list"
+  category: 4 # list_integrity
