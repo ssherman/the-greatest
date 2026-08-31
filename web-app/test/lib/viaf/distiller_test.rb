@@ -179,13 +179,21 @@ class Viaf::DistillerTest < ActiveSupport::TestCase
     assert_equal [{"source" => "WKP", "name" => "Tolstoy"}], result["main_headings"]
   end
 
+  # A bare String subfield element is a vacuous fixture: String#["code"] is a
+  # substring lookup that silently returns nil regardless of the is_a?(Hash)
+  # guard, so deleting the guard would not be detected. Use nil instead: nil["code"]
+  # raises NoMethodError, so this only passes if the guard actually skips it.
   test "ignores a subfield entry that is not a hash" do
     result = distill({"ns1:VIAFCluster" => {"ns1:mainHeadings" => {"ns1:mainHeadingEl" => [{
       "ns1:sources" => {"ns1:s" => "LC"},
-      "ns1:datafield" => {"ns1:subfield" => ["not-a-hash", {"code" => "a", "content" => "Tolstoy"}]}
+      "ns1:datafield" => {"ns1:subfield" => [
+        {"code" => "a", "content" => "Austen"},
+        nil,
+        {"code" => "b", "content" => "Jane"}
+      ]}
     }]}}})
 
-    assert_equal [{"source" => "LC", "name" => "Tolstoy"}], result["main_headings"]
+    assert_equal [{"source" => "LC", "name" => "Austen Jane"}], result["main_headings"]
   end
 
   # MARC subfield content routinely carries leading/internal double spaces;
