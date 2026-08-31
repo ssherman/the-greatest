@@ -19,6 +19,10 @@ class Viaf::ConfigurationTest < ActiveSupport::TestCase
     assert_match(/TheGreatest/, Viaf::Configuration.new.user_agent)
   end
 
+  test "defaults the logger to the Rails logger" do
+    assert_equal Rails.logger, Viaf::Configuration.new.logger
+  end
+
   test "rejects a blank base url" do
     ENV["VIAF_URL"] = ""
 
