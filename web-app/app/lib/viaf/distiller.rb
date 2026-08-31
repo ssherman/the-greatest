@@ -47,15 +47,34 @@ module Viaf
         "occupation" => text_values(cluster, "occupation"),
         "field_of_activity" => text_values(cluster, "fieldOfActivity")
       }
+    rescue TypeError, NoMethodError => e
+      # `.dig` is used through every intermediate node while Normalizer.array
+      # only guards the leaves. If an intermediate arrives as an Array where a
+      # Hash was expected, `.dig`/`[]` raise TypeError/NoMethodError instead of
+      # a Viaf::Exceptions::Error. Re-raise as ParseError so everything this
+      # module raises stays inside the module's exception hierarchy, which is
+      # what callers (e.g. PersonSearch) rescue against.
+      raise Exceptions::ParseError.new(e.message, raw.to_s[0, 500])
     end
 
+    # Withdrawn markers can sit at the top level of the response (the shape
+    # observed for `abandoned`/`abandoned_viaf_record`/`scavenged`) or nested
+    # under VIAFCluster (`redirect`, and `directto` nested inside `redirect`).
+    # The exact withdrawn-body shape isn't pinned by the spec, so this checks
+    # both scopes rather than trying to narrow which marker lives where.
     def guard_withdrawn!(normalized)
       return unless normalized.is_a?(Hash)
 
-      marker = WITHDRAWN_MARKERS.find { |key| normalized.key?(key) }
+      marker = withdrawn_marker(normalized) || withdrawn_marker(normalized["VIAFCluster"])
       return if marker.nil?
 
       raise Exceptions::AbandonedRecordError, "VIAF cluster is #{marker}"
+    end
+
+    def withdrawn_marker(scope)
+      return nil unless scope.is_a?(Hash)
+
+      WITHDRAWN_MARKERS.find { |key| scope.key?(key) }
     end
 
     # sources.source entries look like {"nsid" => ..., "content" => "LC|n  79068416"}.
@@ -105,5 +124,10 @@ module Viaf
         entry["text"] if entry.is_a?(Hash)
       end.uniq
     end
+
+    # These have no caller outside this module (grepped: Tasks 7/9/10 use only
+    # `.call` and SCHEMA_VERSION). Kept private rather than tested directly.
+    private_class_method :guard_withdrawn!, :withdrawn_marker, :source_ids,
+      :main_headings, :alternate_names, :heading_name, :text_values
   end
 end

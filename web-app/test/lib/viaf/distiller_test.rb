@@ -107,6 +107,31 @@ class Viaf::DistillerTest < ActiveSupport::TestCase
     assert_equal "n123", result["source_ids"]["LC"]
   end
 
+  test "keeps the first source id when an agency code repeats" do
+    result = distill({"ns1:VIAFCluster" => {"ns1:sources" => {"ns1:source" => [
+      {"ns1:content" => "BNF|11898689"},
+      {"ns1:content" => "BNF|22222222"}
+    ]}}})
+
+    assert_equal "11898689", result["source_ids"]["BNF"]
+  end
+
+  test "skips source entries with unparseable content" do
+    result = distill({"ns1:VIAFCluster" => {"ns1:sources" => {"ns1:source" => [
+      {"ns1:content" => "NOPIPE"},
+      {"ns1:content" => 12345},
+      {"ns1:content" => "WKP|Q7243"}
+    ]}}})
+
+    assert_equal({"WKP" => "Q7243"}, result["source_ids"])
+  end
+
+  test "handles a source entry that is a bare content string, not a hash" do
+    result = distill({"ns1:VIAFCluster" => {"ns1:sources" => {"ns1:source" => "LC|n123"}}})
+
+    assert_equal "n123", result["source_ids"]["LC"]
+  end
+
   test "keeps main headings with their contributing source" do
     assert_equal [{"source" => "LC", "name" => "Tolstoy, Leo"}], distill["main_headings"]
   end
@@ -139,6 +164,41 @@ class Viaf::DistillerTest < ActiveSupport::TestCase
     assert_equal "DNB", result["main_headings"].first["source"]
   end
 
+  test "skips a main heading whose subfields yield no name" do
+    result = distill({"ns1:VIAFCluster" => {"ns1:mainHeadings" => {"ns1:mainHeadingEl" => [
+      {
+        "ns1:sources" => {"ns1:s" => "LC"},
+        "ns1:datafield" => {"ns1:subfield" => [{"code" => "d", "content" => "1828-1910"}]}
+      },
+      {
+        "ns1:sources" => {"ns1:s" => "WKP"},
+        "ns1:datafield" => {"ns1:subfield" => [{"code" => "a", "content" => "Tolstoy"}]}
+      }
+    ]}}})
+
+    assert_equal [{"source" => "WKP", "name" => "Tolstoy"}], result["main_headings"]
+  end
+
+  test "ignores a subfield entry that is not a hash" do
+    result = distill({"ns1:VIAFCluster" => {"ns1:mainHeadings" => {"ns1:mainHeadingEl" => [{
+      "ns1:sources" => {"ns1:s" => "LC"},
+      "ns1:datafield" => {"ns1:subfield" => ["not-a-hash", {"code" => "a", "content" => "Tolstoy"}]}
+    }]}}})
+
+    assert_equal [{"source" => "LC", "name" => "Tolstoy"}], result["main_headings"]
+  end
+
+  # MARC subfield content routinely carries leading/internal double spaces;
+  # squish must not be dropped or these leak straight into the persisted name.
+  test "squishes leading and internal whitespace out of subfield content" do
+    result = distill({"ns1:VIAFCluster" => {"ns1:mainHeadings" => {"ns1:mainHeadingEl" => [{
+      "ns1:sources" => {"ns1:s" => "LC"},
+      "ns1:datafield" => {"ns1:subfield" => [{"code" => "a", "content" => "  Austen,   Jane"}]}
+    }]}}})
+
+    assert_equal [{"source" => "LC", "name" => "Austen, Jane"}], result["main_headings"]
+  end
+
   test "collects deduplicated alternate names from x400s" do
     result = distill({"ns1:VIAFCluster" => {"ns1:x400s" => {"ns1:x400" => [
       {"ns1:datafield" => {"ns1:subfield" => [{"code" => "a", "content" => "Tolstoi"}]}},
@@ -156,6 +216,15 @@ class Viaf::DistillerTest < ActiveSupport::TestCase
     assert_equal ["rus"], result["language"]
     assert_equal ["authors"], result["occupation"]
     assert_equal ["literature"], result["field_of_activity"]
+  end
+
+  test "deduplicates text values within a field" do
+    result = distill({"ns1:VIAFCluster" => {"ns1:occupation" => {"ns1:data" => [
+      {"ns1:text" => "authors"},
+      {"ns1:text" => "authors"}
+    ]}}})
+
+    assert_equal ["authors"], result["occupation"]
   end
 
   test "returns empty collections when fields are absent" do
@@ -181,65 +250,34 @@ class Viaf::DistillerTest < ActiveSupport::TestCase
     end
   end
 
+  # redirect/directto never appear at the top level: redirect is a child of
+  # VIAFCluster, and directto is a child of redirect. A top-level-only check
+  # silently distills a withdrawn record as if it were a real person.
+  test "raises AbandonedRecordError for a redirect/directto nested under VIAFCluster" do
+    assert_raises(Viaf::Exceptions::AbandonedRecordError) do
+      Viaf::Distiller.call(
+        {"ns1:VIAFCluster" => {"ns1:redirect" => {"ns1:directto" => "96987389"}}},
+        requested_id: "1"
+      )
+    end
+  end
+
   test "raises ParseError when no cluster is present" do
     assert_raises(Viaf::Exceptions::ParseError) do
       Viaf::Distiller.call({"something" => "else"}, requested_id: "1")
     end
   end
 
-  # `module_function` (no args) makes every method defined below it in
-  # distiller.rb a public module method, callable as Viaf::Distiller.foo.
-  # Task 5's review (see task-5-report.md) sent Normalizer back for the same
-  # reason: methods exercised only indirectly through `call` don't satisfy
-  # "100% coverage of public methods". These tests call each one directly,
-  # against already-normalized (prefix-stripped) input, as `call` would.
-
-  test "guard_withdrawn! raises for a withdrawn marker" do
-    assert_raises(Viaf::Exceptions::AbandonedRecordError) do
-      Viaf::Distiller.guard_withdrawn!({"redirect" => "true"})
+  # `.dig` is used through every intermediate node while Normalizer.array only
+  # guards the leaves. If sources arrives as an Array (Hash expected), dig
+  # raises a bare TypeError; this must surface as a Viaf::Exceptions::Error so
+  # Task 10's rescue can catch it.
+  test "raises ParseError instead of a bare TypeError when a hash is unexpectedly an array" do
+    assert_raises(Viaf::Exceptions::ParseError) do
+      Viaf::Distiller.call(
+        {"ns1:VIAFCluster" => {"ns1:sources" => [{"ns1:source" => {"ns1:content" => "LC|n1"}}]}},
+        requested_id: "1"
+      )
     end
-  end
-
-  test "guard_withdrawn! does nothing for a normal cluster hash" do
-    assert_nil Viaf::Distiller.guard_withdrawn!({"VIAFCluster" => {}})
-  end
-
-  test "source_ids parses content, splitting on the pipe" do
-    result = Viaf::Distiller.source_ids({"sources" => {"source" => [{"content" => "LC|n123"}]}})
-
-    assert_equal({"LC" => "n123"}, result)
-  end
-
-  test "main_headings keeps a heading with its contributing source" do
-    result = Viaf::Distiller.main_headings({"mainHeadings" => {"mainHeadingEl" => [{
-      "sources" => {"s" => "LC"},
-      "datafield" => {"subfield" => [{"code" => "a", "content" => "Tolstoy"}]}
-    }]}})
-
-    assert_equal [{"source" => "LC", "name" => "Tolstoy"}], result
-  end
-
-  test "alternate_names collects deduplicated names from x400s" do
-    result = Viaf::Distiller.alternate_names({"x400s" => {"x400" => [
-      {"datafield" => {"subfield" => [{"code" => "a", "content" => "Tolstoi"}]}},
-      {"datafield" => {"subfield" => [{"code" => "a", "content" => "Tolstoi"}]}}
-    ]}})
-
-    assert_equal ["Tolstoi"], result
-  end
-
-  test "heading_name selects only name subfields and trims a trailing comma" do
-    entry = {"datafield" => {"subfield" => [
-      {"code" => "a", "content" => "Austen,"},
-      {"code" => "d", "content" => "1775-1817"}
-    ]}}
-
-    assert_equal "Austen", Viaf::Distiller.heading_name(entry)
-  end
-
-  test "text_values collects unique text entries for a field" do
-    result = Viaf::Distiller.text_values({"occupation" => {"data" => [{"text" => "authors"}]}}, "occupation")
-
-    assert_equal ["authors"], result
   end
 end
