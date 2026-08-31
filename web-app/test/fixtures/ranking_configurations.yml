@@ -259,3 +259,20 @@ books_authors_secondary:
   min_list_weight: 1
   apply_list_dates_penalty: false
   inherit_penalties: false
+
+books_year_2025:
+  type: Books::RankingConfiguration
+  name: "The Best Books of 2025"
+  description: "Year-scoped configuration for 2025 books"
+  global: true
+  primary: false
+  archived: false
+  algorithm_version: 1
+  exponent: 3.0
+  bonus_pool_percentage: 6.0
+  min_list_weight: 1
+  year: 2025
+  primary_mapped_list_cutoff_limit: 2
+  secondary_mapped_list_cutoff_limit: 2
+  apply_list_dates_penalty: false
+  inherit_penalties: false
