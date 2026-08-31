@@ -450,6 +450,10 @@ class RankingConfigurationTest < ActiveSupport::TestCase
     config.year = 0
     assert_not config.valid?
     assert_includes config.errors[:year], "must be greater than 0"
+
+    config.year = 1.5
+    assert_not config.valid?
+    assert_includes config.errors[:year], "must be an integer"
   end
 
   test "secondary_mapped_list_cutoff_limit rejects zero" do
