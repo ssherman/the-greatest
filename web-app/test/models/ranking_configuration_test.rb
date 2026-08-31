@@ -467,4 +467,36 @@ class RankingConfigurationTest < ActiveSupport::TestCase
     config.secondary_mapped_list_cutoff_limit = nil
     assert config.valid?
   end
+
+  test "the four item domains support year rollups" do
+    {
+      books_global: ::Books::List,
+      games_global: ::Games::List,
+      music_albums_global: ::Music::Albums::List,
+      music_songs_global: ::Music::Songs::List
+    }.each do |fixture, list_class|
+      config = ranking_configurations(fixture)
+      assert config.supports_year_rollups?, "#{fixture} should support year rollups"
+      assert_equal list_class, config.generated_list_class
+    end
+  end
+
+  test "creator configurations do not support year rollups" do
+    assert_not ranking_configurations(:books_authors_global).supports_year_rollups?
+    assert_not ranking_configurations(:music_artists_global).supports_year_rollups?
+  end
+
+  test "generated_list_noun capitalises the media noun" do
+    assert_equal "Books", ranking_configurations(:books_global).generated_list_noun
+    assert_equal "Games", ranking_configurations(:games_global).generated_list_noun
+    assert_equal "Albums", ranking_configurations(:music_albums_global).generated_list_noun
+    assert_equal "Songs", ranking_configurations(:music_songs_global).generated_list_noun
+  end
+
+  test "only books names a static one-year penalty" do
+    assert_equal "List: only covers 1 year (yearly book awards, best of the year, etc)",
+      ranking_configurations(:books_global).one_year_penalty_name
+    assert_nil ranking_configurations(:games_global).one_year_penalty_name
+    assert_nil ranking_configurations(:music_albums_global).one_year_penalty_name
+  end
 end

@@ -50,6 +50,10 @@ module Music
   module Albums
     class RankingConfiguration < ::RankingConfiguration
       def media_noun_plural = "albums"
+
+      def supports_year_rollups? = true
+
+      def generated_list_class = ::Music::Albums::List
     end
   end
 end

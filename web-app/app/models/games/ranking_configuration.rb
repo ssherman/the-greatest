@@ -49,5 +49,9 @@
 module Games
   class RankingConfiguration < ::RankingConfiguration
     def media_noun_plural = "games"
+
+    def supports_year_rollups? = true
+
+    def generated_list_class = ::Games::List
   end
 end

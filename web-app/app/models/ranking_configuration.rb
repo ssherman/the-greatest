@@ -104,6 +104,32 @@ class RankingConfiguration < ApplicationRecord
     raise NotImplementedError, "#{self.class.name} must define #media_noun_plural"
   end
 
+  # Whether this configuration can produce year rollup lists. Tested instead of
+  # respond_to?(:generated_list_class), which would answer true everywhere --
+  # the base class defines that method in order to raise from it.
+  def supports_year_rollups?
+    false
+  end
+
+  # The List subclass this configuration's generated year rollups belong to.
+  def generated_list_class
+    raise NotImplementedError, "#{self.class.name} must define #generated_list_class"
+  end
+
+  # Display noun for generated list names: "The 100 Greatest Books of 2025".
+  def generated_list_noun
+    media_noun_plural.capitalize
+  end
+
+  # The static one-year penalty this domain tags its year rollups with, or nil
+  # when the domain penalises time scope dynamically instead. Books is the only
+  # domain with a static penalty; games, albums and songs apply the dynamic
+  # Global::Penalty "List: number of years covered", which reads
+  # list.num_years_covered and therefore needs no tag.
+  def one_year_penalty_name
+    nil
+  end
+
   def default_primary?
     self.class.default_primary&.id == id
   end
