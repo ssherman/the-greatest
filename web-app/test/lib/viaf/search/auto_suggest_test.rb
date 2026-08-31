@@ -56,4 +56,17 @@ class Viaf::Search::AutoSuggestTest < ActiveSupport::TestCase
 
     assert_raises(Viaf::Exceptions::BlockedError) { @search.call("tolstoy") }
   end
+
+  test "handles a bare Hash result (not wrapped in array)" do
+    @client.stubs(:get).returns({success: true, data: {"query" => "tolstoy", "result" => {
+      "term" => "Tolstoy, Leo, graf, 1828-1910", "nametype" => "personal",
+      "viafid" => "96987389", "score" => "63074", "lc" => "n79068416"
+    }}, errors: [], metadata: {}})
+
+    results = @search.call("tolstoy")
+
+    assert_equal 1, results.size
+    assert_instance_of Viaf::Suggestion, results.first
+    assert_equal "96987389", results.first.viaf_id
+  end
 end
