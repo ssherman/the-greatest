@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "faraday"
-require "faraday/follow_redirects"
 require "json"
 
 module Viaf
@@ -11,6 +10,18 @@ module Viaf
   # type is negotiated with an Accept header rather than a .json path suffix.
   class BaseClient
     BLOCKED_MARKER = "you have been blocked"
+
+    # Merged clusters answer 301 pointing at the surviving cluster, so
+    # redirects are a normal occurrence, not an edge case. Redirects are
+    # handled here rather than via Faraday's `follow_redirects` middleware
+    # because that middleware resolves every hop *inside* the connection,
+    # bypassing `@rate_limiter.wait!` for every hop after the first. Against
+    # a Cloudflare WAF that blocks on ~5-8 rapid requests, that amplification
+    # (1 limiter slot for up to 4 upstream requests) is enough on its own to
+    # trip the ban. Looping through the public `#get` path instead means
+    # every hop pays for its own slot.
+    REDIRECT_STATUSES = [301, 302, 303, 307, 308].freeze
+    MAX_REDIRECTS = 3
 
     attr_reader :config, :connection, :last_rate_limit
 
@@ -23,14 +34,7 @@ module Viaf
 
     def get(path, params = {})
       start_time = Time.current
-      @rate_limiter.wait!
-
-      response = connection.get(path) do |req|
-        req.params.update(params)
-        req.headers["Accept"] = "application/json"
-        req.headers["User-Agent"] = config.user_agent
-      end
-
+      response = fetch_with_redirects(path, params)
       parse_response(response, path, start_time)
     rescue Faraday::TimeoutError => e
       raise Exceptions::TimeoutError.new("Request timed out", e)
@@ -42,12 +46,56 @@ module Viaf
 
     private
 
+    # Performs the request, then follows any 301/302/303/307/308 by
+    # recursing into itself with the redirected URL. Each recursive call
+    # goes through the same `@rate_limiter.wait!` this method starts with,
+    # so an N-hop redirect chain acquires N+1 limiter slots — one per
+    # upstream request, matching the connection's actual request count.
+    def fetch_with_redirects(url, params, redirect_count: 0)
+      @rate_limiter.wait!
+
+      response = connection.get(url) do |req|
+        req.params.update(params)
+        req.headers["Accept"] = "application/json"
+        req.headers["User-Agent"] = config.user_agent
+      end
+
+      return response unless REDIRECT_STATUSES.include?(response.status)
+
+      if redirect_count >= MAX_REDIRECTS
+        raise Exceptions::NetworkError.new(
+          "Exceeded maximum redirects (#{MAX_REDIRECTS}) resolving #{url}"
+        )
+      end
+
+      location = response.headers["location"]
+      if location.blank?
+        raise Exceptions::NetworkError.new(
+          "Redirect response (#{response.status}) is missing a Location header"
+        )
+      end
+
+      # Params belong to the original request only: the Location header is
+      # already a complete (or resolvable) URL, so re-applying the caller's
+      # params to it would risk duplicating or overriding its query string.
+      fetch_with_redirects(resolve_redirect_url(response, location), {}, redirect_count: redirect_count + 1)
+    end
+
+    # Resolves Location per RFC 3986: relative to the URL that was just
+    # requested (not the configured base_url), same as a browser or
+    # Faraday's own follow_redirects middleware would. VIAF sends absolute
+    # URLs today, but this keeps a relative one from crashing or silently
+    # requesting the wrong host.
+    def resolve_redirect_url(response, location)
+      response.env.url.merge(location).to_s
+    rescue URI::Error => e
+      raise Exceptions::NetworkError.new("Invalid redirect Location header #{location.inspect}: #{e.message}", e)
+    end
+
     def build_connection
       Faraday.new(url: config.base_url) do |conn|
         conn.options.timeout = config.timeout
         conn.options.open_timeout = config.open_timeout
-        # Merged clusters answer 301 pointing at the surviving cluster.
-        conn.response :follow_redirects, limit: 3
         conn.adapter Faraday.default_adapter
       end
     end

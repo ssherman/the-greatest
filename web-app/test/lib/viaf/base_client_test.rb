@@ -164,4 +164,64 @@ class Viaf::BaseClientTest < ActiveSupport::TestCase
 
     assert_equal({"ns1:viafID" => 222}, result[:data])
   end
+
+  # This is the test that proves the pacing defect is fixed. Faraday's
+  # follow_redirects middleware resolves every hop *inside* the connection,
+  # so pacing code that only wraps the top-level call sees one request and
+  # acquires one slot no matter how many hops actually hit the wire. Against
+  # a chain of 3 redirects (4 upstream requests total), that old
+  # implementation acquires only 1 limiter slot here — this assertion goes
+  # red against it. See the mutation test evidence in the PR/report for the
+  # before/after run.
+  test "an N-hop redirect chain acquires N+1 rate limit slots and makes N+1 upstream requests" do
+    stub1 = stub_request(:get, "https://viaf.test/viaf/1")
+      .to_return(status: 301, headers: {"Location" => "https://viaf.test/viaf/2"})
+    stub2 = stub_request(:get, "https://viaf.test/viaf/2")
+      .to_return(status: 302, headers: {"Location" => "https://viaf.test/viaf/3"})
+    stub3 = stub_request(:get, "https://viaf.test/viaf/3")
+      .to_return(status: 301, headers: {"Location" => "https://viaf.test/viaf/4"})
+    stub4 = stub_request(:get, "https://viaf.test/viaf/4")
+      .to_return(status: 200, body: '{"ns1:viafID":4}', headers: {"Content-Type" => "application/json"})
+
+    @limiter.expects(:wait!).times(4)
+
+    result = @client.get("viaf/1")
+
+    assert_equal({"ns1:viafID" => 4}, result[:data])
+    assert_requested stub1, times: 1
+    assert_requested stub2, times: 1
+    assert_requested stub3, times: 1
+    assert_requested stub4, times: 1
+  end
+
+  test "raises inside the Viaf::Exceptions::Error family when redirects exceed the limit" do
+    stub_request(:get, "https://viaf.test/viaf/1")
+      .to_return(status: 301, headers: {"Location" => "https://viaf.test/viaf/2"})
+    stub_request(:get, "https://viaf.test/viaf/2")
+      .to_return(status: 301, headers: {"Location" => "https://viaf.test/viaf/3"})
+    stub_request(:get, "https://viaf.test/viaf/3")
+      .to_return(status: 301, headers: {"Location" => "https://viaf.test/viaf/4"})
+    stub_request(:get, "https://viaf.test/viaf/4")
+      .to_return(status: 301, headers: {"Location" => "https://viaf.test/viaf/5"})
+
+    assert_raises(Viaf::Exceptions::Error) { @client.get("viaf/1") }
+  end
+
+  test "raises inside the Viaf::Exceptions::Error family when a redirect is missing its Location header" do
+    stub_request(:get, "https://viaf.test/viaf/1")
+      .to_return(status: 301)
+
+    assert_raises(Viaf::Exceptions::Error) { @client.get("viaf/1") }
+  end
+
+  test "resolves a relative Location against the request host" do
+    stub_request(:get, "https://viaf.test/viaf/111")
+      .to_return(status: 301, headers: {"Location" => "222"})
+    stub_request(:get, "https://viaf.test/viaf/222")
+      .to_return(status: 200, body: '{"ns1:viafID":222}', headers: {"Content-Type" => "application/json"})
+
+    result = @client.get("viaf/111")
+
+    assert_equal({"ns1:viafID" => 222}, result[:data])
+  end
 end
