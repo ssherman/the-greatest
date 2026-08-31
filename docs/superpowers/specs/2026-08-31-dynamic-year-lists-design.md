@@ -377,8 +377,11 @@ Median voter counts for reference: books 24, games 11, albums 20, songs 17.
 
 ### 4. Admin surface
 
-- **Form**: add `year` and `secondary_mapped_list_cutoff_limit`; demote the two mapped-list
-  selects to read-only display.
+- **Form**: add `year` and `secondary_mapped_list_cutoff_limit` alongside the existing
+  `primary_mapped_list_cutoff_limit`. The form has never rendered fields for
+  `primary_mapped_list_id` / `secondary_mapped_list_id` — the controller permits them but
+  nothing offers them, so those values arrived only via migration. Leave the form that way and
+  **remove both `_id` keys from the permitted params**, since the generator now owns them.
 - **Show page**: extend the existing mapped-lists card with the year, both cutoffs, and each
   generated list linked with its item count and last-generated time.
 - **Actions dropdown** (`app/views/admin/ranking_configurations/show.html.erb`, which
