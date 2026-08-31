@@ -226,13 +226,17 @@ class Viaf::DistillerTest < ActiveSupport::TestCase
     assert_equal ["literature"], result["field_of_activity"]
   end
 
+  # Two entries repeat "authors" (proving dedup) and a third, distinct entry
+  # ("translators") must still survive: two identical values alone would let
+  # a `.first`-truncated text_values pass vacuously by returning ["authors"].
   test "deduplicates text values within a field" do
     result = distill({"ns1:VIAFCluster" => {"ns1:occupation" => {"ns1:data" => [
       {"ns1:text" => "authors"},
-      {"ns1:text" => "authors"}
+      {"ns1:text" => "authors"},
+      {"ns1:text" => "translators"}
     ]}}})
 
-    assert_equal ["authors"], result["occupation"]
+    assert_equal ["authors", "translators"], result["occupation"]
   end
 
   test "returns empty collections when fields are absent" do

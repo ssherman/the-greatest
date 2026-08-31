@@ -73,6 +73,17 @@ whole clusters. Search responses carry no trustworthy cache key: the only ID ava
 in-body `viafID`, and VIAF has been observed emitting it in lossy scientific notation. Callers who
 want a cached record fetch the chosen ID through `Viaf::Cluster` instead.
 
+**Known deviation: merged clusters cache under the superseded ID.** A merged VIAF cluster answers
+HTTP 301, and `BaseClient` follows the redirect (see `conn.response :follow_redirects` in
+`BaseClient`), so the *data* `Viaf::Cluster#find` returns is correct — it is the surviving cluster's
+data. But the canonical ID that the redirect points at is never recorded: `find` still caches the
+row under the superseded ID it was asked for, and the `Person` built from it reports that superseded
+ID as `viaf_id`. Consequences: fetching both the superseded and canonical IDs produces two
+`external_records` rows for what is really one cluster, and an author could end up linked by a
+stale-but-still-resolvable VIAF ID rather than the canonical one. Re-keying the cache to the
+canonical ID (by reading it back out of the redirected response) is deferred to the `AuthorImport`
+provider work rather than solved here.
+
 ## What VIAF does and does not provide
 
 Maps cleanly to `Books::Author`: VIAF/ISNI/Wikidata/LCNAF identifiers, `birth_year`, `death_year`,

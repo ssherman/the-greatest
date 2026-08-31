@@ -9,7 +9,7 @@ module Viaf
   # two, with no gender, no birth date and no ISNI.
   class Person
     GENDER_CODES = {"a" => :female, "b" => :male, "u" => :unspecified}.freeze
-    NAME_TYPE_KINDS = {"Personal" => :person, "Corporate" => :organization}.freeze
+    NAME_TYPE_KINDS = {"personal" => :person, "corporate" => :organization}.freeze
 
     attr_reader :viaf_id, :name_type, :birth_date, :death_date, :gender_code,
       :source_ids, :main_headings, :names, :nationality, :language,
@@ -40,7 +40,10 @@ module Viaf
 
     def gender = GENDER_CODES[gender_code]
 
-    def kind = NAME_TYPE_KINDS[name_type]
+    # VIAF's cluster endpoint sends "Personal"/"Corporate" (capitalized); this
+    # is kept case-insensitive against an upstream casing change rather than
+    # relying on that ever staying stable.
+    def kind = NAME_TYPE_KINDS[name_type&.downcase]
 
     def lcnaf = source_ids["LC"]
 

@@ -187,6 +187,11 @@ class Viaf::ClusterTest < ActiveSupport::TestCase
     assert_equal 1, ExternalRecord.where(source: :viaf, source_id: "96987389").count
     assert_instance_of Viaf::Person, person
     assert_equal "96987389", person.viaf_id
+    # viaf_id is identical between the winner's stored payload and the loser's
+    # freshly-fetched one; name_type is what actually distinguishes them
+    # ("Winner" vs raw_response's "Personal"), proving `find` returns the
+    # Person built from its own fetch rather than re-reading the winner's row.
+    assert_equal "Personal", person.name_type
   end
 
   test "raises ArgumentError for a blank id" do

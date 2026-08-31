@@ -22,14 +22,14 @@ module Viaf
     private
 
     def validate_configuration!
-      raise ArgumentError, "VIAF_URL cannot be blank" if base_url.blank?
+      raise Exceptions::ConfigurationError, "VIAF_URL cannot be blank" if base_url.blank?
 
       uri = URI.parse(base_url)
       unless uri.is_a?(URI::HTTP) || uri.is_a?(URI::HTTPS)
-        raise ArgumentError, "VIAF_URL must be a valid HTTP/HTTPS URL"
+        raise Exceptions::ConfigurationError, "VIAF_URL must be a valid HTTP/HTTPS URL"
       end
     rescue URI::InvalidURIError
-      raise ArgumentError, "VIAF_URL must be a valid URL"
+      raise Exceptions::ConfigurationError, "VIAF_URL must be a valid URL"
     end
   end
 end

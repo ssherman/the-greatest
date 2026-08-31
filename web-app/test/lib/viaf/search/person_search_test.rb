@@ -121,6 +121,48 @@ class Viaf::Search::PersonSearchTest < ActiveSupport::TestCase
     assert_equal ["102333412"], results.map(&:viaf_id)
   end
 
+  test "raises ParseError when the response body is not a Hash" do
+    @client.stubs(:get).returns({success: true, data: [], errors: [], metadata: {}})
+
+    assert_raises(Viaf::Exceptions::ParseError) { @search.call("tolstoy") }
+  end
+
+  test "skips a record that is not a Hash rather than raising" do
+    @client.stubs(:get).returns(response([
+      "not-a-hash",
+      record("ns3", 102333412, "Austen, Jane")
+    ]))
+
+    results = @search.call("authors")
+
+    assert_equal ["102333412"], results.map(&:viaf_id)
+  end
+
+  # VIAF has been observed emitting viafID in scientific notation, which Ruby
+  # parses as a Float and coerces back to the WRONG integer (off by ~27,000
+  # for this value). Unlike Cluster, PersonSearch has no requested id to fall
+  # back on, so a Float id means the record is corrupt: skip it, exactly like
+  # a record that fails to distill, without dropping the rest of the response.
+  test "excludes a record whose viafID arrived as a Float, but keeps other records" do
+    float_id_record = {
+      "recordData" => {
+        "ns2:VIAFCluster" => {
+          "ns2:viafID" => 2.71711845065478e+19,
+          "ns2:nameType" => "Personal"
+        }
+      }
+    }
+
+    @client.stubs(:get).returns(response([
+      float_id_record,
+      record("ns3", 102333412, "Austen, Jane")
+    ]))
+
+    results = @search.call("authors")
+
+    assert_equal ["102333412"], results.map(&:viaf_id)
+  end
+
   test "raises ArgumentError for a blank name" do
     assert_raises(ArgumentError) { @search.call("") }
     assert_raises(ArgumentError) { @search.call(nil) }

@@ -77,6 +77,14 @@ class Viaf::PersonTest < ActiveSupport::TestCase
     assert_nil person("name_type" => "UniformTitle").kind
   end
 
+  # AutoSuggest sends "personal"/"corporate" (lowercase); Cluster sends
+  # "Personal"/"Corporate". The lookup must not depend on which endpoint the
+  # value came from.
+  test "maps name type to kind case-insensitively" do
+    assert_equal :person, person("name_type" => "personal").kind
+    assert_equal :organization, person("name_type" => "corporate").kind
+  end
+
   test "exposes mapped identifiers" do
     subject = person
 

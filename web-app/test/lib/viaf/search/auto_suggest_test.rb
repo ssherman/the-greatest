@@ -57,6 +57,18 @@ class Viaf::Search::AutoSuggestTest < ActiveSupport::TestCase
     assert_raises(Viaf::Exceptions::BlockedError) { @search.call("tolstoy") }
   end
 
+  test "raises ParseError when the response body is not a Hash" do
+    @client.stubs(:get).returns({success: true, data: [], errors: [], metadata: {}})
+
+    assert_raises(Viaf::Exceptions::ParseError) { @search.call("tolstoy") }
+  end
+
+  test "raises ParseError when a result element is a bare String, not a Hash" do
+    @client.stubs(:get).returns(response(["tolstoy"]))
+
+    assert_raises(Viaf::Exceptions::ParseError) { @search.call("tolstoy") }
+  end
+
   test "handles a bare Hash result (not wrapped in array)" do
     @client.stubs(:get).returns({success: true, data: {"query" => "tolstoy", "result" => {
       "term" => "Tolstoy, Leo, graf, 1828-1910", "nametype" => "personal",

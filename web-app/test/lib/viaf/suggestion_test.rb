@@ -111,4 +111,16 @@ class Viaf::SuggestionTest < ActiveSupport::TestCase
     assert_equal :organization, suggestion("nametype" => "corporate").kind
     assert_nil suggestion("nametype" => "uniformtitle").kind
   end
+
+  # Cluster sends "Personal"/"Corporate" (capitalized); AutoSuggest sends
+  # "personal"/"corporate". The lookup must not depend on which endpoint the
+  # value came from.
+  test "maps nametype to kind case-insensitively" do
+    assert_equal :person, suggestion("nametype" => "Personal").kind
+    assert_equal :organization, suggestion("nametype" => "Corporate").kind
+  end
+
+  test "raises ParseError when the result is not a Hash" do
+    assert_raises(Viaf::Exceptions::ParseError) { Viaf::Suggestion.from_result("tolstoy") }
+  end
 end

@@ -15,6 +15,10 @@ module Viaf
     attr_reader :viaf_id, :term, :display_form, :name_type, :score, :source_ids
 
     def self.from_result(result)
+      unless result.is_a?(Hash)
+        raise Exceptions::ParseError.new("Expected a Hash AutoSuggest result", result.to_s[0, 500])
+      end
+
       new(result)
     end
 
@@ -27,7 +31,10 @@ module Viaf
       @source_ids = result.except(*STRUCTURAL_KEYS)
     end
 
-    def kind = NAME_TYPE_KINDS[name_type]
+    # VIAF's AutoSuggest endpoint sends "personal"/"corporate" (lowercase); this
+    # is kept case-insensitive against an upstream casing change rather than
+    # relying on that ever staying stable.
+    def kind = NAME_TYPE_KINDS[name_type&.downcase]
 
     def birth_year = date_range[0]
 

@@ -15,8 +15,12 @@ module Viaf
         raise ArgumentError, "query cannot be blank" if query.blank?
 
         response = @client.get(ENDPOINT, {query: query})
+        data = response[:data]
+        unless data.is_a?(Hash)
+          raise Exceptions::ParseError.new("Expected a Hash response body", data.to_s[0, 500])
+        end
 
-        Normalizer.array(response[:data]["result"]).map do |result|
+        Normalizer.array(data["result"]).map do |result|
           Suggestion.from_result(result)
         end
       end

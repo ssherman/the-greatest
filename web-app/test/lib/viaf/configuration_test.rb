@@ -26,7 +26,7 @@ class Viaf::ConfigurationTest < ActiveSupport::TestCase
   test "rejects a blank base url" do
     ENV["VIAF_URL"] = ""
 
-    assert_raises(ArgumentError) { Viaf::Configuration.new }
+    assert_raises(Viaf::Exceptions::ConfigurationError) { Viaf::Configuration.new }
   ensure
     ENV.delete("VIAF_URL")
   end
@@ -34,7 +34,7 @@ class Viaf::ConfigurationTest < ActiveSupport::TestCase
   test "rejects a non-http base url" do
     ENV["VIAF_URL"] = "ftp://viaf.org"
 
-    assert_raises(ArgumentError) { Viaf::Configuration.new }
+    assert_raises(Viaf::Exceptions::ConfigurationError) { Viaf::Configuration.new }
   ensure
     ENV.delete("VIAF_URL")
   end
