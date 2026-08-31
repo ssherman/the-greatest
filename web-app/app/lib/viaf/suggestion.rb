@@ -36,10 +36,22 @@ module Viaf
     private
 
     # Dates are embedded in the heading, e.g. "Tolstoy, Leo, graf, 1828-1910".
+    # Both sides of the dash are matched by the same digit-run rule, but the
+    # dash itself must be adjacent to at least one digit run: a hyphenated
+    # surname ("Smith-Jones") has a dash with no digits on either side, and
+    # a naive "both sides optional" regex would zero-width match there
+    # before ever reaching the real date later in the string.
     def date_range
       @date_range ||= begin
-        match = term.to_s.match(/(\d{3,4})\s*-\s*(\d{3,4})?/)
-        match ? [match[1].to_i, match[2]&.to_i] : [nil, nil]
+        text = term.to_s
+
+        if (match = text.match(/(\d{3,4})\s*-\s*(\d{3,4})?/))
+          [match[1].to_i, match[2]&.to_i]
+        elsif (match = text.match(/-\s*(\d{3,4})/))
+          [nil, match[1].to_i]
+        else
+          [nil, nil]
+        end
       end
     end
   end

@@ -78,6 +78,34 @@ class Viaf::SuggestionTest < ActiveSupport::TestCase
     assert_nil subject.death_year
   end
 
+  test "parses a death-only date range" do
+    subject = suggestion("term" => "Smith, Jane, -1910")
+
+    assert_nil subject.birth_year
+    assert_equal 1910, subject.death_year
+  end
+
+  test "does not mistake a hyphenated surname for a date range" do
+    subject = suggestion("term" => "Smith-Jones, Jane, 1828-1910")
+
+    assert_equal 1828, subject.birth_year
+    assert_equal 1910, subject.death_year
+  end
+
+  test "returns nil years for a term with only a roman numeral" do
+    subject = suggestion("term" => "Louis XIV")
+
+    assert_nil subject.birth_year
+    assert_nil subject.death_year
+  end
+
+  test "returns nil years for a term with a short non-date number" do
+    subject = suggestion("term" => "Henry, 8, King")
+
+    assert_nil subject.birth_year
+    assert_nil subject.death_year
+  end
+
   test "maps nametype to the Books::Author kind enum" do
     assert_equal :person, suggestion("nametype" => "personal").kind
     assert_equal :organization, suggestion("nametype" => "corporate").kind
