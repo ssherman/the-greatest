@@ -100,6 +100,26 @@ module Services
         assert_equal @books[2, 2].map(&:id), items.map(&:listable_id)
       end
 
+      test "reads items by rank, not by insertion order" do
+        # Insert in ascending-id (natural) order but rank in reverse, so
+        # insertion order and rank order disagree. If .order(:rank) were ever
+        # dropped from top_items/overflow_items, Postgres would still return
+        # these rows in roughly insertion order and this test would catch it.
+        @books.each_with_index do |book, index|
+          ::RankedItem.create!(ranking_configuration: @config, item: book,
+            rank: @books.size - index, score: (100 - index).to_d)
+        end
+
+        result = generate
+        top = result.data[:top_list]
+        overflow = result.data[:overflow_list]
+
+        assert_equal [@books[4].id, @books[3].id],
+          top.list_items.order(:position).map(&:listable_id)
+        assert_equal [@books[2].id, @books[1].id],
+          overflow.list_items.order(:position).map(&:listable_id)
+      end
+
       test "the secondary cutoff drops the tail" do
         rank(@books)
 
