@@ -54,4 +54,21 @@ class Viaf::NormalizerTest < ActiveSupport::TestCase
   test "array turns nil into an empty array" do
     assert_equal [], Viaf::Normalizer.array(nil)
   end
+
+  test "strip_prefix removes an ns-numbered prefix" do
+    assert_equal "viafID", Viaf::Normalizer.strip_prefix("ns1:viafID")
+  end
+
+  test "strip_prefix removes a non-numeric prefix" do
+    assert_equal "VIAFCluster", Viaf::Normalizer.strip_prefix("v:VIAFCluster")
+  end
+
+  test "strip_prefix preserves xmlns declarations" do
+    assert_equal "xmlns:foaf", Viaf::Normalizer.strip_prefix("xmlns:foaf")
+    assert_equal "xmlns", Viaf::Normalizer.strip_prefix("xmlns")
+  end
+
+  test "strip_prefix leaves an unprefixed key alone" do
+    assert_equal "content", Viaf::Normalizer.strip_prefix("content")
+  end
 end
