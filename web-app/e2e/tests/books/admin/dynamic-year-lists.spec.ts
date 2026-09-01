@@ -23,10 +23,19 @@ test.describe("Books admin — dynamic year lists", () => {
   });
 
   test.afterEach(async ({ page }) => {
+    // Each id is deleted independently -- one failure (a missing button, an
+    // unexpected redirect, a failed assertion) must not strand the rest of
+    // the queue. In test 4 the second id is the side-effect configuration
+    // this whole cleanup exists to protect, so it cannot be allowed to ride
+    // on the first delete succeeding.
     for (const id of configIdsToDelete) {
-      await page.goto(`/admin/ranking_configurations/${id}`);
-      await page.getByRole("button", { name: "Delete" }).click();
-      await expect(page).toHaveURL(/\/admin\/ranking_configurations$/);
+      try {
+        await page.goto(`/admin/ranking_configurations/${id}`);
+        await page.getByRole("button", { name: "Delete" }).click();
+        await expect(page).toHaveURL(/\/admin\/ranking_configurations$/);
+      } catch (error) {
+        console.error(`Failed to delete ranking configuration ${id} during cleanup:`, error);
+      }
     }
   });
 
@@ -45,7 +54,11 @@ test.describe("Books admin — dynamic year lists", () => {
   // Locates the id of a configuration by its exact name, via the index
   // search -- used to find the second configuration that "Create Next
   // Year's Configuration" creates as a side effect, so it can be queued
-  // for deletion too.
+  // for deletion too. The name is computed by the caller, never parsed out
+  // of the flash: CreateNextYearConfiguration is deterministic (max(year) +
+  // 1 for the domain, named "The Best Books of <year>"), so cleanup doesn't
+  // need to depend on flash markup, timing, or an ILIKE round-trip of
+  // scraped text.
   async function findConfigurationId(page: Page, name: string): Promise<number> {
     await page.goto(`/admin/ranking_configurations?q=${encodeURIComponent(name)}`);
     const link = page.getByRole("link", { name, exact: true });
@@ -88,21 +101,25 @@ test.describe("Books admin — dynamic year lists", () => {
   });
 
   test("creating next year's configuration reports what it copied", async ({ page }) => {
-    await createConfiguration(page, `E2E Source RC ${Date.now()}`, "2033");
+    const sourceYear = 2033;
+    await createConfiguration(page, `E2E Source RC ${Date.now()}`, String(sourceYear));
     await page.locator(".dropdown").getByText("Actions", { exact: true }).click();
     await page.getByRole("button", { name: /Create Next Year/ }).click();
 
+    // Real coverage of the action's reporting -- kept as an assertion, but
+    // cleanup below does not depend on parsing this text.
     const flash = page
       .locator('[role="alert"] span')
       .filter({ hasText: "penalties copied forward" });
     await expect(flash).toBeVisible();
 
-    const flashText = await flash.textContent();
-    const match = flashText?.match(/Created (.+?): \d/);
-    expect(match).not.toBeNull();
-
-    // Queue the configuration this action created (a second, real row) for
-    // deletion alongside the source configuration created above.
-    configIdsToDelete.push(await findConfigurationId(page, match![1]));
+    // CreateNextYearConfiguration is deterministic: target year is
+    // max(year) + 1 across this domain's year configurations, and afterEach
+    // deletes every configuration each test creates, so at this point the
+    // only year configuration in the domain is the one just created above.
+    // Real data can't raise this: the site's real year configurations are
+    // 2023-2025, well below sourceYear.
+    const nextYearName = `The Best Books of ${sourceYear + 1}`;
+    configIdsToDelete.push(await findConfigurationId(page, nextYearName));
   });
 });
