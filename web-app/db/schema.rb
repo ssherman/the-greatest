@@ -406,6 +406,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_31_230610) do
     t.index ["submitted_by_id"], name: "index_external_links_on_submitted_by_id"
   end
 
+  create_table "external_records", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "fetched_at", null: false
+    t.jsonb "payload", null: false
+    t.integer "schema_version", default: 1, null: false
+    t.integer "source", null: false
+    t.string "source_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["source", "fetched_at"], name: "index_external_records_on_source_and_fetched_at"
+    t.index ["source", "source_id"], name: "index_external_records_on_source_and_source_id", unique: true
+  end
+
   create_table "friendly_id_slugs", force: :cascade do |t|
     t.datetime "created_at"
     t.string "scope"
