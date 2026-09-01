@@ -38,7 +38,13 @@ class Books::ReadingGoalTest < ActiveSupport::TestCase
   end
 
   test "date scopes use inclusive boundaries and stable ordering" do
-    today = Date.new(2026, 8, 26)
+    # Date.current, not a literal: the fixtures are laid out relative to today,
+    # so a hardcoded query date would drift away from them and go red on a
+    # future run. The boundaries are still exercised -- active_ending_soon ends
+    # exactly today and active_ending_later starts exactly today, so this one
+    # query proves ends_on >= date and starts_on <= date are inclusive while
+    # starts_on > date and ends_on < date are not.
+    today = Date.current
 
     assert_equal [
       books_reading_goals(:active_ending_soon).id,
