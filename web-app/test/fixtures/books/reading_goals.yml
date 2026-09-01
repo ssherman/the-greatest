@@ -30,14 +30,23 @@
 # from what the dates meant -- active_ending_soon had been sitting in the
 # finished group -- and the test had been written to match the drift.
 #
-# Keep them relative. An absolute date here is a time bomb with no owner.
+# Keep them relative. An absolute date here is a time bomb with no owner -- and
+# so is a hardcoded query date in a test that reads these, which is why
+# Books::ReadingGoalTest queries at Date.current rather than a literal.
+#
+# Two goals sit exactly ON today, and that is load-bearing: active_ending_soon
+# ENDS today and active_ending_later STARTS today. Between them they pin all
+# four inequality directions in the scopes -- `ends_on >= date` and
+# `starts_on <= date` include them in active_on, while `starts_on > date` and
+# `ends_on < date` exclude them from upcoming_on and finished_on. Move either
+# off today and the "inclusive boundaries" coverage disappears silently.
 active_ending_soon:
   id: 1
   user: regular_user
   name: Finish Summer Reading
   target_count: 5
   starts_on: <%= Date.current - 30.days %>
-  ends_on: <%= Date.current + 3.days %>
+  ends_on: <%= Date.current %>
   public: false
 
 active_ending_later:
@@ -45,7 +54,7 @@ active_ending_later:
   user: regular_user
   name: August Classics
   target_count: 3
-  starts_on: <%= Date.current - 20.days %>
+  starts_on: <%= Date.current %>
   ends_on: <%= Date.current + 30.days %>
   public: false
 
