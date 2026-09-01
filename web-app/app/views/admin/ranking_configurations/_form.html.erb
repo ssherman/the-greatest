@@ -226,6 +226,60 @@
             </label>
           <% end %>
         </div>
+
+        <div>
+          <%= f.label :year, class: "label" do %>
+            <span class="font-semibold">Year</span>
+          <% end %>
+          <%= f.number_field :year,
+              class: "input w-full #{@ranking_configuration.errors[:year].any? ? 'input-error' : ''}",
+              min: 1,
+              placeholder: "All-time" %>
+          <label class="label">
+            <span>Set this to scope the configuration to one year (optional)</span>
+          </label>
+          <% if @ranking_configuration.errors[:year].any? %>
+            <label class="label">
+              <span class="text-error"><%= @ranking_configuration.errors[:year].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <div>
+          <%= f.label :primary_mapped_list_cutoff_limit, class: "label" do %>
+            <span class="font-semibold">Top List Size</span>
+          <% end %>
+          <%= f.number_field :primary_mapped_list_cutoff_limit,
+              class: "input w-full #{@ranking_configuration.errors[:primary_mapped_list_cutoff_limit].any? ? 'input-error' : ''}",
+              min: 1,
+              placeholder: "100" %>
+          <label class="label">
+            <span>How many items the generated top list holds</span>
+          </label>
+          <% if @ranking_configuration.errors[:primary_mapped_list_cutoff_limit].any? %>
+            <label class="label">
+              <span class="text-error"><%= @ranking_configuration.errors[:primary_mapped_list_cutoff_limit].first %></span>
+            </label>
+          <% end %>
+        </div>
+
+        <div>
+          <%= f.label :secondary_mapped_list_cutoff_limit, class: "label" do %>
+            <span class="font-semibold">Honorable Mention Size</span>
+          <% end %>
+          <%= f.number_field :secondary_mapped_list_cutoff_limit,
+              class: "input w-full #{@ranking_configuration.errors[:secondary_mapped_list_cutoff_limit].any? ? 'input-error' : ''}",
+              min: 1,
+              placeholder: "400" %>
+          <label class="label">
+            <span>How many items follow the top list; blank means no limit</span>
+          </label>
+          <% if @ranking_configuration.errors[:secondary_mapped_list_cutoff_limit].any? %>
+            <label class="label">
+              <span class="text-error"><%= @ranking_configuration.errors[:secondary_mapped_list_cutoff_limit].first %></span>
+            </label>
+          <% end %>
+        </div>
       </div>
     </div>
   </div>

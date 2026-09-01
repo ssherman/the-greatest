@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_31_055647) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_31_230610) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -576,6 +576,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_31_055647) do
   create_table "lists", force: :cascade do |t|
     t.datetime "activated_at"
     t.integer "auto_generated_kind"
+    t.integer "auto_generated_year"
     t.boolean "category_specific"
     t.datetime "created_at", null: false
     t.boolean "creator_specific"
@@ -609,7 +610,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_31_055647) do
     t.index ["activated_at"], name: "index_lists_on_activated_at"
     t.index ["submitted_at"], name: "index_lists_on_submitted_at"
     t.index ["submitted_by_id"], name: "index_lists_on_submitted_by_id"
-    t.index ["type", "auto_generated_kind"], name: "index_lists_on_type_and_auto_generated_kind", unique: true, where: "(auto_generated_kind IS NOT NULL)"
+    t.index ["type", "auto_generated_kind", "auto_generated_year"], name: "index_lists_on_type_and_auto_generated_kind_and_year", unique: true, where: "(auto_generated_kind IS NOT NULL)", nulls_not_distinct: true
   end
 
   create_table "memberships", force: :cascade do |t|
@@ -940,10 +941,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_31_055647) do
     t.integer "primary_mapped_list_cutoff_limit"
     t.bigint "primary_mapped_list_id"
     t.datetime "published_at"
+    t.integer "secondary_mapped_list_cutoff_limit"
     t.bigint "secondary_mapped_list_id"
     t.string "type", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id"
+    t.integer "year"
     t.index ["inherited_from_id"], name: "index_ranking_configurations_on_inherited_from_id"
     t.index ["primary_mapped_list_id"], name: "index_ranking_configurations_on_primary_mapped_list_id"
     t.index ["secondary_mapped_list_id"], name: "index_ranking_configurations_on_secondary_mapped_list_id"

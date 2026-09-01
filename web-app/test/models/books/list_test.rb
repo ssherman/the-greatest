@@ -7,6 +7,7 @@ require "test_helper"
 #  id                    :bigint           not null, primary key
 #  activated_at          :datetime
 #  auto_generated_kind   :integer
+#  auto_generated_year   :integer
 #  category_specific     :boolean
 #  creator_specific      :boolean
 #  description           :text
@@ -40,10 +41,10 @@ require "test_helper"
 #
 # Indexes
 #
-#  index_lists_on_activated_at                  (activated_at)
-#  index_lists_on_submitted_at                  (submitted_at)
-#  index_lists_on_submitted_by_id               (submitted_by_id)
-#  index_lists_on_type_and_auto_generated_kind  (type,auto_generated_kind) UNIQUE WHERE (auto_generated_kind IS NOT NULL)
+#  index_lists_on_activated_at                           (activated_at)
+#  index_lists_on_submitted_at                           (submitted_at)
+#  index_lists_on_submitted_by_id                        (submitted_by_id)
+#  index_lists_on_type_and_auto_generated_kind_and_year  (type,auto_generated_kind,auto_generated_year) UNIQUE NULLS NOT DISTINCT WHERE (auto_generated_kind IS NOT NULL)
 #
 # Foreign Keys
 #

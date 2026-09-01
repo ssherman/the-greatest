@@ -2,30 +2,32 @@
 #
 # Table name: ranking_configurations
 #
-#  id                                :bigint           not null, primary key
-#  algorithm_version                 :integer          default(1), not null
-#  apply_list_dates_penalty          :boolean          default(TRUE), not null
-#  archived                          :boolean          default(FALSE), not null
-#  bonus_pool_percentage             :decimal(10, 2)   default(3.0), not null
-#  description                       :text
-#  exponent                          :decimal(10, 2)   default(3.0), not null
-#  global                            :boolean          default(TRUE), not null
-#  inherit_penalties                 :boolean          default(TRUE), not null
-#  list_limit                        :integer
-#  max_list_dates_penalty_age        :integer          default(50)
-#  max_list_dates_penalty_percentage :integer          default(80)
-#  min_list_weight                   :integer          default(1), not null
-#  name                              :string           not null
-#  primary                           :boolean          default(FALSE), not null
-#  primary_mapped_list_cutoff_limit  :integer
-#  published_at                      :datetime
-#  type                              :string           not null
-#  created_at                        :datetime         not null
-#  updated_at                        :datetime         not null
-#  inherited_from_id                 :bigint
-#  primary_mapped_list_id            :bigint
-#  secondary_mapped_list_id          :bigint
-#  user_id                           :bigint
+#  id                                 :bigint           not null, primary key
+#  algorithm_version                  :integer          default(1), not null
+#  apply_list_dates_penalty           :boolean          default(TRUE), not null
+#  archived                           :boolean          default(FALSE), not null
+#  bonus_pool_percentage              :decimal(10, 2)   default(3.0), not null
+#  description                        :text
+#  exponent                           :decimal(10, 2)   default(3.0), not null
+#  global                             :boolean          default(TRUE), not null
+#  inherit_penalties                  :boolean          default(TRUE), not null
+#  list_limit                         :integer
+#  max_list_dates_penalty_age         :integer          default(50)
+#  max_list_dates_penalty_percentage  :integer          default(80)
+#  min_list_weight                    :integer          default(1), not null
+#  name                               :string           not null
+#  primary                            :boolean          default(FALSE), not null
+#  primary_mapped_list_cutoff_limit   :integer
+#  published_at                       :datetime
+#  secondary_mapped_list_cutoff_limit :integer
+#  type                               :string           not null
+#  year                               :integer
+#  created_at                         :datetime         not null
+#  updated_at                         :datetime         not null
+#  inherited_from_id                  :bigint
+#  primary_mapped_list_id             :bigint
+#  secondary_mapped_list_id           :bigint
+#  user_id                            :bigint
 #
 # Indexes
 #
@@ -48,6 +50,10 @@ module Music
   module Songs
     class RankingConfiguration < ::RankingConfiguration
       def media_noun_plural = "songs"
+
+      def supports_year_rollups? = true
+
+      def generated_list_class = ::Music::Songs::List
     end
   end
 end

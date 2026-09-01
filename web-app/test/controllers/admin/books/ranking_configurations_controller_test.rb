@@ -40,6 +40,19 @@ module Admin
         assert_response :success
       end
 
+      # Books::RankingConfiguration#supports_year_rollups? is true, unlike
+      # Books::Authors::RankingConfiguration -- see the negative case in
+      # Admin::Music::Artists::RankingConfigurationsControllerTest.
+      test "offers Create Next Year's Configuration, which this domain supports" do
+        assert @rc.supports_year_rollups?
+
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_ranking_configuration_path(@rc)
+
+        assert_response :success
+        assert_match(/action_name=CreateNextYearConfiguration/, response.body)
+      end
+
       test "index tolerates a sort-injection attempt" do
         sign_in_as(@admin_user, stub_auth: true)
         assert_nothing_raised do
@@ -62,6 +75,45 @@ module Admin
         assert_no_difference("::Books::RankingConfiguration.count") do
           post admin_books_ranking_configurations_path, params: {ranking_configuration: {name: "Nope"}}
         end
+      end
+
+      test "permits year and secondary cutoff on update" do
+        config = ranking_configurations(:books_year_2025)
+        sign_in_as(@admin_user, stub_auth: true)
+
+        patch admin_books_ranking_configuration_path(config), params: {
+          ranking_configuration: {year: 2026, secondary_mapped_list_cutoff_limit: 250}
+        }
+
+        config.reload
+        assert_equal 2026, config.year
+        assert_equal 250, config.secondary_mapped_list_cutoff_limit
+      end
+
+      test "ignores mapped list ids on update since the generator owns them" do
+        config = ranking_configurations(:books_year_2025)
+        other = lists(:basic_list)
+        sign_in_as(@admin_user, stub_auth: true)
+
+        patch admin_books_ranking_configuration_path(config), params: {
+          ranking_configuration: {primary_mapped_list_id: other.id}
+        }
+
+        assert_nil config.reload.primary_mapped_list_id
+      end
+
+      test "accepts the two new action names" do
+        config = ranking_configurations(:books_year_2025)
+        sign_in_as(@admin_user, stub_auth: true)
+        GenerateDynamicListsJob.stubs(:perform_async)
+
+        post execute_action_admin_books_ranking_configuration_path(config),
+          params: {action_name: "GenerateDynamicLists"}
+        assert_response :redirect
+
+        post execute_action_admin_books_ranking_configuration_path(config),
+          params: {action_name: "CreateNextYearConfiguration"}
+        assert_response :redirect
       end
     end
   end

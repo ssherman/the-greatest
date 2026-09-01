@@ -5,6 +5,7 @@
 #  id                    :bigint           not null, primary key
 #  activated_at          :datetime
 #  auto_generated_kind   :integer
+#  auto_generated_year   :integer
 #  category_specific     :boolean
 #  creator_specific      :boolean
 #  description           :text
@@ -38,10 +39,10 @@
 #
 # Indexes
 #
-#  index_lists_on_activated_at                  (activated_at)
-#  index_lists_on_submitted_at                  (submitted_at)
-#  index_lists_on_submitted_by_id               (submitted_by_id)
-#  index_lists_on_type_and_auto_generated_kind  (type,auto_generated_kind) UNIQUE WHERE (auto_generated_kind IS NOT NULL)
+#  index_lists_on_activated_at                           (activated_at)
+#  index_lists_on_submitted_at                           (submitted_at)
+#  index_lists_on_submitted_by_id                        (submitted_by_id)
+#  index_lists_on_type_and_auto_generated_kind_and_year  (type,auto_generated_kind,auto_generated_year) UNIQUE NULLS NOT DISTINCT WHERE (auto_generated_kind IS NOT NULL)
 #
 # Foreign Keys
 #
@@ -74,9 +75,11 @@ class List < ApplicationRecord
   # Set on lists whose items are written by a generator rather than curated by
   # hand. Identifies the generated list durably across renames -- the legacy
   # implementation looked its lists up by name, which broke on any edit.
-  # Prefixed so the predicate reads generated_user_favorites? rather than
-  # colliding with a bare user_favorites? on List.
-  enum :auto_generated_kind, {user_favorites: 0}, prefix: :generated
+  # year_top and year_honorable_mention pair with auto_generated_year; a
+  # user_favorites list leaves that column NULL.
+  enum :auto_generated_kind,
+    {user_favorites: 0, year_top: 1, year_honorable_mention: 2},
+    prefix: :generated
 
   # Set by Services::Lists::Submission only. The simplifier is a Nokogiri parse
   # and auto_simplify_content runs it inline on every new record carrying

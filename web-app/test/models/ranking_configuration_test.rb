@@ -2,30 +2,32 @@
 #
 # Table name: ranking_configurations
 #
-#  id                                :bigint           not null, primary key
-#  algorithm_version                 :integer          default(1), not null
-#  apply_list_dates_penalty          :boolean          default(TRUE), not null
-#  archived                          :boolean          default(FALSE), not null
-#  bonus_pool_percentage             :decimal(10, 2)   default(3.0), not null
-#  description                       :text
-#  exponent                          :decimal(10, 2)   default(3.0), not null
-#  global                            :boolean          default(TRUE), not null
-#  inherit_penalties                 :boolean          default(TRUE), not null
-#  list_limit                        :integer
-#  max_list_dates_penalty_age        :integer          default(50)
-#  max_list_dates_penalty_percentage :integer          default(80)
-#  min_list_weight                   :integer          default(1), not null
-#  name                              :string           not null
-#  primary                           :boolean          default(FALSE), not null
-#  primary_mapped_list_cutoff_limit  :integer
-#  published_at                      :datetime
-#  type                              :string           not null
-#  created_at                        :datetime         not null
-#  updated_at                        :datetime         not null
-#  inherited_from_id                 :bigint
-#  primary_mapped_list_id            :bigint
-#  secondary_mapped_list_id          :bigint
-#  user_id                           :bigint
+#  id                                 :bigint           not null, primary key
+#  algorithm_version                  :integer          default(1), not null
+#  apply_list_dates_penalty           :boolean          default(TRUE), not null
+#  archived                           :boolean          default(FALSE), not null
+#  bonus_pool_percentage              :decimal(10, 2)   default(3.0), not null
+#  description                        :text
+#  exponent                           :decimal(10, 2)   default(3.0), not null
+#  global                             :boolean          default(TRUE), not null
+#  inherit_penalties                  :boolean          default(TRUE), not null
+#  list_limit                         :integer
+#  max_list_dates_penalty_age         :integer          default(50)
+#  max_list_dates_penalty_percentage  :integer          default(80)
+#  min_list_weight                    :integer          default(1), not null
+#  name                               :string           not null
+#  primary                            :boolean          default(FALSE), not null
+#  primary_mapped_list_cutoff_limit   :integer
+#  published_at                       :datetime
+#  secondary_mapped_list_cutoff_limit :integer
+#  type                               :string           not null
+#  year                               :integer
+#  created_at                         :datetime         not null
+#  updated_at                         :datetime         not null
+#  inherited_from_id                  :bigint
+#  primary_mapped_list_id             :bigint
+#  secondary_mapped_list_id           :bigint
+#  user_id                            :bigint
 #
 # Indexes
 #
@@ -435,5 +437,66 @@ class RankingConfigurationTest < ActiveSupport::TestCase
       assert result.success?, "Should succeed even with no active lists"
       assert config.ranked_items.empty?, "Should create no items when no active lists"
     end
+  end
+
+  test "year accepts nil" do
+    config = ranking_configurations(:books_global)
+    config.year = nil
+    assert config.valid?
+  end
+
+  test "year rejects zero and non-integers" do
+    config = ranking_configurations(:books_global)
+    config.year = 0
+    assert_not config.valid?
+    assert_includes config.errors[:year], "must be greater than 0"
+
+    config.year = 1.5
+    assert_not config.valid?
+    assert_includes config.errors[:year], "must be an integer"
+  end
+
+  test "secondary_mapped_list_cutoff_limit rejects zero" do
+    config = ranking_configurations(:books_global)
+    config.secondary_mapped_list_cutoff_limit = 0
+    assert_not config.valid?
+  end
+
+  test "secondary_mapped_list_cutoff_limit accepts nil meaning uncapped" do
+    config = ranking_configurations(:books_global)
+    config.secondary_mapped_list_cutoff_limit = nil
+    assert config.valid?
+  end
+
+  test "the four item domains support year rollups" do
+    {
+      books_global: ::Books::List,
+      games_global: ::Games::List,
+      music_albums_global: ::Music::Albums::List,
+      music_songs_global: ::Music::Songs::List
+    }.each do |fixture, list_class|
+      config = ranking_configurations(fixture)
+      assert config.supports_year_rollups?, "#{fixture} should support year rollups"
+      assert_equal list_class, config.generated_list_class
+    end
+  end
+
+  test "creator configurations do not support year rollups" do
+    assert_not ranking_configurations(:books_authors_global).supports_year_rollups?
+    assert_not ranking_configurations(:music_artists_global).supports_year_rollups?
+  end
+
+  test "generated_list_noun capitalises the media noun" do
+    assert_equal "Books", ranking_configurations(:books_global).generated_list_noun
+    assert_equal "Games", ranking_configurations(:games_global).generated_list_noun
+    assert_equal "Albums", ranking_configurations(:music_albums_global).generated_list_noun
+    assert_equal "Songs", ranking_configurations(:music_songs_global).generated_list_noun
+  end
+
+  test "only books names a static one-year penalty" do
+    assert_equal "List: only covers 1 year (yearly book awards, best of the year, etc)",
+      ranking_configurations(:books_global).one_year_penalty_name
+    assert_nil ranking_configurations(:games_global).one_year_penalty_name
+    assert_nil ranking_configurations(:music_albums_global).one_year_penalty_name
   end
 end

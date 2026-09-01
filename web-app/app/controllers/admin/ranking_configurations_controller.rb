@@ -149,9 +149,9 @@ class Admin::RankingConfigurationsController < Admin::BaseController
       :apply_list_dates_penalty,
       :max_list_dates_penalty_age,
       :max_list_dates_penalty_percentage,
-      :primary_mapped_list_id,
-      :secondary_mapped_list_id,
-      :primary_mapped_list_cutoff_limit
+      :year,
+      :primary_mapped_list_cutoff_limit,
+      :secondary_mapped_list_cutoff_limit
     )
   end
 
@@ -186,7 +186,7 @@ class Admin::RankingConfigurationsController < Admin::BaseController
   # validate_action_name! is inherited from Admin::BaseController; this class only
   # declares which names it accepts.
   def allowed_action_names
-    %w[RefreshRankings BulkCalculateWeights]
+    %w[RefreshRankings BulkCalculateWeights GenerateDynamicLists CreateNextYearConfiguration]
   end
 
   def table_partial_path

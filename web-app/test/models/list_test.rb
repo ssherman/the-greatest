@@ -5,6 +5,7 @@
 #  id                    :bigint           not null, primary key
 #  activated_at          :datetime
 #  auto_generated_kind   :integer
+#  auto_generated_year   :integer
 #  category_specific     :boolean
 #  creator_specific      :boolean
 #  description           :text
@@ -38,10 +39,10 @@
 #
 # Indexes
 #
-#  index_lists_on_activated_at                  (activated_at)
-#  index_lists_on_submitted_at                  (submitted_at)
-#  index_lists_on_submitted_by_id               (submitted_by_id)
-#  index_lists_on_type_and_auto_generated_kind  (type,auto_generated_kind) UNIQUE WHERE (auto_generated_kind IS NOT NULL)
+#  index_lists_on_activated_at                           (activated_at)
+#  index_lists_on_submitted_at                           (submitted_at)
+#  index_lists_on_submitted_by_id                        (submitted_by_id)
+#  index_lists_on_type_and_auto_generated_kind_and_year  (type,auto_generated_kind,auto_generated_year) UNIQUE NULLS NOT DISTINCT WHERE (auto_generated_kind IS NOT NULL)
 #
 # Foreign Keys
 #
@@ -489,5 +490,41 @@ class ListTest < ActiveSupport::TestCase
     )
 
     assert list.valid?, list.errors.full_messages.to_sentence
+  end
+
+  test "auto_generated_kind carries the two year rollup values" do
+    list = Books::List.new(name: "x", auto_generated_kind: :year_top, auto_generated_year: 2025)
+    assert list.generated_year_top?
+    assert list.auto_generated?
+
+    list.auto_generated_kind = :year_honorable_mention
+    assert list.generated_year_honorable_mention?
+  end
+
+  test "one generated list of each kind per type per year" do
+    Books::List.create!(name: "Top 2025", status: :active,
+      auto_generated_kind: :year_top, auto_generated_year: 2025)
+
+    assert_raises(ActiveRecord::RecordNotUnique) do
+      Books::List.create!(name: "Dupe", status: :active,
+        auto_generated_kind: :year_top, auto_generated_year: 2025)
+    end
+  end
+
+  test "different years of the same kind coexist" do
+    Books::List.create!(name: "Top 2025", status: :active,
+      auto_generated_kind: :year_top, auto_generated_year: 2025)
+    other = Books::List.create!(name: "Top 2024", status: :active,
+      auto_generated_kind: :year_top, auto_generated_year: 2024)
+
+    assert other.persisted?
+  end
+
+  test "user_favorites still collapses to one per type despite a null year" do
+    Books::List.create!(name: "Favs", status: :active, auto_generated_kind: :user_favorites)
+
+    assert_raises(ActiveRecord::RecordNotUnique) do
+      Books::List.create!(name: "Dupe favs", status: :active, auto_generated_kind: :user_favorites)
+    end
   end
 end
