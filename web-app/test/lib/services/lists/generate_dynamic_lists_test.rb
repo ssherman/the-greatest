@@ -14,6 +14,13 @@ module Services
           books_books(:got),
           books_books(:clash)
         ]
+
+        # rank() seeds ranked_items directly; the real calculation would wipe them,
+        # since prepare_lists finds no weighted lists on this fixture configuration.
+        @config.stubs(:calculate_rankings).returns(
+          ItemRankings::Calculator::Result.new(success?: true, data: [], errors: [])
+        )
+        Rankings::BulkWeightCalculator.any_instance.stubs(:call)
       end
 
       # Ranks the given books 1..N on the year configuration. The generator
@@ -327,6 +334,79 @@ module Services
         generate
 
         assert_equal 1, top.reload.ranked_lists.count
+      end
+
+      # The brief's version of this test sequences bulk.expects(:call) before
+      # Rankings::BulkWeightCalculator.expects(:new).with(@config).returns(bulk)
+      # -- impossible, since #call can't be expected on an object #new hasn't
+      # returned yet. Beyond the ordering, mocking .new with a strict .with(@config)
+      # also collides with recalculate_primary's own Rankings::BulkWeightCalculator.new(main)
+      # call later in the same run (main != @config here, since books_year_2025 is
+      # not the primary) -- that second call would be "unexpected invocation" against
+      # an expectation scoped to @config. Recording invocation order with plain
+      # stubs sidesteps both problems and is more robust than a Mocha::Sequence: it
+      # doesn't care how many times ranked_items is read (once for the top window,
+      # once for overflow), only that both come after the weight and rank recalculation.
+      test "recalculates the year configuration's weights and rankings before reading them" do
+        call_order = []
+
+        Rankings::BulkWeightCalculator.any_instance.stubs(:call).with {
+          call_order << :bulk_weight_call
+          true
+        }
+        @config.stubs(:calculate_rankings).with {
+          call_order << :calculate_rankings
+          true
+        }.returns(ItemRankings::Calculator::Result.new(success?: true, data: [], errors: []))
+        @config.stubs(:ranked_items).with {
+          call_order << :ranked_items
+          true
+        }.returns(::RankedItem.none)
+
+        GenerateDynamicLists.call(ranking_configuration: @config, recalculate_primary: false)
+
+        assert_equal [:bulk_weight_call, :calculate_rankings, :ranked_items], call_order.first(3)
+      end
+
+      test "fails when the year ranking calculation fails" do
+        @config.stubs(:calculate_rankings).returns(
+          ItemRankings::Calculator::Result.new(success?: false, data: nil, errors: ["boom"])
+        )
+
+        result = GenerateDynamicLists.call(ranking_configuration: @config, recalculate_primary: false)
+
+        assert_not result.success?
+        assert_match(/boom/, result.errors.first)
+      end
+
+      test "recalculates only the two affected rows on the primary configuration" do
+        rank(@books)
+        captured = nil
+        Rankings::BulkWeightCalculator.any_instance.stubs(:call_for_ids).with { |ids|
+          captured = ids
+          true
+        }
+
+        result = GenerateDynamicLists.call(ranking_configuration: @config, recalculate_primary: false)
+
+        expected = [result.data[:top_list], result.data[:overflow_list]]
+          .flat_map { |list| list.ranked_lists.pluck(:id) }
+        assert_equal expected.sort, captured.sort
+      end
+
+      test "queues the primary configuration's ranking recalculation" do
+        rank(@books)
+        main = ::Books::RankingConfiguration.default_primary
+        CalculateRankingsJob.expects(:perform_async).with(main.id).once
+
+        GenerateDynamicLists.call(ranking_configuration: @config)
+      end
+
+      test "skips the primary recalculation when asked to" do
+        rank(@books)
+        CalculateRankingsJob.expects(:perform_async).never
+
+        GenerateDynamicLists.call(ranking_configuration: @config, recalculate_primary: false)
       end
     end
   end

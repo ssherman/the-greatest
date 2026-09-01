@@ -31,6 +31,8 @@ module Services
         failure = guard_failure
         return Result.new(success?: false, data: nil, errors: [failure]) if failure
 
+        refresh_year_rankings
+
         top_list = nil
         overflow_list = nil
 
@@ -47,6 +49,8 @@ module Services
             secondary_mapped_list_id: overflow_list.id
           )
         end
+
+        recalculate_primary([top_list, overflow_list])
 
         Result.new(
           success?: true,
@@ -239,6 +243,37 @@ module Services
         return if main.nil?
 
         ::RankedList.find_or_create_by!(list: list, ranking_configuration: main)
+      end
+
+      # Order is load-bearing. The generator reads ranked_items, so both the
+      # weights and the rankings behind them must be current first, and
+      # calculate_rankings runs synchronously for exactly that reason. Measured on
+      # real data: 0.3-0.6s for a 43-60 list year configuration.
+      def refresh_year_rankings
+        ::Rankings::BulkWeightCalculator.new(@config).call
+
+        result = @config.calculate_rankings
+        return if result.success?
+
+        raise "Ranking calculation failed for #{@config.name}: #{result.errors.join(", ")}"
+      end
+
+      # Only the two rows this run touched, not the primary's whole corpus -- for
+      # books that is 623 lists, and the two generated lists are the only ones
+      # whose weight inputs changed.
+      #
+      # The ranking recalculation is safe as perform_async because the lists are
+      # fully written and re-weighted by the time it is enqueued. It is the same
+      # job the Refresh Rankings button queues, so this adds no new load to a
+      # queue that is already a throughput bottleneck.
+      def recalculate_primary(lists)
+        main = @config.class.default_primary
+        return if main.nil?
+
+        ranked_list_ids = ::RankedList.where(ranking_configuration: main, list: lists).pluck(:id)
+        ::Rankings::BulkWeightCalculator.new(main).call_for_ids(ranked_list_ids) if ranked_list_ids.any?
+
+        ::CalculateRankingsJob.perform_async(main.id) if @recalculate_primary
       end
     end
   end
