@@ -276,6 +276,32 @@ module Services
         assert_equal true, broken.high_quality_source
       end
 
+      # Real data: 50 books lists carry a `url` with a leading space, which fails
+      # List's format validation. update_columns is the only way to create that
+      # state in a test -- it skips validations, same as the bad data's original
+      # write must have. assert_fields must still succeed and still assert its
+      # fields on a list like this, or a config that happens to adopt one of
+      # these 50 breaks on every regeneration run, not just the first.
+      test "asserts fields on a list with a pre-existing invalid url" do
+        rank(@books)
+        broken = ::Books::List.create!(
+          name: "Hand-made overflow", status: :active,
+          auto_generated_kind: :year_honorable_mention, auto_generated_year: 2025
+        )
+        broken.update_columns(url: " https://example.com")
+        assert_not broken.valid?
+
+        result = generate
+
+        assert result.success?, result.errors.inspect
+        broken.reload
+        assert_equal " https://example.com", broken.url
+        assert_equal 1, broken.num_years_covered
+        assert_equal 2025, broken.year_published
+        assert_equal false, broken.voter_count_unknown
+        assert_equal true, broken.high_quality_source
+      end
+
       test "tags both lists with the domain's one-year penalty" do
         rank(@books)
         penalty = penalties(:books_one_year_penalty)

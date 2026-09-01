@@ -188,8 +188,19 @@ module Services
       # Re-asserted on every run rather than set once by hand: the two lists this
       # replaces were hand-created a year apart and drifted, leaving 2023's and
       # 2024's overflow lists at weight 0 with 1,837 items between them.
+      #
+      # assign_attributes + save!(validate: false), not update!: this method owns
+      # a fixed set of known-valid fields -- booleans, an integer, and the
+      # configuration's year -- and asserts only those on every run. `update!`
+      # validates the ENTIRE record, so a pre-existing invalid value on a column
+      # this method never touches would still block it. It does on real data: 50
+      # books lists carry a `url` with a leading space (" https://...") that
+      # fails List's format validation, which is what surfaced this. Not
+      # update_columns: that skips callbacks too and leaves updated_at
+      # unchanged, and the admin show page renders `time_ago_in_words(list.
+      # updated_at)` as the "generated N ago" indicator.
       def assert_fields(list)
-        list.update!(
+        list.assign_attributes(
           num_years_covered: 1,
           number_of_voters: source_list_count,
           voter_count_unknown: false,
@@ -203,6 +214,7 @@ module Services
           location_specific: false,
           creator_specific: false
         )
+        list.save!(validate: false)
       end
 
       # Attaches tags only. The value of a tag is a per-configuration editorial

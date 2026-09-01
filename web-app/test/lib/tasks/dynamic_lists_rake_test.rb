@@ -63,6 +63,23 @@ class DynamicListsRakeTest < ActiveSupport::TestCase
     assert_equal 250, @config.reload.secondary_mapped_list_cutoff_limit
   end
 
+  # Real data: 50 books lists carry a `url` with a leading space, which fails
+  # List's format validation -- running `adopt` against development aborted
+  # partway through with a RecordInvalid on url. update_columns is the only
+  # way to create that state in a test -- it skips validations, same as the
+  # bad data's original write must have.
+  test "adopt stamps a mapped list with a pre-existing invalid url" do
+    @top.update_columns(url: " https://example.com")
+    assert_not @top.valid?
+
+    run_task("dynamic_lists:adopt")
+
+    @top.reload
+    assert @top.generated_year_top?
+    assert_equal 2025, @top.auto_generated_year
+    assert_equal " https://example.com", @top.url
+  end
+
   test "adopt is idempotent" do
     run_task("dynamic_lists:adopt")
     run_task("dynamic_lists:adopt")

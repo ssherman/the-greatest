@@ -24,14 +24,30 @@ namespace :dynamic_lists do
         next
       end
 
-      config.update!(year: year) if config.year.blank?
-      config.update!(secondary_mapped_list_cutoff_limit: 400) if config.secondary_mapped_list_cutoff_limit.blank?
+      # assign_attributes + save!(validate: false), not update!: this task only
+      # ever writes booleans, integers and the primary list's year onto fields
+      # it owns (a RankingConfiguration's year/cutoff, a List's
+      # auto_generated_kind/auto_generated_year). `update!` validates the
+      # ENTIRE record, so a pre-existing invalid value on a column this task
+      # never touches would still abort adoption. It does on real data: 50
+      # books lists carry a `url` with a leading space (" https://...") that
+      # fails List's format validation -- running this task against
+      # development aborted after adopting 2024 and 2023, leaving 2025
+      # unstamped. Not update_columns: that skips callbacks too and leaves
+      # updated_at unchanged, and the admin show page renders
+      # `time_ago_in_words(list.updated_at)` as the "generated N ago"
+      # indicator.
+      config.year = year if config.year.blank?
+      config.secondary_mapped_list_cutoff_limit = 400 if config.secondary_mapped_list_cutoff_limit.blank?
+      config.save!(validate: false) if config.changed?
 
-      top.update!(auto_generated_kind: :year_top, auto_generated_year: year)
+      top.assign_attributes(auto_generated_kind: :year_top, auto_generated_year: year)
+      top.save!(validate: false)
       puts "ADOPT list #{top.id} #{top.name.inspect} as year_top #{year} (#{top.list_items.count} items)."
 
       if overflow
-        overflow.update!(auto_generated_kind: :year_honorable_mention, auto_generated_year: year)
+        overflow.assign_attributes(auto_generated_kind: :year_honorable_mention, auto_generated_year: year)
+        overflow.save!(validate: false)
         puts "ADOPT list #{overflow.id} #{overflow.name.inspect} as year_honorable_mention #{year} " \
           "(#{overflow.list_items.count} items)."
       else
