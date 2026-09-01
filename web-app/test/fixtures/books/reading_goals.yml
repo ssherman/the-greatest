@@ -22,13 +22,22 @@
 #
 #  fk_rails_...  (user_id => users.id)
 #
+# Dates are RELATIVE to Date.current, deliberately.
+#
+# They were absolute until 2026-09-01, when two goals whose ends_on was
+# 2026-08-31 rolled from active into finished at UTC midnight and broke
+# Books::My::ReadingGoalsControllerTest. The fixture names had already drifted
+# from what the dates meant -- active_ending_soon had been sitting in the
+# finished group -- and the test had been written to match the drift.
+#
+# Keep them relative. An absolute date here is a time bomb with no owner.
 active_ending_soon:
   id: 1
   user: regular_user
   name: Finish Summer Reading
   target_count: 5
-  starts_on: 2026-08-01
-  ends_on: 2026-08-26
+  starts_on: <%= Date.current - 30.days %>
+  ends_on: <%= Date.current + 3.days %>
   public: false
 
 active_ending_later:
@@ -36,8 +45,8 @@ active_ending_later:
   user: regular_user
   name: August Classics
   target_count: 3
-  starts_on: 2026-08-26
-  ends_on: 2026-08-31
+  starts_on: <%= Date.current - 20.days %>
+  ends_on: <%= Date.current + 30.days %>
   public: false
 
 upcoming:
@@ -45,8 +54,8 @@ upcoming:
   user: regular_user
   name: Fall Reading List
   target_count: 10
-  starts_on: 2026-09-01
-  ends_on: 2026-11-30
+  starts_on: <%= Date.current + 10.days %>
+  ends_on: <%= Date.current + 100.days %>
   public: false
 
 finished:
@@ -54,8 +63,8 @@ finished:
   user: regular_user
   name: July Reading List
   target_count: 4
-  starts_on: 2026-07-01
-  ends_on: 2026-07-31
+  starts_on: <%= Date.current - 90.days %>
+  ends_on: <%= Date.current - 60.days %>
   public: false
 
 private_goal:
@@ -63,8 +72,8 @@ private_goal:
   user: regular_user
   name: Private Winter Reading
   target_count: 2
-  starts_on: 2026-12-01
-  ends_on: 2026-12-31
+  starts_on: <%= Date.current + 40.days %>
+  ends_on: <%= Date.current + 70.days %>
   public: false
 
 public_goal_other_user:
@@ -72,33 +81,39 @@ public_goal_other_user:
   user: admin_user
   name: Community Book Club
   target_count: 6
-  starts_on: 2027-01-01
-  ends_on: 2027-03-31
+  starts_on: <%= Date.current + 120.days %>
+  ends_on: <%= Date.current + 200.days %>
   public: true
 
+# Shares an ends_on with active_ending_later (id 2) on purpose: exercises the
+# (ends_on, id) tiebreak in Books::ReadingGoal.active_on.
 active_ending_later_same_day:
   id: 7
   user: regular_user
   name: August Mysteries
   target_count: 2
-  starts_on: 2026-08-20
-  ends_on: 2026-08-31
+  starts_on: <%= Date.current - 25.days %>
+  ends_on: <%= Date.current + 30.days %>
   public: false
 
+# Shares a starts_on with upcoming (id 3) on purpose: exercises the
+# (starts_on, id) tiebreak in Books::ReadingGoal.upcoming_on.
 upcoming_same_day:
   id: 8
   user: regular_user
   name: September Poetry
   target_count: 3
-  starts_on: 2026-09-01
-  ends_on: 2026-09-30
+  starts_on: <%= Date.current + 10.days %>
+  ends_on: <%= Date.current + 70.days %>
   public: false
 
+# Shares an ends_on with finished (id 4) on purpose: exercises the
+# (ends_on desc, id desc) tiebreak in Books::ReadingGoal.finished_on.
 finished_same_day:
   id: 9
   user: regular_user
   name: July Short Stories
   target_count: 2
-  starts_on: 2026-07-15
-  ends_on: 2026-07-31
+  starts_on: <%= Date.current - 75.days %>
+  ends_on: <%= Date.current - 60.days %>
   public: false
