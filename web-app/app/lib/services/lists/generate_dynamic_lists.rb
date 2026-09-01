@@ -95,7 +95,40 @@ module Services
           # which is never what anyone wants and is silent when it happens.
           return "#{@config.name} has no primary cutoff limit set"
         end
+        if (owner = conflicting_configuration)
+          return "#{@config.name} cannot generate #{@config.year} lists: the " \
+            "#{@config.year} year rollup lists are already owned by " \
+            "#{owner.class.name} #{owner.name.inspect} (##{owner.id}). Archive " \
+            "or detach that configuration before generating from this one."
+        end
         nil
+      end
+
+      # RankingConfiguration has no uniqueness constraint on (type, year) --
+      # competing configurations for the same year are legitimate -- but
+      # find_or_create_list looks up the generated List rows by
+      # (auto_generated_kind, auto_generated_year) alone, with no configuration
+      # in that identity. Two configurations of the same type and year would
+      # therefore find and rewrite the SAME two lists, silently corrupting
+      # whichever configuration doesn't currently own them: its
+      # primary_mapped_list_id / secondary_mapped_list_id would keep pointing at
+      # rows another configuration just deleted the items from and rewrote.
+      #
+      # A list at this (kind, year) that no configuration has claimed yet --
+      # first run, or a hand-made list nothing points at -- is not a conflict;
+      # see "repairs a list left with unknown voter count" below for the latter.
+      def conflicting_configuration
+        list_ids = @config.generated_list_class
+          .where(auto_generated_kind: [:year_top, :year_honorable_mention],
+            auto_generated_year: @config.year)
+          .ids
+        return nil if list_ids.empty?
+
+        ::RankingConfiguration
+          .where(primary_mapped_list_id: list_ids)
+          .or(::RankingConfiguration.where(secondary_mapped_list_id: list_ids))
+          .where.not(id: @config.id)
+          .first
       end
 
       def top_items
@@ -271,7 +304,11 @@ module Services
       # calculate_rankings runs synchronously for exactly that reason. Measured on
       # real data: 0.3-0.6s for a 43-60 list year configuration.
       def refresh_year_rankings
-        ::Rankings::BulkWeightCalculator.new(@config).call
+        weight_results = ::Rankings::BulkWeightCalculator.new(@config).call
+        if weight_results[:errors].any?
+          raise "Weight calculation failed for #{@config.name}: " \
+            "#{format_weight_errors(weight_results[:errors])}"
+        end
 
         result = @config.calculate_rankings
         return if result.success?
@@ -292,9 +329,19 @@ module Services
         return if main.nil?
 
         ranked_list_ids = ::RankedList.where(ranking_configuration: main, list: lists).pluck(:id)
-        ::Rankings::BulkWeightCalculator.new(main).call_for_ids(ranked_list_ids) if ranked_list_ids.any?
+        if ranked_list_ids.any?
+          weight_results = ::Rankings::BulkWeightCalculator.new(main).call_for_ids(ranked_list_ids)
+          if weight_results[:errors].any?
+            raise "Weight calculation failed for #{main.name}: " \
+              "#{format_weight_errors(weight_results[:errors])}"
+          end
+        end
 
         ::CalculateRankingsJob.perform_async(main.id) if @recalculate_primary
+      end
+
+      def format_weight_errors(errors)
+        errors.map { |e| "#{e[:list_name]} (RankedList ##{e[:ranked_list_id]}): #{e[:error]}" }.join("; ")
       end
     end
   end

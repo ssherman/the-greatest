@@ -20,7 +20,15 @@ module Services
         @config.stubs(:calculate_rankings).returns(
           ItemRankings::Calculator::Result.new(success?: true, data: [], errors: [])
         )
-        Rankings::BulkWeightCalculator.any_instance.stubs(:call)
+        Rankings::BulkWeightCalculator.any_instance.stubs(:call).returns(no_weight_errors)
+      end
+
+      # A clean BulkWeightCalculator#call / #call_for_ids results hash --
+      # matches the real shape (see Rankings::BulkWeightCalculator#initialize)
+      # so refresh_year_rankings/recalculate_primary's `results[:errors]` check
+      # sees no failures.
+      def no_weight_errors
+        {processed: 0, updated: 0, errors: [], weights_calculated: []}
       end
 
       # Ranks the given books 1..N on the year configuration. The generator
@@ -75,6 +83,72 @@ module Services
 
         assert_not result.success?
         assert_match(/primary cutoff/, result.errors.first)
+      end
+
+      # find_or_create_list looks up the generated List rows by
+      # (auto_generated_kind, auto_generated_year) alone -- no configuration in
+      # that identity -- while RankingConfiguration deliberately allows more
+      # than one configuration per (type, year). Without this guard, a second
+      # configuration at the same type and year would find and rewrite the
+      # first configuration's lists, corrupting it silently.
+      test "succeeds on a first run when no list exists yet at this kind and year" do
+        rank(@books)
+
+        assert_equal 0, ::Books::List.where(auto_generated_kind: [:year_top, :year_honorable_mention],
+          auto_generated_year: 2025).count
+
+        result = generate
+
+        assert result.success?, result.errors.inspect
+      end
+
+      test "succeeds on a re-run by the same configuration that already owns the lists" do
+        rank(@books)
+        generate
+
+        result = generate
+
+        assert result.success?, result.errors.inspect
+      end
+
+      test "refuses to generate when a different configuration already owns the year's lists" do
+        rank(@books)
+        first_result = generate
+        first_top = first_result.data[:top_list]
+        first_overflow = first_result.data[:overflow_list]
+        first_top_items = first_top.list_items.order(:position).pluck(:listable_id)
+        first_overflow_items = first_overflow.list_items.order(:position).pluck(:listable_id)
+
+        # Built inline rather than as a fixture: a shared fixture with a year
+        # set is picked up by anything that scans "every year configuration of
+        # a type" (the regenerate rake task, CreateNextYearConfiguration's
+        # "most recent year" lookup), breaking unrelated tests that assume
+        # books_year_2025 is the only one. This object lives only inside this
+        # test's transaction.
+        rival = ::Books::RankingConfiguration.create!(
+          name: "Rival Best Books of 2025",
+          description: "A competing year-scoped configuration for 2025 books",
+          global: true, primary: false, archived: false,
+          algorithm_version: 1, exponent: 3.0, bonus_pool_percentage: 6.0, min_list_weight: 1,
+          year: 2025, primary_mapped_list_cutoff_limit: 2, secondary_mapped_list_cutoff_limit: 2,
+          apply_list_dates_penalty: false, inherit_penalties: false
+        )
+        rival_result = GenerateDynamicLists.call(ranking_configuration: rival, recalculate_primary: false)
+
+        assert_not rival_result.success?
+        assert_match(/The Best Books of 2025/, rival_result.errors.first)
+        assert_match(/archive or detach/i, rival_result.errors.first)
+
+        # The first configuration's lists and items must be untouched.
+        @config.reload
+        assert_equal first_top.id, @config.primary_mapped_list_id
+        assert_equal first_overflow.id, @config.secondary_mapped_list_id
+        assert_equal first_top_items, first_top.reload.list_items.order(:position).pluck(:listable_id)
+        assert_equal first_overflow_items, first_overflow.reload.list_items.order(:position).pluck(:listable_id)
+
+        rival.reload
+        assert_nil rival.primary_mapped_list_id
+        assert_nil rival.secondary_mapped_list_id
       end
 
       test "creates both lists active on first run, named from year and cutoff" do
@@ -390,7 +464,7 @@ module Services
         Rankings::BulkWeightCalculator.any_instance.stubs(:call).with {
           call_order << :bulk_weight_call
           true
-        }
+        }.returns(no_weight_errors)
         @config.stubs(:calculate_rankings).with {
           call_order << :calculate_rankings
           true
@@ -416,19 +490,55 @@ module Services
         assert_match(/boom/, result.errors.first)
       end
 
+      # BulkWeightCalculator never raises for a single list's failure -- it
+      # rescues per-list and pushes into results[:errors], then #call returns
+      # normally either way. Without checking that hash, every weight
+      # calculation could fail here and calculate_rankings would still run
+      # "successfully" against stale weights, publishing a plausible but wrong
+      # rollup with no error anywhere.
+      test "fails when weight calculation errors during the year configuration pass" do
+        Rankings::BulkWeightCalculator.any_instance.stubs(:call).returns(
+          {processed: 1, updated: 0,
+           errors: [{ranked_list_id: 42, list_name: "Some List", error: "unsupported algorithm_version"}],
+           weights_calculated: []}
+        )
+
+        result = GenerateDynamicLists.call(ranking_configuration: @config, recalculate_primary: false)
+
+        assert_not result.success?
+        assert_match(/unsupported algorithm_version/, result.errors.first)
+      end
+
       test "recalculates only the two affected rows on the primary configuration" do
         rank(@books)
         captured = nil
         Rankings::BulkWeightCalculator.any_instance.stubs(:call_for_ids).with { |ids|
           captured = ids
           true
-        }
+        }.returns(no_weight_errors)
 
         result = GenerateDynamicLists.call(ranking_configuration: @config, recalculate_primary: false)
 
         expected = [result.data[:top_list], result.data[:overflow_list]]
           .flat_map { |list| list.ranked_lists.pluck(:id) }
         assert_equal expected.sort, captured.sort
+      end
+
+      # Same shape as the year-configuration pass above, but for the later
+      # call_for_ids refresh of the two generated lists on the primary
+      # configuration in recalculate_primary.
+      test "fails when weight calculation errors recalculating the primary configuration" do
+        rank(@books)
+        Rankings::BulkWeightCalculator.any_instance.stubs(:call_for_ids).returns(
+          {processed: 1, updated: 0,
+           errors: [{ranked_list_id: 99, list_name: "Primary List", error: "kaboom"}],
+           weights_calculated: []}
+        )
+
+        result = GenerateDynamicLists.call(ranking_configuration: @config, recalculate_primary: false)
+
+        assert_not result.success?
+        assert_match(/kaboom/, result.errors.first)
       end
 
       test "queues the primary configuration's ranking recalculation" do
