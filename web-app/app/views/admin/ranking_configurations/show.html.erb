@@ -58,6 +58,22 @@
                   class: "text-left",
                   data: { turbo_confirm: "Recalculate rankings for this configuration?" } %>
             </li>
+            <li>
+              <%= button_to "Create Next Year's Configuration",
+                  execute_action_ranking_configuration_path(@ranking_configuration, action_name: "CreateNextYearConfiguration"),
+                  method: :post,
+                  class: "text-left",
+                  data: { turbo_confirm: "Create the next year's configuration, copying settings and penalties forward?" } %>
+            </li>
+            <% if @ranking_configuration.year.present? %>
+              <li>
+                <%= button_to "Generate Dynamic Lists",
+                    execute_action_ranking_configuration_path(@ranking_configuration, action_name: "GenerateDynamicLists"),
+                    method: :post,
+                    class: "text-left",
+                    data: { turbo_confirm: "Rebuild this year's two lists and refresh the main rankings?" } %>
+              </li>
+            <% end %>
           </ul>
         </div>
       <% end %>
@@ -248,29 +264,31 @@
         </div>
       </div>
 
-      <% if @ranking_configuration.primary_mapped_list.present? || @ranking_configuration.secondary_mapped_list.present? %>
+      <% if @ranking_configuration.year.present? %>
         <div class="card bg-base-100 shadow-xl">
           <div class="card-body">
-            <h2 class="card-title">Mapped Lists</h2>
+            <h2 class="card-title">Dynamic Lists for <%= @ranking_configuration.year %></h2>
             <div class="space-y-4">
-              <% if @ranking_configuration.primary_mapped_list.present? %>
-                <div>
-                  <label class="label">
-                    <span class="font-semibold">Primary Mapped List</span>
-                  </label>
-                  <p><%= @ranking_configuration.primary_mapped_list.name %></p>
-                  <% if @ranking_configuration.primary_mapped_list_cutoff_limit.present? %>
-                    <p class="text-sm text-base-content/70">Cutoff Limit: <%= @ranking_configuration.primary_mapped_list_cutoff_limit %></p>
-                  <% end %>
-                </div>
-              <% end %>
+              <p class="text-sm text-base-content/70">
+                Top list holds <%= @ranking_configuration.primary_mapped_list_cutoff_limit || "an unset number of" %> items;
+                honorable mention holds <%= @ranking_configuration.secondary_mapped_list_cutoff_limit || "every remaining" %> item(s).
+              </p>
 
-              <% if @ranking_configuration.secondary_mapped_list.present? %>
+              <% [["Top List", @ranking_configuration.primary_mapped_list],
+                  ["Honorable Mention", @ranking_configuration.secondary_mapped_list]].each do |label, list| %>
                 <div>
                   <label class="label">
-                    <span class="font-semibold">Secondary Mapped List</span>
+                    <span class="font-semibold"><%= label %></span>
                   </label>
-                  <p><%= @ranking_configuration.secondary_mapped_list.name %></p>
+                  <% if list.present? %>
+                    <p><%= list.name %></p>
+                    <p class="text-sm text-base-content/70">
+                      <%= pluralize(list.list_items.count, "item") %> ·
+                      generated <%= time_ago_in_words(list.updated_at) %> ago
+                    </p>
+                  <% else %>
+                    <p class="text-sm text-base-content/70">Not generated yet.</p>
+                  <% end %>
                 </div>
               <% end %>
             </div>

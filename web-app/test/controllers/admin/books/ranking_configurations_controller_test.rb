@@ -63,6 +63,45 @@ module Admin
           post admin_books_ranking_configurations_path, params: {ranking_configuration: {name: "Nope"}}
         end
       end
+
+      test "permits year and secondary cutoff on update" do
+        config = ranking_configurations(:books_year_2025)
+        sign_in_as(@admin_user, stub_auth: true)
+
+        patch admin_books_ranking_configuration_path(config), params: {
+          ranking_configuration: {year: 2026, secondary_mapped_list_cutoff_limit: 250}
+        }
+
+        config.reload
+        assert_equal 2026, config.year
+        assert_equal 250, config.secondary_mapped_list_cutoff_limit
+      end
+
+      test "ignores mapped list ids on update since the generator owns them" do
+        config = ranking_configurations(:books_year_2025)
+        other = lists(:basic_list)
+        sign_in_as(@admin_user, stub_auth: true)
+
+        patch admin_books_ranking_configuration_path(config), params: {
+          ranking_configuration: {primary_mapped_list_id: other.id}
+        }
+
+        assert_nil config.reload.primary_mapped_list_id
+      end
+
+      test "accepts the two new action names" do
+        config = ranking_configurations(:books_year_2025)
+        sign_in_as(@admin_user, stub_auth: true)
+        GenerateDynamicListsJob.stubs(:perform_async)
+
+        post execute_action_admin_books_ranking_configuration_path(config),
+          params: {action_name: "GenerateDynamicLists"}
+        assert_response :redirect
+
+        post execute_action_admin_books_ranking_configuration_path(config),
+          params: {action_name: "CreateNextYearConfiguration"}
+        assert_response :redirect
+      end
     end
   end
 end
