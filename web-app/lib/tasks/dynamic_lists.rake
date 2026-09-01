@@ -44,16 +44,35 @@ namespace :dynamic_lists do
     puts "Done. Adopted #{adopted} configuration(s)."
   end
 
-  # Rebuilds every year configuration of a type, then refreshes the primary
-  # configuration ONCE rather than once per year -- for books that is the
-  # difference between one pass over 623 lists and three.
-  desc "Regenerate every year configuration of a type, e.g. Books::RankingConfiguration"
+  # Rebuilds every year configuration of a type, one at a time, then refreshes
+  # the primary configuration ONCE rather than once per year -- for books that
+  # is the difference between one pass over 623 lists and three.
+  #
+  # Each generator runs INLINE (`.new.perform`, not `perform_async`) so this
+  # process blocks until it finishes before starting the next. That is not
+  # optional: `config/sidekiq.yml` runs 5 concurrent threads against the
+  # `default` queue (the single-threaded `serial` capsule in
+  # config/initializers/sidekiq.rb does not cover it), so enqueuing one job per
+  # year plus a trailing CalculateRankingsJob would let that refresh start
+  # ALONGSIDE the generators and read each mapped list's pre-regeneration
+  # list_items and stale ranked_lists.weight -- the exact stale-ordering bug
+  # this feature exists to eliminate. Running inline here costs well under a
+  # second per year configuration (weights + rankings) and guarantees every
+  # generator has completed, and the primary's weights for those lists are
+  # current, before the single CalculateRankingsJob is enqueued.
+  desc "Regenerate every year configuration of a type in order, then queue one primary refresh"
   task :regenerate, [:type] => :environment do |_task, args|
     type = args[:type]
     raise ArgumentError, "Pass a ranking configuration type, e.g. Books::RankingConfiguration" if type.blank?
 
     config_class = type.constantize
-    configs = config_class.where.not(year: nil).order(:year)
+    # `where(primary: false)` on top of `where.not(year: nil)`: the admin form
+    # exposes `year` on every configuration type, so nothing stops an operator
+    # setting it on the domain's primary configuration too. Regenerating that
+    # row would overwrite it with a year-scoped top list that then feeds back
+    # into itself -- see the guard in Services::Lists::GenerateDynamicLists,
+    # which is the same reason this scope excludes it here.
+    configs = config_class.where.not(year: nil).where(primary: false).order(:year)
 
     if configs.empty?
       puts "No year configurations found for #{type}."
@@ -61,8 +80,8 @@ namespace :dynamic_lists do
     end
 
     configs.each do |config|
-      puts "Queueing #{config.name.inspect} (#{config.year})."
-      GenerateDynamicListsJob.perform_async(config.id, false)
+      puts "Regenerating #{config.name.inspect} (#{config.year})."
+      GenerateDynamicListsJob.new.perform(config.id, false)
     end
 
     main = config_class.default_primary
@@ -71,6 +90,6 @@ namespace :dynamic_lists do
       CalculateRankingsJob.perform_async(main.id)
     end
 
-    puts "Done. Queued #{configs.count} configuration(s)."
+    puts "Done. Regenerated #{configs.count} configuration(s)."
   end
 end

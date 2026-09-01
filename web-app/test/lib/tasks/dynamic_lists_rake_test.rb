@@ -93,14 +93,18 @@ class DynamicListsRakeTest < ActiveSupport::TestCase
   # Mocha's two independent `.once` expectations pass regardless of call order,
   # so a regression that hoists the terminal CalculateRankingsJob call above (or
   # into) the per-year loop -- recalculating the primary against stale mapped
-  # lists, defeating the whole point of coalescing -- would still pass. Recording
-  # invocation order with plain `.with { ... }` blocks, as
-  # generate_dynamic_lists_test.rb does, pins the sequence instead.
-  test "regenerate queues one job per year configuration and suppresses their primary refresh, in that order" do
+  # lists, defeating the whole point of running each generator inline before it
+  # -- would still pass. Recording invocation order with plain `.with { ... }`
+  # blocks, as generate_dynamic_lists_test.rb does, pins the sequence instead.
+  #
+  # Stubs GenerateDynamicListsJob's instance `perform` (not `perform_async`):
+  # the task now runs each year's generator inline and synchronously, in the
+  # same process, so nothing is ever enqueued for it.
+  test "regenerate runs each year configuration inline, then queues the single primary refresh, in that order" do
     @config.update_column(:year, 2025)
     call_order = []
 
-    GenerateDynamicListsJob.expects(:perform_async).with { |id, recalculate_primary|
+    GenerateDynamicListsJob.any_instance.expects(:perform).with { |id, recalculate_primary|
       call_order << :generate
       id == @config.id && recalculate_primary == false
     }.once
@@ -112,6 +116,27 @@ class DynamicListsRakeTest < ActiveSupport::TestCase
     run_task("dynamic_lists:regenerate", "Books::RankingConfiguration")
 
     assert_equal [:generate, :calculate], call_order
+  end
+
+  # Defense in depth alongside the guard in Services::Lists::GenerateDynamicLists#guard_failure:
+  # even if an operator sets `year` on the domain's primary configuration, the
+  # rake task's own query must never hand it to the generator.
+  test "regenerate excludes the primary configuration even when it carries a year" do
+    @config.update_column(:year, 2025)
+    primary = ranking_configurations(:books_global)
+    primary.update_columns(year: 2024, primary_mapped_list_cutoff_limit: 100)
+
+    generated_ids = []
+    GenerateDynamicListsJob.any_instance.stubs(:perform).with { |id, _recalculate_primary|
+      generated_ids << id
+      true
+    }
+    CalculateRankingsJob.stubs(:perform_async)
+
+    run_task("dynamic_lists:regenerate", "Books::RankingConfiguration")
+
+    assert_equal [@config.id], generated_ids
+    refute_includes generated_ids, primary.id
   end
 
   # Only one fixture in the whole suite (books_year_2025) has `year` set, so a
@@ -126,16 +151,16 @@ class DynamicListsRakeTest < ActiveSupport::TestCase
       name: "Best Albums of 2025", year: 2025, global: true, primary: false
     )
 
-    queued_ids = []
-    GenerateDynamicListsJob.stubs(:perform_async).with { |id, _recalculate_primary|
-      queued_ids << id
+    generated_ids = []
+    GenerateDynamicListsJob.any_instance.stubs(:perform).with { |id, _recalculate_primary|
+      generated_ids << id
       true
     }
     CalculateRankingsJob.stubs(:perform_async)
 
     run_task("dynamic_lists:regenerate", "Books::RankingConfiguration")
 
-    assert_equal [@config.id], queued_ids
-    refute_includes queued_ids, other.id
+    assert_equal [@config.id], generated_ids
+    refute_includes generated_ids, other.id
   end
 end

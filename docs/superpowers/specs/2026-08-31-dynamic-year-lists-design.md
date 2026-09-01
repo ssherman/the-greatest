@@ -383,7 +383,11 @@ Median voter counts for reference: books 24, games 11, albums 20, songs 17.
   nothing offers them, so those values arrived only via migration. Leave the form that way and
   **remove both `_id` keys from the permitted params**, since the generator now owns them.
 - **Show page**: extend the existing mapped-lists card with the year, both cutoffs, and each
-  generated list linked with its item count and last-generated time.
+  generated list's name, item count and last-generated time. The names are plain text, not
+  links: this view is shared across all four domains and the admin list route is namespaced per
+  domain (`admin_books_list_path`, `admin_games_list_path`, …) with no shared equivalent, so
+  linking would mean threading a fifth `helper_method` through the base controller and all four
+  subclasses for a convenience.
 - **Actions dropdown** (`app/views/admin/ranking_configurations/show.html.erb`, which
   hard-codes its entries): add **Create Next Year's Configuration**, and **Generate Dynamic
   Lists** shown only when `year` is present. Both names added to `allowed_action_names`.
@@ -412,8 +416,21 @@ Idempotent, reports every adoption, and re-running no-ops. Configurations 5/6/7 
 746/747, 1041/1042, 1088/1089 land with no guessing.
 
 **`dynamic_lists:regenerate[Type]`** — runs the generator across every year configuration of a
-type and enqueues the main configuration's recalculation **once** at the end rather than per
+type and triggers the main configuration's recalculation **once** at the end rather than per
 year. The service takes a flag to suppress its own step 5 so the batch can coalesce.
+
+The generators run **inline and synchronously** inside the rake task, not via `perform_async`.
+Enqueueing them would not work: `config/sidekiq.yml` sets `:concurrency: 5` and these jobs land
+on the `default` queue (the single-threaded capsule covers only `serial`), so five threads would
+pop every job at once and the single `CalculateRankingsJob` would run *alongside* the generators,
+reading the mapped lists' pre-regeneration items and stale weights. Enqueue order is not
+execution order. Blocking is correct here — this is a task an operator runs deliberately, and
+each year configuration ranks in well under a second.
+
+The task also skips the domain's primary configuration even if one carries a `year`, and the
+generator itself refuses to run against `default_primary?`. Without that, setting a year and a
+cutoff on the primary configuration would generate the all-time top 100 as a list that feeds the
+all-time ranking — a self-referential loop whose output lists cannot be deleted through admin.
 
 ## Expected effect on live books rankings
 

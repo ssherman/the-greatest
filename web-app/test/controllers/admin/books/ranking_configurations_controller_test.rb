@@ -40,6 +40,19 @@ module Admin
         assert_response :success
       end
 
+      # Books::RankingConfiguration#supports_year_rollups? is true, unlike
+      # Books::Authors::RankingConfiguration -- see the negative case in
+      # Admin::Music::Artists::RankingConfigurationsControllerTest.
+      test "offers Create Next Year's Configuration, which this domain supports" do
+        assert @rc.supports_year_rollups?
+
+        sign_in_as(@admin_user, stub_auth: true)
+        get admin_books_ranking_configuration_path(@rc)
+
+        assert_response :success
+        assert_match(/action_name=CreateNextYearConfiguration/, response.body)
+      end
+
       test "index tolerates a sort-injection attempt" do
         sign_in_as(@admin_user, stub_auth: true)
         assert_nothing_raised do

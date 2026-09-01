@@ -81,6 +81,15 @@ module Services
         unless @config.supports_year_rollups?
           return "#{@config.class.name} does not support year rollups"
         end
+        if @config.default_primary?
+          # The domain's primary configuration must stay the all-time ranking
+          # that everything else feeds INTO. Generating against it would write
+          # its own top-N output back into itself as a mapped list -- a
+          # self-referential loop, and one whose output lists are undeletable
+          # through admin (List#prevent_destroy_when_auto_generated).
+          return "#{@config.name} is the primary configuration for #{@config.class.name} " \
+            "and cannot be used to generate dynamic lists"
+        end
         if @config.primary_mapped_list_cutoff_limit.blank?
           # Legacy dumped every ranked item into the primary list in this case,
           # which is never what anyone wants and is silent when it happens.

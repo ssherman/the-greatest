@@ -128,6 +128,20 @@ module Admin
           assert_response :success
         end
 
+        # Music::Artists::RankingConfiguration#supports_year_rollups? is false (an
+        # artist is not released in a year), and CreateNextYearConfiguration always
+        # errors here as a result. The show view must not offer a button that can
+        # only fail.
+        test "should not offer Create Next Year's Configuration, which this domain does not support" do
+          refute @ranking_configuration.supports_year_rollups?
+
+          sign_in_as(@admin_user, stub_auth: true)
+          get admin_artists_ranking_configuration_path(@ranking_configuration)
+
+          assert_response :success
+          assert_no_match(/action_name=CreateNextYearConfiguration/, response.body)
+        end
+
         test "should get new for admin" do
           sign_in_as(@admin_user, stub_auth: true)
           get new_admin_artists_ranking_configuration_path

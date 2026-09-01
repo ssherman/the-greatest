@@ -57,6 +57,17 @@ module Services
         assert_match(/does not support year rollups/, result.errors.first)
       end
 
+      test "fails when the configuration is the domain's primary configuration" do
+        primary = ranking_configurations(:books_global)
+        primary.update_columns(year: 2025, primary_mapped_list_cutoff_limit: 100)
+
+        result = GenerateDynamicLists.call(ranking_configuration: primary,
+          recalculate_primary: false)
+
+        assert_not result.success?
+        assert_match(/primary configuration/, result.errors.first)
+      end
+
       test "fails when the primary cutoff is unset" do
         @config.update_column(:primary_mapped_list_cutoff_limit, nil)
 

@@ -58,13 +58,15 @@
                   class: "text-left",
                   data: { turbo_confirm: "Recalculate rankings for this configuration?" } %>
             </li>
-            <li>
-              <%= button_to "Create Next Year's Configuration",
-                  execute_action_ranking_configuration_path(@ranking_configuration, action_name: "CreateNextYearConfiguration"),
-                  method: :post,
-                  class: "text-left",
-                  data: { turbo_confirm: "Create the next year's configuration, copying settings and penalties forward?" } %>
-            </li>
+            <% if @ranking_configuration.supports_year_rollups? %>
+              <li>
+                <%= button_to "Create Next Year's Configuration",
+                    execute_action_ranking_configuration_path(@ranking_configuration, action_name: "CreateNextYearConfiguration"),
+                    method: :post,
+                    class: "text-left",
+                    data: { turbo_confirm: "Create the next year's configuration, copying settings and penalties forward?" } %>
+              </li>
+            <% end %>
             <% if @ranking_configuration.year.present? %>
               <li>
                 <%= button_to "Generate Dynamic Lists",
