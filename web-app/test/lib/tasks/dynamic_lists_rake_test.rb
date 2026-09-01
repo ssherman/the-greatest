@@ -80,11 +80,62 @@ class DynamicListsRakeTest < ActiveSupport::TestCase
     assert_nil @config.reload.year
   end
 
-  test "regenerate queues one job per year configuration and suppresses their primary refresh" do
+  test "adopt handles a configuration with no secondary mapped list, without raising" do
+    @config.update_column(:secondary_mapped_list_id, nil)
+
+    run_task("dynamic_lists:adopt")
+
+    assert @top.reload.generated_year_top?
+    assert_equal 2025, @top.auto_generated_year
+    assert_equal 2025, @config.reload.year
+  end
+
+  # Mocha's two independent `.once` expectations pass regardless of call order,
+  # so a regression that hoists the terminal CalculateRankingsJob call above (or
+  # into) the per-year loop -- recalculating the primary against stale mapped
+  # lists, defeating the whole point of coalescing -- would still pass. Recording
+  # invocation order with plain `.with { ... }` blocks, as
+  # generate_dynamic_lists_test.rb does, pins the sequence instead.
+  test "regenerate queues one job per year configuration and suppresses their primary refresh, in that order" do
     @config.update_column(:year, 2025)
-    GenerateDynamicListsJob.expects(:perform_async).with(@config.id, false).once
-    CalculateRankingsJob.expects(:perform_async).with(::Books::RankingConfiguration.default_primary.id).once
+    call_order = []
+
+    GenerateDynamicListsJob.expects(:perform_async).with { |id, recalculate_primary|
+      call_order << :generate
+      id == @config.id && recalculate_primary == false
+    }.once
+    CalculateRankingsJob.expects(:perform_async).with { |id|
+      call_order << :calculate
+      id == ::Books::RankingConfiguration.default_primary.id
+    }.once
 
     run_task("dynamic_lists:regenerate", "Books::RankingConfiguration")
+
+    assert_equal [:generate, :calculate], call_order
+  end
+
+  # Only one fixture in the whole suite (books_year_2025) has `year` set, so a
+  # regression that swaps config_class.where for a bare RankingConfiguration.where
+  # -- silently dropping the type scope, so regenerating Books would also queue
+  # jobs for every other domain's year configurations -- passes every other test
+  # in this file. This test creates a same-year configuration in a different
+  # domain inline so that regression has something to catch.
+  test "regenerate scopes to the given type and ignores other domains' year configurations" do
+    @config.update_column(:year, 2025)
+    other = ::Music::Albums::RankingConfiguration.create!(
+      name: "Best Albums of 2025", year: 2025, global: true, primary: false
+    )
+
+    queued_ids = []
+    GenerateDynamicListsJob.stubs(:perform_async).with { |id, _recalculate_primary|
+      queued_ids << id
+      true
+    }
+    CalculateRankingsJob.stubs(:perform_async)
+
+    run_task("dynamic_lists:regenerate", "Books::RankingConfiguration")
+
+    assert_equal [@config.id], queued_ids
+    refute_includes queued_ids, other.id
   end
 end
