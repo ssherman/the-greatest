@@ -16,7 +16,9 @@ class Books::ReadingGoals::GoalCardComponentTest < ViewComponent::TestCase
     render_inline Books::ReadingGoals::GoalCardComponent.new(goal: goal, progress: @progress)
 
     assert_text "Finish Summer Reading"
-    assert_text "August 1, 2026 – August 26, 2026"
+    # Derived from the goal, not hardcoded: the fixture dates are relative to
+    # Date.current, so a literal here would expire the way the old ones did.
+    assert_text "#{goal.starts_on.strftime("%B %-d, %Y")} – #{goal.ends_on.strftime("%B %-d, %Y")}"
     assert_selector ".badge", text: "Private"
     assert_text "2 of 5 books"
     assert_text "33.3%"

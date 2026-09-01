@@ -37,9 +37,11 @@ class Books::My::ReadingGoalsControllerTest < ActionDispatch::IntegrationTest
 
     get books_my_reading_goals_path, headers: {"HOST" => @host}
 
-    assert_equal [2, 7], @controller.view_assigns.fetch("active_reading_goals").map(&:id)
+    # Ties are deliberate: 2 and 7 share an ends_on, 3 and 8 share a starts_on,
+    # and 9 and 4 share an ends_on -- so each group also pins its id tiebreak.
+    assert_equal [1, 2, 7], @controller.view_assigns.fetch("active_reading_goals").map(&:id)
     assert_equal [3, 8, 5], @controller.view_assigns.fetch("upcoming_reading_goals").map(&:id)
-    assert_equal [1, 9, 4], @controller.view_assigns.fetch("finished_reading_goals").map(&:id)
+    assert_equal [9, 4], @controller.view_assigns.fetch("finished_reading_goals").map(&:id)
   end
 
   test "admin index only shows the admin's own goals" do
