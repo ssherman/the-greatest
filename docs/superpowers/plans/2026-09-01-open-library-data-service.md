@@ -46,7 +46,7 @@ These apply to **every** task. They are not repeated per task.
   host sets `OL_DATA_HOST=/data/openlibrary`. To move this box onto `/data` instead,
   `sudo mkdir -p /data && sudo chown shane:shane /data` and change the flag.
 - **The API opens an explicit version directory, never a symlink.** A symlink flip does not affect a process holding open file handles.
-- **The API mounts the artifact read-only** and opens DuckDB with `read_only=True`. The service must be physically unable to corrupt its own data.
+- **The API mounts the artifact read-only.** The service must be physically unable to corrupt its own data. Note what enforces that: the container's `:ro` bind mount, plus never issuing a `COPY` against a version directory. It is NOT DuckDB's `read_only` flag — that applies to a database file, and the artifact is Parquet read through an in-memory connection, which cannot be opened read-only. Do not add a `read_only` parameter that cannot enforce anything.
 - **Size is a measured output, not a design target.** The spec's "5–8 GB" is an estimate stated as an estimate. Task 15 produces the real number in `build_report.json`. If the real number is 3 GB or 14 GB, that is the answer — do not tune the schema to land inside the estimate, and do not treat a miss as a failure.
 
 ### Boundaries (the structural guard against repeating the previous failure)
@@ -1796,7 +1796,7 @@ The dump-date discovery is the interesting part: `ol_dump_<type>_latest.txt.gz` 
 - Produces:
   - `openlibrary.pipeline.paths.TABLES: tuple[str, ...]` = `("works", "work_details", "authors", "author_names", "work_authors", "editions", "identifiers", "year_evidence", "popularity", "redirects")`
   - `openlibrary.pipeline.paths.ArtifactPaths(root: Path, dump_date: str)` with properties `dumps_dir`, `version_dir`, `staging_dir`, `tmp_dir` and methods `table(name: str) -> Path`, `staging(name: str) -> Path`, `dump(kind: str) -> Path`, `ensure() -> None`
-  - `openlibrary.pipeline.duck.connect(paths: ArtifactPaths, *, memory_limit: str = "8GB", read_only: bool = False) -> duckdb.DuckDBPyConnection`
+  - `openlibrary.pipeline.duck.connect(paths: ArtifactPaths, *, memory_limit: str = "8GB", threads: int | None = None) -> duckdb.DuckDBPyConnection`
   - `openlibrary.pipeline.download.DUMP_KINDS: tuple[str, ...]` = `("works", "authors", "editions", "redirects", "ratings", "reading-log")`
   - `openlibrary.pipeline.download.latest_url(kind: str) -> str`
   - `openlibrary.pipeline.download.discover_dump_date(client: httpx.Client, kind: str) -> str`
@@ -2014,6 +2014,13 @@ Three settings are not optional for a bulk pass:
   memory_limit                    -- the editions pass will otherwise take the box down
   temp_directory                  -- the default spills into the root filesystem, and
                                      the editions pass spills tens of gigabytes
+
+There is deliberately no `read_only` parameter. The artifact is Parquet read
+through an in-memory connection, so there is no database file for DuckDB to open
+read-only, and a flag that cannot enforce anything is worse than no flag: it
+tells a future caller they are safe when they are not. What actually enforces
+read-only is the container's `:ro` bind mount and never issuing a COPY against a
+version directory.
 """
 
 from __future__ import annotations
@@ -2028,20 +2035,14 @@ def connect(
     *,
     memory_limit: str = "8GB",
     threads: int | None = None,
-    read_only: bool = False,
 ) -> duckdb.DuckDBPyConnection:
-    connection = duckdb.connect(database=":memory:", read_only=False)
+    connection = duckdb.connect(database=":memory:")
     connection.execute("SET preserve_insertion_order=false;")
     connection.execute(f"SET memory_limit='{memory_limit}';")
     paths.tmp_dir.mkdir(parents=True, exist_ok=True)
     connection.execute(f"SET temp_directory='{paths.tmp_dir}';")
     if threads is not None:
         connection.execute(f"SET threads={threads};")
-    if read_only:
-        # The artifact is read through parquet scans; there is no attached database
-        # to open read-only. The read-only guarantee is enforced by the container
-        # mount (:ro) and by never issuing a COPY against the version directory.
-        connection.execute("SET enable_external_access=true;")
     return connection
 ```
 
