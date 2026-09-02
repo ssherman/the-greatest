@@ -31,6 +31,9 @@ packages = ["src/common", "src/openlibrary"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+    "artifact: requires a real built artifact; set OL_DATA_ROOT to run",
+]
 
 [tool.ruff]
 line-length = 100
