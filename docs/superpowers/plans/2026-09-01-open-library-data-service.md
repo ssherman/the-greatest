@@ -3864,12 +3864,29 @@ def test_edition_count_matches_the_editions_table(built):
     assert bad == 0
 
 
-def test_popularity_does_not_prune_anything(built):
+def test_every_work_with_a_signal_gets_a_row(built):
     con, paths, _ = built
-    # popularity is a side table. Nothing is removed from `works` because of it.
-    (works_n,) = con.execute(f"SELECT count(*) FROM '{paths.table('works')}'").fetchone()
-    (pop_n,) = con.execute(f"SELECT count(*) FROM '{paths.table('popularity')}'").fetchone()
-    assert pop_n <= works_n
+    # THE property this table exists to protect. Popularity is a prior and a
+    # tie-breaker; it must never prune. 27.9% of the works our books link to
+    # have zero reading-log entries and zero ratings, and they are exactly the
+    # population a "greatest books" site exists to rank.
+    #
+    # Note the signal set is NOT bounded by works.parquet: editions, ratings and
+    # reading-log all name work keys that Open Library has since merged or
+    # deleted, and works.parquet holds only live /type/work records. Asserting
+    # popularity <= works would be asserting something false.
+    (orphans,) = con.execute(
+        f"""
+        WITH signal_keys AS (
+            SELECT DISTINCT work_key FROM '{paths.table("editions")}'
+            WHERE work_key IS NOT NULL
+        )
+        SELECT count(*) FROM signal_keys s
+        LEFT JOIN '{paths.table("popularity")}' p USING (work_key)
+        WHERE p.work_key IS NULL
+        """
+    ).fetchone()
+    assert orphans == 0, f"{orphans} work keys carry editions but got no popularity row"
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
