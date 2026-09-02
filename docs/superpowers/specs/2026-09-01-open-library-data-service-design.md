@@ -363,7 +363,10 @@ exercised, so these are matcher **outputs**, not inputs.
 | Collection / anthology | `book_kind: collection` | Its own Book |
 | Adaptation | `relation_type: adaptation_of` | Different Book |
 
-This is what lets `OL15331408W` resolve correctly: the omnibus work and the three part-works are all
+`OL15331408W` turns out to exercise both halves of this design at once: it is a shared key AND a
+dead one. Open Library merged it into `OL3809593W` on 2026-01-04, so it is simultaneously one of
+the 380 collisions and one of the 3,064 stale keys — verified against the 2026-07-31 redirects dump
+while implementing. Resolution therefore runs redirect-first, then identity. Once resolved: the omnibus work and the three part-works are all
 legitimate OL records, and four separate Books is the correct local representation. The matcher maps
 each to the right one rather than collapsing them.
 

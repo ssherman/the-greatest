@@ -1349,7 +1349,7 @@ The extraction script is committed and re-runnable so a future dump can refresh 
 - Consumes: nothing
 - Produces:
   - pytest fixture `fixture_dumps(tmp_path_factory) -> dict[str, Path]` (session scope) — gzips each `tests/fixtures/*.txt` into a temp directory and returns `{"works": Path, "authors": Path, "editions": Path, "redirects": Path, "ratings": Path, "reading-log": Path}` with `.txt.gz` names matching the real dump naming.
-  - Module constant `openlibrary.pipeline` consumers can rely on: fixture work keys `OL15331408W` (omnibus), `OL2014226W`, `OL81205W`, `OL8331643W` are present in `works.txt`.
+  - Module constant `openlibrary.pipeline` consumers can rely on: fixture work keys `OL3809593W` (omnibus), `OL2014226W`, `OL81205W`, `OL8331643W` are present in `works.txt`, and the stale key `OL15331408W` is present in `redirects.txt` pointing at `OL3809593W`.
 
 - [ ] **Step 1: Write the extraction script**
 
@@ -1384,7 +1384,12 @@ OUT = Path(__file__).parent
 # Works named in the spec's collision analysis. These are the seed of both the
 # fixture corpus and the evaluation set's hardest stratum.
 SEED_WORKS = [
-    "OL15331408W",  # omnibus: Eye in the Pyramid / Golden Apple / Leviathan
+    # The omnibus: Eye in the Pyramid / Golden Apple / Leviathan. Our books store
+    # OL15331408W for this, but Open Library merged that key into OL3809593W on
+    # 2026-01-04, so the stored key is one of the 3,064 (9.9%) that no longer
+    # exist in the dump. Seed the LIVE key here; SEED_REDIRECTS keeps the stale
+    # one, because a real stale key is exactly what the redirects table is for.
+    "OL3809593W",
     "OL2014226W",   # 99 Francs / 99 Франков -- one work, two languages
     "OL81205W",     # Poems of D. H. Lawrence / The Other -- wrong data
     "OL8331643W",   # Blood River / Blood River -- real duplicate
@@ -1701,8 +1706,17 @@ def test_total_corpus_stays_small_enough_to_commit():
 
 def test_seed_collision_works_are_present():
     keys = {key.removeprefix("/works/") for key, _ in _docs("works")}
-    for seed in ("OL15331408W", "OL2014226W", "OL81205W", "OL8331643W"):
+    for seed in ("OL3809593W", "OL2014226W", "OL81205W", "OL8331643W"):
         assert seed in keys, f"{seed} missing from the works fixture"
+
+
+def test_the_stale_omnibus_key_is_present_as_a_redirect():
+    """Our books store OL15331408W; Open Library merged it into OL3809593W on
+    2026-01-04. It is a real member of the 9.9% of stored keys that no longer
+    resolve, and carrying it here is what gives the redirect path a genuine
+    case rather than a synthetic one."""
+    locations = {key: doc.get("location") for key, doc in _docs("redirects")}
+    assert locations.get("/works/OL15331408W") == "/works/OL3809593W"
 
 
 def test_corpus_contains_a_description_object_and_a_description_string():
@@ -4045,7 +4059,7 @@ def built(tmp_path, fixture_dumps):
 def test_canaries_are_the_spec_collision_works(built):
     # These four are the seeds of both the fixture corpus and the eval set's
     # hardest stratum; if they stop resolving, something structural broke.
-    assert set(CANARY_WORK_KEYS) >= {"OL15331408W", "OL2014226W", "OL81205W", "OL8331643W"}
+    assert set(CANARY_WORK_KEYS) >= {"OL3809593W", "OL2014226W", "OL81205W", "OL8331643W"}
 
 
 def test_a_clean_first_build_passes_every_gate(built):
@@ -4151,7 +4165,7 @@ from .paths import TABLES, ArtifactPaths
 # a two-language work, a wrong-data pairing, and a real duplicate. If any stops
 # resolving, the failure is structural rather than statistical.
 CANARY_WORK_KEYS = (
-    "OL15331408W",
+    "OL3809593W",
     "OL2014226W",
     "OL81205W",
     "OL8331643W",
@@ -6600,7 +6614,7 @@ The identity rule matters more here than anywhere else. The four documented caus
 | An omnibus work and one of its three parts | `omnibus_vs_parts` | `match` on the **part** work when our book is a part, on the omnibus when it is the omnibus |
 | "Poems of D. H. Lawrence" attached to "The Other" | `wrong_data` | `no_match`, or `match` on the work that is actually right |
 
-`OL15331408W` is the worked example: the omnibus and its three part-works are all legitimate OL records, and four separate Books is the correct local representation. Label each of our four books onto its own work.
+`OL15331408W` is the worked example, and it is now a two-step one. Open Library merged that key into `OL3809593W` on 2026-01-04, so the key our books store no longer exists — resolve it through the redirect first, then decide. The omnibus (`OL3809593W`) and its three part-works are all legitimate OL records, and four separate Books is the correct local representation. Label each of our four books onto its own work. Its Open Library description reads "see .../OL15331408W", pointing back at the key that redirects to it; that circularity is the data, not an error in the tooling.
 
 - [ ] **Step 3: Label the remaining strata**
 
