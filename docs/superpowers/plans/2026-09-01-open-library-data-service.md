@@ -5517,15 +5517,19 @@ module Books
 end
 ```
 
-**`Language` has no `code` column** — verified: the table is `id`, `name`, `slug`, `created_at`,
-`updated_at`. Use `slug`, and name the exported field `original_language_slug` so nothing reads it
-as an ISO code.
+**`Language` has an ISO code column, and it is empty.** Measured: `languages` carries
+`iso_639_1 (2)` and `iso_639_3 (3)`, the latter with a UNIQUE index — `iso_639_3` is exactly the
+three-letter family Open Library uses (`eng`, `ger`, `fre`). But **all 201 rows have it NULL**.
 
-That leaves a real gap worth naming rather than papering over: Open Library stores three-letter
-codes (`eng`, `ger`), our `Language` stores a slug. Nothing maps between them yet. `EvalBook` does
-not consume the field at all today, and the matcher's `language_agreement` feature returns `None`
-when either side is absent, so it degrades to neutral rather than wrong. Export the slug now,
-carry it in the JSONL, and let whoever needs the comparison build the mapping then.
+So export `original_language_slug` from `book.original_language&.slug`, which is populated. Do not
+export `iso_639_3`: a column that is NULL everywhere would look like a working join key and silently
+match nothing.
+
+Worth recording as an enrichment opportunity rather than a gap. The join key the matcher's
+`language_agreement` feature wants already has a schema home and a unique index; it just has no
+values. Populating those 201 rows — a one-time backfill from any ISO 639 table — would turn the
+language feature from permanently neutral into a real signal. Until then `language_agreement`
+returns `None` when either side is absent, which degrades to neutral rather than wrong.
 
 Create `web-app/lib/tasks/open_library.rake`:
 
