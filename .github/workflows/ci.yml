@@ -97,3 +97,31 @@ jobs:
           AMAZON_PRODUCT_API_SECRET_KEY: ci_test_secret_key
           AMAZON_PRODUCT_API_PARTNER_KEY: ci_test_partner_key
         run: bin/rails db:test:prepare test
+
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: data-sources
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.17"
+          enable-cache: true
+
+      - name: Install dependencies (fails on lockfile drift)
+        run: uv sync --locked
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Check formatting
+        run: uv run ruff format --check .
+
+      - name: Run tests
+        run: uv run pytest
