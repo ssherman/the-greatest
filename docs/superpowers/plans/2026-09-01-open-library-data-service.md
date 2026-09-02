@@ -2439,7 +2439,14 @@ def build_works(con: duckdb.DuckDBPyConnection, paths: ArtifactPaths) -> dict[st
             subtitle,
             description,
             first_publish_date_raw,
-            TRY_CAST(regexp_extract(first_publish_date_raw, '(-?\\d{{1,4}})', 1) AS INTEGER)
+            -- A four-digit run, or a NEGATIVE one-to-four-digit run for ancient
+            -- works. Alternation is leftmost-first, so "December 31, 1991" gives
+            -- 1991 and "-350" gives -350. The obvious '(-?\\d{{1,4}})' takes the
+            -- FIRST digit run instead, which measured 241,714 corrupted years out
+            -- of 22.4M on the real dump ("July 3, 2003" -> 3). Residual: a hyphen
+            -- used as a separator reads as a sign ("12-12-2008" -> -12), measured
+            -- at 7 rows in 4.4M; RE2 has no lookaround to disambiguate it.
+            TRY_CAST(regexp_extract(first_publish_date_raw, '(-\\d{{1,4}}|\\d{{4}})', 1) AS INTEGER)
               AS declared_year,
             subjects
           FROM '{staged}'
