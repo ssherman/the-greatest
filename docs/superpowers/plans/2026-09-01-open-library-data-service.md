@@ -3019,18 +3019,22 @@ def build_redirects(con: duckdb.DuckDBPyConnection, paths: ArtifactPaths) -> dic
 
     # Iterative closure. Each round follows one more hop for the rows that are
     # still pointing at something that is itself a redirect.
+    # Ping-pong between two table names. DuckDB will not CREATE OR REPLACE a
+    # table from a SELECT that reads the same table, so each round writes into
+    # the other name and the pair swaps.
     con.execute(
         """
-        CREATE OR REPLACE TABLE redirect_state AS
+        CREATE OR REPLACE TABLE redirect_state_a AS
         SELECT entity, source_path, target_path AS cursor_path,
                CAST(1 AS SMALLINT) AS depth, false AS is_cycle
         FROM redirect_edges;
         """
     )
+    current, other = "redirect_state_a", "redirect_state_b"
     for _ in range(MAX_REDIRECT_DEPTH - 1):
         (moving,) = con.execute(
-            """
-            SELECT count(*) FROM redirect_state s
+            f"""
+            SELECT count(*) FROM {current} s
             JOIN redirect_edges e ON e.source_path = s.cursor_path
             WHERE NOT s.is_cycle
             """
@@ -3038,8 +3042,8 @@ def build_redirects(con: duckdb.DuckDBPyConnection, paths: ArtifactPaths) -> dic
         if moving == 0:
             break
         con.execute(
-            """
-            CREATE OR REPLACE TABLE redirect_state AS
+            f"""
+            CREATE OR REPLACE TABLE {other} AS
             SELECT
               s.entity,
               s.source_path,
@@ -3048,23 +3052,25 @@ def build_redirects(con: duckdb.DuckDBPyConnection, paths: ArtifactPaths) -> dic
                    ELSE CAST(s.depth + 1 AS SMALLINT) END AS depth,
               s.is_cycle OR (e.target_path IS NOT NULL AND e.target_path = s.source_path)
                 AS is_cycle
-            FROM redirect_state s
+            FROM {current} s
             LEFT JOIN redirect_edges e
               ON e.source_path = s.cursor_path AND NOT s.is_cycle;
             """
         )
+        current, other = other, current
 
     # Anything still pointing at a redirect after the cap is a cycle by
     # definition of the cap, whether or not we saw it revisit its own source.
     con.execute(
-        """
-        CREATE OR REPLACE TABLE redirect_state AS
+        f"""
+        CREATE OR REPLACE TABLE {other} AS
         SELECT
           entity, source_path, cursor_path, depth,
           is_cycle OR cursor_path IN (SELECT source_path FROM redirect_edges) AS is_cycle
-        FROM redirect_state;
+        FROM {current};
         """
     )
+    current = other
 
     con.execute(
         f"""
@@ -3087,7 +3093,7 @@ def build_redirects(con: duckdb.DuckDBPyConnection, paths: ArtifactPaths) -> dic
                   NOT IN (SELECT author_key FROM '{paths.table("authors")}')
               ELSE false
             END                                                             AS is_dangling
-          FROM redirect_state s
+          FROM {current} s
         ) TO '{paths.table("redirects")}' (FORMAT parquet, COMPRESSION zstd);
         """
     )
@@ -5787,7 +5793,6 @@ def _register_books(con: duckdb.DuckDBPyConnection, books: list[EvalBook]) -> No
                 "existing_keys": book.existing_ol_work_keys,
             }
         )
-    con.execute("CREATE OR REPLACE TABLE eval_books AS SELECT * FROM (VALUES (NULL)) WHERE false")
     con.register("eval_books_df", rows)
     con.execute("CREATE OR REPLACE TABLE eval_books AS SELECT * FROM eval_books_df")
 
@@ -8825,7 +8830,7 @@ Honest constraint, stated up front: 300–500 labeled cases is a small training 
 - Produces:
   - `openlibrary.eval.calibrate.split_cases(cases, *, seed, train_fraction=0.6) -> tuple[list, list]` — stratified
   - `openlibrary.eval.calibrate.objective(metrics, *, min_accept_rate) -> float`
-  - `openlibrary.eval.calibrate.search_weights(con, paths, train, *, base, iterations, seed) -> Weights`
+  - `openlibrary.eval.calibrate.search_weights(con, paths, train, *, base, iterations, seed, min_accept_rate) -> tuple[Weights, float]` — the float is the training-set objective
   - `openlibrary.eval.calibrate.splink_weights(train) -> Weights | None` — returns `None` when the `calibration` extra is not installed
   - CLI: `uv run --extra calibration python -m openlibrary.eval.calibrate --root ... --dump-date ... --out src/openlibrary/matcher/weights.json`
 
