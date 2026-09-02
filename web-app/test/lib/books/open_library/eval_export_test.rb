@@ -40,18 +40,18 @@ module Books
       end
 
       test "groups identifiers by type" do
-        identifier = Identifier.find_by(
-          identifiable_type: "Books::Book",
-          identifier_type: :books_work_isbn13
-        )
-        skip "no isbn13 identifier fixture" if identifier.nil?
+        isbn13 = identifiers(:war_and_peace_isbn13)
+        asin = identifiers(:war_and_peace_asin)
         io = StringIO.new
 
         EvalExport.call(io: io)
         record = io.string.lines.map { |line| JSON.parse(line) }
-          .find { |r| r["book_id"] == identifier.identifiable_id }
+          .find { |r| r["book_id"] == isbn13.identifiable_id }
 
-        assert_includes record["isbn13"], identifier.value
+        assert_includes record["isbn13"], isbn13.value
+        assert_includes record["asin"], asin.value
+        refute_includes record["isbn13"], asin.value
+        refute_includes record["asin"], isbn13.value
       end
 
       test "emits an empty array rather than nil for a book with no identifiers" do

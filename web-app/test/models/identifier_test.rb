@@ -182,7 +182,9 @@ class IdentifierTest < ActiveSupport::TestCase
 
   test "books_works scope returns work-level book identifiers" do
     results = Identifier.books_works
-    assert_equal 0, results.count # No book fixtures currently
+    assert_includes results, identifiers(:war_and_peace_isbn13)
+    assert_includes results, identifiers(:war_and_peace_asin)
+    refute_includes results, identifiers(:david_bowie_musicbrainz)
   end
 
   test "books_editions scope returns edition-level book identifiers" do
