@@ -20,14 +20,13 @@ def built(tmp_path, fixture_dumps):
     build_works(con, paths)
     stage_editions(con, paths)
     build_editions(con, paths)
-    (works_n_before,) = con.execute(f"SELECT count(*) FROM '{paths.table('works')}'").fetchone()
     rows = build_popularity(con, paths)
-    yield con, paths, rows, works_n_before
+    yield con, paths, rows
     con.close()
 
 
 def test_every_row_carries_at_least_one_signal(built):
-    con, paths, _, _ = built
+    con, paths, _ = built
     (empty,) = con.execute(
         f"""
         SELECT count(*) FROM '{paths.table("popularity")}'
@@ -38,7 +37,7 @@ def test_every_row_carries_at_least_one_signal(built):
 
 
 def test_counts_are_never_null(built):
-    con, paths, _, _ = built
+    con, paths, _ = built
     (nulls,) = con.execute(
         f"""
         SELECT count(*) FROM '{paths.table("popularity")}'
@@ -49,7 +48,7 @@ def test_counts_are_never_null(built):
 
 
 def test_average_rating_is_null_exactly_when_there_are_no_ratings(built):
-    con, paths, _, _ = built
+    con, paths, _ = built
     (bad,) = con.execute(
         f"""
         SELECT count(*) FROM '{paths.table("popularity")}'
@@ -60,7 +59,7 @@ def test_average_rating_is_null_exactly_when_there_are_no_ratings(built):
 
 
 def test_average_rating_is_within_the_scale(built):
-    con, paths, _, _ = built
+    con, paths, _ = built
     (bad,) = con.execute(
         f"""
         SELECT count(*) FROM '{paths.table("popularity")}'
@@ -71,7 +70,7 @@ def test_average_rating_is_within_the_scale(built):
 
 
 def test_edition_count_matches_the_editions_table(built):
-    con, paths, _, _ = built
+    con, paths, _ = built
     (bad,) = con.execute(
         f"""
         SELECT count(*) FROM (
@@ -86,21 +85,29 @@ def test_edition_count_matches_the_editions_table(built):
     assert bad == 0
 
 
-def test_popularity_does_not_prune_the_works_table(built):
-    con, paths, _, works_n_before = built
-    # popularity is a side table, derived from editions/ratings/reading-log, never
-    # from `works` -- building it must never cause a row to disappear from `works`.
+def test_every_work_with_a_signal_gets_a_row(built):
+    con, paths, _ = built
+    # THE property this table exists to protect. Popularity is a prior and a
+    # tie-breaker; it must never prune. 27.9% of the works our books link to
+    # have zero reading-log entries and zero ratings, and they are exactly the
+    # population a "greatest books" site exists to rank.
     #
-    # Note this is deliberately NOT `pop_n <= works_n`: editions, ratings and
-    # reading-log are independently-sampled dumps from `works` (see conftest's
-    # `fixture_dumps`), so an edition's work_key is not guaranteed to resolve to a
-    # row in the (separately sampled) `works` fixture -- in this corpus, editions
-    # reference 56 distinct work_keys against only 34 rows in `works`. That is a
-    # fixture-sampling artifact, not something `build_popularity` should paper
-    # over by filtering against `works`: popularity is keyed by "any work_key with
-    # a signal", not "any work_key currently present in `works`".
-    (works_n_after,) = con.execute(f"SELECT count(*) FROM '{paths.table('works')}'").fetchone()
-    assert works_n_after == works_n_before
+    # Note the signal set is NOT bounded by works.parquet: editions, ratings and
+    # reading-log all name work keys that Open Library has since merged or
+    # deleted, and works.parquet holds only live /type/work records. Asserting
+    # popularity <= works would be asserting something false.
+    (orphans,) = con.execute(
+        f"""
+        WITH signal_keys AS (
+            SELECT DISTINCT work_key FROM '{paths.table("editions")}'
+            WHERE work_key IS NOT NULL
+        )
+        SELECT count(*) FROM signal_keys s
+        LEFT JOIN '{paths.table("popularity")}' p USING (work_key)
+        WHERE p.work_key IS NULL
+        """
+    ).fetchone()
+    assert orphans == 0, f"{orphans} work keys carry editions but got no popularity row"
 
 
 def test_each_side_of_the_full_outer_join_contributes_rows_alone(tmp_path):
