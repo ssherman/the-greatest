@@ -1,0 +1,16 @@
+- old archived ranking configurations
+- google ads
+- google analytics
+- recommendations
+- goodreads import
+- google books integration
+- books DataImporter
+- authors DataImporter
+- add list wizard
+- move worker to a new server
+- custom user ranking configurations (paid feature)
+- API framework
+- books admin api
+- books public api
+- authors admin api
+- authors public api
