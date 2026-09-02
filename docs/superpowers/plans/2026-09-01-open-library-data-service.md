@@ -4,7 +4,7 @@
 
 **Goal:** Build a read-only Open Library lookup service — monthly dumps distilled into an immutable Parquet artifact, a record-linkage matcher evaluated against a hand-labeled set, a FastAPI service in front of both, and a Rails provider that consumes it — so the books domain has a second data source that can propose (never apply) book identities and field fills.
 
-**Architecture:** A new top-level `data-sources/` directory (Python 3.12, `uv`, DuckDB, FastAPI) that is a **sibling of `web-app/`, never inside it**. `src/common/` holds the shared, versioned normalizer, response schemas, comparators and gates; `src/openlibrary/` holds this one source's pipeline, matcher, API and evaluation set. Data lives outside the repo at `/data/openlibrary/versions/<dump-date>/` and is mounted read-only. Rails reaches the service over HTTP via `OPEN_LIBRARY_SERVICE_URL`, exactly as it already reaches MusicBrainz via `MUSICBRAINZ_URL`.
+**Architecture:** A new top-level `data-sources/` directory (Python 3.12, `uv`, DuckDB, FastAPI) that is a **sibling of `web-app/`, never inside it**. `src/common/` holds the shared, versioned normalizer, response schemas, comparators and gates; `src/openlibrary/` holds this one source's pipeline, matcher, API and evaluation set. Data lives outside the repo at `/home/shane/ol-data/versions/<dump-date>/` and is mounted read-only. Rails reaches the service over HTTP via `OPEN_LIBRARY_SERVICE_URL`, exactly as it already reaches MusicBrainz via `MUSICBRAINZ_URL`.
 
 **Tech Stack:** Python 3.12, uv (lockfile committed, `uv sync --locked` everywhere), DuckDB 1.5.x, Parquet+zstd, Pydantic 2, FastAPI + uvicorn, rapidfuzz, Splink (calibration only, optional extra), pytest + ruff. Rails side: Rails 8.1, Ruby 4.0.6, Faraday 2, Minitest + Mocha + WebMock, standardrb.
 
@@ -37,6 +37,14 @@ These apply to **every** task. They are not repeated per task.
 
 ### The artifact
 
+- **The artifact root on this machine is `/home/shane/ol-data`.** The design names
+  `/data/openlibrary`, which is the production path on the headless server; `/data` does not exist
+  on this development box and creating it needs root. Nothing in the code hard-codes either — the
+  root is a constructor argument (`ArtifactPaths.root`), a CLI flag (`--root`), and an environment
+  variable (`OL_DATA_ROOT`). The Compose file keeps `/data` as the **in-container** path and takes
+  the host side from `OL_DATA_HOST`, defaulting to this box's `/home/shane/ol-data`; the production
+  host sets `OL_DATA_HOST=/data/openlibrary`. To move this box onto `/data` instead,
+  `sudo mkdir -p /data && sudo chown shane:shane /data` and change the flag.
 - **The API opens an explicit version directory, never a symlink.** A symlink flip does not affect a process holding open file handles.
 - **The API mounts the artifact read-only** and opens DuckDB with `read_only=True`. The service must be physically unable to corrupt its own data.
 - **Size is a measured output, not a design target.** The spec's "5–8 GB" is an estimate stated as an estimate. Task 15 produces the real number in `build_report.json`. If the real number is 3 GB or 14 GB, that is the answer — do not tune the schema to land inside the estimate, and do not treat a miss as a failure.
@@ -136,7 +144,7 @@ reversing either means reading it again.
 
 > **Naming, because this repo has two things called "edition".** `Books::Edition` / `books_editions`
 > is the **Rails** table in `web-app/`, and this plan does not touch it. `editions.parquet` is a file
-> in the **Open Library artifact** under `/data/openlibrary/versions/<dump-date>/`, holding *Open
+> in the **Open Library artifact** under `/home/shane/ol-data/versions/<dump-date>/`, holding *Open
 > Library's* edition records distilled from their editions dump. Everywhere below, an unqualified
 > "table" means a Parquet file in the artifact, never a Postgres table.
 
@@ -266,7 +274,7 @@ web-app/
 
 | Increment | Tasks | Deliverable | Depends on |
 |---|---|---|---|
-| 1 — Distillation pipeline | 1–15 | A reproducible artifact at `/data/openlibrary/versions/<date>/` plus `build_report.json` with **measured** sizes and row counts | nothing |
+| 1 — Distillation pipeline | 1–15 | A reproducible artifact at `/home/shane/ol-data/versions/<date>/` plus `build_report.json` with **measured** sizes and row counts | nothing |
 | 2 — Labeled evaluation set | 16–21 | 300–500 stratified labeled cases in `eval/cases/`, plus the tooling that built them | Increment 1 |
 | 3 — Matcher | 22–28 | Blocking + scoring + deciding, with measured metrics against Increment 2 | Increments 1, 2 |
 | 4 — HTTP service | 29–34 | FastAPI service in Docker, retrieval and resolution | Increments 1, 3 |
@@ -278,7 +286,7 @@ web-app/
 
 # Increment 1 — Distillation pipeline (Tasks 1–15)
 
-**Deliverable:** a reproducible artifact at `/data/openlibrary/versions/<dump-date>/` — ten Parquet tables, `manifest.json`, and `build_report.json` carrying the **measured** row counts, byte sizes, field coverage and per-stage timings. The build report is half the deliverable; a pipeline that produces tables but cannot tell you what it produced has not finished.
+**Deliverable:** a reproducible artifact at `/home/shane/ol-data/versions/<dump-date>/` — ten Parquet tables, `manifest.json`, and `build_report.json` carrying the **measured** row counts, byte sizes, field coverage and per-stage timings. The build report is half the deliverable; a pipeline that produces tables but cannot tell you what it produced has not finished.
 
 ---
 
@@ -1358,9 +1366,9 @@ stable and every line is here for a stated reason.
         --works /mnt/e/ol_dump_works_2026-07-31.txt.gz \
         --authors /mnt/e/ol_dump_authors_2026-07-31.txt.gz \
         --editions /mnt/c/Users/shane/Downloads/ol_dump_editions_2026-07-31.txt.gz \
-        --redirects /data/ol-dumps/2026-07-31/ol_dump_redirects_2026-07-31.txt.gz \
-        --ratings /data/ol-dumps/2026-07-31/ol_dump_ratings_2026-07-31.txt.gz \
-        --reading-log /data/ol-dumps/2026-07-31/ol_dump_reading-log_2026-07-31.txt.gz
+        --redirects /home/shane/ol-data/incoming/2026-07-31/ol_dump_redirects_2026-07-31.txt.gz \
+        --ratings /home/shane/ol-data/incoming/2026-07-31/ol_dump_ratings_2026-07-31.txt.gz \
+        --reading-log /home/shane/ol-data/incoming/2026-07-31/ol_dump_reading-log_2026-07-31.txt.gz
 """
 
 from __future__ import annotations
@@ -1606,8 +1614,8 @@ if __name__ == "__main__":
 The redirects, ratings and reading-log dumps are not on disk yet. Download the three small ones first (they total well under 200 MB):
 
 ```bash
-mkdir -p /data/ol-dumps/2026-07-31
-cd /data/ol-dumps/2026-07-31
+mkdir -p /home/shane/ol-data/incoming/2026-07-31
+cd /home/shane/ol-data/incoming/2026-07-31
 for t in redirects ratings reading-log; do
   curl -L -o "ol_dump_${t}_2026-07-31.txt.gz" \
     "https://openlibrary.org/data/ol_dump_${t}_latest.txt.gz"
@@ -1623,9 +1631,9 @@ uv run python tests/fixtures/extract_fixtures.py \
   --works /mnt/e/ol_dump_works_2026-07-31.txt.gz \
   --authors /mnt/e/ol_dump_authors_2026-07-31.txt.gz \
   --editions /mnt/c/Users/shane/Downloads/ol_dump_editions_2026-07-31.txt.gz \
-  --redirects /data/ol-dumps/2026-07-31/ol_dump_redirects_2026-07-31.txt.gz \
-  --ratings /data/ol-dumps/2026-07-31/ol_dump_ratings_2026-07-31.txt.gz \
-  --reading-log /data/ol-dumps/2026-07-31/ol_dump_reading-log_2026-07-31.txt.gz
+  --redirects /home/shane/ol-data/incoming/2026-07-31/ol_dump_redirects_2026-07-31.txt.gz \
+  --ratings /home/shane/ol-data/incoming/2026-07-31/ol_dump_ratings_2026-07-31.txt.gz \
+  --reading-log /home/shane/ol-data/incoming/2026-07-31/ol_dump_reading-log_2026-07-31.txt.gz
 ```
 
 Expected: six files written, each printing a line count and byte size. If any predicate reports "quota not met", note which — a missing category is a real gap in the corpus, and the affected test in a later task must be marked with the reason rather than silently passing on absent data.
@@ -4582,7 +4590,7 @@ Order matters: works and authors before their derived tables, editions before `y
 - Produces:
   - `openlibrary.pipeline.build.build(root: Path, *, dump_date: str | None = None, download: bool = True, memory_limit: str = "8GB", keep_staging: bool = False) -> dict` — returns the build report
   - `openlibrary.pipeline.build.main() -> None` — the `typer` CLI entry point
-  - CLI: `uv run python -m openlibrary.pipeline.build --root /data/openlibrary [--dump-date 2026-07-31] [--no-download] [--memory-limit 12GB] [--keep-staging]`
+  - CLI: `uv run python -m openlibrary.pipeline.build --root /home/shane/ol-data [--dump-date 2026-07-31] [--no-download] [--memory-limit 12GB] [--keep-staging]`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -4762,7 +4770,7 @@ def build(
 
 @app.command()
 def main(
-    root: Path = typer.Option(Path("/data/openlibrary"), "--root"),
+    root: Path = typer.Option(Path("/home/shane/ol-data"), "--root"),
     dump_date: str | None = typer.Option(None, "--dump-date"),
     download: bool = typer.Option(True, "--download/--no-download"),
     memory_limit: str = typer.Option("8GB", "--memory-limit"),
@@ -4806,13 +4814,13 @@ The three large dumps are already on disk in three different places, so stage th
 
 ```bash
 df -h /data /mnt/e
-mkdir -p /data/openlibrary/dumps/2026-07-31
-cp /mnt/e/ol_dump_works_2026-07-31.txt.gz          /data/openlibrary/dumps/2026-07-31/
-cp /mnt/e/ol_dump_authors_2026-07-31.txt.gz        /data/openlibrary/dumps/2026-07-31/
-cp /mnt/c/Users/shane/Downloads/ol_dump_editions_2026-07-31.txt.gz /data/openlibrary/dumps/2026-07-31/
-cp /data/ol-dumps/2026-07-31/ol_dump_{redirects,ratings,reading-log}_2026-07-31.txt.gz \
-   /data/openlibrary/dumps/2026-07-31/
-ls -la /data/openlibrary/dumps/2026-07-31/
+mkdir -p /home/shane/ol-data/dumps/2026-07-31
+cp /mnt/e/ol_dump_works_2026-07-31.txt.gz          /home/shane/ol-data/dumps/2026-07-31/
+cp /mnt/e/ol_dump_authors_2026-07-31.txt.gz        /home/shane/ol-data/dumps/2026-07-31/
+cp /mnt/c/Users/shane/Downloads/ol_dump_editions_2026-07-31.txt.gz /home/shane/ol-data/dumps/2026-07-31/
+cp /home/shane/ol-data/incoming/2026-07-31/ol_dump_{redirects,ratings,reading-log}_2026-07-31.txt.gz \
+   /home/shane/ol-data/dumps/2026-07-31/
+ls -la /home/shane/ol-data/dumps/2026-07-31/
 ```
 
 Then build. Expect roughly 15–25 minutes dominated by the editions scan; set `--memory-limit` to about half of physical RAM.
@@ -4820,17 +4828,17 @@ Then build. Expect roughly 15–25 minutes dominated by the editions scan; set `
 ```bash
 cd /home/shane/dev/the-greatest/.claude/worktrees/open-library-data-source/data-sources
 uv run python -m openlibrary.pipeline.build \
-  --root /data/openlibrary --dump-date 2026-07-31 --no-download --memory-limit 12GB \
+  --root /home/shane/ol-data --dump-date 2026-07-31 --no-download --memory-limit 12GB \
   2>&1 | tee /tmp/ol-build-2026-07-31.log
 ```
 
 - [ ] **Step 7: Read the build report and record the real numbers**
 
 ```bash
-cat /data/openlibrary/versions/2026-07-31/build_report.json | python3 -m json.tool | head -80
+cat /home/shane/ol-data/versions/2026-07-31/build_report.json | python3 -m json.tool | head -80
 python3 - <<'PY'
 import json
-r = json.load(open('/data/openlibrary/versions/2026-07-31/build_report.json'))
+r = json.load(open('/home/shane/ol-data/versions/2026-07-31/build_report.json'))
 print(f"TOTAL {r['total_bytes']/1e9:.2f} GB")
 for name, t in sorted(r['tables'].items(), key=lambda kv: -kv[1]['bytes']):
     print(f"  {name:16} {t['rows']:>14,} rows  {t['bytes']/1e9:>6.2f} GB")
@@ -4871,7 +4879,7 @@ rebuildable from a dump, and is never on a public request path.
 
     cd data-sources
     uv sync --locked
-    uv run python -m openlibrary.pipeline.build --root /data/openlibrary --memory-limit 12GB
+    uv run python -m openlibrary.pipeline.build --root /home/shane/ol-data --memory-limit 12GB
 
 Downloads six dumps (all must resolve to the same date), distills, derives,
 validates and reports. A failed gate leaves the previous version live.
@@ -5513,9 +5521,9 @@ This is a read-only `find_each` over 126,330 books. It touches no writes.
 
 ```bash
 cd /home/shane/dev/the-greatest/.claude/worktrees/open-library-data-source/web-app
-bin/rails "open_library:export_books[/data/openlibrary/eval/books.jsonl]"
-wc -l /data/openlibrary/eval/books.jsonl
-head -1 /data/openlibrary/eval/books.jsonl | python3 -m json.tool
+bin/rails "open_library:export_books[/home/shane/ol-data/eval/books.jsonl]"
+wc -l /home/shane/ol-data/eval/books.jsonl
+head -1 /home/shane/ol-data/eval/books.jsonl | python3 -m json.tool
 ```
 
 Expected: `126330` lines (or whatever `Books::Book.count` currently is), and a first record with populated fields.
@@ -5552,7 +5560,7 @@ For each stratum, pick books that match the stratum's definition and attach the 
   - `openlibrary.eval.build_pool.naive_candidates(con, paths, books) -> dict[int, list[PoolCandidate]]`
   - `openlibrary.eval.build_pool.assign_strata(con, paths, books, candidates) -> dict[str, list[int]]`
   - `openlibrary.eval.build_pool.build_pool(con, paths, books_path, out_path, *, seed=20260901) -> dict[str, int]`
-  - CLI: `uv run python -m openlibrary.eval.build_pool --root /data/openlibrary --dump-date 2026-07-31 --books /data/openlibrary/eval/books.jsonl --out /data/openlibrary/eval/pool.jsonl`
+  - CLI: `uv run python -m openlibrary.eval.build_pool --root /home/shane/ol-data --dump-date 2026-07-31 --books /home/shane/ol-data/eval/books.jsonl --out /home/shane/ol-data/eval/pool.jsonl`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -6060,7 +6068,7 @@ def build_pool(
 
 @app.command()
 def main(
-    root: Path = typer.Option(Path("/data/openlibrary"), "--root"),
+    root: Path = typer.Option(Path("/home/shane/ol-data"), "--root"),
     dump_date: str = typer.Option(..., "--dump-date"),
     books: Path = typer.Option(..., "--books"),
     out: Path = typer.Option(..., "--out"),
@@ -6098,10 +6106,10 @@ Expected: PASS, 7 tests.
 ```bash
 cd /home/shane/dev/the-greatest/.claude/worktrees/open-library-data-source/data-sources
 uv run python -m openlibrary.eval.build_pool \
-  --root /data/openlibrary --dump-date 2026-07-31 \
-  --books /data/openlibrary/eval/books.jsonl \
-  --out /data/openlibrary/eval/pool.jsonl
-wc -l /data/openlibrary/eval/pool.jsonl
+  --root /home/shane/ol-data --dump-date 2026-07-31 \
+  --books /home/shane/ol-data/eval/books.jsonl \
+  --out /home/shane/ol-data/eval/pool.jsonl
+wc -l /home/shane/ol-data/eval/pool.jsonl
 ```
 
 Expected: a per-stratum table and roughly 450 cases. **A stratum reported `SHORT` is information, not a failure** — for example, if fewer than 30 books have a pseudonym-only author match, that is a fact about the catalog. Record which strata came up short; Task 21's integrity test uses the actual counts, and a short stratum means its metric will be noisy.
@@ -6136,7 +6144,7 @@ Two hard requirements:
   - `openlibrary.eval.label.parse_choice(raw: str, entry: PoolEntry) -> Choice` — pure; returns a `Choice` dataclass with `kind` in `{"candidate", "manual_key", "no_match", "ambiguous", "skip", "quit"}` and `work_key: str | None`
   - `openlibrary.eval.label.already_labeled(out_path: Path) -> set[str]`
   - `openlibrary.eval.label.append_case(out_path: Path, case: EvalCase) -> None`
-  - CLI: `uv run python -m openlibrary.eval.label --pool /data/openlibrary/eval/pool.jsonl --out src/openlibrary/eval/cases/labels.jsonl [--stratum shared_key_collision] [--dump-date 2026-07-31]`
+  - CLI: `uv run python -m openlibrary.eval.label --pool /home/shane/ol-data/eval/pool.jsonl --out src/openlibrary/eval/cases/labels.jsonl [--stratum shared_key_collision] [--dump-date 2026-07-31]`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -6567,7 +6575,7 @@ Start with `easy_baseline` (60 cases). It is fast, it calibrates the interface, 
 ```bash
 cd /home/shane/dev/the-greatest/.claude/worktrees/open-library-data-source/data-sources
 uv run python -m openlibrary.eval.label \
-  --pool /data/openlibrary/eval/pool.jsonl \
+  --pool /home/shane/ol-data/eval/pool.jsonl \
   --out src/openlibrary/eval/cases/labels.jsonl \
   --dump-date 2026-07-31 \
   --stratum easy_baseline
@@ -6577,7 +6585,7 @@ uv run python -m openlibrary.eval.label \
 
 ```bash
 uv run python -m openlibrary.eval.label \
-  --pool /data/openlibrary/eval/pool.jsonl \
+  --pool /home/shane/ol-data/eval/pool.jsonl \
   --out src/openlibrary/eval/cases/labels.jsonl \
   --dump-date 2026-07-31 \
   --stratum shared_key_collision
@@ -6604,7 +6612,7 @@ for s in stale_ol_key high_frequency_title non_latin_title degenerate_title \
          author_less_work isbn_reuse no_candidates; do
   echo "=== $s ==="
   uv run python -m openlibrary.eval.label \
-    --pool /data/openlibrary/eval/pool.jsonl \
+    --pool /home/shane/ol-data/eval/pool.jsonl \
     --out src/openlibrary/eval/cases/labels.jsonl \
     --dump-date 2026-07-31 --stratum "$s"
 done
@@ -6970,7 +6978,7 @@ Expected: PASS; the two `@pytest.mark.artifact` tests skip.
 
 ```bash
 cd /home/shane/dev/the-greatest/.claude/worktrees/open-library-data-source/data-sources
-OL_DATA_ROOT=/data/openlibrary OL_DATA_VERSION=2026-07-31 \
+OL_DATA_ROOT=/home/shane/ol-data OL_DATA_VERSION=2026-07-31 \
   uv run pytest tests/openlibrary/test_eval_dataset.py -m artifact -v -s
 ```
 
@@ -7464,7 +7472,7 @@ from openlibrary.matcher.blocking import BlockingQuery, generate_candidates
 from openlibrary.pipeline.duck import connect
 from openlibrary.pipeline.paths import ArtifactPaths
 from pathlib import Path
-paths = ArtifactPaths(root=Path('/data/openlibrary'), dump_date='2026-07-31')
+paths = ArtifactPaths(root=Path('/home/shane/ol-data'), dump_date='2026-07-31')
 con = connect(paths, memory_limit='8GB')
 q = BlockingQuery(title='a title that will not match anything exactly at all')
 t = time.time(); r = generate_candidates(con, paths, q); print(f'{time.time()-t:.2f}s, {len(r.candidates)} candidates')
@@ -8442,7 +8450,7 @@ Every work-key comparison goes through `dataset.same_work`, so a label written a
   - `openlibrary.eval.harness.CaseOutcome` — `case_id`, `stratum`, `expected_work_key`, `expected_verdict`, `decision: Decision`, `candidate_rank: int | None`, `correct: bool`, `false_merge: bool`
   - `openlibrary.eval.harness.Metrics` — `candidate_recall: dict[int, float]`, `precision_at_accept: float`, `false_merge_rate: float`, `abstention_rate: float`, `correct_no_match_rate: float`, `n_cases: int`, `n_accepted: int`, `n_no_match_cases: int`
   - `openlibrary.eval.harness.run(con, paths, cases, weights) -> tuple[Metrics, list[CaseOutcome]]`
-  - CLI: `uv run python -m openlibrary.eval.harness --root /data/openlibrary --dump-date 2026-07-31`
+  - CLI: `uv run python -m openlibrary.eval.harness --root /home/shane/ol-data --dump-date 2026-07-31`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -8749,7 +8757,7 @@ def run(
 
 @app.command()
 def main(
-    root: Path = typer.Option(Path("/data/openlibrary"), "--root"),
+    root: Path = typer.Option(Path("/home/shane/ol-data"), "--root"),
     dump_date: str = typer.Option(..., "--dump-date"),
 ) -> None:
     from openlibrary.pipeline.duck import connect
@@ -8796,7 +8804,7 @@ Expected: PASS, 7 tests.
 
 ```bash
 cd /home/shane/dev/the-greatest/.claude/worktrees/open-library-data-source/data-sources
-uv run python -m openlibrary.eval.harness --root /data/openlibrary --dump-date 2026-07-31 \
+uv run python -m openlibrary.eval.harness --root /home/shane/ol-data --dump-date 2026-07-31 \
   | tee /tmp/ol-eval-baseline.txt
 ```
 
@@ -9046,7 +9054,7 @@ def splink_weights(train: list[EvalCase]) -> Weights | None:
 
 @app.command()
 def main(
-    root: Path = typer.Option(Path("/data/openlibrary"), "--root"),
+    root: Path = typer.Option(Path("/home/shane/ol-data"), "--root"),
     dump_date: str = typer.Option(..., "--dump-date"),
     out: Path = typer.Option(Path("src/openlibrary/matcher/weights.json"), "--out"),
     seed: int = typer.Option(20260901, "--seed"),
@@ -9120,7 +9128,7 @@ Expected: PASS, 4 tests.
 cd /home/shane/dev/the-greatest/.claude/worktrees/open-library-data-source/data-sources
 uv sync --locked --extra calibration
 uv run python -m openlibrary.eval.calibrate \
-  --root /data/openlibrary --dump-date 2026-07-31 \
+  --root /home/shane/ol-data --dump-date 2026-07-31 \
   --out src/openlibrary/matcher/weights.json \
   2>&1 | tee /tmp/ol-calibration.log
 ```
@@ -9133,7 +9141,7 @@ Whatever happens with Splink, write it down: "Splink beat the search by X" and "
 
 ```bash
 cd /home/shane/dev/the-greatest/.claude/worktrees/open-library-data-source/data-sources
-uv run python -m openlibrary.eval.harness --root /data/openlibrary --dump-date 2026-07-31 \
+uv run python -m openlibrary.eval.harness --root /home/shane/ol-data --dump-date 2026-07-31 \
   | tee /tmp/ol-eval-calibrated.txt
 ```
 
@@ -9303,7 +9311,7 @@ def test_the_evaluation_gate_reports_a_real_status_once_labels_exist(built):
 ```bash
 cd /home/shane/dev/the-greatest/.claude/worktrees/open-library-data-source/data-sources
 uv run pytest
-OL_DATA_ROOT=/data/openlibrary OL_DATA_VERSION=2026-07-31 uv run pytest -m artifact -v
+OL_DATA_ROOT=/home/shane/ol-data OL_DATA_VERSION=2026-07-31 uv run pytest -m artifact -v
 uv run ruff check . && uv run ruff format --check .
 ```
 
@@ -10300,7 +10308,7 @@ services:
       - "8080:8080"
     volumes:
       # Read-only: the service is physically unable to corrupt its own data.
-      - /data/openlibrary:/data:ro
+      - ${OL_DATA_HOST:-/home/shane/ol-data}:/data:ro
     environment:
       OL_DATA_ROOT: /data
       # An EXPLICIT version directory, never a symlink: a symlink flip does not
@@ -10312,7 +10320,7 @@ services:
     image: the-greatest/data-sources:latest
     profiles: ["build"]
     volumes:
-      - /data/openlibrary:/data
+      - ${OL_DATA_HOST:-/home/shane/ol-data}:/data
     environment:
       OL_DATA_ROOT: /data
     command:
@@ -10613,7 +10621,7 @@ OPEN_LIBRARY_SERVICE_URL=http://localhost:8080
 
 - [ ] **Step 3: Add a `data-sources/` section to AGENTS.md**
 
-Short, and placed near "Where code actually lives". It must say: Python lives in `data-sources/` at the project root, a **sibling of `web-app/`, never inside it**; run Python commands from `data-sources/` and Rails commands from `web-app/`; dependencies are `uv` with a committed lockfile and every install uses `uv sync --locked`; the artifact lives outside the repo at `/data/openlibrary/versions/<dump-date>/` and is mounted read-only; and the four boundaries (never writes to Rails, holds nothing that is not rebuildable, never on a public request path, no covers or public search).
+Short, and placed near "Where code actually lives". It must say: Python lives in `data-sources/` at the project root, a **sibling of `web-app/`, never inside it**; run Python commands from `data-sources/` and Rails commands from `web-app/`; dependencies are `uv` with a committed lockfile and every install uses `uv sync --locked`; the artifact lives outside the repo at `/home/shane/ol-data/versions/<dump-date>/` and is mounted read-only; and the four boundaries (never writes to Rails, holds nothing that is not rebuildable, never on a public request path, no covers or public search).
 
 - [ ] **Step 4: Run the full gate**
 
@@ -10625,7 +10633,7 @@ cd ../data-sources
 uv sync --locked
 uv run pytest
 uv run ruff check . && uv run ruff format --check .
-OL_DATA_ROOT=/data/openlibrary OL_DATA_VERSION=2026-07-31 uv run pytest -m artifact -v
+OL_DATA_ROOT=/home/shane/ol-data OL_DATA_VERSION=2026-07-31 uv run pytest -m artifact -v
 ```
 
 Expected: everything green. No new warning lines in the Rails output — a clean `bin/rails test` emits none beyond the two known upstream sources (`weighted_list_rank`'s position `puts`, and npm/yarn during `test:prepare`), and a new one is a regression to fix rather than to filter.
