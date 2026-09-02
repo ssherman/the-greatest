@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12, uv (lockfile committed, `uv sync --locked` everywhere), DuckDB 1.5.x, Parquet+zstd, Pydantic 2, FastAPI + uvicorn, rapidfuzz, Splink (calibration only, optional extra), pytest + ruff. Rails side: Rails 8.1, Ruby 4.0.6, Faraday 2, Minitest + Mocha + WebMock, standardrb.
 
-**Spec:** `docs/superpowers/specs/2026-09-01-open-library-data-service-design.md`
+**Spec:** `docs/superpowers/specs/2026-09-01-open-library-data-service-design.md` (amended 2026-09-02)
 
 ---
 
@@ -125,9 +125,14 @@ Everything below was verified against the `2026-07-31` dumps while writing this 
 
 ---
 
-## Two departures from the spec, both flagged rather than assumed
+## Two corrections the spec absorbed
 
-**(a) The nine-table list has no `editions` table, but the HTTP contract needs one.**
+Both of these were gaps found while writing this plan. Both are now **in the spec**, amended
+2026-09-02 — they are not departures, and an implementer should find the plan and the spec agreeing.
+They are recorded here because both decide what gets pulled out of the 12.5 GB editions dump, and
+reversing either means reading it again.
+
+**(a) A tenth table, `editions`.**
 
 > **Naming, because this repo has two things called "edition".** `Books::Edition` / `books_editions`
 > is the **Rails** table in `web-app/`, and this plan does not touch it. `editions.parquet` is a file
@@ -135,13 +140,28 @@ Everything below was verified against the `2026-07-31` dumps while writing this 
 > Library's* edition records distilled from their editions dump. Everywhere below, an unqualified
 > "table" means a Parquet file in the artifact, never a Postgres table.
 
-The spec's artifact section lists nine tables; `identifiers` carries only `(type, value) → edition → work`. But the contract specifies `GET /works/{work_key}/editions` returning "language, pages, publisher, year, ISBNs, binding", and `year_evidence` is derived from edition years. None of those columns exist in any of the nine tables. This plan adds a **tenth table, `editions`**, holding the narrow per-edition columns. It is produced by the same single pass over the 12.5 GB dump that produces `identifiers`, so it costs one extra `COPY` from staging, not another read. This is the spec's own argument for retaining OCLC and LCCN, applied to the same pass. **If Shane rejects the tenth table, `/works/{key}/editions` must come out of the contract** — the endpoint and the table stand or fall together.
+The spec's artifact section listed nine tables; `identifiers` carries only
+`(type, value) → edition → work`. But the contract specifies `GET /works/{work_key}/editions`
+returning "language, pages, publisher, year, ISBNs, binding", and `year_evidence` is derived from
+edition years. None of those columns existed anywhere. The tenth table is produced by the same single
+pass over the 12.5 GB dump that produces `identifiers`, so it costs one extra `COPY` from staging,
+not another read — the spec's own argument for retaining OCLC and LCCN, applied to the same pass.
 
-**(b) Blocking rule 1 omits Goodreads IDs, which are our highest-coverage identifier.** The spec lists "ISBN / OCLC / LCCN / ASIN". Measured: 95.0% of our books carry a Goodreads ID (higher than ISBN's 88.1%), OCLC and LCCN are on **zero** of our books, and the OL editions dump carries `identifiers.goodreads` on ~12.5% of editions. This plan therefore extracts `goodreads` into the `identifiers` table alongside the four the spec names, and Increment 3 adds it to rule 1. It costs one more row type in a table that is already type-keyed and generic — no shape change. The spec's justification for OCLC/LCCN is unaffected and still correct: those are the *WorldCat* cross-source join key, not a local one. **Everything Goodreads-related in this plan is marked `[GOODREADS]`, so it can be removed with a grep if Shane vetoes it.** If it is removed after Increment 1 has run, the fix is a re-read of the 12.5 GB editions dump — which is precisely why it is being decided now rather than later.
+**(b) Goodreads IDs in `identifiers`, and in blocking rule 1.** The spec's rule 1 listed
+"ISBN / OCLC / LCCN / ASIN". Measured in the development database: 95.0% of our books carry a
+Goodreads ID (higher than ISBN's 88.1%), OCLC and LCCN are on **zero** of them, and the OL editions
+dump carries `identifiers.goodreads` on ~12.5% of editions. It is the highest-coverage join key we
+own. It costs one more row type in a table that is already keyed by identifier type — no shape
+change. The spec's justification for OCLC and LCCN is unaffected and still correct: those are the
+*WorldCat* cross-source join key, not a local one.
 
-Nothing else in this plan departs from the spec. In particular, the options in the spec's "Deferred and rejected" section — ClickHouse, OpenSearch, a dedicated PostgreSQL, Meilisearch/Typesense/Quickwit/vector search, popularity pruning, author-first as a sequential gate — are not revisited anywhere.
+Goodreads-related code carries a `[GOODREADS]` marker throughout this plan. It is a locator, not a
+hedge — it makes every touchpoint greppable if the field ever needs revisiting.
 
----
+Nothing else in this plan departs from the spec. In particular, the options in the spec's "Deferred
+and rejected" section — ClickHouse, OpenSearch, a dedicated PostgreSQL, Meilisearch/Typesense/
+Quickwit/vector search, popularity pruning, and author-first as a sequential gate — are not
+revisited anywhere.
 
 ## File structure
 

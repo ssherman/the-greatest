@@ -5,6 +5,19 @@
 **Scope:** A backend book-data lookup service built from Open Library's monthly dumps, plus its
 Rails integration. Batch reconciliation of the existing 126k books is a separate spec.
 
+**Amended 2026-09-02**, during implementation planning, in two places. Both were gaps rather than
+changes of mind, and both had to be settled before the pipeline reads the 12.5 GB editions dump,
+because reversing either means reading it again.
+
+1. **A tenth table, `editions`.** The artifact listed nine tables, none of which had a home for the
+   fields `GET /works/{work_key}/editions` promises — and `year_evidence` is derived from edition
+   years regardless. It is produced by the same single pass that produces `identifiers`.
+2. **Goodreads IDs in `identifiers`, and in blocking rule 1.** Measured in the development database:
+   **120,059 of our 126,330 books (95.0%) carry a Goodreads ID**, against 111,242 (88.1%) with an
+   ISBN and **zero** with an OCLC number or LCCN. Open Library's editions dump carries
+   `identifiers.goodreads` on roughly 12.5% of editions. It is our highest-coverage join key and it
+   was missing from the rule.
+
 ## Problem
 
 The books domain has exactly one external data source: the Amazon Product API. That is not enough
@@ -102,6 +115,21 @@ Three conclusions drive the design:
 | existing OL work keys | 31,602 (31,059 unique) |
 | existing OL author keys | 16,542 |
 
+Identifier coverage on those books, counted 2026-09-02 — the reason blocking rule 1 carries
+Goodreads and cannot lean on OCLC:
+
+| Identifier | Rows | Distinct books |
+|---|---|---|
+| `books_work_goodreads_id` | 154,541 | **120,059 (95.0%)** |
+| `books_work_isbn10` | 183,980 | — |
+| `books_work_isbn13` | 133,915 | 111,242 with either ISBN (88.1%) |
+| `books_work_asin` | 79,105 | — |
+| `books_work_openlibrary_id` | 31,602 | 31,602 (25.0%) |
+| `books_work_oclc_id` | **0** | 0 |
+| `books_edition_oclc_number` | **0** | 0 |
+
+124,140 books (98.3%) carry a Goodreads ID *or* an ISBN.
+
 The editions table is effectively a table of Amazon product rows: publisher and binding populated,
 real bibliographic fields empty. Co-authors, editors, translators, series and collections are
 absent. The `Books::Book`/`Books::Edition` enums that encode intent (`contains`, `collection`,
@@ -198,8 +226,12 @@ Library itself turns out to be wrong, deleting a directory reverses it.
 
 ## The distilled artifact
 
-Nine Parquet tables. Blocking queries read only narrow columns; that is what makes columnar storage
+Ten Parquet tables. Blocking queries read only narrow columns; that is what makes columnar storage
 pay and is the opposite of the previous approach.
+
+A naming note, because the repository now has two things called "edition": `Books::Edition` /
+`books_editions` is the Rails table and is untouched by this design. `editions` below is a Parquet
+file in the artifact holding *Open Library's* edition records.
 
 | Table | Rows | Purpose |
 |---|---|---|
@@ -208,7 +240,8 @@ pay and is the opposite of the previous approach.
 | `authors` | 15.4M | Author skeleton. |
 | `author_names` | ~25M | Exploded name → author_key, including `alternate_names`. |
 | `work_authors` | 44.7M | Exploded pairs. |
-| `identifiers` | ~100M | From editions. ISBN/OCLC/LCCN/ASIN → edition → work. |
+| `editions` | ~50M | Narrow per-edition columns: work, title, year, language, pages, publisher, format, series. |
+| `identifiers` | ~100M | From editions. ISBN/OCLC/LCCN/ASIN/Goodreads → edition → work. |
 | `year_evidence` | ~30M | Year *candidates* per work, never one answer. |
 | `popularity` | ~3.5M | edition / reading-log / rating counts. |
 | `redirects` | ~5M | Transitively resolved, cycles flagged. |
@@ -237,6 +270,18 @@ return several works for one identifier; the caller sees the ambiguity.
 Building the bridge while editions are already being parsed is free; retrofitting means reprocessing
 12.5 GB.
 
+**Goodreads IDs are retained too, and for the opposite reason.** OCLC and LCCN are a bet on a future
+source; Goodreads is the join key we already hold. 95.0% of our books carry one — more than carry an
+ISBN — because the catalogue came largely from Goodreads imports, and Open Library's editions dump
+carries `identifiers.goodreads` on roughly 12.5% of editions. Nothing about the table's shape
+changes: it is already keyed by identifier type.
+
+**`editions` exists because the contract needs it.** `GET /works/{work_key}/editions` returns
+language, pages, publisher, year, ISBNs and binding, and no other table holds those columns;
+`year_evidence` is derived from edition years as well. One pass over the 12.5 GB dump produces both
+this table and `identifiers`, so the second `COPY` is the whole cost. Kept deliberately narrow —
+descriptions, notes, contributions, physical dimensions and classifications are dropped, as below.
+
 ### Dropped entirely
 
 Covers, links, excerpts, first sentences, LC/Dewey classifications, `subject_places`,
@@ -245,7 +290,7 @@ Covers, links, excerpts, first sentences, LC/Dewey classifications, `subject_pla
 
 ### Size
 
-**5–8 GB, dominated by `identifiers`.** This is deliberately not pinned down — Parquet size is a
+**5–8 GB, dominated by `identifiers` and `editions`.** This is deliberately not pinned down — Parquet size is a
 measured build output, not a design assumption. Increment 1 reports it. For scale, the two tables
 already built are 2.74 GB and 0.42 GB, and the skeleton shrinks further once `last_modified` becomes
 a date instead of text (0.38 GB) and `subjects` moves to `work_details` (0.41 GB).
@@ -261,7 +306,7 @@ Each emits `(book_id, work_key, rule_name)`; results are deduped.
 
 | # | Rule |
 |---|---|
-| 1 | Normalized ISBN / OCLC / LCCN / ASIN → `identifiers`. Deterministic; may return several works. |
+| 1 | Normalized ISBN / OCLC / LCCN / ASIN / Goodreads → `identifiers`. Deterministic; may return several works. Goodreads is the highest-coverage key on our side (95.0% of books) and OCLC the lowest (0). |
 | 2 | Existing OL work key, redirect-resolved. A **hint**, weighted like any other evidence. |
 | 3 | Resolved author + any title fingerprint variant. Precision rule; measured p90 = 4. |
 | 4 | Title fingerprint alone where `title_fp_freq <= 50`. Recall rule; measured p90 = 42. |
