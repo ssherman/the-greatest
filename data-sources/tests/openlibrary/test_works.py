@@ -1,8 +1,9 @@
+import duckdb
 import pytest
 
 from openlibrary.pipeline.duck import connect
 from openlibrary.pipeline.paths import ArtifactPaths
-from openlibrary.pipeline.works import build_works, stage_works
+from openlibrary.pipeline.works import _DECLARED_YEAR_PATTERN, build_works, stage_works
 
 
 @pytest.fixture()
@@ -108,3 +109,44 @@ def test_last_modified_is_a_date_not_text(built):
         for row in con.execute(f"DESCRIBE SELECT * FROM '{paths.table('works')}'").fetchall()
     }
     assert types["last_modified"] == "DATE"
+
+
+def test_declared_year_is_never_implausibly_small(built):
+    # Regression guard for a bug where a free-text `first_publish_date_raw`
+    # (e.g. "December 31, 1991") was parsed by taking its FIRST digit run,
+    # yielding the day instead of the year. None of the fixture dates are
+    # free text, so this passes on today's fixture corpus either way; the
+    # table-driven check below exercises the regex directly against the
+    # inputs that actually distinguish the old pattern from the fix.
+    con, paths, _, _ = built
+    (bad,) = con.execute(
+        f"SELECT count(*) FROM '{paths.table('work_details')}' WHERE declared_year < 1000"
+    ).fetchone()
+    assert bad == 0
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("December 31, 1991", 1991),  # old pattern took the day: 31
+        ("1904", 1904),
+        ("-350", -350),  # ancient/BCE work
+        ("1991-1995", 1991),  # a range: the year wins, not the first digit run
+        ("ca. 1900", 1900),
+        ("31", None),  # no 4-digit run and no sign -- nothing plausible
+        ("19uu", None),  # OCR/placeholder junk, only 2 real digits
+        ("July 3, 2003", 2003),  # old pattern took the day: 3
+    ],
+)
+def test_declared_year_regex_extracts_the_year_not_the_first_digit_run(raw, expected):
+    # Exercises the production regex (openlibrary.pipeline.works._DECLARED_YEAR_PATTERN)
+    # directly against `first_publish_date_raw` shapes seen in the real dump, without
+    # needing a matching fixture row. Restoring the old pattern, `(-?\d{1,4})`, fails
+    # this on "December 31, 1991", "July 3, 2003", "31", and "19uu".
+    con = duckdb.connect()
+    (value,) = con.execute(
+        f"SELECT TRY_CAST(regexp_extract(?, '{_DECLARED_YEAR_PATTERN}', 1) AS INTEGER)",
+        [raw],
+    ).fetchone()
+    con.close()
+    assert value == expected

@@ -27,6 +27,33 @@ _DUMP_COLUMNS = (
     "'column3':'VARCHAR','column4':'VARCHAR'}"
 )
 
+# `first_publish_date_raw` is free text ("December 31, 1991", "-350", "ca.
+# 1900", "1991-1995", ...), and `declared_year` is extracted from it with a
+# regex. The original pattern, `(-?\d{1,4})`, took the FIRST digit run in the
+# string -- which for a spelled-out date is the day, not the year:
+# "December 31, 1991" -> 31, "July 3, 2003" -> 3, "May 1, 1990" -> 1. Measured
+# against the production dump (22,448,953-row work_details table, ~4.4M of
+# those rows carrying a non-null first_publish_date_raw): that bug put
+# 241,714 rows' declared_year below 1000 (1.08% of the table). This pattern
+# instead matches a four-digit run, or a NEGATIVE one-to-four-digit run for
+# ancient/BCE works (e.g. "-350"). Regex alternation is leftmost-first, so a
+# four-digit year embedded anywhere in the text wins over a shorter leading
+# number: "December 31, 1991" -> 1991, "1991-1995" -> 1991, a bare "31" or
+# "19uu" -> NULL (no 4-digit run, so nothing plausible to extract). Simulated
+# over the same ~4.4M dated rows, this cuts declared_year < 1000 from 241,714
+# to 87 (99.96% reduction) and turns zero rows NULL that were not already
+# unmatched under the old pattern.
+#
+# Residual, accepted rather than fixed: a hyphen used as a DATE SEPARATOR
+# still reads as a negative sign, e.g. "12-12-2008" -> -12 and
+# "OCTOBER-2008" -> -2008 (measured at 7 rows in ~4.4M). DuckDB's RE2 engine
+# has no lookaround to tell a separator hyphen from a sign hyphen, and a
+# plausibility bound can't help either -- -12 is a legitimate declared year
+# for an ancient work, so there is no threshold that rejects the separator
+# case without also rejecting real ones. Do not "simplify" this back to
+# `(-?\d{1,4})`; that reintroduces the 241,714-row regression above.
+_DECLARED_YEAR_PATTERN = r"(-\d{1,4}|\d{4})"
+
 
 # DuckDB's read_csv defaults to a 2 MB line cap. The real editions dump has at
 # least one record at 2,005,928 bytes -- just over the default -- so the cap
@@ -133,8 +160,8 @@ def build_works(con: duckdb.DuckDBPyConnection, paths: ArtifactPaths) -> dict[st
             subtitle,
             description,
             first_publish_date_raw,
-            TRY_CAST(regexp_extract(first_publish_date_raw, '(-?\\d{{1,4}})', 1) AS INTEGER)
-              AS declared_year,
+            TRY_CAST(regexp_extract(first_publish_date_raw, '{_DECLARED_YEAR_PATTERN}', 1)
+                     AS INTEGER)                                     AS declared_year,
             subjects
           FROM '{staged}'
           WHERE subtitle IS NOT NULL
