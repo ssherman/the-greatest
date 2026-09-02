@@ -8,6 +8,17 @@ Three outcomes, all representable:
 A depth cap makes the iteration terminate regardless of the data; anything still
 moving at the cap is treated as a cycle. 9.9% of our stored OL work keys are
 dead, so this table is the difference between a resolution and a 404.
+
+`location` is usually a full path ("/authors/OL1319517A") but 6,987 of the
+1,790,272 records in the 2026-07-31 dump store it as a bare key
+("OL2538914A") instead -- an old-revision quirk in the upstream data, not
+ours. Open Library's key suffix (A/W/M) already disambiguates entity type and
+a redirect never crosses entity kinds, so a bare target is normalized against
+its own source's entity. Left bare, a cursor built from it can never match
+`redirect_edges.source_path` (always the full `$.key`) in the loop below, so a
+chain silently stops one hop short whenever that bare target is itself a
+further redirect -- confirmed against the real dump: exactly one chain
+(OL6022750A -> OL2538914A -> /authors/OL1319517A) did.
 """
 
 from __future__ import annotations
@@ -26,18 +37,31 @@ def build_redirects(con: duckdb.DuckDBPyConnection, paths: ArtifactPaths) -> dic
     con.execute(
         f"""
         CREATE OR REPLACE TABLE redirect_edges AS
+        WITH raw AS (
+          SELECT
+            CASE
+              WHEN starts_with(json_extract_string(column4, '$.key'), '/works/')   THEN 'work'
+              WHEN starts_with(json_extract_string(column4, '$.key'), '/authors/') THEN 'author'
+              WHEN starts_with(json_extract_string(column4, '$.key'), '/books/')   THEN 'edition'
+              ELSE 'other'
+            END                                                     AS entity,
+            json_extract_string(column4, '$.key')                   AS source_path,
+            json_extract_string(column4, '$.location')              AS location_raw
+          FROM {source}
+          WHERE column0 = '/type/redirect'
+            AND json_extract_string(column4, '$.location') IS NOT NULL
+        )
         SELECT
+          entity,
+          source_path,
           CASE
-            WHEN starts_with(json_extract_string(column4, '$.key'), '/works/')   THEN 'work'
-            WHEN starts_with(json_extract_string(column4, '$.key'), '/authors/') THEN 'author'
-            WHEN starts_with(json_extract_string(column4, '$.key'), '/books/')   THEN 'edition'
-            ELSE 'other'
-          END                                                     AS entity,
-          json_extract_string(column4, '$.key')                   AS source_path,
-          json_extract_string(column4, '$.location')              AS target_path
-        FROM {source}
-        WHERE column0 = '/type/redirect'
-          AND json_extract_string(column4, '$.location') IS NOT NULL;
+            WHEN location_raw LIKE '/%'  THEN location_raw
+            WHEN entity = 'work'         THEN '/works/' || location_raw
+            WHEN entity = 'author'       THEN '/authors/' || location_raw
+            WHEN entity = 'edition'      THEN '/books/' || location_raw
+            ELSE location_raw
+          END                                                       AS target_path
+        FROM raw;
         """
     )
 
@@ -65,6 +89,12 @@ def build_redirects(con: duckdb.DuckDBPyConnection, paths: ArtifactPaths) -> dic
         ).fetchone()
         if moving == 0:
             break
+        # `NOT s.is_cycle` has to live in a WHERE, not the ON: a predicate on the
+        # left side inside a LEFT JOIN's ON clause stops DuckDB from planning
+        # this as an equi-join (source_path = cursor_path) and forces a nested
+        # loop instead -- O(rows^2) over 1.79M rows, measured at 2,703s. The
+        # already-cyclic rows are split off and passed through unchanged
+        # instead, keeping the join itself a plain hash join on equality.
         con.execute(
             f"""
             CREATE OR REPLACE TABLE {other} AS
@@ -74,11 +104,16 @@ def build_redirects(con: duckdb.DuckDBPyConnection, paths: ArtifactPaths) -> dic
               COALESCE(e.target_path, s.cursor_path) AS cursor_path,
               CASE WHEN e.target_path IS NULL THEN s.depth
                    ELSE CAST(s.depth + 1 AS SMALLINT) END AS depth,
-              s.is_cycle OR (e.target_path IS NOT NULL AND e.target_path = s.source_path)
-                AS is_cycle
+              (e.target_path IS NOT NULL AND e.target_path = s.source_path) AS is_cycle
             FROM {current} s
-            LEFT JOIN redirect_edges e
-              ON e.source_path = s.cursor_path AND NOT s.is_cycle;
+            LEFT JOIN redirect_edges e ON e.source_path = s.cursor_path
+            WHERE NOT s.is_cycle
+
+            UNION ALL
+
+            SELECT entity, source_path, cursor_path, depth, is_cycle
+            FROM {current}
+            WHERE is_cycle;
             """
         )
         current, other = other, current

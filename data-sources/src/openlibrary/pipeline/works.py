@@ -28,13 +28,35 @@ _DUMP_COLUMNS = (
 )
 
 
+# DuckDB's read_csv defaults to a 2 MB line cap. The real editions dump has at
+# least one record at 2,005,928 bytes -- just over the default -- so the cap
+# has to move, and deliberately not tuned tight to that one observed record:
+# the next oversized record we have not seen yet should not fail the same way.
+#
+# 64 MiB was the first choice (the box building the real artifact has 45 GB of
+# RAM, so it costs nothing there), but DuckDB's read_csv pre-allocates a
+# buffer that scales with max_line_size regardless of actual line lengths --
+# and every fixture-based test in this project's suite (Tasks 1-14, not this
+# task's to change) connects at memory_limit="1GB". Measured empirically
+# against the real stage_works/stage_authors/stage_editions COPY queries (not
+# a bare read_csv count, which has a much smaller footprint and understates
+# this): the OOM cliff for those queries at a 1 GB limit sits at ~29.75-29.8
+# MiB. 64 MiB, and even the 32 MiB first tried here, both land past that
+# cliff and OOM every one of those tests before a single fixture row is
+# read. 16 MiB stays clear of the cliff with real margin (~14 MiB / 46%
+# headroom) while still 8x the observed overflow -- the same
+# over-provisioning logic the 64 MiB choice was reaching for, sized to a
+# figure the test suite can actually run under.
+MAX_LINE_SIZE = 16 * 1024 * 1024
+
+
 def read_dump_sql(path) -> str:
     """Every 5-column OL dump reads the same way. quote='' and escape='' are
     required: the dumps are raw TSV and DuckDB would otherwise treat a double
     quote inside a JSON payload as a quoted field."""
     return (
         f"read_csv('{path}', delim='\\t', header=false, quote='', escape='', "
-        f"columns={_DUMP_COLUMNS})"
+        f"max_line_size={MAX_LINE_SIZE}, columns={_DUMP_COLUMNS})"
     )
 
 
