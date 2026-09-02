@@ -85,12 +85,26 @@ def render_case(entry: PoolEntry, *, index: int, total: int) -> str:
         )
         lines.append(f"     rules: {', '.join(candidate.rules)}")
         lines.append(f"     https://openlibrary.org/works/{candidate.work_key}")
+    # A 20-candidate case renders ~136 lines, so the detail for candidate [1] has
+    # scrolled off long before the prompt. Repeat the choices compactly here so
+    # the final screen is self-sufficient and nobody has to scroll back mid-decision.
+    if entry.candidates:
+        lines += ["", "CHOOSE  (detail above; this repeats it in one line each)"]
+        for position, candidate in enumerate(entry.candidates, start=1):
+            title = (candidate.title or "")[:52]
+            lines.append(
+                f" [{position:>2}] {candidate.work_key:<13} {title:<52} "
+                f"{candidate.edition_count:>4} eds  rl={candidate.readinglog_count}"
+            )
+
+    upper = len(entry.candidates)
+    pick = f"  [1-{upper}] pick a candidate" if upper else "  (no candidates to pick)"
     lines += [
         "",
-        "  [1-9] pick a candidate      [n] no match in Open Library",
-        "  [a] ambiguous               [k <WORK_KEY>] enter a key no rule produced --",
-        "  [s] skip                    [q] save and quit    this is the ONLY way a",
-        "                                                    recall failure gets recorded",
+        f"{pick:<30}[n] no match in Open Library",
+        "  [a] ambiguous                 [k <WORK_KEY>] enter a key no rule produced --",
+        "  [s] skip                      [q] save and quit    this is the ONLY way a",
+        "                                                     recall failure gets recorded",
     ]
     return "\n".join(lines)
 

@@ -80,6 +80,41 @@ def test_render_shows_progress(entry):
     assert "1/450" in render_case(entry, index=1, total=450)
 
 
+def test_choose_recap_lists_every_candidate_and_names_the_real_upper_bound(entry):
+    # A 20-candidate case is the worst real one in the pool (King John,
+    # shared_key_collision-002): the detail block scrolls candidate [1] off
+    # screen long before the prompt, so the final screen must repeat every
+    # candidate's number where the labeler is actually choosing.
+    many = entry.model_copy(
+        update={
+            "candidates": [
+                PoolCandidate(
+                    work_key=f"OL{1000000 + n}W",
+                    rules=["title_fp"],
+                    title=f"Candidate {n}",
+                    author_names=["Some Author"],
+                    edition_count=n,
+                    readinglog_count=n * 10,
+                )
+                for n in range(1, 21)
+            ]
+        }
+    )
+    text = render_case(many, index=1, total=450)
+    for position in range(1, 21):
+        assert f" [{position:>2}] " in text, f"candidate {position} missing from the recap"
+    assert "[1-20] pick a candidate" in text
+    assert "[1-9]" not in text
+
+
+def test_zero_candidate_entry_renders_without_a_pick_range(entry):
+    # 96 of the 450 real cases have no candidates at all.
+    none = entry.model_copy(update={"candidates": []})
+    text = render_case(none, index=1, total=450)
+    assert "(no candidates to pick)" in text
+    assert "pick a candidate" not in text
+
+
 def test_choosing_a_number_picks_that_candidate(entry):
     choice = parse_choice("2", entry)
     assert choice.kind == "candidate"
