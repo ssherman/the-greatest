@@ -6,6 +6,13 @@ Three settings are not optional for a bulk pass:
   memory_limit                    -- the editions pass will otherwise take the box down
   temp_directory                  -- the default spills into the root filesystem, and
                                      the editions pass spills tens of gigabytes
+
+There is deliberately no `read_only` parameter. The artifact is Parquet read
+through an in-memory connection, so there is no database file for DuckDB to open
+read-only, and a flag that cannot enforce anything is worse than no flag: it
+tells a future caller they are safe when they are not. What actually enforces
+read-only is the container's `:ro` bind mount and never issuing a COPY against a
+version directory.
 """
 
 from __future__ import annotations
@@ -20,18 +27,12 @@ def connect(
     *,
     memory_limit: str = "8GB",
     threads: int | None = None,
-    read_only: bool = False,
 ) -> duckdb.DuckDBPyConnection:
-    connection = duckdb.connect(database=":memory:", read_only=False)
+    connection = duckdb.connect(database=":memory:")
     connection.execute("SET preserve_insertion_order=false;")
     connection.execute(f"SET memory_limit='{memory_limit}';")
     paths.tmp_dir.mkdir(parents=True, exist_ok=True)
     connection.execute(f"SET temp_directory='{paths.tmp_dir}';")
     if threads is not None:
         connection.execute(f"SET threads={threads};")
-    if read_only:
-        # The artifact is read through parquet scans; there is no attached database
-        # to open read-only. The read-only guarantee is enforced by the container
-        # mount (:ro) and by never issuing a COPY against the version directory.
-        connection.execute("SET enable_external_access=true;")
     return connection
