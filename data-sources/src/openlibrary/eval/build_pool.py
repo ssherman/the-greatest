@@ -4,12 +4,10 @@ NAIVE blocking only -- identifier, existing key, author + title fingerprint, and
 title fingerprint under a frequency guard. These are exactly the four rules the
 design measured (union recall 82.2%, exactly-one 44.6%).
 
-This module must NOT import the scoring/decision code from a later increment
-(the thing this evaluation set exists to judge, packaged as its own module
-under `openlibrary/`). The evaluation set is the only ground truth that code
-will ever be graded against; if tuning it could change which cases exist or
-which candidates a labeler saw, the resulting metrics would measure nothing.
-A work key the labeler enters by hand that no rule here produced is recorded
+This module must NOT import openlibrary.matcher. The evaluation set is the thing
+the matcher is judged against; if tuning the matcher could change which cases
+exist or which candidates a labeler saw, the metrics would measure nothing. A
+work key the labeler enters by hand and that no rule here produced is recorded
 as `found_outside_blocking` -- that is how a recall failure becomes visible.
 """
 

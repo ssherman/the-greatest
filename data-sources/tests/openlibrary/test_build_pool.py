@@ -135,10 +135,26 @@ def test_build_pool_writes_jsonl_and_reports_per_stratum_counts(artifact, books_
 
 
 def test_the_pool_builder_does_not_import_the_matcher():
-    # The evaluation set must not be reshaped by tuning the thing it judges.
+    """The evaluation set must not be reshaped by tuning the thing it judges.
+
+    Checked against actual IMPORT STATEMENTS rather than a bare substring
+    search. A substring check collides with the module docstring that explains
+    why the duplication is deliberate -- and that explanation is the single
+    thing most likely to stop a future maintainer seeing duplicated SQL and
+    "cleaning it up". The test should forbid the import, not the word.
+    """
+    import ast
     import inspect
 
     from openlibrary.eval import build_pool
 
-    source = inspect.getsource(build_pool)
-    assert "matcher" not in source
+    tree = ast.parse(inspect.getsource(build_pool))
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module)
+
+    offenders = sorted(name for name in imported if "matcher" in name)
+    assert offenders == [], f"build_pool must not import the matcher: {offenders}"
