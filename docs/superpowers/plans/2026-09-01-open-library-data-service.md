@@ -5346,7 +5346,7 @@ The pool builder needs all 126,330 books with their identifiers and authors as J
 - Consumes: `Books::Book`, `Books::Author`, `Identifier`
 - Produces:
   - `Books::OpenLibrary::EvalExport.call(io:, batch_size: 1000) -> Integer` — writes one JSON object per line, returns the count
-  - Each line: `{"book_id":, "title":, "subtitle":, "sort_title":, "alternate_titles":[], "first_published_year":, "book_kind":, "original_language_code":, "author_names":[], "existing_ol_work_keys":[], "existing_ol_author_keys":[], "isbn13":[], "isbn10":[], "asin":[], "goodreads_id":[]}`
+  - Each line: `{"book_id":, "title":, "subtitle":, "sort_title":, "alternate_titles":[], "first_published_year":, "book_kind":, "original_language_slug":, "author_names":[], "existing_ol_work_keys":[], "existing_ol_author_keys":[], "isbn13":[], "isbn10":[], "asin":[], "goodreads_id":[]}`
   - Rake task `open_library:export_books[path]`
 
 - [ ] **Step 1: Write the failing test**
@@ -5498,7 +5498,7 @@ module Books
           alternate_titles: book.alternate_titles,
           first_published_year: book.first_published_year,
           book_kind: book.book_kind,
-          original_language_code: book.original_language&.code,
+          original_language_slug: book.original_language&.slug,
           author_names: authors.map(&:name),
           existing_ol_author_keys: authors.flat_map { |author|
             author.identifiers
@@ -5517,14 +5517,15 @@ module Books
 end
 ```
 
-Check `Language`'s column name before relying on `original_language&.code`:
+**`Language` has no `code` column** — verified: the table is `id`, `name`, `slug`, `created_at`,
+`updated_at`. Use `slug`, and name the exported field `original_language_slug` so nothing reads it
+as an ISO code.
 
-```bash
-cd /home/shane/dev/the-greatest/.claude/worktrees/open-library-data-source/web-app
-sed -n '1,25p' app/models/language.rb
-```
-
-If the column is not `code`, use whatever it actually is. Do not guess.
+That leaves a real gap worth naming rather than papering over: Open Library stores three-letter
+codes (`eng`, `ger`), our `Language` stores a slug. Nothing maps between them yet. `EvalBook` does
+not consume the field at all today, and the matcher's `language_agreement` feature returns `None`
+when either side is absent, so it degrades to neutral rather than wrong. Export the slug now,
+carry it in the JSONL, and let whoever needs the comparison build the mapping then.
 
 Create `web-app/lib/tasks/open_library.rake`:
 
