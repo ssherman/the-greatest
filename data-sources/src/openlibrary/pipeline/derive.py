@@ -101,3 +101,67 @@ def build_year_evidence(con: duckdb.DuckDBPyConnection, paths: ArtifactPaths) ->
     )
     (count,) = con.execute(f"SELECT count(*) FROM '{paths.table('year_evidence')}'").fetchone()
     return count
+
+
+def build_popularity(con: duckdb.DuckDBPyConnection, paths: ArtifactPaths) -> int:
+    """Edition / reading-log / rating counts per work.
+
+    PRIOR AND TIE-BREAKER ONLY, NEVER IDENTITY, and never a pruning criterion:
+    27.9% of the works our own books link to have zero reading-log entries and
+    zero ratings, and they are exactly the population this site exists to rank.
+
+    ratings and reading-log are 4-column TSVs with no JSON:
+        work_key \\t edition_key_or_\\N \\t (rating | shelf) \\t date
+    """
+    ratings_cols = "{'work':'VARCHAR','edition':'VARCHAR','rating':'VARCHAR','day':'VARCHAR'}"
+    log_cols = "{'work':'VARCHAR','edition':'VARCHAR','shelf':'VARCHAR','day':'VARCHAR'}"
+
+    ratings_src = (
+        f"read_csv('{paths.dump('ratings')}', delim='\\t', header=false, "
+        f"quote='', escape='', columns={ratings_cols})"
+    )
+    log_src = (
+        f"read_csv('{paths.dump('reading-log')}', delim='\\t', header=false, "
+        f"quote='', escape='', columns={log_cols})"
+    )
+
+    con.execute(
+        f"""
+        COPY (
+          WITH editions_per_work AS (
+            SELECT work_key, CAST(count(*) AS INTEGER) AS edition_count
+            FROM '{paths.table("editions")}'
+            WHERE work_key IS NOT NULL
+            GROUP BY work_key
+          ),
+          ratings_per_work AS (
+            SELECT
+              replace(work, '/works/', '')                  AS work_key,
+              CAST(count(*) AS INTEGER)                     AS ratings_count,
+              avg(TRY_CAST(rating AS DOUBLE))               AS ratings_avg
+            FROM {ratings_src}
+            WHERE TRY_CAST(rating AS DOUBLE) IS NOT NULL
+            GROUP BY 1
+          ),
+          log_per_work AS (
+            SELECT
+              replace(work, '/works/', '')                  AS work_key,
+              CAST(count(*) AS INTEGER)                     AS readinglog_count
+            FROM {log_src}
+            GROUP BY 1
+          )
+          SELECT
+            work_key,
+            COALESCE(e.edition_count, 0)                    AS edition_count,
+            COALESCE(l.readinglog_count, 0)                 AS readinglog_count,
+            COALESCE(r.ratings_count, 0)                    AS ratings_count,
+            r.ratings_avg
+          FROM editions_per_work e
+          FULL OUTER JOIN ratings_per_work r USING (work_key)
+          FULL OUTER JOIN log_per_work l USING (work_key)
+          WHERE work_key IS NOT NULL
+        ) TO '{paths.table("popularity")}' (FORMAT parquet, COMPRESSION zstd);
+        """
+    )
+    (count,) = con.execute(f"SELECT count(*) FROM '{paths.table('popularity')}'").fetchone()
+    return count
