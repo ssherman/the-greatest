@@ -145,10 +145,11 @@ These variables are used by nginx's built-in template system for environment var
 
 ### Application Features
 
-#### FIREBASE_PROJECT_ID
-- **Description**: Firebase project ID for authentication
-- **Required**: Yes (if using Firebase Auth)
-- **Example**: `thegreatestmusic-org`
+Firebase's project ID is **not** an environment variable. It is hardcoded in
+`config/initializers/firebase.rb` (and must match the value compiled into the
+public JS bundle), specifically so a wrong or stale value in a deployment
+`.env` can never diverge from what the app actually verifies tokens against.
+Do not add a `FIREBASE_PROJECT_ID` entry back here or to any `.env` file.
 
 #### FIREBASE_API_KEY
 - **Description**: Firebase API key
@@ -306,7 +307,8 @@ CERT_PATH=/etc/letsencrypt/live
 KEY_PATH=/etc/letsencrypt/live
 
 # Firebase (if using Firebase Auth)
-FIREBASE_PROJECT_ID=thegreatestmusic-org
+# FIREBASE_PROJECT_ID is not read by the app — it's hardcoded in
+# config/initializers/firebase.rb. Do not set it here.
 FIREBASE_API_KEY=your_firebase_api_key_here
 
 # Stripe Billing

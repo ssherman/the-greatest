@@ -34,16 +34,17 @@ sequenceDiagram
     FB-->>FP: Firebase user + ID token
     FP->>FAS: handleAuthSuccess() / handleEmailAuthResult()
     FAS->>FAS: user.getIdToken()
-    FAS->>RC: POST /auth/sign_in {jwt, provider, user_data}
-    RC->>AS: AuthenticationService.call(auth_token:, provider:, user_data:)
-    AS->>JWT: JwtValidationService.call(token)
-    JWT->>JWT: Fetch Google public certs, validate RS256 signature
+    FAS->>RC: POST /auth/sign_in {jwt}
+    RC->>AS: AuthenticationService.call(auth_token:, project_id:, signup_domain:)
+    AS->>JWT: JwtValidationService.call(token, project_id:)
+    JWT->>JWT: Cached Google certs; verify RS256 signature, aud, iss, sub
     JWT-->>AS: Decoded JWT payload
-    AS->>AS: extract_provider_data(payload, provider, user_data)
-    AS->>UAS: UserAuthenticationService.call(provider_data:)
-    UAS->>DB: Find by email or auth_uid, create/update user
+    AS->>AS: extract_provider_data(payload)
+    AS->>UAS: UserAuthenticationService.call(provider_data:, signup_domain:)
+    UAS->>DB: Find by auth_uid, else by VERIFIED email, else create
     UAS-->>AS: User record
     AS-->>RC: {success: true, user: User}
+    RC->>RC: reset_session (fixation)
     RC->>RC: session[:user_id] = user.id
     RC-->>FAS: JSON {success: true, user: {...}}
     FAS->>FAS: Dispatch 'auth:success' custom event
@@ -64,7 +65,7 @@ sequenceDiagram
     S->>FAS: firebaseAuthService.signOut()
     FAS->>FB: auth.signOut()
     FAS->>RC: POST /auth/sign_out
-    RC->>RC: Clear session[:user_id] and session[:provider]
+    RC->>RC: reset_session (fixation)
     RC-->>FAS: JSON {success: true}
     FAS->>FAS: Dispatch 'auth:signout' custom event
     S->>S: Update navbar to "Login"
@@ -101,7 +102,36 @@ sequenceDiagram
 | Facebook | Enum defined, not implemented | `facebook.com` | `facebook` (0) |
 | Twitter | Enum defined, not implemented | `twitter.com` | `twitter` (1) |
 
-**Important**: Firebase uses `"google.com"` as the `providerId` for OAuth providers but just `"password"` for email/password (no `.com` suffix). The `AuthenticationService.extract_provider_data` handles this by searching for both `"#{provider}.com"` and `"#{provider}"` in the `providerData` array.
+## Security model
+
+Everything the server trusts comes out of a signature-verified token. The
+request body carries the JWT and nothing else.
+
+| Property | Enforced by |
+|---|---|
+| Token really is Firebase's | RS256 verified against Google's certs; `ALGORITHM` is a constant, never read from the token header |
+| Token is for **our** project | `aud` + `iss` checked with `verify_aud`/`verify_iss`; `project_id` is a required argument so no caller can skip it |
+| Identity | `sub` claim → `users.auth_uid`. Never an email from the request |
+| Provider | `firebase.sign_in_provider` claim, mapped through `PROVIDER_MAP`. Anything unmapped is refused |
+| Cross-identity linking | Only on a token asserting `email_verified: true`. An unverified email matching an existing account raises `UnverifiedEmailConflict` -- it never links and never creates a duplicate |
+| Session fixation | `reset_session` on both sign-in and sign-out |
+| Brute force / enumeration | `rate_limit` on `sign_in` and `check_provider`, keyed by `visitor_ip` |
+
+Because `auth_uid` is a single column, a verified-email relink evicts the
+previous Firebase identity. Someone who signs up with an unverified password
+account and later signs in with Google has their row rewritten to the Google
+uid; if they go back to password sign-in, step 1 misses, step 2 sees
+`email_verified: false` from the password token, and they land on
+`UnverifiedEmailConflict` -- locked out of that method until they verify. It
+degrades gracefully: the error copy ("Please verify your email address, then
+sign in again.") is exactly the right remediation, but nothing else says so.
+
+**Do not reintroduce a request-body field carrying identity.** The parameter
+`user_data` previously supplied the email, and the service preferred it over
+the signed claim -- which made any account claimable by anyone holding a valid
+token for any account.
+
+**Important**: Firebase uses `"google.com"` as the `providerId` for OAuth providers but just `"password"` for email/password (no `.com` suffix). `AuthenticationService::PROVIDER_MAP` maps every supported `firebase.sign_in_provider` value to its `external_provider` enum name; a provider not in the map raises `UnsupportedProviderError` and never reaches `UserAuthenticationService`.
 
 ## Key Files
 
@@ -132,7 +162,7 @@ sequenceDiagram
 | `app/controllers/auth_controller.rb` | Auth endpoints: `sign_in` (validate JWT, create session), `sign_out` (clear session), `check_provider` (detect OAuth conflicts). Skips CSRF for JSON requests |
 | `app/lib/services/authentication_service.rb` | Main auth orchestrator. Coordinates JWT validation -> data extraction -> user find/create. Handles provider naming quirks |
 | `app/lib/services/jwt_validation_service.rb` | Validates Firebase JWT using Google's public RS256 certificates. Fetches certs from `googleapis.com`, verifies signature and audience |
-| `app/lib/services/user_authentication_service.rb` | Finds existing users by email (case-insensitive) or `auth_uid`. Creates new users or updates existing ones. Stores `provider_data` as JSON, tracks `sign_in_count` |
+| `app/lib/services/user_authentication_service.rb` | Finds existing users by `auth_uid` first, then by a **verified** email (relinking the account). An unverified email match raises `UnverifiedEmailConflict` instead of linking. Otherwise creates a new user. Stores `provider_data` as JSON, tracks `sign_in_count` |
 | `app/controllers/application_controller.rb` | Defines `current_user` (reads `session[:user_id]`) and `signed_in?` helpers. Sets `current_domain` based on request host |
 | `app/models/user.rb` | User model with `external_provider` enum, `auth_uid`, `email_verified`, domain role methods. See schema at top of file |
 
@@ -225,7 +255,7 @@ To add a new Firebase auth provider (e.g., Apple, GitHub), changes are needed at
 
 ### Backend
 5. **Add the provider to the User enum** in `app/models/user.rb` if not already present. The enum is integer-backed so add new values at the end to avoid breaking existing data.
-6. **Handle provider ID format** - If the new provider uses a `.com` suffix in Firebase's `providerId` (e.g., `apple.com`), the existing `AuthenticationService.extract_provider_data` already handles it. If the provider uses a different format, update the `provider_ids` logic.
+6. **Add the provider to `PROVIDER_MAP`** in `authentication_service.rb`, mapping Firebase's `firebase.sign_in_provider` claim (e.g. `apple.com`) to the `external_provider` enum name. Anything not in the map raises `UnsupportedProviderError` and is refused before it reaches the database -- apple, facebook, and twitter are already mapped even though their frontend providers aren't implemented yet.
 7. **Update `check_provider`** in `auth_controller.rb` - The `oauth_providers` array already includes `apple`, `facebook`, `twitter`. Add any new provider name there.
 
 ### Firebase Console

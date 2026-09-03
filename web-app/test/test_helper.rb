@@ -5,6 +5,7 @@ require "mocha/minitest"
 require "webmock/minitest"
 require_relative "support/turbo_frame_links"
 require_relative "support/stripe_webhook_helper"
+require_relative "support/firebase_token_helper"
 
 # Configure Sidekiq to run jobs inline during tests
 # Sidekiq 9 removes `require "sidekiq/testing"`. Sidekiq.testing! loads sidekiq/test_api
@@ -35,8 +36,35 @@ module ActiveSupport
     # Books::BookType memoizes its LegacyIdMap lookup at the class level, which
     # would otherwise outlive the per-test transaction and leak an order-dependent
     # value into every later test in the same worker.
+    #
+    # rate_limit_store.clear belongs here, not inside sign_in_as: sign_in_as is
+    # the de facto login path for ~90 other test files, all sharing one worker
+    # process and therefore one Rails.application.config.x.rate_limit_store
+    # instance (see config/initializers/rate_limit_store.rb) for the life of
+    # that worker. AuthController#sign_in is rate-limited, keyed by visitor_ip
+    # -- and every integration-test request resolves to the same visitor_ip, so
+    # without clearing somewhere, the Nth call to sign_in_as in a worker
+    # (N > AuthController::SIGN_IN_RATE within the window) gets a 429 instead
+    # of a real sign-in, and every test after it fails as "not signed in" in
+    # files that have nothing to do with auth or rate limiting. Clearing here,
+    # once per test instead of inside sign_in_as, is what it takes to fix that
+    # without also erasing counts a single test builds up deliberately (e.g.
+    # reviews_controller_test.rb's "the limit is per user, not global", which
+    # posts as one user, then calls sign_in_as for a second user and expects
+    # the FIRST user's count to still be there for the assertion to mean
+    # anything) -- an in-helper clear wipes the whole store, including buckets
+    # that have nothing to do with auth, mid-test.
+    #
+    # JwtValidationService.reset_cert_cache! belongs here for the same class of
+    # reason: the Google cert cache is class-level state shared across every
+    # test in a worker. Nothing leaks today, but the failure mode is a test
+    # *passing* on a certificate cached by an earlier test that it never
+    # stubbed itself -- silent, and only three test files reset it on their
+    # own.
     setup do
       ::Books::BookType.reset_category_ids!
+      Rails.application.config.x.rate_limit_store.clear
+      Services::JwtValidationService.reset_cert_cache!
     end
 
     # Add more helper methods to be used by all tests here...
@@ -65,11 +93,7 @@ module ActionDispatch
         )
       end
 
-      post auth_sign_in_path, params: {
-        jwt: "test_token",
-        provider: "google",
-        user_data: {email: user.email, name: user.name}
-      }, as: :json
+      post auth_sign_in_path, params: {jwt: "test_token"}, as: :json
     end
 
     # Fails when a link on `path` would navigate a Turbo Frame that its

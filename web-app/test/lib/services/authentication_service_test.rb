@@ -2,160 +2,138 @@ require "test_helper"
 
 class AuthenticationServiceTest < ActiveSupport::TestCase
   def setup
-    @valid_payload = {
-      "sub" => "user123",
-      "email" => "test@example.com",
-      "name" => "Test User",
-      "picture" => "https://example.com/photo.jpg",
-      "email_verified" => true,
-      "auth_time" => Time.current.to_i,
-      "iat" => Time.current.to_i,
-      "exp" => (Time.current + 1.hour).to_i
-    }
+    Services::JwtValidationService.reset_cert_cache!
+    FirebaseTokenHelper.stub_certs
+    @project_id = Rails.application.config.x.firebase_project_id
   end
 
-  test "successfully authenticates with valid token" do
-    # Mock JWT validation
-    Services::JwtValidationService.stubs(:call).returns(@valid_payload)
-
-    result = Services::AuthenticationService.call(
-      auth_token: "valid.jwt.token",
-      provider: "google"
+  def call(token, signup_domain: nil)
+    Services::AuthenticationService.call(
+      auth_token: token,
+      project_id: @project_id,
+      signup_domain: signup_domain
     )
+  end
+
+  test "authenticates a well-formed token and creates the user" do
+    token = FirebaseTokenHelper.token({
+      "sub" => "uid-new-1",
+      "email" => "brand.new@example.com",
+      "firebase" => {"sign_in_provider" => "google.com"}
+    })
+
+    result = call(token)
 
     assert result[:success]
-    assert_equal "user123", result[:user].auth_uid
-    assert_equal "test@example.com", result[:user].email
+    assert_equal "uid-new-1", result[:user].auth_uid
+    assert_equal "brand.new@example.com", result[:user].email
     assert_equal "google", result[:user].external_provider
   end
 
-  test "validates project_id when provided" do
-    # Mock JWT validation with project_id validation
-    Services::JwtValidationService.stubs(:call).returns(@valid_payload)
+  # F2. The whole class of bug: user_data was client-supplied params, and its
+  # email won over the signed claim. This asserts the parameter is gone.
+  test "call does not accept a user_data argument at all" do
+    assert_raises ArgumentError do
+      Services::AuthenticationService.call(
+        auth_token: FirebaseTokenHelper.token,
+        project_id: @project_id,
+        user_data: {"providerData" => [{"providerId" => "password", "email" => "victim@example.com"}]}
+      )
+    end
+  end
 
-    result = Services::AuthenticationService.call(
-      auth_token: "valid.jwt.token",
-      provider: "google",
-      project_id: "test-project"
-    )
+  test "provider comes from the token's sign_in_provider, not from a parameter" do
+    token = FirebaseTokenHelper.token({
+      "sub" => "uid-apple-1",
+      "email" => "apple.person@example.com",
+      "firebase" => {"sign_in_provider" => "apple.com"}
+    })
+
+    result = call(token)
 
     assert result[:success]
+    assert_equal "apple", result[:user].external_provider
   end
 
-  test "handles JWT validation failure" do
-    Services::JwtValidationService.stubs(:call).raises(JWT::DecodeError.new("Invalid token"))
+  test "rejects a provider the app does not model" do
+    token = FirebaseTokenHelper.token({"firebase" => {"sign_in_provider" => "anonymous"}})
 
-    result = Services::AuthenticationService.call(
-      auth_token: "invalid.jwt.token",
-      provider: "google"
-    )
+    result = call(token)
 
     refute result[:success]
-    assert_equal "Invalid authentication token", result[:error]
+    assert_equal :unsupported_provider, result[:error_code]
+  end
+
+  test "rejects a token with no firebase claim" do
+    token = FirebaseTokenHelper.token({"firebase" => nil})
+
+    result = call(token)
+
+    refute result[:success]
+    assert_equal :unsupported_provider, result[:error_code]
+  end
+
+  test "maps an invalid token to invalid_token without raising" do
+    result = call(FirebaseTokenHelper.token({"aud" => "another-project"}))
+
+    refute result[:success]
     assert_equal :invalid_token, result[:error_code]
+    assert_equal "Invalid authentication token", result[:error]
   end
 
-  test "handles user creation failure" do
-    # Mock JWT validation to succeed
-    Services::JwtValidationService.stubs(:call).returns(@valid_payload)
+  test "surfaces the unverified-email conflict as its own error code" do
+    token = FirebaseTokenHelper.token({
+      "sub" => "uid-attacker",
+      "email" => users(:regular_user).email,
+      "email_verified" => false,
+      "firebase" => {"sign_in_provider" => "password"}
+    })
 
-    # Mock user save to fail
-    User.any_instance.stubs(:save!).raises(ActiveRecord::RecordInvalid.new(User.new))
-
-    result = Services::AuthenticationService.call(
-      auth_token: "valid.jwt.token",
-      provider: "google"
-    )
+    result = call(token)
 
     refute result[:success]
-    assert_equal "Failed to create user account", result[:error]
+    assert_equal :email_verification_required, result[:error_code]
+  end
+
+  test "passes the signup domain through to user creation" do
+    token = FirebaseTokenHelper.token({"sub" => "uid-dom-1", "email" => "domain.person@example.com"})
+
+    result = call(token, signup_domain: "thegreatest.games")
+
+    assert result[:success]
+    assert_equal "thegreatest.games", result[:user].original_signup_domain
+  end
+
+  test "does not log the token payload" do
+    logged = StringIO.new
+    original = Rails.logger
+    Rails.logger = ActiveSupport::Logger.new(logged)
+
+    begin
+      call(FirebaseTokenHelper.token({"sub" => "uid-log-1", "email" => "logged.person@example.com"}))
+    ensure
+      Rails.logger = original
+    end
+
+    refute_includes logged.string, "logged.person@example.com"
+    refute_includes logged.string, "JWT Payload"
+  end
+
+  test "maps a user save failure to user_creation_failed" do
+    token = FirebaseTokenHelper.token({"sub" => "uid-no-email", "email" => nil})
+
+    result = call(token)
+
+    refute result[:success]
     assert_equal :user_creation_failed, result[:error_code]
   end
 
-  test "handles general authentication failure" do
-    Services::JwtValidationService.stubs(:call).raises(StandardError.new("Unexpected error"))
+  test "maps an unexpected error to authentication_failed" do
+    Services::JwtValidationService.stubs(:call).raises(StandardError.new("boom"))
 
-    result = Services::AuthenticationService.call(
-      auth_token: "valid.jwt.token",
-      provider: "google"
-    )
+    result = call(FirebaseTokenHelper.token)
 
     refute result[:success]
-    assert_equal "Authentication failed", result[:error]
     assert_equal :authentication_failed, result[:error_code]
-  end
-
-  test "extracts provider data correctly" do
-    # Mock JWT validation
-    Services::JwtValidationService.stubs(:call).returns(@valid_payload)
-
-    result = Services::AuthenticationService.call(
-      auth_token: "valid.jwt.token",
-      provider: "google"
-    )
-
-    assert result[:success]
-    provider_data = result[:provider_data]
-
-    assert_equal "user123", provider_data[:user_id]
-    assert_equal "test@example.com", provider_data[:email]
-    assert_equal "Test User", provider_data[:name]
-    assert_equal "https://example.com/photo.jpg", provider_data[:picture]
-    assert provider_data[:email_verified]
-    assert_equal "google", provider_data[:provider]
-    assert provider_data[:auth_time]
-    assert provider_data[:iat]
-    assert provider_data[:exp]
-  end
-
-  test "extracts provider data from password provider user_data" do
-    Services::JwtValidationService.stubs(:call).returns(@valid_payload)
-
-    user_data = {
-      "providerData" => [
-        {
-          "providerId" => "password",
-          "uid" => "passworduser@example.com",
-          "email" => "passworduser@example.com"
-        }
-      ],
-      "displayName" => nil,
-      "photoURL" => nil,
-      "emailVerified" => false
-    }
-
-    result = Services::AuthenticationService.call(
-      auth_token: "valid.jwt.token",
-      provider: "password",
-      user_data: user_data
-    )
-
-    assert result[:success]
-    assert_equal "passworduser@example.com", result[:provider_data][:email]
-    assert_equal "password", result[:provider_data][:provider]
-  end
-
-  test "handles missing optional fields in payload" do
-    minimal_payload = {
-      "sub" => "user123",
-      "email" => "test@example.com"
-    }
-
-    Services::JwtValidationService.stubs(:call).returns(minimal_payload)
-
-    result = Services::AuthenticationService.call(
-      auth_token: "valid.jwt.token",
-      provider: "google"
-    )
-
-    assert result[:success]
-    provider_data = result[:provider_data]
-
-    assert_equal "user123", provider_data[:user_id]
-    assert_equal "test@example.com", provider_data[:email]
-    assert_nil provider_data[:name]
-    assert_nil provider_data[:picture]
-    assert_equal false, provider_data[:email_verified]
-    assert_equal "google", provider_data[:provider]
   end
 end

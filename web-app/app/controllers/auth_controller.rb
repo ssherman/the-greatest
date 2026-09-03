@@ -11,57 +11,91 @@ class AuthController < ApplicationController
   skip_before_action :verify_authenticity_token, only: [:sign_in, :sign_out, :check_provider]
   before_action :prevent_caching
 
+  include VisitorIp
+
+  # Both endpoints are unauthenticated, and the repository is public, so an
+  # attacker knows exactly what to hit. sign_in is a credential-stuffing target;
+  # check_provider confirms whether an address has an account and names its
+  # provider, which is an enumeration oracle.
+  #
+  # by: goes through visitor_ip, never request.remote_ip -- in production
+  # remote_ip is the Cloudflare edge IP, so keying on it would put every visitor
+  # in one bucket and lock out the whole site.
+  #
+  # with: is not optional. Rails' default raises TooManyRequests, which renders
+  # an HTML error body to a caller that asked for JSON.
+  SIGN_IN_RATE = 30
+  CHECK_PROVIDER_RATE = 20
+  RATE_WINDOW = 1.minute
+
+  rate_limit to: SIGN_IN_RATE, within: RATE_WINDOW,
+    by: -> { visitor_ip },
+    with: -> { render_rate_limited },
+    store: Rails.application.config.x.rate_limit_store,
+    name: "auth-sign-in",
+    only: [:sign_in]
+
+  rate_limit to: CHECK_PROVIDER_RATE, within: RATE_WINDOW,
+    by: -> { visitor_ip },
+    with: -> { render_rate_limited },
+    store: Rails.application.config.x.rate_limit_store,
+    name: "auth-check-provider",
+    only: [:check_provider]
+
   def sign_in
-    if params[:jwt].blank? || params[:provider].blank?
-      render json: {success: false, error: "Missing jwt or provider parameter"}, status: :unauthorized
+    if params[:jwt].blank?
+      render json: {success: false, error: "Missing jwt parameter"}, status: :unauthorized
       return
     end
 
-    # Log domain information for debugging
-    Rails.logger.info "Authentication request from domain: #{params[:domain]} (current host: #{request.host})"
-
     result = Services::AuthenticationService.call(
       auth_token: params[:jwt],
-      provider: params[:provider],
-      user_data: params[:user_data]
+      project_id: Rails.application.config.x.firebase_project_id,
+      signup_domain: request.host
     )
 
-    if result[:success]
-      session[:user_id] = result[:user].id
-      session[:provider] = params[:provider]
-      cookies[TG_UID_COOKIE] = {
-        value: result[:user].id.to_s,
-        secure: Rails.env.production?,
-        same_site: :lax
-      }
-
-      render json: {
-        success: true,
-        user: {
-          id: result[:user].id,
-          email: result[:user].email,
-          name: result[:user].name,
-          provider: params[:provider]
-        }
-      }
-    else
+    unless result[:success]
       render json: {
         success: false,
-        error: result[:error]
+        error: result[:error],
+        error_code: result[:error_code]
       }, status: :unauthorized
+      return
     end
-  rescue => e
-    Rails.logger.error "Authentication error: #{e.message}"
+
+    user = result[:user]
+
+    # Session fixation: a pre-authentication session id must not survive into
+    # the authenticated session. reset_session discards it, so the id an
+    # attacker could have planted is worthless.
+    reset_session
+    session[:user_id] = user.id
+    session[:provider] = user.external_provider
+    cookies[TG_UID_COOKIE] = {
+      value: user.id.to_s,
+      secure: Rails.env.production?,
+      same_site: :lax
+    }
+
     render json: {
-      success: false,
-      error: "Authentication failed"
-    }, status: :internal_server_error
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        provider: user.external_provider
+      }
+    }
+  rescue => e
+    Rails.logger.error "Authentication error: #{e.class}: #{e.message}"
+    render json: {success: false, error: "Authentication failed"}, status: :internal_server_error
   end
 
   def sign_out
-    session[:user_id] = nil
-    session[:provider] = nil
     cookies.delete(TG_UID_COOKIE)
+    # Same reasoning as sign_in: leaving the id intact lets a captured
+    # pre-logout session id be reused against the next sign-in on this browser.
+    reset_session
 
     render json: {success: true}
   end
@@ -89,5 +123,14 @@ class AuthController < ApplicationController
     else
       render json: {has_oauth_provider: false, provider: nil, message: nil}
     end
+  end
+
+  private
+
+  def render_rate_limited
+    render json: {
+      success: false,
+      error: "Too many attempts. Please wait a moment and try again."
+    }, status: :too_many_requests
   end
 end
