@@ -3,98 +3,94 @@ require "jwt"
 
 class JwtValidationServiceTest < ActiveSupport::TestCase
   def setup
-    @valid_token = "valid.jwt.token"
-    @valid_payload = {
-      "sub" => "user123",
-      "email" => "test@example.com",
-      "aud" => "test-project",
-      "iat" => Time.current.to_i,
-      "exp" => (Time.current + 1.hour).to_i
-    }
+    @project_id = Rails.application.config.x.firebase_project_id
+    FirebaseTokenHelper.stub_certs
   end
 
-  test "successfully validates a valid JWT token" do
-    # Mock the certificate fetching
-    mock_cert = mock
-    mock_cert.stubs(:public_key).returns(mock)
-
-    Services::JwtValidationService.stubs(:fetch_google_cert).returns(mock_cert)
-
-    # Mock JWT decode to return our test payload
-    JWT.stubs(:decode).returns([@valid_payload, {"kid" => "test-key"}])
-
-    result = Services::JwtValidationService.call(@valid_token)
-
-    assert_equal @valid_payload, result
+  def call(token)
+    Services::JwtValidationService.call(token, project_id: @project_id)
   end
 
-  test "validates project_id when provided" do
-    mock_cert = mock
-    mock_cert.stubs(:public_key).returns(mock)
+  test "accepts a well-formed token and returns its payload" do
+    payload = call(FirebaseTokenHelper.token)
 
-    Services::JwtValidationService.stubs(:fetch_google_cert).returns(mock_cert)
-    JWT.stubs(:decode).returns([@valid_payload, {"kid" => "test-key"}])
-
-    result = Services::JwtValidationService.call(@valid_token, project_id: "test-project")
-
-    assert_equal @valid_payload, result
+    assert_equal "firebase-uid-abc", payload["sub"]
+    assert_equal "someone@example.com", payload["email"]
+    assert_equal @project_id, payload["aud"]
   end
 
-  test "raises error when project_id does not match" do
-    payload_with_wrong_aud = @valid_payload.merge("aud" => "wrong-project")
-    mock_cert = mock
-    mock_cert.stubs(:public_key).returns(mock)
+  test "project_id is required -- omitting it is an ArgumentError, not a skipped check" do
+    assert_raises ArgumentError do
+      Services::JwtValidationService.call(FirebaseTokenHelper.token)
+    end
+  end
 
-    Services::JwtValidationService.stubs(:fetch_google_cert).returns(mock_cert)
-    JWT.stubs(:decode).returns([payload_with_wrong_aud, {"kid" => "test-key"}])
+  # F1. Before this, project_id defaulted to nil and AuthController never passed
+  # one, so a token from any Firebase project on earth validated.
+  test "rejects a token minted for a different Firebase project" do
+    token = FirebaseTokenHelper.token({"aud" => "someone-elses-project"})
 
     assert_raises JWT::InvalidAudError do
-      Services::JwtValidationService.call(@valid_token, project_id: "test-project")
+      call(token)
     end
   end
 
-  test "raises error when Faraday request fails" do
-    mock_response = mock
-    mock_response.stubs(:success?).returns(false)
-    mock_response.stubs(:status).returns(500)
+  test "rejects a token whose issuer is not our project" do
+    token = FirebaseTokenHelper.token({"iss" => "https://securetoken.google.com/someone-elses-project"})
 
-    Faraday.stubs(:get).returns(mock_response)
-
-    assert_raises JWT::DecodeError do
-      Services::JwtValidationService.call(@valid_token)
+    assert_raises JWT::InvalidIssuerError do
+      call(token)
     end
   end
 
-  test "raises error when key ID is not found in certificates" do
-    response_mock = mock
-    response_mock.stubs(:success?).returns(true)
-    response_mock.stubs(:body).returns('{"other-key": "cert-data"}')
-
-    Faraday.stubs(:get).returns(response_mock)
+  # The legacy app is exploitable exactly here: it read alg from the header.
+  test "rejects an unsigned alg=none token" do
+    token = FirebaseTokenHelper.token({}, alg: "none")
 
     assert_raises JWT::DecodeError do
-      Services::JwtValidationService.call(@valid_token)
+      call(token)
     end
   end
 
-  test "raises error when certificate creation fails" do
-    response_mock = mock
-    response_mock.stubs(:success?).returns(true)
-    response_mock.stubs(:body).returns('{"test-key": "invalid-cert-data"}')
+  test "rejects a token signed by a key that is not Google's" do
+    foreign = OpenSSL::PKey::RSA.new(2048)
+    token = FirebaseTokenHelper.token(signing_key: foreign)
 
-    Faraday.stubs(:get).returns(response_mock)
-    OpenSSL::X509::Certificate.stubs(:new).raises(OpenSSL::X509::CertificateError.new)
-
-    assert_raises JWT::DecodeError do
-      Services::JwtValidationService.call(@valid_token)
+    assert_raises JWT::VerificationError do
+      call(token)
     end
   end
 
-  test "raises error when JWT decode fails" do
-    JWT.stubs(:decode).raises(JWT::DecodeError.new("Invalid token"))
+  test "rejects an expired token" do
+    token = FirebaseTokenHelper.token({"exp" => Time.now.to_i - 60})
+
+    assert_raises JWT::ExpiredSignature do
+      call(token)
+    end
+  end
+
+  test "rejects a token with a blank subject" do
+    token = FirebaseTokenHelper.token({"sub" => ""})
 
     assert_raises JWT::DecodeError do
-      Services::JwtValidationService.call("invalid.token")
+      call(token)
+    end
+  end
+
+  test "rejects a token whose kid is not in Google's certificate set" do
+    token = FirebaseTokenHelper.token(kid: "some-other-kid")
+
+    assert_raises JWT::DecodeError do
+      call(token)
+    end
+  end
+
+  test "raises when Google's certificate endpoint fails" do
+    WebMock.stub_request(:get, Services::JwtValidationService::GOOGLE_CERTS_URL)
+      .to_return(status: 500, body: "")
+
+    assert_raises JWT::DecodeError do
+      call(FirebaseTokenHelper.token)
     end
   end
 end
