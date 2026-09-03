@@ -3,6 +3,7 @@ require "jwt"
 
 class JwtValidationServiceTest < ActiveSupport::TestCase
   def setup
+    Services::JwtValidationService.reset_cert_cache!
     @project_id = Rails.application.config.x.firebase_project_id
     FirebaseTokenHelper.stub_certs
   end
@@ -92,5 +93,32 @@ class JwtValidationServiceTest < ActiveSupport::TestCase
     assert_raises JWT::DecodeError do
       call(FirebaseTokenHelper.token)
     end
+  end
+
+  test "fetches Google's certificates once across repeated validations" do
+    3.times { call(FirebaseTokenHelper.token) }
+
+    assert_requested :get, Services::JwtValidationService::GOOGLE_CERTS_URL, times: 1
+  end
+
+  test "refetches once the Cache-Control max-age has passed" do
+    FirebaseTokenHelper.stub_certs(max_age: 60)
+    call(FirebaseTokenHelper.token)
+
+    travel 61.seconds do
+      call(FirebaseTokenHelper.token)
+    end
+
+    assert_requested :get, Services::JwtValidationService::GOOGLE_CERTS_URL, times: 2
+  end
+
+  test "refetches when the kid is absent from the cached set" do
+    call(FirebaseTokenHelper.token)
+
+    # A rotated key: present in the fresh response, absent from what we cached.
+    assert_raises JWT::DecodeError do
+      call(FirebaseTokenHelper.token(kid: "rotated-kid"))
+    end
+    assert_requested :get, Services::JwtValidationService::GOOGLE_CERTS_URL, times: 2
   end
 end
