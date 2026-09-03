@@ -405,7 +405,13 @@ export default class extends Controller {
 
       const data = await response.json()
 
-      if (data.has_oauth_provider) {
+      // check_provider is rate-limited (Task 7): a throttled request has no
+      // has_oauth_provider key at all, which would otherwise silently fall
+      // through to the generic invalid-credential message below and hide the
+      // real reason from someone who is about to retry into the same limit.
+      if (response.status === 429) {
+        this.showError(data.error || 'Too many attempts. Please wait a moment and try again.')
+      } else if (data.has_oauth_provider) {
         this.showError(data.message)
       } else {
         this.showError('Invalid email or password.')
@@ -571,10 +577,22 @@ export default class extends Controller {
     }
   }
 
-  // Handle authentication error
+  // Handle authentication error. email_verification_required is not a failure
+  // the reader can fix by retrying -- it means the address already belongs to
+  // an account and Firebase has not confirmed they control it, so it gets the
+  // resend-verification affordance rather than a red error box.
   handleAuthError(event) {
-    this.showError(event.detail.error)
     this.showLoading(false)
+
+    if (event.detail.code === 'email_verification_required') {
+      this.showInfo(event.detail.error)
+      if (this.hasVerificationMessageTarget) {
+        this.verificationMessageTarget.style.display = 'block'
+      }
+      return
+    }
+
+    this.showError(event.detail.error)
   }
 
   // Handle sign out event

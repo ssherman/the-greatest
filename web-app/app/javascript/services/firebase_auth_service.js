@@ -162,47 +162,28 @@ class FirebaseAuthService {
   async sendToBackend(idToken, provider, user) {
     try {
       console.log("📤 Sending to Rails backend...")
-      const domainConfig = this.getDomainConfig()
-      
-      // Get the full user data including providerData
-      const userData = {
-        uid: user.uid,
-        email: user.email,
-        emailVerified: user.emailVerified,
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-        providerData: user.providerData.map(provider => ({
-          providerId: provider.providerId,
-          uid: provider.uid,
-          displayName: provider.displayName,
-          email: provider.email,
-          phoneNumber: provider.phoneNumber,
-          photoURL: provider.photoURL
-        })),
-        stsTokenManager: user.stsTokenManager,
-        createdAt: user.metadata?.creationTime,
-        lastLoginAt: user.metadata?.lastSignInTime
-      }
-      
+
+      // Only the token. Everything the server needs is inside it, signed.
+      // This used to also send uid, email, emailVerified, displayName and the
+      // full providerData array -- and the server preferred that unsigned email
+      // over the token's own claim, which made any account claimable by anyone
+      // holding a valid token. Do not reintroduce a body field here.
       const response = await fetch('/auth/sign_in', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
-        body: JSON.stringify({
-          jwt: idToken,
-          provider: provider,
-          domain: domainConfig.baseDomain,
-          user_data: userData
-        })
+        body: JSON.stringify({ jwt: idToken })
       })
 
       const data = await response.json()
       console.log("📥 Backend response:", data)
-      
+
       if (!data.success) {
-        throw new Error(data.error || 'Authentication failed')
+        const error = new Error(data.error || 'Authentication failed')
+        error.code = data.error_code
+        throw error
       }
 
       // Trigger custom event for successful authentication
@@ -214,13 +195,13 @@ class FirebaseAuthService {
       return data
     } catch (error) {
       console.error('❌ Backend authentication error:', error)
-      
+
       // Trigger custom event for authentication failure
       console.log("📡 Dispatching auth:error event")
       window.dispatchEvent(new CustomEvent('auth:error', {
-        detail: { error: error.message }
+        detail: { error: error.message, code: error.code }
       }))
-      
+
       throw error
     }
   }
