@@ -12,56 +12,59 @@ class AuthController < ApplicationController
   before_action :prevent_caching
 
   def sign_in
-    if params[:jwt].blank? || params[:provider].blank?
-      render json: {success: false, error: "Missing jwt or provider parameter"}, status: :unauthorized
+    if params[:jwt].blank?
+      render json: {success: false, error: "Missing jwt parameter"}, status: :unauthorized
       return
     end
 
-    # Log domain information for debugging
-    Rails.logger.info "Authentication request from domain: #{params[:domain]} (current host: #{request.host})"
-
     result = Services::AuthenticationService.call(
       auth_token: params[:jwt],
-      provider: params[:provider],
-      user_data: params[:user_data]
+      project_id: Rails.application.config.x.firebase_project_id,
+      signup_domain: request.host
     )
 
-    if result[:success]
-      session[:user_id] = result[:user].id
-      session[:provider] = params[:provider]
-      cookies[TG_UID_COOKIE] = {
-        value: result[:user].id.to_s,
-        secure: Rails.env.production?,
-        same_site: :lax
-      }
-
-      render json: {
-        success: true,
-        user: {
-          id: result[:user].id,
-          email: result[:user].email,
-          name: result[:user].name,
-          provider: params[:provider]
-        }
-      }
-    else
+    unless result[:success]
       render json: {
         success: false,
-        error: result[:error]
+        error: result[:error],
+        error_code: result[:error_code]
       }, status: :unauthorized
+      return
     end
-  rescue => e
-    Rails.logger.error "Authentication error: #{e.message}"
+
+    user = result[:user]
+
+    # Session fixation: a pre-authentication session id must not survive into
+    # the authenticated session. reset_session discards it, so the id an
+    # attacker could have planted is worthless.
+    reset_session
+    session[:user_id] = user.id
+    session[:provider] = user.external_provider
+    cookies[TG_UID_COOKIE] = {
+      value: user.id.to_s,
+      secure: Rails.env.production?,
+      same_site: :lax
+    }
+
     render json: {
-      success: false,
-      error: "Authentication failed"
-    }, status: :internal_server_error
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        provider: user.external_provider
+      }
+    }
+  rescue => e
+    Rails.logger.error "Authentication error: #{e.class}: #{e.message}"
+    render json: {success: false, error: "Authentication failed"}, status: :internal_server_error
   end
 
   def sign_out
-    session[:user_id] = nil
-    session[:provider] = nil
     cookies.delete(TG_UID_COOKIE)
+    # Same reasoning as sign_in: leaving the id intact lets a captured
+    # pre-logout session id be reused against the next sign-in on this browser.
+    reset_session
 
     render json: {success: true}
   end
