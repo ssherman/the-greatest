@@ -103,16 +103,24 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
     refute_equal before, request.session.id.public_id, "session id must rotate to prevent fixation"
   end
 
+  # Comparing raw cookie bytes here has the same flaw the sign-in test above
+  # documents in detail: a mutation back to the pre-fix body
+  # (`session[:user_id] = nil; session[:provider] = nil`) still *writes* to
+  # `session`, so it still re-emits a freshly (re-)encrypted cookie and the
+  # raw-bytes comparison stays green even with fixation fully reopened.
+  # Comparing CookieStore's internal session id (only replaced by
+  # reset_session's delete_session, preserved by an ordinary write) is what
+  # actually distinguishes the two.
   test "rotates the session id on sign out" do
     post auth_sign_in_path, params: {
       jwt: FirebaseTokenHelper.token({"sub" => "uid-fix-2", "email" => "fix.two@example.com"})
     }, as: :json
-    before = session_id_cookie
+    before = request.session.id.public_id
 
     post auth_sign_out_path, as: :json
 
     assert_response :success
-    refute_equal before, session_id_cookie
+    refute_equal before, request.session.id.public_id, "session id must rotate to prevent fixation"
   end
 
   test "records the request host as the signup domain for a new user" do
@@ -125,9 +133,56 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
     assert_equal "dev.thegreatest.games", User.find_by(auth_uid: "uid-host-1").original_signup_domain
   end
 
-  private
+  # check_provider's asymmetry -- disclose an OAuth provider, never disclose
+  # that a password account exists -- IS the security control (avoids email
+  # enumeration of password accounts). These tests restore coverage the Task 6
+  # brief's full-file replacement silently dropped.
+  test "check_provider returns the neutral body for a blank email" do
+    post auth_check_provider_path, params: {email: ""}, as: :json
 
-  def session_id_cookie
-    cookies[Rails.application.config.session_options[:key]]
+    assert_response :success
+    body = JSON.parse(response.body)
+    refute body["has_oauth_provider"]
+    assert_nil body["provider"]
+    assert_nil body["message"]
+  end
+
+  test "check_provider discloses the provider for an OAuth account" do
+    post auth_check_provider_path, params: {email: users(:google_user).email}, as: :json
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert body["has_oauth_provider"]
+    assert_equal "google", body["provider"]
+  end
+
+  test "check_provider discloses nothing for a password account" do
+    post auth_check_provider_path, params: {email: users(:password_user).email}, as: :json
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    refute body["has_oauth_provider"]
+    assert_nil body["provider"]
+    assert_nil body["message"]
+  end
+
+  test "check_provider is indistinguishable between a password account and no account at all" do
+    post auth_check_provider_path, params: {email: users(:password_user).email}, as: :json
+    password_body = JSON.parse(response.body)
+
+    post auth_check_provider_path, params: {email: "no-such-account@example.com"}, as: :json
+    no_account_body = JSON.parse(response.body)
+
+    assert_response :success
+    assert_equal password_body, no_account_body
+  end
+
+  test "check_provider looks up the email case-insensitively" do
+    post auth_check_provider_path, params: {email: users(:google_user).email.upcase}, as: :json
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert body["has_oauth_provider"]
+    assert_equal "google", body["provider"]
   end
 end
