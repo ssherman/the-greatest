@@ -11,6 +11,37 @@ class AuthController < ApplicationController
   skip_before_action :verify_authenticity_token, only: [:sign_in, :sign_out, :check_provider]
   before_action :prevent_caching
 
+  include VisitorIp
+
+  # Both endpoints are unauthenticated, and the repository is public, so an
+  # attacker knows exactly what to hit. sign_in is a credential-stuffing target;
+  # check_provider confirms whether an address has an account and names its
+  # provider, which is an enumeration oracle.
+  #
+  # by: goes through visitor_ip, never request.remote_ip -- in production
+  # remote_ip is the Cloudflare edge IP, so keying on it would put every visitor
+  # in one bucket and lock out the whole site.
+  #
+  # with: is not optional. Rails' default raises TooManyRequests, which renders
+  # an HTML error body to a caller that asked for JSON.
+  SIGN_IN_RATE = 30
+  CHECK_PROVIDER_RATE = 20
+  RATE_WINDOW = 1.minute
+
+  rate_limit to: SIGN_IN_RATE, within: RATE_WINDOW,
+    by: -> { visitor_ip },
+    with: -> { render_rate_limited },
+    store: Rails.application.config.x.rate_limit_store,
+    name: "auth-sign-in",
+    only: [:sign_in]
+
+  rate_limit to: CHECK_PROVIDER_RATE, within: RATE_WINDOW,
+    by: -> { visitor_ip },
+    with: -> { render_rate_limited },
+    store: Rails.application.config.x.rate_limit_store,
+    name: "auth-check-provider",
+    only: [:check_provider]
+
   def sign_in
     if params[:jwt].blank?
       render json: {success: false, error: "Missing jwt parameter"}, status: :unauthorized
@@ -92,5 +123,14 @@ class AuthController < ApplicationController
     else
       render json: {has_oauth_provider: false, provider: nil, message: nil}
     end
+  end
+
+  private
+
+  def render_rate_limited
+    render json: {
+      success: false,
+      error: "Too many attempts. Please wait a moment and try again."
+    }, status: :too_many_requests
   end
 end

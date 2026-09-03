@@ -57,6 +57,19 @@ module ActionDispatch
     include StripeWebhookHelper
 
     def sign_in_as(user, stub_auth: false)
+      # This helper is the de facto login path for ~90 other test files, all
+      # sharing one worker process and therefore one
+      # Rails.application.config.x.rate_limit_store instance (see
+      # config/initializers/rate_limit_store.rb) for the life of that worker.
+      # AuthController#sign_in is rate-limited (AuthController::SIGN_IN_RATE
+      # per AuthController::RATE_WINDOW), keyed by visitor_ip -- and every
+      # integration-test request resolves to the same visitor_ip, so without
+      # clearing here, the Nth call to this helper in a worker (N > SIGN_IN_RATE
+      # within the window) gets a 429 instead of a real sign-in, and every test
+      # after it fails as "not signed in" -- in files that have nothing to do
+      # with auth or rate limiting.
+      Rails.application.config.x.rate_limit_store.clear
+
       # Stub authentication service to bypass JWT validation if requested
       if stub_auth
         Services::AuthenticationService.stubs(:call).returns(

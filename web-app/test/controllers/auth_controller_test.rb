@@ -2,6 +2,7 @@ require "test_helper"
 
 class AuthControllerTest < ActionDispatch::IntegrationTest
   def setup
+    Rails.application.config.x.rate_limit_store.clear
     Services::JwtValidationService.reset_cert_cache!
     FirebaseTokenHelper.stub_certs
   end
@@ -184,5 +185,24 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
     body = JSON.parse(response.body)
     assert body["has_oauth_provider"]
     assert_equal "google", body["provider"]
+  end
+
+  test "throttles repeated sign-in attempts from one visitor" do
+    bad = FirebaseTokenHelper.token({"aud" => "other-project"})
+
+    (AuthController::SIGN_IN_RATE + 1).times do
+      post auth_sign_in_path, params: {jwt: bad}, as: :json
+    end
+
+    assert_response :too_many_requests
+    refute JSON.parse(response.body)["success"]
+  end
+
+  test "throttles repeated provider checks from one visitor" do
+    (AuthController::CHECK_PROVIDER_RATE + 1).times do
+      post auth_check_provider_path, params: {email: "someone@example.com"}, as: :json
+    end
+
+    assert_response :too_many_requests
   end
 end
