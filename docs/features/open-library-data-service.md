@@ -38,7 +38,7 @@ The first full build against real dumps. All ten tables produced, every gate pas
 | popularity | 41,406,604 | 0.22 GB |
 | redirects | 1,790,272 | 0.016 GB |
 
-Total artifact size: **10.40 GB** (10,401,005,135 bytes)
+Total artifact size: **10.40 GB** (10,400,464,161 bytes)
 Total build time: **~483 s** (~8.0 minutes), dominated by `editions_staging` at 198 s
 (the single-threaded 12.5 GB gzip scan)
 
@@ -65,12 +65,20 @@ against a published 44,739,082 -- a difference of 59, noted and not chased.
 
 ### Known weaknesses, measured at scale
 
-- **Year regex takes the first digit run.** `work_details.declared_year` is
-  extracted from free-text `first_publish_date_raw` with a first-digit-run
-  regex, so a value like `"December 31, 1991"` yields `31`, not `1991`.
-  **241,714 of 22,448,953** `work_details` rows (1.1%) carry a
-  `declared_year < 1000` as a result. Not fixed here by design -- this measures
-  the blast radius, it does not close it.
+- **Year regex took the first digit run -- fixed.** `work_details.declared_year`
+  was extracted from free-text `first_publish_date_raw` with a first-digit-run
+  regex, so a value like `"December 31, 1991"` yielded `31`, not `1991`.
+  Measured at the time: **241,714 of 22,448,953** `work_details` rows (1.1%)
+  carried a `declared_year < 1000` as a result. The regex was replaced with a
+  pattern that matches a four-digit run (or a negative one-to-four-digit run,
+  for ancient/BCE works) instead of the first digit run of any length, so a
+  spelled-out date's day no longer wins over its year. Rebuilding the
+  2026-07-31 artifact with the fix dropped the count to **87** (a 99.96%
+  reduction); all gates still pass. A residual is accepted, not fixed: a
+  hyphen used as a date separator (`"12-12-2008"`, `"OCTOBER-2008"`) still
+  reads as a negative sign, since the regex engine has no lookaround to tell
+  it apart from a genuine negative (BCE) year -- measured at 7 rows out of
+  ~4.4M dated rows.
 - **Editions pointing at a work that no longer exists in `works`.** `year_evidence`
   is anchored on `works`, so an edition whose `work_key` was merged or redirected
   away never contributes its year to the surviving work. **4,516 editions**

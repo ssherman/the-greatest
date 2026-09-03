@@ -271,7 +271,16 @@ def assign_strata(
             if len(title_fingerprints(b.title).full) < MIN_BLOCKING_FP_LENGTH
         ),
     )
-    claim("non_latin_title", (b.book_id for b in books if any(ord(ch) > 0x2000 for ch in b.title)))
+    # A LETTER outside the Latin blocks (Basic Latin, Latin-1 Supplement, Latin
+    # Extended-A/B all end at U+024F). `ord(ch) > 0x2000` was wrong twice over:
+    # Greek (U+0370) and Cyrillic (U+0400) sit BELOW it and were structurally
+    # unreachable, while typographic punctuation above it -- an en dash in
+    # "Novels 1896-1899" -- claimed pure-Latin titles. `.isalpha()` is what
+    # excludes the punctuation; 0x024F is what includes the scripts.
+    claim(
+        "non_latin_title",
+        (b.book_id for b in books if any(ch.isalpha() and ord(ch) > 0x024F for ch in b.title)),
+    )
     claim("author_less_work", (b.book_id for b in books if not b.author_names))
     claim("pseudonym_or_alt_name", alt_name_only)
     claim(

@@ -50,6 +50,17 @@ def build_redirects(con: duckdb.DuckDBPyConnection, paths: ArtifactPaths) -> dic
           FROM {source}
           WHERE column0 = '/type/redirect'
             AND json_extract_string(column4, '$.location') IS NOT NULL
+            -- A NULL `$.key` here would carry through as a NULL source_path.
+            -- The closure check below tests `cursor_path IN (SELECT
+            -- source_path FROM redirect_edges)`: SQL `IN` against a column
+            -- containing NULL evaluates to NULL (not false) for every row
+            -- that doesn't otherwise match, so ONE such record turns
+            -- `is_cycle` NULL for the entire table -- and gates.py's `NOT
+            -- is_cycle` count then reports `unclosed = 0` no matter how
+            -- broken the data actually is. Today's dump has no such record,
+            -- but this branch already hit one differently-malformed redirect
+            -- in 1,790,272 records, so this is guarded rather than assumed.
+            AND json_extract_string(column4, '$.key') IS NOT NULL
         )
         SELECT
           entity,
@@ -142,6 +153,14 @@ def build_redirects(con: duckdb.DuckDBPyConnection, paths: ArtifactPaths) -> dic
             END                                                             AS terminal_key,
             s.depth,
             s.is_cycle,
+            -- 'edition' and 'other' are never checked against a table below --
+            -- editions.parquet does not exist yet at this point in the pipeline
+            -- order, and this table is not the place to add that dependency.
+            -- The ELSE arm is therefore NULL ("unknown"), not false: `false`
+            -- would assert those redirects resolve when nobody looked. Measured
+            -- against the built artifact, 78 of 115,947 edition redirects
+            -- terminate at an edition_key absent from editions.parquet while
+            -- silently carrying is_dangling = false under the old ELSE false.
             CASE
               WHEN s.is_cycle THEN false
               WHEN s.entity = 'work' THEN
@@ -150,7 +169,7 @@ def build_redirects(con: duckdb.DuckDBPyConnection, paths: ArtifactPaths) -> dic
               WHEN s.entity = 'author' THEN
                 regexp_replace(s.cursor_path, '^/authors/', '')
                   NOT IN (SELECT author_key FROM '{paths.table("authors")}')
-              ELSE false
+              ELSE NULL
             END                                                             AS is_dangling
           FROM {current} s
         ) TO '{paths.table("redirects")}' (FORMAT parquet, COMPRESSION zstd);

@@ -270,10 +270,19 @@ def lccn_sql(expr: str) -> str:
     base = f"replace(regexp_replace({expr}, '//.*$', ''), ' ', '')"
     head = f"regexp_extract({base}, '^([^-]*)-', 1)"
     tail = f"regexp_extract({base}, '^[^-]*-(.*)$', 1)"
+    # `lpad(tail, 6, '0')` alone TRUNCATES a tail longer than 6 characters from
+    # the right (lpad('1234567', 6, '0') -> '123456'), unlike Python's
+    # `tail.zfill(6)`, which only pads and never shortens. Left unpadded,
+    # "n 78-8903510" -- a 7-digit tail -- wrote "n78890351" here while the
+    # Python side normalized the same string to "n788903510": a silent parity
+    # break in the one module whose entire purpose is SQL/Python agreement.
+    # Only pad when the tail is actually shorter than 6; leave a longer tail
+    # intact, matching `zfill`.
+    padded_tail = f"CASE WHEN length({tail}) >= 6 THEN {tail} ELSE lpad({tail}, 6, '0') END"
     joined = (
         f"CASE WHEN contains({base}, '-') THEN "
         f"CASE WHEN regexp_matches({tail}, '^[0-9]+$') "
-        f"THEN {head} || lpad({tail}, 6, '0') ELSE {head} || {tail} END "
+        f"THEN {head} || {padded_tail} ELSE {head} || {tail} END "
         f"ELSE {base} END"
     )
     cleaned = f"lower(regexp_replace({joined}, '[^0-9A-Za-z]', '', 'g'))"

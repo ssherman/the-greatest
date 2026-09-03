@@ -92,7 +92,9 @@ ISBN_CORPUS = [
 OTHER_CORPUS = [
     "ocm00012345",
     "(OCoLC)00012345",
-    "n 78-890351",
+    "n 78-89035",  # hyphenated LCCN, 5-digit tail
+    "n 78-890351",  # hyphenated LCCN, 6-digit tail -- the boundary `lpad(_, 6, _)` doesn't touch
+    "n 78-8903510",  # hyphenated LCCN, 7-digit tail -- `lpad` used to truncate this to 6
     "agr 62000298//r862",
     "b000fc1abc",
     "4671.The_Great_Gatsby",
@@ -118,7 +120,7 @@ def test_isbn_checksum_flag_matches_duckdb(con, raw):
 def test_scalar_identifier_normalizers_match_duckdb(con, raw):
     for sql_builder, py_fn, binding_count in (
         (oclc_sql, normalize_oclc, 3),
-        (lccn_sql, normalize_lccn, 14),
+        (lccn_sql, normalize_lccn, 18),
         (asin_sql, normalize_asin, 2),
         (goodreads_sql, normalize_goodreads, 2),
     ):
