@@ -49,7 +49,11 @@ module Services
       return by_uid if by_uid
       return nil if email.nil?
 
-      by_email = User.find_by("LOWER(email) = ?", email)
+      # .order(:id).first, not find_by: the database currently holds
+      # case-insensitively duplicate email rows, and this lookup sits on the
+      # security boundary (see the class comment). Without an explicit order,
+      # which row wins is Postgres's choice and can change between query plans.
+      by_email = User.where("LOWER(email) = ?", email).order(:id).first
       return nil if by_email.nil?
       raise UnverifiedEmailConflict, "unverified email matches an existing account" unless email_verified?
 

@@ -36,11 +36,11 @@ sequenceDiagram
     FAS->>FAS: user.getIdToken()
     FAS->>RC: POST /auth/sign_in {jwt}
     RC->>AS: AuthenticationService.call(auth_token:, project_id:, signup_domain:)
-    AS->>JWT: JwtValidationService.call(token)
+    AS->>JWT: JwtValidationService.call(token, project_id:)
     JWT->>JWT: Cached Google certs; verify RS256 signature, aud, iss, sub
     JWT-->>AS: Decoded JWT payload
     AS->>AS: extract_provider_data(payload)
-    AS->>UAS: UserAuthenticationService.call(provider_data:)
+    AS->>UAS: UserAuthenticationService.call(provider_data:, signup_domain:)
     UAS->>DB: Find by auth_uid, else by VERIFIED email, else create
     UAS-->>AS: User record
     AS-->>RC: {success: true, user: User}

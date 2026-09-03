@@ -30,8 +30,14 @@ module Services
         verify_aud: true,
         iss: "https://securetoken.google.com/#{project_id}",
         verify_iss: true,
-        verify_expiration: true,
-        verify_iat: true
+        verify_expiration: true
+        # verify_iat is deliberately NOT set. In jwt 3.2.0 it is built as
+        # verify_iat: ->(*) { Claims::IssuedAt.new } -- the options hash
+        # (including leeway) is discarded -- and it raises whenever
+        # iat.to_f > Time.now.to_f, with zero tolerance. If this host's clock
+        # lags Google's by even a second, freshly minted tokens 401 site-wide
+        # with no way to add leeway. verify_expiration already bounds how long
+        # a token is usable; do not re-add this.
       })
 
       # Firebase guarantees a non-empty sub; a token without one identifies
@@ -52,24 +58,38 @@ module Services
     # dependency.
     #
     # An unknown kid forces a refetch before it is treated as an error, so a key
-    # rotation mid-cache-window recovers on the next request rather than failing
-    # every sign-in until the window expires.
+    # rotation mid-cache-window recovers rather than failing every sign-in
+    # until the cache expires. That refetch is cooldown-gated (see
+    # UNKNOWN_KID_REFETCH_COOLDOWN below): without a floor, a caller sending
+    # tokens with random kid values would force one Google round trip per
+    # request, serialized behind CERT_CACHE_LOCK -- blocking every other
+    # sign-in in this process. A genuine rotation still recovers, just no
+    # sooner than the next cooldown window.
     CERT_CACHE_LOCK = Monitor.new
     DEFAULT_CERT_TTL = 3600
+    UNKNOWN_KID_REFETCH_COOLDOWN = 30 # seconds
 
     def self.reset_cert_cache!
       CERT_CACHE_LOCK.synchronize do
         @certs = nil
         @certs_expire_at = nil
+        @last_fetch_at = nil
       end
     end
 
     def self.fetch_google_cert(kid)
       CERT_CACHE_LOCK.synchronize do
-        load_certs! if @certs.nil? || @certs_expire_at.nil? || Time.current >= @certs_expire_at
-        load_certs! unless @certs.key?(kid)
+        cache_expired = @certs.nil? || @certs_expire_at.nil? || Time.current >= @certs_expire_at
+        kid_unknown = !cache_expired && !@certs.key?(kid)
+        cooldown_active = @last_fetch_at && Time.current < @last_fetch_at + UNKNOWN_KID_REFETCH_COOLDOWN
 
-        cert_pem = @certs[kid]
+        # A single invocation issues at most one fetch: cache_expired and
+        # kid_unknown are mutually exclusive (kid_unknown is only evaluated
+        # once the cache is known fresh), so this never fires twice for the
+        # same call the way two independent `if`s used to.
+        load_certs! if cache_expired || (kid_unknown && !cooldown_active)
+
+        cert_pem = @certs && @certs[kid]
         raise JWT::DecodeError, "Unknown key ID" unless cert_pem
 
         OpenSSL::X509::Certificate.new(cert_pem)
@@ -77,7 +97,11 @@ module Services
     end
 
     def self.load_certs!
-      response = Faraday.get(GOOGLE_CERTS_URL)
+      response = Faraday.get(GOOGLE_CERTS_URL) do |req|
+        req.options.open_timeout = 2
+        req.options.timeout = 5
+      end
+      @last_fetch_at = Time.current
 
       unless response.success?
         raise JWT::DecodeError, "Failed to fetch Google certificates: #{response.status}"

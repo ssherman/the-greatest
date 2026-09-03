@@ -70,6 +70,17 @@ class JwtValidationServiceTest < ActiveSupport::TestCase
     end
   end
 
+  # I2. verify_iat is deliberately not set: jwt 3.2.0 gives it zero leeway
+  # tolerance, so if this host's clock lags Google's by even a second, every
+  # freshly minted token would 401.
+  test "accepts a token whose iat is slightly ahead of this host's clock" do
+    token = FirebaseTokenHelper.token({"iat" => Time.now.to_i + 5})
+
+    payload = call(token)
+
+    assert_equal "firebase-uid-abc", payload["sub"]
+  end
+
   test "rejects a token with a blank subject" do
     token = FirebaseTokenHelper.token({"sub" => ""})
 
@@ -112,13 +123,50 @@ class JwtValidationServiceTest < ActiveSupport::TestCase
     assert_requested :get, Services::JwtValidationService::GOOGLE_CERTS_URL, times: 2
   end
 
-  test "refetches when the kid is absent from the cached set" do
+  # I3. The unknown-kid refetch is cooldown-gated, so a genuine rotation only
+  # recovers once the cooldown window has passed -- travel past it here, or
+  # this would fall into the "suppressed" case covered below instead.
+  test "refetches when the kid is absent from the cached set, once the refetch cooldown has passed" do
     call(FirebaseTokenHelper.token)
 
-    # A rotated key: present in the fresh response, absent from what we cached.
-    assert_raises JWT::DecodeError do
-      call(FirebaseTokenHelper.token(kid: "rotated-kid"))
+    travel Services::JwtValidationService::UNKNOWN_KID_REFETCH_COOLDOWN + 1 do
+      # A rotated key: present in the fresh response, absent from what we cached.
+      assert_raises JWT::DecodeError do
+        call(FirebaseTokenHelper.token(kid: "rotated-kid"))
+      end
     end
+    assert_requested :get, Services::JwtValidationService::GOOGLE_CERTS_URL, times: 2
+  end
+
+  # I3. Without this cooldown, a caller sending tokens with random kid values
+  # forces one Google round trip per request, serialized behind the cache's
+  # global lock -- blocking every other sign-in in the process.
+  test "does not refetch for another unknown kid within the cooldown window" do
+    call(FirebaseTokenHelper.token) # primes the cache -- 1 request
+
+    assert_raises JWT::DecodeError do
+      call(FirebaseTokenHelper.token(kid: "attacker-kid-1"))
+    end
+    assert_raises JWT::DecodeError do
+      call(FirebaseTokenHelper.token(kid: "attacker-kid-2"))
+    end
+
+    assert_requested :get, Services::JwtValidationService::GOOGLE_CERTS_URL, times: 1
+  end
+
+  # I3. A single call must never issue two identical requests, even when the
+  # cache is expired AND the kid is unknown -- collapsing those two branches
+  # into one `if` is what prevents that.
+  test "issues at most one request when the cache is expired and the kid is also unknown" do
+    FirebaseTokenHelper.stub_certs(max_age: 60)
+    call(FirebaseTokenHelper.token)
+
+    travel 61.seconds do
+      assert_raises JWT::DecodeError do
+        call(FirebaseTokenHelper.token(kid: "never-seen-kid"))
+      end
+    end
+
     assert_requested :get, Services::JwtValidationService::GOOGLE_CERTS_URL, times: 2
   end
 end

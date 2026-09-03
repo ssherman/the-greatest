@@ -54,9 +54,17 @@ module ActiveSupport
     # the FIRST user's count to still be there for the assertion to mean
     # anything) -- an in-helper clear wipes the whole store, including buckets
     # that have nothing to do with auth, mid-test.
+    #
+    # JwtValidationService.reset_cert_cache! belongs here for the same class of
+    # reason: the Google cert cache is class-level state shared across every
+    # test in a worker. Nothing leaks today, but the failure mode is a test
+    # *passing* on a certificate cached by an earlier test that it never
+    # stubbed itself -- silent, and only three test files reset it on their
+    # own.
     setup do
       ::Books::BookType.reset_category_ids!
       Rails.application.config.x.rate_limit_store.clear
+      Services::JwtValidationService.reset_cert_cache!
     end
 
     # Add more helper methods to be used by all tests here...
@@ -85,11 +93,7 @@ module ActionDispatch
         )
       end
 
-      post auth_sign_in_path, params: {
-        jwt: "test_token",
-        provider: "google",
-        user_data: {email: user.email, name: user.name}
-      }, as: :json
+      post auth_sign_in_path, params: {jwt: "test_token"}, as: :json
     end
 
     # Fails when a link on `path` would navigate a Turbo Frame that its

@@ -62,6 +62,7 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
     post auth_sign_in_path, params: {jwt: FirebaseTokenHelper.token({}, alg: "none")}, as: :json
 
     assert_response :unauthorized
+    assert_equal "invalid_token", JSON.parse(response.body)["error_code"]
   end
 
   test "returns email_verification_required when an unverified email hits an existing account" do
