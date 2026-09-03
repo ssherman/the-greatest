@@ -25,6 +25,7 @@ export default class extends Controller {
   connect() {
     this.isSignUpMode = false
     this.storedEmail = null
+    this.pendingVerification = false
     this.setupEventListeners()
     this.observeLoginModal()
 
@@ -132,6 +133,14 @@ export default class extends Controller {
     }
 
     if (user) {
+      // Rails refused this identity (see handleAuthError's
+      // email_verification_required branch) and we deliberately keep the
+      // Firebase user signed in so resendVerification() still has someone to
+      // send to. Firebase re-notifies on its own schedule -- a token refresh is
+      // enough -- so without this guard that later notification would silently
+      // re-present a refused identity as signed in.
+      if (this.pendingVerification) return
+
       markSignedIn()
       this.showAuthenticatedState(user)
     } else {
@@ -357,6 +366,12 @@ export default class extends Controller {
     this.showLoading(true)
     this.hideError()
     this.hideInfo()
+
+    // A fresh attempt: whatever we refused last time is no longer what is being
+    // presented, so stop suppressing auth-state notifications. Without this the
+    // guard in handleAuthStateChange would outlive the refusal and a genuinely
+    // verified sign-in on the second try would never update the UI.
+    this.pendingVerification = false
 
     // Resolved before the try, not inside the catch. loadFirebase() nulls its
     // memo on a script-load error, so reaching for getUserFriendlyMessage from
@@ -585,6 +600,24 @@ export default class extends Controller {
     this.showLoading(false)
 
     if (event.detail.code === 'email_verification_required') {
+      // Firebase signed this reader in client-side before Rails ever saw the
+      // token, so its auth-state callback has ALREADY flipped the navbar to
+      // Logout, hidden the sign-in controls, and persisted the localStorage
+      // signed-in hint. Rails then refused the token, and there is no session
+      // behind any of it. Left alone the browser keeps presenting a signed-in
+      // identity -- and because the hint outlives the page, it does so across
+      // reloads too, on a page whose server-rendered content is anonymous.
+      //
+      // So roll the UI all the way back to anonymous, but leave the Firebase
+      // user in place: resendVerification() reads
+      // firebaseAuthService.getCurrentUser(), which is Firebase's user and not
+      // this controller's currentUserValue, so clearing our state costs the
+      // reader nothing and the resend link still works.
+      this.pendingVerification = true
+      clearSignedInHint()
+      this.showUnauthenticatedState()
+
+      // After showUnauthenticatedState, not before: it hides this same target.
       this.showInfo(event.detail.error)
       if (this.hasVerificationMessageTarget) {
         this.verificationMessageTarget.style.display = 'block'
