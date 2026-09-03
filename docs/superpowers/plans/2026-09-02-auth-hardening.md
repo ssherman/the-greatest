@@ -40,7 +40,7 @@
   - `Rails.application.config.x.firebase_issuer` → String
   - `FirebaseTokenHelper.key` → `OpenSSL::PKey::RSA` (memoised per process)
   - `FirebaseTokenHelper.certificate_pem` → String
-  - `FirebaseTokenHelper.token(overrides = {}, kid:, alg:, key:)` → String
+  - `FirebaseTokenHelper.token(overrides = {}, kid:, alg:, signing_key:)` → String — **overrides must be brace-wrapped at every call site**: a bare `token("aud" => "x")` is parsed as keyword arguments on Ruby 4 and raises `ArgumentError: unknown keyword: "aud"`
   - `FirebaseTokenHelper.stub_certs(kid:, pem:, max_age:)` → WebMock stub
 
 - [ ] **Step 1: Write the initializer**
@@ -89,9 +89,16 @@ require "openssl"
 # creation, so sharing them across tests in a worker is safe.
 module FirebaseTokenHelper
   DEFAULT_KID = "test-kid".freeze
-  CERTS_URL = Services::JwtValidationService::GOOGLE_CERTS_URL
 
   class << self
+    # A method, not a constant: this file is require_relative'd from
+    # test_helper.rb, and eager_load is off in test, so resolving an autoloaded
+    # app constant at module-body evaluation is a Zeitwerk sharp edge. Deferring
+    # it to call time sidesteps that entirely.
+    def certs_url
+      Services::JwtValidationService::GOOGLE_CERTS_URL
+    end
+
     def key
       @key ||= OpenSSL::PKey::RSA.new(2048)
     end
@@ -150,7 +157,7 @@ module FirebaseTokenHelper
     # Stubs Google's x509 endpoint. WebMock rather than Mocha on Faraday, so
     # the service's real HTTP + JSON + certificate parsing all run.
     def stub_certs(kid: DEFAULT_KID, pem: certificate_pem, max_age: 3600)
-      WebMock.stub_request(:get, CERTS_URL).to_return(
+      WebMock.stub_request(:get, certs_url).to_return(
         status: 200,
         body: {kid => pem}.to_json,
         headers: {
@@ -280,7 +287,7 @@ class JwtValidationServiceTest < ActiveSupport::TestCase
   # F1. Before this, project_id defaulted to nil and AuthController never passed
   # one, so a token from any Firebase project on earth validated.
   test "rejects a token minted for a different Firebase project" do
-    token = FirebaseTokenHelper.token("aud" => "someone-elses-project")
+    token = FirebaseTokenHelper.token({"aud" => "someone-elses-project"})
 
     assert_raises JWT::InvalidAudError do
       call(token)
@@ -288,7 +295,7 @@ class JwtValidationServiceTest < ActiveSupport::TestCase
   end
 
   test "rejects a token whose issuer is not our project" do
-    token = FirebaseTokenHelper.token("iss" => "https://securetoken.google.com/someone-elses-project")
+    token = FirebaseTokenHelper.token({"iss" => "https://securetoken.google.com/someone-elses-project"})
 
     assert_raises JWT::InvalidIssuerError do
       call(token)
@@ -314,7 +321,7 @@ class JwtValidationServiceTest < ActiveSupport::TestCase
   end
 
   test "rejects an expired token" do
-    token = FirebaseTokenHelper.token("exp" => Time.now.to_i - 60)
+    token = FirebaseTokenHelper.token({"exp" => Time.now.to_i - 60})
 
     assert_raises JWT::ExpiredSignature do
       call(token)
@@ -322,7 +329,7 @@ class JwtValidationServiceTest < ActiveSupport::TestCase
   end
 
   test "rejects a token with a blank subject" do
-    token = FirebaseTokenHelper.token("sub" => "")
+    token = FirebaseTokenHelper.token({"sub" => ""})
 
     assert_raises JWT::DecodeError do
       call(token)
@@ -590,11 +597,11 @@ class AuthenticationServiceTest < ActiveSupport::TestCase
   end
 
   test "authenticates a well-formed token and creates the user" do
-    token = FirebaseTokenHelper.token(
+    token = FirebaseTokenHelper.token({
       "sub" => "uid-new-1",
       "email" => "brand.new@example.com",
       "firebase" => {"sign_in_provider" => "google.com"}
-    )
+    })
 
     result = call(token)
 
@@ -617,11 +624,11 @@ class AuthenticationServiceTest < ActiveSupport::TestCase
   end
 
   test "provider comes from the token's sign_in_provider, not from a parameter" do
-    token = FirebaseTokenHelper.token(
+    token = FirebaseTokenHelper.token({
       "sub" => "uid-apple-1",
       "email" => "apple.person@example.com",
       "firebase" => {"sign_in_provider" => "apple.com"}
-    )
+    })
 
     result = call(token)
 
@@ -630,7 +637,7 @@ class AuthenticationServiceTest < ActiveSupport::TestCase
   end
 
   test "rejects a provider the app does not model" do
-    token = FirebaseTokenHelper.token("firebase" => {"sign_in_provider" => "anonymous"})
+    token = FirebaseTokenHelper.token({"firebase" => {"sign_in_provider" => "anonymous"}})
 
     result = call(token)
 
@@ -639,7 +646,7 @@ class AuthenticationServiceTest < ActiveSupport::TestCase
   end
 
   test "rejects a token with no firebase claim" do
-    token = FirebaseTokenHelper.token("firebase" => nil)
+    token = FirebaseTokenHelper.token({"firebase" => nil})
 
     result = call(token)
 
@@ -648,7 +655,7 @@ class AuthenticationServiceTest < ActiveSupport::TestCase
   end
 
   test "maps an invalid token to invalid_token without raising" do
-    result = call(FirebaseTokenHelper.token("aud" => "another-project"))
+    result = call(FirebaseTokenHelper.token({"aud" => "another-project"}))
 
     refute result[:success]
     assert_equal :invalid_token, result[:error_code]
@@ -656,12 +663,12 @@ class AuthenticationServiceTest < ActiveSupport::TestCase
   end
 
   test "surfaces the unverified-email conflict as its own error code" do
-    token = FirebaseTokenHelper.token(
+    token = FirebaseTokenHelper.token({
       "sub" => "uid-attacker",
       "email" => users(:regular_user).email,
       "email_verified" => false,
       "firebase" => {"sign_in_provider" => "password"}
-    )
+    })
 
     result = call(token)
 
@@ -670,7 +677,7 @@ class AuthenticationServiceTest < ActiveSupport::TestCase
   end
 
   test "passes the signup domain through to user creation" do
-    token = FirebaseTokenHelper.token("sub" => "uid-dom-1", "email" => "domain.person@example.com")
+    token = FirebaseTokenHelper.token({"sub" => "uid-dom-1", "email" => "domain.person@example.com"})
 
     result = call(token, signup_domain: "thegreatest.games")
 
@@ -684,7 +691,7 @@ class AuthenticationServiceTest < ActiveSupport::TestCase
     Rails.logger = ActiveSupport::Logger.new(logged)
 
     begin
-      call(FirebaseTokenHelper.token("sub" => "uid-log-1", "email" => "logged.person@example.com"))
+      call(FirebaseTokenHelper.token({"sub" => "uid-log-1", "email" => "logged.person@example.com"}))
     ensure
       Rails.logger = original
     end
@@ -1180,11 +1187,11 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "signs in with a valid token and returns the user" do
-    token = FirebaseTokenHelper.token(
+    token = FirebaseTokenHelper.token({
       "sub" => "uid-ctrl-1",
       "email" => "ctrl.one@example.com",
       "firebase" => {"sign_in_provider" => "password"}
-    )
+    })
 
     post auth_sign_in_path, params: {jwt: token}, as: :json
 
@@ -1205,11 +1212,11 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
   # F2 end to end: the payload that used to grant takeover must now be inert.
   test "a client-supplied user_data email cannot claim another user's account" do
     victim = users(:google_user)
-    token = FirebaseTokenHelper.token(
+    token = FirebaseTokenHelper.token({
       "sub" => "attacker-uid",
       "email" => "attacker@example.com",
       "firebase" => {"sign_in_provider" => "password"}
-    )
+    })
 
     post auth_sign_in_path, params: {
       jwt: token,
@@ -1224,7 +1231,7 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "rejects a token minted for another Firebase project" do
-    post auth_sign_in_path, params: {jwt: FirebaseTokenHelper.token("aud" => "other-project")}, as: :json
+    post auth_sign_in_path, params: {jwt: FirebaseTokenHelper.token({"aud" => "other-project"})}, as: :json
 
     assert_response :unauthorized
     assert_equal "Invalid authentication token", JSON.parse(response.body)["error"]
@@ -1237,12 +1244,12 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "returns email_verification_required when an unverified email hits an existing account" do
-    token = FirebaseTokenHelper.token(
+    token = FirebaseTokenHelper.token({
       "sub" => "attacker-uid-2",
       "email" => users(:google_user).email,
       "email_verified" => false,
       "firebase" => {"sign_in_provider" => "password"}
-    )
+    })
 
     post auth_sign_in_path, params: {jwt: token}, as: :json
 
@@ -1256,7 +1263,7 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
     before = session_id_cookie
 
     post auth_sign_in_path, params: {
-      jwt: FirebaseTokenHelper.token("sub" => "uid-fix-1", "email" => "fix.one@example.com")
+      jwt: FirebaseTokenHelper.token({"sub" => "uid-fix-1", "email" => "fix.one@example.com"})
     }, as: :json
 
     assert_response :success
@@ -1265,7 +1272,7 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
 
   test "rotates the session id on sign out" do
     post auth_sign_in_path, params: {
-      jwt: FirebaseTokenHelper.token("sub" => "uid-fix-2", "email" => "fix.two@example.com")
+      jwt: FirebaseTokenHelper.token({"sub" => "uid-fix-2", "email" => "fix.two@example.com"})
     }, as: :json
     before = session_id_cookie
 
@@ -1277,7 +1284,7 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
 
   test "records the request host as the signup domain for a new user" do
     post auth_sign_in_path,
-      params: {jwt: FirebaseTokenHelper.token("sub" => "uid-host-1", "email" => "host.one@example.com")},
+      params: {jwt: FirebaseTokenHelper.token({"sub" => "uid-host-1", "email" => "host.one@example.com"})},
       headers: {"HOST" => "dev.thegreatest.games"},
       as: :json
 
@@ -1407,7 +1414,7 @@ a worker, so counts leak without it.
 
 ```ruby
   test "throttles repeated sign-in attempts from one visitor" do
-    bad = FirebaseTokenHelper.token("aud" => "other-project")
+    bad = FirebaseTokenHelper.token({"aud" => "other-project"})
 
     (AuthController::SIGN_IN_RATE + 1).times do
       post auth_sign_in_path, params: {jwt: bad}, as: :json
