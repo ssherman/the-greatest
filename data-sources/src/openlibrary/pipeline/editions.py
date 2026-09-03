@@ -7,7 +7,8 @@ even though nothing consumes them yet.
 
 `identifiers` has no uniqueness on `value` on purpose: ISBNs are reused, and a
 caller is meant to see several works for one identifier rather than have the
-ambiguity hidden.
+ambiguity hidden. It IS unique on the whole row, though -- one edition asserting
+one identifier is one piece of evidence no matter how many of its fields said so.
 """
 
 from __future__ import annotations
@@ -142,6 +143,19 @@ def build_editions(con: duckdb.DuckDBPyConnection, paths: ArtifactPaths) -> dict
             SELECT edition_key, work_key, unnest(source_records) AS record
             FROM base WHERE source_records IS NOT NULL AND len(source_records) > 0
           )
+          -- DISTINCT, not UNION ALL alone: one edition asserting one identifier
+          -- is one piece of evidence however many ways it said so. `isbn_any`
+          -- unions the edition's isbn_10 and isbn_13 lists and every branch
+          -- below converts each raw value to BOTH canonical forms, so an
+          -- edition carrying equivalent ISBN-10 and ISBN-13 emitted each form
+          -- twice; an ASIN present in both `identifiers.amazon` and an
+          -- `amazon:` source record emitted twice the same way. Measured on
+          -- 2026-07-31: 145,964,239 rows against 120,498,957 distinct --
+          -- 25,465,282 duplicates, 17.4% of the table. The grain this
+          -- collapses to is (id_type, value, edition_key, work_key,
+          -- checksum_ok); the same value under two different work keys stays
+          -- two rows, which is the ambiguity this table exists to show.
+          SELECT DISTINCT * FROM (
           SELECT 'isbn13' AS id_type, {isbn13_sql("raw")} AS value, edition_key, work_key,
                  {isbn_checksum_ok_sql("raw")} AS checksum_ok
           FROM isbn_any WHERE {isbn13_sql("raw")} IS NOT NULL
@@ -181,6 +195,9 @@ def build_editions(con: duckdb.DuckDBPyConnection, paths: ArtifactPaths) -> dict
           FROM (SELECT edition_key, work_key, unnest(goodreads_raw) AS raw FROM base
                 WHERE goodreads_raw IS NOT NULL AND len(goodreads_raw) > 0)
           WHERE {goodreads_sql("raw")} IS NOT NULL
+          )  -- closes SELECT DISTINCT * FROM ( above; the branches are left
+             -- unindented so this stayed a two-line diff rather than a
+             -- 60-line reflow of SQL that did not change.
         ) TO '{paths.table("identifiers")}' (FORMAT parquet, COMPRESSION zstd);
         """
     )

@@ -54,6 +54,32 @@ module Books
         refute_includes record["asin"], isbn13.value
       end
 
+      test "does not set a scope order that find_each throws away" do
+        # `find_each` always batches by primary key and warns that it is
+        # discarding any scope order it was handed. A `.order(:id)` in front of
+        # it is therefore a no-op that emits a warning on every run.
+        captured = StringIO.new
+        original_logger = ActiveRecord::Base.logger
+        ActiveRecord::Base.logger = ActiveSupport::Logger.new(captured)
+
+        begin
+          EvalExport.call(io: StringIO.new)
+        ensure
+          ActiveRecord::Base.logger = original_logger
+        end
+
+        refute_match(/Scoped order is ignored/, captured.string)
+      end
+
+      test "exports books in ascending id order" do
+        io = StringIO.new
+
+        EvalExport.call(io: io)
+        ids = io.string.lines.map { |line| JSON.parse(line)["book_id"] }
+
+        assert_equal ids.sort, ids
+      end
+
       test "emits an empty array rather than nil for a book with no identifiers" do
         io = StringIO.new
 

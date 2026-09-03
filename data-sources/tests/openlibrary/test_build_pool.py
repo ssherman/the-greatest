@@ -30,15 +30,18 @@ def books_file(tmp_path, artifact):
         FROM '{artifact.table("works")}' w
         LEFT JOIN '{artifact.table("work_authors")}' wa USING (work_key)
         LEFT JOIN '{artifact.table("authors")}' a USING (author_key)
+        WHERE w.title <> 'Selected Poems'
         GROUP BY w.work_key, w.title
-        LIMIT 40
+        ORDER BY w.work_key
         """
     ).fetchall()
     con.close()
-    # The committed fixture corpus (Tasks 1-17, not this task's to change) has
-    # exactly 34 works, fewer than the LIMIT 40 above asks for -- so this
-    # fixture yields 34 books, not 40. See test_fixture_corpus.py for the
-    # corpus's own accounting of what it contains.
+    # Ordered, and with the synthetic block excluded by title: the corpus
+    # carries 51 works titled "Selected Poems" purely to push one fingerprint
+    # past MAX_TITLE_FP_FREQ (see extract_fixtures.py's
+    # SYNTHETIC_FREQUENT_TITLE), and letting them in would make most of these
+    # books the same title. The unordered LIMIT this replaced also made the set
+    # depend on how many works the corpus happened to have.
 
     path = tmp_path / "books.jsonl"
     with path.open("w") as fh:
@@ -65,8 +68,11 @@ def books_file(tmp_path, artifact):
 
 
 def test_load_books_parses_every_line(books_file):
+    written = sum(1 for line in books_file.open() if line.strip())
     books = load_books(books_file)
-    assert len(books) == 34
+
+    assert written > 0
+    assert len(books) == written
     assert books[0].book_id == 1
 
 
@@ -95,17 +101,36 @@ def test_every_candidate_records_which_rules_produced_it(artifact, books_file):
             }
 
 
-def test_candidates_carry_the_evidence_a_human_needs(artifact, books_file):
+def test_candidates_carry_the_evidence_a_human_needs(artifact):
+    """The labeller decides from these numbers, so they are asserted as values.
+
+    `is not None` could not fail here: `title_fp_freq` and `edition_count` are
+    ints defaulting to 0 and `title` comes from a NOT NULL join column, so the
+    original assertions held however badly the evidence query was wired.
+    """
     con = connect(artifact, memory_limit="1GB")
-    books = load_books(books_file)
-    candidates = naive_candidates(con, artifact, books)
+    book = EvalBook(book_id=1, title="Probe", existing_ol_work_keys=["OL3809593W"])
+    candidates = naive_candidates(con, artifact, [book])
     con.close()
-    every = [c for entries in candidates.values() for c in entries]
-    assert every
-    sample = every[0]
-    assert sample.title is not None
-    assert sample.title_fp_freq is not None
-    assert sample.edition_count is not None
+
+    (candidate,) = candidates[1]
+    assert candidate.work_key == "OL3809593W"
+    assert candidate.title == "The Illuminatus! Trilogy"
+    assert candidate.title_fp_freq == 1
+    assert (candidate.min_edition_year, candidate.modal_edition_year) == (1977, 2021)
+    # reading-log and ratings counts are pinned exactly because swapping the
+    # two columns in the evidence query is the mistake worth catching. They do
+    # move when the corpus is regenerated -- reading-log.txt keeps the first
+    # 200 rows that match ANY fixture work, so adding works redistributes them
+    # (this work has read 89, 75 and 79 across three regenerations). A
+    # regeneration already requires re-checking the corpus assertions; this
+    # line goes with them.
+    assert (candidate.edition_count, candidate.readinglog_count, candidate.ratings_count) == (
+        9,
+        79,
+        15,
+    )
+    assert sorted(candidate.author_names) == ["Robert Anton Wilson", "Robert Shea"]
 
 
 def test_the_title_fp_rule_is_guarded_by_frequency(artifact, books_file):
@@ -185,3 +210,32 @@ def test_the_pool_builder_does_not_import_the_matcher():
 
     offenders = sorted(name for name in imported if "matcher" in name)
     assert offenders == [], f"build_pool must not import the matcher: {offenders}"
+
+
+def test_the_frequency_guard_keeps_a_crowded_title_out_of_the_title_fp_rule(artifact):
+    """Rule 4 must produce NOTHING for a title 51 works share.
+
+    The guard exists because one degenerate key produced a 604,144-row join,
+    and until the corpus carried a fingerprint above MAX_TITLE_FP_FREQ the
+    guard could be deleted without a single test noticing: the old check only
+    looked at candidates that had already been returned.
+    """
+    con = connect(artifact, memory_limit="1GB")
+    book = EvalBook(book_id=1, title="Selected Poems")
+    candidates = naive_candidates(con, artifact, [book])
+    con.close()
+
+    assert candidates.get(1, []) == []
+
+
+def test_a_title_below_the_frequency_guard_still_blocks(artifact):
+    """The control: without it the rule could be 'never return anything from
+    title_fp' and the guard test above would still pass."""
+    con = connect(artifact, memory_limit="1GB")
+    book = EvalBook(book_id=1, title="The establishment clause")
+    candidates = naive_candidates(con, artifact, [book])
+    con.close()
+
+    by_key = {c.work_key: c for c in candidates.get(1, [])}
+    assert {"OL108593W", "OL269642W"} <= set(by_key)
+    assert "title_fp" in by_key["OL108593W"].rules

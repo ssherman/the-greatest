@@ -22,3 +22,22 @@ def fixture_dumps(tmp_path_factory) -> dict[str, Path]:
             shutil.copyfileobj(fin, fout)
         paths[name] = target
     return paths
+
+
+@pytest.fixture(scope="session")
+def fixture_artifact(tmp_path_factory, fixture_dumps):
+    """Build the committed fixture corpus into a real artifact, once per session.
+
+    Read-only for its consumers: several modules query the same ten Parquet
+    tables, and building them per test costs a second each for no benefit.
+    """
+    from openlibrary.pipeline.build import build
+    from openlibrary.pipeline.paths import ArtifactPaths
+
+    root = tmp_path_factory.mktemp("ol-artifact")
+    paths = ArtifactPaths(root=root, dump_date=FIXTURE_DUMP_DATE)
+    paths.ensure()
+    for kind, source in fixture_dumps.items():
+        paths.dump(kind).write_bytes(source.read_bytes())
+    build(root, dump_date=FIXTURE_DUMP_DATE, download=False, memory_limit="1GB")
+    return paths

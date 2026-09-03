@@ -155,3 +155,35 @@ def test_a_null_key_record_does_not_mask_a_genuinely_unclosed_chain(tmp_path, fi
 
     assert closure.observed["unclosed"] >= 1, closure.detail
     assert closure.status == "fail"
+
+
+def test_a_work_redirect_can_dangle_not_only_an_author_one(built):
+    """`is_dangling` is set per entity against a different table -- works for
+    work redirects, authors for author ones. Every dangling row in the corpus
+    used to be an AUTHOR, so the work branch of that CASE had no positive case
+    and could have been wired to the wrong table without failing anything.
+    OL26204513W redirects to OL16808392W, which is absent from all 41.5M works.
+    """
+    con, paths, _ = built
+    row = con.execute(
+        f"""
+        SELECT source_key, terminal_key, is_dangling
+        FROM '{paths.table("redirects")}'
+        WHERE entity = 'work' AND source_key = 'OL26204513W'
+        """
+    ).fetchone()
+
+    assert row == ("OL26204513W", "OL16808392W", True)
+
+    # The control, and the reason the branch has to name the right table: a
+    # work redirect whose terminal IS in works.parquet must come back false.
+    # Without this, resolving work keys against `authors` would still mark the
+    # dangling one above as dangling and look correct.
+    resolved = con.execute(
+        f"""
+        SELECT is_dangling FROM '{paths.table("redirects")}'
+        WHERE entity = 'work' AND source_key = 'OL15331408W'
+        """
+    ).fetchone()
+
+    assert resolved == (False,)

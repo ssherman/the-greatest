@@ -42,6 +42,51 @@ SEED_WORKS = [
     "OL8331643W",  # Blood River / Blood River -- real duplicate
 ]
 
+# A sample of real data is almost all happy path, and this corpus was one:
+# measured against the build it produces, it had 0 works sharing a title
+# fingerprint, 0 ISBNs on more than one work, 0 non-Latin-SCRIPT titles, 0
+# work-entity dangling redirects and 0 works with a declared year but no
+# editions. Every guard that exists to catch one of those therefore had no test
+# that could fail -- which is how a `non_latin_title` predicate that could not
+# match Greek or Cyrillic shipped into a 450-case labelling pool.
+#
+# These works are here to be the NEGATIVE class. They are real records, chosen
+# by querying the built artifact for the property named beside each one.
+NEGATIVE_CLASS_WORKS = [
+    # One book, two OL works, two author records ("Leonard W. Levy" and
+    # "Leonard Williams Levy"), and ISBN 9780028972459 on editions of both.
+    # Gives the corpus its only reused ISBN and its only repeated title
+    # fingerprint ("the establishment clause").
+    "OL108593W",
+    "OL269642W",
+    # "The Jeeves Omnibus : No.4" / "The Jeeves Omnibus": the SUBTITLE variant
+    # of the first equals the full fingerprint of the second, which is the
+    # collision title_fp_nosub exists to catch. OL37903252W also has no
+    # authors at all -- the OL-side half of the author_less_work stratum.
+    "OL37903252W",
+    "OL286576W",
+    # "The Third Book of Swords" / "Third Book of Swords": the ARTICLE variant
+    # of the first equals the full fingerprint of the second.
+    "OL11312814W",
+    "OL100114W",
+    # 武田信玄のすべて -- a pure-CJK title, whose fingerprint is the EMPTY
+    # STRING. The design's claim that "the fingerprint erases these" asserted
+    # against a real row rather than assumed.
+    "OL45112058W",
+    # "don kichotis / δον κιχώτης" -- Greek and Latin in one title, so it
+    # fingerprints to "don kichotis" and stays long enough to be a blocking
+    # key. This is the only shape non_latin_title can actually claim: a title
+    # in one non-Latin script alone fingerprints to nothing and is claimed by
+    # degenerate_title first.
+    "OL31397951W",
+    # "The ascendant organisation" -- a first_publish_date and ZERO editions
+    # anywhere in the dump. NOTE: a seed work with no editions means the
+    # editions pass can never satisfy its stop condition and scans to EOF. That
+    # is already true of OL1017765W and OL10445829W, and scan() documents it as
+    # the correct fallback.
+    "OL3524373W",
+]
+
 # Each predicate takes the parsed JSON and returns True when the line is an
 # example we need. `quota` caps how many of each we keep.
 WORK_PREDICATES = {
@@ -56,8 +101,16 @@ WORK_PREDICATES = {
         lambda d: len(re.sub(r"[^a-z0-9 ]", " ", (d.get("title") or "").lower()).strip()) < 4,
         5,
     ),
+    # `ord(ch) > 0x2000` was wrong in both directions and this file carried the
+    # same bug that shipped in build_pool.py. The Latin blocks end at U+024F,
+    # so Greek (U+0370) and Cyrillic (U+0400) sit BELOW 0x2000 and could never
+    # match; general punctuation sits above it, so the five works this selected
+    # matched on a right single quote, a euro sign and the combining half marks
+    # in "i︠a︡" -- all pure Latin. `.isalpha()` is what excludes the punctuation.
+    # The NEGATIVE_CLASS_WORKS seeds carry the real scripts regardless of what
+    # this predicate happens to find first.
     "non_latin_title": (
-        lambda d: any(ord(ch) > 0x2000 for ch in (d.get("title") or "")),
+        lambda d: any(ch.isalpha() and ord(ch) > 0x024F for ch in (d.get("title") or "")),
         5,
     ),
     "has_subjects_and_year": (
@@ -83,9 +136,95 @@ AUTHOR_PREDICATES = {
 # genuine (not synthetic) example of a stale/merged key resolving via one redirect hop.
 STALE_OMNIBUS_REDIRECT_KEY = "/works/OL15331408W"
 
+# A /works/ redirect whose terminal does not exist in the works dump at all
+# (OL16808392W is absent from all 41.5M works). Before this, all 69 dangling
+# redirects in the corpus were AUTHORS, so redirects.py's work-entity dangling
+# branch -- the one the matcher will lean on when a stored key resolves to
+# nothing -- had no positive case anywhere.
+DANGLING_WORK_REDIRECT_KEY = "/works/OL26204513W"
+
+# MAX_TITLE_FP_FREQ is 50, so exercising blocking rule 4's frequency guard --
+# the guard that exists because one degenerate key produced a 604,144-row join
+# -- needs 51 works sharing one title fingerprint. These are SYNTHETIC and say
+# so in their JSON. The real dump has 1,981 works titled "Selected Poems", but
+# seeding 51 of them by key would drag 51 unrelated authors into authors.txt
+# and shift the corpus's author coverage, for a property that is purely a
+# count. They reuse an author key the corpus already carries, so author
+# coverage is unchanged.
+#
+# The key range matters. The first attempt used OL9990001W..OL9990051W, which
+# are REAL Open Library work keys -- the highest real numeric part in the
+# 2026-07-31 dump is 45,845,863, so anything with eight or fewer digits can
+# collide. It did: the editions pass collects every edition of every fixture
+# work, so 51 real editions were pulled in and attached to synthetic works,
+# quietly giving them publish years and ISBNs. These keys sit just above the
+# synthetic cycle pair, four digits clear of the real maximum, and
+# test_fixture_corpus.py asserts no edition ever attaches to one.
+SYNTHETIC_FREQUENT_TITLE = "Selected Poems"
+SYNTHETIC_FREQUENT_TITLE_COUNT = 51
+SYNTHETIC_FREQUENT_AUTHOR_KEY = "/authors/OL32259A"
+SYNTHETIC_FREQUENT_KEY_BASE = 999_999_100
+
+
+def synthetic_frequent_title_works() -> list[str]:
+    lines = []
+    for index in range(1, SYNTHETIC_FREQUENT_TITLE_COUNT + 1):
+        key = f"/works/OL{SYNTHETIC_FREQUENT_KEY_BASE + index}W"
+        doc = {
+            "key": key,
+            "title": SYNTHETIC_FREQUENT_TITLE,
+            "authors": [
+                {
+                    "type": {"key": "/type/author_role"},
+                    "author": {"key": SYNTHETIC_FREQUENT_AUTHOR_KEY},
+                }
+            ],
+            "type": {"key": "/type/work"},
+            "_synthetic": (
+                f"one of {SYNTHETIC_FREQUENT_TITLE_COUNT} works sharing one title "
+                "fingerprint, so title_fp_freq exceeds MAX_TITLE_FP_FREQ"
+            ),
+        }
+        lines.append(
+            f"/type/work\t{key}\t1\t2020-01-01T00:00:00.000000\t"
+            + json.dumps(doc, ensure_ascii=False)
+            + "\n"
+        )
+    return lines
+
+
+def _isbn_check_digit_is_wrong(raw) -> bool:
+    """True for a syntactically valid ISBN whose check digit does not compute.
+
+    Deliberately its own arithmetic rather than a call into
+    `common.normalize`: this predicate SELECTS the rows that test
+    `isbn_checksum_ok_sql`, and selecting them with the code under test would
+    make the fixture agree with the implementation by construction.
+    """
+    cleaned = "".join(ch for ch in str(raw) if ch.isalnum()).upper()
+    if len(cleaned) == 10 and cleaned[:9].isdigit() and (cleaned[9].isdigit() or cleaned[9] == "X"):
+        total = sum((10 - i) * int(ch) for i, ch in enumerate(cleaned[:9]))
+        remainder = (11 - (total % 11)) % 11
+        return ("X" if remainder == 10 else str(remainder)) != cleaned[9]
+    if len(cleaned) == 13 and cleaned.isdigit():
+        total = sum(int(ch) * (1 if i % 2 == 0 else 3) for i, ch in enumerate(cleaned[:12]))
+        return str((10 - (total % 10)) % 10) != cleaned[12]
+    return False
+
 
 EDITION_PREDICATES = {
     "no_works": (lambda d: not d.get("works"), 3),
+    # 76,242 ISBN-10 and 30,221 ISBN-13 rows in the real build fail their check
+    # digit. Without one of each here, `identifiers.checksum_ok` has no `false`
+    # anywhere in the corpus and its test can only assert `>= 0`.
+    "bad_isbn10_check_digit": (
+        lambda d: any(_isbn_check_digit_is_wrong(v) for v in (d.get("isbn_10") or [])),
+        2,
+    ),
+    "bad_isbn13_check_digit": (
+        lambda d: any(_isbn_check_digit_is_wrong(v) for v in (d.get("isbn_13") or [])),
+        2,
+    ),
     "marc_filler_date": (
         lambda d: bool(d.get("publish_date")) and not re.search(r"\d{4}", str(d["publish_date"])),
         5,
@@ -189,10 +328,11 @@ def main() -> None:
         ap.add_argument(f"--{name}", type=Path, required=True)
     args = ap.parse_args()
 
-    seeds = set(SEED_WORKS)
+    seeds = set(SEED_WORKS) | set(NEGATIVE_CLASS_WORKS)
 
     print("works...")
     work_lines = scan(args.works, "/works/", seeds, WORK_PREDICATES)
+    work_lines.extend(synthetic_frequent_title_works())
     (OUT / "works.txt").write_text("".join(work_lines), encoding="utf-8")
 
     work_keys = {ln.split("\t", 2)[1].removeprefix("/works/") for ln in work_lines}
@@ -268,10 +408,11 @@ def collect_redirects(path: Path) -> list[str]:
             by_key[src] = dst
             lines[src] = line
 
-    if STALE_OMNIBUS_REDIRECT_KEY in lines:
-        kept.append(lines[STALE_OMNIBUS_REDIRECT_KEY])
-    else:
-        print(f"  WARNING: {STALE_OMNIBUS_REDIRECT_KEY} not found in the redirects dump")
+    for explicit in (STALE_OMNIBUS_REDIRECT_KEY, DANGLING_WORK_REDIRECT_KEY):
+        if explicit in lines:
+            kept.append(lines[explicit])
+        else:
+            print(f"  WARNING: {explicit} not found in the redirects dump")
 
     chains = []
     for src in by_key:

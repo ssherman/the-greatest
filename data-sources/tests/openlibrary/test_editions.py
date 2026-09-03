@@ -89,12 +89,40 @@ def test_identifiers_carry_every_extracted_type(built):
 
 
 def test_a_bad_check_digit_is_stored_and_flagged(built):
+    """Stored AND flagged: a wrong check digit is evidence, not a parse error.
+
+    The original `assert flagged >= 0` could not fail -- a count never is
+    negative -- and the corpus it ran against contained no bad check digit at
+    all, so the column's whole purpose went unexercised. See
+    test_fixture_corpus.py::test_corpus_contains_an_isbn_with_a_wrong_check_digit.
+    """
     con, paths, _, _ = built
     (flagged,) = con.execute(
         f"SELECT count(*) FROM '{paths.table('identifiers')}' "
         "WHERE id_type IN ('isbn13', 'isbn10') AND checksum_ok = false"
     ).fetchone()
-    assert flagged >= 0  # zero is acceptable; what matters is that false is representable
+    assert flagged >= 1, "the corpus has an ISBN with a wrong check digit; nothing flagged it"
+
+    # Named rows, not just counts. Counting both classes cannot detect an
+    # INVERTED check -- the bad ISBNs become `true`, the good ones become
+    # `false`, and both counts stay non-zero. OL16296997M carries a wrong
+    # check digit in both formats; OL2213506M's ISBN-10 is correct.
+    flags = dict(
+        con.execute(
+            f"""
+            SELECT (id_type || ':' || value), checksum_ok
+            FROM '{paths.table("identifiers")}'
+            WHERE (edition_key = 'OL16296997M' AND id_type IN ('isbn10', 'isbn13'))
+               OR (edition_key = 'OL2213506M' AND id_type = 'isbn10')
+            """
+        ).fetchall()
+    )
+
+    assert flags == {
+        "isbn10:9185391936": False,
+        "isbn13:9789185391836": False,
+        "isbn10:0028972457": True,
+    }
     (nulls,) = con.execute(
         f"SELECT count(*) FROM '{paths.table('identifiers')}' "
         "WHERE id_type IN ('isbn13', 'isbn10') AND checksum_ok IS NULL"
@@ -102,7 +130,49 @@ def test_a_bad_check_digit_is_stored_and_flagged(built):
     assert nulls == 0, "an ISBN row must always say whether its checksum passed"
 
 
-def test_identifiers_are_not_unique_on_value(built):
+def test_identifiers_carries_each_piece_of_evidence_once(built):
+    """One edition asserting one identifier is ONE row, however it said it.
+
+    Two mechanisms produced duplicates. `isbn_any` unions an edition's
+    `isbn_10` and `isbn_13` lists and then converts every raw value to BOTH
+    canonical forms, so an edition carrying equivalent ISBN-10 and ISBN-13
+    emitted each canonical form twice. ASINs arrive by two routes --
+    `identifiers.amazon` and an `amazon:` prefixed `source_records` entry --
+    and an edition listing both emitted the ASIN twice.
+
+    Measured on the full 2026-07-31 dump before the fix: 145,964,239 rows,
+    120,498,957 distinct, i.e. 25,465,282 duplicates -- 17.4% of the table.
+    """
+    con, paths, _, _ = built
+    (duplicates,) = con.execute(
+        f"""
+        SELECT coalesce(sum(n), 0) - count(*) FROM (
+          SELECT id_type, value, edition_key, work_key, checksum_ok, count(*) AS n
+          FROM '{paths.table("identifiers")}'
+          GROUP BY ALL
+        )
+        """
+    ).fetchone()
+    assert duplicates == 0
+
+
+def test_one_isbn_on_two_works_survives_as_two_rows(built):
+    """The DISTINCT that removes duplicate evidence must not remove AMBIGUOUS
+    evidence. ISBN 9780028972459 is on editions of both OL108593W and
+    OL269642W -- one book, two OL works -- and a caller has to see both."""
+    con, paths, _, _ = built
+    works = {
+        row[0]
+        for row in con.execute(
+            f"SELECT DISTINCT work_key FROM '{paths.table('identifiers')}' "
+            "WHERE id_type = 'isbn13' AND value = '9780028972459'"
+        ).fetchall()
+    }
+
+    assert works == {"OL108593W", "OL269642W"}
+
+
+def test_identifiers_carries_the_evidence_columns(built):
     con, paths, _, _ = built
     # An evidence table: the same ISBN may legitimately point at several works,
     # and the caller is meant to see that ambiguity rather than have it hidden.

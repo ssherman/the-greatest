@@ -84,7 +84,10 @@ def test_a_work_with_a_declared_year_and_no_editions_still_gets_a_row(built):
         WHERE declared_year IS NOT NULL AND edition_count = 0
         """
     ).fetchone()
-    assert rows >= 0  # representable; the fixture corpus may or may not contain one
+    assert rows >= 1, (
+        "no work in the corpus has a declared year and no editions, so this "
+        "test and the contradiction check below both assert nothing"
+    )
     (contradiction,) = con.execute(
         f"""
         SELECT count(*) FROM '{paths.table("year_evidence")}'

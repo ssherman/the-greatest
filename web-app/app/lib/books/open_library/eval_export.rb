@@ -35,10 +35,12 @@ module Books
 
       private
 
+      # No `.order` here: `find_each` batches by primary key and discards any
+      # scope order it is handed, warning each time it does. Ascending id is
+      # what the export wants and what batching already gives it.
       def scope
         ::Books::Book
           .includes(:identifiers, :original_language, book_authors: {author: :identifiers})
-          .order(:id)
       end
 
       def record_for(book)

@@ -346,7 +346,19 @@ def assign_strata(
         "non_latin_title",
         (b.book_id for b in books if any(ch.isalpha() and ord(ch) > 0x024F for ch in b.title)),
     )
-    claim("author_less_work", (b.book_id for b in books if not b.author_names))
+    # Both halves of the stratum's definition: "our book has no author, OR the
+    # OL candidate has none" (schema.STRATA). Testing only `not b.author_names`
+    # leaves the candidate half unexercised, and the candidate half is the one
+    # the matcher has to reason about -- a local book WITH authors matched
+    # against an OL work that has none, where author agreement can say nothing.
+    claim(
+        "author_less_work",
+        (
+            b.book_id
+            for b in books
+            if not b.author_names or any(not c.author_names for c in candidates.get(b.book_id, []))
+        ),
+    )
     claim("pseudonym_or_alt_name", alt_name_only)
     claim(
         "anthology_or_collection",

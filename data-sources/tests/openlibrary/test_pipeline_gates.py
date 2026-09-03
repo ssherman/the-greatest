@@ -61,6 +61,41 @@ def test_a_row_count_collapse_against_a_previous_build_fails(built):
     assert not gates_passed(results)
 
 
+def _observed_coverage(con, paths, name: str) -> float:
+    """What this build actually measured, so the tolerance tests do not depend
+    on how many works the fixture corpus happens to contain."""
+    first = run_gates(con, paths, previous_report=None)
+    return next(r for r in first if r.name == "field_coverage").observed[name]
+
+
+def test_a_coverage_collapse_against_a_previous_build_fails(built):
+    """A previous build whose coverage was 25% higher is past
+    MAX_COVERAGE_DROP -- the shape of a parser change that quietly stopped
+    extracting a field."""
+    con, paths = built
+    observed = _observed_coverage(con, paths, "works.has_authors")
+    previous = {"coverage": {"works.has_authors": observed / (1 - 0.25)}}
+
+    results = run_gates(con, paths, previous_report=previous)
+
+    coverage = next(r for r in results if r.name == "field_coverage")
+    assert coverage.status == "fail"
+    assert "works.has_authors" in coverage.detail
+    assert not gates_passed(results)
+
+
+def test_a_coverage_dip_within_tolerance_passes(built):
+    """The control the failure test needs: without it the gate could be
+    'fail whenever a previous report exists' and still look correct."""
+    con, paths = built
+    observed = _observed_coverage(con, paths, "works.has_authors")
+    previous = {"coverage": {"works.has_authors": observed / (1 - 0.01)}}
+
+    results = run_gates(con, paths, previous_report=previous)
+
+    assert next(r for r in results if r.name == "field_coverage").status == "pass"
+
+
 def test_a_missing_canary_fails(built, monkeypatch):
     con, paths = built
     monkeypatch.setattr("openlibrary.pipeline.gates.CANARY_WORK_KEYS", ("OL_DOES_NOT_EXIST_W",))

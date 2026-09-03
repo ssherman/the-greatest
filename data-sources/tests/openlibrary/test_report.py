@@ -58,7 +58,9 @@ def test_report_records_every_table_with_rows_and_bytes(reported):
     _, _, report = reported
     for table in TABLES:
         assert table in report["tables"], table
-        assert report["tables"][table]["rows"] >= 0
+        # `>= 0` is true of every count ever taken. A table that built to zero
+        # rows is a broken build, and that is what this has to catch.
+        assert report["tables"][table]["rows"] > 0, table
         assert report["tables"][table]["bytes"] > 0
 
 

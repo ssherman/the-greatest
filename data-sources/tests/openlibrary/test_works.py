@@ -45,13 +45,59 @@ def test_description_object_is_unwrapped_to_its_text(built):
 
 
 def test_three_title_fingerprints_are_populated(built):
+    """Populated for EVERY work, not just for whichever row LIMIT 1 returns.
+
+    `is not None` on one arbitrary row cannot fail while a single work has a
+    title: it says nothing about the other 33 and nothing about the variants
+    being different from each other.
+    """
+    con, paths, _, _ = built
+    (missing,) = con.execute(
+        f"""
+        SELECT count(*) FROM '{paths.table("works")}'
+        WHERE title_fp IS NULL OR title_fp_nosub IS NULL OR title_fp_noart IS NULL
+        """
+    ).fetchone()
+    assert missing == 0
+
+
+def test_the_subtitle_variant_cuts_at_the_first_colon(built):
+    """Wyvernhail: The Kiesha'ra -> 'wyvernhail'. Without a work whose nosub
+    actually differs from its full fingerprint, a builder that assigned the
+    same expression to all three columns would pass every other test here."""
     con, paths, _, _ = built
     row = con.execute(
-        f"SELECT title, title_fp, title_fp_nosub, title_fp_noart "
-        f"FROM '{paths.table('works')}' WHERE title_fp <> '' LIMIT 1"
+        f"SELECT title_fp, title_fp_nosub FROM '{paths.table('works')}' "
+        "WHERE work_key = 'OL100077W'"
     ).fetchone()
-    assert row is not None
-    assert all(value is not None for value in row)
+
+    assert row == ("wyvernhail the kiesha ra", "wyvernhail")
+
+
+def test_the_article_variant_drops_a_leading_the(built):
+    con, paths, _, _ = built
+    row = con.execute(
+        f"SELECT title_fp, title_fp_noart FROM '{paths.table('works')}' "
+        "WHERE work_key = 'OL3809593W'"
+    ).fetchone()
+
+    assert row == ("the illuminatus trilogy", "illuminatus trilogy")
+
+
+def test_title_fp_freq_is_greater_than_one_for_a_shared_fingerprint(built):
+    """The corpus had a maximum title_fp_freq of 1, so a window function that
+    always returned 1 would have passed every test that reads this column.
+    OL108593W and OL269642W are "The establishment clause" twice."""
+    con, paths, _, _ = built
+    rows = con.execute(
+        f"SELECT work_key, title_fp, title_fp_freq FROM '{paths.table('works')}' "
+        "WHERE work_key IN ('OL108593W', 'OL269642W') ORDER BY work_key"
+    ).fetchall()
+
+    assert rows == [
+        ("OL108593W", "the establishment clause", 2),
+        ("OL269642W", "the establishment clause", 2),
+    ]
 
 
 def test_title_fp_freq_counts_shared_fingerprints(built):
