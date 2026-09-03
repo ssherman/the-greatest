@@ -20,7 +20,14 @@ import duckdb
 import typer
 from pydantic import BaseModel, Field
 
-from common.normalize import MIN_BLOCKING_FP_LENGTH, name_fingerprint, title_fingerprints
+from common.normalize import (
+    MIN_BLOCKING_FP_LENGTH,
+    name_fingerprint,
+    normalize_asin,
+    normalize_goodreads,
+    normalize_isbn,
+    title_fingerprints,
+)
 from openlibrary.eval.schema import STRATA, EvalBook
 from openlibrary.pipeline.paths import ArtifactPaths
 
@@ -48,11 +55,31 @@ class PoolCandidate(BaseModel):
     title_fp_freq: int = 0
 
 
+class GeneratedCandidateKey(BaseModel):
+    """A blocking-produced key with no evidence fields -- provenance only.
+
+    Deliberately smaller than `PoolCandidate`: `PoolEntry.all_generated` exists
+    only so `found_outside_blocking` can be computed correctly, not to carry
+    display evidence for candidates nobody will see rendered.
+    """
+
+    work_key: str
+    rules: list[str] = Field(default_factory=list)
+
+
 class PoolEntry(BaseModel):
     case_id: str
     stratum: str
     book: EvalBook
     candidates: list[PoolCandidate] = Field(default_factory=list)
+    # The COMPLETE set of keys blocking generated for this book, before the
+    # `[:20]` display slice below. `candidates` is capped at 20 for the
+    # labeling CLI's terminal rendering; `all_generated` is what
+    # `EvalCase.found_outside_blocking` must be computed against, so that a
+    # manually-entered key blocking DID produce -- just outside the top 20 --
+    # is not misrecorded as a recall failure. Do NOT collapse this back into
+    # `candidates`; see label.py's `candidates_shown_for`.
+    all_generated: list[GeneratedCandidateKey] = Field(default_factory=list)
 
 
 def load_books(path: Path) -> list[EvalBook]:
@@ -101,16 +128,54 @@ _EVAL_BOOKS_COLUMNS = [
 ]
 
 
+def _identifier_pairs(book: EvalBook) -> list[tuple[str, str]]:
+    """Canonicalize a book's locally-stored identifiers before they are joined.
+
+    `identifiers.parquet` stores values already run through `isbn13_sql` /
+    `isbn10_sql` / `asin_sql` / `goodreads_sql` (see pipeline/editions.py).
+    Rule 1's join is exact equality, so a local value in any other form -- a
+    hyphenated ISBN, a lowercase ISBN-10 check digit, a slugged Goodreads id
+    -- silently misses. Every value is pushed through the matching Python
+    normalizer (the twin of the SQL one) before it is registered here; values
+    that normalize to None are dropped rather than registered raw.
+    """
+    pairs: set[tuple[str, str]] = set()
+
+    for value in [*book.isbn13, *book.isbn10]:
+        normalized = normalize_isbn(value)
+        if normalized is None:
+            continue
+        if normalized.isbn13:
+            pairs.add(("isbn13", normalized.isbn13))
+        if normalized.isbn10:
+            pairs.add(("isbn10", normalized.isbn10))
+
+    for value in book.asin:
+        asin = normalize_asin(value)
+        if asin is not None:
+            pairs.add(("asin", asin))
+        # An Amazon ASIN for a book is usually its ISBN-10 -- mirrors what the
+        # design specifies for rule 1 (matcher/blocking.py does not exist yet).
+        normalized = normalize_isbn(value)
+        if normalized is not None:
+            if normalized.isbn13:
+                pairs.add(("isbn13", normalized.isbn13))
+            if normalized.isbn10:
+                pairs.add(("isbn10", normalized.isbn10))
+
+    for value in book.goodreads_id:  # [GOODREADS]
+        goodreads = normalize_goodreads(value)
+        if goodreads is not None:
+            pairs.add(("goodreads", goodreads))
+
+    return sorted(pairs)
+
+
 def _register_books(con: duckdb.DuckDBPyConnection, books: list[EvalBook]) -> None:
     rows = []
     for book in books:
         fps = title_fingerprints(book.title)
-        identifiers = (
-            [("isbn13", v) for v in book.isbn13]
-            + [("isbn10", v) for v in book.isbn10]
-            + [("asin", v) for v in book.asin]
-            + [("goodreads", v) for v in book.goodreads_id]  # [GOODREADS]
-        )
+        identifiers = _identifier_pairs(book)
         rows.append(
             (
                 book.book_id,
@@ -402,14 +467,20 @@ def build_pool(
             chosen = members[:quota]
             counts[stratum] = len(chosen)
             for index, book_id in enumerate(chosen, start=1):
+                generated = candidates.get(book_id, [])
+                ranked = sorted(
+                    generated,
+                    key=lambda c: (-c.readinglog_count, -c.edition_count, c.work_key),
+                )
                 entry = PoolEntry(
                     case_id=f"{stratum}-{index:03d}",
                     stratum=stratum,
                     book=by_id[book_id],
-                    candidates=sorted(
-                        candidates.get(book_id, []),
-                        key=lambda c: (-c.readinglog_count, -c.edition_count, c.work_key),
-                    )[:20],
+                    # Capped at 20 -- see the `all_generated` field docstring.
+                    candidates=ranked[:20],
+                    all_generated=[
+                        GeneratedCandidateKey(work_key=c.work_key, rules=c.rules) for c in generated
+                    ],
                 )
                 fh.write(entry.model_dump_json() + "\n")
     return counts

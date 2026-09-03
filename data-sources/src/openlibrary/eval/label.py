@@ -132,6 +132,20 @@ def parse_choice(raw: str, entry: PoolEntry) -> Choice:
     }.get(head, Choice("invalid"))
 
 
+def candidates_shown_for(entry: PoolEntry) -> list[EvalCandidate]:
+    """Build `EvalCase.candidates_shown` from the COMPLETE generated set.
+
+    Deliberately built from `entry.all_generated`, NOT `entry.candidates`.
+    `entry.candidates` is capped at 20 -- all the terminal can usefully render
+    -- but `found_outside_blocking` must know whether a manually-entered key
+    was ever produced by blocking AT ALL, including at rank 21+. Using the
+    capped list here would misrecord a key blocking produced but did not
+    display as a recall failure that never happened. Do not "simplify" this
+    back to `entry.candidates`.
+    """
+    return [EvalCandidate(work_key=c.work_key, rules=c.rules) for c in entry.all_generated]
+
+
 def already_labeled(out_path: Path) -> set[str]:
     path = Path(out_path)
     if not path.exists():
@@ -215,9 +229,7 @@ def main(
                 case_id=entry.case_id,
                 stratum=entry.stratum,
                 book=entry.book,
-                candidates_shown=[
-                    EvalCandidate(work_key=c.work_key, rules=c.rules) for c in entry.candidates
-                ],
+                candidates_shown=candidates_shown_for(entry),
                 label=EvalLabel(
                     verdict=verdict,
                     work_key=work_key,

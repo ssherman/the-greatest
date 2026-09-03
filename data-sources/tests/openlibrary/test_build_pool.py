@@ -3,7 +3,7 @@ import json
 import pytest
 
 from openlibrary.eval.build_pool import build_pool, load_books, naive_candidates
-from openlibrary.eval.schema import STRATA
+from openlibrary.eval.schema import STRATA, EvalBook
 from openlibrary.pipeline.build import build
 from openlibrary.pipeline.duck import connect
 from openlibrary.pipeline.paths import ArtifactPaths
@@ -117,6 +117,33 @@ def test_the_title_fp_rule_is_guarded_by_frequency(artifact, books_file):
         for candidate in entries:
             if candidate.rules == ["title_fp"]:
                 assert candidate.title_fp_freq <= 50
+
+
+def test_identifier_registration_normalizes_local_values_before_joining(artifact):
+    """`identifiers.parquet` stores values canonicalized via isbn13_sql /
+    isbn10_sql / asin_sql / goodreads_sql (editions.py). Rule 1's join is exact
+    equality, so a locally-stored value in any other form -- hyphenated,
+    slugged, mixed-case -- must be pushed through the matching Python
+    normalizer before it is registered, or it silently misses.
+
+    OL100077W and OL104728W are real work keys from the committed fixture
+    corpus (see test_fixture_corpus.py); their canonical identifiers were
+    confirmed by querying the built fixture artifact directly.
+    """
+    con = connect(artifact, memory_limit="1GB")
+    book = EvalBook(
+        book_id=999,
+        title="Probe Book",
+        isbn13=["978-0-385-90442-1"],  # hyphenated; canonical: 9780385904421
+        isbn10=["052105818x"],  # lowercase check digit; canonical: 052105818X
+        goodreads_id=["30338.The_Great_Gatsby"],  # slugged; canonical: 30338
+    )
+    candidates = naive_candidates(con, artifact, [book])
+    con.close()
+
+    hit_keys = {c.work_key for c in candidates.get(999, []) if "identifier" in c.rules}
+    assert "OL100077W" in hit_keys, "hyphenated isbn13 / slugged goodreads did not join"
+    assert "OL104728W" in hit_keys, "lowercase-x isbn10 did not join"
 
 
 def test_build_pool_writes_jsonl_and_reports_per_stratum_counts(artifact, books_file, tmp_path):

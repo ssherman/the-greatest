@@ -6,6 +6,7 @@ from openlibrary.eval.build_pool import PoolCandidate, PoolEntry
 from openlibrary.eval.label import (
     already_labeled,
     append_case,
+    candidates_shown_for,
     parse_choice,
     render_case,
 )
@@ -146,6 +147,40 @@ def test_a_manual_key_must_look_like_a_work_key(entry):
 def test_s_skips_and_q_quits(entry):
     assert parse_choice("s", entry).kind == "skip"
     assert parse_choice("q", entry).kind == "quit"
+
+
+def test_candidates_shown_uses_the_complete_generated_set_not_the_display_cap(entry):
+    # `entry.candidates` is capped at 20 for the terminal display; `all_generated`
+    # carries the complete set blocking produced. A labeler who manually enters a
+    # key that blocking DID produce -- just not inside the top 20 shown -- must
+    # NOT have that recorded as `found_outside_blocking`, which is reserved for
+    # keys no rule produced at all. If `candidates_shown` were built from the
+    # capped `entry.candidates` instead, this key would wrongly look unseen.
+    beyond_the_cap = PoolCandidate(
+        work_key="OL9999999W",
+        rules=["title_fp"],
+        title="Ranked 21st, Never Displayed",
+    )
+    entry_with_full_set = entry.model_copy(
+        update={"all_generated": entry.candidates + [beyond_the_cap]}
+    )
+    assert beyond_the_cap.work_key not in {c.work_key for c in entry_with_full_set.candidates}
+
+    case = EvalCase(
+        case_id=entry.case_id,
+        stratum=entry.stratum,
+        book=entry.book,
+        candidates_shown=candidates_shown_for(entry_with_full_set),
+        label=EvalLabel(
+            verdict="match",
+            work_key="OL9999999W",
+            identity_rule="same_work",
+            rationale="Confirmed by hand on openlibrary.org; blocking ranked it 21st+.",
+            labeled_at=datetime.date(2026, 9, 2),
+            labeled_against_dump_date="2026-07-31",
+        ),
+    )
+    assert case.found_outside_blocking is False
 
 
 def test_resume_skips_case_ids_already_written(tmp_path, entry):
