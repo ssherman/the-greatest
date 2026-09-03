@@ -154,6 +154,38 @@ class JwtValidationServiceTest < ActiveSupport::TestCase
     assert_requested :get, Services::JwtValidationService::GOOGLE_CERTS_URL, times: 1
   end
 
+  # I3 (scoped re-review fix). @last_fetch_at must be set before the request,
+  # not only after a response comes back -- a Faraday::TimeoutError or
+  # Faraday::ConnectionFailed (a real Google outage; exactly what
+  # open_timeout/timeout exist to produce) raises out of Faraday.get, so an
+  # assignment placed after the call would never run on that path and the
+  # cooldown would never engage during the one scenario it matters most for.
+  test "does not retry a failed fetch again within the cooldown window" do
+    call(FirebaseTokenHelper.token) # primes a valid, long-lived cache -- 1 request
+
+    travel Services::JwtValidationService::UNKNOWN_KID_REFETCH_COOLDOWN + 1 do
+      WebMock.stub_request(:get, Services::JwtValidationService::GOOGLE_CERTS_URL)
+        .to_raise(Faraday::ConnectionFailed.new("connection refused"))
+
+      # Past the priming call's cooldown, so this one actually attempts a
+      # fetch -- which fails with the stubbed connection error.
+      assert_raises(Faraday::ConnectionFailed) do
+        call(FirebaseTokenHelper.token(kid: "unknown-kid-1"))
+      end
+
+      # Within the cooldown started by the FAILED attempt above. If
+      # @last_fetch_at were only set on success, this would retry and also
+      # raise Faraday::ConnectionFailed (with a 3rd request); instead it must
+      # fall straight through to the ordinary "still unknown" error with no
+      # further request.
+      assert_raises(JWT::DecodeError) do
+        call(FirebaseTokenHelper.token(kid: "unknown-kid-2"))
+      end
+    end
+
+    assert_requested :get, Services::JwtValidationService::GOOGLE_CERTS_URL, times: 2
+  end
+
   # I3. A single call must never issue two identical requests, even when the
   # cache is expired AND the kid is unknown -- collapsing those two branches
   # into one `if` is what prevents that.

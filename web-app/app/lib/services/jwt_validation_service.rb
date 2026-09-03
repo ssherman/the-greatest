@@ -97,11 +97,18 @@ module Services
     end
 
     def self.load_certs!
+      # Set before the request, not after: Faraday::TimeoutError and
+      # Faraday::ConnectionFailed (the normal shape of a Google outage, and
+      # exactly what open_timeout/timeout below exist to produce) propagate
+      # out of Faraday.get, so a line placed after the call never runs on
+      # that path and the cooldown would never engage during an outage --
+      # the one case it matters most. An HTTP error response, by contrast,
+      # does reach a line after the call either way.
+      @last_fetch_at = Time.current
       response = Faraday.get(GOOGLE_CERTS_URL) do |req|
         req.options.open_timeout = 2
         req.options.timeout = 5
       end
-      @last_fetch_at = Time.current
 
       unless response.success?
         raise JWT::DecodeError, "Failed to fetch Google certificates: #{response.status}"

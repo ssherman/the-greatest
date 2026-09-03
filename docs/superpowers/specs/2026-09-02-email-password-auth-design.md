@@ -174,10 +174,12 @@ tier in the console before the run.
 
 ### JwtValidationService
 
-- `project_id` becomes a **required** keyword argument with no default, sourced from a
-  `FIREBASE_PROJECT_ID` environment variable. Removing the default is the fix; a required
-  argument makes the check structurally impossible to skip, which matters more than the
-  check's contents. (F1)
+- `project_id` becomes a **required** keyword argument with no default. Removing the
+  default is the fix; a required argument makes the check structurally impossible to
+  skip, which matters more than the check's contents. (F1) The value itself is
+  hardcoded in `config/initializers/firebase.rb`, not sourced from an environment
+  variable -- production's env file already carried the wrong project id, and nothing
+  read it until this PR made it load-bearing; see the final fix-wave review.
 - Validate `iss == "https://securetoken.google.com/#{project_id}"`. (F1)
 - Validate `sub` is present and non-empty.
 - Keep `RS256` hardcoded — never read the algorithm from the token header.
