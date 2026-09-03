@@ -75,12 +75,33 @@ than reading the export file, and scopes to `auth_uid IS NULL`.
 
 **Two consequences of "replace" that are not obvious:**
 
-1. **Replace is total, so the import has a shelf life.** Re-importing overwrites
-   whatever the account has become — a password the user changed, an email they
-   verified — back to the 2014 bcrypt hash and `emailVerified: false`. That is
-   harmless while books is unlaunched and nobody is signing in. **Once books is
-   live and real people have used these accounts, the import must not be re-run.**
-   The export and write-back stay safe; only the Firebase import carries this.
+1. **Replace is total, so the import has a shelf life — and the cutoff is NOT
+   books launch.** Re-importing overwrites whatever the account has become — a
+   password the user changed, an email they verified — back to the 2014 bcrypt
+   hash and `emailVerified: false`.
+
+   An earlier version of this section said that was harmless "while books is
+   unlaunched and nobody is signing in," and set the cutoff at books launch.
+   **That is wrong.** `firebase_auth_service.js` hardcodes
+   `projectId: "the-greatest-books"` and varies only `authDomain`, so every
+   domain authenticates against one Firebase project — and
+   `Authentication::WidgetComponent` renders in all four layouts, including the
+   **live** music and games sites. The moment the cohort lands in Firebase, any
+   one of those 30,437 people can sign in or run a password reset on
+   thegreatest.music or thegreatest.games. Books launch has nothing to do with
+   it; the first production import IS the exposure.
+
+   **So run the Firebase import exactly once, against production, after the
+   final data migration — not during the pre-launch rehearsals.** A re-import
+   after any real sign-in silently reverts that person's credentials, with
+   nothing in the output to show it. The export and the write-back stay safe to
+   re-run; only the Firebase import carries this.
+
+   A corollary worth stating, since the write-back *is* re-run every time: a
+   rehearsal that sets `auth_uid = tgbv1-<id>` without a matching Firebase
+   account leaves Rails pointing at an identity that does not exist. Harmless
+   while nobody signs in, but it means the two steps are only truly consistent
+   once both have run in the launch sequence.
 
 2. **If id stability ever breaks, the failure is silent.** Because the API does
    not check email duplication, a re-migration that assigned *different* ids

@@ -127,10 +127,18 @@ development and that production did not yet hold these rows. Production does hol
 `User.where(auth_uid: nil).where.not(email: nil).count` returns **30,437** there, all with
 `external_provider` nil and `legacy_migrated` false — the V1 cohort.
 
-They are **not live users**. Books has not launched, and production is a pre-launch rehearsal of
-the migration that Shane will truncate and re-run before it does. So the figures below still stand
-as measurements of dev, production will differ again after the re-migration, and **whatever
-production numbers matter must be measured at the time, not carried over from here**.
+They are **not live users** *as Rails rows*. Books has not launched, and production is a
+pre-launch rehearsal of the migration that Shane will re-run from scratch before it does. So the
+figures below still stand as measurements of dev, production will differ again after the
+re-migration, and **whatever production numbers matter must be measured at the time, not carried
+over from here**.
+
+That stops being true the moment they exist **in Firebase**, which is a different question from
+whether books has launched. Every domain shares one Firebase project — `firebase_auth_service.js`
+hardcodes `projectId: "the-greatest-books"` and varies only `authDomain` — and the auth widget
+renders in all four layouts, music and games included. See the plan's "Re-running all of this,
+repeatedly" section: the Firebase import runs **once**, after the final data migration, because
+the first production import is what makes these accounts reachable on the live sites.
 
 **New `users` table — 69,495 rows**
 
