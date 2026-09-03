@@ -36,8 +36,27 @@ module ActiveSupport
     # Books::BookType memoizes its LegacyIdMap lookup at the class level, which
     # would otherwise outlive the per-test transaction and leak an order-dependent
     # value into every later test in the same worker.
+    #
+    # rate_limit_store.clear belongs here, not inside sign_in_as: sign_in_as is
+    # the de facto login path for ~90 other test files, all sharing one worker
+    # process and therefore one Rails.application.config.x.rate_limit_store
+    # instance (see config/initializers/rate_limit_store.rb) for the life of
+    # that worker. AuthController#sign_in is rate-limited, keyed by visitor_ip
+    # -- and every integration-test request resolves to the same visitor_ip, so
+    # without clearing somewhere, the Nth call to sign_in_as in a worker
+    # (N > AuthController::SIGN_IN_RATE within the window) gets a 429 instead
+    # of a real sign-in, and every test after it fails as "not signed in" in
+    # files that have nothing to do with auth or rate limiting. Clearing here,
+    # once per test instead of inside sign_in_as, is what it takes to fix that
+    # without also erasing counts a single test builds up deliberately (e.g.
+    # reviews_controller_test.rb's "the limit is per user, not global", which
+    # posts as one user, then calls sign_in_as for a second user and expects
+    # the FIRST user's count to still be there for the assertion to mean
+    # anything) -- an in-helper clear wipes the whole store, including buckets
+    # that have nothing to do with auth, mid-test.
     setup do
       ::Books::BookType.reset_category_ids!
+      Rails.application.config.x.rate_limit_store.clear
     end
 
     # Add more helper methods to be used by all tests here...
@@ -57,19 +76,6 @@ module ActionDispatch
     include StripeWebhookHelper
 
     def sign_in_as(user, stub_auth: false)
-      # This helper is the de facto login path for ~90 other test files, all
-      # sharing one worker process and therefore one
-      # Rails.application.config.x.rate_limit_store instance (see
-      # config/initializers/rate_limit_store.rb) for the life of that worker.
-      # AuthController#sign_in is rate-limited (AuthController::SIGN_IN_RATE
-      # per AuthController::RATE_WINDOW), keyed by visitor_ip -- and every
-      # integration-test request resolves to the same visitor_ip, so without
-      # clearing here, the Nth call to this helper in a worker (N > SIGN_IN_RATE
-      # within the window) gets a 429 instead of a real sign-in, and every test
-      # after it fails as "not signed in" -- in files that have nothing to do
-      # with auth or rate limiting.
-      Rails.application.config.x.rate_limit_store.clear
-
       # Stub authentication service to bypass JWT validation if requested
       if stub_auth
         Services::AuthenticationService.stubs(:call).returns(
