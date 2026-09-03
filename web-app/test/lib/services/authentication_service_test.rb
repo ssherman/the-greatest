@@ -118,4 +118,22 @@ class AuthenticationServiceTest < ActiveSupport::TestCase
     refute_includes logged.string, "logged.person@example.com"
     refute_includes logged.string, "JWT Payload"
   end
+
+  test "maps a user save failure to user_creation_failed" do
+    token = FirebaseTokenHelper.token({"sub" => "uid-no-email", "email" => nil})
+
+    result = call(token)
+
+    refute result[:success]
+    assert_equal :user_creation_failed, result[:error_code]
+  end
+
+  test "maps an unexpected error to authentication_failed" do
+    Services::JwtValidationService.stubs(:call).raises(StandardError.new("boom"))
+
+    result = call(FirebaseTokenHelper.token)
+
+    refute result[:success]
+    assert_equal :authentication_failed, result[:error_code]
+  end
 end
