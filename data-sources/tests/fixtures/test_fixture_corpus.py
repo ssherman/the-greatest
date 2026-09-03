@@ -147,6 +147,7 @@ def test_corpus_contains_two_works_that_fingerprint_identically():
     """title_fp_freq can only be > 1 if two works share a fingerprint, and
     every frequency guard downstream reads that column."""
     from common.normalize import fingerprint
+    from openlibrary.eval.build_pool import MAX_TITLE_FP_FREQ
 
     counts: dict[str, int] = {}
     for _, doc in _docs("works"):
@@ -154,8 +155,12 @@ def test_corpus_contains_two_works_that_fingerprint_identically():
         if fp:
             counts[fp] = counts.get(fp, 0) + 1
 
-    assert any(count == 2 for count in counts.values()), (
-        "no title fingerprint in the corpus is shared by exactly two works"
+    # `> 1`, not `== 2`: the class is "shared", and pinning it at exactly two
+    # would fail if a regeneration pulled in a third "The establishment
+    # clause". Bounded above so the 51-work synthetic block cannot satisfy it
+    # on its own -- that block is what the NEXT test is for.
+    assert any(1 < count <= MAX_TITLE_FP_FREQ for count in counts.values()), (
+        "no title fingerprint in the corpus is shared by two or more works"
     )
 
 
@@ -180,12 +185,17 @@ def test_corpus_contains_a_title_in_a_non_latin_script():
     sign, or the combining half marks in "i︠a︡".
 
     Stricter than `assign_strata`'s own predicate on purpose. That one starts
-    at U+024F, which also admits the Spacing Modifier Letters (U+02B0-U+02FF)
-    that Latin romanizations use -- "Al Qurʻān", "Pipʻyŏng ŭisik ŭi tʻusido".
-    Measured over the 126,330-book export, that costs 2 books of 3,744 claimed
-    (0.1%), both Arabic transliterations, so the predicate is left alone. But
-    a corpus assertion satisfied by a romanization would not notice if the
-    genuinely-scripted seeds disappeared, so this starts at Greek (U+0370).
+    at U+024F, which also admits IPA Extensions and Spacing Modifier Letters
+    (U+0250-U+02FF). Measured over the 126,330-book export: it claims 3,744
+    titles where a Greek-and-above threshold claims 3,734, so 10 books are
+    mislabelled -- 8 Azerbaijani titles using the genuinely Latin schwa
+    "\u0259" ("Qara Q\u0259hv\u0259", "\u00dc\u00e7 P\u0259rd\u0259li Faciy\u0259"), and 2 Arabic
+    transliterations ("Al Qur\u02bb\u0101n" U+02BB, "What \u02bf\u012bs\u0101 Ibn Hish\u0101m Told
+    Us" U+02BF). At a stratum quota of 30 that is 0.08 expected mislabelled
+    draws, and all 30 non_latin_title cases in the current pool are genuinely
+    scripted, so the predicate is left alone. But a corpus assertion satisfied
+    by a romanization would not notice the genuinely-scripted seeds
+    disappearing, so this one starts at Greek (U+0370).
     """
     scripted = [
         (key, doc["title"])

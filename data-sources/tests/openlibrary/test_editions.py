@@ -107,22 +107,21 @@ def test_a_bad_check_digit_is_stored_and_flagged(built):
     # INVERTED check -- the bad ISBNs become `true`, the good ones become
     # `false`, and both counts stay non-zero. OL16296997M carries a wrong
     # check digit in both formats; OL2213506M's ISBN-10 is correct.
-    flags = dict(
-        con.execute(
-            f"""
-            SELECT (id_type || ':' || value), checksum_ok
-            FROM '{paths.table("identifiers")}'
-            WHERE (edition_key = 'OL16296997M' AND id_type IN ('isbn10', 'isbn13'))
-               OR (edition_key = 'OL2213506M' AND id_type = 'isbn10')
-            """
-        ).fetchall()
-    )
+    flags = con.execute(
+        f"""
+        SELECT id_type, value, checksum_ok
+        FROM '{paths.table("identifiers")}'
+        WHERE (edition_key = 'OL16296997M' AND id_type IN ('isbn10', 'isbn13'))
+           OR (edition_key = 'OL2213506M' AND id_type = 'isbn10')
+        ORDER BY id_type, value
+        """
+    ).fetchall()
 
-    assert flags == {
-        "isbn10:9185391936": False,
-        "isbn13:9789185391836": False,
-        "isbn10:0028972457": True,
-    }
+    assert flags == [
+        ("isbn10", "0028972457", True),
+        ("isbn10", "9185391936", False),
+        ("isbn13", "9789185391836", False),
+    ]
     (nulls,) = con.execute(
         f"SELECT count(*) FROM '{paths.table('identifiers')}' "
         "WHERE id_type IN ('isbn13', 'isbn10') AND checksum_ok IS NULL"

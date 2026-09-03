@@ -30,7 +30,7 @@ def books_file(tmp_path, artifact):
         FROM '{artifact.table("works")}' w
         LEFT JOIN '{artifact.table("work_authors")}' wa USING (work_key)
         LEFT JOIN '{artifact.table("authors")}' a USING (author_key)
-        WHERE w.title <> 'Selected Poems'
+        WHERE w.title IS DISTINCT FROM 'Selected Poems'
         GROUP BY w.work_key, w.title
         ORDER BY w.work_key
         """
@@ -40,8 +40,10 @@ def books_file(tmp_path, artifact):
     # carries 51 works titled "Selected Poems" purely to push one fingerprint
     # past MAX_TITLE_FP_FREQ (see extract_fixtures.py's
     # SYNTHETIC_FREQUENT_TITLE), and letting them in would make most of these
-    # books the same title. The unordered LIMIT this replaced also made the set
-    # depend on how many works the corpus happened to have.
+    # books the same title. `IS DISTINCT FROM`, not `<>`: SQL `NULL <> 'x'` is
+    # NULL, so a title-less work would silently leave the fixture. The
+    # unordered LIMIT this replaced also made the set depend on how many works
+    # the corpus happened to have.
 
     path = tmp_path / "books.jsonl"
     with path.open("w") as fh:

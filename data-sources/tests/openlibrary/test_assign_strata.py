@@ -28,6 +28,7 @@ POPULAR_WORK = "OL3809593W"  # "The Illuminatus! Trilogy" -- 79 reading-log, 15 
 ANOTHER_POPULAR_WORK = "OL10530571W"  # "Fire and Ice" -- 53 reading-log, 4 ratings
 UNPOPULAR_WORK = "OL11729038W"  # "British ships and British seamen" -- 1 author, 0 signal
 ALTERNATE_ONLY_NAME = "Frederick Beigbeder"  # OL3113863A carries it as an alternate only
+PRIMARY_AND_ALTERNATE_NAME = "D. H. Lawrence"  # OL19964A: 1 primary spelling + 16 alternates
 NO_SUCH_WORK = "OL999999999W"  # absent from works.parquet: a stale stored key
 CROWDED_TITLE_WORK = "OL999999101W"  # one of 51 corpus works titled "Selected Poems"
 
@@ -174,6 +175,24 @@ def test_an_author_matching_a_primary_name_is_not_a_pseudonym(fixture_artifact, 
     control the predicate could be 'matches any author name at all' and every
     test above would still pass."""
     subject = ordinary_book(author_names=["Amelia Atwater-Rhodes"])
+
+    assert strata_of(fixture_artifact, [subject])[1] != "pseudonym_or_alt_name"
+
+
+def test_an_author_matching_a_primary_AND_an_alternate_name_is_not_a_pseudonym(
+    fixture_artifact, ordinary_book
+):
+    """The word doing the work in the stratum is ONLY.
+
+    `D. H. Lawrence` fingerprints to a name OL19964A carries once as its
+    primary and sixteen more times as alternate spellings -- so both halves of
+    the HAVING are non-zero and the book must not be claimed. Without this,
+    loosening `count(*) FILTER (WHERE source = 'primary') = 0` to `>= 0`, or
+    dropping that clause outright, passes every other test here: the
+    alternate-only control has no primary match to be forgiven, and the
+    primary-only control has no alternate to satisfy the other half.
+    """
+    subject = ordinary_book(author_names=[PRIMARY_AND_ALTERNATE_NAME])
 
     assert strata_of(fixture_artifact, [subject])[1] != "pseudonym_or_alt_name"
 

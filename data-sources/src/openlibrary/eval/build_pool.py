@@ -445,6 +445,12 @@ def _authors_matching_only_alternate_names(con, paths, books) -> list[int]:
     _load_rows(con, "eval_author_fps", [("book_id", "INTEGER"), ("name_fp", "VARCHAR")], rows_in)
     rows = con.execute(
         f"""
+        -- `source` is a two-valued domain (authors.py labels the two halves of
+        -- one UNION ALL 'primary' and 'alternate'), and a GROUP BY group only
+        -- exists when the join matched at least one row -- so `primary = 0`
+        -- already implies every matched row is an alternate, and the second
+        -- clause is redundant. It is kept because it states the stratum's
+        -- definition; do not expect a test to be able to fail on its removal.
         SELECT e.book_id
         FROM eval_author_fps e
         JOIN '{paths.table("author_names")}' an USING (name_fp)

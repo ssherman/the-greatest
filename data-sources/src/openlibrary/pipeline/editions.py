@@ -155,49 +155,49 @@ def build_editions(con: duckdb.DuckDBPyConnection, paths: ArtifactPaths) -> dict
           -- collapses to is (id_type, value, edition_key, work_key,
           -- checksum_ok); the same value under two different work keys stays
           -- two rows, which is the ambiguity this table exists to show.
+          -- Measured after the fix: 1,138,510 ISBN-13 values are still on more
+          -- than one work.
           SELECT DISTINCT * FROM (
-          SELECT 'isbn13' AS id_type, {isbn13_sql("raw")} AS value, edition_key, work_key,
-                 {isbn_checksum_ok_sql("raw")} AS checksum_ok
-          FROM isbn_any WHERE {isbn13_sql("raw")} IS NOT NULL
+            SELECT 'isbn13' AS id_type, {isbn13_sql("raw")} AS value, edition_key, work_key,
+                   {isbn_checksum_ok_sql("raw")} AS checksum_ok
+            FROM isbn_any WHERE {isbn13_sql("raw")} IS NOT NULL
 
-          UNION ALL
-          SELECT 'isbn10', {isbn10_sql("raw")}, edition_key, work_key,
-                 {isbn_checksum_ok_sql("raw")}
-          FROM isbn_any WHERE {isbn10_sql("raw")} IS NOT NULL
-
-          UNION ALL
-          SELECT 'oclc', {oclc_sql("raw")}, edition_key, work_key, NULL
-          FROM (SELECT edition_key, work_key, unnest(oclc_raw) AS raw FROM base
-                WHERE oclc_raw IS NOT NULL AND len(oclc_raw) > 0)
-          WHERE {oclc_sql("raw")} IS NOT NULL
-
-          UNION ALL
-          SELECT 'lccn', {lccn_sql("raw")}, edition_key, work_key, NULL
-          FROM (SELECT edition_key, work_key, unnest(lccn_raw) AS raw FROM base
-                WHERE lccn_raw IS NOT NULL AND len(lccn_raw) > 0)
-          WHERE {lccn_sql("raw")} IS NOT NULL
-
-          UNION ALL
-          SELECT 'asin', {asin_sql("raw")}, edition_key, work_key, NULL
-          FROM (
-            SELECT edition_key, work_key, unnest(asin_raw) AS raw FROM base
-              WHERE asin_raw IS NOT NULL AND len(asin_raw) > 0
             UNION ALL
-            SELECT edition_key, work_key,
-                   regexp_extract(record, '^amazon:(.+)$', 1) AS raw
-            FROM source_record_asins
-          )
-          WHERE {asin_sql("raw")} IS NOT NULL
+            SELECT 'isbn10', {isbn10_sql("raw")}, edition_key, work_key,
+                   {isbn_checksum_ok_sql("raw")}
+            FROM isbn_any WHERE {isbn10_sql("raw")} IS NOT NULL
 
-          UNION ALL
-          -- [GOODREADS]
-          SELECT 'goodreads', {goodreads_sql("raw")}, edition_key, work_key, NULL
-          FROM (SELECT edition_key, work_key, unnest(goodreads_raw) AS raw FROM base
-                WHERE goodreads_raw IS NOT NULL AND len(goodreads_raw) > 0)
-          WHERE {goodreads_sql("raw")} IS NOT NULL
-          )  -- closes SELECT DISTINCT * FROM ( above; the branches are left
-             -- unindented so this stayed a two-line diff rather than a
-             -- 60-line reflow of SQL that did not change.
+            UNION ALL
+            SELECT 'oclc', {oclc_sql("raw")}, edition_key, work_key, NULL
+            FROM (SELECT edition_key, work_key, unnest(oclc_raw) AS raw FROM base
+                  WHERE oclc_raw IS NOT NULL AND len(oclc_raw) > 0)
+            WHERE {oclc_sql("raw")} IS NOT NULL
+
+            UNION ALL
+            SELECT 'lccn', {lccn_sql("raw")}, edition_key, work_key, NULL
+            FROM (SELECT edition_key, work_key, unnest(lccn_raw) AS raw FROM base
+                  WHERE lccn_raw IS NOT NULL AND len(lccn_raw) > 0)
+            WHERE {lccn_sql("raw")} IS NOT NULL
+
+            UNION ALL
+            SELECT 'asin', {asin_sql("raw")}, edition_key, work_key, NULL
+            FROM (
+              SELECT edition_key, work_key, unnest(asin_raw) AS raw FROM base
+                WHERE asin_raw IS NOT NULL AND len(asin_raw) > 0
+              UNION ALL
+              SELECT edition_key, work_key,
+                     regexp_extract(record, '^amazon:(.+)$', 1) AS raw
+              FROM source_record_asins
+            )
+            WHERE {asin_sql("raw")} IS NOT NULL
+
+            UNION ALL
+            -- [GOODREADS]
+            SELECT 'goodreads', {goodreads_sql("raw")}, edition_key, work_key, NULL
+            FROM (SELECT edition_key, work_key, unnest(goodreads_raw) AS raw FROM base
+                  WHERE goodreads_raw IS NOT NULL AND len(goodreads_raw) > 0)
+            WHERE {goodreads_sql("raw")} IS NOT NULL
+          )
         ) TO '{paths.table("identifiers")}' (FORMAT parquet, COMPRESSION zstd);
         """
     )

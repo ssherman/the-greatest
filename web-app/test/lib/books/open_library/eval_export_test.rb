@@ -71,6 +71,11 @@ module Books
         refute_match(/Scoped order is ignored/, captured.string)
       end
 
+      # Not evidence that removing `.order(:id)` was safe -- `find_each` batches
+      # by primary key whatever the scope says, so this holds either way. It
+      # guards the contract itself: the evaluation pool's sampler reads this
+      # file positionally, so a rewrite away from `find_each` must not silently
+      # change the order. The scoped-order test above is what covers the removal.
       test "exports books in ascending id order" do
         io = StringIO.new
 
