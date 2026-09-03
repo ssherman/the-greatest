@@ -5,6 +5,21 @@ module Books
     # Streams every Books::Book as JSONL for the Open Library evaluation-set
     # pool builder. Read-only: this class must never write to the database.
     class EvalExport
+      # Every admin E2E spec titles its fixture with a trailing `${Date.now()}`
+      # -- "E2E Smoke Book 1784091457158", "Tag Book 1785655579265" -- and
+      # nothing cleans them up, so 126 of them sit in the development database
+      # and would be exported as if they were books. They are not: none carries
+      # a single identifier, and they are eligible for every stratum in the
+      # evaluation pool. The draw before this filter spent 20 of 450
+      # hand-labelling slots on them, 19 in `author_less_work` alone.
+      #
+      # Keyed on the epoch-millisecond stamp rather than the per-spec prefixes,
+      # because the stamp is what every spec has in common and a new spec with
+      # a new prefix would escape a prefix list. Measured against the
+      # development database: this matches 126 rows, exactly the same 126 the
+      # prefix list matches, and no genuine book.
+      E2E_LEFTOVER_TITLE = "[[:space:]][0-9]{13}$"
+
       IDENTIFIER_FIELDS = {
         books_work_isbn13: "isbn13",
         books_work_isbn10: "isbn10",
@@ -40,6 +55,7 @@ module Books
       # what the export wants and what batching already gives it.
       def scope
         ::Books::Book
+          .where.not("title ~ ?", E2E_LEFTOVER_TITLE)
           .includes(:identifiers, :original_language, book_authors: {author: :identifiers})
       end
 

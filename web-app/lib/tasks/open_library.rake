@@ -10,5 +10,11 @@ namespace :open_library do
     end
 
     puts "wrote #{count} books to #{path}"
+
+    # Say what was left out rather than letting the number quietly shrink:
+    # EvalExport drops the Playwright leftovers, and a silent drop is how a
+    # filter that starts matching real books goes unnoticed.
+    skipped = Books::Book.count - count
+    puts "skipped #{skipped} E2E leftover books" if skipped.positive?
   end
 end

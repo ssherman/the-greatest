@@ -131,6 +131,28 @@ anything with eight or fewer digits can collide, and the first attempt at the
 synthetic block did, quietly attaching 52 real editions to works that should
 have had none.
 
+### The books export leaves out Playwright's leftovers
+
+`Books::OpenLibrary::EvalExport` feeds the evaluation pool with every
+`Books::Book`, and the development database is not only real books. Every admin
+E2E spec titles its fixture with a trailing `${Date.now()}` -- `E2E Smoke Book
+1784091457158`, `Tag Book 1785655579265` -- and nothing cleans them up, so
+**126** of them had accumulated. None carries a single identifier, 97 have no
+author, and they were eligible for every stratum in the pool: one draw put
+**20 of the 450** hand-labelling cases on them, 19 in `author_less_work` alone.
+
+The filter keys on the epoch-millisecond stamp rather than the per-spec title
+prefixes, because the stamp is what every spec has in common and a new spec
+with a new prefix would walk straight past a prefix list. Measured against the
+development database: it matches 126 rows -- exactly the same 126 the prefix
+list matches -- and no genuine book. The export went 126,330 -> 126,204, and
+`rake open_library:export_books` now prints what it skipped, because a filter
+that quietly starts matching real books is the failure worth catching.
+
+This is a filter, not a cleanup: the rows are still in the development
+database. Deleting them is a separate decision, and the dev database is not
+disposable.
+
 ### Known weaknesses, measured at scale
 
 - **Year regex took the first digit run -- fixed.** `work_details.declared_year`

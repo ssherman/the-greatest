@@ -5,7 +5,7 @@ require "test_helper"
 module Books
   module OpenLibrary
     class EvalExportTest < ActiveSupport::TestCase
-      test "writes one JSON line per book" do
+      test "writes one JSON line per exported book" do
         io = StringIO.new
 
         count = EvalExport.call(io: io)
@@ -13,6 +13,16 @@ module Books
         lines = io.string.lines
         assert_equal ::Books::Book.count, count
         assert_equal count, lines.size
+      end
+
+      test "the returned count is what was written, not what was scanned" do
+        ::Books::Book.create!(title: "E2E Smoke Book 1784091457158")
+        io = StringIO.new
+
+        count = EvalExport.call(io: io)
+
+        assert_equal ::Books::Book.count - 1, count
+        assert_equal count, io.string.lines.size
       end
 
       test "each line carries the fields the evaluation pool needs" do
@@ -52,6 +62,32 @@ module Books
         assert_includes record["asin"], asin.value
         refute_includes record["isbn13"], asin.value
         refute_includes record["asin"], isbn13.value
+      end
+
+      test "leaves out the books Playwright left behind" do
+        # The admin E2E specs title their fixtures "E2E Smoke Book #{Date.now()}"
+        # and nothing cleans them up, so 126 sit in the development database.
+        # They are eligible for every stratum in the evaluation pool, and the
+        # draw before this filter spent 20 of 450 hand-labelling slots on them.
+        junk = ::Books::Book.create!(title: "E2E Smoke Book 1784091457158")
+        io = StringIO.new
+
+        EvalExport.call(io: io)
+        ids = io.string.lines.map { |line| JSON.parse(line)["book_id"] }
+
+        refute_includes ids, junk.id
+      end
+
+      test "keeps a real book whose title merely contains digits" do
+        # The filter keys on a trailing epoch-millisecond stamp, not on digits.
+        # Without this control it could be "drop any title with a number in it".
+        real = ::Books::Book.create!(title: "1984 Reissued 2019")
+        io = StringIO.new
+
+        EvalExport.call(io: io)
+        ids = io.string.lines.map { |line| JSON.parse(line)["book_id"] }
+
+        assert_includes ids, real.id
       end
 
       test "does not set a scope order that find_each throws away" do
