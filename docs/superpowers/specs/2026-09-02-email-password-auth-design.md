@@ -120,8 +120,17 @@ here so the decision is deliberate and traceable.
 
 ## Data
 
-Measured against the development database on 2026-09-02. The books data exists only in
-development; production does not yet hold these rows.
+Measured against the development database on 2026-09-02.
+
+**Correction, 2026-09-03.** This section originally claimed the books data existed only in
+development and that production did not yet hold these rows. Production does hold them:
+`User.where(auth_uid: nil).where.not(email: nil).count` returns **30,437** there, all with
+`external_provider` nil and `legacy_migrated` false — the V1 cohort.
+
+They are **not live users**. Books has not launched, and production is a pre-launch rehearsal of
+the migration that Shane will truncate and re-run before it does. So the figures below still stand
+as measurements of dev, production will differ again after the re-migration, and **whatever
+production numbers matter must be measured at the time, not carried over from here**.
 
 **New `users` table — 69,495 rows**
 
@@ -253,8 +262,20 @@ No service account enters the app or the deployed environment.
 
 A second rake task sets `users.auth_uid = "tgbv1-<id>"` for the same cohort. It recomputes
 rather than reading the export file, so it is idempotent and environment-independent.
-Run against development now; production picks it up whenever phase 4 of the data migration
-runs, with no coordination required.
+
+**It must be run against production explicitly, and it belongs in the books launch sequence.** An
+earlier version of this section said to run it against development and let production "pick it up
+whenever phase 4 of the data migration runs, with no coordination required." Nothing picks it up
+on its own. Skipping the production run would leave every one of those users importable into
+Firebase but unlinkable by uid, falling back to the verified-email path for an address most of
+them cannot confirm.
+
+Sequencing matters more than it looks. Production books data today is a pre-launch rehearsal that
+will be **truncated and re-migrated** before books launch, which resets `users.auth_uid` for the
+whole cohort. So the write-back is not a one-time step to schedule now — it is a step that must
+run **after** the final production data migration, every time that migration is re-run. Treat it
+as part of the launch runbook, not as PR 2 housekeeping, and measure the cohort at that point
+rather than carrying these numbers forward.
 
 ### The linking rule
 

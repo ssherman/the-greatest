@@ -49,9 +49,19 @@ docs/                     # project root, NOT web-app/
 
 ## The development database is not disposable
 
-**The books data exists ONLY in development.** It is not in production, so `bin/refresh-dev-db.sh`
-cannot bring it back — rebuilding it means re-running `data_migration:all` against the legacy DB,
-which takes **hours**.
+**Nothing restores the dev books data.** `bin/refresh-dev-db.sh` does not cover books, so rebuilding
+it means re-running `data_migration:all` against the legacy DB, which takes **hours**.
+
+Production *does* hold migrated books and users — verified 2026-09-03, e.g. 30,437 production users
+in the pre-Firebase V1 cohort alone. An earlier version of this section said the books data existed
+only in development; that is wrong and has now misled three sessions.
+
+But do not swing the other way either: **the books data in production is a pre-launch rehearsal
+copy, not live user data.** Books has not launched, nobody signs in as those rows, and Shane will
+truncate and re-run the data migration before it does. Music and games ARE live on the same
+database, so a destructive command there is still an outage — the point is only that prod books
+rows are neither absent nor precious, and any books-migration step you plan for production belongs
+in the launch sequence *after* that final re-migration, not run against today's copy.
 
 - **Never run a destructive command against development.** A `PreToolUse` hook
   (`.claude/hooks/block-destructive-db.sh`) hard-blocks `create_fixtures`, `db:drop`/`db:reset`/
