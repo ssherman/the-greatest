@@ -307,3 +307,38 @@ def test_a_no_match_with_no_candidates_records_the_search_not_the_empty_list(
     assert "0 candidates" not in text
     assert "open library" in text.lower()
     assert len(text) >= 10
+
+
+# A `no_candidates` verdict rests on a hand search of Open Library, and every
+# other stratum needs one whenever the candidates look wrong. The details above
+# are laid out to be read, which makes them awkward to copy: the title is
+# quoted, the authors sit behind a label, and both are indented. One flush-left
+# line with nothing but the query saves a retype 450 times over.
+
+
+def test_a_flush_left_search_line_pairs_the_title_with_the_authors(entry):
+    line = "The Golden Apple by Robert Shea, Robert Anton Wilson"
+
+    assert line in render_case(entry, index=1, total=450).splitlines()
+
+
+def test_the_search_line_carries_no_quotes_or_indent(entry):
+    """Triple-clicking selects a whole line, so anything sharing the line ends
+    up in the search box. The repr quotes on the OURS line are the reason this
+    line exists."""
+    text = render_case(entry, index=1, total=450)
+
+    line = next(ln for ln in text.splitlines() if ln.startswith("The Golden Apple by"))
+    assert line == line.strip()
+    assert "'" not in line
+
+
+def test_a_book_with_no_author_gets_a_search_line_without_a_dangling_by():
+    entry = PoolEntry(
+        case_id="no_candidates-002",
+        stratum="no_candidates",
+        book=EvalBook(book_id=1, title="Kebra Nagast", author_names=[]),
+        candidates=[],
+    )
+
+    assert "Kebra Nagast" in render_case(entry, index=1, total=450).splitlines()

@@ -66,6 +66,14 @@ def render_case(entry: PoolEntry, *, index: int, total: int) -> str:
             + "   [UNTRUSTED -- do not treat as the answer: 9.9% are dead, 380 are shared]"
         )
 
+    # Flush left, unquoted, alone on its line: a triple-click copies the query
+    # and nothing else. Every `no_candidates` verdict depends on a hand search
+    # of Open Library, and the block above is laid out to be read, not copied.
+    search_query = book.title
+    if book.author_names:
+        search_query += " by " + ", ".join(book.author_names)
+    lines += ["", search_query]
+
     lines.append("")
     if not entry.candidates:
         lines.append("CANDIDATES  (none -- no blocking rule produced anything)")
