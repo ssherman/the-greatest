@@ -91,6 +91,63 @@ without it. 42 usable gains, low risk.
 - **Repair the 2,760 subtitle repeats** in the data, at migration time. They
   cost nothing to fix and they restore `title_fp_nosub` to working order.
 
+## When one title covers several books
+
+The importer also truncated. Book #160918 is stored as `Hellmaw` — the *series*
+name — when the book is *Hellmaw: Throckmorton's Trick*. Three of our rows are
+titled just `Hellmaw`, with three different ISBNs and three different Goodreads
+ids: three books in a series collapsed onto one string.
+
+**146 (author, title) pairs are held by more than one Book row, covering 387
+books.** That symptom has two opposite causes and they need opposite repairs —
+a truncated series title must be **split**, a twice-imported book must be
+**merged** — and the title alone cannot tell them apart.
+
+Open Library arbitrates. `classify_title_collision` resolves each row's
+identifiers to OL works and asks whether the rows landed on the same one:
+
+| Verdict | Groups | Books | Meaning |
+|---|---:|---:|---|
+| `unresolved` | 70 | 146 | fewer than two rows resolve; OL has no opinion |
+| `duplicate_rows` | 55 | 121 | rows share a work — **merge** candidates |
+| `distinct_books` | 18 | 49 | rows land on disjoint works — **truncation** |
+| `mixed` | 3 | 71 | both defects in one group |
+
+**30 groups / 68 books are high-confidence merges** — every resolved row lands
+on exactly one OL work and they all agree. Those are safe to hand to the
+existing record-merge tooling. The rest are not.
+
+### The three `mixed` groups are the three biggest
+
+| | Title | Stored author |
+|---:|---|---|
+| **40×** | `d ceased` | `Tom     Taylor` |
+| **28×** | `jo jo's bizarre adventure` | `Nobuyoshi Araki` |
+| 3× | `new x men` | Nunzio DeFilippis |
+
+Between them they hold 71 of the 387 books, and neither repair is safe applied
+wholesale — some rows in each group share a work and some do not.
+
+The JoJo group carries a **second, unrelated defect**: *JoJo's Bizarre
+Adventure* is by **Hirohiko** Araki. Twenty-eight of our rows credit
+**Nobuyoshi** Araki, a real person but a photographer. Open Library holds 287
+works by Hirohiko and 145 by Nobuyoshi, so both exist and the importer chose
+wrong. This is the `surname_collision` class of `books-author-disagreements.md`
+concentrated in one bucket — that sweep found `nobuyoshi araki` to be its
+**third-largest** disagreeing author at 47 books, and 28 of them are this one
+series.
+
+### Limit: an intersection gets cheap when a row is noisy
+
+The `duplicate_rows` verdict asks whether resolved rows share *any* work, so a
+row resolving to a dozen works can produce an intersection by chance. `X Men` by
+Chris Claremont lands there with rows resolving to 13 and 7 works respectively,
+and is almost certainly truncation rather than duplication.
+
+Of the 240 resolved rows, 185 land on exactly one work and only 13 land on four
+or more, so the effect is small — but it is the reason the high-confidence
+subset above exists, and the reason to use that subset rather than the 55.
+
 ## Why a lone year is never stripped
 
 `1984` is a whole title. `The War Book Of The German General Staff 1914` is

@@ -76,6 +76,34 @@ def title_repeats_subtitle(title: str, subtitle: str | None) -> bool:
     return needle in title.casefold()
 
 
+def classify_title_collision(work_sets: list[set[str]]) -> str:
+    """Why do several of our Book rows share one (author, title)?
+
+    Two opposite defects produce the same symptom. The importer truncated a
+    series title, so different books collapsed onto one string and the repair
+    is to SPLIT them; or the same book was imported twice and the repair is to
+    MERGE them. The title cannot tell them apart.
+
+    Open Library arbitrates. `work_sets` holds, per row, the OL works that
+    row's identifiers resolve to -- an empty set for a row OL cannot place.
+
+    - `unresolved`    fewer than two rows resolved. One opinion is not a
+                      comparison, and 70 of the 146 real groups land here.
+    - `duplicate_rows` every resolved row shares a work: one book, many rows.
+    - `distinct_books` no two resolved rows share a work: different books.
+    - `mixed`         some rows share and some do not, so the group holds both
+                      defects and neither repair is safe applied wholesale.
+    """
+    resolved = [set(s) for s in work_sets if s]
+    if len(resolved) < 2:
+        return "unresolved"
+    if set.intersection(*resolved):
+        return "duplicate_rows"
+    if all(not (a & b) for i, a in enumerate(resolved) for b in resolved[i + 1 :]):
+        return "distinct_books"
+    return "mixed"
+
+
 def audit(root: Path, dump_date: str, books_path: Path, out_path: Path | None) -> dict[str, int]:
     """Count the defects, then measure what the normalisation would actually buy.
 
