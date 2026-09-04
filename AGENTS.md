@@ -49,9 +49,33 @@ docs/                     # project root, NOT web-app/
 
 ## The development database is not disposable
 
-**The books data exists ONLY in development.** It is not in production, so `bin/refresh-dev-db.sh`
-cannot bring it back — rebuilding it means re-running `data_migration:all` against the legacy DB,
-which takes **hours**.
+**`bin/refresh-dev-db.sh` restores the whole production dump, books included.** It runs
+`pg_restore` with no table or schema filters, so everything in the nightly backup comes back.
+Production holds the books data — the dev database is itself an old restore of production, and
+30,437 production users sit in the pre-Firebase V1 cohort alone (verified 2026-09-03).
+
+Two earlier versions of this section were wrong about this. The first said the books data existed
+**only in development**; the second kept the conclusion ("does not cover books") after removing the
+premise. Between them they misled three sessions into believing a lost dev database costs an
+hours-long `data_migration:all` re-run against the legacy DB. It does not — it costs a restore.
+
+What a refresh does **not** bring back is anything created since the last nightly backup, and it
+replaces the database wholesale rather than merging. So this is still not a database to treat as
+disposable; the cost of losing it is just far lower than this section used to claim.
+
+Do not swing the other way on the production side either: **the books data in production is a
+pre-launch rehearsal copy, not live user data.** Books has not launched, nobody signs in as those
+rows *today*, and Shane will truncate and re-run the data migration before launch. Music and games
+ARE live on the same database, so a destructive command there is still an outage — the point is
+only that prod books rows are neither absent nor precious. Any books-migration step you plan for
+production is a **repeating** step, not a one-off: the data migration is rehearsed against
+production more than once, and anything downstream of it (uid write-backs, Firebase imports) has
+to be re-run after each pass and again in the final launch sequence. Design those steps to be
+idempotent and then actually exercise that, rather than scheduling them once.
+One caveat on "nobody signs in": every domain's auth widget points at the **same**
+Firebase project (`projectId` is hardcoded in `firebase_auth_service.js`; only `authDomain` varies),
+so any account pushed into Firebase becomes signable-in on live music and games immediately,
+whether or not books has launched.
 
 - **Never run a destructive command against development.** A `PreToolUse` hook
   (`.claude/hooks/block-destructive-db.sh`) hard-blocks `create_fixtures`, `db:drop`/`db:reset`/
@@ -61,8 +85,8 @@ which takes **hours**.
   To inspect a fixture, read the YAML: `sed -n '/^name:/,/^$/p' test/fixtures/<file>.yml`.
 - **Snapshot before bulk work:** `bin/snapshot-dev-db.sh --label pre-migration`, restore with
   `bin/snapshot-dev-db.sh --restore`. Turns an hours-long rebuild into a ~1 minute restore.
-- `bin/refresh-dev-db.sh` restores music/games/movies from the production backup. It does **not**
-  restore books.
+- `bin/refresh-dev-db.sh` restores **everything** in the production backup — music, games and
+  books alike. `pg_restore` is invoked with no `-t`/`-T`/`-n` filters.
 
 **The test database is per-checkout.** `config/test_database_name.rb` names the test primary after
 the directory the checkout lives in, so each git worktree gets its own

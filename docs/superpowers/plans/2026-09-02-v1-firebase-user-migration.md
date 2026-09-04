@@ -49,6 +49,82 @@ The zero duplicates and zero collisions mean the dedup logic below will not fire
 today. It stays in as an assertion — if a future run reports a non-zero count,
 the data changed and the run should be examined rather than trusted.
 
+## Re-running all of this, repeatedly
+
+The owner's working pattern is to truncate everything and re-run the full data
+migration, more than once, before books launches. **All three steps here are
+designed to survive that, and the property doing the work is that the uid is
+derived rather than stored.**
+
+`UserMigrator` upserts `unique_by: :id` with ids taken from the static legacy
+database, so re-migrating reproduces identical `users.id` values, so
+`tgbv1-<id>` derives to the same string every time.
+
+Firebase's import API then behaves as follows
+([docs](https://firebase.google.com/docs/auth/admin/import-users)):
+
+> The user import API is optimized for speed and does not check for uid, email,
+> phoneNumber and other unique identifier duplication. Importing a user that
+> collides with an existing uid will replace the existing user. However,
+> importing a user with any other field duplicated (e.g. email) will result in
+> an additional user with the same value.
+
+So a re-import replaces each account in place: no duplicates, no errors, no
+cleanup step. The write-back is independently idempotent — it recomputes rather
+than reading the export file, and scopes to `auth_uid IS NULL`.
+
+**Two consequences of "replace" that are not obvious:**
+
+1. **Replace is total, so the import has a shelf life.** Re-importing overwrites
+   whatever the account has become — a password the user changed, an email they
+   verified — back to the 2014 bcrypt hash and `emailVerified: false`. **Once
+   books is live and real people have used these accounts, the import must not
+   be re-run.** The export and the write-back stay safe to re-run; only the
+   Firebase import carries this.
+
+   **The bulk import IS re-run against production on every rehearsal, and that
+   is deliberate.** The whole point of deriving the uid from the legacy id is
+   that the import is idempotent, and an idempotent step is worthless unless it
+   is actually exercised — a 30,437-row import performed for the first time at
+   launch is the larger risk by far. Prove it with the canary (Task 2), then
+   re-run the real thing as often as the data migration is re-run.
+
+   **What "books is not live yet" does NOT buy you.** It does not make the
+   cohort unreachable. `firebase_auth_service.js` hardcodes
+   `projectId: "the-greatest-books"` and varies only `authDomain`, so every
+   domain authenticates against one Firebase project, and
+   `Authentication::WidgetComponent` renders in all four layouts — including
+   the **live** music and games sites. So from the first production import
+   onward, any of these 30,437 people can sign in, or trigger a
+   forgot-password email, on thegreatest.music or thegreatest.games. The
+   import is what creates that reachability; books launch has nothing to do
+   with it.
+
+   **The owner weighed this and accepted it (2026-09-03.)** The residual risk
+   is that someone in the cohort signs in on music or games during the
+   pre-launch window, changes their password, and has it silently reverted by
+   the next rehearsal import. Accepted because the cohort has zero sign-ins in
+   two years and the window is short, against the much larger risk of an
+   unrehearsed import at launch. **Do not re-raise this as a defect and do not
+   quietly reintroduce an "import only once" rule** — it was raised in review
+   on PR #289, considered, and declined. The obligation the decision creates is
+   that the import must be *proven* idempotent, not that it be avoided.
+
+   Within each cycle, run the import before the write-back (the order in
+   "Running it" below), so `auth_uid` never points at an identity that does not
+   exist yet.
+
+2. **If id stability ever breaks, the failure is silent.** Because the API does
+   not check email duplication, a re-migration that assigned *different* ids
+   would not error — it would create a second Firebase account per user sharing
+   the same email. The console's "one account per email address" setting does not
+   protect against this; it governs the client SDK's signup path, not the admin
+   import API. The only guard is that `UserMigrator` keeps preserving legacy ids.
+   If that ever changes, this breaks quietly and at scale.
+
+Task 2's canary should therefore be run **twice** against the same record, to
+confirm the replace path behaves as documented before 30,463 records depend on it.
+
 ---
 
 ### Task 1: Export the cohort as a Firebase import file
@@ -1116,6 +1192,10 @@ Prove the mechanism first with a single record whose password you chose:
 ```bash
 bin/rails "firebase:canary[$HOME/canary.json,you+v1@gmail.com,a-password-you-pick]"
 ```
+
+Run that import **twice** and sign in again after the second. The whole
+re-run story rests on Firebase replacing a colliding `localId` rather than
+duplicating it, and this is the cheapest place to confirm that holds.
 
 ## The uid
 
