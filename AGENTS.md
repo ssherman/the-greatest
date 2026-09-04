@@ -49,9 +49,16 @@ docs/                     # project root, NOT web-app/
 
 ## The development database is not disposable
 
-**The books data exists ONLY in development.** It is not in production, so `bin/refresh-dev-db.sh`
-cannot bring it back — rebuilding it means re-running `data_migration:all` against the legacy DB,
-which takes **hours**.
+Books data **is** now in production — `data_migration:all` was run there, and
+`bin/refresh-dev-db.sh` restores books along with everything else (verified by matching book counts
+after a restore). That is a change: this file used to say books existed only in development and
+that a refresh could not bring them back, which was true before the production migration and is
+not true now. Treat a refresh as recoverable.
+
+The database is still not disposable. A restore costs a real download and re-import, anything you
+have in development and have not migrated to production is still gone, and the destructive
+commands below are still destructive. `data_migration:all` against the legacy DB — the fallback if
+production is ever wrong too — still takes **hours**.
 
 - **Never run a destructive command against development.** A `PreToolUse` hook
   (`.claude/hooks/block-destructive-db.sh`) hard-blocks `create_fixtures`, `db:drop`/`db:reset`/
@@ -61,8 +68,11 @@ which takes **hours**.
   To inspect a fixture, read the YAML: `sed -n '/^name:/,/^$/p' test/fixtures/<file>.yml`.
 - **Snapshot before bulk work:** `bin/snapshot-dev-db.sh --label pre-migration`, restore with
   `bin/snapshot-dev-db.sh --restore`. Turns an hours-long rebuild into a ~1 minute restore.
-- `bin/refresh-dev-db.sh` restores music/games/movies from the production backup. It does **not**
-  restore books.
+- `bin/refresh-dev-db.sh` restores books, music, games and movies from the production backup.
+  Expect the counts to move: a refresh after the production migration took books from 126,330 to
+  157,806 and authors from 58,247 to 70,973. Anything derived from the dev database — the Open
+  Library books export and its evaluation pool, for instance — is stale afterwards and has to be
+  regenerated.
 
 **The test database is per-checkout.** `config/test_database_name.rb` names the test primary after
 the directory the checkout lives in, so each git worktree gets its own
