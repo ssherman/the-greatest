@@ -7,6 +7,7 @@ from openlibrary.eval.label import (
     already_labeled,
     append_case,
     candidates_shown_for,
+    default_rationale,
     parse_choice,
     render_case,
 )
@@ -272,3 +273,37 @@ def test_a_key_no_rule_produced_has_no_default(entry):
     from openlibrary.eval.label import default_rationale
 
     assert default_rationale(entry, verdict="match", work_key="OL_NOT_A_CANDIDATE_W") == ""
+
+
+@pytest.fixture()
+def entry_without_candidates() -> PoolEntry:
+    """A real `no_candidates` case: a German Merian travel guide whose ISBN is
+    absent from Open Library, whose stored `author` is the publisher, and whose
+    title fingerprint (`thailand`, 594 OL works) is over MAX_TITLE_FP_FREQ. All
+    four blocking rules correctly produced nothing."""
+    return PoolEntry(
+        case_id="no_candidates-001",
+        stratum="no_candidates",
+        book=EvalBook(
+            book_id=93053,
+            title="Merian Thailand",
+            author_names=["Jahreszeitenverlag"],
+            isbn13=["9783834227355"],
+        ),
+        candidates=[],
+    )
+
+
+def test_a_no_match_with_no_candidates_records_the_search_not_the_empty_list(
+    entry_without_candidates,
+):
+    """`no_candidates` is 50 of the 450 cases and most will be no_match, so this
+    default gets accepted more than any other. "none of the 0 candidates shown"
+    is both silly and a lie about where the evidence came from: nothing was
+    rejected, because nothing was offered. The verdict rests on the labeller
+    searching Open Library directly, and that is what the rationale must say."""
+    text = default_rationale(entry_without_candidates, verdict="no_match", work_key=None)
+
+    assert "0 candidates" not in text
+    assert "open library" in text.lower()
+    assert len(text) >= 10

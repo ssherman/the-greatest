@@ -177,8 +177,18 @@ def default_rationale(entry: PoolEntry, *, verdict: str, work_key: str | None) -
     point and a machine-written one would be a fabrication: `ambiguous`, which
     is a judgement call by definition, and a work key no rule produced, which
     is the only evidence of a candidate-recall failure the set will contain.
+
+    A default states evidence; pressing Enter is the labeller vouching for it.
+    Overtype it whenever the case took real work -- a search under a different
+    title or language is worth a sentence the next reader cannot reconstruct.
     """
     if verdict == "no_match":
+        if not entry.candidates:
+            # The `no_candidates` stratum, where nothing was rejected because
+            # nothing was offered. The verdict rests entirely on the labeller
+            # searching Open Library by hand, so that is what gets recorded --
+            # counting an empty list would credit evidence that does not exist.
+            return "no blocking rule produced a candidate; searched Open Library, no matching work"
         return f"none of the {len(entry.candidates)} candidates shown is this book"
     if verdict == "match" and work_key:
         candidate = next((c for c in entry.candidates if c.work_key == work_key), None)
