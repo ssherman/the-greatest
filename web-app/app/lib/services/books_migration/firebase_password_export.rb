@@ -76,7 +76,7 @@ module Services
 
       def initialize(output_path)
         @output_path = output_path
-        @skipped = {invalid_email: 0, invalid_hash: 0, duplicate_email: 0}
+        @skipped = {invalid_email: 0, invalid_hash: 0, duplicate_email: 0, already_linked: 0}
       end
 
       def call
@@ -132,7 +132,33 @@ module Services
         [attrs["last_sign_in_at"]&.to_time || NEVER_SIGNED_IN, attrs["id"].to_i]
       end
 
+      # Cohort ids whose new-table row already carries a Firebase uid.
+      #
+      # Measured 2026-09-04: 30 of the 30,463. All 30 hold Firebase-NATIVE uids
+      # rather than tgbv1- ones, 28 of them acquired on the new app, and they
+      # are active -- sign-in counts up to 120, the most recent the day before
+      # this was written. The plan assumed this set was empty ("zero sign-ins in
+      # two years"); it is not.
+      #
+      # They must not be exported. Firebase's import API does not check email
+      # duplication, so importing them would create a SECOND account per
+      # address holding their 2014 password, leaving two identities for one
+      # email and making a password reset ambiguous. They already have a
+      # working way in. FirebaseUidBackfill skips exactly these rows too --
+      # export and write-back have to agree on who is being migrated.
+      #
+      # Loaded once rather than per row: the cohort is 30k and this is a single
+      # indexed scan.
+      def already_linked_ids
+        @already_linked_ids ||= ::User.where.not(auth_uid: nil).pluck(:id).to_set
+      end
+
       def build_record(attrs)
+        if already_linked_ids.include?(attrs["id"])
+          @skipped[:already_linked] += 1
+          return nil
+        end
+
         email = attrs["email"].to_s.strip.downcase
         hash = attrs["old_encrypted_password"].to_s
 

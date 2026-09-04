@@ -177,6 +177,37 @@ class Services::BooksMigration::FirebasePasswordExportTest < ActiveSupport::Test
     end
   end
 
+  # 30 real cohort members already hold a Firebase-native uid, acquired by
+  # signing in on the live music and games sites -- sign-in counts up to 120,
+  # the most recent yesterday. Exporting them would create a SECOND Firebase
+  # account per email carrying their 2014 password, because the import API does
+  # not check email duplication. They already have a working identity; the
+  # backfill skips them, and the export has to skip the same people or the two
+  # halves disagree about who is being migrated.
+  test "skips a cohort member whose users row already holds a Firebase uid" do
+    linked = User.create!(id: 920_001, email: "linked@example.com", auth_uid: "firebase-native-uid")
+    User.create!(id: 920_002, email: "unlinked@example.com")
+
+    result = run_export([
+      legacy_attrs("id" => linked.id, "email" => "linked@example.com"),
+      legacy_attrs("id" => 920_002, "email" => "unlinked@example.com")
+    ])
+
+    assert result[:success], result[:error]
+    assert_equal 1, result[:data][:exported]
+    assert_equal 1, result[:data][:skipped][:already_linked]
+    assert_equal ["tgbv1-920002"], written["users"].map { |u| u["localId"] }
+  end
+
+  # A cohort member with no users row at all must still export. The backfill is
+  # what refuses in that case, loudly; the export must not quietly drop them.
+  test "still exports a cohort member that has no users row yet" do
+    result = run_export([legacy_attrs("id" => 920_003, "email" => "norow@example.com")])
+
+    assert_equal 1, result[:data][:exported]
+    assert_equal 0, result[:data][:skipped][:already_linked]
+  end
+
   # The canary task writes a bcrypt hash too, and must not get its own,
   # divergent copy of this rule.
   test "exposes the repository guard as a reusable class method" do
