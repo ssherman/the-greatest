@@ -81,6 +81,17 @@ Our schema has `Books::Credit` for exactly these roles and it holds 19 rows in
 total. Deciding what `book_authors` means for an anthology is a design decision
 for the new importer, not a repair.
 
+**But not all of them are modelling.** Some are Open Library errors. Book
+#84336, the Polish edition of Aksel Sandemose's *En flyktning krysser sitt
+spor*, is credited by OL to `Akshya Upanishad` (`OL9091340A`) — a record with
+exactly one work to its name, while the correct author sits in OL twice over as
+`OL10720715A` and `OL1520613A`. Our data is right and OL's is junk.
+
+A single-work author record whose name shares nothing with ours is a usable
+smell for this, and the proportion of the 2,764 that it accounts for has not
+been measured. Until it is, do not read `unrelated` as "our data is fine but
+modelled differently" — read it as "these need eyes".
+
 ### `name_subset` and `name_order` — 5,240 books, not corruption
 
 `Irvin D. Yalom` / `irvin yalom`, `Mao` / `mao tse tung`, `Brian Davies` /
@@ -108,9 +119,12 @@ is needed for review.
   no ISBN, ASIN or Goodreads ID is invisible here; so is one whose identifiers
   are wrong, which is its own corruption class and would show as a confident
   match to the wrong book rather than as a disagreement.
-- **Open Library is not ground truth.** It is a second opinion, and it has its
-  own errors — its `first_publish_date` for *Farlig midsommar* is 22 years
-  late. A disagreement means "these two sources differ", never "we are wrong".
+- **Open Library is not ground truth.** It is a second opinion with its own
+  errors, and labelling found four in the first 56 cases: `first_publish_date`
+  22 years late on *Farlig midsommar*, 78 years late on *The Adventure of the
+  Dying Detective*, a mislabelled volume number on *Pokémon 4*, and the junk
+  author above. A disagreement means "these two sources differ", never "we are
+  wrong".
 - **`surname_collision` is not pure.** `Saveur Magazine` against
   `the editors of Saveur` lands there and is arguably the same entity.
 - **Author-level clustering is not measured.** The counts are per book. The
