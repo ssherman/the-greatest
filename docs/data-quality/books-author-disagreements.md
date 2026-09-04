@@ -70,9 +70,9 @@ two are provably other people. Repairing this means splitting buckets, not
 correcting single rows, so the unit of work is the local author record rather
 than the book.
 
-### `unrelated` — 2,764 books, mostly a modelling question
+### `unrelated` — 2,764 books, two different problems
 
-Usually not a wrong name at all. `Stephen Greenblatt` against Shakespeare — he
+Often not a wrong name at all. `Stephen Greenblatt` against Shakespeare — he
 is the *editor*. `Josepha Sherman` against three contributors — an anthology.
 `Paizo Staff` against individual designers. `Arvid Nelson` against
 `robert castro` — a comics writer against the artist.
