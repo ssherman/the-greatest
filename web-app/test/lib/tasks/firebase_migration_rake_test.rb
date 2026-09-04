@@ -70,6 +70,17 @@ class FirebaseMigrationRakeTest < ActiveSupport::TestCase
     assert_equal "100600", format("%o", File.stat(path).mode)
   end
 
+  # File.open's mode applies only on creation, and these steps are re-run.
+  test "the canary tightens permissions when overwriting an existing file" do
+    path = File.join(@dir, "canary.json")
+    File.write(path, "{}")
+    File.chmod(0o644, path)
+
+    invoke("firebase:canary", path, "canary@example.com", "pw")
+
+    assert_equal "100600", format("%o", File.stat(path).mode)
+  end
+
   # The plan let the canary write anywhere. It emits a real bcrypt hash, so it
   # gets the bulk export's refusal too.
   test "the canary refuses to write inside the repository" do

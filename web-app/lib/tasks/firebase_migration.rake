@@ -15,9 +15,9 @@ namespace :firebase do
       abort e.message
     end
 
-    pp result
+    pp result.to_h
 
-    if result[:success]
+    if result.success?
       puts
       puts "Next, from anywhere OUTSIDE this repository:"
       puts "  npx firebase-tools auth:import #{path} --hash-algo=BCRYPT --project the-greatest-books"
@@ -25,7 +25,7 @@ namespace :firebase do
       puts "Then, once sign-in is confirmed:"
       puts "  rake firebase:backfill_v1_uids"
     else
-      abort "Export failed: #{result[:error]}"
+      abort "Export failed: #{result.errors.join(", ")}"
     end
   end
 
@@ -62,6 +62,9 @@ namespace :firebase do
     }
 
     File.open(path, File::WRONLY | File::CREAT | File::TRUNC, 0o600) do |f|
+      # The creation mode is ignored when the path already exists, so a
+      # re-run over a previous 0644 file would leave the hash readable.
+      f.chmod(0o600)
       f.write(JSON.pretty_generate({"users" => [record]}))
     end
 
@@ -80,8 +83,8 @@ namespace :firebase do
     puts dry ? "DRY RUN -- nothing will be written" : "Writing auth_uid for the v1 cohort..."
 
     result = Services::BooksMigration::FirebaseUidBackfill.call(dry_run: dry)
-    pp result
+    pp result.to_h
 
-    abort "Backfill failed: #{result[:error]}" unless result[:success]
+    abort "Backfill failed: #{result.errors.join(", ")}" unless result.success?
   end
 end

@@ -37,8 +37,8 @@ class Services::BooksMigration::FirebasePasswordExportTest < ActiveSupport::Test
   test "writes one Firebase user record per cohort row" do
     result = run_export([legacy_attrs])
 
-    assert result[:success], result[:error]
-    assert_equal 1, result[:data][:exported]
+    assert result.success?, result.errors.join(", ")
+    assert_equal 1, result.data[:exported]
 
     record = written["users"].sole
     assert_equal "tgbv1-90001", record["localId"]
@@ -81,9 +81,9 @@ class Services::BooksMigration::FirebasePasswordExportTest < ActiveSupport::Test
       legacy_attrs("id" => 90002, "email" => "b@example.com", "old_encrypted_password" => "not-a-hash")
     ])
 
-    assert result[:success], result[:error]
-    assert_equal 1, result[:data][:exported]
-    assert_equal 1, result[:data][:skipped][:invalid_hash]
+    assert result.success?, result.errors.join(", ")
+    assert_equal 1, result.data[:exported]
+    assert_equal 1, result.data[:skipped][:invalid_hash]
     assert_equal 1, written["users"].length
   end
 
@@ -95,8 +95,8 @@ class Services::BooksMigration::FirebasePasswordExportTest < ActiveSupport::Test
       legacy_attrs("id" => 90004, "email" => "another@gmailcom")
     ])
 
-    assert_equal 1, result[:data][:exported]
-    assert_equal 2, result[:data][:skipped][:invalid_email]
+    assert_equal 1, result.data[:exported]
+    assert_equal 2, result.data[:skipped][:invalid_email]
     refute_includes written["users"].map { |u| u["email"] }, "typo@gmail"
   end
 
@@ -106,8 +106,8 @@ class Services::BooksMigration::FirebasePasswordExportTest < ActiveSupport::Test
       legacy_attrs("id" => 90006, "email" => "dupe@example.com", "last_sign_in_at" => Time.utc(2020, 1, 1))
     ])
 
-    assert_equal 1, result[:data][:exported]
-    assert_equal 1, result[:data][:skipped][:duplicate_email]
+    assert_equal 1, result.data[:exported]
+    assert_equal 1, result.data[:skipped][:duplicate_email]
     assert_equal "tgbv1-90006", written["users"].sole["localId"]
   end
 
@@ -123,7 +123,7 @@ class Services::BooksMigration::FirebasePasswordExportTest < ActiveSupport::Test
       legacy_attrs("id" => 90010, "email" => "dupe@example.com", "last_sign_in_at" => Time.utc(2021, 6, 1))
     ])
 
-    assert_equal 1, result[:data][:exported]
+    assert_equal 1, result.data[:exported]
     assert_equal "tgbv1-90010", written["users"].sole["localId"]
   end
 
@@ -154,7 +154,7 @@ class Services::BooksMigration::FirebasePasswordExportTest < ActiveSupport::Test
       legacy_attrs("id" => 90008, "email" => "mixed@example.com")
     ])
 
-    assert_equal 1, result[:data][:exported]
+    assert_equal 1, result.data[:exported]
     assert_equal "mixed@example.com", written["users"].sole["email"]
   end
 
@@ -193,9 +193,9 @@ class Services::BooksMigration::FirebasePasswordExportTest < ActiveSupport::Test
       legacy_attrs("id" => 920_002, "email" => "unlinked@example.com")
     ])
 
-    assert result[:success], result[:error]
-    assert_equal 1, result[:data][:exported]
-    assert_equal 1, result[:data][:skipped][:already_linked]
+    assert result.success?, result.errors.join(", ")
+    assert_equal 1, result.data[:exported]
+    assert_equal 1, result.data[:skipped][:already_linked]
     assert_equal ["tgbv1-920002"], written["users"].map { |u| u["localId"] }
   end
 
@@ -204,8 +204,8 @@ class Services::BooksMigration::FirebasePasswordExportTest < ActiveSupport::Test
   test "still exports a cohort member that has no users row yet" do
     result = run_export([legacy_attrs("id" => 920_003, "email" => "norow@example.com")])
 
-    assert_equal 1, result[:data][:exported]
-    assert_equal 0, result[:data][:skipped][:already_linked]
+    assert_equal 1, result.data[:exported]
+    assert_equal 0, result.data[:skipped][:already_linked]
   end
 
   # The canary task writes a bcrypt hash too, and must not get its own,
@@ -226,5 +226,36 @@ class Services::BooksMigration::FirebasePasswordExportTest < ActiveSupport::Test
     run_export([legacy_attrs])
 
     assert_equal "100600", format("%o", File.stat(@path).mode)
+  end
+
+  # The mode passed to File.open applies only when the file is CREATED. These
+  # steps are explicitly re-run, so an export over an existing 0644 file would
+  # otherwise leave 30,387 password hashes group- and world-readable.
+  test "tightens permissions when overwriting an existing world-readable file" do
+    File.write(@path, "{}")
+    File.chmod(0o644, @path)
+
+    run_export([legacy_attrs])
+
+    assert_equal "100600", format("%o", File.stat(@path).mode)
+  end
+
+  # The backfill writes auth_uid for whoever this reports, so the two must be
+  # the same people. Anything the export skips -- already linked, malformed
+  # email, unparseable hash, duplicate loser -- must be absent here too, or a
+  # user gets an auth_uid pointing at a Firebase account that was never created.
+  test "exportable_ids lists exactly the rows that get written" do
+    User.create!(id: 930_001, email: "linked@example.com", auth_uid: "native-uid")
+
+    exporter = Services::BooksMigration::FirebasePasswordExport.new(@path)
+    rows = [
+      legacy_attrs("id" => 930_001, "email" => "linked@example.com"),
+      legacy_attrs("id" => 930_002, "email" => "bad@gmail"),
+      legacy_attrs("id" => 930_003, "email" => "nohash@example.com", "old_encrypted_password" => "nope"),
+      legacy_attrs("id" => 930_004, "email" => "keeper@example.com")
+    ]
+    exporter.stubs(:legacy_each).multiple_yields(*rows.zip)
+
+    assert_equal [930_004], exporter.exportable_ids
   end
 end

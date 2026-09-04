@@ -31,6 +31,10 @@ module Services
       # the user does not control.
       EMAIL_GRAMMAR = /\A[^@\s]+@[^@\s]+\.[^@\s]+\z/
 
+      # The repository's service contract (AGENTS.md). reading_goal_verification
+      # and news_post_migrator in this same namespace use the identical shape.
+      Result = Struct.new(:success?, :data, :errors, keyword_init: true)
+
       UID_PREFIX = "tgbv1-"
       BATCH_SIZE = 1000
 
@@ -74,7 +78,19 @@ module Services
         nil
       end
 
-      def initialize(output_path)
+      # The set of legacy ids this export would actually write -- after the
+      # already-linked, malformed-email, unparseable-hash and duplicate-loser
+      # skips. FirebaseUidBackfill uses this as its cohort so the two cannot
+      # disagree about who is being migrated.
+      def self.exportable_ids
+        new.exportable_ids
+      end
+
+      def exportable_ids
+        select.values.map { |entry| entry[:id] }
+      end
+
+      def initialize(output_path = nil)
         @output_path = output_path
         @skipped = {invalid_email: 0, invalid_hash: 0, duplicate_email: 0, already_linked: 0}
       end
@@ -82,33 +98,22 @@ module Services
       def call
         assert_safe_output_path!
 
-        best = {}
-        legacy_each do |attrs|
-          record = build_record(attrs)
-          next if record.nil?
+        selected = select
+        write(selected.values.map { |entry| build_record(entry[:attrs]) })
 
-          key = record.fetch("email")
-          rank = rank_for(attrs)
-
-          # Zero duplicates exist today. Kept as an assertion: the collision is
-          # counted so a non-zero report is investigated rather than silently
-          # accepted, and the winner is decided by rank rather than by arrival
-          # order -- see rank_for for why arrival order cannot be trusted.
-          if best.key?(key)
-            @skipped[:duplicate_email] += 1
-            next if (best[key][:rank] <=> rank) >= 0
-          end
-
-          best[key] = {rank: rank, record: record}
-        end
-
-        write(best.values.map { |entry| entry[:record] })
-
-        {success: true, data: {path: @output_path, exported: best.size, skipped: @skipped}}
+        Result.new(
+          success?: true,
+          data: {path: @output_path, exported: selected.size, skipped: @skipped},
+          errors: []
+        )
       rescue UnsafeOutputPath
         raise
       rescue => e
-        {success: false, error: e.message, data: {path: @output_path, exported: 0, skipped: @skipped}}
+        Result.new(
+          success?: false,
+          data: {path: @output_path, exported: 0, skipped: @skipped},
+          errors: [e.message]
+        )
       end
 
       private
@@ -153,33 +158,68 @@ module Services
         @already_linked_ids ||= ::User.where.not(auth_uid: nil).pluck(:id).to_set
       end
 
-      def build_record(attrs)
+      # One pass over the cohort, applying every skip rule and resolving
+      # duplicates, returning the winners keyed by email. Both `call` and
+      # `exportable_ids` run through here, which is what stops the exported
+      # file and the backfill's cohort from disagreeing about who is being
+      # migrated -- the 46 malformed-email rows and the 30 already-linked ones
+      # are excluded from both, not just from the file.
+      def select
+        best = {}
+
+        legacy_each do |attrs|
+          next if reject?(attrs)
+
+          email = normalized_email(attrs)
+          rank = rank_for(attrs)
+
+          # Zero duplicates exist today. Kept as an assertion: the collision is
+          # counted so a non-zero report is investigated rather than silently
+          # accepted, and the winner is decided by rank rather than by arrival
+          # order -- see rank_for for why arrival order cannot be trusted.
+          if best.key?(email)
+            @skipped[:duplicate_email] += 1
+            next if (best[email][:rank] <=> rank) >= 0
+          end
+
+          best[email] = {rank: rank, id: attrs["id"], attrs: attrs}
+        end
+
+        best
+      end
+
+      def normalized_email(attrs)
+        attrs["email"].to_s.strip.downcase
+      end
+
+      def reject?(attrs)
         if already_linked_ids.include?(attrs["id"])
           @skipped[:already_linked] += 1
-          return nil
+          return true
         end
 
-        email = attrs["email"].to_s.strip.downcase
-        hash = attrs["old_encrypted_password"].to_s
-
-        unless EMAIL_GRAMMAR.match?(email)
+        unless EMAIL_GRAMMAR.match?(normalized_email(attrs))
           @skipped[:invalid_email] += 1
-          return nil
+          return true
         end
 
-        unless BCRYPT_GRAMMAR.match?(hash)
+        unless BCRYPT_GRAMMAR.match?(attrs["old_encrypted_password"].to_s)
           @skipped[:invalid_hash] += 1
-          return nil
+          return true
         end
 
+        false
+      end
+
+      def build_record(attrs)
         {
           "localId" => self.class.uid_for(attrs["id"]),
-          "email" => email,
+          "email" => normalized_email(attrs),
           # Honest: these addresses were never confirmed. It costs nothing --
           # PR 1 links these users by uid, not by email, so verification status
           # is irrelevant to them reaching their own account.
           "emailVerified" => false,
-          "passwordHash" => encode_hash(hash),
+          "passwordHash" => encode_hash(attrs["old_encrypted_password"].to_s),
           "createdAt" => (attrs["created_at"].to_time.to_i * 1000).to_s
         }
       end
@@ -194,6 +234,10 @@ module Services
 
       def write(records)
         File.open(@output_path, File::WRONLY | File::CREAT | File::TRUNC, 0o600) do |f|
+          # The creation mode is ignored when the path already exists, and
+          # these steps are explicitly re-run -- without this an export over a
+          # previous 0644 file leaves every hash group- and world-readable.
+          f.chmod(0o600)
           f.write(JSON.pretty_generate({"users" => records}))
         end
       end

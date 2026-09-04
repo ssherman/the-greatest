@@ -17,8 +17,8 @@ class Services::BooksMigration::FirebaseUidBackfillTest < ActiveSupport::TestCas
 
     result = run_backfill([910001, 910002])
 
-    assert result[:success], result[:error]
-    assert_equal 2, result[:data][:updated]
+    assert result.success?, result.errors.join(", ")
+    assert_equal 2, result.data[:updated]
     assert_equal "tgbv1-910001", User.find(910001).auth_uid
     assert_equal "tgbv1-910002", User.find(910002).auth_uid
   end
@@ -48,8 +48,8 @@ class Services::BooksMigration::FirebaseUidBackfillTest < ActiveSupport::TestCas
 
     result = run_backfill([910004])
 
-    assert_equal 0, result[:data][:updated]
-    assert_equal 1, result[:data][:already_set]
+    assert_equal 0, result.data[:updated]
+    assert_equal 1, result.data[:already_set]
     assert_equal "firebase-native-uid", User.find(910004).auth_uid
   end
 
@@ -59,7 +59,7 @@ class Services::BooksMigration::FirebaseUidBackfillTest < ActiveSupport::TestCas
     run_backfill([910005])
     second = run_backfill([910005])
 
-    assert_equal 0, second[:data][:updated]
+    assert_equal 0, second.data[:updated]
     assert_equal "tgbv1-910005", User.find(910005).auth_uid
   end
 
@@ -72,9 +72,9 @@ class Services::BooksMigration::FirebaseUidBackfillTest < ActiveSupport::TestCas
 
     result = run_backfill([910006, 99999999])
 
-    refute result[:success]
-    assert_includes result[:error], "99999999"
-    assert_equal [99999999], result[:data][:missing_target]
+    refute result.success?
+    assert_includes result.errors.join(", "), "99999999"
+    assert_equal [99999999], result.data[:missing_target]
   end
 
   test "a failed run writes nothing at all" do
@@ -90,9 +90,9 @@ class Services::BooksMigration::FirebaseUidBackfillTest < ActiveSupport::TestCas
 
     result = run_backfill([910008], dry_run: true)
 
-    assert result[:success], result[:error]
-    assert_equal 1, result[:data][:eligible]
-    assert_equal 0, result[:data][:updated]
+    assert result.success?, result.errors.join(", ")
+    assert_equal 1, result.data[:eligible]
+    assert_equal 0, result.data[:updated]
     assert_nil User.find(910008).auth_uid
   end
 
@@ -105,7 +105,7 @@ class Services::BooksMigration::FirebaseUidBackfillTest < ActiveSupport::TestCas
 
     result = run_backfill([910009, 910010], dry_run: true)
 
-    assert_equal [1, 1, 0], [result[:data][:eligible], result[:data][:already_set], result[:data][:updated]]
+    assert_equal [1, 1, 0], [result.data[:eligible], result.data[:already_set], result.data[:updated]]
     assert_nil User.find(910009).auth_uid
   end
 
@@ -127,16 +127,36 @@ class Services::BooksMigration::FirebaseUidBackfillTest < ActiveSupport::TestCas
 
     result = backfill.call
 
-    assert result[:success], result[:error]
-    assert_equal 0, result[:data][:updated], "a row that gained a uid mid-run must not be counted as updated"
+    assert result.success?, result.errors.join(", ")
+    assert_equal 0, result.data[:updated], "a row that gained a uid mid-run must not be counted as updated"
     assert_equal "issued-mid-run", User.find(910011).auth_uid
+  end
+
+  # Every other test here stubs cohort_ids, so nothing would notice if this
+  # class went back to deriving its own cohort from the legacy table. That is
+  # exactly the bug being fixed: the old query took any nonblank email, while
+  # the export additionally drops malformed emails, unparseable hashes,
+  # duplicate losers and users who already hold a Firebase uid -- so 46 people
+  # got an auth_uid naming a Firebase account that was never created. This
+  # drives the real path and asserts the two sets are the same.
+  test "writes uids for exactly the rows the exporter would export" do
+    make_user(910020)
+    make_user(910021)
+    Services::BooksMigration::FirebasePasswordExport.stubs(:exportable_ids).returns([910020])
+
+    result = Services::BooksMigration::FirebaseUidBackfill.call
+
+    assert result.success?, result.errors.join(", ")
+    assert_equal 1, result.data[:updated]
+    assert_equal "tgbv1-910020", User.find(910020).auth_uid
+    assert_nil User.find(910021).auth_uid, "a row the export skips must never receive an auth_uid"
   end
 
   test "reports success and touches nothing when the cohort is empty" do
     result = run_backfill([])
 
-    assert result[:success], result[:error]
-    assert_equal [0, 0, 0], [result[:data][:eligible], result[:data][:updated], result[:data][:already_set]]
-    assert_empty result[:data][:missing_target]
+    assert result.success?, result.errors.join(", ")
+    assert_equal [0, 0, 0], [result.data[:eligible], result.data[:updated], result.data[:already_set]]
+    assert_empty result.data[:missing_target]
   end
 end

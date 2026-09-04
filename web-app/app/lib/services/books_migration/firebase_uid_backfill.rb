@@ -19,6 +19,10 @@ module Services
     # production data migration, because truncating and re-migrating resets
     # auth_uid for the whole cohort.
     class FirebaseUidBackfill
+      # The repository's service contract (AGENTS.md), matching
+      # reading_goal_verification and news_post_migrator in this namespace.
+      Result = Struct.new(:success?, :data, :errors, keyword_init: true)
+
       BATCH_SIZE = 1000
 
       def self.call(dry_run: false)
@@ -36,12 +40,12 @@ module Services
         present_ids = User.where(id: ids).pluck(:id)
         missing = ids - present_ids
         if missing.any?
-          return {
-            success: false,
-            error: "#{missing.size} cohort ids have no row in users (first: #{missing.first(5).join(", ")}). " \
-                   "Run data_migration:users first.",
-            data: {eligible: 0, updated: 0, already_set: 0, missing_target: missing}
-          }
+          return Result.new(
+            success?: false,
+            data: {eligible: 0, updated: 0, already_set: 0, missing_target: missing},
+            errors: ["#{missing.size} cohort ids have no row in users (first: #{missing.first(5).join(", ")}). " \
+                     "Run data_migration:users first."]
+          )
         end
 
         eligible = eligible_ids(ids)
@@ -59,9 +63,17 @@ module Services
           updated += update_slice(slice)
         end
 
-        {success: true, data: {eligible: eligible.size, updated: updated, already_set: already_set, missing_target: []}}
+        Result.new(
+          success?: true,
+          data: {eligible: eligible.size, updated: updated, already_set: already_set, missing_target: []},
+          errors: []
+        )
       rescue => e
-        {success: false, error: e.message, data: {eligible: 0, updated: 0, already_set: 0, missing_target: []}}
+        Result.new(
+          success?: false,
+          data: {eligible: 0, updated: 0, already_set: 0, missing_target: []},
+          errors: [e.message]
+        )
       end
 
       private
@@ -99,24 +111,29 @@ module Services
         ])
       end
 
-      # Identical to FirebasePasswordExport#cohort's filter, deliberately: the
-      # set exported to Firebase and the set given a uid here have to be the
-      # same people, or a user gets an account they cannot be matched to.
+      # Delegated to the exporter's selection rather than re-deriving the
+      # cohort here. The two used to run separate queries: this one took every
+      # legacy row with a nonblank email, while the export additionally dropped
+      # malformed emails, unparseable hashes, duplicate losers and users who
+      # already hold a Firebase uid. The 46 malformed-email rows therefore got
+      # an auth_uid pointing at a Firebase account that was never created,
+      # breaking this class's own claim that auth_uid identifies an existing
+      # account. Sharing the selection makes disagreement impossible rather
+      # than merely unlikely.
       def cohort_ids
-        LegacyBooks::User
-          .where(migrated: [false, nil])
-          .where(external_provider: nil)
-          .where("old_encrypted_password IS NOT NULL AND old_encrypted_password <> ''")
-          .where("email IS NOT NULL AND email <> ''")
-          .pluck(:id)
+        Services::BooksMigration::FirebasePasswordExport.exportable_ids
       end
 
       def empty_result
-        {success: true, data: {eligible: 0, updated: 0, already_set: 0, missing_target: []}}
+        Result.new(success?: true, data: {eligible: 0, updated: 0, already_set: 0, missing_target: []}, errors: [])
       end
 
       def dry_result(eligible, already_set)
-        {success: true, data: {eligible: eligible, updated: 0, already_set: already_set, missing_target: []}}
+        Result.new(
+          success?: true,
+          data: {eligible: eligible, updated: 0, already_set: already_set, missing_target: []},
+          errors: []
+        )
       end
     end
   end
