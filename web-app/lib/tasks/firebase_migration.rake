@@ -73,4 +73,15 @@ namespace :firebase do
     puts "Run the import TWICE and sign in again after the second. The whole re-run story"
     puts "rests on Firebase replacing a colliding localId rather than duplicating it."
   end
+
+  desc "Write tgbv1-<id> into users.auth_uid for the v1 cohort. Pass DRY_RUN=1 to preview."
+  task backfill_v1_uids: :environment do
+    dry = ENV["DRY_RUN"].present?
+    puts dry ? "DRY RUN -- nothing will be written" : "Writing auth_uid for the v1 cohort..."
+
+    result = Services::BooksMigration::FirebaseUidBackfill.call(dry_run: dry)
+    pp result
+
+    abort "Backfill failed: #{result[:error]}" unless result[:success]
+  end
 end
