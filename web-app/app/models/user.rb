@@ -33,6 +33,7 @@
 #  index_users_on_confirmed_at               (confirmed_at)
 #  index_users_on_external_provider          (external_provider)
 #  index_users_on_external_provider_and_uid  (external_provider,external_provider_uid)
+#  index_users_on_lower_email                (lower((email)::text))
 #  index_users_on_stripe_customer_id         (stripe_customer_id)
 #
 class User < ApplicationRecord

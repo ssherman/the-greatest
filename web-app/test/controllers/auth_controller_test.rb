@@ -188,6 +188,49 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
     assert_equal "google", body["provider"]
   end
 
+  # The database holds case-insensitively duplicate email rows -- 33 groups /
+  # 69 rows in the production snapshot, still being minted by a signup race
+  # (median gap within a group: 0.2s) and by UserMigrator's upsert_all, which
+  # bypasses the uniqueness validation by design. UserAuthenticationService
+  # already resolves the ambiguity with .order(:id).first; check_provider must
+  # describe the same row, or it advertises a provider the sign-in path will
+  # not actually use.
+  test "check_provider describes the same row sign-in would bind to" do
+    email = "duplicate-order@example.com"
+    now = Time.current
+    # Explicit ids inserted HIGH first, so the two fresh tuples land in the
+    # heap in reverse id order and an unordered scan reaches the high-id row
+    # first. Rewriting a row to relocate it does not work here: under the
+    # parallel suite Postgres does a HOT update in place and the row never
+    # moves, which silently turns this into a test that cannot fail. Ids are
+    # far above the sequence so they cannot collide, and the test transaction
+    # rolls them back.
+    high_id = 2_000_000_001
+    low_id = 2_000_000_000
+    User.insert_all(
+      [
+        {id: high_id, email: email, role: 0, email_verified: false,
+         external_provider: User.external_providers[:google], created_at: now, updated_at: now},
+        {id: low_id, email: email, role: 0, email_verified: false,
+         external_provider: User.external_providers[:password], created_at: now, updated_at: now}
+      ]
+    )
+
+    scan_order = User.connection.select_values(
+      "SELECT id FROM users WHERE LOWER(email) = #{User.connection.quote(email)}"
+    )
+    assert_equal [high_id, low_id], scan_order,
+      "precondition failed: the unordered scan must reach the high-id row first, or this test cannot fail"
+
+    post auth_check_provider_path, params: {email: email}, as: :json
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    refute body["has_oauth_provider"],
+      "check_provider must describe the lowest-id row (password), not whichever row the scan reached first"
+    assert_nil body["provider"]
+  end
+
   test "throttles repeated sign-in attempts from one visitor" do
     bad = FirebaseTokenHelper.token({"aud" => "other-project"})
 
