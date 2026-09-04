@@ -1243,7 +1243,29 @@ The backfill asserts this and aborts if any cohort id has no new-table row.
   social login is the next feature after this migration. `PROVIDER_MAP` accepting
   them is intentional.
 - Every domain must be on the **authorized domains** list, or
-  `actionCodeSettings` raises `auth/unauthorized-continue-uri`.
+  `actionCodeSettings` raises `auth/unauthorized-continue-uri`. **Audited against
+  the console 2026-09-04: three hosts this app actually serves are missing, and
+  must be added before Task 4 ships.** Authorized domains gate OAuth redirects and
+  `actionCodeSettings` continue URLs only — plain email/password sign-in needs
+  neither, which is why nothing looks broken today.
+
+  | Host | Source of truth | Status |
+  | --- | --- | --- |
+  | `new.thegreatestbooks.org` | `BOOKS_DOMAIN` (prod SOPS) | **MISSING** — the books launch host |
+  | `dev-new.thegreatestbooks.org` | `domain_config.rb` books default, Caddyfile, Playwright | **MISSING** — blocks testing Task 4 and rollout step 6 |
+  | `dev.thegreatest.games` | `domain_config.rb` games default, Caddyfile, Playwright | **MISSING** — blocks social-login dev work |
+  | `thegreatest.games`, `thegreatestmusic.org`, `dev.thegreatestmusic.org` | prod/dev hosts | present |
+  | `thegreatestbooks.org`, `www.`, `dev.thegreatestbooks.org` | the **legacy** site and its dev host | present, keep |
+
+  Two entries correspond to nothing in this repository and should be removed:
+  `new.thegrestestbooks.org` (a misspelling of `greatest`, so it authorizes
+  nothing) and `dev.thegreatestgames.org` (games dev is `dev.thegreatest.games`,
+  a different TLD). An authorized domain nobody owns is a redirect target, so
+  this is worth clearing rather than leaving.
+
+  Re-run the audit with:
+  `grep -rIl "<host>" --exclude-dir=node_modules --exclude-dir=.git .`
+  A host with zero hits is not one this app serves.
 - Email templates are per-project and cannot vary by domain — keep them
   brand-neutral ("The Greatest").
 ```
