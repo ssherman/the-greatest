@@ -14,3 +14,7 @@
 - books public api
 - authors admin api
 - authors public api
+- login with email and password
+- login with facebook
+- login with x
+- login with apple
