@@ -54,3 +54,12 @@ tmp/db-snapshots/
 
 # Superpowers SDD scratch (ledger, briefs, review packages)
 .superpowers/
+
+# Firebase auth import files: bcrypt password hashes, and this repo is public.
+# FirebasePasswordExport.assert_safe_output_path! also refuses to write
+# anywhere in this tree; these patterns are the second line of defence, not the
+# first. canary*.json is here because the canary task's own documented filename
+# matched none of the other patterns.
+*firebase-import*.json
+*auth-import*.json
+canary*.json

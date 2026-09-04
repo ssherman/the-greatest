@@ -177,6 +177,20 @@ class Services::BooksMigration::FirebasePasswordExportTest < ActiveSupport::Test
     end
   end
 
+  # The canary task writes a bcrypt hash too, and must not get its own,
+  # divergent copy of this rule.
+  test "exposes the repository guard as a reusable class method" do
+    assert_raises Services::BooksMigration::FirebasePasswordExport::UnsafeOutputPath do
+      Services::BooksMigration::FirebasePasswordExport.assert_safe_output_path!(
+        Rails.root.join("tmp", "canary.json").to_s
+      )
+    end
+
+    assert_nil Services::BooksMigration::FirebasePasswordExport.assert_safe_output_path!(
+      File.join(@dir, "canary.json")
+    )
+  end
+
   test "writes the file readable only by its owner" do
     run_export([legacy_attrs])
 

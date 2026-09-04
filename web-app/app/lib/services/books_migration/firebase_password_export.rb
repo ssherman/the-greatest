@@ -52,6 +52,28 @@ module Services
         new(output_path).call
       end
 
+      # The file is tens of thousands of password hashes and this repository is
+      # public. Refusing the whole repo tree is cheaper than trusting a
+      # .gitignore entry to be correct forever.
+      #
+      # Public and on the class because the canary rake task writes a hash too.
+      # The plan had the canary writing straight to whatever path it was given
+      # with no check at all -- one hash rather than 30,463, but the same
+      # mistake, and its own example filename (canary.json) matched none of the
+      # .gitignore patterns the plan added.
+      def self.assert_safe_output_path!(output_path)
+        expanded = File.expand_path(output_path)
+        repo_root = Rails.root.parent.to_s
+
+        if expanded.start_with?(repo_root + File::SEPARATOR)
+          raise UnsafeOutputPath,
+            "refusing to write password hashes inside the repository (#{repo_root}). " \
+            "Choose a path outside it."
+        end
+
+        nil
+      end
+
       def initialize(output_path)
         @output_path = output_path
         @skipped = {invalid_email: 0, invalid_hash: 0, duplicate_email: 0}
@@ -150,18 +172,8 @@ module Services
         end
       end
 
-      # The file is tens of thousands of password hashes and this repository is
-      # public. Refusing the whole repo tree is cheaper than trusting a
-      # .gitignore entry to be correct forever.
       def assert_safe_output_path!
-        expanded = File.expand_path(@output_path)
-        repo_root = Rails.root.parent.to_s
-
-        if expanded.start_with?(repo_root + File::SEPARATOR)
-          raise UnsafeOutputPath,
-            "refusing to write password hashes inside the repository (#{repo_root}). " \
-            "Choose a path outside it."
-        end
+        self.class.assert_safe_output_path!(@output_path)
       end
 
       def cohort
