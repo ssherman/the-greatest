@@ -1218,7 +1218,30 @@ The backfill asserts this and aborts if any cohort id has no new-table row.
 
 ## Console settings this depends on
 
-- **One account per email address** must be enabled.
+- **"Create multiple accounts for each identity provider" is enabled, and stays enabled.**
+  An earlier version of this line said the opposite — that "one account per email
+  address" must be enabled. That was never true of this project and must not be
+  "fixed" by changing the console. The multi-account setting is a deliberate UX
+  choice: a user can sign up with a password and later sign in with Google or
+  Facebook and have it just work, because Rails links the identities by email
+  lookup (`UserAuthenticationService#find_user`) rather than making them remember
+  which button they first used. Confirmed by the owner 2026-09-04.
+- **This does not weaken the linking rule.** The concern recorded in the spec was
+  that multiple identities per address would undermine step 2. It does not: step 2
+  fires only on `email_verified: true` in the JWT, and the second identity an
+  attacker can create starts unverified, so step 3 refuses it. Getting
+  `email_verified` requires clicking a link delivered to the address itself. The
+  gate PR 1 added is what carries the security here, not the console setting.
+- **Apple's "Hide My Email" is the real limitation of email-based linking.** The
+  JWT then carries a `@privaterelay.appleid.com` address that matches no existing
+  row, so step 2 misses and a *second Rails user* is created for the same person.
+  Out of scope for this migration, but it must be designed for when Apple sign-in
+  is built — matching cannot rely on the email claim alone. Note this produces
+  duplicates with *different* emails, so no uniqueness constraint would catch it.
+- **facebook/twitter/apple providers are enabled and stay enabled.** One Firebase
+  project serves the legacy site as well, the legacy site offers those logins, and
+  social login is the next feature after this migration. `PROVIDER_MAP` accepting
+  them is intentional.
 - Every domain must be on the **authorized domains** list, or
   `actionCodeSettings` raises `auth/unauthorized-continue-uri`.
 - Email templates are per-project and cannot vary by domain — keep them
