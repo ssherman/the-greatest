@@ -67,9 +67,12 @@ Do not swing the other way on the production side either: **the books data in pr
 pre-launch rehearsal copy, not live user data.** Books has not launched, nobody signs in as those
 rows *today*, and Shane will truncate and re-run the data migration before launch. Music and games
 ARE live on the same database, so a destructive command there is still an outage — the point is
-only that prod books rows are neither absent nor precious, and any books-migration step you plan
-for production belongs in the launch sequence *after* that final re-migration, not run against
-today's copy. One caveat on "nobody signs in": every domain's auth widget points at the **same**
+only that prod books rows are neither absent nor precious. Any books-migration step you plan for
+production is a **repeating** step, not a one-off: the data migration is rehearsed against
+production more than once, and anything downstream of it (uid write-backs, Firebase imports) has
+to be re-run after each pass and again in the final launch sequence. Design those steps to be
+idempotent and then actually exercise that, rather than scheduling them once.
+One caveat on "nobody signs in": every domain's auth widget points at the **same**
 Firebase project (`projectId` is hardcoded in `firebase_auth_service.js`; only `authDomain` varies),
 so any account pushed into Firebase becomes signable-in on live music and games immediately,
 whether or not books has launched.

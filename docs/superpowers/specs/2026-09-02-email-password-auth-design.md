@@ -136,9 +136,14 @@ over from here**.
 That stops being true the moment they exist **in Firebase**, which is a different question from
 whether books has launched. Every domain shares one Firebase project — `firebase_auth_service.js`
 hardcodes `projectId: "the-greatest-books"` and varies only `authDomain` — and the auth widget
-renders in all four layouts, music and games included. See the plan's "Re-running all of this,
-repeatedly" section: the Firebase import runs **once**, after the final data migration, because
-the first production import is what makes these accounts reachable on the live sites.
+renders in all four layouts, music and games included. So the first production import, not books
+launch, is what makes these accounts signable-in (and forgot-password-able) on the live sites.
+
+That exposure is **accepted deliberately**: the bulk import is re-run against production on every
+rehearsal, because an idempotent step that is never exercised is worth nothing and a 30,437-row
+import performed for the first time at launch is the bigger risk. See the plan's "Re-running all
+of this, repeatedly" section for the full reasoning and the residual risk. The cutoff stays at
+books launch.
 
 **New `users` table — 69,495 rows**
 

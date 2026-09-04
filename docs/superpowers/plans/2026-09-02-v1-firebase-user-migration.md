@@ -75,33 +75,44 @@ than reading the export file, and scopes to `auth_uid IS NULL`.
 
 **Two consequences of "replace" that are not obvious:**
 
-1. **Replace is total, so the import has a shelf life — and the cutoff is NOT
-   books launch.** Re-importing overwrites whatever the account has become — a
-   password the user changed, an email they verified — back to the 2014 bcrypt
-   hash and `emailVerified: false`.
+1. **Replace is total, so the import has a shelf life.** Re-importing overwrites
+   whatever the account has become — a password the user changed, an email they
+   verified — back to the 2014 bcrypt hash and `emailVerified: false`. **Once
+   books is live and real people have used these accounts, the import must not
+   be re-run.** The export and the write-back stay safe to re-run; only the
+   Firebase import carries this.
 
-   An earlier version of this section said that was harmless "while books is
-   unlaunched and nobody is signing in," and set the cutoff at books launch.
-   **That is wrong.** `firebase_auth_service.js` hardcodes
+   **The bulk import IS re-run against production on every rehearsal, and that
+   is deliberate.** The whole point of deriving the uid from the legacy id is
+   that the import is idempotent, and an idempotent step is worthless unless it
+   is actually exercised — a 30,437-row import performed for the first time at
+   launch is the larger risk by far. Prove it with the canary (Task 2), then
+   re-run the real thing as often as the data migration is re-run.
+
+   **What "books is not live yet" does NOT buy you.** It does not make the
+   cohort unreachable. `firebase_auth_service.js` hardcodes
    `projectId: "the-greatest-books"` and varies only `authDomain`, so every
-   domain authenticates against one Firebase project — and
-   `Authentication::WidgetComponent` renders in all four layouts, including the
-   **live** music and games sites. The moment the cohort lands in Firebase, any
-   one of those 30,437 people can sign in or run a password reset on
-   thegreatest.music or thegreatest.games. Books launch has nothing to do with
-   it; the first production import IS the exposure.
+   domain authenticates against one Firebase project, and
+   `Authentication::WidgetComponent` renders in all four layouts — including
+   the **live** music and games sites. So from the first production import
+   onward, any of these 30,437 people can sign in, or trigger a
+   forgot-password email, on thegreatest.music or thegreatest.games. The
+   import is what creates that reachability; books launch has nothing to do
+   with it.
 
-   **So run the Firebase import exactly once, against production, after the
-   final data migration — not during the pre-launch rehearsals.** A re-import
-   after any real sign-in silently reverts that person's credentials, with
-   nothing in the output to show it. The export and the write-back stay safe to
-   re-run; only the Firebase import carries this.
+   **The owner weighed this and accepted it (2026-09-03.)** The residual risk
+   is that someone in the cohort signs in on music or games during the
+   pre-launch window, changes their password, and has it silently reverted by
+   the next rehearsal import. Accepted because the cohort has zero sign-ins in
+   two years and the window is short, against the much larger risk of an
+   unrehearsed import at launch. **Do not re-raise this as a defect and do not
+   quietly reintroduce an "import only once" rule** — it was raised in review
+   on PR #289, considered, and declined. The obligation the decision creates is
+   that the import must be *proven* idempotent, not that it be avoided.
 
-   A corollary worth stating, since the write-back *is* re-run every time: a
-   rehearsal that sets `auth_uid = tgbv1-<id>` without a matching Firebase
-   account leaves Rails pointing at an identity that does not exist. Harmless
-   while nobody signs in, but it means the two steps are only truly consistent
-   once both have run in the launch sequence.
+   Within each cycle, run the import before the write-back (the order in
+   "Running it" below), so `auth_uid` never points at an identity that does not
+   exist yet.
 
 2. **If id stability ever breaks, the failure is silent.** Because the API does
    not check email duplication, a re-migration that assigned *different* ids
