@@ -53,8 +53,11 @@ one of them is a data repair.
 
 ### `surname_collision` — 10,607 books, the actual problem
 
-The old importer matched an author on surname and attached an existing record
-for a different person.
+An author was matched on surname and an existing record for a different person
+attached. Where that happened -- in our importer, or in the source data we
+copied -- has not been established; see the attribution table in
+`books-title-defects.md` for four rows traced by hand, which do not all point
+the same way.
 
 | Our author | Open Library's |
 |---|---|

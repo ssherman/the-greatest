@@ -24,7 +24,8 @@ The pipeline already fingerprints three ways — `title_fp`, `title_fp_nosub`,
 None of that helps when the noise is *inside* the title string, because `nosub`
 strips the separate `subtitle` column and nothing else.
 
-The old importer concatenated. Book #143219 is stored as
+Somewhere between the source and our row, the parts got concatenated.
+Book #143219 is stored as
 
 ```
 Andrew Jackson And The Course Of The American Empire, 1767 1821 Volume I
@@ -93,8 +94,9 @@ without it. 42 usable gains, low risk.
 
 ## When one title covers several books
 
-The importer also truncated. Book #160918 is stored as `Hellmaw` — the *series*
-name — when the book is *Hellmaw: Throckmorton's Trick*. Three of our rows are
+Something also truncated, and here the responsibility **is** ours: Goodreads
+carries the full title *Hellmaw: Throckmorton's Trick* and book #160918 is
+stored as `Hellmaw`, the series name alone. Three of our rows are
 titled just `Hellmaw`, with three different ISBNs and three different Goodreads
 ids: three books in a series collapsed onto one string.
 
@@ -131,8 +133,8 @@ wholesale — some rows in each group share a work and some do not.
 The JoJo group carries a **second, unrelated defect**: *JoJo's Bizarre
 Adventure* is by **Hirohiko** Araki. Twenty-eight of our rows credit
 **Nobuyoshi** Araki, a real person but a photographer. Open Library holds 287
-works by Hirohiko and 145 by Nobuyoshi, so both exist and the importer chose
-wrong. This is the `surname_collision` class of `books-author-disagreements.md`
+works by Hirohiko and 145 by Nobuyoshi, so both exist and the wrong one was
+chosen. This is the `surname_collision` class of `books-author-disagreements.md`
 concentrated in one bucket — that sweep found `nobuyoshi araki` to be its
 **third-largest** disagreeing author at 47 books, and 28 of them are this one
 series.
@@ -160,6 +162,35 @@ way because the novel looks back from 2000 to 1887. Stripping it would be a net
 while `looking backward` sits on 57, which is over `MAX_TITLE_FP_FREQ` — the
 rule would suppress it and the book would go from 37 candidates to none.
 
+## Not every defect is ours
+
+Four of these have been traced to their source by opening the Goodreads page
+the row was imported from, and they do not all point the same way.
+
+| Book | Goodreads holds | Whose defect |
+|---|---|---|
+| #160918 `Hellmaw` | the full `Hellmaw: Throckmorton's Trick` | **ours** — truncated on import |
+| #106848 `D Ceased` | the full `DCeased: War of the Undead Gods #6` | **ours** — the word was split |
+| #43599, year 1975 | first published 1971, this edition 1977 | **ours** — neither year is 1975 |
+| #145894 `The Complete Work Of Meister Eckhart` | **the same wrong title** | **upstream** — copied faithfully |
+
+Book #145894 is the one that matters for planning. Open Library holds the book
+three times as *The Complete Mystical Works of Meister Eckhart*; Goodreads has
+the title wrong on its own record, and our row reproduces it exactly. Nothing
+in our code did this.
+
+**The two kinds need different plans.** A defect we introduced is fixed once, at
+migration. A defect we inherited returns on the next sync from the same source,
+so the repair has to live in the importer as a rule rather than in a one-off
+backfill — and the correction has to survive being overwritten.
+
+**Book #143219's origin is not established.** Our title matches the book's
+*real* title (`Andrew Jackson and the Course of the American Empire`) while
+Goodreads shows the Johns Hopkins reissue title (`Andrew Jackson: The Course of
+American Empire`), and neither source has `Volume I`. It came from somewhere
+else, probably the legacy books app. It is used above as an example of the
+*shape* of the defect, not as evidence about its cause.
+
 ## Known limits
 
 - **Gains are counted against `title_fp` only.** A book with no title candidate
@@ -170,6 +201,10 @@ rule would suppress it and the book would go from 37 candidates to none.
   above.
 - **English volume words only.** `Band`, `Tome`, `том` are not recognised, so
   the volume count under-reports on non-English titles.
+- **Cause is not attributed at scale.** Four rows were traced to their source
+  by hand. Nothing here establishes what share of the 5,427 came from our code
+  versus from the source data, and the counts should not be read as a measure
+  of importer bugs.
 - **The subtitle-repeat count is a lower bound.** It requires the subtitle
-  column to still hold the text. A row where the importer moved it into the
-  title and left `subtitle` null is invisible to this check.
+  column to still hold the text. A row whose subtitle was moved into the title
+  and left null is invisible to this check.
