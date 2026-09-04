@@ -108,7 +108,11 @@ class AuthController < ApplicationController
       return
     end
 
-    user = User.find_by("LOWER(email) = ?", email.downcase)
+    # .order(:id).first mirrors UserAuthenticationService#find_user: the table
+    # holds case-insensitively duplicate email rows, so an unordered lookup
+    # lets Postgres pick the row, and this endpoint would then advertise a
+    # provider the sign-in path will not bind to.
+    user = User.where("LOWER(email) = ?", email.downcase).order(:id).first
 
     # Only reveal OAuth providers, not password accounts (to avoid email enumeration)
     oauth_providers = %w[google apple facebook twitter]
