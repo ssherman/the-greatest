@@ -225,3 +225,50 @@ def test_append_is_additive_not_a_rewrite(tmp_path, entry):
             ),
         )
     assert already_labeled(out) == {"a-001", "a-002"}
+
+
+# --- default rationales -------------------------------------------------
+#
+# Typing a >= 10 character sentence 450 times is over an hour of keystrokes,
+# and on an easy case the reasoning is derivable from the case itself: the
+# labeller has nothing to add beyond "the evidence agreed". So the CLI offers
+# a factual default that Enter accepts. The schema still requires a rationale
+# on every label -- what changes is who types it, not whether it exists.
+#
+# It stays empty, and therefore mandatory, exactly where the reasoning is NOT
+# derivable: an `ambiguous` verdict is a judgement call by definition, and a
+# hand-entered key is the most valuable case in the set.
+
+
+def test_a_match_defaults_to_the_evidence_that_agreed(entry):
+    from openlibrary.eval.label import default_rationale
+
+    text = default_rationale(entry, verdict="match", work_key="OL15331408W")
+
+    assert "existing_key" in text
+    assert len(text) >= 10
+
+
+def test_a_no_match_defaults_to_what_was_rejected(entry):
+    from openlibrary.eval.label import default_rationale
+
+    text = default_rationale(entry, verdict="no_match", work_key=None)
+
+    assert str(len(entry.candidates)) in text
+    assert len(text) >= 10
+
+
+def test_an_ambiguous_verdict_has_no_default(entry):
+    """Ambiguity is the labeller's judgement; a machine-written default would
+    be a fabricated one."""
+    from openlibrary.eval.label import default_rationale
+
+    assert default_rationale(entry, verdict="ambiguous", work_key=None) == ""
+
+
+def test_a_key_no_rule_produced_has_no_default(entry):
+    """`found_outside_blocking` cases are the only evidence of a recall
+    failure the set will ever contain. They get typed."""
+    from openlibrary.eval.label import default_rationale
+
+    assert default_rationale(entry, verdict="match", work_key="OL_NOT_A_CANDIDATE_W") == ""

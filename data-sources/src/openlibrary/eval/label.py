@@ -164,6 +164,29 @@ def append_case(out_path: Path, case: EvalCase) -> None:
         fh.write(case.model_dump_json() + "\n")
 
 
+def default_rationale(entry: PoolEntry, *, verdict: str, work_key: str | None) -> str:
+    """A factual rationale the labeller accepts with Enter, or "" to make them type.
+
+    Every label carries a rationale of at least 10 characters -- that is a
+    schema rule and it does not change here. What changes is that on a case
+    whose reasoning is entirely derivable from the case itself, the labeller
+    does not have to retype it 450 times. The text below states the evidence
+    rather than pretending to be reasoning.
+
+    Two verdicts get no default, because for them the reasoning is the whole
+    point and a machine-written one would be a fabrication: `ambiguous`, which
+    is a judgement call by definition, and a work key no rule produced, which
+    is the only evidence of a candidate-recall failure the set will contain.
+    """
+    if verdict == "no_match":
+        return f"none of the {len(entry.candidates)} candidates shown is this book"
+    if verdict == "match" and work_key:
+        candidate = next((c for c in entry.candidates if c.work_key == work_key), None)
+        if candidate:
+            return f"same work; blocking rules that agreed: {', '.join(candidate.rules)}"
+    return ""
+
+
 def _prompt_identity_rule() -> str:
     typer.echo("  identity rule:")
     for position, rule in enumerate(IDENTITY_RULES, start=1):
@@ -219,9 +242,15 @@ def main(
             verdict, work_key = "match", choice.work_key
             rule = _prompt_identity_rule()
 
+        suggested = default_rationale(entry, verdict=verdict, work_key=work_key)
         rationale = ""
         while len(rationale) < 10:
-            rationale = typer.prompt("  rationale (one line, >= 10 chars)").strip()
+            if suggested:
+                rationale = typer.prompt(
+                    "  rationale (enter to accept)", default=suggested, show_default=True
+                ).strip()
+            else:
+                rationale = typer.prompt("  rationale (one line, >= 10 chars)").strip()
 
         append_case(
             out,
