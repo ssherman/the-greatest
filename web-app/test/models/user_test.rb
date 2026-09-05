@@ -170,6 +170,12 @@ class UserTest < ActiveSupport::TestCase
     assert_equal 16, user.user_lists.count
   end
 
+  test "creating default lists does not update a new user" do
+    user = User.create!(email: "defaults-do-not-touch@example.com", display_name: "Defaults")
+
+    assert_equal user.created_at, user.reload.updated_at
+  end
+
   test "default list counts per subclass" do
     user = User.create!(email: "counts@example.com", display_name: "Counts")
     assert_equal 3, user.user_lists.where(type: "Music::Albums::UserList").count
