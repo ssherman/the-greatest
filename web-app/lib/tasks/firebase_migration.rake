@@ -103,8 +103,16 @@ namespace :firebase do
     # Replace is total. Pointing this at a real cohort member would overwrite
     # the Firebase account they are about to be migrated into, substituting a
     # password chosen here for the one they have used since 2014.
-    if export.exportable_ids.include?(user.id)
-      abort "users##{user.id} is IN the export cohort. Importing this file would replace their " \
+    #
+    # Asked of the LEGACY table, not of exportable_ids. exportable_ids drops
+    # every row that already holds an auth_uid, so after a backfill pass it
+    # reports a migrated cohort member as not-in-cohort -- and the different-uid
+    # check below cannot catch them either, because their uid is exactly the
+    # derived one. Both guards passed for a real user (users#2) once its
+    # auth_uid was seeded, which is to say the protection disappeared at the
+    # moment their Firebase account started existing.
+    if export.legacy_cohort_member?(user.id)
+      abort "users##{user.id} is a v1 cohort member. Importing this file would replace their " \
             "real migrated account with a password chosen here. Use a synthetic row instead."
     end
 

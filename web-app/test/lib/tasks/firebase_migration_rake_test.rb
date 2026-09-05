@@ -108,6 +108,7 @@ class FirebaseMigrationRakeTest < ActiveSupport::TestCase
   test "canary_for_user derives the localId from the user id and uses their email" do
     user = User.create!(id: 940_001, email: "Rehearsal@Example.com")
     Services::BooksMigration::FirebasePasswordExport.stubs(:exportable_ids).returns([])
+    Services::BooksMigration::FirebasePasswordExport.stubs(:legacy_cohort_member?).returns(false)
     path = File.join(@dir, "canary-user.json")
 
     invoke("firebase:canary_for_user", path, user.id.to_s, "pw")
@@ -124,6 +125,7 @@ class FirebaseMigrationRakeTest < ActiveSupport::TestCase
   test "canary_for_user seeds auth_uid on the row so the uid lookup can match" do
     user = User.create!(id: 940_002, email: "seed@example.com")
     Services::BooksMigration::FirebasePasswordExport.stubs(:exportable_ids).returns([])
+    Services::BooksMigration::FirebasePasswordExport.stubs(:legacy_cohort_member?).returns(false)
 
     invoke("firebase:canary_for_user", File.join(@dir, "c.json"), user.id.to_s, "pw")
 
@@ -132,9 +134,9 @@ class FirebaseMigrationRakeTest < ActiveSupport::TestCase
 
   # Replace is total. Aiming this at a real cohort member would overwrite the
   # account they are about to be migrated into, with a password chosen here.
-  test "canary_for_user refuses an id that is in the export cohort" do
+  test "canary_for_user refuses an id that is in the v1 cohort" do
     user = User.create!(id: 940_003, email: "cohort@example.com")
-    Services::BooksMigration::FirebasePasswordExport.stubs(:exportable_ids).returns([user.id])
+    Services::BooksMigration::FirebasePasswordExport.stubs(:legacy_cohort_member?).returns(true)
     path = File.join(@dir, "c.json")
 
     invoke_expecting_exit("firebase:canary_for_user", path, user.id.to_s, "pw")
@@ -145,9 +147,30 @@ class FirebaseMigrationRakeTest < ActiveSupport::TestCase
 
   # Overwriting a Firebase-native uid would detach that person from the account
   # they actually sign in with -- the same clobber the backfill guards against.
+  # The dangerous case, and the one a membership check built on exportable_ids
+  # cannot see. After a completed backfill a real cohort member has
+  # auth_uid == uid_for(id); exportable_ids drops every row holding an auth_uid,
+  # so it reports them as NOT in the cohort -- and the different-uid check does
+  # not fire either, because the uid matches. Verified against dev data: both
+  # guards passed for users#2 once its auth_uid was seeded. So the guard failed
+  # open exactly when real Firebase accounts existed to be destroyed.
+  # Membership has to come from the legacy table, which the backfill never touches.
+  test "canary_for_user refuses a cohort member who has already been backfilled" do
+    User.create!(id: 940_007, email: "migrated@example.com", auth_uid: "tgbv1-940007")
+    export = Services::BooksMigration::FirebasePasswordExport
+    export.stubs(:exportable_ids).returns([])
+    export.stubs(:legacy_cohort_member?).with(940_007).returns(true)
+    path = File.join(@dir, "c.json")
+
+    invoke_expecting_exit("firebase:canary_for_user", path, "940007", "pw")
+
+    refute File.exist?(path), "importing this would replace a real migrated user's Firebase account"
+  end
+
   test "canary_for_user refuses a user who already holds a different uid" do
     user = User.create!(id: 940_004, email: "native@example.com", auth_uid: "firebase-native-uid")
     Services::BooksMigration::FirebasePasswordExport.stubs(:exportable_ids).returns([])
+    Services::BooksMigration::FirebasePasswordExport.stubs(:legacy_cohort_member?).returns(false)
 
     invoke_expecting_exit("firebase:canary_for_user", File.join(@dir, "c.json"), user.id.to_s, "pw")
 
@@ -157,6 +180,7 @@ class FirebaseMigrationRakeTest < ActiveSupport::TestCase
   test "canary_for_user is repeatable once the row already carries the derived uid" do
     user = User.create!(id: 940_005, email: "again@example.com", auth_uid: "tgbv1-940005")
     Services::BooksMigration::FirebasePasswordExport.stubs(:exportable_ids).returns([])
+    Services::BooksMigration::FirebasePasswordExport.stubs(:legacy_cohort_member?).returns(false)
     path = File.join(@dir, "c.json")
 
     invoke("firebase:canary_for_user", path, user.id.to_s, "pw")
@@ -166,6 +190,7 @@ class FirebaseMigrationRakeTest < ActiveSupport::TestCase
 
   test "canary_for_user refuses an unknown user id" do
     Services::BooksMigration::FirebasePasswordExport.stubs(:exportable_ids).returns([])
+    Services::BooksMigration::FirebasePasswordExport.stubs(:legacy_cohort_member?).returns(false)
     path = File.join(@dir, "c.json")
 
     invoke_expecting_exit("firebase:canary_for_user", path, "99999999", "pw")
@@ -176,6 +201,7 @@ class FirebaseMigrationRakeTest < ActiveSupport::TestCase
   test "canary_for_user refuses to write inside the repository" do
     user = User.create!(id: 940_006, email: "repo@example.com")
     Services::BooksMigration::FirebasePasswordExport.stubs(:exportable_ids).returns([])
+    Services::BooksMigration::FirebasePasswordExport.stubs(:legacy_cohort_member?).returns(false)
     path = Rails.root.join("tmp", "canary-user.json").to_s
 
     invoke_expecting_exit("firebase:canary_for_user", path, user.id.to_s, "pw")

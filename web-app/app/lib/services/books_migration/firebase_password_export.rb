@@ -90,6 +90,24 @@ module Services
         select.values.map { |entry| entry[:id] }
       end
 
+      # Is this legacy id a v1 cohort member at all, regardless of what the new
+      # users table currently says?
+      #
+      # Deliberately NOT answered with exportable_ids. That set excludes every
+      # row already holding an auth_uid, so once a backfill pass completes it
+      # stops listing the very people whose Firebase accounts now exist and are
+      # worth protecting -- it fails open in proportion to how well the
+      # migration went. This asks the legacy table, which the backfill never
+      # touches, so the answer does not decay. It is also a single indexed
+      # lookup rather than a 30k scan.
+      def self.legacy_cohort_member?(legacy_id)
+        new.legacy_cohort_member?(legacy_id)
+      end
+
+      def legacy_cohort_member?(legacy_id)
+        cohort.where(id: legacy_id).exists?
+      end
+
       def initialize(output_path = nil)
         @output_path = output_path
         @skipped = {invalid_email: 0, invalid_hash: 0, duplicate_email: 0, already_linked: 0}
