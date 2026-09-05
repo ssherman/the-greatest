@@ -429,10 +429,16 @@ export default class extends Controller {
       } else if (data.has_oauth_provider) {
         this.showError(data.message)
       } else {
-        this.showError('Invalid email or password.')
+        this.showError(
+          "Invalid email or password. If you had an account on the old site and haven't " +
+          "set a password here yet, choose Create account with this address."
+        )
       }
     } catch {
-      this.showError('Invalid email or password.')
+      this.showError(
+        "Invalid email or password. If you had an account on the old site and haven't " +
+        "set a password here yet, choose Create account with this address."
+      )
     }
   }
 
