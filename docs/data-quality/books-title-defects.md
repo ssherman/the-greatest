@@ -164,7 +164,7 @@ rule would suppress it and the book would go from 37 candidates to none.
 
 ## Not every defect is ours
 
-Four of these have been traced to their source by opening the Goodreads page
+Five of these have been traced to their source by opening the Goodreads page
 the row was imported from, and they do not all point the same way.
 
 | Book | Goodreads holds | Whose defect |
@@ -173,11 +173,21 @@ the row was imported from, and they do not all point the same way.
 | #106848 `D Ceased` | the full `DCeased: War of the Undead Gods #6` | **ours** — the word was split |
 | #43599, year 1975 | first published 1971, this edition 1977 | **ours** — neither year is 1975 |
 | #145894 `The Complete Work Of Meister Eckhart` | **the same wrong title** | **upstream** — copied faithfully |
+| #129647 `Pather Pachali` by Satyajit Ray | **the same misspelling and the same wrong author** | **upstream** — copied faithfully |
 
 Book #145894 is the one that matters for planning. Open Library holds the book
 three times as *The Complete Mystical Works of Meister Eckhart*; Goodreads has
 the title wrong on its own record, and our row reproduces it exactly. Nothing
 in our code did this.
+
+Book #129647 is the same shape and carries two defects at once. It is
+Bibhutibhushan Bandyopadhyay's 1929 novel *Pather Panchali*, and Goodreads
+files it as `Pather Pachali` — the `n` dropped — credited to **Satyajit Ray**,
+who directed the 1955 film. Both errors are theirs. The typo is the one that
+cost the match: `pather pachali` matches no Open Library work, `pather
+panchali` matches five, comfortably under the frequency cap. The wrong author
+would not have blocked it either way, because `title_fp` does not look at the
+author.
 
 **The two kinds need different plans.** A defect we introduced is fixed once, at
 migration. A defect we inherited returns on the next sync from the same source,
