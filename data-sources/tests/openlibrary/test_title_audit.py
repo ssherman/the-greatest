@@ -15,6 +15,7 @@ import pytest
 
 from common.normalize import fingerprint
 from openlibrary.audit.titles import (
+    classify_issue_title,
     classify_title_collision,
     strip_matching_noise,
     title_repeats_subtitle,
@@ -172,3 +173,42 @@ def test_rows_that_cluster_into_more_than_one_work_are_mixed():
         )
         == "mixed"
     )
+
+
+# 1,048 exported titles carry a `#N`. They are not one thing, and the four
+# shapes want opposite handling: a single issue should never match a work, a
+# collected range should match the omnibus, a leaked Goodreads series
+# annotation is noise on a book that matches fine once it is gone, and the rest
+# are titles that merely contain a number sign.
+
+
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        # Single issues. OL has no `Batman #614`, no `The Walking Dead #N` at
+        # all, and 798 of these carry only a Goodreads id.
+        ("Batman  #614", "single_issue"),
+        ("The Walking Dead #125", "single_issue"),
+        ("House Of Slaughter #16", "single_issue"),
+        ("Life Is Strange #4.1", "single_issue"),
+        # A span of issues -- an omnibus, which OL may well hold.
+        ("The Dark Tower #1 3", "collected_range"),
+        ("The Chief Inspector Armand Gamache Series, #7 9", "collected_range"),
+        ("Amish Knit Lit Circle #1 8", "collected_range"),
+        # Goodreads writes `Title (Series #N)`. The importer kept the closing
+        # bracket and dropped the opening one. These are real books -- Ranma
+        # volume 20 is a volume, not an issue -- and they match once stripped.
+        ("Ranma ½, Vol. 20 , #20)", "series_annotation"),
+        ("The Crossroads Of Time  Blake Walker #1)", "series_annotation"),
+        # Not issue numbers at all.
+        ("The #1 Lawyer", "none"),
+        ("Amazing Fantasy #15  1st Appearance Of Spider Man", "none"),
+        ("スティール・ボール・ラン #24 ジャンプコミックス", "none"),
+        ("#Girlboss", "none"),
+        ("C#", "none"),
+        ("Dune", "none"),
+        ("", "none"),
+    ],
+)
+def test_the_four_shapes_of_a_numbered_title(title, expected):
+    assert classify_issue_title(title) == expected

@@ -76,6 +76,49 @@ def title_repeats_subtitle(title: str, subtitle: str | None) -> bool:
     return needle in title.casefold()
 
 
+# `#N` shapes. Measured on the 2026-07-31 export, no title fires more than one
+# of these, so the order below is defensive rather than a specification -- do
+# not read precedence into it.
+_ISSUE_RANGE = re.compile(r"#\s*\d+\s*[-\u2013]\s*\d+\b|#\s*\d+\s+\d+\b")
+_ISSUE_ANNOTATION = re.compile(r"#\s*\d+(?:\.\d+)?\s*[)\]]\s*$")
+_ISSUE_TRAILING = re.compile(r"#\s*\d+(?:\.\d+)?\s*$")
+
+
+def classify_issue_title(title: str) -> str:
+    """What does a `#N` in one of our titles actually mean?
+
+    1,048 exported titles carry one and they are four different things, wanting
+    opposite handling:
+
+    - `single_issue`      `Batman #614`. A 26-page floppy. Open Library has no
+                          `Batman #614`, and none at all for The Walking Dead,
+                          Nightwing or Descender. The matcher should abstain,
+                          not reach for the collected trade sitting next to it.
+    - `collected_range`   `The Dark Tower #1 3`. A span, so the omnibus is the
+                          right target rather than any single work.
+    - `series_annotation` `Ranma 1/2, Vol. 20 , #20)`. Goodreads writes
+                          `Title (Series #N)`; the importer kept the closing
+                          bracket and lost the opening one. These are ordinary
+                          books that match once the annotation is gone.
+    - `none`              `The #1 Lawyer`, `C#`, `#Girlboss`. A number sign.
+
+    The trailing bracket is what separates the third from the first: `Vol. 20`
+    and `#20)` in one title is Goodreads saying the same thing twice, not an
+    issue number. All 22 in the export have lost their opening bracket, and
+    none has a well-formed `(... #N)`, so nothing here tests for balance.
+    """
+    text = (title or "").strip()
+    if not text:
+        return "none"
+    if _ISSUE_RANGE.search(text):
+        return "collected_range"
+    if _ISSUE_ANNOTATION.search(text):
+        return "series_annotation"
+    if _ISSUE_TRAILING.search(text):
+        return "single_issue"
+    return "none"
+
+
 def classify_title_collision(work_sets: list[set[str]]) -> str:
     """Why do several of our Book rows share one (author, title)?
 
