@@ -35,6 +35,45 @@ class FirebaseActionCodeSettingsTest < ActiveSupport::TestCase
       "actionCodeSettings.url must be derived from the current origin")
   end
 
+  # createUserWithEmailAndPassword has already created the Firebase account by
+  # the time the verification email is sent. Letting a send failure propagate
+  # therefore leaves the worst possible state: the account exists, but
+  # handleEmailAuthResult never runs so there is no Rails session and no users
+  # row, and the retry reports email-already-in-use. The person is stuck with an
+  # account they cannot reach and cannot recreate.
+  #
+  # There is no JS unit runner here, and an E2E sign-up would create a live
+  # Firebase account in the shared production project on every run, so this is a
+  # source-level guard rather than a behavioural test.
+  test "a failed verification email does not abort a sign-up that already succeeded" do
+    source = File.read(SOURCE)
+
+    body = source[/async signUp\([^)]*\)\s*\{(.*?)\n  \}/m, 1]
+    assert body, "could not locate signUp in #{SOURCE}"
+
+    refute_includes body, "sendEmailVerification(",
+      "signUp must send the verification email through a wrapper that swallows failures. " \
+      "Calling sendEmailVerification directly means a transient send failure aborts a sign-up " \
+      "whose Firebase account already exists, stranding the user on email-already-in-use."
+
+    wrapper = source[/async trySendVerification\([^)]*\)\s*\{(.*?)\n  \}/m, 1]
+    assert wrapper, "expected a trySendVerification wrapper in #{SOURCE}"
+    assert_includes wrapper, "catch",
+      "trySendVerification must catch, or it is not a wrapper -- the failure still propagates"
+  end
+
+  # resendVerification is the opposite case and must keep throwing: the user
+  # explicitly asked to resend, so swallowing the error would show them success
+  # while nothing was sent.
+  test "resendVerification still surfaces a send failure" do
+    source = File.read(SOURCE)
+    body = source[/async resendVerification\([^)]*\)\s*\{(.*?)\n  \}/m, 1]
+
+    assert body, "could not locate resendVerification in #{SOURCE}"
+    assert_includes body, "sendEmailVerification(",
+      "resendVerification must call sendEmailVerification directly so a failure reaches the user"
+  end
+
   # The plan named two call sites to fix. There are three -- resend-verification
   # was missed. Pinning the count means a fourth added later cannot quietly ship
   # without settings, which is the whole failure mode this guards.
