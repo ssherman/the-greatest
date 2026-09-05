@@ -54,34 +54,6 @@ class Choice:
     work_key: str | None = None
 
 
-def most_curated(
-    work_keys: list[str],
-    details: dict[str, CandidateDetail],
-    *,
-    readinglog: dict[str, int],
-    editions: dict[str, int],
-) -> str | None:
-    """Which of several records for the same book to name in the label.
-
-    Only a tiebreak, and only once the labeller has decided the candidates ARE
-    one book. It answers "which record", never "is this the answer".
-
-    Revision first: it counts how often a record has been edited and cannot be
-    inflated by OL duplicating an edition, which is what makes edition_count
-    unreliable here -- OL21242676W shows two editions because one of them is a
-    clone of OL1898483W's. Identifier spread breaks a revision tie, because a
-    work carrying OCLC and LCCN has been through a library catalogue.
-    """
-    if not work_keys:
-        return None
-
-    def rank(key: str) -> tuple[int, int, int, int]:
-        detail = details.get(key, CandidateDetail())
-        return (detail.revision, detail.id_types, readinglog.get(key, 0), editions.get(key, 0))
-
-    return max(work_keys, key=rank)
-
-
 def render_case(
     entry: PoolEntry,
     *,
@@ -154,29 +126,24 @@ def render_case(
     # the final screen is self-sufficient and nobody has to scroll back mid-decision.
     if entry.candidates:
         lines += ["", "CHOOSE  (detail above; this repeats it in one line each)"]
-        curated = (
-            most_curated(
-                [c.work_key for c in entry.candidates],
-                details,
-                readinglog={c.work_key: c.readinglog_count for c in entry.candidates},
-                editions={c.work_key: c.edition_count for c in entry.candidates},
-            )
-            if details is not None
-            else None
-        )
         for position, candidate in enumerate(entry.candidates, start=1):
             title = (candidate.title or "")[:44]
             detail = (details or {}).get(candidate.work_key, CandidateDetail())
-            mark = ">" if candidate.work_key == curated else " "
             lines.append(
-                f"{mark}[{position:>2}] {candidate.work_key:<13} {title:<44} "
+                f" [{position:>2}] {candidate.work_key:<13} {title:<44} "
                 f"{candidate.edition_count:>3} eds rl={candidate.readinglog_count:<3}"
                 f" rev={detail.revision:<3} ids={detail.id_types}"
             )
-        if curated:
-            lines.append("      > = most-curated record. A tiebreak for deciding WHICH of several")
-            lines.append("          duplicate OL works to name, only after you have decided they")
-            lines.append("          are one book. It is not a view on whether any of them matches.")
+        if details is not None:
+            lines += [
+                "",
+                "  rev = times the OL record has been edited; ids = distinct identifier",
+                "  types on it. Use them ONLY to choose between candidates you have",
+                "  already judged to be the same book: prefer higher rev, then more ids.",
+                "  Candidates matched by title_fp alone are often different books that",
+                "  share a title -- check title_fp_freq above before reading anything",
+                "  into a long list.",
+            ]
 
     upper = len(entry.candidates)
     pick = f"  [1-{upper}] pick a candidate" if upper else "  (no candidates to pick)"
