@@ -7,6 +7,20 @@ import {
 import firebaseAuthService from '../firebase_auth_service.js'
 
 class EmailProvider {
+  // Firebase's reset and verification emails link to the project's single
+  // default action URL unless told otherwise -- so a games reader resetting a
+  // password would be emailed a books link. Deriving from the live origin sends
+  // them back to the site they were actually on.
+  //
+  // Every domain used here must be on Firebase's authorized-domains list, or
+  // the SDK rejects the call with auth/unauthorized-continue-uri.
+  actionCodeSettings() {
+    return {
+      url: `${window.location.origin}/`,
+      handleCodeInApp: false
+    }
+  }
+
   // Sign up with email and password
   async signUp(email, password) {
     try {
@@ -14,7 +28,7 @@ class EmailProvider {
       const result = await createUserWithEmailAndPassword(auth, email, password)
 
       // Send verification email
-      await sendEmailVerification(result.user)
+      await sendEmailVerification(result.user, this.actionCodeSettings())
 
       // Send to backend
       await firebaseAuthService.handleEmailAuthResult(result)
@@ -47,7 +61,7 @@ class EmailProvider {
   async sendPasswordReset(email) {
     try {
       const auth = firebaseAuthService.getAuth()
-      await sendPasswordResetEmail(auth, email)
+      await sendPasswordResetEmail(auth, email, this.actionCodeSettings())
     } catch (error) {
       console.error('Password reset error:', error)
       throw error
@@ -59,7 +73,7 @@ class EmailProvider {
     try {
       const user = firebaseAuthService.getCurrentUser()
       if (user) {
-        await sendEmailVerification(user)
+        await sendEmailVerification(user, this.actionCodeSettings())
       }
     } catch (error) {
       console.error('Resend verification error:', error)

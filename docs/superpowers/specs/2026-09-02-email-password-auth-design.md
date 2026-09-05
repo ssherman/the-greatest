@@ -162,7 +162,21 @@ The no-email cohort holds 527,441 list items across 14,668 users but has 16 sign
 years, zero reviews and zero memberships. It is unreachable by any email flow and — having
 no email to match on — is not hijackable through one either.
 
-33 email addresses are duplicated case-insensitively across 69 rows.
+33 email addresses are duplicated across 69 rows — but **none of them are in the V1
+cohort**, and no cohort email collides with a row outside it. Measured 2026-09-02, re-confirmed
+2026-09-05. (They are byte-identical duplicates, not case variants; `count(DISTINCT email)` and
+`count(DISTINCT lower(email))` are both 49,396. See the `duplicate-user-rows-are-generated`
+note: they are still being produced by a signup race and by `UserMigrator`'s `upsert_all`.)
+The exporter still counts duplicates as an assertion.
+
+**46 cohort emails are malformed** (`@gmail` with no TLD, `@gmailcom`, `@123`), 32 of them
+holding list data. They are signup typos that were never deliverable. The exporter skips and
+reports them; it must never repair them, since inferring a domain would create a Firebase
+account at an address the user does not control.
+
+**30 cohort members already hold a Firebase uid** and are likewise excluded — importing them
+would create a second identity for one address. Measured 2026-09-05, after this spec was
+written.
 
 **Legacy password hashes**
 
@@ -186,6 +200,8 @@ comparison could never have matched anyone and the count would be zero.
 | D4 | Import runs locally via `firebase-tools` | No service-account credential enters the app or the deployed environment for a one-time job. |
 | D5 | Legacy app's `alg: "none"` hole left unfixed | Site is being retired; see F8. |
 | D6 | No-email cohort out of scope | Unreachable without implementing Facebook/Twitter login. |
+| D7 | The linking rule moved from PR 2 into PR 1 | Sourcing email from the JWT does not stop an attacker creating an unverified Firebase password account for a victim's address in our own project. Only the `email_verified` gate closes that, so leaving it for PR 2 would keep a known takeover live throughout the migration. |
+| D8 | Users who already hold a Firebase uid are excluded from the export | The import API does not check email duplication, so they would receive a second identity holding their 2014 password, making a password reset ambiguous. They already have a working way in. Added 2026-09-05 after the dry run found 30 such users, contradicting this spec's assumption that the cohort had none. |
 
 **Firebase cost:** billing is on monthly active users, not stored accounts. Importing
 30,463 dormant records costs nothing. Classic Firebase Authentication is unlimited at no
@@ -255,8 +271,10 @@ email present, hash present — and writes Firebase's import JSON.
   report anything that does not.
 - Normalise emails (strip, downcase) and validate format. A malformed address would occupy
   a Firebase account the user could never claim.
-- Resolve the 33 duplicate addresses: keep the row with the most recent `last_sign_in_at`,
-  skip and log the others.
+- Duplicate addresses: keep the row with the most recent `last_sign_in_at`, skip and count the
+  others. Zero exist in the cohort today; this stays as an assertion, so a non-zero count means
+  the data changed and the run needs review. The tie-break is applied per row rather than by
+  iteration order, because `find_each` discards a scoped `ORDER BY`.
 - **Refuse to write output anywhere inside the repository working tree.** The file is
   30,463 password hashes and the repository is public. Add a gitignore entry as a second
   line of defence.
