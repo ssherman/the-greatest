@@ -244,7 +244,7 @@ def test_append_is_additive_not_a_rewrite(tmp_path, entry):
 def test_a_match_defaults_to_the_evidence_that_agreed(entry):
     from openlibrary.eval.label import default_rationale
 
-    text = default_rationale(entry, verdict="match", work_key="OL15331408W")
+    text = default_rationale(entry, verdict="match", work_key="OL15331408W", rule="same_work")
 
     assert "existing_key" in text
     assert len(text) >= 10
@@ -253,7 +253,7 @@ def test_a_match_defaults_to_the_evidence_that_agreed(entry):
 def test_a_no_match_defaults_to_what_was_rejected(entry):
     from openlibrary.eval.label import default_rationale
 
-    text = default_rationale(entry, verdict="no_match", work_key=None)
+    text = default_rationale(entry, verdict="no_match", work_key=None, rule="not_in_open_library")
 
     assert str(len(entry.candidates)) in text
     assert len(text) >= 10
@@ -264,7 +264,7 @@ def test_an_ambiguous_verdict_has_no_default(entry):
     be a fabricated one."""
     from openlibrary.eval.label import default_rationale
 
-    assert default_rationale(entry, verdict="ambiguous", work_key=None) == ""
+    assert default_rationale(entry, verdict="ambiguous", work_key=None, rule="same_work") == ""
 
 
 def test_a_key_no_rule_produced_has_no_default(entry):
@@ -272,7 +272,10 @@ def test_a_key_no_rule_produced_has_no_default(entry):
     failure the set will ever contain. They get typed."""
     from openlibrary.eval.label import default_rationale
 
-    assert default_rationale(entry, verdict="match", work_key="OL_NOT_A_CANDIDATE_W") == ""
+    assert (
+        default_rationale(entry, verdict="match", work_key="OL_NOT_A_CANDIDATE_W", rule="same_work")
+        == ""
+    )
 
 
 @pytest.fixture()
@@ -302,7 +305,9 @@ def test_a_no_match_with_no_candidates_records_the_search_not_the_empty_list(
     is both silly and a lie about where the evidence came from: nothing was
     rejected, because nothing was offered. The verdict rests on the labeller
     searching Open Library directly, and that is what the rationale must say."""
-    text = default_rationale(entry_without_candidates, verdict="no_match", work_key=None)
+    text = default_rationale(
+        entry_without_candidates, verdict="no_match", work_key=None, rule="not_in_open_library"
+    )
 
     assert "0 candidates" not in text
     assert "open library" in text.lower()
@@ -503,3 +508,28 @@ def test_a_value_that_matches_under_a_different_id_type_is_not_a_hit(fixture_art
     hits = fetch_identifier_hits(fixture_artifact.root, fixture_artifact.dump_date, [entry])
 
     assert hits["isbn_reuse-b"] == {}
+
+
+# The default was written before `duplicate_work` was in use and hard-coded
+# "same work" for every match. Ten labels now carry a rationale that contradicts
+# their own rule, so the default has to know which rule was chosen -- and it can,
+# because the tool prompts for the rule first.
+
+
+def test_a_duplicate_work_default_does_not_claim_a_clean_match(entry):
+    text = default_rationale(entry, verdict="match", work_key="OL15331408W", rule="duplicate_work")
+
+    assert "same work;" not in text
+    assert "more than one work" in text
+    assert "existing_key" in text
+    assert len(text) >= 10
+
+
+def test_a_relationship_rule_has_no_default_at_all(entry):
+    """`translation`, `omnibus_vs_parts`, `adaptation` assert a relationship
+    between two different things. A machine cannot state the evidence for that,
+    and all 15 translation labels so far were typed by hand anyway."""
+    for rule in ("translation", "omnibus_vs_parts", "adaptation", "collection"):
+        assert default_rationale(entry, verdict="match", work_key="OL15331408W", rule=rule) == "", (
+            rule
+        )

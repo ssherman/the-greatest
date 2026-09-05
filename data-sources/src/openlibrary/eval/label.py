@@ -217,7 +217,7 @@ def append_case(out_path: Path, case: EvalCase) -> None:
         fh.write(case.model_dump_json() + "\n")
 
 
-def default_rationale(entry: PoolEntry, *, verdict: str, work_key: str | None) -> str:
+def default_rationale(entry: PoolEntry, *, verdict: str, work_key: str | None, rule: str) -> str:
     """A factual rationale the labeller accepts with Enter, or "" to make them type.
 
     Every label carries a rationale of at least 10 characters -- that is a
@@ -246,7 +246,17 @@ def default_rationale(entry: PoolEntry, *, verdict: str, work_key: str | None) -
     if verdict == "match" and work_key:
         candidate = next((c for c in entry.candidates if c.work_key == work_key), None)
         if candidate:
-            return f"same work; blocking rules that agreed: {', '.join(candidate.rules)}"
+            agreed = ", ".join(candidate.rules)
+            if rule == "same_work":
+                return f"same work; blocking rules that agreed: {agreed}"
+            if rule == "duplicate_work":
+                return (
+                    f"OL holds this book as more than one work; picked {work_key} of the "
+                    f"{len(entry.candidates)} candidates shown; rules that agreed: {agreed}"
+                )
+    # Every other rule asserts a RELATIONSHIP between two different things --
+    # a translation of, a part of, an adaptation of. The evidence for that is
+    # not derivable from the case, so it gets typed.
     return ""
 
 
@@ -413,7 +423,7 @@ def main(
             verdict, work_key = "match", choice.work_key
             rule = _prompt_identity_rule()
 
-        suggested = default_rationale(entry, verdict=verdict, work_key=work_key)
+        suggested = default_rationale(entry, verdict=verdict, work_key=work_key, rule=rule)
         rationale = ""
         while len(rationale) < 10:
             if suggested:
