@@ -381,8 +381,16 @@ Firebase reset that works regardless. The import can only improve a user's posit
 
 1. PR 1 merges and deploys. Confirm music and games sign-in still works.
 2. Confirm the Firebase project's billing tier in the console.
-3. Confirm **"one account per email address"** is enabled. If Firebase allows multiple
-   accounts per address, a second identity can exist for one email and step 2 weakens.
+3. ~~Confirm "one account per email address" is enabled.~~ **Resolved 2026-09-04: it is NOT
+   enabled, deliberately.** The project runs **"create multiple accounts for each identity
+   provider"**, so a user can sign up with a password and later sign in with Google or
+   Facebook and have it just work — Rails links the identities by email lookup rather than
+   making them remember which button they first used. Do not change this setting.
+   The worry recorded here — that multiple identities per address weaken step 2 — does not
+   hold. Step 2 fires only on `email_verified: true`, and a second identity an attacker
+   creates for someone else's address starts unverified, so step 3 refuses it; earning
+   `email_verified` means clicking a link delivered to that mailbox. The gate is what carries
+   the security, not the console setting.
 4. Add every domain to Firebase's authorized-domains list.
 5. Make the Firebase email templates brand-neutral.
 6. Run the canary import; verify sign-in on `dev-new.thegreatestbooks.org`.
@@ -394,7 +402,10 @@ Firebase reset that works regardless. The import can only improve a user's posit
 ## Out of scope
 
 - The 20,063 users with no email address (D6).
-- Facebook, Twitter and Apple login.
+- Facebook, Twitter and Apple login — out of scope *for this spec*, and **the next feature
+  after it**. The providers are enabled in Firebase today because the same project serves the
+  legacy site, which offers those logins. `PROVIDER_MAP` accepting them is intentional; it is
+  not an unguarded gap, and disabling them is not on the table.
 - The legacy app's `alg: "none"` vulnerability (D5, F8).
 - Any tuning UI. Configuration goes in Rails config and environment variables.
 
@@ -402,5 +413,10 @@ Firebase reset that works regardless. The import can only improve a user's posit
 
 - The exact encoding `--hash-algo=BCRYPT` expects for `passwordHash` (base64 form) is
   confirmed by the canary, not by this document.
-- Whether "one account per email address" is currently enabled is a console setting the
-  repository cannot observe. Step 3 of rollout resolves it.
+- ~~Whether "one account per email address" is currently enabled.~~ **Closed 2026-09-04:**
+  it is not, and will not be — see rollout step 3. What replaces it as an open item is the
+  Apple case: **"Hide My Email" defeats email-based linking**, since the JWT carries a
+  `@privaterelay.appleid.com` address matching no existing row, so a second Rails user is
+  created for the same person. Out of scope here, but it has to be designed for when Apple
+  sign-in is built, and no uniqueness constraint would catch it because the duplicate rows
+  carry *different* emails.
