@@ -113,21 +113,35 @@ class UserListItemTest < ActiveSupport::TestCase
     assert_equal users(:regular_user), item.user
   end
 
-  test "after_commit touches user on create" do
-    before = @list.user.reload.updated_at
+  test "adding an item does not update its user" do
+    user = @list.user
+    user.touch(time: 1.hour.ago)
+    before = user.reload.updated_at
     travel 1.minute do
       @list.user_list_items.create!(listable: @album)
-      assert @list.user.reload.updated_at > before
+      assert_equal before, user.reload.updated_at
     end
   end
 
-  test "after_commit touches user on destroy" do
+  test "updating an item does not update its user" do
     item = user_list_items(:regular_user_fav_album_1)
     user = item.user
+    user.touch(time: 1.hour.ago)
+    before = user.reload.updated_at
+    travel 1.minute do
+      item.update!(completed_on: Date.current)
+      assert_equal before, user.reload.updated_at
+    end
+  end
+
+  test "destroying an item does not update its user" do
+    item = user_list_items(:regular_user_fav_album_1)
+    user = item.user
+    user.touch(time: 1.hour.ago)
     before = user.reload.updated_at
     travel 1.minute do
       item.destroy
-      assert user.reload.updated_at > before
+      assert_equal before, user.reload.updated_at
     end
   end
 end

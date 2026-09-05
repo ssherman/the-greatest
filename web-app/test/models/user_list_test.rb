@@ -182,31 +182,34 @@ class UserListTest < ActiveSupport::TestCase
     assert_equal({}, UserList.list_type_icons)
   end
 
-  test "after_commit touches user on create" do
+  test "creating a list does not update its user" do
     user = users(:editor_user)
     user.touch(time: 1.hour.ago)
     before = user.reload.updated_at
     travel 1.minute do
       Music::Albums::UserList.create!(user: user, name: "Tracker", list_type: :custom)
-      assert user.reload.updated_at > before
+      assert_equal before, user.reload.updated_at
     end
   end
 
-  test "after_commit touches user on update" do
-    before = @list.user.reload.updated_at
+  test "updating a list does not update its user" do
+    user = @list.user
+    user.touch(time: 1.hour.ago)
+    before = user.reload.updated_at
     travel 1.minute do
       @list.update!(name: "Renamed Favorites")
-      assert @list.user.reload.updated_at > before
+      assert_equal before, user.reload.updated_at
     end
   end
 
-  test "after_commit touches user on destroy" do
+  test "destroying a list does not update its user" do
     user = @custom_list.user
+    user.touch(time: 1.hour.ago)
     user_list_items(:regular_user_custom_album_1).destroy
     before = user.reload.updated_at
     travel 1.minute do
       @custom_list.destroy
-      assert user.reload.updated_at > before
+      assert_equal before, user.reload.updated_at
     end
   end
 
