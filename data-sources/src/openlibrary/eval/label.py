@@ -26,10 +26,26 @@ import typer
 
 from openlibrary.eval.build_pool import PoolEntry
 from openlibrary.eval.schema import IDENTITY_RULES, EvalCandidate, EvalCase, EvalLabel
+from openlibrary.pipeline.paths import ArtifactPaths
 
 app = typer.Typer(add_completion=False)
 
 _WORK_KEY = re.compile(r"^OL\d+W$")
+
+
+@dataclass(frozen=True)
+class CandidateDetail:
+    """Curation signals the pool does not carry.
+
+    `revision` and the spread of identifier types are what separate two OL
+    works that are the same book, and neither is in `PoolCandidate`. They are
+    read from the artifact at start-up rather than baked into the pool, so the
+    pool -- and every case id already labelled against it -- stays untouched.
+    """
+
+    revision: int = 0
+    last_modified: str | None = None
+    id_types: int = 0
 
 
 @dataclass(frozen=True)
@@ -38,7 +54,41 @@ class Choice:
     work_key: str | None = None
 
 
-def render_case(entry: PoolEntry, *, index: int, total: int) -> str:
+def most_curated(
+    work_keys: list[str],
+    details: dict[str, CandidateDetail],
+    *,
+    readinglog: dict[str, int],
+    editions: dict[str, int],
+) -> str | None:
+    """Which of several records for the same book to name in the label.
+
+    Only a tiebreak, and only once the labeller has decided the candidates ARE
+    one book. It answers "which record", never "is this the answer".
+
+    Revision first: it counts how often a record has been edited and cannot be
+    inflated by OL duplicating an edition, which is what makes edition_count
+    unreliable here -- OL21242676W shows two editions because one of them is a
+    clone of OL1898483W's. Identifier spread breaks a revision tie, because a
+    work carrying OCLC and LCCN has been through a library catalogue.
+    """
+    if not work_keys:
+        return None
+
+    def rank(key: str) -> tuple[int, int, int, int]:
+        detail = details.get(key, CandidateDetail())
+        return (detail.revision, detail.id_types, readinglog.get(key, 0), editions.get(key, 0))
+
+    return max(work_keys, key=rank)
+
+
+def render_case(
+    entry: PoolEntry,
+    *,
+    index: int,
+    total: int,
+    details: dict[str, CandidateDetail] | None = None,
+) -> str:
     book = entry.book
     lines = [
         "",
@@ -92,18 +142,41 @@ def render_case(entry: PoolEntry, *, index: int, total: int) -> str:
             f"ratings={candidate.ratings_count} title_fp_freq={candidate.title_fp_freq}"
         )
         lines.append(f"     rules: {', '.join(candidate.rules)}")
+        if details is not None:
+            detail = details.get(candidate.work_key, CandidateDetail())
+            lines.append(
+                f"     curation: rev={detail.revision} id_types={detail.id_types}"
+                f" modified={detail.last_modified or '(unknown)'}"
+            )
         lines.append(f"     https://openlibrary.org/works/{candidate.work_key}")
     # A 20-candidate case renders ~136 lines, so the detail for candidate [1] has
     # scrolled off long before the prompt. Repeat the choices compactly here so
     # the final screen is self-sufficient and nobody has to scroll back mid-decision.
     if entry.candidates:
         lines += ["", "CHOOSE  (detail above; this repeats it in one line each)"]
-        for position, candidate in enumerate(entry.candidates, start=1):
-            title = (candidate.title or "")[:52]
-            lines.append(
-                f" [{position:>2}] {candidate.work_key:<13} {title:<52} "
-                f"{candidate.edition_count:>4} eds  rl={candidate.readinglog_count}"
+        curated = (
+            most_curated(
+                [c.work_key for c in entry.candidates],
+                details,
+                readinglog={c.work_key: c.readinglog_count for c in entry.candidates},
+                editions={c.work_key: c.edition_count for c in entry.candidates},
             )
+            if details is not None
+            else None
+        )
+        for position, candidate in enumerate(entry.candidates, start=1):
+            title = (candidate.title or "")[:44]
+            detail = (details or {}).get(candidate.work_key, CandidateDetail())
+            mark = ">" if candidate.work_key == curated else " "
+            lines.append(
+                f"{mark}[{position:>2}] {candidate.work_key:<13} {title:<44} "
+                f"{candidate.edition_count:>3} eds rl={candidate.readinglog_count:<3}"
+                f" rev={detail.revision:<3} ids={detail.id_types}"
+            )
+        if curated:
+            lines.append("      > = most-curated record. A tiebreak for deciding WHICH of several")
+            lines.append("          duplicate OL works to name, only after you have decided they")
+            lines.append("          are one book. It is not a view on whether any of them matches.")
 
     upper = len(entry.candidates)
     pick = f"  [1-{upper}] pick a candidate" if upper else "  (no candidates to pick)"
@@ -205,6 +278,50 @@ def default_rationale(entry: PoolEntry, *, verdict: str, work_key: str | None) -
     return ""
 
 
+def fetch_candidate_details(
+    root: Path, dump_date: str, work_keys: list[str]
+) -> dict[str, CandidateDetail] | None:
+    """Read revision and identifier spread for every candidate, once.
+
+    One query for the whole pool rather than one per case: the three scans cost
+    about half a second together, because DuckDB prunes parquet row groups by
+    work key. Returns None when the artifact is not mounted, and the tool
+    renders exactly as it did before.
+    """
+    if not work_keys:
+        return {}
+    from openlibrary.pipeline.duck import connect
+
+    paths = ArtifactPaths(root=root, dump_date=dump_date)
+    if not paths.table("works").exists():
+        return None
+    con = connect(paths, memory_limit="4GB")
+    try:
+        con.execute("CREATE TABLE wanted (work_key VARCHAR)")
+        con.executemany("INSERT INTO wanted VALUES (?)", [(k,) for k in work_keys])
+        rows = con.execute(
+            f"""
+            -- last_modified is a DATE, so the cast is already yyyy-mm-dd and
+            -- nothing here trims it.
+            SELECT w.work_key, w.revision, CAST(w.last_modified AS VARCHAR),
+                   coalesce(i.n, 0)
+            FROM wanted k
+            JOIN '{paths.table("works")}' w USING (work_key)
+            LEFT JOIN (
+                SELECT work_key, count(DISTINCT id_type) AS n
+                FROM '{paths.table("identifiers")}'
+                WHERE work_key IS NOT NULL GROUP BY 1
+            ) i USING (work_key)
+            """
+        ).fetchall()
+    finally:
+        con.close()
+    return {
+        key: CandidateDetail(revision=rev or 0, last_modified=mod, id_types=n)
+        for key, rev, mod, n in rows
+    }
+
+
 def _prompt_identity_rule() -> str:
     typer.echo("  identity rule:")
     for position, rule in enumerate(IDENTITY_RULES, start=1):
@@ -223,6 +340,7 @@ def main(
     pool: Path = typer.Option(..., "--pool"),  # noqa: B008
     out: Path = typer.Option(..., "--out"),  # noqa: B008
     dump_date: str = typer.Option("2026-07-31", "--dump-date"),
+    root: Path = typer.Option(Path("/home/shane/ol-data"), "--root"),  # noqa: B008
     stratum: str | None = typer.Option(None, "--stratum"),
 ) -> None:
     entries = [
@@ -232,12 +350,17 @@ def main(
     ]
     if stratum:
         entries = [e for e in entries if e.stratum == stratum]
+    details = fetch_candidate_details(
+        root, dump_date, sorted({c.work_key for e in entries for c in e.candidates})
+    )
     done = already_labeled(out)
     remaining = [e for e in entries if e.case_id not in done]
     typer.echo(f"{len(done)} already labeled, {len(remaining)} to go")
 
     for offset, entry in enumerate(remaining, start=1):
-        typer.echo(render_case(entry, index=len(done) + offset, total=len(entries)))
+        typer.echo(
+            render_case(entry, index=len(done) + offset, total=len(entries), details=details)
+        )
         while True:
             choice = parse_choice(typer.prompt("  choice"), entry)
             if choice.kind == "invalid":

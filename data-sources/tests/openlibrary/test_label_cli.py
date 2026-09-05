@@ -342,3 +342,120 @@ def test_a_book_with_no_author_gets_a_search_line_without_a_dangling_by():
     )
 
     assert "Kebra Nagast" in render_case(entry, index=1, total=450).splitlines()
+
+
+# The tiebreak the labeller needs for OL's duplicate works -- which of several
+# records that are all the same book to name -- rests on `revision` and the
+# spread of identifier types, and NEITHER is in the pool. Without them on
+# screen the choice is made from edition count and reading-log alone, which
+# point the wrong way exactly when the duplicates are freshest: OL24677831W
+# and OL24677832W are one book inserted twice in one run, and the better-curated
+# half is the one with FEWER readers.
+
+
+def _detail(**kw):
+    from openlibrary.eval.label import CandidateDetail
+
+    return CandidateDetail(**{"revision": 0, "last_modified": None, "id_types": 0, **kw})
+
+
+def test_the_most_curated_record_wins_on_revision():
+    """Books #51080's two candidates: consecutive work keys from one import,
+    identical ISBN, publisher, year and page count. Revision 2 beats 1 even
+    though revision 1 is the one with a reader."""
+    from openlibrary.eval.label import most_curated
+
+    chosen = most_curated(
+        ["OL24677831W", "OL24677832W"],
+        {
+            "OL24677831W": _detail(revision=1, id_types=3),
+            "OL24677832W": _detail(revision=2, id_types=4),
+        },
+        readinglog={"OL24677831W": 1, "OL24677832W": 0},
+        editions={"OL24677831W": 1, "OL24677832W": 1},
+    )
+
+    assert chosen == "OL24677832W"
+
+
+def test_identifier_spread_breaks_a_revision_tie():
+    """`Palaces of Medieval England`: the record carrying OCLC and LCCN as well
+    as the ISBNs is the one a library catalogue has touched."""
+    from openlibrary.eval.label import most_curated
+
+    chosen = most_curated(
+        ["OL9037551W", "OL1733659W"],
+        {
+            "OL9037551W": _detail(revision=6, id_types=4),
+            "OL1733659W": _detail(revision=6, id_types=5),
+        },
+        readinglog={"OL9037551W": 0, "OL1733659W": 0},
+        editions={"OL9037551W": 1, "OL1733659W": 1},
+    )
+
+    assert chosen == "OL1733659W"
+
+
+def test_a_candidate_the_artifact_cannot_place_ranks_last_instead_of_crashing():
+    """A work in the pool but absent from this dump -- the pool is built once
+    and relabelled against later artifacts."""
+    from openlibrary.eval.label import most_curated
+
+    chosen = most_curated(
+        ["OL_MISSING_W", "OL455827W"],
+        {"OL455827W": _detail(revision=8, id_types=6)},
+        readinglog={"OL455827W": 9},
+        editions={"OL455827W": 4},
+    )
+
+    assert chosen == "OL455827W"
+
+
+def test_render_shows_revision_and_identifier_spread_for_each_candidate(entry):
+    from openlibrary.eval.label import render_case
+
+    text = render_case(
+        entry,
+        index=1,
+        total=450,
+        details={
+            "OL15331408W": _detail(revision=8, id_types=6, last_modified="2025-10-29"),
+            "OL8384219W": _detail(revision=1, id_types=2),
+        },
+    )
+
+    assert "rev=8" in text
+    assert "rev=1" in text
+    assert "2025-10-29" in text
+
+
+def test_render_without_details_still_works(entry):
+    """The tool must run against a dump the artifact is not mounted for."""
+    from openlibrary.eval.label import render_case
+
+    assert "OL15331408W" in render_case(entry, index=1, total=450)
+
+
+def test_curation_detail_is_read_from_the_artifact(fixture_artifact):
+    """The pure ranking is pinned above; this pins the read that feeds it.
+
+    Without it the SQL could return every revision as 0 and the tiebreak would
+    silently fall through to reading-log -- which is the exact failure that
+    made this data worth putting on screen in the first place.
+    """
+    from openlibrary.eval.label import fetch_candidate_details
+
+    details = fetch_candidate_details(
+        fixture_artifact.root, fixture_artifact.dump_date, ["OL81205W", "OL100077W"]
+    )
+
+    assert details["OL81205W"].revision == 17
+    assert details["OL100077W"].revision == 7
+    assert details["OL100077W"].last_modified == "2022-10-05"
+
+
+def test_a_missing_artifact_disables_the_column_rather_than_failing(tmp_path):
+    """`--root` pointing nowhere must still let someone label."""
+    from openlibrary.eval.label import fetch_candidate_details
+
+    assert fetch_candidate_details(tmp_path / "nope", "2026-07-31", ["OL1W"]) is None
