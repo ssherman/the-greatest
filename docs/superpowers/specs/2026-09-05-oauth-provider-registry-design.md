@@ -244,6 +244,22 @@ rather than a lookup problem (F6). It gets its own review.
 **D8 — Facebook ships disabled.** The registry entry exists with `enabled: false`. Turning
 it on is a one-word change once the Meta app is resolved (F4).
 
+**D8a — A brand-new Meta app will be created; the old one is kept, not deleted.** Decided
+by Shane 2026-09-05, after Meta's self-service recovery turned out to offer nothing. Creating
+it goes through Meta's new app-creation flow and is **separate work, not part of this spec**.
+
+Two consequences for the recovery spec (D7), not for this one:
+
+- A new app issues fresh app-scoped ids, so `external_provider_uid` is **not** a usable key
+  for Facebook. Facebook recovery rests on the `legacy_v1_data` email backfill (F7), which
+  reaches 12,683 of the 17,531 rows. The ~4,800 with no email anywhere lose their only key.
+- Keeping the old app alive preserves the one theoretical route to those ~4,800 — a
+  business-scoped id mapping between two apps in the same Business Manager. It is likely
+  impractical (it needs each user to authenticate against the old app, which only app-role
+  holders can do), but deleting the app would foreclose it outright.
+
+X is unaffected: its ids are global, not app-scoped (F5).
+
 **D9 — Apple is not shipped in this pass.** It is listed as trusted (its relay addresses
 are genuinely Apple-verified and user-controlled) and it needs to be, because legacy-site
 Apple tokens already validate here. Its `@privaterelay.appleid.com` addresses match no
@@ -390,5 +406,6 @@ belt-and-braces for X. If `false`, it is load-bearing and F1 is confirmed empiri
   globally stable and safe to match on (F5), and 49 duplicate groups already exist, so it
   begins as a merge problem, not a prevention problem (F6).
 - **Enabling Facebook** (D8) — blocked on the Meta app, not on code.
+- **Creating the replacement Meta app** (D8a) — Meta's own flow, separate work.
 - **Apple sign-in** (D9).
 - **Movies.** Out of scope permanently.
