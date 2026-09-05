@@ -9,14 +9,24 @@ present in Open Library at all?
 
 ## Results
 
-| Identifier | Books holding one | Distinct values | Present in OL | Value coverage | Books reached | Book coverage |
-|---|---:|---:|---:|---:|---:|---:|
-| `isbn10` | 136,650 | 214,747 | 173,393 | 80.7% | 118,071 | **86.4%** |
-| `isbn13` | 133,057 | 166,736 | 138,947 | 83.3% | 113,660 | **85.4%** |
-| `goodreads` | 151,935 | 193,915 | 58,352 | 30.1% | 50,844 | 33.5% |
-| `asin` | 30,507 | 76,333 | 4,681 | 6.1% | 3,676 | **12.0%** |
+| Identifier | Books holding one | Distinct values | Values in OL | Value coverage | Books whose id **reaches a work** | Book coverage | Lost to orphan editions |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `isbn10` | 136,650 | 214,747 | 173,393 | 80.7% | 117,756 | **86.2%** | 315 |
+| `isbn13` | 133,057 | 166,736 | 138,947 | 83.3% | 113,324 | **85.2%** | 336 |
+| `goodreads` | 151,935 | 193,915 | 58,352 | 30.1% | 50,566 | 33.3% | 278 |
+| `asin` | 30,507 | 76,333 | 4,681 | 6.1% | 3,676 | **12.0%** | 0 |
 
-**Books reachable by any identifier at all: 119,861 of 157,805 — 76.0%.**
+**Books whose identifier reaches an Open Library work: 119,543 of 157,805 —
+75.8%.** Another 318 books hold an identifier Open Library has but cannot use.
+
+### Present in Open Library is not the same as usable
+
+**1,947,922 Open Library editions carry no work key**, and **2,712,741
+identifier rows point at one of them.** Blocking requires a work
+(`WHERE i.work_key IS NOT NULL` in `build_pool`), so those identifiers exist in
+the artifact and can never produce a candidate. The effect on us is small — 318
+books — but the two columns above measure different things and an earlier
+version of this table conflated them.
 
 ## What that means for the matcher
 
@@ -50,6 +60,25 @@ record OL holds three times over.
 Our importer never captured that ISBN, so blocking produced nothing. Had it
 captured it, the identifier rule would have fired and returned **the wrong
 work**. The missing identifier accidentally prevented a false merge.
+
+### And the identifier itself can belong to a different book
+
+Book #138405 is von Baer's 1827 *De ovi mammalium et hominis genesi*, stored
+under its English title. Its ISBN `9783442112975`, ISBN-10 `3442112974`, ASIN
+and Goodreads id `1408396` all resolve to **`OL12708683M` — *Sag nicht Ja, wenn
+Du Nein sagen willst*, Goldmann 1998**, a German self-help paperback. Every
+identifier on the row belongs to a different book.
+
+That edition happens to be one of the 1.9M with no work key, so blocking
+produced nothing. Had it carried a work, the identifier rule would have matched
+a 19th-century embryology treatise to a self-help paperback with full
+confidence.
+
+**This is now the third case where an unusable identifier prevented a wrong
+match** — #143219's ISBN was never captured, DCeased's ASIN is absent from OL,
+and this one is orphaned. The pattern is worth naming because it means our
+current precision is partly luck, and improving identifier capture without
+improving verification would spend that luck.
 
 The `isbn_reuse` stratum (30 cases, one ISBN pointing at more than one work)
 exists to measure how often this happens. Until it is labelled, do not treat an
@@ -88,7 +117,14 @@ for typ in ("isbn13", "isbn10", "asin", "goodreads"):
         FROM ours o JOIN '{p.table("identifiers")}' i
           ON i.id_type = o.id_type AND i.value = o.value
         WHERE o.id_type = '{typ}'""").fetchone()
-    print(f"{typ:<10} books={nb:>7,} vals={nv:>7,} inOL={hv:>7,} ({hv/nv:5.1%}) reached={hb:>7,} ({hb/nb:5.1%})")
+    # The work_key filter is what makes this "usable", not merely "present":
+    # blocking joins on it, so an identifier on a work-less edition is inert.
+    (usable,) = con.execute(f"""SELECT count(DISTINCT o.book_id)
+        FROM ours o JOIN '{p.table("identifiers")}' i
+          ON i.id_type = o.id_type AND i.value = o.value
+        WHERE o.id_type = '{typ}' AND i.work_key IS NOT NULL""").fetchone()
+    print(f"{typ:<10} books={nb:>7,} vals={nv:>7,} inOL={hv:>7,} ({hv/nv:5.1%})"
+          f" reaches_work={usable:>7,} ({usable/nb:5.1%}) orphan_only={hb - usable:>4,}")
 PY
 ```
 
@@ -98,8 +134,9 @@ record mid-JSON.
 
 ## Known limits
 
-- **Coverage is not correctness.** "Present in OL" means the value exists there,
-  not that it points at the right work. See the Remini case above.
+- **Coverage is not correctness.** Reaching a work means the value resolves,
+  not that it resolves to the right work — or even to the right book. See the
+  Remini and von Baer cases above.
 - **Per-value and per-book coverage differ** because a book can hold several
   values of one type; both columns are given rather than one.
 - **`asin` is measured as one type.** Some ASINs we hold are ISBN-10s rather
