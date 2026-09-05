@@ -414,7 +414,7 @@ def test_the_curation_columns_carry_a_warning_about_title_only_matches(entry):
     text = render_case(entry, index=1, total=450, details={})
     legend = text.split("CHOOSE")[1]
 
-    assert "already judged to be the same book" in legend
+    assert "keep only the candidates 'our ids' reaches" in legend
     # `title_fp_freq` also appears in the per-candidate detail block above, so
     # this has to look at the legend specifically or it passes either way.
     assert "check title_fp_freq" in legend
@@ -431,3 +431,75 @@ def test_nothing_in_the_render_marks_a_preferred_candidate(entry):
     )
 
     assert not any(line.startswith(">") for line in text.splitlines())
+
+
+# Which of OUR identifiers reach a candidate is the single most decisive signal
+# in this stratum, and the pool only records that SOME identifier rule fired --
+# not which id, nor how many. On `What to Expect When You're Expecting` that
+# distinction cut 17 candidates to one: all three of our ISBNs and our Goodreads
+# id land on OL521324W and nothing of ours touches the runner-up.
+
+
+def test_each_candidate_shows_which_of_our_identifiers_reach_it(entry):
+    text = render_case(
+        entry,
+        index=1,
+        total=450,
+        id_hits={"OL15331408W": ["goodreads", "isbn10", "isbn13"], "OL8384219W": []},
+    )
+
+    assert "our ids: goodreads, isbn10, isbn13" in text
+
+
+def test_a_candidate_no_identifier_of_ours_reaches_says_so(entry):
+    """Silence would read as "not looked up". These are the candidates that
+    matched on title or author alone."""
+    text = render_case(
+        entry, index=1, total=450, id_hits={"OL15331408W": ["isbn13"], "OL8384219W": []}
+    )
+
+    assert "our ids: none" in text
+
+
+def test_without_the_lookup_no_identifier_line_is_shown(entry):
+    assert "our ids:" not in render_case(entry, index=1, total=450)
+
+
+def _entry_with(case_id, candidates, **ids):
+    from openlibrary.eval.build_pool import PoolCandidate
+
+    return PoolEntry(
+        case_id=case_id,
+        stratum="isbn_reuse",
+        book=EvalBook(book_id=1, title="x", author_names=["y"], **ids),
+        candidates=[PoolCandidate(work_key=k, rules=["identifier"]) for k in candidates],
+    )
+
+
+def test_an_identifier_hit_is_attributed_only_to_the_work_that_carries_it(fixture_artifact):
+    """Without the work_key join every candidate in the case would show the
+    hit, which is the one thing this line exists to distinguish."""
+    from openlibrary.eval.label import fetch_identifier_hits
+
+    entry = _entry_with("isbn_reuse-a", ["OL108593W", "OL100077W"], isbn10=["080782156X"])
+
+    hits = fetch_identifier_hits(fixture_artifact.root, fixture_artifact.dump_date, [entry])
+
+    # `_identifier_pairs` also derives the ISBN-13 form from an ISBN-10, so one
+    # stored value legitimately reaches the work under both types.
+    assert hits["isbn_reuse-a"] == {"OL108593W": ["isbn10", "isbn13"]}
+
+
+def test_a_value_that_matches_under_a_different_id_type_is_not_a_hit(fixture_artifact):
+    """`89036396` is an LCCN in the corpus. A book holding that number as a
+    GOODREADS id has not matched anything -- and this is not hypothetical:
+    our goodreads ids 135034, 1039053, 3811210 and 23403374 all collide with
+    OCLC numbers on unrelated Open Library works.
+    """
+    from openlibrary.eval.label import fetch_identifier_hits
+
+    entry = _entry_with("isbn_reuse-b", ["OL108593W"], goodreads_id=["89036396"])
+
+    hits = fetch_identifier_hits(fixture_artifact.root, fixture_artifact.dump_date, [entry])
+
+    assert hits["isbn_reuse-b"] == {}

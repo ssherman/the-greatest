@@ -24,7 +24,7 @@ from pathlib import Path
 
 import typer
 
-from openlibrary.eval.build_pool import PoolEntry
+from openlibrary.eval.build_pool import PoolEntry, _identifier_pairs
 from openlibrary.eval.schema import IDENTITY_RULES, EvalCandidate, EvalCase, EvalLabel
 from openlibrary.pipeline.paths import ArtifactPaths
 
@@ -60,6 +60,7 @@ def render_case(
     index: int,
     total: int,
     details: dict[str, CandidateDetail] | None = None,
+    id_hits: dict[str, list[str]] | None = None,
 ) -> str:
     book = entry.book
     lines = [
@@ -114,6 +115,9 @@ def render_case(
             f"ratings={candidate.ratings_count} title_fp_freq={candidate.title_fp_freq}"
         )
         lines.append(f"     rules: {', '.join(candidate.rules)}")
+        if id_hits is not None:
+            reached = id_hits.get(candidate.work_key) or []
+            lines.append(f"     our ids: {', '.join(reached) if reached else 'none'}")
         if details is not None:
             detail = details.get(candidate.work_key, CandidateDetail())
             lines.append(
@@ -137,12 +141,13 @@ def render_case(
         if details is not None:
             lines += [
                 "",
-                "  rev = times the OL record has been edited; ids = distinct identifier",
-                "  types on it. Use them ONLY to choose between candidates you have",
-                "  already judged to be the same book: prefer higher rev, then more ids.",
-                "  Candidates matched by title_fp alone are often different books that",
-                "  share a title -- check title_fp_freq above before reading anything",
-                "  into a long list.",
+                "  Work down:",
+                "   (1) keep only the candidates 'our ids' reaches. If none does, keep all.",
+                "   (2) among those, decide which are the same book. That part is yours.",
+                "   (3) break the tie on higher rev, then more ids.",
+                "  A candidate matched by title_fp alone is often a different book that",
+                "  happens to share the title -- check title_fp_freq before reading",
+                "  anything into a long list.",
             ]
 
     upper = len(entry.candidates)
@@ -245,6 +250,57 @@ def default_rationale(entry: PoolEntry, *, verdict: str, work_key: str | None) -
     return ""
 
 
+def fetch_identifier_hits(
+    root: Path, dump_date: str, entries: list[PoolEntry]
+) -> dict[str, dict[str, list[str]]] | None:
+    """Which of OUR identifiers reach each candidate, per case.
+
+    The pool records that the `identifier` rule fired, never which identifier
+    or how many, and that difference decides most of this stratum: on case
+    isbn_reuse-013 all three of our ISBNs and our Goodreads id land on
+    OL521324W while nothing of ours touches the record with the matching
+    declared year.
+
+    One query for the whole pool. Returns None when the artifact is absent.
+    """
+    from openlibrary.pipeline.duck import connect
+
+    paths = ArtifactPaths(root=root, dump_date=dump_date)
+    if not paths.table("identifiers").exists():
+        return None
+    pairs = [
+        (entry.case_id, id_type, value)
+        for entry in entries
+        for id_type, value in _identifier_pairs(entry.book)
+    ]
+    wanted = [(entry.case_id, c.work_key) for entry in entries for c in entry.candidates]
+    if not pairs or not wanted:
+        return {}
+    con = connect(paths, memory_limit="4GB")
+    try:
+        con.execute("CREATE TABLE ours (case_id VARCHAR, id_type VARCHAR, value VARCHAR)")
+        con.executemany("INSERT INTO ours VALUES (?,?,?)", pairs)
+        con.execute("CREATE TABLE cands (case_id VARCHAR, work_key VARCHAR)")
+        con.executemany("INSERT INTO cands VALUES (?,?)", wanted)
+        rows = con.execute(
+            f"""
+            SELECT c.case_id, c.work_key, list(DISTINCT o.id_type ORDER BY o.id_type)
+            FROM cands c
+            JOIN ours o USING (case_id)
+            JOIN '{paths.table("identifiers")}' i
+              ON i.id_type = o.id_type AND i.value = o.value
+             AND i.work_key = c.work_key
+            GROUP BY 1, 2
+            """
+        ).fetchall()
+    finally:
+        con.close()
+    hits: dict[str, dict[str, list[str]]] = {case: {} for case, _ in wanted}
+    for case_id, work_key, id_types in rows:
+        hits[case_id][work_key] = list(id_types)
+    return hits
+
+
 def fetch_candidate_details(
     root: Path, dump_date: str, work_keys: list[str]
 ) -> dict[str, CandidateDetail] | None:
@@ -320,13 +376,20 @@ def main(
     details = fetch_candidate_details(
         root, dump_date, sorted({c.work_key for e in entries for c in e.candidates})
     )
+    id_hits = fetch_identifier_hits(root, dump_date, entries)
     done = already_labeled(out)
     remaining = [e for e in entries if e.case_id not in done]
     typer.echo(f"{len(done)} already labeled, {len(remaining)} to go")
 
     for offset, entry in enumerate(remaining, start=1):
         typer.echo(
-            render_case(entry, index=len(done) + offset, total=len(entries), details=details)
+            render_case(
+                entry,
+                index=len(done) + offset,
+                total=len(entries),
+                details=details,
+                id_hits=None if id_hits is None else id_hits.get(entry.case_id, {}),
+            )
         )
         while True:
             choice = parse_choice(typer.prompt("  choice"), entry)
