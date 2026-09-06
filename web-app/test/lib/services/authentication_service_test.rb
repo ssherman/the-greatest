@@ -136,4 +136,128 @@ class AuthenticationServiceTest < ActiveSupport::TestCase
     refute result[:success]
     assert_equal :authentication_failed, result[:error_code]
   end
+
+  # F1. The guard's real question is not "did the token say verified" but
+  # "could someone have registered this address at this provider without
+  # controlling it". For X the answer is no -- it verifies by confirmation
+  # mail -- but Firebase sends no flag saying so.
+  test "a trusted OAuth provider is email-trusted even when the claim is false" do
+    token = FirebaseTokenHelper.token({
+      "sub" => "uid-x-1",
+      "email" => "x.person@example.com",
+      "email_verified" => false,
+      "firebase" => {"sign_in_provider" => "twitter.com"}
+    })
+
+    result = call(token)
+
+    assert result[:success], result[:error]
+    assert result[:provider_data][:email_trusted], "twitter.com must be email-trusted"
+    refute result[:provider_data][:email_verified],
+      "the raw claim must still be recorded as false"
+  end
+
+  test "every trusted provider is trusted with a false claim" do
+    # Without this, emptying TRUSTED_EMAIL_PROVIDERS would make the loop
+    # below iterate zero times and the test would pass with zero assertions.
+    refute_empty Services::AuthenticationService::TRUSTED_EMAIL_PROVIDERS
+
+    Services::AuthenticationService::TRUSTED_EMAIL_PROVIDERS.each_with_index do |sign_in_provider, i|
+      token = FirebaseTokenHelper.token({
+        "sub" => "uid-trusted-#{i}",
+        "email" => "trusted#{i}@example.com",
+        "email_verified" => false,
+        "firebase" => {"sign_in_provider" => sign_in_provider}
+      })
+
+      result = call(token)
+
+      assert result[:success], "#{sign_in_provider}: #{result[:error]}"
+      assert result[:provider_data][:email_trusted], "#{sign_in_provider} must be email-trusted"
+    end
+  end
+
+  test "password is never email-trusted on a false claim" do
+    token = FirebaseTokenHelper.token({
+      "sub" => "uid-pw-untrusted",
+      "email" => "pw.person@example.com",
+      "email_verified" => false,
+      "firebase" => {"sign_in_provider" => "password"}
+    })
+
+    result = call(token)
+
+    assert result[:success], result[:error]
+    refute result[:provider_data][:email_trusted],
+      "a Firebase password account can be created for any address without " \
+      "proving control -- this is the takeover vector the guard blocks"
+  end
+
+  test "password IS email-trusted once the claim is genuinely true" do
+    token = FirebaseTokenHelper.token({
+      "sub" => "uid-pw-verified",
+      "email" => "pw.verified@example.com",
+      "email_verified" => true,
+      "firebase" => {"sign_in_provider" => "password"}
+    })
+
+    result = call(token)
+
+    assert result[:success], result[:error]
+    assert result[:provider_data][:email_trusted]
+  end
+
+  test "the trusted list never contains password" do
+    refute_includes Services::AuthenticationService::TRUSTED_EMAIL_PROVIDERS, "password"
+  end
+
+  # The provider's own user id (X's numeric id, Facebook's app-scoped id) lives
+  # under the firebase claim's identities map, keyed by sign_in_provider, as an
+  # array. It is the only reconnection key for an email-less OAuth user, so it
+  # must survive extraction even though nothing upstream of this claim is ever
+  # trusted input.
+  test "captures the provider's own user id from the firebase identities claim" do
+    token = FirebaseTokenHelper.token({
+      "sub" => "uid-provider-uid-1",
+      "email" => "provider.uid.person@example.com",
+      "firebase" => {
+        "sign_in_provider" => "twitter.com",
+        "identities" => {"twitter.com" => ["1406121503133888515"]}
+      }
+    })
+
+    result = call(token)
+
+    assert result[:success], result[:error]
+    assert_equal "1406121503133888515", result[:provider_data][:provider_uid]
+  end
+
+  test "a token with no identities claim yields no provider_uid" do
+    token = FirebaseTokenHelper.token({
+      "sub" => "uid-provider-uid-2",
+      "email" => "no.identities@example.com",
+      "firebase" => {"sign_in_provider" => "twitter.com"}
+    })
+
+    result = call(token)
+
+    assert result[:success], result[:error]
+    assert_nil result[:provider_data][:provider_uid]
+  end
+
+  test "a token with an empty identities array for the provider yields no provider_uid" do
+    token = FirebaseTokenHelper.token({
+      "sub" => "uid-provider-uid-3",
+      "email" => "empty.identities@example.com",
+      "firebase" => {
+        "sign_in_provider" => "twitter.com",
+        "identities" => {"twitter.com" => []}
+      }
+    })
+
+    result = call(token)
+
+    assert result[:success], result[:error]
+    assert_nil result[:provider_data][:provider_uid]
+  end
 end

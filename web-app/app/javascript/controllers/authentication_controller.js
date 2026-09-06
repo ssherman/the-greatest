@@ -19,7 +19,12 @@ export default class extends Controller {
   static values = {
     reloadAfterAuth: Boolean,
     currentUser: Object,
-    firebaseSrc: String
+    firebaseSrc: String,
+    // The enabled entries from config/auth_providers.json, handed over by the
+    // widget. A Stimulus value rather than a JS import because there is no
+    // @rollup/plugin-json in this project, and adding one to move a list that
+    // Rails already reads would be the wrong trade.
+    providers: Array
   }
 
   connect() {
@@ -317,9 +322,29 @@ export default class extends Controller {
     }
   }
 
-  // Handle Google sign in
-  async signInWithGoogle(event) {
+  // Look up one registry entry by id. Returns null for an unknown id rather
+  // than throwing, so a stale button in cached Turbo markup degrades to a
+  // visible error instead of an unhandled rejection.
+  providerConfig(id) {
+    return this.providersValue.find((provider) => provider.id === id) || null
+  }
+
+  // Handles every OAuth provider. The button supplies its id through a
+  // Stimulus action param, so adding a provider touches config and markup
+  // only -- never this file.
+  async signInWithOauth(event) {
     event.preventDefault()
+
+    const id = event.params.provider
+    const config = this.providerConfig(id)
+
+    if (!config) {
+      console.error(`Unknown auth provider: ${id}`)
+      this.hideError()
+      this.hideInfo()
+      this.showError('Sign-in is temporarily unavailable. Please try again.')
+      return
+    }
 
     this.showLoading(true)
     this.hideError()
@@ -329,7 +354,7 @@ export default class extends Controller {
     // failure (e.g. firebase-auth.js 404s) has an error.message like "failed
     // to load firebase bundle from /assets/firebase-auth-a1b2c3.js", which is
     // meaningless -- and alarming -- in the login modal. A genuine Firebase
-    // auth error below (the reader cancelling the Google flow, a real
+    // auth error below (the reader cancelling the provider flow, a real
     // provider error) is still shown verbatim, since that message IS useful.
     let firebase
     try {
@@ -345,9 +370,9 @@ export default class extends Controller {
       // Set BEFORE the redirect leaves the page: on return, connect() sees this
       // and eager-loads Firebase so getRedirectResult can run.
       markPendingRedirect()
-      await firebase.googleProvider.signIn(event)
+      await firebase.oauthProvider.signIn(config, event)
     } catch (error) {
-      console.error("Google sign in error:", error)
+      console.error(`${config.label} sign in error:`, error)
       clearPendingRedirect()
       this.showError(error.message)
       this.showLoading(false)

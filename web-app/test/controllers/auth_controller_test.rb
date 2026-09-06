@@ -282,4 +282,47 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :unauthorized
   end
+
+  test "check_provider names every registry provider, not only the enabled ones" do
+    apple_user = User.create!(
+      email: "apple.person@example.com",
+      auth_uid: "apple-uid-check-provider",
+      external_provider: :apple,
+      email_verified: true,
+      role: :user
+    )
+
+    post auth_check_provider_path, params: {email: apple_user.email}, as: :json
+
+    body = JSON.parse(response.body)
+    assert body["has_oauth_provider"],
+      "Apple ships disabled but 1,521 Apple users exist and still need the hint"
+    assert_equal "apple", body["provider"]
+  end
+
+  test "check_provider still refuses to advertise password accounts" do
+    post auth_check_provider_path, params: {email: users(:password_user).email}, as: :json
+
+    body = JSON.parse(response.body)
+    refute body["has_oauth_provider"], "advertising password accounts is an enumeration oracle"
+    assert_nil body["provider"]
+  end
+
+  test "check_provider advertises X by its registry label" do
+    x_user = User.create!(
+      email: "x.person@example.com",
+      auth_uid: "x-uid-check-provider",
+      external_provider: :twitter,
+      email_verified: false,
+      role: :user
+    )
+
+    post auth_check_provider_path, params: {email: x_user.email}, as: :json
+
+    body = JSON.parse(response.body)
+    assert body["has_oauth_provider"]
+    assert_equal "twitter", body["provider"]
+    assert_includes body["message"], "X",
+      "the message must use the registry label, not a capitalised enum name"
+  end
 end

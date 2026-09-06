@@ -20,6 +20,37 @@ module Services
       "twitter.com" => "twitter"
     }.freeze
 
+    # Providers that require email ownership at signup, so their address
+    # assertion is trusted for account linking even when Firebase passes no
+    # email_verified flag. X in particular verifies by confirmation mail but
+    # exposes no flag for it, and Firebase therefore sends false.
+    #
+    # The question this answers is NOT "did the token say verified" -- it is
+    # "could someone have registered this address at this provider without
+    # controlling it". Google requires proving control of an address before
+    # an account can use it, and X requires confirming an address before it
+    # activates an account that uses it.
+    #
+    # That is weaker than it sounds, though: the token's `email` claim is the
+    # Firebase account RECORD's email, not necessarily the address the
+    # provider asserted at signup, and Firebase lets an account holder change
+    # their own Firebase-record email afterward. So this list trusts the
+    # provider's identity -- that Google, Apple, X, or Facebook vouches this
+    # is a real, controlled account -- not the provenance of whatever address
+    # happens to be on today's token.
+    #
+    # "password" is deliberately absent and MUST stay absent: a Firebase
+    # password account can be created for any address without proving control,
+    # which is precisely the account-takeover route UnverifiedEmailConflict
+    # exists to block.
+    #
+    # This list is enumerated, never derived. A future provider that does not
+    # require email ownership must not become trusted merely by not being
+    # "password". It is also deliberately NOT read from
+    # config/auth_providers.json: enabling a button must never widen a security
+    # decision as a side effect.
+    TRUSTED_EMAIL_PROVIDERS = %w[google.com apple.com facebook.com twitter.com].freeze
+
     def self.call(auth_token:, project_id:, signup_domain: nil)
       payload = JwtValidationService.call(auth_token, project_id: project_id)
       provider_data = extract_provider_data(payload)
@@ -61,12 +92,26 @@ module Services
 
       {
         user_id: payload["sub"],
+        # The provider's OWN user id (X's numeric id, Facebook's app-scoped
+        # id) -- not the Firebase uid above. It is the only reconnection key
+        # for an email-less OAuth user, because provider ids (X's especially,
+        # see F5) are stable across apps and Firebase uids are not portable
+        # at all. Lives under the firebase claim's identities map, keyed by
+        # sign_in_provider, as an array; take the first element. Deliberately
+        # does NOT fall back to `sub` -- that is the Firebase uid, and writing
+        # it here would poison the column with values that match nothing.
+        provider_uid: Array(payload.dig("firebase", "identities", sign_in_provider)).first,
         email: payload["email"],
         name: payload["name"],
         picture: payload["picture"],
         # Strict true: Firebase sends a real boolean, and `|| false` on a
         # missing claim must not become "verified".
         email_verified: payload["email_verified"] == true,
+        # What the linking decision actually uses. Kept separate from the raw
+        # claim above so the users.email_verified column keeps recording what
+        # the provider genuinely asserted.
+        email_trusted: payload["email_verified"] == true ||
+          TRUSTED_EMAIL_PROVIDERS.include?(sign_in_provider),
         provider: provider,
         auth_time: payload["auth_time"],
         iat: payload["iat"],
