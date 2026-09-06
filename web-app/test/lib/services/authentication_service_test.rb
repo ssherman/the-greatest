@@ -136,4 +136,74 @@ class AuthenticationServiceTest < ActiveSupport::TestCase
     refute result[:success]
     assert_equal :authentication_failed, result[:error_code]
   end
+
+  # F1. The guard's real question is not "did the token say verified" but
+  # "could someone have registered this address at this provider without
+  # controlling it". For X the answer is no -- it verifies by confirmation
+  # mail -- but Firebase sends no flag saying so.
+  test "a trusted OAuth provider is email-trusted even when the claim is false" do
+    token = FirebaseTokenHelper.token({
+      "sub" => "uid-x-1",
+      "email" => "x.person@example.com",
+      "email_verified" => false,
+      "firebase" => {"sign_in_provider" => "twitter.com"}
+    })
+
+    result = call(token)
+
+    assert result[:success], result[:error]
+    assert result[:provider_data][:email_trusted], "twitter.com must be email-trusted"
+    refute result[:provider_data][:email_verified],
+      "the raw claim must still be recorded as false"
+  end
+
+  test "every trusted provider is trusted with a false claim" do
+    Services::AuthenticationService::TRUSTED_EMAIL_PROVIDERS.each_with_index do |sign_in_provider, i|
+      token = FirebaseTokenHelper.token({
+        "sub" => "uid-trusted-#{i}",
+        "email" => "trusted#{i}@example.com",
+        "email_verified" => false,
+        "firebase" => {"sign_in_provider" => sign_in_provider}
+      })
+
+      result = call(token)
+
+      assert result[:success], "#{sign_in_provider}: #{result[:error]}"
+      assert result[:provider_data][:email_trusted], "#{sign_in_provider} must be email-trusted"
+    end
+  end
+
+  test "password is never email-trusted on a false claim" do
+    token = FirebaseTokenHelper.token({
+      "sub" => "uid-pw-untrusted",
+      "email" => "pw.person@example.com",
+      "email_verified" => false,
+      "firebase" => {"sign_in_provider" => "password"}
+    })
+
+    result = call(token)
+
+    assert result[:success], result[:error]
+    refute result[:provider_data][:email_trusted],
+      "a Firebase password account can be created for any address without " \
+      "proving control -- this is the takeover vector the guard blocks"
+  end
+
+  test "password IS email-trusted once the claim is genuinely true" do
+    token = FirebaseTokenHelper.token({
+      "sub" => "uid-pw-verified",
+      "email" => "pw.verified@example.com",
+      "email_verified" => true,
+      "firebase" => {"sign_in_provider" => "password"}
+    })
+
+    result = call(token)
+
+    assert result[:success], result[:error]
+    assert result[:provider_data][:email_trusted]
+  end
+
+  test "the trusted list never contains password" do
+    refute_includes Services::AuthenticationService::TRUSTED_EMAIL_PROVIDERS, "password"
+  end
 end

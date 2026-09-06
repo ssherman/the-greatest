@@ -7,10 +7,17 @@
 #      that uses it, so this relinks -- a V1 user imported under one uid who
 #      later signs in with Google presents a different sub, and refusing would
 #      lock them out of their own data.
-#   3. an UNVERIFIED email that matches an existing account is refused outright.
+#   3. an UNTRUSTED email that matches an existing account is refused outright.
 #      This is the takeover route: anyone can create a Firebase password account
 #      for someone else's address, and the previous version matched on email
 #      unconditionally and then update!'d that row.
+#
+#      "Trusted" is broader than "verified" on purpose. A real OAuth provider
+#      already proved ownership at signup, and X does so without ever sending
+#      an email_verified flag -- so gating on the flag alone would send every
+#      returning X user to a verification wall. See
+#      AuthenticationService::TRUSTED_EMAIL_PROVIDERS. password is not on that
+#      list and never will be.
 #   4. otherwise, create.
 module Services
   class UserAuthenticationService
@@ -43,6 +50,7 @@ module Services
     def provider = provider_data[:provider]
     def email = provider_data[:email].presence&.downcase
     def email_verified? = provider_data[:email_verified] == true
+    def email_trusted? = provider_data[:email_trusted] == true
 
     def find_user
       by_uid = User.find_by(auth_uid: uid)
@@ -55,7 +63,7 @@ module Services
       # which row wins is Postgres's choice and can change between query plans.
       by_email = User.where("LOWER(email) = ?", email).order(:id).first
       return nil if by_email.nil?
-      raise UnverifiedEmailConflict, "unverified email matches an existing account" unless email_verified?
+      raise UnverifiedEmailConflict, "untrusted email matches an existing account" unless email_trusted?
 
       by_email
     end

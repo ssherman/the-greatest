@@ -8,6 +8,11 @@ class UserAuthenticationServiceTest < ActiveSupport::TestCase
       name: "Test User",
       picture: "https://example.com/photo.jpg",
       email_verified: true,
+      # The permissive value, so the happy-path tests below read the way they
+      # always did. It is the linking decision's input, so any test of the
+      # refusal path must override it -- leaving it alone there would let the
+      # attacker link and the test would pass for the wrong reason.
+      email_trusted: true,
       provider: "google",
       auth_time: Time.current.to_i,
       iat: Time.current.to_i,
@@ -83,14 +88,20 @@ class UserAuthenticationServiceTest < ActiveSupport::TestCase
     refute_equal original_uid, user.auth_uid
   end
 
-  # --- Step 3: an unverified email may never link. This IS the original bug. ---
+  # --- Step 3: an untrusted email may never link. This IS the original bug. ---
+  #
+  # Both tests in this section spell out email_trusted rather than leaning on
+  # the helper's permissive default, because these are the takeover cases and
+  # that default would let the attacker link. "password" plus an unverified
+  # claim is exactly what extract_provider_data turns into email_trusted:
+  # false, so this is the hash production would hand the service.
 
   test "refuses to link an existing account when the email is unverified" do
     victim = users(:google_user)
 
     assert_no_difference "User.count" do
       assert_raises Services::UserAuthenticationService::UnverifiedEmailConflict do
-        call(user_id: "attacker-uid", email: victim.email, email_verified: false, provider: "password")
+        call(user_id: "attacker-uid", email: victim.email, email_verified: false, email_trusted: false, provider: "password")
       end
     end
 
@@ -99,11 +110,13 @@ class UserAuthenticationServiceTest < ActiveSupport::TestCase
     assert_equal "google", victim.external_provider
   end
 
-  test "refuses to link when email_verified is absent entirely" do
+  # nil rather than false: email_trusted? compares with == true for the same
+  # reason email_verified? does -- a missing claim must not become "trusted".
+  test "refuses to link when the email claims are absent entirely" do
     victim = users(:google_user)
 
     assert_raises Services::UserAuthenticationService::UnverifiedEmailConflict do
-      call(user_id: "attacker-uid", email: victim.email, email_verified: nil, provider: "password")
+      call(user_id: "attacker-uid", email: victim.email, email_verified: nil, email_trusted: nil, provider: "password")
     end
   end
 
@@ -184,5 +197,66 @@ class UserAuthenticationServiceTest < ActiveSupport::TestCase
     assert_raises ArgumentError do
       Services::UserAuthenticationService.call(provider_data: provider_data(user_id: nil))
     end
+  end
+
+  test "a trusted provider links to an existing account despite an unverified claim" do
+    existing = users(:google_user)
+
+    user = call(
+      user_id: "brand-new-x-uid",
+      email: existing.email,
+      email_verified: false,
+      email_trusted: true,
+      provider: "twitter"
+    )
+
+    assert_equal existing.id, user.id, "X sign-in must land on the existing account"
+    assert_equal "brand-new-x-uid", user.reload.auth_uid
+  end
+
+  test "an untrusted provider still refuses to link on an unverified email" do
+    existing = users(:google_user)
+
+    assert_raises Services::UserAuthenticationService::UnverifiedEmailConflict do
+      call(
+        user_id: "attacker-uid",
+        email: existing.email,
+        email_verified: false,
+        email_trusted: false,
+        provider: "password"
+      )
+    end
+  end
+
+  test "the linking decision reads email_trusted, not email_verified" do
+    existing = users(:google_user)
+
+    # Deliberately contradictory: verified false, trusted true. If the guard
+    # still read email_verified this would raise.
+    user = call(
+      user_id: "contradiction-uid",
+      email: existing.email,
+      email_verified: false,
+      email_trusted: true,
+      provider: "facebook"
+    )
+
+    assert_equal existing.id, user.id
+  end
+
+  test "a trusted sign-in does not mark the column verified" do
+    existing = users(:google_user)
+    existing.update!(email_verified: false)
+
+    call(
+      user_id: "x-uid-column-check",
+      email: existing.email,
+      email_verified: false,
+      email_trusted: true,
+      provider: "twitter"
+    )
+
+    refute existing.reload.email_verified,
+      "the column records the provider's actual claim, not our trust inference"
   end
 end

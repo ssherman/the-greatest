@@ -20,6 +20,28 @@ module Services
       "twitter.com" => "twitter"
     }.freeze
 
+    # Providers that require email ownership at signup, so their address
+    # assertion is trusted for account linking even when Firebase passes no
+    # email_verified flag. X in particular verifies by confirmation mail but
+    # exposes no flag for it, and Firebase therefore sends false.
+    #
+    # The question this answers is NOT "did the token say verified" -- it is
+    # "could someone have registered this address at this provider without
+    # controlling it". You cannot create a Google account on someone else's
+    # Gmail, and X will not activate an account until it confirms the address.
+    #
+    # "password" is deliberately absent and MUST stay absent: a Firebase
+    # password account can be created for any address without proving control,
+    # which is precisely the account-takeover route UnverifiedEmailConflict
+    # exists to block.
+    #
+    # This list is enumerated, never derived. A future provider that does not
+    # require email ownership must not become trusted merely by not being
+    # "password". It is also deliberately NOT read from
+    # config/auth_providers.json: enabling a button must never widen a security
+    # decision as a side effect.
+    TRUSTED_EMAIL_PROVIDERS = %w[google.com apple.com facebook.com twitter.com].freeze
+
     def self.call(auth_token:, project_id:, signup_domain: nil)
       payload = JwtValidationService.call(auth_token, project_id: project_id)
       provider_data = extract_provider_data(payload)
@@ -67,6 +89,11 @@ module Services
         # Strict true: Firebase sends a real boolean, and `|| false` on a
         # missing claim must not become "verified".
         email_verified: payload["email_verified"] == true,
+        # What the linking decision actually uses. Kept separate from the raw
+        # claim above so the users.email_verified column keeps recording what
+        # the provider genuinely asserted.
+        email_trusted: payload["email_verified"] == true ||
+          TRUSTED_EMAIL_PROVIDERS.include?(sign_in_provider),
         provider: provider,
         auth_time: payload["auth_time"],
         iat: payload["iat"],
