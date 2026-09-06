@@ -659,3 +659,49 @@ def test_an_edition_subtitle_is_shown_because_that_is_where_volumes_hide(entry):
     # In full, on its own line: the marker sits in the middle of the real
     # subtitle, under publisher boilerplate, so any clipping loses it.
     assert "subtitle: The Lightning Saga - Volume 2" in text
+
+
+# The header printed isbn13, goodreads and asin, capped at three values, and
+# left isbn10 out entirely. On isbn_reuse-027 our row carries three ISBN-13s
+# spanning TWO different books -- volume 1 and volume 2 of the Library of
+# America Lincoln -- and the stray one was the only reason two volume-2 works
+# appeared as candidates. None of that was on screen.
+
+
+def test_the_header_lists_every_identifier_type_including_isbn10():
+    entry = PoolEntry(
+        case_id="isbn_reuse-027",
+        stratum="isbn_reuse",
+        book=EvalBook(
+            book_id=35370,
+            title="Speeches And Writings 1832-1858",
+            author_names=["Abraham Lincoln"],
+            isbn13=["9780940450431", "9780940450639"],
+            isbn10=["0940450437", "0940450631"],
+            goodreads_id=["20549"],
+        ),
+        candidates=[],
+    )
+
+    text = render_case(entry, index=1, total=450)
+
+    assert "isbn10=0940450437,0940450631" in text
+    assert "9780940450639" in text
+
+
+def test_a_long_identifier_list_says_how_many_were_hidden():
+    entry = PoolEntry(
+        case_id="x-1",
+        stratum="isbn_reuse",
+        book=EvalBook(
+            book_id=1,
+            title="t",
+            author_names=["a"],
+            asin=[f"B{i:09d}" for i in range(7)],
+        ),
+        candidates=[],
+    )
+
+    text = render_case(entry, index=1, total=450)
+
+    assert "+4 more" in text

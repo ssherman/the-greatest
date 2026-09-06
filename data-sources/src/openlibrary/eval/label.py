@@ -34,6 +34,7 @@ _WORK_KEY = re.compile(r"^OL\d+W$")
 
 
 MAX_EDITIONS_SHOWN = 4
+MAX_IDENTIFIERS_SHOWN = 3
 
 
 @dataclass(frozen=True)
@@ -105,15 +106,22 @@ def render_case(
         f"       authors: {', '.join(book.author_names) or '(none)'}",
         f"       year: {book.first_published_year or '(unknown)'}",
     ]
-    identifier_bits = []
-    if book.isbn13:
-        identifier_bits.append(f"isbn13={','.join(book.isbn13[:3])}")
-    if book.goodreads_id:
-        identifier_bits.append(f"goodreads={','.join(book.goodreads_id[:3])}")  # [GOODREADS]
-    if book.asin:
-        identifier_bits.append(f"asin={','.join(book.asin[:3])}")
-    if identifier_bits:
-        lines.append("       " + "  ".join(identifier_bits))
+    # Every type, and a count when the list is clipped. `isbn10` used to be
+    # omitted entirely and the others capped silently at three, which hid that
+    # book #35370 carries ISBNs for TWO different books -- Library of America
+    # Lincoln volume 1 AND volume 2 -- and that the stray one was what pulled
+    # two volume-2 works into the candidate list.
+    for name, values in (
+        ("isbn13", book.isbn13),
+        ("isbn10", book.isbn10),
+        ("goodreads", book.goodreads_id),  # [GOODREADS]
+        ("asin", book.asin),
+    ):
+        if not values:
+            continue
+        shown = ",".join(values[:MAX_IDENTIFIERS_SHOWN])
+        extra = len(values) - MAX_IDENTIFIERS_SHOWN
+        lines.append(f"       {name}={shown}" + (f"  +{extra} more" if extra > 0 else ""))
     if book.existing_ol_work_keys:
         lines.append(
             "       stored OL key(s): "
