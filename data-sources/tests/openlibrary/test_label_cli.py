@@ -533,3 +533,129 @@ def test_a_relationship_rule_has_no_default_at_all(entry):
         assert default_rationale(entry, verdict="match", work_key="OL15331408W", rule=rule) == "", (
             rule
         )
+
+
+# `our ids` says an identifier of ours reaches a candidate, not WHICH edition
+# carries it, and on isbn_reuse-024 both candidates showed the identical
+# `goodreads, isbn10, isbn13`. The Atlas Press 1985 printing our ISBN actually
+# names sat on one of them; the other had it wrongly attached to a Serpent's
+# Tail edition. Nothing on screen could tell those apart.
+#
+# The edition list is also what settles the harder question -- is this candidate
+# the same book at all? OL1818515W looked like a fine duplicate until its
+# editions showed one subtitled `The Lightning Saga - Volume 2`.
+
+
+def _ed(key, year, publisher, *, title="t", lang="eng", pages=None):
+    from openlibrary.eval.label import EditionRow
+
+    return EditionRow(
+        edition_key=key,
+        title=title,
+        publish_year=year,
+        publisher=publisher,
+        language_code=lang,
+        page_count=pages,
+    )
+
+
+def test_editions_are_listed_under_each_candidate(entry):
+    text = render_case(
+        entry,
+        index=1,
+        total=450,
+        editions={"OL15331408W": [_ed("OL848575M", 1985, "Atlas Press", pages=115)]},
+    )
+
+    assert "1985 Atlas Press" in text
+    assert "115pp" in text
+
+
+def test_the_edition_carrying_our_identifiers_is_marked(entry):
+    text = render_case(
+        entry,
+        index=1,
+        total=450,
+        editions={
+            "OL15331408W": [
+                _ed("OL15324768M", 1984, "Atlas Press"),
+                _ed("OL848575M", 1985, "Atlas Press", pages=115),
+            ]
+        },
+        matched_editions={"OL848575M"},
+    )
+
+    marked = [ln for ln in text.splitlines() if "OL848575M" in ln]
+    assert marked and marked[0].lstrip().startswith("*"), marked
+    unmarked = [ln for ln in text.splitlines() if "OL15324768M" in ln]
+    assert unmarked and not unmarked[0].lstrip().startswith("*"), unmarked
+
+
+def test_a_long_edition_list_is_capped_and_says_how_many_were_hidden(entry):
+    rows = [_ed(f"OL{i}M", 2000 + i, "DC Comics") for i in range(9)]
+    text = render_case(entry, index=1, total=450, editions={"OL15331408W": rows})
+
+    assert "+5 more" in text
+    assert "OL8M" not in text
+
+
+def test_without_edition_data_no_edition_lines_are_shown(entry):
+    assert "editions:" not in render_case(entry, index=1, total=450)
+
+
+def test_edition_rows_are_read_from_the_artifact(fixture_artifact):
+    from openlibrary.eval.label import fetch_edition_rows
+
+    rows = fetch_edition_rows(
+        fixture_artifact.root, fixture_artifact.dump_date, ["OL108593W", "OL100077W"]
+    )
+
+    assert rows["OL108593W"]
+    assert all(r.edition_key.startswith("OL") for r in rows["OL108593W"])
+    assert any(r.publisher for r in rows["OL108593W"])
+    # The subtitle has to survive the read, because that is where a volume
+    # marker lives -- `Volume Five (Kiesha'ra)` here, `The Lightning Saga -
+    # Volume 2` on isbn_reuse-020.
+    subtitles = [r.subtitle for r in rows["OL100077W"] if r.subtitle]
+    assert any("Volume Five" in sub for sub in subtitles), subtitles
+
+
+def test_the_matched_edition_keys_come_back_per_case(fixture_artifact):
+    """Not just which work our identifiers reach -- which edition inside it."""
+    from openlibrary.eval.label import fetch_matched_editions
+
+    entry = _entry_with("isbn_reuse-c", ["OL108593W"], isbn10=["080782156X"])
+
+    matched = fetch_matched_editions(fixture_artifact.root, fixture_artifact.dump_date, [entry])
+
+    keys = matched["isbn_reuse-c"]
+    assert keys and all(k.startswith("OL") and k.endswith("M") for k in keys), keys
+
+
+def test_an_edition_subtitle_is_shown_because_that_is_where_volumes_hide(entry):
+    """OL1818515W's editions all read `Justice League of America`. The only
+    thing distinguishing volume 2 from volume 1 was the SUBTITLE field, and
+    without it the work looks like a clean duplicate rather than three books
+    merged into one."""
+    from openlibrary.eval.label import EditionRow
+
+    text = render_case(
+        entry,
+        index=1,
+        total=450,
+        editions={
+            "OL15331408W": [
+                EditionRow(
+                    edition_key="OL11590894M",
+                    title="Justice League of America",
+                    subtitle="The Lightning Saga - Volume 2",
+                    publish_year=2008,
+                    publisher="DC Comics",
+                )
+            ]
+        },
+    )
+
+    # In full, on its own line: the marker sits in the middle of the real
+    # subtitle, under publisher boilerplate, so any clipping loses it.
+    assert "subtitle: The Lightning Saga - Volume 2" in text

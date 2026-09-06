@@ -33,6 +33,36 @@ app = typer.Typer(add_completion=False)
 _WORK_KEY = re.compile(r"^OL\d+W$")
 
 
+MAX_EDITIONS_SHOWN = 4
+
+
+@dataclass(frozen=True)
+class EditionRow:
+    """One Open Library edition under a candidate work.
+
+    The edition list is the evidence. Work-level fields are summaries and have
+    misled on this stratum three times: `min_ed` read as a publication date, a
+    work title read as a canonical title, and a work that looked like a clean
+    duplicate until its editions showed one subtitled `Volume 2`.
+    """
+
+    edition_key: str
+    title: str | None = None
+    subtitle: str | None = None
+    publish_year: int | None = None
+    publisher: str | None = None
+    language_code: str | None = None
+    page_count: int | None = None
+
+    def describe(self) -> str:
+        bits = [str(self.publish_year or "????"), (self.publisher or "(no publisher)")[:20]]
+        if self.language_code:
+            bits.append(f"({self.language_code})")
+        if self.page_count:
+            bits.append(f"{self.page_count}pp")
+        return " ".join(bits)
+
+
 @dataclass(frozen=True)
 class CandidateDetail:
     """Curation signals the pool does not carry.
@@ -61,6 +91,8 @@ def render_case(
     total: int,
     details: dict[str, CandidateDetail] | None = None,
     id_hits: dict[str, list[str]] | None = None,
+    editions: dict[str, list[EditionRow]] | None = None,
+    matched_editions: set[str] | None = None,
 ) -> str:
     book = entry.book
     lines = [
@@ -118,6 +150,23 @@ def render_case(
         if id_hits is not None:
             reached = id_hits.get(candidate.work_key) or []
             lines.append(f"     our ids: {', '.join(reached) if reached else 'none'}")
+        if editions is not None:
+            rows = editions.get(candidate.work_key) or []
+            shown = rows[:MAX_EDITIONS_SHOWN]
+            for position_row, row in enumerate(shown):
+                mark = "*" if row.edition_key in (matched_editions or set()) else " "
+                label = "     editions:" if position_row == 0 else "              "
+                title = (row.title or "")[:40]
+                lines.append(f"{label} {mark} {row.edition_key:<13} {title:<42} {row.describe()}")
+                # A subtitle gets its own line rather than a share of a clipped
+                # one. `The Lightning Saga - Volume 2 (Justice League of
+                # America) (Graphic Novels)` is the only thing separating
+                # volume 2 from volume 1, and it sits in the middle of the
+                # string -- clipping either end loses it.
+                if row.subtitle:
+                    lines.append(f"                    subtitle: {row.subtitle[:96]}")
+            if len(rows) > MAX_EDITIONS_SHOWN:
+                lines.append(f"                +{len(rows) - MAX_EDITIONS_SHOWN} more")
         if details is not None:
             detail = details.get(candidate.work_key, CandidateDetail())
             lines.append(
@@ -311,6 +360,90 @@ def fetch_identifier_hits(
     return hits
 
 
+def fetch_edition_rows(
+    root: Path, dump_date: str, work_keys: list[str]
+) -> dict[str, list[EditionRow]] | None:
+    """Every edition under each candidate work. One query for the whole pool."""
+    from openlibrary.pipeline.duck import connect
+
+    paths = ArtifactPaths(root=root, dump_date=dump_date)
+    if not paths.table("editions").exists() or not work_keys:
+        return None
+    con = connect(paths, memory_limit="4GB")
+    try:
+        con.execute("CREATE TABLE wanted (work_key VARCHAR)")
+        con.executemany("INSERT INTO wanted VALUES (?)", [(k,) for k in work_keys])
+        rows = con.execute(
+            f"""
+            SELECT e.work_key, e.edition_key, e.title, e.subtitle, e.publish_year,
+                   e.publisher, e.language_code, e.page_count
+            FROM wanted k
+            JOIN '{paths.table("editions")}' e USING (work_key)
+            ORDER BY e.work_key, e.publish_year NULLS LAST, e.edition_key
+            """
+        ).fetchall()
+    finally:
+        con.close()
+    out: dict[str, list[EditionRow]] = {}
+    for work_key, edition_key, title, subtitle, year, publisher, lang, pages in rows:
+        out.setdefault(work_key, []).append(
+            EditionRow(
+                edition_key=edition_key,
+                title=title,
+                subtitle=subtitle,
+                publish_year=year,
+                publisher=publisher,
+                language_code=lang,
+                page_count=pages,
+            )
+        )
+    return out
+
+
+def fetch_matched_editions(
+    root: Path, dump_date: str, entries: list[PoolEntry]
+) -> dict[str, set[str]] | None:
+    """Which EDITION carries the identifier, not just which work.
+
+    Both candidates on isbn_reuse-024 showed the same three identifier types.
+    The difference was that one held them on the Atlas Press 1985 printing the
+    ISBN actually names and the other had them wrongly attached to a Serpent's
+    Tail edition -- invisible at work level.
+    """
+    from openlibrary.pipeline.duck import connect
+
+    paths = ArtifactPaths(root=root, dump_date=dump_date)
+    if not paths.table("identifiers").exists():
+        return None
+    pairs = [
+        (entry.case_id, id_type, value)
+        for entry in entries
+        for id_type, value in _identifier_pairs(entry.book)
+    ]
+    if not pairs:
+        return {}
+    con = connect(paths, memory_limit="4GB")
+    try:
+        con.execute("CREATE TABLE ours2 (case_id VARCHAR, id_type VARCHAR, value VARCHAR)")
+        con.executemany("INSERT INTO ours2 VALUES (?,?,?)", pairs)
+        rows = con.execute(
+            f"""
+            SELECT o.case_id, i.edition_key
+            FROM ours2 o
+            JOIN '{paths.table("identifiers")}' i
+              ON i.id_type = o.id_type AND i.value = o.value
+            WHERE i.edition_key IS NOT NULL
+            GROUP BY 1, 2
+            """
+        ).fetchall()
+    finally:
+        con.close()
+    out: dict[str, set[str]] = {}
+    for case_id, edition_key in rows:
+        out.setdefault(case_id, set()).add(edition_key)
+    return out
+
+
 def fetch_candidate_details(
     root: Path, dump_date: str, work_keys: list[str]
 ) -> dict[str, CandidateDetail] | None:
@@ -387,6 +520,10 @@ def main(
         root, dump_date, sorted({c.work_key for e in entries for c in e.candidates})
     )
     id_hits = fetch_identifier_hits(root, dump_date, entries)
+    editions = fetch_edition_rows(
+        root, dump_date, sorted({c.work_key for e in entries for c in e.candidates})
+    )
+    matched_editions = fetch_matched_editions(root, dump_date, entries)
     done = already_labeled(out)
     remaining = [e for e in entries if e.case_id not in done]
     typer.echo(f"{len(done)} already labeled, {len(remaining)} to go")
@@ -399,6 +536,10 @@ def main(
                 total=len(entries),
                 details=details,
                 id_hits=None if id_hits is None else id_hits.get(entry.case_id, {}),
+                editions=editions,
+                matched_editions=(
+                    None if matched_editions is None else matched_editions.get(entry.case_id, set())
+                ),
             )
         )
         while True:
