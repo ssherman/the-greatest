@@ -340,6 +340,8 @@ export default class extends Controller {
 
     if (!config) {
       console.error(`Unknown auth provider: ${id}`)
+      this.hideError()
+      this.hideInfo()
       this.showError('Sign-in is temporarily unavailable. Please try again.')
       return
     }

@@ -1,6 +1,9 @@
 # OAuth providers
 
-Social sign-in is driven by one file: `web-app/config/auth_providers.json`.
+`web-app/config/auth_providers.json` is the single source of truth for the
+provider's id, label, scopes, and whether its button renders — but that file
+alone is not enough to add a working provider. Adding one touches several
+files across Ruby and JS; see below for all of them.
 
 ## Adding a provider
 
@@ -13,10 +16,17 @@ Social sign-in is driven by one file: `web-app/config/auth_providers.json`.
    Apple included. The fallback still works if an entry is missing; only the
    explicit entry is checked by the lint test below, so a mismatch is caught by
    `bin/rails test` instead of only surfacing when someone clicks the button.
-4. If it requires email ownership at signup, add its `firebase_id` to
+4. Add `firebase_id => id` to `Services::AuthenticationService::PROVIDER_MAP`.
+   Without this, the button renders, the redirect works, and Firebase returns
+   a valid token — but `/auth/sign_in` answers "This sign-in method is not
+   supported". The button looks live and isn't.
+5. Add `id` to `User`'s `external_provider` enum. `PROVIDER_MAP`'s value has
+   to be a real enum value, or the first sign-in raises when it tries to save
+   the user.
+6. If it requires email ownership at signup, add its `firebase_id` to
    `Services::AuthenticationService::TRUSTED_EMAIL_PROVIDERS`.
 
-`test/lint/auth_provider_registry_test.rb` fails if 1 and 3 disagree;
+`test/lint/auth_provider_registry_test.rb` fails if 1, 3, 4, or 5 disagree;
 `test/components/authentication/widget_component_test.rb` fails if 2 is missing.
 
 ## `enabled` gates the button, nothing else

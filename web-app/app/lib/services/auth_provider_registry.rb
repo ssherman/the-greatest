@@ -45,11 +45,6 @@ module Services
           }
         end
       end
-
-      # Test seam: the file is memoised because it cannot change at runtime.
-      def reset!
-        @all = nil
-      end
     end
   end
 end

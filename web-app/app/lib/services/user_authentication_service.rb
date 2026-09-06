@@ -75,6 +75,15 @@ module Services
       # address for roughly 4% of sign-ins, and 20,063 legacy rows have none)
       # ever becomes linkable to the same human's other providers.
       #
+      # The fill is also gated on email_trusted?, not just on the row being
+      # uid-matched. Without that gate, an attacker holding an email-less
+      # OAuth row could link a password credential to the same Firebase user
+      # with any unclaimed address and have this fill write it onto their row
+      # on the next sign-in -- and that address then becomes what a LATER
+      # trusted sign-in matches on in find_user. Every legitimate case in the
+      # design (X, Google, Apple, Facebook, and a verified password sign-in)
+      # is trusted, so this gate changes no real behaviour.
+      #
       # The fill is skippable, though: this uid-matched row can be blank
       # while the token's address already belongs to a different row (the
       # class comment above notes the table holds case-insensitive
@@ -84,7 +93,7 @@ module Services
       # optional convenience would invert the priority, so a collision just
       # leaves the row exactly as blank as it already was.
       user.update!(
-        email: user.email.presence || fillable_email(user),
+        email: user.email.presence || (email_trusted? ? fillable_email(user) : nil),
         auth_uid: uid,
         display_name: provider_data[:name].presence || user.display_name,
         photo_url: provider_data[:picture].presence || user.photo_url,

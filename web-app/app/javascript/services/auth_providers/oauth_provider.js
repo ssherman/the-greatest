@@ -31,7 +31,7 @@ const PROVIDER_FACTORIES = {
 // generic OAuthProvider built from the id itself means an id absent from the
 // map still works (this is what makes the fallback path exercisable at all),
 // it just skips the lint test's guarantee.
-export function providerFactoryFor(firebaseId) {
+function providerFactoryFor(firebaseId) {
   return PROVIDER_FACTORIES[firebaseId] || (() => new OAuthProvider(firebaseId))
 }
 

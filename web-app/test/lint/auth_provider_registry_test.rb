@@ -16,12 +16,48 @@ class AuthProviderRegistryLintTest < ActiveSupport::TestCase
 
   test "every configured provider has a Firebase constructor in the JS map" do
     source = File.read(OAUTH_PROVIDER_JS)
+    # Anchored to the factory block itself, not the whole file -- otherwise a
+    # quoted firebase_id sitting in a comment or anywhere else in the file
+    # would satisfy assert_includes without the map actually containing it.
+    factories = source[/const PROVIDER_FACTORIES = \{.*?\}/m]
+    assert factories, "could not find PROVIDER_FACTORIES in #{OAUTH_PROVIDER_JS.basename}"
 
     Services::AuthProviderRegistry.all.each do |id, entry|
-      assert_includes source, "'#{entry["firebase_id"]}'",
+      assert_includes factories, "'#{entry["firebase_id"]}'",
         "#{id} is in config/auth_providers.json but #{entry["firebase_id"]} is " \
         "absent from the constructor map in #{OAUTH_PROVIDER_JS.basename}. " \
         "The button would render and then fail on click."
+    end
+  end
+
+  # The feature doc used to claim adding a provider is a JSON entry plus an
+  # icon. It also needs an entry in AuthenticationService::PROVIDER_MAP and a
+  # value in User's external_provider enum -- without both, the button
+  # renders, the redirect works, Firebase returns a valid token, and
+  # /auth/sign_in answers "This sign-in method is not supported". That is the
+  # exact silent drift this registry exists to prevent, moved one file over.
+  test "every registry entry's firebase_id is mapped by AuthenticationService" do
+    Services::AuthProviderRegistry.all.each do |id, entry|
+      firebase_id = entry["firebase_id"]
+
+      assert Services::AuthenticationService::PROVIDER_MAP.key?(firebase_id),
+        "#{id} is in config/auth_providers.json but #{firebase_id} is absent " \
+        "from Services::AuthenticationService::PROVIDER_MAP. The button would " \
+        "render, the redirect would succeed, and /auth/sign_in would answer " \
+        "\"This sign-in method is not supported\"."
+    end
+  end
+
+  test "PROVIDER_MAP maps each registry firebase_id to that provider's own id and enum value" do
+    Services::AuthProviderRegistry.all.each do |id, entry|
+      firebase_id = entry["firebase_id"]
+      mapped = Services::AuthenticationService::PROVIDER_MAP[firebase_id]
+
+      assert_equal id, mapped,
+        "#{firebase_id} maps to #{mapped.inspect} in PROVIDER_MAP, not " \
+        "#{id.inspect} -- PROVIDER_MAP and the registry have drifted"
+      assert_includes User.external_providers.keys, mapped,
+        "#{mapped.inspect} is not a value in User's external_provider enum"
     end
   end
 

@@ -27,8 +27,17 @@ module Services
     #
     # The question this answers is NOT "did the token say verified" -- it is
     # "could someone have registered this address at this provider without
-    # controlling it". You cannot create a Google account on someone else's
-    # Gmail, and X will not activate an account until it confirms the address.
+    # controlling it". Google requires proving control of an address before
+    # an account can use it, and X requires confirming an address before it
+    # activates an account that uses it.
+    #
+    # That is weaker than it sounds, though: the token's `email` claim is the
+    # Firebase account RECORD's email, not necessarily the address the
+    # provider asserted at signup, and Firebase lets an account holder change
+    # their own Firebase-record email afterward. So this list trusts the
+    # provider's identity -- that Google, Apple, X, or Facebook vouches this
+    # is a real, controlled account -- not the provenance of whatever address
+    # happens to be on today's token.
     #
     # "password" is deliberately absent and MUST stay absent: a Firebase
     # password account can be created for any address without proving control,

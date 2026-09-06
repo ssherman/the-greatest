@@ -109,7 +109,19 @@ class User < ApplicationRecord
   end
 
   # Any provider other than password. Derived from the enum rather than a
-  # second hardcoded list, so adding a provider cannot leave this behind.
+  # second hardcoded list, so adding a provider cannot leave this behind --
+  # a new OAuth provider should get email-optional treatment automatically,
+  # not by remembering to add it here too.
+  #
+  # This looks like it contradicts
+  # AuthenticationService::TRUSTED_EMAIL_PROVIDERS, which is deliberately
+  # enumerated because "anything that is not password" is exactly the shape
+  # that constant avoids. It doesn't: that list is a trust boundary, where a
+  # wrong entry grants account access to someone who does not control the
+  # address. This is a presence validation, where a wrong entry only permits
+  # a null email column on a row nothing else can reach by that address. The
+  # two rules guard against opposite failure modes, so they deliberately use
+  # opposite strategies -- derive here, enumerate there.
   def external_oauth_account?
     external_provider.present? && !password?
   end

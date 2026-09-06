@@ -117,7 +117,7 @@ class AuthController < ApplicationController
     # Only reveal OAuth providers, not password accounts (to avoid email
     # enumeration).
     #
-    # provider_names, not enabled: a provider whose button is turned off still
+    # .all, not enabled: a provider whose button is turned off still
     # has users who need this hint. 1,521 Apple accounts are in exactly that
     # position, and the legacy site can still mint their tokens.
     registry = Services::AuthProviderRegistry.all

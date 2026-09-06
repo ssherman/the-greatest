@@ -158,6 +158,10 @@ class AuthenticationServiceTest < ActiveSupport::TestCase
   end
 
   test "every trusted provider is trusted with a false claim" do
+    # Without this, emptying TRUSTED_EMAIL_PROVIDERS would make the loop
+    # below iterate zero times and the test would pass with zero assertions.
+    refute_empty Services::AuthenticationService::TRUSTED_EMAIL_PROVIDERS
+
     Services::AuthenticationService::TRUSTED_EMAIL_PROVIDERS.each_with_index do |sign_in_provider, i|
       token = FirebaseTokenHelper.token({
         "sub" => "uid-trusted-#{i}",

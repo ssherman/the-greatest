@@ -92,10 +92,11 @@ class UserAuthenticationServiceTest < ActiveSupport::TestCase
   #
   # Both tests in this section spell out email_trusted rather than leaning on
   # the helper's permissive default, because these are the takeover cases and
-  # that default would let the attacker link. "password" plus an unverified
-  # claim is exactly what extract_provider_data turns into email_trusted:
-  # false, so this is the hash production would hand the service.
+  # that default would let the attacker link.
 
+  # "password" plus an unverified claim is exactly what extract_provider_data
+  # turns into email_trusted: false, so this is the hash production would
+  # hand the service.
   test "refuses to link an existing account when the email is unverified" do
     victim = users(:google_user)
 
@@ -110,8 +111,12 @@ class UserAuthenticationServiceTest < ActiveSupport::TestCase
     assert_equal "google", victim.external_provider
   end
 
-  # nil rather than false: email_trusted? compares with == true for the same
-  # reason email_verified? does -- a missing claim must not become "trusted".
+  # Unlike the test above, this is NOT the hash production would hand the
+  # service: extract_provider_data compares both claims with == true, so
+  # email_trusted and email_verified can never actually come out nil, only
+  # true or false. nil here is a deliberately out-of-band value, used to pin
+  # the `== true` fail-closed strictness against a caller that omits the key
+  # entirely, rather than to reproduce a real payload shape.
   test "refuses to link when the email claims are absent entirely" do
     victim = users(:google_user)
 
@@ -291,6 +296,42 @@ class UserAuthenticationServiceTest < ActiveSupport::TestCase
 
     assert_equal "now.has.one@example.com", blank.reload.email,
       "an email-less row must pick up an address so it becomes linkable"
+  end
+
+  # The mirror of the fill test above: an untrusted claim must not fill a
+  # blank email either. Without this gate, an attacker who controls an
+  # email-less OAuth row could link a password credential to the same
+  # Firebase user with any unclaimed address, have this fill write it onto
+  # their row on the next sign-in, and then have a later trusted sign-in
+  # match on it via find_user's email lookup.
+  #
+  # This uid-matched row still has its external_provider overwritten to
+  # "password" (update_existing always writes the incoming provider), and
+  # password accounts require a present email -- so with the fill correctly
+  # withheld, the whole update fails its presence validation rather than
+  # silently landing with a blank email. That is still the property this
+  # test is after: either way, the attacker-chosen address never reaches the
+  # row.
+  test "an untrusted sign-in does not fill a blank email" do
+    blank = User.create!(
+      auth_uid: "pw-uid-untrusted-fill",
+      external_provider: :twitter,
+      email_verified: false,
+      role: :user
+    )
+
+    assert_raises ActiveRecord::RecordInvalid do
+      call(
+        user_id: blank.auth_uid,
+        email: "attacker.chosen@example.com",
+        email_verified: false,
+        email_trusted: false,
+        provider: "password"
+      )
+    end
+
+    assert_nil blank.reload.email,
+      "an untrusted claim must not fill a blank email"
   end
 
   test "a sign-in never overwrites an existing email" do
