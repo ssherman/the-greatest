@@ -77,7 +77,17 @@ class User < ApplicationRecord
 
   after_create :create_default_user_lists
 
-  validates :email, presence: true, uniqueness: true
+  # Presence is conditional on the provider, not on auth_uid: password users
+  # hold an auth_uid too, so keying on it would exempt exactly the accounts
+  # that must have an email. A nil external_provider also stays required --
+  # nothing identifies such a row.
+  #
+  # allow_nil on uniqueness is not optional. Rails compares `email IS NULL`,
+  # so a second nil-email row collides with the first even though Postgres
+  # permits any number of NULLs. Verified on users#1 (a V1 twitter row), which
+  # fails today with BOTH "can't be blank" and "has already been taken".
+  validates :email, presence: true, unless: :external_oauth_account?
+  validates :email, uniqueness: {allow_nil: true}
   validates :role, presence: true
   validates :email_verified, inclusion: {in: [true, false]}
   validates :confirmation_token, uniqueness: true, allow_nil: true
@@ -96,6 +106,12 @@ class User < ApplicationRecord
   # renewal date and a portal to manage.
   def granting_membership
     memberships.granting_access.order(:source, current_period_end: :desc).first
+  end
+
+  # Any provider other than password. Derived from the enum rather than a
+  # second hardcoded list, so adding a provider cannot leave this behind.
+  def external_oauth_account?
+    external_provider.present? && !password?
   end
 
   # Email confirmation methods
