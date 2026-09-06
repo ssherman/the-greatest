@@ -253,8 +253,19 @@ an integer key like `"1"` means the row predates PR #288 and is not.
 
 Then replace this block with whichever paragraph matches:
 
-- If `token_claim` printed `false`: *"Measured <date>: a real X sign-in produced `email_verified: false` for an address X had confirmed. F1 is confirmed empirically — `TRUSTED_EMAIL_PROVIDERS` is load-bearing for X, and without it every returning X user with an existing account would hit a verification wall."*
-- If `token_claim` printed `true`: *"Measured <date>: a real X sign-in produced `email_verified: true`. `TRUSTED_EMAIL_PROVIDERS` is belt-and-braces for X rather than load-bearing. It stays: Firebase's flag for X is not contractual, and F1's reasoning does not depend on any single observation."*
+If `token_claim` printed `false`:
+
+**Measured <today's date>:** a real X sign-in on `dev-new.thegreatestbooks.org` produced
+`email_verified: false` in the token, for an address X had confirmed. F1 is confirmed
+empirically: `TRUSTED_EMAIL_PROVIDERS` is **load-bearing** for X, and without it every
+returning X user with an existing account would hit a verification wall.
+
+If `token_claim` printed `true`:
+
+**Measured <today's date>:** a real X sign-in on `dev-new.thegreatestbooks.org` produced
+`email_verified: true` in the token. `TRUSTED_EMAIL_PROVIDERS` is therefore
+**belt-and-braces** for X rather than load-bearing. It stays: Firebase's flag for X is not
+contractual, and F1's reasoning does not depend on any single observation.
 
 **D7 — Legacy identity recovery is a separate spec.** The `legacy_v1_data` email backfill
 (F7), uid-based claiming, and the 404 collisions are one coherent piece of work that is
