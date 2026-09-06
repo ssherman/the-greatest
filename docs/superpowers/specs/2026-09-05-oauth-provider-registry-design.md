@@ -236,6 +236,26 @@ Filling a blank is not rewriting.
 **D6 — Measure the X `email_verified` claim; do not model it** (F2). One real sign-in on
 dev during implementation, with the observed claim recorded back into this document.
 
+**Status as of 2026-09-05: PENDING — requires a real X sign-in by the repository owner.**
+Everything else in this design shipped and is verified; this is the one fact that can only
+come from a live token. The Playwright spec proves the client path reaches Firebase's auth
+handler with `providerId=twitter.com`, but it deliberately stops before X's login page, so
+it cannot observe the returned claim.
+
+To close it: sign in with X on `dev-new.thegreatestbooks.org`, then run
+
+```bash
+cd web-app && bin/rails runner 'u = User.where(external_provider: :twitter).order(updated_at: :desc).first; pd = u.provider_data; puts({id: u.id, email: u.email, column_verified: u.email_verified, token_claim: pd.is_a?(Hash) ? pd.dig("twitter", "email_verified") : pd, trusted: pd.is_a?(Hash) ? pd.dig("twitter", "email_trusted") : nil}.inspect)'
+```
+
+A `provider_data` keyed by the string `"twitter"` is the hardened format and is your sign-in;
+an integer key like `"1"` means the row predates PR #288 and is not.
+
+Then replace this block with whichever paragraph matches:
+
+- If `token_claim` printed `false`: *"Measured <date>: a real X sign-in produced `email_verified: false` for an address X had confirmed. F1 is confirmed empirically — `TRUSTED_EMAIL_PROVIDERS` is load-bearing for X, and without it every returning X user with an existing account would hit a verification wall."*
+- If `token_claim` printed `true`: *"Measured <date>: a real X sign-in produced `email_verified: true`. `TRUSTED_EMAIL_PROVIDERS` is belt-and-braces for X rather than load-bearing. It stays: Firebase's flag for X is not contractual, and F1's reasoning does not depend on any single observation."*
+
 **D7 — Legacy identity recovery is a separate spec.** The `legacy_v1_data` email backfill
 (F7), uid-based claiming, and the 404 collisions are one coherent piece of work that is
 independent of this one, helps Google and email sign-in equally, and is a merge problem
