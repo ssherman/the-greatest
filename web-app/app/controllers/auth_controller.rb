@@ -114,11 +114,18 @@ class AuthController < ApplicationController
     # provider the sign-in path will not bind to.
     user = User.where("LOWER(email) = ?", email.downcase).order(:id).first
 
-    # Only reveal OAuth providers, not password accounts (to avoid email enumeration)
-    oauth_providers = %w[google apple facebook twitter]
+    # Only reveal OAuth providers, not password accounts (to avoid email
+    # enumeration).
+    #
+    # provider_names, not enabled: a provider whose button is turned off still
+    # has users who need this hint. 1,521 Apple accounts are in exactly that
+    # position, and the legacy site can still mint their tokens.
+    registry = Services::AuthProviderRegistry.all
 
-    if user && oauth_providers.include?(user.external_provider)
-      provider_name = user.external_provider.capitalize
+    if user && registry.key?(user.external_provider)
+      # The registry label, not the enum name capitalised -- otherwise X reads
+      # as "Twitter" and names a button that does not exist.
+      provider_name = registry.fetch(user.external_provider).fetch("label")
       render json: {
         has_oauth_provider: true,
         provider: user.external_provider,
