@@ -143,6 +143,19 @@ class UserAuthenticationServiceTest < ActiveSupport::TestCase
     end
   end
 
+  # A token that carries no email claim at all: find_user misses on uid,
+  # short-circuits on `return nil if email.nil?`, and this must still create
+  # an account rather than raise -- an email-less OAuth row is a supported
+  # state (see User#external_oauth_account?), not an error.
+  test "a token with no email creates a new user with a blank email" do
+    assert_difference "User.count", 1 do
+      user = call(user_id: "fresh-uid-no-email", email: nil, email_verified: false, provider: "twitter")
+
+      assert_nil user.email
+      assert_equal "fresh-uid-no-email", user.auth_uid
+    end
+  end
+
   test "records the signup domain on creation" do
     user = call(user_id: "dom-uid", email: "dom@example.com", signup_domain: "thegreatest.games")
 
@@ -258,5 +271,60 @@ class UserAuthenticationServiceTest < ActiveSupport::TestCase
 
     refute existing.reload.email_verified,
       "the column records the provider's actual claim, not our trust inference"
+  end
+
+  test "a sign-in fills a blank email" do
+    blank = User.create!(
+      auth_uid: "x-uid-blank-email",
+      external_provider: :twitter,
+      email_verified: false,
+      role: :user
+    )
+
+    call(
+      user_id: blank.auth_uid,
+      email: "now.has.one@example.com",
+      email_verified: false,
+      email_trusted: true,
+      provider: "twitter"
+    )
+
+    assert_equal "now.has.one@example.com", blank.reload.email,
+      "an email-less row must pick up an address so it becomes linkable"
+  end
+
+  test "a sign-in never overwrites an existing email" do
+    existing = users(:google_user)
+    original = existing.email
+
+    call(
+      user_id: existing.auth_uid,
+      email: "attacker.controlled@example.com",
+      email_verified: true,
+      email_trusted: true,
+      provider: "google"
+    )
+
+    assert_equal original, existing.reload.email,
+      "a sign-in must never rewrite the address an account is known by"
+  end
+
+  test "a sign-in with no email leaves a blank email blank" do
+    blank = User.create!(
+      auth_uid: "x-uid-still-blank",
+      external_provider: :twitter,
+      email_verified: false,
+      role: :user
+    )
+
+    call(
+      user_id: blank.auth_uid,
+      email: nil,
+      email_verified: false,
+      email_trusted: true,
+      provider: "twitter"
+    )
+
+    assert_nil blank.reload.email
   end
 end

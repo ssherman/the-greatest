@@ -69,9 +69,13 @@ module Services
     end
 
     def update_existing(user)
-      # email is deliberately absent: a sign-in must never rewrite the address
-      # an account is known by.
+      # Fill a blank, never overwrite. Rewriting the address an account is
+      # known by would be an account-takeover primitive; filling a blank is
+      # not, and it is the only way an email-less OAuth row (X supplies no
+      # address for roughly 4% of sign-ins, and 20,063 legacy rows have none)
+      # ever becomes linkable to the same human's other providers.
       user.update!(
+        email: user.email.presence || email,
         auth_uid: uid,
         display_name: provider_data[:name].presence || user.display_name,
         photo_url: provider_data[:picture].presence || user.photo_url,
