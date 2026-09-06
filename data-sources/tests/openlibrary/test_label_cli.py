@@ -705,3 +705,115 @@ def test_a_long_identifier_list_says_how_many_were_hidden():
     text = render_case(entry, index=1, total=450)
 
     assert "+4 more" in text
+
+
+# `ambiguous` means the case could not be resolved. None of the nine identity
+# rules describes that -- they all assert a relationship between two things --
+# and the schema agrees: it constrains identity_rule for `match` and `no_match`
+# and leaves it free, including None, for `ambiguous`. The tool was demanding
+# one anyway, so the first ambiguous label would have had to claim a
+# relationship the labeller had just said they could not establish.
+
+
+def test_an_ambiguous_verdict_may_record_no_identity_rule():
+    import datetime
+
+    from openlibrary.eval.schema import EvalLabel
+
+    label = EvalLabel(
+        verdict="ambiguous",
+        work_key=None,
+        identity_rule=None,
+        rationale="row is a placeholder; nothing in it identifies a book",
+        labeled_at=datetime.date(2026, 9, 6),
+        labeled_against_dump_date="2026-07-31",
+    )
+
+    assert label.identity_rule is None
+
+
+def test_the_rule_prompt_can_be_declined_when_optional(monkeypatch):
+    from openlibrary.eval import label as label_module
+
+    # A bounded iterator, not a constant: if the blank stops being accepted the
+    # prompt loops, and this has to fail rather than hang the suite.
+    answers = iter(["", "", ""])
+    monkeypatch.setattr(label_module.typer, "prompt", lambda *a, **k: next(answers))
+    monkeypatch.setattr(label_module.typer, "echo", lambda *a, **k: None)
+
+    assert label_module._prompt_identity_rule(optional=True) is None
+
+
+def test_the_rule_prompt_still_insists_when_required(monkeypatch):
+    """A `match` verdict must carry a rule, so blank input has to loop rather
+    than fall through to None."""
+    from openlibrary.eval import label as label_module
+
+    answers = iter(["", "1"])
+    monkeypatch.setattr(label_module.typer, "prompt", lambda *a, **k: next(answers))
+    monkeypatch.setattr(label_module.typer, "echo", lambda *a, **k: None)
+
+    assert label_module._prompt_identity_rule() == "same_work"
+
+
+# `main` was the one function with no test, on the grounds that it touches
+# stdin. It now wires five lookups into the renderer and decides which verdicts
+# may decline an identity rule, and a mutation that made `ambiguous` demand one
+# again killed nothing. CliRunner feeds the prompts instead.
+
+
+def _one_case_pool(tmp_path, entry):
+    pool = tmp_path / "pool.jsonl"
+    pool.write_text(entry.model_dump_json() + "\n", encoding="utf-8")
+    return pool
+
+
+def _run_labeller(tmp_path, entry, keys):
+    import json as _json
+
+    from typer.testing import CliRunner
+
+    from openlibrary.eval.label import app
+
+    out = tmp_path / "labels.jsonl"
+    result = CliRunner().invoke(
+        app,
+        [
+            "--pool",
+            str(_one_case_pool(tmp_path, entry)),
+            "--out",
+            str(out),
+            "--dump-date",
+            "2026-07-31",
+            # No artifact here: the curation, identifier and edition lookups
+            # must all degrade to absent rather than raising.
+            "--root",
+            str(tmp_path / "no-artifact"),
+        ],
+        input="".join(k + "\n" for k in keys),
+    )
+    assert result.exit_code == 0, result.output
+    return _json.loads(out.read_text(encoding="utf-8").strip()), result.output
+
+
+def test_an_ambiguous_verdict_records_no_rule_end_to_end(tmp_path, entry):
+    row, _ = _run_labeller(tmp_path, entry, ["a", "", "cannot be resolved from this row"])
+
+    assert row["label"]["verdict"] == "ambiguous"
+    assert row["label"]["identity_rule"] is None
+    assert row["label"]["work_key"] is None
+
+
+def test_a_match_still_requires_a_rule_end_to_end(tmp_path, entry):
+    row, _ = _run_labeller(tmp_path, entry, ["1", "1", "the evidence agreed here"])
+
+    assert row["label"]["verdict"] == "match"
+    assert row["label"]["identity_rule"] == "same_work"
+    assert row["label"]["work_key"] == "OL15331408W"
+
+
+def test_the_labeller_runs_without_an_artifact(tmp_path, entry):
+    _, output = _run_labeller(tmp_path, entry, ["n", "no work in open library"])
+
+    assert "our ids:" not in output
+    assert "curation:" not in output

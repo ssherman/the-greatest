@@ -496,12 +496,23 @@ def fetch_candidate_details(
     }
 
 
-def _prompt_identity_rule() -> str:
+def _prompt_identity_rule(*, optional: bool = False) -> str | None:
+    """Ask for the identity rule.
+
+    `optional` is for `ambiguous`, where none of the nine rules applies: they
+    all assert a relationship between two things, and an ambiguous verdict is
+    the labeller saying they could not establish one. The schema allows None
+    there; `match` and `no_match` it constrains, so those still insist.
+    """
     typer.echo("  identity rule:")
     for position, rule in enumerate(IDENTITY_RULES, start=1):
         typer.echo(f"    [{position}] {rule}")
+    if optional:
+        typer.echo("    [enter] none of these -- the case could not be resolved")
     while True:
-        raw = typer.prompt("  rule").strip()
+        raw = typer.prompt("  rule", default="" if optional else None).strip()
+        if optional and not raw:
+            return None
         if raw.isdigit() and 1 <= int(raw) <= len(IDENTITY_RULES):
             return IDENTITY_RULES[int(raw) - 1]
         if raw in IDENTITY_RULES:
@@ -567,7 +578,7 @@ def main(
             verdict, work_key, rule = "no_match", None, "not_in_open_library"
         elif choice.kind == "ambiguous":
             verdict, work_key = "ambiguous", None
-            rule = _prompt_identity_rule()
+            rule = _prompt_identity_rule(optional=True)
         else:
             verdict, work_key = "match", choice.work_key
             rule = _prompt_identity_rule()
