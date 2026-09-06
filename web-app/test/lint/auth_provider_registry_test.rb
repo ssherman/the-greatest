@@ -48,4 +48,36 @@ class AuthProviderRegistryLintTest < ActiveSupport::TestCase
       "email/password is a different shape and must not be folded into the " \
       "OAuth abstraction"
   end
+
+  CONTROLLER_JS = Rails.root.join("app/javascript/controllers/authentication_controller.js")
+
+  test "the controller has one generic OAuth action, not one per provider" do
+    source = File.read(CONTROLLER_JS)
+
+    assert_includes source, "signInWithOauth",
+      "the controller needs a single generic OAuth sign-in action"
+    refute_match(/signInWith(Google|Twitter|Facebook|Apple)\b/, source,
+      "a per-provider action defeats the registry: adding a provider must not " \
+      "mean editing this 688-line controller")
+  end
+
+  test "the controller declares a providers value" do
+    source = File.read(CONTROLLER_JS)
+
+    assert_match(/providers:\s*Array/, source,
+      "the registry reaches the browser as a Stimulus Array value -- there is " \
+      "no @rollup/plugin-json in this project, so the config cannot be imported")
+  end
+
+  test "the generic action still marks the pending redirect" do
+    source = File.read(CONTROLLER_JS)
+    action = source[/async signInWithOauth\(event\)\s*\{.*?\n  \}/m]
+
+    assert action, "could not find signInWithOauth in #{CONTROLLER_JS}"
+    assert_includes action, "markPendingRedirect()",
+      "without this, a reload mid-redirect loses the sign-in silently: tg_uid " \
+      "is unset, markSignedIn has not run, and Firebase has consumed its own key"
+    assert_includes action, "clearPendingRedirect()",
+      "a failed redirect must clear the marker it set"
+  end
 end
