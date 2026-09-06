@@ -210,4 +210,54 @@ class AuthenticationServiceTest < ActiveSupport::TestCase
   test "the trusted list never contains password" do
     refute_includes Services::AuthenticationService::TRUSTED_EMAIL_PROVIDERS, "password"
   end
+
+  # The provider's own user id (X's numeric id, Facebook's app-scoped id) lives
+  # under the firebase claim's identities map, keyed by sign_in_provider, as an
+  # array. It is the only reconnection key for an email-less OAuth user, so it
+  # must survive extraction even though nothing upstream of this claim is ever
+  # trusted input.
+  test "captures the provider's own user id from the firebase identities claim" do
+    token = FirebaseTokenHelper.token({
+      "sub" => "uid-provider-uid-1",
+      "email" => "provider.uid.person@example.com",
+      "firebase" => {
+        "sign_in_provider" => "twitter.com",
+        "identities" => {"twitter.com" => ["1406121503133888515"]}
+      }
+    })
+
+    result = call(token)
+
+    assert result[:success], result[:error]
+    assert_equal "1406121503133888515", result[:provider_data][:provider_uid]
+  end
+
+  test "a token with no identities claim yields no provider_uid" do
+    token = FirebaseTokenHelper.token({
+      "sub" => "uid-provider-uid-2",
+      "email" => "no.identities@example.com",
+      "firebase" => {"sign_in_provider" => "twitter.com"}
+    })
+
+    result = call(token)
+
+    assert result[:success], result[:error]
+    assert_nil result[:provider_data][:provider_uid]
+  end
+
+  test "a token with an empty identities array for the provider yields no provider_uid" do
+    token = FirebaseTokenHelper.token({
+      "sub" => "uid-provider-uid-3",
+      "email" => "empty.identities@example.com",
+      "firebase" => {
+        "sign_in_provider" => "twitter.com",
+        "identities" => {"twitter.com" => []}
+      }
+    })
+
+    result = call(token)
+
+    assert result[:success], result[:error]
+    assert_nil result[:provider_data][:provider_uid]
+  end
 end

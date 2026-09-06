@@ -48,6 +48,7 @@ module Services
 
     def uid = provider_data[:user_id]
     def provider = provider_data[:provider]
+    def provider_uid = provider_data[:provider_uid]
     def email = provider_data[:email].presence&.downcase
     def email_verified? = provider_data[:email_verified] == true
     def email_trusted? = provider_data[:email_trusted] == true
@@ -69,13 +70,19 @@ module Services
     end
 
     def update_existing(user)
-      # Fill a blank, never overwrite. Rewriting the address an account is
-      # known by would be an account-takeover primitive; filling a blank is
-      # not, and it is the only way an email-less OAuth row (X supplies no
-      # address for roughly 4% of sign-ins, and 20,063 legacy rows have none)
-      # ever becomes linkable to the same human's other providers.
+      # Fill a blank, never overwrite -- for both email and
+      # external_provider_uid. Rewriting the address an account is known by
+      # would be an account-takeover primitive; filling a blank is not, and
+      # it is the only way an email-less OAuth row (X supplies no address for
+      # roughly 4% of sign-ins, and 20,063 legacy rows have none) ever
+      # becomes linkable to the same human's other providers.
+      # external_provider_uid gets the identical treatment for the identical
+      # reason: a row may already hold a legacy provider id (X's especially,
+      # since it is the only globally stable one -- see F5), and a later
+      # sign-in with a different provider must not clobber it with THAT
+      # provider's id.
       #
-      # The fill is also gated on email_trusted?, not just on the row being
+      # The email fill is also gated on email_trusted?, not just on the row being
       # uid-matched. Without that gate, an attacker holding an email-less
       # OAuth row could link a password credential to the same Firebase user
       # with any unclaimed address and have this fill write it onto their row
@@ -95,6 +102,7 @@ module Services
       user.update!(
         email: user.email.presence || (email_trusted? ? fillable_email(user) : nil),
         auth_uid: uid,
+        external_provider_uid: user.external_provider_uid.presence || provider_uid,
         display_name: provider_data[:name].presence || user.display_name,
         photo_url: provider_data[:picture].presence || user.photo_url,
         external_provider: provider,
@@ -121,6 +129,7 @@ module Services
       user = User.new(
         email: email,
         auth_uid: uid,
+        external_provider_uid: provider_uid,
         display_name: provider_data[:name],
         photo_url: provider_data[:picture],
         external_provider: provider,

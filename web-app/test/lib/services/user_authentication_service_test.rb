@@ -376,6 +376,40 @@ class UserAuthenticationServiceTest < ActiveSupport::TestCase
   # :email's uniqueness validation and fail a sign-in that had already
   # matched by uid. It must not: the fill is a convenience, not the point of
   # the sign-in, so a collision just skips the fill and leaves the row blank.
+  # --- external_provider_uid: the only reconnection key for an email-less OAuth user ---
+
+  test "a new user gets external_provider_uid from the token" do
+    user = call(user_id: "fresh-uid-pu", email: "fresh.pu@example.com", provider_uid: "x-1406121503133888515")
+
+    assert_equal "x-1406121503133888515", user.external_provider_uid
+  end
+
+  test "an existing row with a blank external_provider_uid gets it filled" do
+    existing = users(:google_user)
+    assert_nil existing.external_provider_uid
+
+    call(user_id: existing.auth_uid, email: existing.email, provider_uid: "new-provider-uid")
+
+    assert_equal "new-provider-uid", existing.reload.external_provider_uid
+  end
+
+  # The real-world shape of this: a row carries a legacy X id (X ids are the
+  # only globally stable ones -- see F5), and a LATER sign-in with a
+  # different provider (Google) must not clobber it with that provider's id.
+  # This is the scenario the design comment and the task's named risk call
+  # out -- not merely "the incoming value differs", but "the incoming
+  # provider differs from the one on file" -- so the row's existing
+  # external_provider is deliberately set to twitter while the sign-in
+  # itself is google.
+  test "an existing row that already holds a provider uid keeps it when a different provider signs in" do
+    existing = users(:google_user)
+    existing.update!(external_provider: :twitter, external_provider_uid: "legacy-x-id-123")
+
+    call(user_id: existing.auth_uid, email: existing.email, provider: "google", provider_uid: "new-google-uid")
+
+    assert_equal "legacy-x-id-123", existing.reload.external_provider_uid
+  end
+
   test "a blank-email fill is skipped when the address already belongs to a different row" do
     other = users(:regular_user)
     blank = User.create!(

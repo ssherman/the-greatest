@@ -92,6 +92,15 @@ module Services
 
       {
         user_id: payload["sub"],
+        # The provider's OWN user id (X's numeric id, Facebook's app-scoped
+        # id) -- not the Firebase uid above. It is the only reconnection key
+        # for an email-less OAuth user, because provider ids (X's especially,
+        # see F5) are stable across apps and Firebase uids are not portable
+        # at all. Lives under the firebase claim's identities map, keyed by
+        # sign_in_provider, as an array; take the first element. Deliberately
+        # does NOT fall back to `sub` -- that is the Firebase uid, and writing
+        # it here would poison the column with values that match nothing.
+        provider_uid: Array(payload.dig("firebase", "identities", sign_in_provider)).first,
         email: payload["email"],
         name: payload["name"],
         picture: payload["picture"],
