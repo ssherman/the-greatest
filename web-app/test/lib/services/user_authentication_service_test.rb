@@ -327,4 +327,33 @@ class UserAuthenticationServiceTest < ActiveSupport::TestCase
 
     assert_nil blank.reload.email
   end
+
+  # find_user matches on uid alone, with no requirement that a blank row's
+  # email agree with the token's -- so the token's address can turn out to
+  # already belong to a totally different row (the class comment notes the
+  # table holds case-insensitive duplicates). Filling it in anyway would hit
+  # :email's uniqueness validation and fail a sign-in that had already
+  # matched by uid. It must not: the fill is a convenience, not the point of
+  # the sign-in, so a collision just skips the fill and leaves the row blank.
+  test "a blank-email fill is skipped when the address already belongs to a different row" do
+    other = users(:regular_user)
+    blank = User.create!(
+      auth_uid: "x-uid-collision",
+      external_provider: :twitter,
+      email_verified: false,
+      role: :user
+    )
+
+    user = call(
+      user_id: blank.auth_uid,
+      email: other.email,
+      email_verified: false,
+      email_trusted: true,
+      provider: "twitter"
+    )
+
+    assert_equal blank.id, user.id, "the uid match must still win the sign-in"
+    assert_nil blank.reload.email, "a collision must skip the fill, not raise"
+    assert_equal other.email, other.reload.email, "the other row's email must be untouched"
+  end
 end

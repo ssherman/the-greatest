@@ -74,8 +74,17 @@ module Services
       # not, and it is the only way an email-less OAuth row (X supplies no
       # address for roughly 4% of sign-ins, and 20,063 legacy rows have none)
       # ever becomes linkable to the same human's other providers.
+      #
+      # The fill is skippable, though: this uid-matched row can be blank
+      # while the token's address already belongs to a different row (the
+      # class comment above notes the table holds case-insensitive
+      # duplicates), and writing it here would hit :email's uniqueness
+      # validation and fail the whole sign-in. The person already
+      # authenticated and matched by uid -- failing that to protect an
+      # optional convenience would invert the priority, so a collision just
+      # leaves the row exactly as blank as it already was.
       user.update!(
-        email: user.email.presence || email,
+        email: user.email.presence || fillable_email(user),
         auth_uid: uid,
         display_name: provider_data[:name].presence || user.display_name,
         photo_url: provider_data[:picture].presence || user.photo_url,
@@ -85,6 +94,18 @@ module Services
         sign_in_count: (user.sign_in_count || 0) + 1
       )
       persist_provider_data(user)
+    end
+
+    # The token's email, unless a different row already has it. Case-
+    # insensitive, matching find_user's own lookup style. Self-excluding so
+    # this reads correctly standing alone -- the only caller already
+    # guarantees user.email is blank, so self-exclusion can't change the
+    # result today, but the method shouldn't depend on that to be correct.
+    def fillable_email(user)
+      return nil if email.nil?
+      return nil if User.where("LOWER(email) = ?", email).where.not(id: user.id).exists?
+
+      email
     end
 
     def build_new
