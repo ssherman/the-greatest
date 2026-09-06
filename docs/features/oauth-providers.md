@@ -53,6 +53,12 @@ verification wall. `password` is excluded permanently — a Firebase password ac
 can be created for any address without proof, which is the account-takeover route
 `UserAuthenticationService::UnverifiedEmailConflict` exists to block.
 
+This trust model leans on one Firebase console setting: Email enumeration protection
+must stay ON, because it is what stops an attacker from using `accounts:update` to
+retarget their own account's email to a victim's address and get linked via this list.
+See D10 in the OAuth provider registry design doc for the full attack and why the two
+are a pair.
+
 ## Facebook is off
 
 The Meta app is disabled by Meta and runs in development mode only, so only accounts

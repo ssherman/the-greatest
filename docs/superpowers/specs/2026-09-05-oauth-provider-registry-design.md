@@ -236,36 +236,25 @@ Filling a blank is not rewriting.
 **D6 — Measure the X `email_verified` claim; do not model it** (F2). One real sign-in on
 dev during implementation, with the observed claim recorded back into this document.
 
-**Status as of 2026-09-05: PENDING — requires a real X sign-in by the repository owner.**
-Everything else in this design shipped and is verified; this is the one fact that can only
-come from a live token. The Playwright spec proves the client path reaches Firebase's auth
-handler with `providerId=twitter.com`, but it deliberately stops before X's login page, so
-it cannot observe the returned claim.
-
-To close it: sign in with X on `dev-new.thegreatestbooks.org`, then run
-
-```bash
-cd web-app && bin/rails runner 'u = User.where(external_provider: :twitter).order(updated_at: :desc).first; pd = u.provider_data; puts({id: u.id, email: u.email, column_verified: u.email_verified, token_claim: pd.is_a?(Hash) ? pd.dig("twitter", "email_verified") : pd, trusted: pd.is_a?(Hash) ? pd.dig("twitter", "email_trusted") : nil}.inspect)'
-```
-
-A `provider_data` keyed by the string `"twitter"` is the hardened format and is your sign-in;
-an integer key like `"1"` means the row predates PR #288 and is not.
-
-Then replace this block with whichever paragraph matches:
-
-If `token_claim` printed `false`:
-
-**Measured <today's date>:** a real X sign-in on `dev-new.thegreatestbooks.org` produced
-`email_verified: false` in the token, for an address X had confirmed. F1 is confirmed
+**Measured 2026-09-06:** a real X sign-in on `dev-new.thegreatestbooks.org` produced
+`email_verified: false` in the token, for an account X had confirmed. F1 is confirmed
 empirically: `TRUSTED_EMAIL_PROVIDERS` is **load-bearing** for X, and without it every
 returning X user with an existing account would hit a verification wall.
 
-If `token_claim` printed `true`:
+Two things the measurement also settled, neither of which the design anticipated:
 
-**Measured <today's date>:** a real X sign-in on `dev-new.thegreatestbooks.org` produced
-`email_verified: true` in the token. `TRUSTED_EMAIL_PROVIDERS` is therefore
-**belt-and-braces** for X rather than load-bearing. It stays: Firebase's flag for X is not
-contractual, and F1's reasoning does not depend on any single observation.
+- **X supplies no email for a minority of sign-ins.** The test account was one: it produced
+  a row with `email: nil`, which succeeded only because of D4. Measured base rate across
+  Firebase-era X accounts is roughly 94% with an email (2024: 38/38, 2025: 20/22,
+  2026: 8/9). So D4 is not an edge case allowance — it is load-bearing for about one X
+  sign-in in eighteen.
+- **X's callback allowlist is per-hostname and separate from Firebase's authorized
+  domains.** `createAuthUri` returned X error 415 "Callback URL not approved for this
+  client application" while `google.com` and `facebook.com` both built valid auth URLs for
+  the same `continueUri`. Each host needs `https://<host>/__/auth/handler` registered in the
+  X app. X is OAuth 1.0a, so it fails early at `createAuthUri`; OAuth 2.0 providers build a
+  URL regardless and fail later at their own dialog — so a successful `createAuthUri` for
+  Facebook proves nothing about whether Facebook would work.
 
 **D7 — Legacy identity recovery is a separate spec.** The `legacy_v1_data` email backfill
 (F7), uid-based claiming, and the 404 collisions are one coherent piece of work that is
@@ -295,6 +284,30 @@ X is unaffected: its ids are global, not app-scoped (F5).
 are genuinely Apple-verified and user-controlled) and it needs to be, because legacy-site
 Apple tokens already validate here. Its `@privaterelay.appleid.com` addresses match no
 existing row, which is a matching problem for the recovery spec, not a trust problem.
+
+**D10 — Firebase's Email enumeration protection is ON, and the trust model depends on it.**
+Enabled in the console 2026-09-06.
+
+A whole-branch review established that D1's trust model has a gap the F1 framing missed: the
+token's `email` claim is the **Firebase account record's** email, not the address the
+provider asserted, and the account holder can change it. With the setting off, an attacker
+could sign in with their own Google account, call Identity Toolkit `accounts:update` to set
+their email to a victim's address — `emailVerified` becomes false but `sign_in_provider`
+stays `google.com` — and be linked to the victim's row. The pre-D1 guard blocked that
+because it read `email_verified`; D1's guard would not have.
+
+Email enumeration protection closes it by disabling `updateEmail` outright: an email change
+must go through `verifyBeforeUpdateEmail`, which requires clicking a link at the new
+address. **Do not disable this setting while `TRUSTED_EMAIL_PROVIDERS` exists.** The two are
+a pair.
+
+It required no code change: this app does not use `fetchSignInMethodsForEmail`, and
+`email_provider.js` already maps `auth/invalid-credential` to "Invalid email or password",
+which is the error both wrong-password and unknown-account now return.
+
+F1's sentence "the provider already required ownership" remains true of the provider's
+assertion and false of the claim the code reads. It is corrected here rather than in F1 so
+the finding's original wording stays legible.
 
 ## Design
 
