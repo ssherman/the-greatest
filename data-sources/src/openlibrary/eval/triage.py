@@ -248,8 +248,7 @@ def _proposed_case(entry: PoolEntry, t: Triage, dump_date: str) -> dict:
             work_key=t.work_key,
             identity_rule=t.identity_rule,
             rationale=(
-                f"PROPOSED, unreviewed: {t.reason}. "
-                f"Candidates blocking produced: {shown or 'none'}"
+                f"PROPOSED, unreviewed: {t.reason}. Candidates blocking produced: {shown or 'none'}"
             ),
             labeled_at=datetime.date.today(),
             labeled_against_dump_date=dump_date,
