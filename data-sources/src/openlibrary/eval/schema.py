@@ -16,6 +16,24 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+# ASPIRATIONAL, not planned. Labelling stopped at 204 human cases by Shane's
+# decision on 2026-09-07, and these numbers were left as written rather than
+# quietly lowered to match. Nothing enforces them: the `evaluation_set`
+# pipeline gate is `skipped`.
+#
+# The reason is not fatigue. 29,777 of 157,805 local books carry a merge
+# signature -- more than one isbn13, or an alternate_title -- because merging
+# book A into B copies A's identifiers onto B. A merged row's identifiers
+# legitimately fan out to several distinct OL works, so "which single work is
+# this book" has no answer for it. Book #28542 'Selected Poems' reaches Agee,
+# Celan and Chaucer. 41% of the cases left when this was called were that
+# shape, and a label there teaches the matcher nothing.
+#
+# What the 204 DO establish is the band that matters: where our identifiers
+# reach exactly one surfaced work, Shane's label agreed 77/79, and 63/63
+# outside collection strata. See openlibrary.eval.triage, which also records
+# why the opposite rule -- calling an unreachable book a no_match -- is unsafe
+# at 38/57.
 MIN_CASES = 300
 MAX_CASES = 500
 MIN_NO_MATCH_CASES = 20
@@ -69,6 +87,14 @@ IDENTITY_RULES = (
 
 Verdict = Literal["match", "no_match", "ambiguous"]
 
+# Who decided a case. The file's worth rests on a human who knows this
+# catalogue having judged each row, so once a triage tool can write into it
+# every label has to say which kind it is -- otherwise "precision against
+# ground truth" quietly becomes "precision against the tool's own opinion".
+# Absent means human: the 200 labels written before this field existed were
+# all hand-made.
+Labeler = Literal["human", "agent", "agent_confirmed"]
+
 
 class EvalBook(BaseModel):
     book_id: int
@@ -96,6 +122,7 @@ class EvalLabel(BaseModel):
     rationale: str = Field(min_length=10)
     labeled_at: datetime.date
     labeled_against_dump_date: str
+    labeled_by: Labeler = "human"
 
     @model_validator(mode="after")
     def check_verdict_consistency(self) -> EvalLabel:

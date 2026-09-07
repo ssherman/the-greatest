@@ -156,3 +156,27 @@ def test_a_minimum_number_of_negatives_is_declared():
     # Without negatives the false-merge rate -- the one metric to watch, because
     # a wrong merge destroys data -- cannot be computed at all.
     assert MIN_NO_MATCH_CASES >= 20
+
+
+def test_a_label_records_who_made_it():
+    """Agent-written labels must be separable from Shane's.
+
+    The whole value of this file is that a human who knows the catalogue
+    decided each case. Once a triage tool can write into it, metrics computed
+    over the file are only interpretable if every row says which kind it is --
+    otherwise "precision on human ground truth" silently becomes "precision
+    against the tool's own opinion".
+    """
+    assert _label(labeled_by="agent").labeled_by == "agent"
+    assert _label(labeled_by="agent_confirmed").labeled_by == "agent_confirmed"
+
+
+def test_a_label_written_before_provenance_existed_reads_as_human():
+    """The 200 labels already in cases/labels.jsonl carry no such field and
+    were all hand-made, so the absent value has to mean human -- not unknown."""
+    assert _label().labeled_by == "human"
+
+
+def test_an_unrecognised_labeler_is_rejected():
+    with pytest.raises(ValidationError):
+        _label(labeled_by="claude-opus-5")
