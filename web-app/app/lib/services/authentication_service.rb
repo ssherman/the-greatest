@@ -57,7 +57,13 @@ module Services
 
       user = UserAuthenticationService.call(
         provider_data: provider_data,
-        signup_domain: signup_domain
+        signup_domain: signup_domain,
+        email_resolver: ProviderEmailResolver.new(
+          uid: payload["sub"],
+          sign_in_provider: payload.dig("firebase", "sign_in_provider"),
+          project_id: project_id,
+          fallback_email: payload["email"]
+        )
       )
 
       {success: true, user: user, provider_data: provider_data}
@@ -72,6 +78,21 @@ module Services
         success: false,
         error: "Please verify your email address, then sign in again.",
         error_code: :email_verification_required
+      }
+    rescue FirebaseAccountLookup::Error, GoogleServiceAccountToken::Error => e
+      # Refuse rather than guess. Without the address we cannot tell a new user
+      # from an existing one adding a provider, and proceeding would silently
+      # create a duplicate of a real account -- permanent, and undoable only by
+      # a merge. A refused sign-in is temporary and self-heals on retry.
+      #
+      # This clause MUST stay above the catch-all `rescue => e` below; Ruby
+      # matches rescue clauses in order, and the catch-all would otherwise
+      # flatten this into a generic :authentication_failed.
+      Rails.logger.error "Firebase account lookup failed: #{e.class}: #{e.message}"
+      {
+        success: false,
+        error: "We couldn't complete sign-in. Please try again.",
+        error_code: :account_lookup_failed
       }
     rescue ActiveRecord::RecordInvalid => e
       Rails.logger.error "User creation/update failed: #{e.message}"

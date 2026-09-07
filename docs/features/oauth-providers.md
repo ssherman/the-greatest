@@ -53,11 +53,11 @@ verification wall. `password` is excluded permanently — a Firebase password ac
 can be created for any address without proof, which is the account-takeover route
 `UserAuthenticationService::UnverifiedEmailConflict` exists to block.
 
-This trust model leans on one Firebase console setting: Email enumeration protection
-must stay ON, because it is what stops an attacker from using `accounts:update` to
-retarget their own account's email to a victim's address and get linked via this list.
-See D10 in the OAuth provider registry design doc for the full attack and why the two
-are a pair.
+Linking reads the address from the account's **provider record**, not the token's
+`email` claim, so an account holder cannot repoint it via `accounts:update`. That
+closes the takeover in code. Email enumeration protection stays enabled as hygiene
+but is no longer load-bearing — spec D8 retires the pairing that D10 of the provider
+registry design required.
 
 ## Facebook runs on a replacement Meta app
 
@@ -80,14 +80,13 @@ with an existing row and need a merge, not an update). Until that backfill runs,
 enabling the button converts a lookup problem into a merge problem for anyone who
 comes back.
 
-**The token's `email` claim depends on the Meta app's mode.** While the new app sat
-in development with `email` only "Ready for testing", Firebase received the address
-in the Graph response, kept it on the provider record, and never promoted it to the
-account record — so the ID token carried no `email` claim at all and
-`extract_provider_data` saw `nil`. The old app's tokens did carry it (`users#1141`
-holds both `google.com` and `facebook.com` in `provider_data`, linked by email).
-Re-verify the claim after any change to the Meta app's mode or permissions before
-trusting cross-provider linking.
+**Facebook tokens carry no `email` claim, and that is permanent.** It is not a Meta
+setting: Firebase keeps a provider-supplied address on the provider record and, under
+this project's "allow multiple accounts with the same email address" setting, does not
+promote it to the account record that mints ID tokens. Measured four times on
+2026-09-07, including against a published app with a revoked grant and a deleted
+Firebase account. `Services::ProviderEmailResolver` fetches it server-to-server
+instead; see `docs/superpowers/specs/2026-09-07-firebase-account-lookup-design.md`.
 
 ## Meta Platform Data must never reach ad targeting
 

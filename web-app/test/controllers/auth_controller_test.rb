@@ -5,6 +5,23 @@ class AuthControllerTest < ActionDispatch::IntegrationTest
     Rails.application.config.x.rate_limit_store.clear
     Services::JwtValidationService.reset_cert_cache!
     FirebaseTokenHelper.stub_certs
+    stub_account_lookup_empty
+  end
+
+  # AuthenticationService now builds a real ProviderEmailResolver on every
+  # sign-in, which -- on an auth_uid miss -- reaches Identity Toolkit. None
+  # of the tests below exercise that lookup, so the default here makes the
+  # provider-record lookup find nothing, which is exactly what makes the
+  # resolver fall back to the token's own `email` claim -- the behavior
+  # every test here predates and expects.
+  def stub_account_lookup_empty
+    Services::GoogleServiceAccountToken.stubs(:access_token).returns("test-service-account-token")
+    WebMock.stub_request(:post, %r{\Ahttps://identitytoolkit\.googleapis\.com/v1/projects/[^/]+/accounts:lookup\z})
+      .to_return(
+        status: 200,
+        body: {users: []}.to_json,
+        headers: {"Content-Type" => "application/json"}
+      )
   end
 
   test "signs in with a valid token and returns the user" do
