@@ -656,6 +656,18 @@ export default class extends Controller {
       return
     }
 
+    if (event.detail.code === 'account_lookup_failed') {
+      // Same rollback as email_verification_required above, and for the same
+      // reason: Firebase already flipped the navbar to signed-in before Rails
+      // refused the token, and the signed-in hint outlives the page. Unlike
+      // that branch this is a genuine failure with no resend-verification
+      // affordance, so it keeps the ordinary red error box.
+      clearSignedInHint()
+      this.showUnauthenticatedState()
+      this.showError(event.detail.error)
+      return
+    }
+
     this.showError(event.detail.error)
   }
 

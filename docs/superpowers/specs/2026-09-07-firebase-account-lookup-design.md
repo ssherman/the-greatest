@@ -2,7 +2,9 @@
 
 **Status:** approved 2026-09-07
 **Branch:** `enable-facebook-login`
-**Supersedes:** D10 of `2026-09-05-oauth-provider-registry-design.md` (see D8 below)
+**Does NOT supersede:** D10 of `2026-09-05-oauth-provider-registry-design.md` remains in
+force — see D8 below, corrected 2026-09-07 after review found the fallback this design
+still uses
 
 ## Summary
 
@@ -16,8 +18,10 @@ declines to promote it to the **account record**, which is what mints ID tokens.
 This design fetches it from the provider record server-to-server, at the one moment
 it decides anything: when the `auth_uid` match misses.
 
-It also makes the linking key strictly more trustworthy than the token claim it
-replaces, which retires a standing dependency on a Firebase console setting.
+It also makes the linking key more trustworthy when a provider-record address
+exists — but it falls back to the same token claim when one doesn't (every
+Facebook sign-in), so it does not retire the standing dependency on a Firebase
+console setting. See D8, corrected below.
 
 ## Context
 
@@ -176,13 +180,20 @@ question it answers — could someone register this address at this provider wit
 controlling it — is untouched by where we read the address. A password account can
 still be created for any address without proving control.
 
-**D8 — D10 of the OAuth provider registry design is retired as a requirement.**
-That decision said email enumeration protection must stay on because
-`TRUSTED_EMAIL_PROVIDERS` depended on it, since `accounts:update` could repoint the
-account-record email the linking rule read. Linking will no longer read that field
-(F6, D3), so the coupling is closed in code rather than by console state. Keep the
-setting enabled as hygiene; it is no longer load-bearing, and nothing in this
-codebase should depend on it again.
+**D8 — D10 of the OAuth provider registry design is NOT retired.** It still says
+email enumeration protection must stay on because `TRUSTED_EMAIL_PROVIDERS` depends
+on it, since `accounts:update` can repoint the account-record email the linking
+rule reads. D3's resolver *prefers* the provider record, but `ProviderEmailResolver`
+falls back to the token's `email` claim — the mutable account-record field —
+whenever the provider record has no address (`provider_email_resolver.rb:28`), and
+`AuthenticationService` wires that fallback from `payload["email"]`
+(`authentication_service.rb:65`). Every Facebook token hits exactly this path: it
+carries no provider-record email at all (F2), so linking there reads the token
+claim precisely as before D3 shipped. Retiring D10 would mean removing the
+fallback for trusted providers, which this design deliberately does not do: a nil
+email would make `find_user` create a new row rather than refuse, trading a narrow,
+console-mitigated takeover for guaranteed duplicate accounts. Keep the setting
+enabled — it remains load-bearing.
 
 **D9 — `users.email_verified` keeps recording the raw token claim.** Unchanged. It
 is the provider's own assertion; the linking decision remains a separate key.

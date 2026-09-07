@@ -94,4 +94,40 @@ class GoogleServiceAccountTokenTest < ActiveSupport::TestCase
       Services::GoogleServiceAccountToken.access_token
     end
   end
+
+  # Without this, an outage serializes every queued caller behind LOCK for a
+  # full open+read timeout each -- with WEB_CONCURRENCY=1 and
+  # RAILS_MAX_THREADS=5, enough to hold the entire Puma thread pool.
+  test "a failed exchange is not retried within the cooldown" do
+    connection = mock
+    connection.expects(:post).once.raises(Faraday::TimeoutError)
+    Faraday.stubs(:new).returns(connection)
+
+    first_error = assert_raises(Services::GoogleServiceAccountToken::Error) do
+      Services::GoogleServiceAccountToken.access_token
+    end
+
+    second_error = assert_raises(Services::GoogleServiceAccountToken::Error) do
+      Services::GoogleServiceAccountToken.access_token
+    end
+
+    assert_same first_error, second_error,
+      "a call inside the cooldown must raise the cached failure, not attempt a second exchange"
+  end
+
+  test "a failed exchange is retried after the cooldown elapses" do
+    connection = mock
+    connection.stubs(:post).raises(Faraday::TimeoutError)
+    Faraday.stubs(:new).returns(connection)
+
+    assert_raises(Services::GoogleServiceAccountToken::Error) do
+      Services::GoogleServiceAccountToken.access_token
+    end
+
+    travel Services::GoogleServiceAccountToken::FAILURE_COOLDOWN + 1 do
+      stub_exchange
+
+      assert_equal "ya29.token", Services::GoogleServiceAccountToken.access_token
+    end
+  end
 end

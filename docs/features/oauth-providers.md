@@ -53,11 +53,17 @@ verification wall. `password` is excluded permanently — a Firebase password ac
 can be created for any address without proof, which is the account-takeover route
 `UserAuthenticationService::UnverifiedEmailConflict` exists to block.
 
-Linking reads the address from the account's **provider record**, not the token's
-`email` claim, so an account holder cannot repoint it via `accounts:update`. That
-closes the takeover in code. Email enumeration protection stays enabled as hygiene
-but is no longer load-bearing — spec D8 retires the pairing that D10 of the provider
-registry design required.
+Linking *prefers* the address on the account's **provider record** over the token's
+`email` claim, which narrows the exposure: most sign-ins never touch the mutable
+claim at all. But `Services::ProviderEmailResolver` falls back to the token's
+`email` when the provider record has none — see
+`provider_email_resolver.rb:28` — and `Services::AuthenticationService` supplies
+that fallback from `payload["email"]`, the same account-record claim an account
+holder can repoint via `accounts:update`. A Facebook user who declines the
+optional `email` permission at Meta's consent dialog is exactly this case: no
+provider-record email, so linking reads the token claim as before. Email
+enumeration protection must stay enabled — it is still the only thing blocking
+that takeover, exactly as D10 of the provider registry design requires.
 
 ## Facebook runs on a replacement Meta app
 

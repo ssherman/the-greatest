@@ -23,6 +23,15 @@ module Services
     REFRESH_BUFFER = 300
     OPEN_TIMEOUT = 3
     READ_TIMEOUT = 3
+    # access_token runs the whole exchange under LOCK, so a failed attempt
+    # with no cooldown re-attempts the full open+read timeout for every
+    # caller queued behind it. With WEB_CONCURRENCY=1 and RAILS_MAX_THREADS=5,
+    # five concurrent sign-ins during a Google outage can hold the entire
+    # Puma thread pool for the duration, starving ordinary page requests on
+    # live sites. Same hazard JwtValidationService's
+    # UNKNOWN_KID_REFETCH_COOLDOWN exists to bound; see that file for the
+    # fuller writeup.
+    FAILURE_COOLDOWN = 30 # seconds
 
     class Error < StandardError; end
 
@@ -31,7 +40,10 @@ module Services
     class << self
       def access_token
         LOCK.synchronize do
-          refresh! if expired?
+          if expired?
+            raise @last_error if cooldown_active?
+            refresh!
+          end
           @access_token
         end
       end
@@ -40,6 +52,8 @@ module Services
         LOCK.synchronize do
           @access_token = nil
           @expires_at = nil
+          @last_attempt_at = nil
+          @last_error = nil
         end
       end
 
@@ -50,7 +64,23 @@ module Services
           Time.current >= (@expires_at - REFRESH_BUFFER)
       end
 
+      # Only true after a FAILED attempt -- @last_error is nil on a fresh
+      # process and cleared on every success, so a healthy token that somehow
+      # expires immediately still re-attempts rather than raising a nil.
+      def cooldown_active?
+        @last_error && @last_attempt_at && Time.current < @last_attempt_at + FAILURE_COOLDOWN
+      end
+
       def refresh!
+        # Set before the request, not after: Faraday::TimeoutError and
+        # Faraday::ConnectionFailed (the normal shape of a Google outage, and
+        # exactly what open_timeout/timeout below exist to produce) propagate
+        # out of post_assertion, so a line placed after the call never runs on
+        # that path and the cooldown would never engage during an outage --
+        # the one case it matters most. Mirrors
+        # JwtValidationService#load_certs!.
+        @last_attempt_at = Time.current
+
         response = post_assertion(build_assertion)
 
         unless response.status == 200
@@ -63,10 +93,20 @@ module Services
 
         @access_token = token
         @expires_at = Time.current + data["expires_in"].to_i
+        @last_error = nil
       rescue JSON::ParserError => e
-        raise Error, "token exchange returned an unparseable body: #{e.message}"
+        @last_error = Error.new("token exchange returned an unparseable body: #{e.message}")
+        raise @last_error
       rescue Faraday::Error => e
-        raise Error, "token exchange request failed: #{e.class}"
+        @last_error = Error.new("token exchange request failed: #{e.class}")
+        raise @last_error
+      rescue Error => e
+        # Catches the two explicit raises above plus anything credentials/
+        # build_assertion raises (missing/invalid key, bad RSA key) -- all of
+        # those still need to be cached so a caller inside the cooldown
+        # window gets this same error back instead of nil.
+        @last_error = e
+        raise
       end
 
       def credentials
