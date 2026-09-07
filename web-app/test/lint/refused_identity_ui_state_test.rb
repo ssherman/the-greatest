@@ -109,4 +109,53 @@ class RefusedIdentityUiStateTest < ActiveSupport::TestCase
       "submitEmailForm must clear pendingVerification, or the guard outlives " \
       "the refusal and a genuinely verified retry never updates the UI"
   end
+
+  # Rolling the UI back is not enough on its own. Firebase re-notifies on its
+  # own schedule, and that notification calls markSignedIn(). The
+  # email_verification_required branch has been guarded since it was written;
+  # account_lookup_failed shipped the visible half of that rollback without the
+  # guard, and a PR review caught it. These pin both halves.
+
+  test "account_lookup_failed suppresses later auth-state notifications" do
+    assert_includes account_lookup_branch, "this.identityRefused = true",
+      "the account_lookup_failed branch must set identityRefused, or a token " \
+      "refresh re-presents the refused identity as signed in with no Rails " \
+      "session behind it"
+  end
+
+  test "account_lookup_failed signs the Firebase user out" do
+    assert_includes account_lookup_branch, "signOut()",
+      "the account_lookup_failed branch must sign the Firebase user out. The " \
+      "identityRefused flag dies with the page, so without this a reload " \
+      "re-presents the same refused identity. Nothing needs that Firebase " \
+      "user afterwards -- unlike the verification branch, which keeps it for " \
+      "resendVerification"
+  end
+
+  test "a later Firebase notification cannot re-present a lookup-refused identity" do
+    marker = "if (user) {"
+    start = source.index(marker)
+    assert start, "could not find the auth-state user branch"
+
+    finish = source.index("markSignedIn()", start)
+    assert finish, "the auth-state user branch does not call markSignedIn"
+
+    assert_includes source[start...finish], "this.identityRefused",
+      "handleAuthStateChange must check identityRefused before markSignedIn: " \
+      "the branch signs Firebase out, but signOut() is async and a token " \
+      "refresh can land in between"
+  end
+
+  test "a fresh sign-in attempt stops suppressing lookup-refused notifications" do
+    marker = "async submitEmailForm(event) {"
+    start = source.index(marker)
+    assert start, "could not find submitEmailForm"
+
+    finish = source.index("await this.firebase()", start)
+    assert finish, "submitEmailForm does not resolve the firebase bundle"
+
+    assert_includes source[start...finish], "this.identityRefused = false",
+      "submitEmailForm must clear identityRefused, or the guard outlives the " \
+      "refusal and a successful retry never updates the UI"
+  end
 end

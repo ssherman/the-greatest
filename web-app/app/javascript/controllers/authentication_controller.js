@@ -31,6 +31,7 @@ export default class extends Controller {
     this.isSignUpMode = false
     this.storedEmail = null
     this.pendingVerification = false
+    this.identityRefused = false
     this.setupEventListeners()
     this.observeLoginModal()
 
@@ -144,7 +145,10 @@ export default class extends Controller {
       // send to. Firebase re-notifies on its own schedule -- a token refresh is
       // enough -- so without this guard that later notification would silently
       // re-present a refused identity as signed in.
-      if (this.pendingVerification) return
+      // identityRefused covers the same hazard for account_lookup_failed. That
+      // branch signs the Firebase user out, but signOut() is async and a token
+      // refresh can land first, so the flag closes the window in between.
+      if (this.pendingVerification || this.identityRefused) return
 
       markSignedIn()
       this.showAuthenticatedState(user)
@@ -397,6 +401,7 @@ export default class extends Controller {
     // guard in handleAuthStateChange would outlive the refusal and a genuinely
     // verified sign-in on the second try would never update the UI.
     this.pendingVerification = false
+    this.identityRefused = false
 
     // Resolved before the try, not inside the catch. loadFirebase() nulls its
     // memo on a script-load error, so reaching for getUserFriendlyMessage from
@@ -662,9 +667,26 @@ export default class extends Controller {
       // refused the token, and the signed-in hint outlives the page. Unlike
       // that branch this is a genuine failure with no resend-verification
       // affordance, so it keeps the ordinary red error box.
+      //
+      // Rolling the UI back is not enough on its own. Firebase re-notifies on
+      // its own schedule -- a token refresh is enough -- and that notification
+      // would call markSignedIn() and present this refused identity as
+      // authenticated again, with no Rails session behind it. So suppress
+      // those notifications AND sign the Firebase user out: the flag dies with
+      // the page, and without the sign-out a reload would re-present the same
+      // refused identity. Nothing here needs the Firebase user afterwards,
+      // unlike the verification branch above, which keeps it for resend.
+      this.identityRefused = true
       clearSignedInHint()
       this.showUnauthenticatedState()
       this.showError(event.detail.error)
+
+      // Best-effort and deliberately not awaited: the UI is already correct,
+      // and a Firebase load or sign-out failure must not turn a retriable
+      // error into an unhandled rejection. The flag covers this window.
+      this.firebase()
+        .then((firebase) => firebase.firebaseAuthService.signOut())
+        .catch((error) => console.error('Firebase sign out after refused lookup failed:', error))
       return
     }
 
