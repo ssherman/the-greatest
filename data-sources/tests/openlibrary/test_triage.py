@@ -29,6 +29,7 @@ def test_one_work_reached_and_shown_is_proposed_as_a_match():
         stratum="no_popularity_signal",
         candidate_keys=["OL2860956W", "OL41996W"],
         reach=_reach(works=["OL2860956W"]),
+        corroborates=True,
     )
     assert t.bucket == "decisive_match"
     assert t.work_key == "OL2860956W"
@@ -226,10 +227,69 @@ def test_a_shared_surname_alone_does_not_corroborate():
     assert not corroborated(_book(authors=["Paul Auster"]), _cand(authors=["Sara Auster"]))
 
 
-def test_the_year_falling_inside_the_editions_corroborates():
+def test_a_matching_year_alone_does_not_corroborate():
+    """This limb existed and shipped a false merge with it.
+
+    Book #36129, Pamela Anderson's `I Love You` (2024), carries isbn13
+    9780316573481. Open Library really does hold that number -- on
+    OL38014589W, `New Cookbook by Paul Anthony`, three editions, all 2024,
+    Little Brown. Author `unrelated`, no title overlap, and the year limb
+    said 2024 <= 2024 <= 2024, so the tool proposed Pamela Anderson's memoir
+    as the same work as a Paul Anthony cookbook and overrode her plausible
+    stored key OL28844458W.
+
+    With one distinct year the check degenerates to "published the same
+    year", which is not evidence of anything. Two of 73 proposals rested on
+    it and one was that."""
     from openlibrary.eval.triage import corroborated
 
-    assert corroborated(_book(year=1954), _cand(min_ed=1952, modal=1957))
+    ours = _book(title="I Love You", authors=["Pamela Anderson"], year=2024)
+    theirs = _cand(
+        title="New Cookbook by Paul Anthony", authors=["Paul Anthony"], min_ed=2024, modal=2024
+    )
+    assert not corroborated(ours, theirs)
+
+
+def test_a_title_too_short_to_block_on_cannot_corroborate():
+    """non_latin_title-013: our 熱帯魚は雪に焦がれる 1 fingerprints to
+    `1 nettaigyo wa yuki ni kogareru 1`, Open Library's work to `1`. The
+    substring test passed on a single character -- one that 1,675 OL works
+    share. MIN_BLOCKING_FP_LENGTH already governs this everywhere else in the
+    project; it was missing only here."""
+    from openlibrary.eval.triage import corroborated
+
+    ours = _book(
+        title="熱帯魚は雪に焦がれる 1 [Nettaigyo Wa Yuki Ni Kogareru 1]", authors=["Makoto Hagino"]
+    )
+    assert not corroborated(ours, _cand(title="1", authors=[]))
+
+
+def test_two_identically_short_titles_do_not_corroborate_each_other():
+    """The length floor and the overlap ratio catch different things, and
+    without this only the ratio was tested. `It` against `It` is a perfect
+    containment at ratio 1.0 on two characters -- and 613 OL works fingerprint
+    to `i`, 1,488 to `2`. MIN_BLOCKING_FP_LENGTH is what blocking uses to
+    refuse exactly this, so corroboration uses it too."""
+    from openlibrary.eval.triage import corroborated
+
+    assert not corroborated(_book(title="It"), _cand(title="It"))
+
+
+def test_a_title_that_is_a_small_fraction_of_the_other_does_not_corroborate():
+    """shared_key_collision-023: `america` inside `america the book`. Long
+    enough to block on, and still two different books."""
+    from openlibrary.eval.triage import corroborated
+
+    assert not corroborated(_book(title="America"), _cand(title="America the Book"))
+
+
+def test_a_dropped_leading_article_still_corroborates():
+    """pseudonym_or_alt_name-029: `the women could fly` against
+    `women could fly`. The containment test has to survive this or it stops
+    being useful at all."""
+    from openlibrary.eval.triage import corroborated
+
+    assert corroborated(_book(title="The Women Could Fly"), _cand(title="Women Could Fly"))
 
 
 def test_nothing_in_common_is_not_corroborated():
@@ -267,3 +327,193 @@ def test_an_uncorroborated_identifier_goes_to_the_human():
     )
     assert t.bucket == "needs_human"
     assert "corrobor" in t.reason
+
+
+def test_corroboration_defaults_to_refusing():
+    """Fail closed. The default is what a future caller gets when it forgets
+    the argument, and the cost of the two mistakes is not symmetric: a missed
+    proposal costs Shane one case to read, an unchecked one writes a false
+    merge into the ground truth."""
+    from openlibrary.eval.triage import triage
+
+    t = triage(stratum="easy_baseline", candidate_keys=["OL9W"], reach=_reach(works=["OL9W"]))
+    assert t.bucket == "needs_human"
+
+
+def _pool_file(tmp_path, entries):
+    import json
+
+    p = tmp_path / "pool.jsonl"
+    p.write_text(
+        "\n".join(json.dumps(e.model_dump(mode="json"), ensure_ascii=False) for e in entries),
+        encoding="utf-8",
+    )
+    return p
+
+
+def test_the_cli_refuses_to_write_over_the_labels_file(tmp_path, fixture_artifact):
+    """cases/proposed.jsonl and cases/labels.jsonl sit in the same directory
+    and share an extension. `proposed.open("w")` truncates. One mistyped flag
+    would destroy 204 labels that took days and cannot be regenerated, with no
+    error and nothing to restore from."""
+    import typer
+
+    from openlibrary.eval.triage import main
+
+    labels = tmp_path / "labels.jsonl"
+    labels.write_text("", encoding="utf-8")
+    pool = _pool_file(
+        tmp_path, [_entry("c", "easy_baseline", ["OL108593W"], isbn10=["080782156X"])]
+    )
+
+    # A working artifact, so the only thing that can stop this is the guard.
+    kwargs = dict(
+        pool=pool,
+        labels=labels,
+        report=tmp_path / "r.md",
+        dump_date=fixture_artifact.dump_date,
+        root=fixture_artifact.root,
+    )
+    main(proposed=tmp_path / "fine.jsonl", **kwargs)  # the same call without the collision works
+
+    with pytest.raises(typer.Exit):
+        main(proposed=labels, **kwargs)
+    with pytest.raises(typer.Exit):
+        main(proposed=tmp_path / "ok.jsonl", **{**kwargs, "report": labels})
+
+
+def test_the_cli_never_touches_the_labels_file(tmp_path, fixture_artifact):
+    """The one hard requirement. Mutating `proposed.open("w")` into
+    `labels.open("a")` left the whole suite green, so nothing was actually
+    checking it."""
+    from openlibrary.eval.triage import main
+
+    labels = tmp_path / "labels.jsonl"
+    labels.write_text("", encoding="utf-8")
+    before = labels.read_bytes()
+    entry = _entry("c", "easy_baseline", ["OL108593W"], isbn10=["080782156X"])
+    proposed = tmp_path / "proposed.jsonl"
+
+    main(
+        pool=_pool_file(tmp_path, [entry]),
+        labels=labels,
+        proposed=proposed,
+        report=tmp_path / "r.md",
+        dump_date=fixture_artifact.dump_date,
+        root=fixture_artifact.root,
+    )
+
+    assert labels.read_bytes() == before
+    assert proposed.exists()
+
+
+def _proposable(case_id="c"):
+    """A case the tool SHOULD propose: isbn10 1555849091 reaches exactly one
+    work in the fixture corpus (OL8331643W, `Blood River` by Tim Butcher) and
+    the author agrees, so corroboration holds."""
+    entry = _entry(case_id, "easy_baseline", ["OL8331643W"], isbn10=["1555849091"])
+    entry.book.title = "Blood River"
+    entry.book.author_names = ["Tim Butcher"]
+    entry.candidates[0].title = "Blood River"
+    entry.candidates[0].author_names = ["Tim Butcher"]
+    return entry
+
+
+def test_a_written_proposal_is_stamped_as_machine_made(tmp_path, fixture_artifact):
+    """Flipping labeled_by to "human" in the writer killed no test: only the
+    schema DEFAULT was covered, never what this tool stamps. The first version
+    of this test asserted inside a `for` over an empty list and so proved
+    nothing -- hence the explicit count."""
+    import json
+
+    from openlibrary.eval.schema import EvalCase
+    from openlibrary.eval.triage import main
+
+    proposed = tmp_path / "proposed.jsonl"
+    main(
+        pool=_pool_file(tmp_path, [_proposable()]),
+        labels=tmp_path / "labels.jsonl",
+        proposed=proposed,
+        report=tmp_path / "r.md",
+        dump_date=fixture_artifact.dump_date,
+        root=fixture_artifact.root,
+    )
+
+    lines = [x for x in proposed.read_text(encoding="utf-8").split("\n") if x.strip()]
+    assert len(lines) == 1
+    row = EvalCase(**json.loads(lines[0]))
+    assert row.label.labeled_by == "agent"
+    assert row.label.verdict == "match"
+    assert row.label.work_key == "OL8331643W"
+    assert row.label.work_key in {c.work_key for c in row.candidates_shown}
+
+
+def test_the_cli_proposes_nothing_when_corroboration_fails(tmp_path, fixture_artifact):
+    """Same reachable work, but the candidate now names a different book by a
+    different person. Replacing main()'s corroboration computation with a bare
+    True left the suite green, so nothing checked that main consults it at
+    all."""
+    from openlibrary.eval.triage import main
+
+    entry = _proposable()
+    entry.candidates[0].title = "New Cookbook by Paul Anthony"
+    entry.candidates[0].author_names = ["Paul Anthony"]
+    proposed = tmp_path / "proposed.jsonl"
+
+    main(
+        pool=_pool_file(tmp_path, [entry]),
+        labels=tmp_path / "labels.jsonl",
+        proposed=proposed,
+        report=tmp_path / "r.md",
+        dump_date=fixture_artifact.dump_date,
+        root=fixture_artifact.root,
+    )
+
+    assert proposed.read_text(encoding="utf-8").strip() == ""
+
+
+def test_a_dropped_middle_initial_still_corroborates():
+    """`name_subset` carries 10 of the 73 proposals -- `Irvin D. Yalom`
+    against `irvin yalom`. Dropping it from the accepted set killed nothing."""
+    from openlibrary.eval.triage import corroborated
+
+    assert corroborated(_book(authors=["Irvin D. Yalom"]), _cand(authors=["Irvin Yalom"]))
+
+
+def test_an_orphaned_identifier_is_counted_apart_from_an_absent_one(fixture_artifact):
+    """Absent means Open Library has never heard of the number; orphaned means
+    it holds it on an edition with no work key, which blocking cannot see.
+    They route the same today but read differently in the dossier, and only
+    `absent` was asserted -- zeroing the orphaned count killed nothing."""
+    from openlibrary.eval.triage import fetch_identifier_reach
+    from openlibrary.pipeline.duck import connect
+    from openlibrary.pipeline.paths import ArtifactPaths
+
+    paths = ArtifactPaths(root=fixture_artifact.root, dump_date=fixture_artifact.dump_date)
+    con = connect(paths, memory_limit="2GB")
+    row = con.execute(
+        f"""SELECT value FROM '{paths.table("identifiers")}'
+            WHERE work_key IS NULL AND id_type = 'isbn13' LIMIT 1"""
+    ).fetchone()
+    con.close()
+    if row is None:
+        pytest.skip("fixture corpus holds no work-less identifier")
+
+    entry = _entry("orphan", "easy_baseline", [], isbn13=[row[0]])
+    reach = fetch_identifier_reach(fixture_artifact.root, fixture_artifact.dump_date, [entry])
+
+    assert reach["orphan"].works == frozenset()
+    assert reach["orphan"].orphaned > 0
+    assert reach["orphan"].absent == 0
+
+
+def test_read_lines_splits_only_on_newline(tmp_path):
+    """`str.splitlines()` also breaks on \\x85 and \\u2028, which truncated a
+    JSON record in this very pool once. A record whose title contains one must
+    survive as a single line."""
+    from openlibrary.eval.triage import _read_lines
+
+    p = tmp_path / "x.jsonl"
+    p.write_text('{"a": "one two"}\n{"b": 2}\n', encoding="utf-8")
+
+    assert len(_read_lines(p)) == 2

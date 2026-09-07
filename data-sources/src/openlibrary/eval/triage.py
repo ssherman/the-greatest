@@ -26,7 +26,7 @@ from pathlib import Path
 
 import typer
 
-from common.normalize import name_fingerprint, title_fingerprints
+from common.normalize import MIN_BLOCKING_FP_LENGTH, name_fingerprint, title_fingerprints
 from openlibrary.eval.build_pool import PoolCandidate, PoolEntry, _identifier_pairs
 from openlibrary.eval.schema import EvalBook
 from openlibrary.pipeline.paths import ArtifactPaths
@@ -41,6 +41,15 @@ from openlibrary.pipeline.paths import ArtifactPaths
 JUDGEMENT_STRATA = frozenset({"anthology_or_collection", "high_frequency_title"})
 
 BUCKETS = ("decisive_match", "needs_human")
+
+# A title only corroborates when the shorter fingerprint is long enough to
+# block on AND is most of the longer one. Both halves are load-bearing, and
+# both come from cases this shipped wrongly: `1` (non_latin_title-013) passed
+# a bare substring test and is shared by 1,675 OL works, while `america`
+# inside `america the book` (shared_key_collision-023) is long enough yet only
+# 44% of it, and they are different books. `the women could fly` against
+# `women could fly` is 79% and has to survive, which brackets the threshold.
+MIN_TITLE_OVERLAP = 0.6
 
 
 @dataclass(frozen=True)
@@ -80,6 +89,15 @@ def corroborated(book: EvalBook, candidate: PoolCandidate) -> bool:
     deliberately NOT accepted: that class means the wrong person 10,607 times
     over in this catalogue, and accepting it would corroborate precisely the
     failure this exists to catch.
+
+    A matching YEAR is not accepted at all, on measured evidence. It was, and
+    it shipped a false merge: Pamela Anderson's `I Love You` (2024) carries an
+    isbn13 that Open Library holds on `New Cookbook by Paul Anthony` -- three
+    editions, all 2024 -- so `2024 <= 2024 <= 2024` proposed her memoir as a
+    Paul Anthony cookbook. With one distinct year the test degenerates to
+    "published the same year". Two of 73 proposals rested on it alone and one
+    was that, so the limb is gone rather than weakened; author and title each
+    still stand alone.
     """
     from openlibrary.audit.authors import classify_disagreement
 
@@ -91,16 +109,14 @@ def corroborated(book: EvalBook, candidate: PoolCandidate) -> bool:
 
     ours_t = title_fingerprints(book.title).full
     theirs_t = title_fingerprints(candidate.title or "").full
-    if ours_t and theirs_t and (ours_t in theirs_t or theirs_t in ours_t):
-        return True
-
-    years = [
-        y
-        for y in (candidate.declared_year, candidate.min_edition_year, candidate.modal_edition_year)
-        if y
-    ]
-    if book.first_published_year and years:
-        return min(years) <= book.first_published_year <= max(years)
+    if ours_t and theirs_t:
+        short, long_ = sorted((ours_t, theirs_t), key=len)
+        if (
+            len(short) >= MIN_BLOCKING_FP_LENGTH
+            and short in long_
+            and len(short) / len(long_) >= MIN_TITLE_OVERLAP
+        ):
+            return True
 
     return False
 
@@ -110,13 +126,19 @@ def triage(
     stratum: str,
     candidate_keys: Sequence[str],
     reach: IdentifierReach,
-    corroborates: bool = True,
+    corroborates: bool = False,
 ) -> Triage:
     """Decide whether this case can be proposed automatically.
 
     Pure: every fact it needs is already gathered. That is what lets the rule
     be re-measured against the labels Shane has already written whenever it
     changes.
+
+    `corroborates` defaults to False so a caller that forgets it loses a
+    proposal rather than gaining an unchecked one. The two mistakes do not
+    cost the same: a missed proposal is one more case for Shane to read, an
+    unchecked one writes a false merge into ground truth that cannot be
+    regenerated.
     """
     shown = set(candidate_keys)
 
@@ -266,6 +288,18 @@ def main(
     dump_date: str = typer.Option("2026-07-31", "--dump-date"),
     root: Path = typer.Option(Path("/home/shane/ol-data"), "--root"),  # noqa: B008
 ) -> None:
+    # proposed.open("w") truncates and report.write_text overwrites. Both
+    # default to the directory holding labels.jsonl and one shares its
+    # extension, so a mistyped flag would silently destroy 204 hand labels
+    # that took days and have no other copy.
+    if labels in (proposed, report) or proposed == report:
+        typer.echo(
+            f"refusing to write over {labels}: --proposed and --report must be "
+            "distinct paths and neither may be --labels",
+            err=True,
+        )
+        raise typer.Exit(2)
+
     entries = [PoolEntry(**json.loads(line)) for line in _read_lines(pool)]
     done: set[str] = set()
     if labels.exists():
@@ -294,10 +328,17 @@ def main(
         )
         (decided if t.bucket == "decisive_match" else human).append((entry, t))
 
+    # Build the whole file before touching the destination: EvalCase validates
+    # on construction, and truncating first would leave a half-written
+    # proposals file behind if any row ever failed.
     proposed.parent.mkdir(parents=True, exist_ok=True)
-    with proposed.open("w", encoding="utf-8") as fh:
-        for entry, t in decided:
-            fh.write(json.dumps(_proposed_case(entry, t, dump_date), ensure_ascii=False) + "\n")
+    body = "".join(
+        json.dumps(_proposed_case(entry, t, dump_date), ensure_ascii=False) + "\n"
+        for entry, t in decided
+    )
+    tmp = proposed.with_suffix(proposed.suffix + ".tmp")
+    tmp.write_text(body, encoding="utf-8")
+    tmp.replace(proposed)
 
     by_stratum: dict[str, list] = {}
     for entry, t in human:
