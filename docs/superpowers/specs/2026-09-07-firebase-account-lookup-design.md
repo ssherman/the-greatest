@@ -109,9 +109,31 @@ Faraday is the HTTP client throughout `app/lib`.
 rows have `NULL` email and none has ever authenticated through Firebase. The new
 Meta app also reset the app-scoped ids — measured `10166754100896840` where
 `users#42207` holds `10160972764671840` — so all 17,529 stored
-`external_provider_uid` values are dead keys, and the 4,848 rows with no email
-anywhere have nothing left to match on. 12,683 addresses are recoverable from
-`legacy_v1_data`, 398 of which collide with an existing row.
+`external_provider_uid` values match nothing a new-app token presents.
+
+The cohort splits three ways:
+
+- **12,683** have an address recoverable from `legacy_v1_data`; 398 of those collide
+  with an existing row and need a merge rather than an update. Caveat: it is the
+  address Facebook supplied between 2014 and 2020, so anyone who has since changed
+  their Facebook email will not match.
+- **4,848** have no address anywhere. Their only stored key is the old app's
+  app-scoped id — but that may still be usable, see F9.
+- Those 4,848 rows own **19,392 UserLists and 83,231 UserListItems**. All of them
+  signed in at least once; 347 signed in repeatedly. This is a decade of reading
+  lists, not dormant stubs.
+
+**F9 — The old app-scoped ids may be recoverable through Meta's Business Mapping
+API.** [`ids_for_business`](https://developers.facebook.com/docs/graph-api/reference/user/ids_for_business)
+on the User node "returns the list of IDs that a user has in any of those other
+apps", for apps claimed by the same Business Manager. On a sign-in through the new
+app it would yield the same person's id in the old app, which is exactly what all
+4,848 rows still hold in `external_provider_uid`.
+
+Unverified, and two gates are undocumented: whether a **Meta-disabled** app can be
+claimed by a Business Manager, and what permissions the edge requires. Both are
+cheap to establish. **The old Meta app must not be deleted** — it is the only thing
+that makes this path possible.
 
 ## Decisions
 
@@ -169,12 +191,19 @@ is the provider's own assertion; the linking decision remains a separate key.
 three pinned test assertions are already committed on this branch, with Playwright
 green 15/15 across books, music and games.
 
-**D11 — The legacy email backfill is out of scope and is a named gap.** Until it
-runs, a returning legacy Facebook or X user still lands on a new row, because
-`find_user` matches the resolved email against `users.email` and theirs is `NULL`.
-This design fixes new sign-ups and existing users adding a provider. It does not
-reconnect F8's cohort. That is its own spec, and it is a merge problem, not a lookup
-problem.
+**D11 — Legacy reconnection is out of scope and is a named gap.** Until it runs, a
+returning legacy Facebook or X user still lands on a new row, because `find_user`
+matches the resolved email against `users.email` and theirs is `NULL`. This design
+fixes new sign-ups and existing users adding a provider. It does not reconnect F8's
+cohort. That is its own spec, covering two distinct paths — the `legacy_v1_data`
+email backfill for 12,683 rows, and the F9 Business Mapping route for the 4,848 that
+have no address at all — and both end in a merge problem, not a lookup problem.
+
+**D11a — Establish the F9 gates before that spec, not during it.** Whether the
+disabled app can be claimed by a Business Manager decides whether the 4,848 are
+recoverable at all, and it is a console question, not an engineering one. Answer it
+early: it is the only finding that could change the shape of the recovery spec, and
+84k list items ride on it.
 
 **D12 — The service-account key is a SOPS-managed ENV var**, base64-encoded into a
 single variable, per the project rule that secrets are ENV vars and never
