@@ -59,12 +59,44 @@ retarget their own account's email to a victim's address and get linked via this
 See D10 in the OAuth provider registry design doc for the full attack and why the two
 are a pair.
 
-## Facebook is off
+## Facebook runs on a replacement Meta app
 
-The Meta app is disabled by Meta and runs in development mode only, so only accounts
-holding a role on the app can sign in. A replacement app is separate work; note that
-it will issue fresh app-scoped ids, so `users.external_provider_uid` will not match
-for Facebook. X ids are global and unaffected.
+The original app was disabled by Meta. A new one replaced it, and two consequences
+follow that do not apply to any other provider.
+
+**The app-scoped ids reset.** Facebook has issued per-app ids since Graph API v2.0,
+so the new app returns different numbers for the same people. Measured 2026-09-07:
+the new app returned `10166754100896840` where `users#42207` still holds
+`10160972764671840` from the old one. All 17,529 stored Facebook
+`external_provider_uid` values are dead keys. For the 4,848 Facebook rows with no
+email anywhere — not on the row, not in `legacy_v1_data` — nothing is left to
+match on. X ids are global and unaffected; see the design doc's F5.
+
+**Every Facebook row has a NULL email.** All 17,531 of them, and none has ever
+authenticated through Firebase. `find_user` matches on `users.email`, so a
+returning Facebook user matches nothing and gets a new row rather than their
+account. 12,683 of those emails are recoverable from `legacy_v1_data` (398 collide
+with an existing row and need a merge, not an update). Until that backfill runs,
+enabling the button converts a lookup problem into a merge problem for anyone who
+comes back.
+
+**The token's `email` claim depends on the Meta app's mode.** While the new app sat
+in development with `email` only "Ready for testing", Firebase received the address
+in the Graph response, kept it on the provider record, and never promoted it to the
+account record — so the ID token carried no `email` claim at all and
+`extract_provider_data` saw `nil`. The old app's tokens did carry it (`users#1141`
+holds both `google.com` and `facebook.com` in `provider_data`, linked by email).
+Re-verify the claim after any change to the Meta app's mode or permissions before
+trusting cross-provider linking.
+
+## Meta Platform Data must never reach ad targeting
+
+Meta's Platform Terms prohibit using Platform Data for advertising or ad targeting
+and prohibit sharing it with ad networks. The sites serve Google Ads to non-members,
+so the constraint is live: the Facebook-derived email and user id must not be passed
+to gtag, used for hashed-email audience matching, or built into custom audiences.
+Nothing does this today. Conversion tracking is the likely place someone would break
+it by accident.
 
 ## Email-less accounts
 

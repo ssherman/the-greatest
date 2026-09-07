@@ -16,9 +16,10 @@ const DOMAINS = [
 const ENABLED = [
   { id: 'google', label: 'Google', firebaseId: 'google.com' },
   { id: 'twitter', label: 'X', firebaseId: 'twitter.com' },
+  { id: 'facebook', label: 'Facebook', firebaseId: 'facebook.com' },
 ];
 
-const DISABLED = ['facebook', 'apple'];
+const DISABLED = ['apple'];
 
 async function openLoginModal(page: Page) {
   await page.goto('/');
@@ -49,23 +50,34 @@ for (const domain of DOMAINS) {
       }
     });
 
-    test('clicking X starts the Firebase redirect with the right providerId', async ({ page }) => {
-      await openLoginModal(page);
+    // Every enabled provider gets this, not just one: the provider id travels
+    // from the JSON through a Stimulus action param into the Firebase factory
+    // map, and a provider missing from that map fails only on click. Checking
+    // one provider leaves the others unproven.
+    for (const provider of ENABLED) {
+      test(`clicking ${provider.label} starts the Firebase redirect with the right providerId`, async ({
+        page,
+      }) => {
+        await openLoginModal(page);
 
-      await page
-        .locator('#login_modal button[data-authentication-provider-param="twitter"]')
-        .click();
+        await page
+          .locator(`#login_modal button[data-authentication-provider-param="${provider.id}"]`)
+          .click();
 
-      // signInWithRedirect goes to the Firebase auth handler on THIS host
-      // (nginx and Caddy proxy /__/auth* to the-greatest-books.firebaseapp.com)
-      // before it ever reaches X. Waiting on that URL keeps the test off X's
-      // bot detection while still proving the whole client path.
-      await page.waitForURL(/\/__\/auth\/handler\?.*providerId=twitter\.com/, {
-        timeout: 20000,
+        // signInWithRedirect goes to the Firebase auth handler on THIS host
+        // (nginx and Caddy proxy /__/auth* to the-greatest-books.firebaseapp.com)
+        // before it ever reaches the provider. Waiting on that URL keeps the
+        // test off the provider's bot detection while still proving the whole
+        // client path.
+        const escaped = provider.firebaseId.replace(/\./g, '\\.');
+        await page.waitForURL(
+          new RegExp(`/__/auth/handler\\?.*providerId=${escaped}`),
+          { timeout: 20000 }
+        );
+
+        expect(page.url()).toContain(`providerId=${provider.firebaseId}`);
       });
-
-      expect(page.url()).toContain('providerId=twitter.com');
-    });
+    }
 
     test('an unknown provider id does not silently do nothing', async ({ page }) => {
       await openLoginModal(page);
