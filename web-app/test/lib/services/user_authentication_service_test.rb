@@ -431,4 +431,108 @@ class UserAuthenticationServiceTest < ActiveSupport::TestCase
     assert_nil blank.reload.email, "a collision must skip the fill, not raise"
     assert_equal other.email, other.reload.email, "the other row's email must be untouched"
   end
+
+  # --- Lazy email resolution ---
+
+  # The whole cost argument for resolving lazily: a returning user whose row
+  # already has an address must not pay a network round trip.
+  # password_user, not regular_user: these two need a row that already has an
+  # auth_uid to match on, and regular_user's is nil -- passing that as user_id
+  # raises ArgumentError before any of this is exercised.
+  test "a uid match on a row that already has an email never calls the resolver" do
+    existing = users(:password_user)
+    assert existing.email.present?, "fixture precondition"
+    resolver = mock
+    resolver.expects(:call).never
+
+    Services::UserAuthenticationService.call(
+      provider_data: provider_data(user_id: existing.auth_uid, provider: "google"),
+      email_resolver: resolver
+    )
+  end
+
+  test "a uid match on a blank-email row resolves once and fills the blank" do
+    existing = users(:password_user)
+    # update_columns, not update!: :email's presence rule is only relaxed for
+    # external_oauth_account?, and this row is a password account until the
+    # same statement changes it.
+    existing.update_columns(email: nil, external_provider: User.external_providers[:twitter])
+    resolver = mock
+    resolver.expects(:call).once.returns("filled@example.com")
+
+    user = Services::UserAuthenticationService.call(
+      provider_data: provider_data(
+        user_id: existing.auth_uid, provider: "twitter", email_trusted: true
+      ),
+      email_resolver: resolver
+    )
+
+    assert_equal "filled@example.com", user.reload.email
+  end
+
+  test "a uid miss resolves the email and links by it" do
+    existing = users(:regular_user)
+    existing.update!(email: "target@example.com")
+    resolver = mock
+    resolver.expects(:call).once.returns("TARGET@example.com")
+
+    user = Services::UserAuthenticationService.call(
+      provider_data: provider_data(
+        user_id: "brand_new_uid", email: nil, provider: "facebook", email_trusted: true
+      ),
+      email_resolver: resolver
+    )
+
+    assert_equal existing.id, user.id, "the resolved address must drive the link"
+  end
+
+  test "the resolver is consulted at most once per sign-in" do
+    resolver = mock
+    resolver.expects(:call).once.returns("new.person@example.com")
+
+    Services::UserAuthenticationService.call(
+      provider_data: provider_data(user_id: "brand_new_uid", email: nil, provider: "facebook"),
+      email_resolver: resolver
+    )
+  end
+
+  test "a resolver returning nil creates a user with no email" do
+    resolver = mock
+    resolver.stubs(:call).returns(nil)
+
+    user = Services::UserAuthenticationService.call(
+      provider_data: provider_data(user_id: "brand_new_uid", email: nil, provider: "facebook"),
+      email_resolver: resolver
+    )
+
+    assert_nil user.email
+    assert_predicate user, :persisted?
+  end
+
+  test "an untrusted provider still raises against an existing row even when resolved" do
+    existing = users(:regular_user)
+    existing.update!(email: "victim@example.com")
+    resolver = mock
+    resolver.stubs(:call).returns("victim@example.com")
+
+    assert_raises(Services::UserAuthenticationService::UnverifiedEmailConflict) do
+      Services::UserAuthenticationService.call(
+        provider_data: provider_data(
+          user_id: "attacker_uid", email: nil, provider: "password", email_trusted: false
+        ),
+        email_resolver: resolver
+      )
+    end
+  end
+
+  test "with no resolver the service reads provider_data[:email] as before" do
+    existing = users(:regular_user)
+    existing.update!(email: "legacy@example.com")
+
+    user = Services::UserAuthenticationService.call(
+      provider_data: provider_data(user_id: "brand_new_uid", email: "legacy@example.com")
+    )
+
+    assert_equal existing.id, user.id
+  end
 end
