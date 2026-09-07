@@ -78,9 +78,6 @@ class UserList < ApplicationRecord
   validate :list_type_immutable, on: :update
   validate :one_default_per_type_per_user
 
-  # Callbacks
-  after_commit :touch_user, on: [:create, :update, :destroy]
-
   # Scopes
   scope :public_lists, -> { where(public: true) }
   scope :owned_by, ->(user) { where(user: user) }
@@ -191,11 +188,6 @@ class UserList < ApplicationRecord
   end
 
   private
-
-  def touch_user
-    return if user.nil? || user.destroyed? || user.new_record?
-    user.touch
-  end
 
   def list_type_immutable
     return unless list_type_changed?

@@ -76,6 +76,12 @@ group :development, :test do
 
   # Omakase Ruby styling [https://github.com/rails/rubocop-rails-omakase/]
   gem "rubocop-rails-omakase", require: false
+
+  # Only for firebase:canary, which generates a known-plaintext hash matching
+  # the v1 cohort's construction. The app itself never hashes a password --
+  # Firebase does. Deliberately not in the default group, so nothing in
+  # production can start depending on it.
+  gem "bcrypt", "~> 3.1"
 end
 
 group :development do

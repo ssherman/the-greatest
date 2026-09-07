@@ -7,14 +7,49 @@ import {
 import firebaseAuthService from '../firebase_auth_service.js'
 
 class EmailProvider {
+  // Firebase's reset and verification emails link to the project's single
+  // default action URL unless told otherwise -- so a games reader resetting a
+  // password would be emailed a books link. Deriving from the live origin sends
+  // them back to the site they were actually on.
+  //
+  // Every domain used here must be on Firebase's authorized-domains list, or
+  // the SDK rejects the call with auth/unauthorized-continue-uri.
+  actionCodeSettings() {
+    return {
+      url: `${window.location.origin}/`,
+      handleCodeInApp: false
+    }
+  }
+
+  // createUserWithEmailAndPassword has already created the Firebase account by
+  // the time this runs. Letting a send failure propagate would therefore leave
+  // the worst possible state: the account exists, handleEmailAuthResult never
+  // runs so there is no Rails session and no users row, and the retry reports
+  // email-already-in-use -- an account the person can neither reach nor
+  // recreate. The verification email is the recoverable half, since the widget
+  // shows a resend button for unverified password users, so a failure here must
+  // not abort a sign-up that already succeeded.
+  //
+  // resendVerification deliberately does NOT use this: there the user asked to
+  // resend, so the error has to reach them rather than be reported as success.
+  async trySendVerification(user) {
+    try {
+      await sendEmailVerification(user, this.actionCodeSettings())
+      return true
+    } catch (error) {
+      console.error('Verification email failed to send (sign-up continues):', error)
+      return false
+    }
+  }
+
   // Sign up with email and password
   async signUp(email, password) {
     try {
       const auth = firebaseAuthService.getAuth()
       const result = await createUserWithEmailAndPassword(auth, email, password)
 
-      // Send verification email
-      await sendEmailVerification(result.user)
+      // Deliberately not awaited for its success: see trySendVerification.
+      await this.trySendVerification(result.user)
 
       // Send to backend
       await firebaseAuthService.handleEmailAuthResult(result)
@@ -47,7 +82,7 @@ class EmailProvider {
   async sendPasswordReset(email) {
     try {
       const auth = firebaseAuthService.getAuth()
-      await sendPasswordResetEmail(auth, email)
+      await sendPasswordResetEmail(auth, email, this.actionCodeSettings())
     } catch (error) {
       console.error('Password reset error:', error)
       throw error
@@ -59,7 +94,7 @@ class EmailProvider {
     try {
       const user = firebaseAuthService.getCurrentUser()
       if (user) {
-        await sendEmailVerification(user)
+        await sendEmailVerification(user, this.actionCodeSettings())
       }
     } catch (error) {
       console.error('Resend verification error:', error)

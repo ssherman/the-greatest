@@ -33,6 +33,7 @@
 #  index_users_on_confirmed_at               (confirmed_at)
 #  index_users_on_external_provider          (external_provider)
 #  index_users_on_external_provider_and_uid  (external_provider,external_provider_uid)
+#  index_users_on_lower_email                (lower((email)::text))
 #  index_users_on_stripe_customer_id         (stripe_customer_id)
 #
 require "test_helper"
@@ -167,6 +168,12 @@ class UserTest < ActiveSupport::TestCase
   test "creates 16 default user lists on create" do
     user = User.create!(email: "defaults@example.com", display_name: "Defaults")
     assert_equal 16, user.user_lists.count
+  end
+
+  test "creating default lists does not update a new user" do
+    user = User.create!(email: "defaults-do-not-touch@example.com", display_name: "Defaults")
+
+    assert_equal user.created_at, user.reload.updated_at
   end
 
   test "default list counts per subclass" do
@@ -319,5 +326,73 @@ class UserTest < ActiveSupport::TestCase
     user.destroy!
 
     assert_empty NewsPost.where(id: post_ids)
+  end
+
+  # 20,063 rows in production already have a nil email -- they migrated via
+  # upsert_all, which bypasses validations, so the model and the table have
+  # been disagreeing. X supplies no email for roughly 4% of sign-ins, and
+  # refusing those outright is worse than an account that cannot be linked.
+  test "an OAuth account may have no email" do
+    user = User.new(
+      auth_uid: "x-uid-no-email",
+      external_provider: :twitter,
+      email_verified: false,
+      role: :user
+    )
+
+    assert user.valid?, user.errors.full_messages.join(", ")
+  end
+
+  test "two OAuth accounts may both have no email" do
+    User.create!(
+      auth_uid: "x-uid-no-email-1",
+      external_provider: :twitter,
+      email_verified: false,
+      role: :user
+    )
+
+    second = User.new(
+      auth_uid: "x-uid-no-email-2",
+      external_provider: :twitter,
+      email_verified: false,
+      role: :user
+    )
+
+    # Rails' uniqueness validator compares `email IS NULL`, so without
+    # allow_nil the second nil-email row collides with the first even though
+    # Postgres permits any number of NULLs.
+    assert second.valid?, second.errors.full_messages.join(", ")
+  end
+
+  test "a password account still requires an email" do
+    user = User.new(
+      auth_uid: "password-uid-no-email",
+      external_provider: :password,
+      email_verified: false,
+      role: :user
+    )
+
+    refute user.valid?
+    assert_includes user.errors[:email], "can't be blank"
+  end
+
+  test "an account with no provider at all still requires an email" do
+    user = User.new(auth_uid: "orphan-uid", email_verified: false, role: :user)
+
+    refute user.valid?
+    assert_includes user.errors[:email], "can't be blank"
+  end
+
+  test "email uniqueness is still enforced when an email is present" do
+    duplicate = User.new(
+      email: users(:google_user).email,
+      auth_uid: "some-other-uid",
+      external_provider: :google,
+      email_verified: true,
+      role: :user
+    )
+
+    refute duplicate.valid?
+    assert_includes duplicate.errors[:email], "has already been taken"
   end
 end

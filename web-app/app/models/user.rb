@@ -33,6 +33,7 @@
 #  index_users_on_confirmed_at               (confirmed_at)
 #  index_users_on_external_provider          (external_provider)
 #  index_users_on_external_provider_and_uid  (external_provider,external_provider_uid)
+#  index_users_on_lower_email                (lower((email)::text))
 #  index_users_on_stripe_customer_id         (stripe_customer_id)
 #
 class User < ApplicationRecord
@@ -76,7 +77,17 @@ class User < ApplicationRecord
 
   after_create :create_default_user_lists
 
-  validates :email, presence: true, uniqueness: true
+  # Presence is conditional on the provider, not on auth_uid: password users
+  # hold an auth_uid too, so keying on it would exempt exactly the accounts
+  # that must have an email. A nil external_provider also stays required --
+  # nothing identifies such a row.
+  #
+  # allow_nil on uniqueness is not optional. Rails compares `email IS NULL`,
+  # so a second nil-email row collides with the first even though Postgres
+  # permits any number of NULLs. Verified on users#1 (a V1 twitter row), which
+  # fails today with BOTH "can't be blank" and "has already been taken".
+  validates :email, presence: true, unless: :external_oauth_account?
+  validates :email, uniqueness: {allow_nil: true}
   validates :role, presence: true
   validates :email_verified, inclusion: {in: [true, false]}
   validates :confirmation_token, uniqueness: true, allow_nil: true
@@ -95,6 +106,24 @@ class User < ApplicationRecord
   # renewal date and a portal to manage.
   def granting_membership
     memberships.granting_access.order(:source, current_period_end: :desc).first
+  end
+
+  # Any provider other than password. Derived from the enum rather than a
+  # second hardcoded list, so adding a provider cannot leave this behind --
+  # a new OAuth provider should get email-optional treatment automatically,
+  # not by remembering to add it here too.
+  #
+  # This looks like it contradicts
+  # AuthenticationService::TRUSTED_EMAIL_PROVIDERS, which is deliberately
+  # enumerated because "anything that is not password" is exactly the shape
+  # that constant avoids. It doesn't: that list is a trust boundary, where a
+  # wrong entry grants account access to someone who does not control the
+  # address. This is a presence validation, where a wrong entry only permits
+  # a null email column on a row nothing else can reach by that address. The
+  # two rules guard against opposite failure modes, so they deliberately use
+  # opposite strategies -- derive here, enumerate there.
+  def external_oauth_account?
+    external_provider.present? && !password?
   end
 
   # Email confirmation methods

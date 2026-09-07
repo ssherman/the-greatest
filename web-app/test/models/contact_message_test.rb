@@ -1,5 +1,30 @@
 require "test_helper"
 
+# == Schema Information
+#
+# Table name: contact_messages
+#
+#  id           :bigint           not null, primary key
+#  domain       :integer          not null
+#  email        :string           not null
+#  message      :text             not null
+#  replied_at   :datetime
+#  status       :integer          default(0), not null
+#  submitter_ip :string
+#  created_at   :datetime         not null
+#  updated_at   :datetime         not null
+#  user_id      :bigint
+#
+# Indexes
+#
+#  index_contact_messages_on_domain_and_created_at  (domain,created_at)
+#  index_contact_messages_on_status_and_created_at  (status,created_at)
+#  index_contact_messages_on_user_id                (user_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (user_id => users.id)
+#
 class ContactMessageTest < ActiveSupport::TestCase
   def valid_attributes
     {email: "reader@example.org", message: "Hello", domain: :books}

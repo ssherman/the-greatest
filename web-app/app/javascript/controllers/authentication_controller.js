@@ -19,12 +19,18 @@ export default class extends Controller {
   static values = {
     reloadAfterAuth: Boolean,
     currentUser: Object,
-    firebaseSrc: String
+    firebaseSrc: String,
+    // The enabled entries from config/auth_providers.json, handed over by the
+    // widget. A Stimulus value rather than a JS import because there is no
+    // @rollup/plugin-json in this project, and adding one to move a list that
+    // Rails already reads would be the wrong trade.
+    providers: Array
   }
 
   connect() {
     this.isSignUpMode = false
     this.storedEmail = null
+    this.pendingVerification = false
     this.setupEventListeners()
     this.observeLoginModal()
 
@@ -132,6 +138,14 @@ export default class extends Controller {
     }
 
     if (user) {
+      // Rails refused this identity (see handleAuthError's
+      // email_verification_required branch) and we deliberately keep the
+      // Firebase user signed in so resendVerification() still has someone to
+      // send to. Firebase re-notifies on its own schedule -- a token refresh is
+      // enough -- so without this guard that later notification would silently
+      // re-present a refused identity as signed in.
+      if (this.pendingVerification) return
+
       markSignedIn()
       this.showAuthenticatedState(user)
     } else {
@@ -308,9 +322,29 @@ export default class extends Controller {
     }
   }
 
-  // Handle Google sign in
-  async signInWithGoogle(event) {
+  // Look up one registry entry by id. Returns null for an unknown id rather
+  // than throwing, so a stale button in cached Turbo markup degrades to a
+  // visible error instead of an unhandled rejection.
+  providerConfig(id) {
+    return this.providersValue.find((provider) => provider.id === id) || null
+  }
+
+  // Handles every OAuth provider. The button supplies its id through a
+  // Stimulus action param, so adding a provider touches config and markup
+  // only -- never this file.
+  async signInWithOauth(event) {
     event.preventDefault()
+
+    const id = event.params.provider
+    const config = this.providerConfig(id)
+
+    if (!config) {
+      console.error(`Unknown auth provider: ${id}`)
+      this.hideError()
+      this.hideInfo()
+      this.showError('Sign-in is temporarily unavailable. Please try again.')
+      return
+    }
 
     this.showLoading(true)
     this.hideError()
@@ -320,7 +354,7 @@ export default class extends Controller {
     // failure (e.g. firebase-auth.js 404s) has an error.message like "failed
     // to load firebase bundle from /assets/firebase-auth-a1b2c3.js", which is
     // meaningless -- and alarming -- in the login modal. A genuine Firebase
-    // auth error below (the reader cancelling the Google flow, a real
+    // auth error below (the reader cancelling the provider flow, a real
     // provider error) is still shown verbatim, since that message IS useful.
     let firebase
     try {
@@ -336,9 +370,9 @@ export default class extends Controller {
       // Set BEFORE the redirect leaves the page: on return, connect() sees this
       // and eager-loads Firebase so getRedirectResult can run.
       markPendingRedirect()
-      await firebase.googleProvider.signIn(event)
+      await firebase.oauthProvider.signIn(config, event)
     } catch (error) {
-      console.error("Google sign in error:", error)
+      console.error(`${config.label} sign in error:`, error)
       clearPendingRedirect()
       this.showError(error.message)
       this.showLoading(false)
@@ -357,6 +391,12 @@ export default class extends Controller {
     this.showLoading(true)
     this.hideError()
     this.hideInfo()
+
+    // A fresh attempt: whatever we refused last time is no longer what is being
+    // presented, so stop suppressing auth-state notifications. Without this the
+    // guard in handleAuthStateChange would outlive the refusal and a genuinely
+    // verified sign-in on the second try would never update the UI.
+    this.pendingVerification = false
 
     // Resolved before the try, not inside the catch. loadFirebase() nulls its
     // memo on a script-load error, so reaching for getUserFriendlyMessage from
@@ -405,13 +445,25 @@ export default class extends Controller {
 
       const data = await response.json()
 
-      if (data.has_oauth_provider) {
+      // check_provider is rate-limited (Task 7): a throttled request has no
+      // has_oauth_provider key at all, which would otherwise silently fall
+      // through to the generic invalid-credential message below and hide the
+      // real reason from someone who is about to retry into the same limit.
+      if (response.status === 429) {
+        this.showError(data.error || 'Too many attempts. Please wait a moment and try again.')
+      } else if (data.has_oauth_provider) {
         this.showError(data.message)
       } else {
-        this.showError('Invalid email or password.')
+        this.showError(
+          "Invalid email or password. If you had an account on the old site and haven't " +
+          "set a password here yet, choose Create account with this address."
+        )
       }
     } catch {
-      this.showError('Invalid email or password.')
+      this.showError(
+        "Invalid email or password. If you had an account on the old site and haven't " +
+        "set a password here yet, choose Create account with this address."
+      )
     }
   }
 
@@ -571,10 +623,40 @@ export default class extends Controller {
     }
   }
 
-  // Handle authentication error
+  // Handle authentication error. email_verification_required is not a failure
+  // the reader can fix by retrying -- it means the address already belongs to
+  // an account and Firebase has not confirmed they control it, so it gets the
+  // resend-verification affordance rather than a red error box.
   handleAuthError(event) {
-    this.showError(event.detail.error)
     this.showLoading(false)
+
+    if (event.detail.code === 'email_verification_required') {
+      // Firebase signed this reader in client-side before Rails ever saw the
+      // token, so its auth-state callback has ALREADY flipped the navbar to
+      // Logout, hidden the sign-in controls, and persisted the localStorage
+      // signed-in hint. Rails then refused the token, and there is no session
+      // behind any of it. Left alone the browser keeps presenting a signed-in
+      // identity -- and because the hint outlives the page, it does so across
+      // reloads too, on a page whose server-rendered content is anonymous.
+      //
+      // So roll the UI all the way back to anonymous, but leave the Firebase
+      // user in place: resendVerification() reads
+      // firebaseAuthService.getCurrentUser(), which is Firebase's user and not
+      // this controller's currentUserValue, so clearing our state costs the
+      // reader nothing and the resend link still works.
+      this.pendingVerification = true
+      clearSignedInHint()
+      this.showUnauthenticatedState()
+
+      // After showUnauthenticatedState, not before: it hides this same target.
+      this.showInfo(event.detail.error)
+      if (this.hasVerificationMessageTarget) {
+        this.verificationMessageTarget.style.display = 'block'
+      }
+      return
+    }
+
+    this.showError(event.detail.error)
   }
 
   // Handle sign out event

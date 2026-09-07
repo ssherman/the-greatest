@@ -7,8 +7,11 @@
 // injected <script src> with a Rails-provided asset_path sidesteps that
 // entirely.
 import firebaseAuthService from "../services/firebase_auth_service"
-import googleProvider from "../services/auth_providers/google_provider"
+import oauthProvider from "../services/auth_providers/oauth_provider"
 import emailProvider from "../services/auth_providers/email_provider"
 import redirectHandler from "../services/auth_handlers/redirect_handler"
 
-window.__tgFirebase = { firebaseAuthService, googleProvider, emailProvider, redirectHandler }
+// oauthProvider is generic: the Stimulus controller passes it one registry
+// entry per click, so a new provider needs no change here. emailProvider stays
+// separate on purpose -- no redirect, plus signup, reset and verification.
+window.__tgFirebase = { firebaseAuthService, oauthProvider, emailProvider, redirectHandler }
