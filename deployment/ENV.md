@@ -156,6 +156,18 @@ Do not add a `FIREBASE_PROJECT_ID` entry back here or to any `.env` file.
 - **Required**: Yes (if using Firebase Auth)
 - **Security**: Can be public (client-side)
 
+#### FIREBASE_SERVICE_ACCOUNT_KEY
+- **Description**: Base64-encoded JSON key for a GCP service account with the
+  `firebaseauth.users.get` permission on the `the-greatest-books` project.
+  Used to call Identity Toolkit `accounts:lookup` and read the email Firebase
+  keeps on an account's provider record but does not put in the ID token.
+- **Required**: Yes. Without it, any sign-in whose `auth_uid` does not already
+  match a user is refused — that is new sign-ups and anyone adding a provider.
+- **Format**: `base64 -w0 service-account.json`
+- **Used By**: web
+- **Security**: A real credential, unlike `FIREBASE_API_KEY`. Never commit it;
+  manage via SOPS — see `deployment/SECRETS.md`.
+
 ### Stripe Billing
 
 For the full production setup sequence these variables are part of — registering webhook

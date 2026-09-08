@@ -29,8 +29,7 @@ class Authentication::WidgetComponentTest < ViewComponent::TestCase
   test "does not render a button for a disabled provider" do
     render_inline(Authentication::WidgetComponent.new)
 
-    # Facebook ships disabled -- the Meta app is restricted to development mode
-    assert_no_selector "button[data-authentication-provider-param='facebook']"
+    # Apple stays disabled -- Sign in with Apple is not configured (spec D9)
     assert_no_selector "button[data-authentication-provider-param='apple']"
   end
 
@@ -51,9 +50,19 @@ class Authentication::WidgetComponentTest < ViewComponent::TestCase
     raw = page.find("[data-controller='authentication']")["data-authentication-providers-value"]
     parsed = JSON.parse(raw)
 
-    assert_equal %w[google twitter], parsed.map { |p| p["id"] }
-    assert_equal "twitter.com", parsed.last["firebase_id"]
-    assert_equal [], parsed.last["scopes"], "the client needs the scope list to build the provider"
+    assert_equal %w[google twitter facebook], parsed.map { |p| p["id"] }
+
+    # Indexed by id rather than position: `parsed.last` used to mean twitter,
+    # and enabling Facebook silently moved these assertions onto a different
+    # provider instead of failing.
+    by_id = parsed.index_by { |p| p["id"] }
+
+    assert_equal "twitter.com", by_id["twitter"]["firebase_id"]
+    assert_equal [], by_id["twitter"]["scopes"], "the client needs the scope list to build the provider"
+    # Facebook is the only enabled provider with a non-empty scope list, so it
+    # is the one that proves scopes survive the trip to the client at all.
+    assert_equal "facebook.com", by_id["facebook"]["firebase_id"]
+    assert_equal %w[public_profile email], by_id["facebook"]["scopes"]
   end
 
   test "every registry provider has an icon partial, enabled or not" do

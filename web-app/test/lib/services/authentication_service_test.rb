@@ -5,6 +5,28 @@ class AuthenticationServiceTest < ActiveSupport::TestCase
     Services::JwtValidationService.reset_cert_cache!
     FirebaseTokenHelper.stub_certs
     @project_id = Rails.application.config.x.firebase_project_id
+    stub_account_lookup_empty
+  end
+
+  # AuthenticationService now builds a real ProviderEmailResolver on every
+  # call, which -- on an auth_uid miss -- reaches Identity Toolkit. Every
+  # pre-existing test in this file predates that and expects the token's own
+  # `email` claim to win, so the default here makes the provider-record
+  # lookup find nothing, which is exactly what makes the resolver fall back
+  # to that claim. GoogleServiceAccountToken.access_token is stubbed (not
+  # FirebaseAccountLookup.call itself) and the lookup endpoint is stubbed
+  # with WebMock rather than mocked away, so the REAL accounts:lookup code
+  # path still runs -- which is what lets "a token minting failure refuses
+  # the sign-in with the same code" below override just the token stub and
+  # see that error travel the real path into the rescue clause.
+  def stub_account_lookup_empty
+    Services::GoogleServiceAccountToken.stubs(:access_token).returns("test-service-account-token")
+    WebMock.stub_request(:post, %r{\Ahttps://identitytoolkit\.googleapis\.com/v1/projects/[^/]+/accounts:lookup\z})
+      .to_return(
+        status: 200,
+        body: {users: []}.to_json,
+        headers: {"Content-Type" => "application/json"}
+      )
   end
 
   def call(token, signup_domain: nil)
@@ -259,5 +281,67 @@ class AuthenticationServiceTest < ActiveSupport::TestCase
 
     assert result[:success], result[:error]
     assert_nil result[:provider_data][:provider_uid]
+  end
+
+  # --- Provider email resolution ---
+
+  test "builds a resolver from the token's sub and sign_in_provider" do
+    payload = {
+      "sub" => "uid_1",
+      "firebase" => {"sign_in_provider" => "facebook.com", "identities" => {"facebook.com" => ["1016"]}},
+      "email" => "claim@example.com"
+    }
+    Services::JwtValidationService.stubs(:call).returns(payload)
+
+    Services::ProviderEmailResolver.expects(:new).with(
+      uid: "uid_1",
+      sign_in_provider: "facebook.com",
+      project_id: "the-greatest-books",
+      fallback_email: "claim@example.com"
+    ).returns(stub(call: "resolved@example.com"))
+
+    Services::AuthenticationService.call(auth_token: "t", project_id: "the-greatest-books")
+  end
+
+  test "a lookup failure refuses the sign-in with a retriable code" do
+    payload = {
+      "sub" => "uid_1",
+      "firebase" => {"sign_in_provider" => "facebook.com"}
+    }
+    Services::JwtValidationService.stubs(:call).returns(payload)
+    Services::FirebaseAccountLookup.stubs(:call).raises(Services::FirebaseAccountLookup::Error, "boom")
+
+    result = Services::AuthenticationService.call(auth_token: "t", project_id: "the-greatest-books")
+
+    assert_equal false, result[:success]
+    assert_equal :account_lookup_failed, result[:error_code],
+      "must not be swallowed by the catch-all rescue into :authentication_failed"
+  end
+
+  test "a token minting failure refuses the sign-in with the same code" do
+    payload = {
+      "sub" => "uid_1",
+      "firebase" => {"sign_in_provider" => "facebook.com"}
+    }
+    Services::JwtValidationService.stubs(:call).returns(payload)
+    Services::GoogleServiceAccountToken.stubs(:access_token)
+      .raises(Services::GoogleServiceAccountToken::Error, "no credential")
+
+    result = Services::AuthenticationService.call(auth_token: "t", project_id: "the-greatest-books")
+
+    assert_equal :account_lookup_failed, result[:error_code]
+  end
+
+  test "a refused sign-in creates no user row" do
+    payload = {
+      "sub" => "uid_never_seen",
+      "firebase" => {"sign_in_provider" => "facebook.com"}
+    }
+    Services::JwtValidationService.stubs(:call).returns(payload)
+    Services::FirebaseAccountLookup.stubs(:call).raises(Services::FirebaseAccountLookup::Error, "boom")
+
+    assert_no_difference "User.count" do
+      Services::AuthenticationService.call(auth_token: "t", project_id: "the-greatest-books")
+    end
   end
 end

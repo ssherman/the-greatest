@@ -24,8 +24,7 @@ class Services::AuthProviderRegistryTest < ActiveSupport::TestCase
 
     assert_includes enabled.keys, "google"
     assert_includes enabled.keys, "twitter"
-    refute_includes enabled.keys, "facebook",
-      "Facebook must ship disabled: the Meta app is restricted to development mode."
+    assert_includes enabled.keys, "facebook"
     refute_includes enabled.keys, "apple",
       "Apple is not implemented in this pass."
   end
@@ -33,7 +32,7 @@ class Services::AuthProviderRegistryTest < ActiveSupport::TestCase
   test "enabled_for_view exposes symbol keys in file order" do
     entries = Services::AuthProviderRegistry.enabled_for_view
 
-    assert_equal %w[google twitter], entries.map { |e| e[:id] }
+    assert_equal %w[google twitter facebook], entries.map { |e| e[:id] }
     google = entries.first
     assert_equal "google.com", google[:firebase_id]
     assert_equal "Google", google[:label]

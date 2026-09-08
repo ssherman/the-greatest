@@ -25,13 +25,14 @@ module Services
     # again" -- never into a new account, and never into a link.
     class UnverifiedEmailConflict < StandardError; end
 
-    def self.call(provider_data:, signup_domain: nil)
-      new(provider_data, signup_domain).call
+    def self.call(provider_data:, signup_domain: nil, email_resolver: nil)
+      new(provider_data, signup_domain, email_resolver).call
     end
 
-    def initialize(provider_data, signup_domain = nil)
+    def initialize(provider_data, signup_domain = nil, email_resolver = nil)
       @provider_data = provider_data
       @signup_domain = signup_domain
+      @email_resolver = email_resolver
     end
 
     def call
@@ -44,12 +45,31 @@ module Services
 
     private
 
-    attr_reader :provider_data, :signup_domain
+    attr_reader :provider_data, :signup_domain, :email_resolver
 
     def uid = provider_data[:user_id]
     def provider = provider_data[:provider]
     def provider_uid = provider_data[:provider_uid]
-    def email = provider_data[:email].presence&.downcase
+
+    # Lazily resolved, and memoised so one sign-in costs at most one lookup.
+    #
+    # find_user returns on the auth_uid match before reading this, so a
+    # returning user whose row already has an address never triggers the
+    # resolver at all -- update_existing's `user.email.presence ||` short-
+    # circuits before fillable_email is reached. A uid-matched row with a
+    # BLANK email does resolve, which is the point: that fill is the only way
+    # an email-less OAuth row ever becomes linkable to the same human's other
+    # providers.
+    #
+    # defined? rather than ||=, so a resolved nil is cached instead of
+    # re-resolving on every call.
+    def email
+      return @email if defined?(@email)
+
+      raw = email_resolver ? email_resolver.call : provider_data[:email]
+      @email = raw.presence&.downcase
+    end
+
     def email_verified? = provider_data[:email_verified] == true
     def email_trusted? = provider_data[:email_trusted] == true
 

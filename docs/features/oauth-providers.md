@@ -53,18 +53,55 @@ verification wall. `password` is excluded permanently — a Firebase password ac
 can be created for any address without proof, which is the account-takeover route
 `UserAuthenticationService::UnverifiedEmailConflict` exists to block.
 
-This trust model leans on one Firebase console setting: Email enumeration protection
-must stay ON, because it is what stops an attacker from using `accounts:update` to
-retarget their own account's email to a victim's address and get linked via this list.
-See D10 in the OAuth provider registry design doc for the full attack and why the two
-are a pair.
+Linking *prefers* the address on the account's **provider record** over the token's
+`email` claim, which narrows the exposure: most sign-ins never touch the mutable
+claim at all. But `Services::ProviderEmailResolver` falls back to the token's
+`email` when the provider record has none — see
+`provider_email_resolver.rb:28` — and `Services::AuthenticationService` supplies
+that fallback from `payload["email"]`, the same account-record claim an account
+holder can repoint via `accounts:update`. A Facebook user who declines the
+optional `email` permission at Meta's consent dialog is exactly this case: no
+provider-record email, so linking reads the token claim as before. Email
+enumeration protection must stay enabled — it is still the only thing blocking
+that takeover, exactly as D10 of the provider registry design requires.
 
-## Facebook is off
+## Facebook runs on a replacement Meta app
 
-The Meta app is disabled by Meta and runs in development mode only, so only accounts
-holding a role on the app can sign in. A replacement app is separate work; note that
-it will issue fresh app-scoped ids, so `users.external_provider_uid` will not match
-for Facebook. X ids are global and unaffected.
+The original app was disabled by Meta. A new one replaced it, and two consequences
+follow that do not apply to any other provider.
+
+**The app-scoped ids reset.** Facebook has issued per-app ids since Graph API v2.0,
+so the new app returns different numbers for the same people. Measured 2026-09-07:
+the new app returned `10166754100896840` where `users#42207` still holds
+`10160972764671840` from the old one. All 17,529 stored Facebook
+`external_provider_uid` values are dead keys. For the 4,848 Facebook rows with no
+email anywhere — not on the row, not in `legacy_v1_data` — nothing is left to
+match on. X ids are global and unaffected; see the design doc's F5.
+
+**Every Facebook row has a NULL email.** All 17,531 of them, and none has ever
+authenticated through Firebase. `find_user` matches on `users.email`, so a
+returning Facebook user matches nothing and gets a new row rather than their
+account. 12,683 of those emails are recoverable from `legacy_v1_data` (398 collide
+with an existing row and need a merge, not an update). Until that backfill runs,
+enabling the button converts a lookup problem into a merge problem for anyone who
+comes back.
+
+**Facebook tokens carry no `email` claim, and that is permanent.** It is not a Meta
+setting: Firebase keeps a provider-supplied address on the provider record and, under
+this project's "allow multiple accounts with the same email address" setting, does not
+promote it to the account record that mints ID tokens. Measured four times on
+2026-09-07, including against a published app with a revoked grant and a deleted
+Firebase account. `Services::ProviderEmailResolver` fetches it server-to-server
+instead; see `docs/superpowers/specs/2026-09-07-firebase-account-lookup-design.md`.
+
+## Meta Platform Data must never reach ad targeting
+
+Meta's Platform Terms prohibit using Platform Data for advertising or ad targeting
+and prohibit sharing it with ad networks. The sites serve Google Ads to non-members,
+so the constraint is live: the Facebook-derived email and user id must not be passed
+to gtag, used for hashed-email audience matching, or built into custom audiences.
+Nothing does this today. Conversion tracking is the likely place someone would break
+it by accident.
 
 ## Email-less accounts
 
