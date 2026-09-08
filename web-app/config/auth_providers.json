@@ -15,7 +15,7 @@
     "firebase_id": "facebook.com",
     "label": "Facebook",
     "scopes": ["public_profile", "email"],
-    "enabled": false
+    "enabled": true
   },
   "apple": {
     "firebase_id": "apple.com",
