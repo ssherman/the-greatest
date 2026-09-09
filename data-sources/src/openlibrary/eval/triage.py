@@ -287,6 +287,7 @@ def main(
     report: Path = typer.Option(..., "--report"),  # noqa: B008
     dump_date: str = typer.Option("2026-07-31", "--dump-date"),
     root: Path = typer.Option(Path("/home/shane/ol-data"), "--root"),  # noqa: B008
+    done: list[Path] = typer.Option(None, "--done"),  # noqa: B008
 ) -> None:
     # proposed.open("w") truncates and report.write_text overwrites. Both
     # default to the directory holding labels.jsonl and one shares its
@@ -301,10 +302,14 @@ def main(
         raise typer.Exit(2)
 
     entries = [PoolEntry(**json.loads(line)) for line in _read_lines(pool)]
-    done: set[str] = set()
-    if labels.exists():
-        done = {json.loads(line)["case_id"] for line in _read_lines(labels)}
-    todo = [e for e in entries if e.case_id not in done]
+    # Answers accumulate in more than one file: labels.jsonl for Shane's own,
+    # researched.jsonl for ones a web-search model produced and he accepted.
+    # A dossier that knows only about the first hands back finished work.
+    settled: set[str] = set()
+    for path in [labels, *(done or [])]:
+        if path.exists():
+            settled |= {json.loads(line)["case_id"] for line in _read_lines(path)}
+    todo = [e for e in entries if e.case_id not in settled]
 
     reach = fetch_identifier_reach(root, dump_date, todo)
     if reach is None:

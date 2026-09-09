@@ -373,6 +373,7 @@ def test_the_cli_refuses_to_write_over_the_labels_file(tmp_path, fixture_artifac
         report=tmp_path / "r.md",
         dump_date=fixture_artifact.dump_date,
         root=fixture_artifact.root,
+        done=[],
     )
     main(proposed=tmp_path / "fine.jsonl", **kwargs)  # the same call without the collision works
 
@@ -401,6 +402,7 @@ def test_the_cli_never_touches_the_labels_file(tmp_path, fixture_artifact):
         report=tmp_path / "r.md",
         dump_date=fixture_artifact.dump_date,
         root=fixture_artifact.root,
+        done=[],
     )
 
     assert labels.read_bytes() == before
@@ -437,6 +439,7 @@ def test_a_written_proposal_is_stamped_as_machine_made(tmp_path, fixture_artifac
         report=tmp_path / "r.md",
         dump_date=fixture_artifact.dump_date,
         root=fixture_artifact.root,
+        done=[],
     )
 
     lines = [x for x in proposed.read_text(encoding="utf-8").split("\n") if x.strip()]
@@ -467,6 +470,7 @@ def test_the_cli_proposes_nothing_when_corroboration_fails(tmp_path, fixture_art
         report=tmp_path / "r.md",
         dump_date=fixture_artifact.dump_date,
         root=fixture_artifact.root,
+        done=[],
     )
 
     assert proposed.read_text(encoding="utf-8").strip() == ""
@@ -541,8 +545,37 @@ def test_the_dossier_lists_every_candidate_not_just_the_first_few(tmp_path, fixt
         report=report,
         dump_date=fixture_artifact.dump_date,
         root=fixture_artifact.root,
+        done=[],
     )
 
     text = report.read_text(encoding="utf-8")
     for i in range(9):
         assert f"OL{i}W" in text, f"candidate OL{i}W missing from the dossier"
+
+
+def test_cases_decided_in_another_file_are_not_listed_again(tmp_path, fixture_artifact):
+    """Answers accumulate in more than one file: labels.jsonl for Shane's own,
+    researched.jsonl for ones a web-search model produced and he accepted. A
+    dossier that only knows about the first hands back work already done -- it
+    listed all ten researched cases the day after they were recorded."""
+    import json
+
+    from openlibrary.eval.triage import main
+
+    entry = _proposable("already-done")
+    done = tmp_path / "researched.jsonl"
+    done.write_text(json.dumps({"case_id": "already-done"}) + "\n", encoding="utf-8")
+    report = tmp_path / "r.md"
+
+    main(
+        pool=_pool_file(tmp_path, [entry]),
+        labels=tmp_path / "labels.jsonl",
+        proposed=tmp_path / "p.jsonl",
+        report=report,
+        dump_date=fixture_artifact.dump_date,
+        root=fixture_artifact.root,
+        done=[done],
+    )
+
+    assert "already-done" not in report.read_text(encoding="utf-8")
+    assert "already-done" not in (tmp_path / "p.jsonl").read_text(encoding="utf-8")
