@@ -517,3 +517,32 @@ def test_read_lines_splits_only_on_newline(tmp_path):
     p.write_text('{"a": "one two"}\n{"b": 2}\n', encoding="utf-8")
 
     assert len(_read_lines(p)) == 2
+
+
+def test_the_dossier_lists_every_candidate_not_just_the_first_few(tmp_path, fixture_artifact):
+    """The report clipped at 6 while 25% of cases carry more -- 21 of them the
+    full 20. A researcher working from it kept reporting "only six of the
+    stated 20 candidates were supplied", and its duplicate counts were
+    minimums as a result. The dossier exists to be read; clipping it defeats
+    the point."""
+    from openlibrary.eval.build_pool import PoolCandidate
+    from openlibrary.eval.triage import main
+
+    entry = _entry("many", "shared_key_collision", [], isbn13=["9789999999999"])
+    entry.candidates = [
+        PoolCandidate(work_key=f"OL{i}W", rules=["title_fp"], title=f"Book {i}") for i in range(9)
+    ]
+    report = tmp_path / "r.md"
+
+    main(
+        pool=_pool_file(tmp_path, [entry]),
+        labels=tmp_path / "labels.jsonl",
+        proposed=tmp_path / "p.jsonl",
+        report=report,
+        dump_date=fixture_artifact.dump_date,
+        root=fixture_artifact.root,
+    )
+
+    text = report.read_text(encoding="utf-8")
+    for i in range(9):
+        assert f"OL{i}W" in text, f"candidate OL{i}W missing from the dossier"

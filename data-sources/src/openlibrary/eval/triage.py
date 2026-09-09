@@ -374,7 +374,7 @@ def main(
                 f"- **why you:** {t.reason}",
                 f"- candidates: {len(entry.candidates)}",
             ]
-            for c in entry.candidates[:6]:
+            for c in entry.candidates:
                 lines.append(
                     f"    - `{c.work_key}` {(c.title or '')[:52]!r} "
                     f"{c.edition_count} eds  rl={c.readinglog_count}  fp_freq={c.title_fp_freq}  "
