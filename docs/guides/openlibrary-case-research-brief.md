@@ -103,6 +103,29 @@ Edition count does not override our own ISBN. Two real cases show the line:
   all carry the right subtitle, is the better record. **This is the exception,
   and it needs the contamination stated in the rationale.**
 
+### Where the exception stops
+
+It fires when the record **is** two books — a whole separate work merged into
+it, or a combined volume that says so in its own title. It does **not** fire
+because a large consolidated record has one stray edition.
+
+Nearly every Open Library record with forty-plus editions has a blemish
+somewhere. Treating each one as disqualifying would systematically prefer thin
+two-edition records over the canonical one, which is the opposite of what we
+want — the big record is where the editions, covers and identifiers live. Two
+real cases mark the line:
+
+- *'Twixt Land and Sea* — `OL39008W`, 57 editions, **taken**, while noting it
+  also carries an omnibus pairing the collection with *Last Essays*.
+- *Rebecca of Sunnybrook Farm* — `OL24340768W`, 45 editions, **taken**, despite
+  one Great Illustrated Classics edition among them. The 2-edition
+  `OL24328014W` also carries an ISBN of ours and is the wrong answer: fewer
+  editions, same book.
+
+In that same case the exception *does* apply to `OL17384406W`, titled `Rebecca
+Of Sunnybrook Farm Rebecca Of The Brick House` — that record is two novels, and
+its title says so.
+
 ## Traps that have actually cost us
 
 **The work-level title is a summary; the edition list is the evidence.** This has
