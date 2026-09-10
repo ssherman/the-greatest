@@ -49,6 +49,12 @@ NOTES:     anything else you found (wrong identifiers, OL data errors)
 
 `no_match` always takes `RULE: not_in_open_library` and never a work key.
 
+The dossier you are given lists **every** candidate, not a sample, and prints
+our subtitle when we hold one. The subtitle is sometimes the whole
+identification: one row reads `The Story Of The Stone... Vol. 4` with subtitle
+`The Debt of Tears`, and Open Library's work is `The Debt of Tears (... Volume
+4)`.
+
 ## The decision procedure
 
 **1. Start from the identifiers.** Which candidate works do our ISBNs, ASINs or
@@ -74,18 +80,37 @@ candidates to be unrelated books.
 `translation` rather than `same_work`. Still the same Book; the rule records
 that the language differs.
 
-## Tiebreak, when several survive
+## Tiebreak, when several survive — read the precedence carefully
 
-Edition count, then reading-log count, then revision, then how many identifier
-types the work carries. Prefer the record that consolidated the most editions —
-that is the one Open Library treats as canonical.
+This is the one rule that has been misread, so it is spelled out. It is a
+**precedence**, not a list of equally weighted signals:
+
+1. **Prefer works our identifiers reach and that something corroborates.** An
+   ISBN of ours landing on a work outranks every curation signal.
+2. **Apply the consolidation tiebreak WITHIN that group** — edition count, then
+   reading-log, then revision, then how many identifier types the work carries.
+3. **Only step outside that group** when the identifier-bearing record
+   demonstrably combines different books. Say so explicitly when you do.
+
+Edition count does not override our own ISBN. Two real cases show the line:
+
+- *The Brain* — `OL20822331W` carries our ISBN with one edition, `OL19762848W`
+  has two. **Our ISBN wins.** Consolidation is a tiebreak within the
+  identifier-bearing group, not a way out of it.
+- *Aristotle* — `OL19760957W` carries our ISBN but also contains the unrelated
+  2011 collection *Aristotle: Metaphysics and Practical Philosophy*, so its
+  editions are not all this book. `OL21511771W`, whose three Princeton editions
+  all carry the right subtitle, is the better record. **This is the exception,
+  and it needs the contamination stated in the rationale.**
 
 ## Traps that have actually cost us
 
 **The work-level title is a summary; the edition list is the evidence.** This has
-misled four times. A work titled `Collected Poems` whose editions are all 1953
+misled five times. A work titled `Collected Poems` whose editions are all 1953
 New Directions printings is the American edition of `Collected Poems 1934-1952`.
-Always read the editions.
+Open Library truncates the work title of the 2012 Blackbook coin guide and
+credits the work to the wrong Hudgeons, while its edition carries our exact
+ISBN. Always read the editions.
 
 **"Collected"/"Complete" vs "Selected".** A *Collected Poems* has one corpus, so
 multiple Open Library works for it are usually real duplicates. A *Selected
@@ -115,6 +140,16 @@ Nineteen of fifty-seven such cases turned out to be present.
 **A `no_match` only ever means "not found by the best search anyone ran."** Say
 so, and say what you searched.
 
+**Expect the candidate list to be incomplete, and say when the answer is not in
+it.** Measured over 28 researched matches, **10 correct answers — 36% — were
+never produced by blocking at all**; in the short-title stratum it was 8 of 10.
+Blocking cannot fire on a title fingerprint shorter than four characters and
+cannot bridge scripts, so for short, non-Latin or romanised titles the working
+assumption should be that the right work is *absent from the candidates* and
+has to be found by search. Naming a work key that was not on the list is not a
+failure — those cases are the only measurement of candidate recall this project
+has.
+
 **Some of our rows are several books fused together.** Our merge process copies
 the child's identifiers onto the parent, so a merged row's identifiers can
 legitimately reach several genuinely different works — book #28542 `Selected
@@ -138,6 +173,16 @@ create a new record, which is the status quo. So:
   split. Do not pick one to seem decisive.
 - If you cannot verify something, say which fact you could not establish.
 - `CONFIDENCE: low` is useful information, not a failure.
+
+## The NOTES field is worth as much as the verdict
+
+Across 65 researched cases the notes have found three stored keys pointing at
+entirely different books, a Goodreads id belonging to another author's novel,
+several ISBNs naming stage adaptations, study guides and omnibuses, a missing
+co-author, a subtitle borrowed from a different book, and a dozen wrong years.
+Every one of those is a row that is wrong on a live site, and none of them
+would have surfaced from the verdict alone. Write down anything that looks
+wrong even when it does not change the answer.
 
 ## What we most need from your web access
 
