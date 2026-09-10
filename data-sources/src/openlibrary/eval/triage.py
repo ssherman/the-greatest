@@ -42,13 +42,20 @@ JUDGEMENT_STRATA = frozenset({"anthology_or_collection", "high_frequency_title"}
 
 BUCKETS = ("decisive_match", "needs_human")
 
-# A title only corroborates when the shorter fingerprint is long enough to
-# block on AND is most of the longer one. Both halves are load-bearing, and
-# both come from cases this shipped wrongly: `1` (non_latin_title-013) passed
-# a bare substring test and is shared by 1,675 OL works, while `america`
-# inside `america the book` (shared_key_collision-023) is long enough yet only
-# 44% of it, and they are different books. `the women could fly` against
-# `women could fly` is 79% and has to survive, which brackets the threshold.
+# Share of TOKENS two titles must have in common, measured against their
+# union, before one corroborates the other. Measured against the cases this
+# has got wrong in both directions:
+#
+#   america / america the book                      0.33  reject, different books
+#   nettaigyo... / 1                                0.17  reject, `1` is shared by 1,675 works
+#   the women could fly / women could fly           0.75  accept, dropped article
+#   blackbook ... coins 2012 / official 2012 ...    0.90  accept, only 2012 moved
+#
+# Measured against the UNION on purpose: comparing against the shorter title
+# would score `america` inside `america the book` as a perfect match. And
+# token overlap rather than substring, because substring is brittle to word
+# order -- that is what refused author_less_work-010, whose edition carried
+# our exact ISBN.
 MIN_TITLE_OVERLAP = 0.6
 
 
@@ -75,7 +82,9 @@ class Triage:
     identity_rule: str | None = None
 
 
-def corroborated(book: EvalBook, candidate: PoolCandidate) -> bool:
+def corroborated(
+    book: EvalBook, candidate: PoolCandidate, *, edition_titles: Sequence[str] = ()
+) -> bool:
     """Does anything OTHER than the identifier agree?
 
     An identifier is a claim, not a proof. Book #24233's ISBN really does sit
@@ -107,15 +116,18 @@ def corroborated(book: EvalBook, candidate: PoolCandidate) -> bool:
     if any(ours_a) and any(theirs_a) and classify_disagreement(ours_a, theirs_a) in agreeing:
         return True
 
+    # The work-level title is a summary and has misled five times; the edition
+    # list is the evidence. Open Library truncates the Blackbook work title,
+    # and the corroboration sits one level down.
     ours_t = title_fingerprints(book.title).full
-    theirs_t = title_fingerprints(candidate.title or "").full
-    if ours_t and theirs_t:
-        short, long_ = sorted((ours_t, theirs_t), key=len)
-        if (
-            len(short) >= MIN_BLOCKING_FP_LENGTH
-            and short in long_
-            and len(short) / len(long_) >= MIN_TITLE_OVERLAP
-        ):
+    for other in (candidate.title, *edition_titles):
+        theirs_t = title_fingerprints(other or "").full
+        if not ours_t or not theirs_t:
+            continue
+        if min(len(ours_t), len(theirs_t)) < MIN_BLOCKING_FP_LENGTH:
+            continue
+        ours_w, theirs_w = set(ours_t.split()), set(theirs_t.split())
+        if len(ours_w & theirs_w) / len(ours_w | theirs_w) >= MIN_TITLE_OVERLAP:
             return True
 
     return False
@@ -316,6 +328,14 @@ def main(
         typer.echo(f"no artifact under {root} for {dump_date}", err=True)
         raise typer.Exit(1)
 
+    # Work titles are summaries. Read the editions of every work our
+    # identifiers reach, once for the whole pool, so corroboration can see them.
+    from openlibrary.eval.label import fetch_edition_rows
+
+    reached = sorted({k for e in todo for k in reach[e.case_id].works})
+    rows = fetch_edition_rows(root, dump_date, reached) or {}
+    edition_titles = {key: tuple(r.title for r in eds if r.title) for key, eds in rows.items()}
+
     decided, human = [], []
     for entry in todo:
         r = reach[entry.case_id]
@@ -323,7 +343,9 @@ def main(
         # through `all_generated` cannot be corroborated and goes to the human.
         detailed = {c.work_key: c for c in entry.candidates}
         corroborates = any(
-            corroborated(entry.book, detailed[key]) for key in r.works if key in detailed
+            corroborated(entry.book, detailed[key], edition_titles=edition_titles.get(key, ()))
+            for key in r.works
+            if key in detailed
         )
         t = triage(
             stratum=entry.stratum,
@@ -373,6 +395,7 @@ def main(
             ids = ", ".join(f"{k}={v}" for k, v in fields if v)
             lines += [
                 f"### {entry.case_id} — #{b.book_id} {b.title!r}",
+                *([f"- subtitle: {b.subtitle!r}"] if b.subtitle else []),
                 f"- authors: {', '.join(b.author_names) or '(none)'}"
                 f"   year: {b.first_published_year}",
                 f"- {ids or 'no identifiers'}",

@@ -293,21 +293,18 @@ def test_a_dropped_leading_article_still_corroborates():
 
 
 def test_nothing_in_common_is_not_corroborated():
-    """author_less_work-010: our 1960 Blackbook guide by Thomas E. Hudgeons Jr
-    against Open Library's 2011 `official 2012 blackbook` by Marc Hudgeons.
-    Different year, different person, and only the identifier joining them."""
+    """This test used to use the Blackbook guide as its example, on the belief
+    that our 1960 `Thomas E. Hudgeons Jr.` row and Open Library's 2011 `Marc
+    Hudgeons` record were different books. They are not: OL edition
+    OL26647591M carries our exact isbn13 9780375723209, and the titles share
+    nine tokens with only the position of 2012 differing. The example was
+    wrong, not the principle, so the principle keeps a case that really is
+    unrelated."""
     from openlibrary.eval.triage import corroborated
 
-    ours = _book(
-        title="The Official Blackbook Price Guide To United States Coins",
-        authors=["Thomas E. Hudgeons Jr."],
-        year=1960,
-    )
+    ours = _book(title="I Love You", authors=["Pamela Anderson"], year=2024)
     theirs = _cand(
-        title="The official 2012 blackbook price guide to United States coins",
-        authors=["Marc Hudgeons"],
-        min_ed=2011,
-        modal=2011,
+        title="New Cookbook by Paul Anthony", authors=["Paul Anthony"], min_ed=2024, modal=2024
     )
     assert not corroborated(ours, theirs)
 
@@ -458,9 +455,12 @@ def test_the_cli_proposes_nothing_when_corroboration_fails(tmp_path, fixture_art
     all."""
     from openlibrary.eval.triage import main
 
+    # Change OUR row, not the candidate: main reads the work's real edition
+    # titles from the artifact now, so overriding only the candidate's
+    # work-level title leaves the editions still agreeing with us.
     entry = _proposable()
-    entry.candidates[0].title = "New Cookbook by Paul Anthony"
-    entry.candidates[0].author_names = ["Paul Anthony"]
+    entry.book.title = "New Cookbook by Paul Anthony"
+    entry.book.author_names = ["Paul Anthony"]
     proposed = tmp_path / "proposed.jsonl"
 
     main(
@@ -579,3 +579,93 @@ def test_cases_decided_in_another_file_are_not_listed_again(tmp_path, fixture_ar
 
     assert "already-done" not in report.read_text(encoding="utf-8")
     assert "already-done" not in (tmp_path / "p.jsonl").read_text(encoding="utf-8")
+
+
+def test_a_reordered_title_still_corroborates():
+    """author_less_work-010. Our `The Official Blackbook Price Guide To United
+    States Coins 2012` against Open Library's `The official 2012 blackbook
+    price guide to United States` -- nine tokens shared, only the position of
+    2012 differing. Substring containment said no and the case was refused,
+    while its edition carried our exact ISBN 9780375723209."""
+    from openlibrary.eval.triage import corroborated
+
+    ours = _book(title="The Official Blackbook Price Guide To United States Coins 2012")
+    theirs = _cand(title="The official 2012 blackbook price guide to United States")
+    assert corroborated(ours, theirs)
+
+
+def test_an_edition_title_can_corroborate_when_the_work_title_cannot():
+    """The work-level title is a summary; the edition list is the evidence.
+    Open Library truncates that work's title, so the corroboration lives one
+    level down. Fifth case to teach this."""
+    from openlibrary.eval.triage import corroborated
+
+    ours = _book(title="The Official Blackbook Price Guide To United States Coins 2012")
+    stub = _cand(title="Wholly Unrelated Title Of Another Book Entirely")
+    assert not corroborated(ours, stub)
+    assert corroborated(
+        ours, stub, edition_titles=["The official 2012 blackbook price guide to United States"]
+    )
+
+
+def test_token_overlap_does_not_re_admit_a_contained_shorter_title():
+    """`america` sits inside `america the book` and they are different books.
+    Jaccard is 0.33 because the union counts the tokens the shorter title
+    lacks -- which is exactly why overlap is measured against the union rather
+    than against the shorter side."""
+    from openlibrary.eval.triage import corroborated
+
+    assert not corroborated(_book(title="America"), _cand(title="America the Book"))
+
+
+def test_the_cli_proposes_when_only_an_edition_title_agrees(tmp_path, fixture_artifact):
+    """The Blackbook shape, end to end. Open Library's work-level title and
+    author disagree with us; the corroboration lives on the edition, which is
+    also where our ISBN sits. main() has to read the editions and pass them
+    down -- dropping that argument left every other test green."""
+    from openlibrary.eval.triage import main
+
+    entry = _proposable()
+    # work-level metadata that agrees with nothing; the artifact's editions for
+    # OL8331643W are still titled 'Blood River', as is our row.
+    entry.candidates[0].title = "Wholly Unrelated Work Level Summary"
+    entry.candidates[0].author_names = ["Nobody At All"]
+    proposed = tmp_path / "proposed.jsonl"
+
+    main(
+        pool=_pool_file(tmp_path, [entry]),
+        labels=tmp_path / "labels.jsonl",
+        proposed=proposed,
+        report=tmp_path / "r.md",
+        dump_date=fixture_artifact.dump_date,
+        root=fixture_artifact.root,
+        done=[],
+    )
+
+    assert "OL8331643W" in proposed.read_text(encoding="utf-8")
+
+
+def test_the_dossier_shows_our_subtitle(tmp_path, fixture_artifact):
+    """pseudonym_or_alt_name-025 was called a wrong proposal on the strength of
+    a truncated title. Our row is `The Story Of The Stone... Vol. 4` with
+    subtitle `The Debt of Tears`, and Open Library's work is `The Debt of
+    Tears (... Volume 4)` -- the subtitle IS the identification, and the
+    dossier was not printing it."""
+    from openlibrary.eval.triage import main
+
+    entry = _entry("sub", "shared_key_collision", ["OL1W"], isbn13=["9789999999999"])
+    entry.book.title = "The Story Of The Stone"
+    entry.book.subtitle = "The Debt of Tears"
+    report = tmp_path / "r.md"
+
+    main(
+        pool=_pool_file(tmp_path, [entry]),
+        labels=tmp_path / "labels.jsonl",
+        proposed=tmp_path / "p.jsonl",
+        report=report,
+        dump_date=fixture_artifact.dump_date,
+        root=fixture_artifact.root,
+        done=[],
+    )
+
+    assert "The Debt of Tears" in report.read_text(encoding="utf-8")
