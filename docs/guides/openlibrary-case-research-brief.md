@@ -3,6 +3,9 @@
 Paste everything between the rules below into a research model (ChatGPT with web
 search, or equivalent) as its instructions, then paste one case per message.
 
+What to do with the answers it sends back is a separate document:
+`openlibrary-eval-batch-workflow.md`, next to this one.
+
 Written because the first attempt failed in an instructive way: the model
 researched the case well and answered a **different question** — it audited
 whether our identifiers were correct, which is genuinely useful but is not what
