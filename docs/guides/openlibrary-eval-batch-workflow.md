@@ -63,30 +63,36 @@ alone, point it at a throwaway and pass `--done .../proposed.jsonl` instead.
 --check .`, and commit. CI runs the formatter as a step separate from the
 linter; running only `ruff check` has broken the build once.
 
-## State as of 2026-09-10 (commit 9cb9e6be)
+## State as of 2026-09-11
 
 ```
-labels      204   researched   84   proposed  75    = 363 decided
-remaining    87   in /home/shane/ol-data/eval/needs-you.md
+labels      204   researched   94   proposed  75    = 373 decided
+remaining    77   in /home/shane/ol-data/eval/needs-you.md
 
 remaining by stratum:
-  shared_key_collision 52 · non_latin_title 15 · stale_ol_key 12 · pseudonym_or_alt_name 8
+  shared_key_collision 52 · stale_ol_key 12 · pseudonym_or_alt_name 8 · non_latin_title 5
 ```
 
-`researched.jsonl`: 71 match, 9 no_match, 4 ambiguous.
+`researched.jsonl`: 78 match, 12 no_match, 4 ambiguous.
+
+When the dossier is regenerated with `--proposed` pointed at a throwaway, its
+header reads "0 proposed automatically" and names the throwaway path. That is
+cosmetic: the 75 proposals still exist and are still excluded from the list.
 
 ## What this has actually produced
 
-The labels are the least valuable output. Across 84 researched cases:
+The labels are the least valuable output. Across 94 researched cases:
 
-- **13 candidate-recall failures** — the right work was never produced by
-  blocking. 8 of them in `degenerate_title`, 3 in `non_latin_title`. These are
+- **18 candidate-recall failures** — the right work was never produced by
+  blocking. 8 of them in `degenerate_title`, 8 in `non_latin_title` (every
+  manga and manhwa volume found so far was under its English title). These are
   the only cases that measure recall; without them recall is 100% by
   construction. `EvalCase.found_outside_blocking` finds them.
-- **11 wrong stored OL keys**, including Harari's *Nexus* keyed to a book about
-  bees, a Mike Omer thriller keyed to a Batman parody, and Rilke's *Sonnets to
-  Orpheus* keyed to the *Duino Elegies*.
-- **48 rationales carrying LOCALDATA findings** — wrong authors (Fritz Stern for
+- **12 wrong stored OL keys**, including Harari's *Nexus* keyed to a book about
+  bees, a Mike Omer thriller keyed to a Batman parody, Rilke's *Sonnets to
+  Orpheus* keyed to the *Duino Elegies*, and Nagano's 1978 photobook keyed to a
+  2019 novel by a different Nagano.
+- **57 rationales carrying LOCALDATA findings** — wrong authors (Fritz Stern for
   Jessica Stern; Doyle Brunson for Russell Brunson), missing co-authors, wrong
   years, ASINs sitting in the `isbn10` column, ISBNs naming study guides, stage
   adaptations and sequels.
