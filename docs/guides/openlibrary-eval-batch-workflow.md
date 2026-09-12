@@ -66,15 +66,32 @@ linter; running only `ruff check` has broken the build once.
 ## State as of 2026-09-12
 
 ```
-labels      204   researched  159   proposed  75    = 438 decided
-remaining    12   in /home/shane/ol-data/eval/needs-you.md
+labels      204   researched  164   proposed  75    = 443 decided
+remaining     7   in /home/shane/ol-data/eval/needs-you.md
 
 remaining by stratum:
-  stale_ol_key 12
+  stale_ol_key 7
 ```
 
-`researched.jsonl`: 128 match, 22 no_match, 9 ambiguous. `shared_key_collision`
+`researched.jsonl`: 133 match, 22 no_match, 9 ambiguous. `shared_key_collision`
 and `pseudonym_or_alt_name` are complete.
+
+**The exception moves you to a clean record our identifiers also reach — never
+to a thinner record nothing of ours reaches.** Two `stale_ol_key` answers
+stepped off a canonical record because of a minority of stray editions:
+Gandhi's autobiography (140 editions, five identifier hits, eight misfiled
+*Selected Writings*/*Lifelines* editions) to a one-edition print-on-demand
+record, and *How to Measure Anything* (18 editions, four identifier hits, three
+companion-workbook editions) to a one-edition Chinese translation. Both were
+recorded on the canonical record. Eight in 140 and a companion workbook are
+blemishes (King John, Rebecca, Adichie's guided journal); the exception is for
+records that *are* two books (Colette's, Barthelme's, X-Factor's), and every
+time it has fired so far the clean record also carried an identifier of ours.
+
+**The first five `stale_ol_key` keys are not stale in this dump.** All five
+resolve in 2026-07-31, four were the right work and one a thin duplicate of it.
+The stratum was cut against an earlier dump; treat its "stale" label as a
+hypothesis, not a fact.
 
 **The brief's Pamela Anderson example is wrong, and so is the docstring built on
 it.** `shared_key_collision-075`: ISBN 9780316573481 sits on `OL38014589W`
@@ -159,7 +176,7 @@ cosmetic: the 75 proposals still exist and are still excluded from the list.
 
 ## What this has actually produced
 
-The labels are the least valuable output. Across 159 researched cases:
+The labels are the least valuable output. Across 164 researched cases:
 
 - **28 candidate-recall failures** — the right work was never produced by
   blocking. 9 of them in `non_latin_title` (every manga and manhwa volume
@@ -178,7 +195,7 @@ The labels are the least valuable output. Across 159 researched cases:
   record that holds the book among unrelated ones. Nine stored keys in the
   stratum were correct, and one (Wharton) was a duplicate of the same book
   rather than wrong.
-- **118 rationales carrying LOCALDATA findings** — wrong authors (Fritz Stern for
+- **123 rationales carrying LOCALDATA findings** — wrong authors (Fritz Stern for
   Jessica Stern; Doyle Brunson for Russell Brunson), missing co-authors, wrong
   years, ASINs sitting in the `isbn10` column, ISBNs naming study guides, stage
   adaptations and sequels.
