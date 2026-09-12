@@ -66,14 +66,34 @@ linter; running only `ruff check` has broken the build once.
 ## State as of 2026-09-12
 
 ```
-labels      204   researched  153   proposed  75    = 432 decided
-remaining    18   in /home/shane/ol-data/eval/needs-you.md
+labels      204   researched  159   proposed  75    = 438 decided
+remaining    12   in /home/shane/ol-data/eval/needs-you.md
 
 remaining by stratum:
-  stale_ol_key 12 · shared_key_collision 6
+  stale_ol_key 12
 ```
 
-`researched.jsonl`: 124 match, 21 no_match, 8 ambiguous.
+`researched.jsonl`: 128 match, 22 no_match, 9 ambiguous. `shared_key_collision`
+and `pseudonym_or_alt_name` are complete.
+
+**The brief's Pamela Anderson example is wrong, and so is the docstring built on
+it.** `shared_key_collision-075`: ISBN 9780316573481 sits on `OL38014589W`
+'New Cookbook by Paul Anthony' — but that record's three 2024 Little Brown
+ISBNs are all Anderson's *I Love You: Recipes from the Heart*, and the same
+placeholder author `OL352405A` holds an "I LOVE YOU — Carton of 10 Signed
+Copies" record. It is her book with stale publisher-feed metadata, not a Paul
+Anthony cookbook. The brief cites it under "an identifier is a claim, not a
+proof", and `triage.py`'s `corroborated()` docstring cites it as the false merge
+that justified dropping the year limb. The *principle* may still be right; the
+*example* is a true match. Neither the brief nor the code has been changed —
+that is Shane's call — but do not repeat the example.
+
+**Re-runs can beat a recorded label.** `pseudonym_or_alt_name-004` was recorded
+on an English duplicate; a re-run surfaced the Chinese original `OL11977540W`
+(4 editions, under a fourth Rou Shi author key the earlier search missed) and
+the row was amended in place to that key with `translation`. When Shane
+re-pastes an already-recorded case, diff it against the file rather than
+refusing it — the new answer may carry a record nobody had seen.
 
 **Identifier-first applied to a public-domain classic.** Wharton's *Tales of
 Men and Ghosts* (-049): our one ISBN sits on a 2012 CreateSpace record whose
@@ -139,26 +159,26 @@ cosmetic: the 75 proposals still exist and are still excluded from the list.
 
 ## What this has actually produced
 
-The labels are the least valuable output. Across 153 researched cases:
+The labels are the least valuable output. Across 159 researched cases:
 
-- **27 candidate-recall failures** — the right work was never produced by
+- **28 candidate-recall failures** — the right work was never produced by
   blocking. 9 of them in `non_latin_title` (every manga and manhwa volume
   found so far was under its English title), 8 in `degenerate_title`. These are
   the only cases that measure recall; without them recall is 100% by
   construction. `EvalCase.found_outside_blocking` finds them.
-- **42 wrong stored OL keys**, including Harari's *Nexus* keyed to a book about
+- **46 wrong stored OL keys**, including Harari's *Nexus* keyed to a book about
   bees, a Mike Omer thriller keyed to a Batman parody, Rilke's *Sonnets to
   Orpheus* keyed to the *Duino Elegies*, Nagano's 1978 photobook keyed to a
   2019 novel by a different Nagano, and T. C. Boyle's *Stories* keyed to *The
-  Adventures of Sherlock Holmes*. Thirty of the forty-two came from the first
-  forty-six `shared_key_collision` cases — the stratum is defined by the
-  defect. Eleven of those point at a *container* (an omnibus, a boxed set, a
-  collected-works volume, the whole novel for a volume-I row, *Aelita* alone for
-  an *Aelita + Garin* row) rather than an unrelated book, and three more at a
-  grab-bag record that holds the book among unrelated ones. Eight stored keys
-  in the stratum were correct, and one (Wharton) was a duplicate of the same
-  book rather than wrong.
-- **112 rationales carrying LOCALDATA findings** — wrong authors (Fritz Stern for
+  Adventures of Sherlock Holmes*. Thirty-four of the forty-six came from the
+  fifty-two `shared_key_collision` cases — the stratum is defined by the
+  defect. Twelve of those point at a *container* (an omnibus, a boxed set, a
+  collected-works volume, an anthology for a single issue, the whole novel for
+  a volume-I row) rather than an unrelated book, and four more at a grab-bag
+  record that holds the book among unrelated ones. Nine stored keys in the
+  stratum were correct, and one (Wharton) was a duplicate of the same book
+  rather than wrong.
+- **118 rationales carrying LOCALDATA findings** — wrong authors (Fritz Stern for
   Jessica Stern; Doyle Brunson for Russell Brunson), missing co-authors, wrong
   years, ASINs sitting in the `isbn10` column, ISBNs naming study guides, stage
   adaptations and sequels.
