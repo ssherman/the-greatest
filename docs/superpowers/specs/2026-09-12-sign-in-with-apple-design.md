@@ -63,7 +63,7 @@ first branch and never touches the email path.
 
 ## Findings
 
-**F1 — Apple's return URLs are per host, and the Services ID accepted all eight.**
+**F1 — Apple's return URLs are per host, and an individual Services ID holds ten entries.**
 Firebase's return URL is `https://<authDomain>/__/auth/handler`, and this app's
 `authDomain` is the page's own hostname (`firebase_auth_service.js#getDomainConfig`;
 Caddy and nginx proxy `/__/auth/*` to Firebase on every host). Apple validates the
