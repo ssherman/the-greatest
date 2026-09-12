@@ -63,17 +63,39 @@ alone, point it at a throwaway and pass `--done .../proposed.jsonl` instead.
 --check .`, and commit. CI runs the formatter as a step separate from the
 linter; running only `ruff check` has broken the build once.
 
-## State as of 2026-09-11
+## State as of 2026-09-12
 
 ```
-labels      204   researched  131   proposed  75    = 410 decided
-remaining    40   in /home/shane/ol-data/eval/needs-you.md
+labels      204   researched  142   proposed  75    = 421 decided
+remaining    29   in /home/shane/ol-data/eval/needs-you.md
 
 remaining by stratum:
-  shared_key_collision 28 · stale_ol_key 12
+  shared_key_collision 17 · stale_ol_key 12
 ```
 
-`researched.jsonl`: 105 match, 20 no_match, 6 ambiguous.
+`researched.jsonl`: 115 match, 21 no_match, 6 ambiguous.
+
+**An expanded edition does not fire the exception.** The research model stepped
+outside the identifier-bearing Dark Phoenix Saga record because its other
+edition was Panini's 440pp French edition with tie-in material. That is the
+saga in an expanded edition under the saga's own title — the same Book — not a
+record that *is* two books. The exception needs a whole separate work merged in
+(Colette's record holding White's *The Stories* and a Franklin Library novella
+volume; X-Factor's holding volumes 7 and 11), not a fatter edition.
+
+**A row titled as a canonical corpus matches the corpus record, when one
+exists.** Martial's *Epigrams* (#8974) carries ISBNs for eight different
+selections and Loeb volumes; the research model answered `ambiguous`. But OL
+holds the corpus as `OL2241482W` *Epigrammata* (155 editions) and files
+selections under it, so the row has a work-level answer. *One Thousand and One
+Nights* (-018) stays `ambiguous` because OL has no corpus-level record there —
+every candidate is one translation, selection or volume.
+
+**Check the research model's tiebreak counts against the dump.** Its identifier
+type count for Fortunata y Jacinta I used LibraryThing ids from the live site,
+which the artifact does not hold, and missed an OCLC on the rival; in the dump
+the two records tie. Its fifth Dark Phoenix record, `OL45881233W`, is not in
+the 2026-07-31 dump at all.
 
 **A collection edition titled after its lead work belongs to that work.** Row
 #39492 `Тіні забутих предків` carries an ISBN naming a 352pp collection; the
@@ -109,22 +131,24 @@ cosmetic: the 75 proposals still exist and are still excluded from the list.
 
 ## What this has actually produced
 
-The labels are the least valuable output. Across 131 researched cases:
+The labels are the least valuable output. Across 142 researched cases:
 
-- **25 candidate-recall failures** — the right work was never produced by
+- **26 candidate-recall failures** — the right work was never produced by
   blocking. 9 of them in `non_latin_title` (every manga and manhwa volume
   found so far was under its English title), 8 in `degenerate_title`. These are
   the only cases that measure recall; without them recall is 100% by
   construction. `EvalCase.found_outside_blocking` finds them.
-- **29 wrong stored OL keys**, including Harari's *Nexus* keyed to a book about
+- **37 wrong stored OL keys**, including Harari's *Nexus* keyed to a book about
   bees, a Mike Omer thriller keyed to a Batman parody, Rilke's *Sonnets to
   Orpheus* keyed to the *Duino Elegies*, Nagano's 1978 photobook keyed to a
   2019 novel by a different Nagano, and T. C. Boyle's *Stories* keyed to *The
-  Adventures of Sherlock Holmes*. Seventeen of the twenty-nine came from the
-  first twenty-four `shared_key_collision` cases — the stratum is defined by the
-  defect. Nine of those seventeen point at a *container* (an omnibus, a boxed
-  set, a collected-works volume) rather than an unrelated book.
-- **90 rationales carrying LOCALDATA findings** — wrong authors (Fritz Stern for
+  Adventures of Sherlock Holmes*. Twenty-five of the thirty-seven came from the
+  first thirty-five `shared_key_collision` cases — the stratum is defined by the
+  defect. Ten of those point at a *container* (an omnibus, a boxed set, a
+  collected-works volume, the whole novel for a volume-I row) rather than an
+  unrelated book, and two more at a grab-bag record that holds the book among
+  unrelated ones. Four stored keys in the stratum were correct.
+- **101 rationales carrying LOCALDATA findings** — wrong authors (Fritz Stern for
   Jessica Stern; Doyle Brunson for Russell Brunson), missing co-authors, wrong
   years, ASINs sitting in the `isbn10` column, ISBNs naming study guides, stage
   adaptations and sequels.
