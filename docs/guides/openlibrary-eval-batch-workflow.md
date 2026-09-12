@@ -66,14 +66,27 @@ linter; running only `ruff check` has broken the build once.
 ## State as of 2026-09-11
 
 ```
-labels      204   researched  117   proposed  75    = 396 decided
-remaining    54   in /home/shane/ol-data/eval/needs-you.md
+labels      204   researched  131   proposed  75    = 410 decided
+remaining    40   in /home/shane/ol-data/eval/needs-you.md
 
 remaining by stratum:
-  shared_key_collision 41 · stale_ol_key 12 · pseudonym_or_alt_name 1
+  shared_key_collision 28 · stale_ol_key 12
 ```
 
-`researched.jsonl`: 92 match, 20 no_match, 5 ambiguous.
+`researched.jsonl`: 105 match, 20 no_match, 6 ambiguous.
+
+**A collection edition titled after its lead work belongs to that work.** Row
+#39492 `Тіні забутих предків` carries an ISBN naming a 352pp collection; the
+research model answered `omnibus_vs_parts`. Open Library files the same shape
+(a 1988 `povist ta opovidannya` edition) under the novella's work, and the
+row's title is the novella's, so it was recorded `duplicate_work` on the
+novella. `omnibus_vs_parts` is for rows whose *title* states the scope
+difference (Bastard volume 3 against a set record; an omnibus row against a
+single volume) — not for an edition that happens to bundle extra material.
+
+Two local rows can settle on one OL work: #39906 and #38913 are both
+Bulychev's `Путешествие Алисы` (the second under its alternate title). That is
+a local duplicate pair, worth more than either label.
 
 **R20b is binding on the rows it names.** `shared_key_collision-006` is book
 #28542, which R20b (and `schema.py`, and the brief) cite as the merged-row
@@ -96,20 +109,22 @@ cosmetic: the 75 proposals still exist and are still excluded from the list.
 
 ## What this has actually produced
 
-The labels are the least valuable output. Across 117 researched cases:
+The labels are the least valuable output. Across 131 researched cases:
 
-- **21 candidate-recall failures** — the right work was never produced by
+- **25 candidate-recall failures** — the right work was never produced by
   blocking. 9 of them in `non_latin_title` (every manga and manhwa volume
   found so far was under its English title), 8 in `degenerate_title`. These are
   the only cases that measure recall; without them recall is 100% by
   construction. `EvalCase.found_outside_blocking` finds them.
-- **20 wrong stored OL keys**, including Harari's *Nexus* keyed to a book about
+- **29 wrong stored OL keys**, including Harari's *Nexus* keyed to a book about
   bees, a Mike Omer thriller keyed to a Batman parody, Rilke's *Sonnets to
   Orpheus* keyed to the *Duino Elegies*, Nagano's 1978 photobook keyed to a
   2019 novel by a different Nagano, and T. C. Boyle's *Stories* keyed to *The
-  Adventures of Sherlock Holmes*. Eight of the twenty came from the first
-  eleven `shared_key_collision` cases — the stratum is defined by the defect.
-- **76 rationales carrying LOCALDATA findings** — wrong authors (Fritz Stern for
+  Adventures of Sherlock Holmes*. Seventeen of the twenty-nine came from the
+  first twenty-four `shared_key_collision` cases — the stratum is defined by the
+  defect. Nine of those seventeen point at a *container* (an omnibus, a boxed
+  set, a collected-works volume) rather than an unrelated book.
+- **90 rationales carrying LOCALDATA findings** — wrong authors (Fritz Stern for
   Jessica Stern; Doyle Brunson for Russell Brunson), missing co-authors, wrong
   years, ASINs sitting in the `isbn10` column, ISBNs naming study guides, stage
   adaptations and sequels.
