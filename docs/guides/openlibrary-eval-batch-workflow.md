@@ -66,14 +66,22 @@ linter; running only `ruff check` has broken the build once.
 ## State as of 2026-09-11
 
 ```
-labels      204   researched  106   proposed  75    = 385 decided
-remaining    65   in /home/shane/ol-data/eval/needs-you.md
+labels      204   researched  117   proposed  75    = 396 decided
+remaining    54   in /home/shane/ol-data/eval/needs-you.md
 
 remaining by stratum:
-  shared_key_collision 52 · stale_ol_key 12 · pseudonym_or_alt_name 1
+  shared_key_collision 41 · stale_ol_key 12 · pseudonym_or_alt_name 1
 ```
 
-`researched.jsonl`: 84 match, 18 no_match, 4 ambiguous.
+`researched.jsonl`: 92 match, 20 no_match, 5 ambiguous.
+
+**R20b is binding on the rows it names.** `shared_key_collision-006` is book
+#28542, which R20b (and `schema.py`, and the brief) cite as the merged-row
+example. The research model labelled it a match on the grounds that the author
+field says Agee; that is exactly the shape-(b) reading R20b rejected for this
+row, so it is recorded `ambiguous` with the whole argument in the rationale and
+a one-field flip described. Check the ruling before recording a match on a row
+the ruling names.
 
 **Holding a case back works.** `pseudonym_or_alt_name-012` was answered
 `no_match`; the artifact held three `DUDEN.Das Woerterbuch der Synonyme` works
@@ -88,18 +96,20 @@ cosmetic: the 75 proposals still exist and are still excluded from the list.
 
 ## What this has actually produced
 
-The labels are the least valuable output. Across 106 researched cases:
+The labels are the least valuable output. Across 117 researched cases:
 
 - **21 candidate-recall failures** — the right work was never produced by
   blocking. 9 of them in `non_latin_title` (every manga and manhwa volume
   found so far was under its English title), 8 in `degenerate_title`. These are
   the only cases that measure recall; without them recall is 100% by
   construction. `EvalCase.found_outside_blocking` finds them.
-- **12 wrong stored OL keys**, including Harari's *Nexus* keyed to a book about
+- **20 wrong stored OL keys**, including Harari's *Nexus* keyed to a book about
   bees, a Mike Omer thriller keyed to a Batman parody, Rilke's *Sonnets to
-  Orpheus* keyed to the *Duino Elegies*, and Nagano's 1978 photobook keyed to a
-  2019 novel by a different Nagano.
-- **65 rationales carrying LOCALDATA findings** — wrong authors (Fritz Stern for
+  Orpheus* keyed to the *Duino Elegies*, Nagano's 1978 photobook keyed to a
+  2019 novel by a different Nagano, and T. C. Boyle's *Stories* keyed to *The
+  Adventures of Sherlock Holmes*. Eight of the twenty came from the first
+  eleven `shared_key_collision` cases — the stratum is defined by the defect.
+- **76 rationales carrying LOCALDATA findings** — wrong authors (Fritz Stern for
   Jessica Stern; Doyle Brunson for Russell Brunson), missing co-authors, wrong
   years, ASINs sitting in the `isbn10` column, ISBNs naming study guides, stage
   adaptations and sequels.
