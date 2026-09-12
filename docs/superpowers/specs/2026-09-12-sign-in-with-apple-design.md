@@ -73,22 +73,47 @@ values and should be explicitly registered", no wildcards, https only, no localh
 entry.
 
 Apple's stated cap is "up to 10 website URLs" for an individual enrollment and 100 for an
-organization. This account is an individual enrollment. **Measured 2026-09-12: eight
-domains plus eight return URLs saved without complaint**, so the cap is not a joint count
-across the two boxes. Registered on the Services ID:
+organization. This account is an individual enrollment. **Measured 2026-09-12: the cap is
+a joint count across both boxes.** An earlier draft of this finding said eight domains
+plus eight return URLs had saved; they had not — the dialog accepted the paste, the outer
+page silently discarded it, and a later attempt with the outer save surfaced the real
+error: "Limit exceeded for 'Website URLs'. Maximum limit : '10'." Until then Apple's
+production behaviour was the giveaway: the Services ID Firebase uses,
+`org.thegreatestbooks.beta`, accepted only `https://thegreatestbooks.org/__/auth/handler`
+and rejected the other seven with "invalid_request — Invalid web redirect url".
 
-| host | role |
-|---|---|
-| `thegreatestbooks.org` | legacy books today; this app at launch |
-| `dev.thegreatestbooks.org` | legacy books dev |
-| `new.thegreatestbooks.org` | this app, books, pre-launch |
-| `dev-new.thegreatestbooks.org` | this app, books, dev |
-| `thegreatestmusic.org` | this app, live |
-| `dev.thegreatestmusic.org` | this app, dev |
-| `thegreatest.games` | this app, live |
-| `dev.thegreatest.games` | this app, dev |
+Two things make ten enough. Apple validates the OAuth `redirect_uri` against the Return
+URLs box alone; the Domains box serves its JS popup flow and the email relay, neither of
+which this app uses, so it needs only the three apex domains. And the legacy dev host
+was already rejected, so dropping it loses nothing. Registered on
+`org.thegreatestbooks.beta` — 3 domains + 7 return URLs = 10:
+
+| entry | box | role |
+|---|---|---|
+| `thegreatestbooks.org` | domain | apex |
+| `thegreatestmusic.org` | domain | apex |
+| `thegreatest.games` | domain | apex |
+| `https://thegreatestbooks.org/__/auth/handler` | return URL | legacy books today; this app at launch |
+| `https://new.thegreatestbooks.org/__/auth/handler` | return URL | this app, books, pre-launch |
+| `https://dev-new.thegreatestbooks.org/__/auth/handler` | return URL | this app, books, dev |
+| `https://thegreatestmusic.org/__/auth/handler` | return URL | this app, live |
+| `https://dev.thegreatestmusic.org/__/auth/handler` | return URL | this app, dev |
+| `https://thegreatest.games/__/auth/handler` | return URL | this app, live |
+| `https://dev.thegreatest.games/__/auth/handler` | return URL | this app, dev |
+
+Not registered, by choice: `dev.thegreatestbooks.org` (the legacy dev site, retiring).
+Any future host costs a slot; the next one to give up is `new.thegreatestbooks.org` once
+books launches on the apex.
 
 `www.` variants are not needed: nginx 301s them to the apex before any page renders.
+
+**The registration can be checked without a browser.** `accounts:createAuthUri` returns
+the exact `appleid.apple.com/auth/authorize` URL Firebase would redirect to for a given
+`continueUri`; fetching it shows Apple's "invalid_request" page for an unregistered host
+and the sign-in page for a registered one. That is what verified all seven, production
+hosts included, before deploy — see Measured. Apple propagates a Services ID save across
+its edge over several minutes, during which the same URL alternates between accepted and
+rejected; two consecutive clean passes is the bar.
 
 The configuration lives under Certificates, Identifiers & Profiles → **Identifiers** →
 filter "Services IDs" → the Services ID → Sign in with Apple → Configure → Website URLs.
@@ -146,6 +171,12 @@ present on later sign-ins too. `UserAuthenticationService#update_existing` write
 through this app fills the 1,472 Apple rows that have no name today. There is no public
 edit form for `display_name`, so nothing user-entered is at risk of being overwritten.
 
+The exception is real, and the measured sign-in (D3) hit it: an account whose first
+authorization did not leave a `displayName` on the Firebase record never gets one — Apple
+will not resend the name, and the token has no `name` claim at all. `presence ||` keeps
+whatever the row already holds, so those accounts lose nothing; they just do not gain a
+name either.
+
 **F6 — Relay addresses cannot link across providers, and nothing can change that.** A
 `@privaterelay.appleid.com` address is unique per Apple user per developer team. It
 matches no Google or password row, so an Apple user who also holds another account here
@@ -172,12 +203,18 @@ holds a Firebase account from the legacy site). The uid-miss path is not forced 
 deleting that Firebase account: the resolver is unit-tested and has been live for
 Facebook in production since #301.
 
-**D4 — Verify every host by hand, once.** Six clicks: the Apple button on each of
+**D4 — Verify every host, once.** As written, six clicks: the Apple button on each of
 `dev-new.thegreatestbooks.org`, `dev.thegreatestmusic.org`, `dev.thegreatest.games`, and
 after deploy `new.thegreatestbooks.org`, `thegreatestmusic.org`, `thegreatest.games`.
 Pass is Apple rendering its sign-in form; fail is Apple's "invalid_request" page, which
 means that host's return URL is missing from the Services ID. This is the only check of
 the one thing that can actually be wrong, and D2 deliberately does not automate it.
+
+**Amended during implementation:** the `createAuthUri` probe described under F1 checks
+the same thing — Apple's verdict on the exact `redirect_uri` Firebase builds for a host —
+and was run for all seven registered hosts, production included, before deploy. One real
+browser click on `dev-new.thegreatestbooks.org` confirmed the probe agrees with a browser.
+The post-deploy clicks are therefore confirmation, not the first evidence.
 
 **D5 — Leave the "does not render a disabled provider" test standing, on a stub.** With
 Apple enabled there is no disabled provider left in the real config. The test keeps its
@@ -259,4 +296,45 @@ Recorded back into this document under **Measured** before the branch is finishe
 
 ## Measured
 
-_To be filled in during implementation (D3, D4)._
+**Hosts (D4), 2026-09-12.** `createAuthUri` probe against `org.thegreatestbooks.beta`,
+two consecutive passes after propagation settled:
+
+| host | Apple's verdict |
+|---|---|
+| `thegreatestbooks.org` | accepted |
+| `new.thegreatestbooks.org` | accepted |
+| `dev-new.thegreatestbooks.org` | accepted — and confirmed by a real browser click |
+| `thegreatestmusic.org` | accepted |
+| `dev.thegreatestmusic.org` | accepted |
+| `thegreatest.games` | accepted |
+| `dev.thegreatest.games` | accepted |
+| `dev.thegreatestbooks.org` | rejected — not registered, by choice (F1) |
+
+Before the Services ID save landed, the same probe returned accepted for
+`thegreatestbooks.org` only and rejected for all seven others, matching the user's
+"invalid_request" click on dev-new. During propagation the probe alternated verdicts on
+the same URL between runs.
+
+**Token (D3), one real sign-in on `dev-new.thegreatestbooks.org`, 2026-09-12 18:42 UTC.**
+
+Claims: `aud, auth_time, exp, firebase, iat, iss, sub, user_id`. `alg: RS256`,
+`sign_in_provider: apple.com`, `identities: {apple.com}`. **No `email`** (F2 confirmed on
+a live token, not just the account record) and **no `name`** — the tester's Firebase
+Apple account, created 2024-03-26, holds no `displayName` on either the account or the
+provider record, so it is the 1-in-36 case F5's exception paragraph describes.
+
+Branch: **uid miss → `ProviderEmailResolver` → provider-record email → match → relink.**
+The tester's row (`users#1141`, created 2014, `sign_in_count` 136 → 137) had been relinked
+to the Facebook uid by the 2026-09-07 measurement; this sign-in rewrote `auth_uid` to the
+Apple uid and `external_provider` to `apple`, the documented single-`auth_uid` eviction.
+The provider record carried the real address (relay: no — the tester shared it with
+Apple), which is what matched. `email` on the row was not rewritten; `display_name` was
+not touched (`presence ||`). `POST /auth/sign_in` completed 200 in 355 ms with six
+queries, and the page loaded signed in.
+
+This exercised the resolver path rather than the uid-hit path D3 expected, because the
+Facebook test had already moved the tester's uid. Both paths are now measured live for
+Apple: the uid-hit path is what every one of the 1,521 legacy Apple users takes.
+
+**Production hosts (D4): probed accepted before deploy (table above); browser confirmation
+after deploy is a formality.**

@@ -149,11 +149,22 @@ Firebase keeps it on the account record (35/36 in the same measurement), so the 
 `https://<authDomain>/__/auth/handler`, and `authDomain` here is the page's own hostname,
 so every host that renders the widget needs its own entry on the Services ID (Identifiers
 → Services IDs → Sign in with Apple → Configure → Website URLs, then Continue → Save on
-the outer page or the dialog is discarded). Registered: `thegreatestbooks.org`,
-`dev.thegreatestbooks.org`, `new.thegreatestbooks.org`, `dev-new.thegreatestbooks.org`,
+the outer page or the dialog is discarded). The Services ID Firebase uses is
+`org.thegreatestbooks.beta`. Registered return URLs: `https://<host>/__/auth/handler` for
+`thegreatestbooks.org`, `new.thegreatestbooks.org`, `dev-new.thegreatestbooks.org`,
 `thegreatestmusic.org`, `dev.thegreatestmusic.org`, `thegreatest.games`,
-`dev.thegreatest.games`. Apple documents a cap of 10 website URLs for an individual
-enrollment; eight domains plus eight return URLs saved on this individual account, so the
-cap is not a joint count. A host missing from the list fails only at Apple's page, with
-"invalid_request — Invalid web redirect url" — the E2E stops at the Firebase handler and
-cannot see it, so a new host needs one manual click.
+`dev.thegreatest.games`; domains: the three apexes only.
+
+**The cap is ten entries across both boxes** on this individual enrollment — Apple
+rejects the outer save with "Limit exceeded for 'Website URLs'. Maximum limit : '10'".
+Apple checks the OAuth `redirect_uri` against the Return URLs box alone; the Domains box
+serves its JS popup flow and the email relay, which this app does not use, so it holds
+only the apex domains. That is how seven hosts fit; the legacy `dev.thegreatestbooks.org`
+was dropped. Adding a host means giving one up.
+
+A host missing from the list fails only at Apple's page, with "invalid_request — Invalid
+web redirect url" — the E2E stops at the Firebase handler and cannot see it. Check it
+without a browser: POST `{"providerId":"apple.com","continueUri":"https://<host>/__/auth/handler"}`
+to Identity Toolkit's `accounts:createAuthUri` with the web API key, fetch the `authUri`
+it returns, and grep the body for `invalid_request`. A Services ID save takes several
+minutes to propagate and alternates verdicts meanwhile; wait for two clean passes.
