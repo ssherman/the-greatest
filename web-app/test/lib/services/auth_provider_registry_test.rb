@@ -20,23 +20,38 @@ class Services::AuthProviderRegistryTest < ActiveSupport::TestCase
   end
 
   test "enabled excludes providers that are turned off" do
-    enabled = Services::AuthProviderRegistry.enabled
+    # Every real provider is enabled now, so the flag is proven on a stubbed
+    # config rather than on whichever provider happens to be off this month.
+    # Stubbing `all` is enough: `enabled` reaches the config through it.
+    Services::AuthProviderRegistry.stubs(:all).returns({
+      "on" => {"firebase_id" => "on.example", "label" => "On", "scopes" => [], "enabled" => true},
+      "off" => {"firebase_id" => "off.example", "label" => "Off", "scopes" => [], "enabled" => false}
+    })
 
-    assert_includes enabled.keys, "google"
-    assert_includes enabled.keys, "twitter"
-    assert_includes enabled.keys, "facebook"
-    refute_includes enabled.keys, "apple",
-      "Apple is not implemented in this pass."
+    assert_equal ["on"], Services::AuthProviderRegistry.enabled.keys
   end
 
   test "enabled_for_view exposes symbol keys in file order" do
     entries = Services::AuthProviderRegistry.enabled_for_view
 
-    assert_equal %w[google twitter facebook], entries.map { |e| e[:id] }
+    assert_equal %w[google twitter facebook apple], entries.map { |e| e[:id] }
     google = entries.first
     assert_equal "google.com", google[:firebase_id]
     assert_equal "Google", google[:label]
     assert_equal ["profile", "email"], google[:scopes]
+  end
+
+  test "the Apple entry is enabled and requests the email and name scopes" do
+    apple = Services::AuthProviderRegistry.all.fetch("apple")
+
+    assert_equal "apple.com", apple["firebase_id"]
+    assert apple["enabled"], "Sign in with Apple shipped enabled (spec 2026-09-12)"
+    # Load-bearing, not cosmetic. Under this project's "multiple accounts per
+    # email address" setting Firebase requests NO scopes for Apple unless the
+    # client passes them. Drop "email" and every new Apple user gets a token
+    # with no address on the provider record either -- an email-less row that
+    # can never be linked to anything (spec F3).
+    assert_equal %w[email name], apple["scopes"]
   end
 
   test "the X entry is labelled X and requests no scopes" do
