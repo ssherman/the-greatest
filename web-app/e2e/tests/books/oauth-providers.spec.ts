@@ -17,9 +17,12 @@ const ENABLED = [
   { id: 'google', label: 'Google', firebaseId: 'google.com' },
   { id: 'twitter', label: 'X', firebaseId: 'twitter.com' },
   { id: 'facebook', label: 'Facebook', firebaseId: 'facebook.com' },
+  { id: 'apple', label: 'Apple', firebaseId: 'apple.com' },
 ];
 
-const DISABLED = ['apple'];
+// Empty since Apple shipped (2026-09-12). Kept so the next disabled provider
+// has somewhere to go; the loop over it below is a no-op until then.
+const DISABLED: string[] = [];
 
 async function openLoginModal(page: Page) {
   await page.goto('/');

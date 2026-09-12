@@ -21,6 +21,6 @@
     "firebase_id": "apple.com",
     "label": "Apple",
     "scopes": ["email", "name"],
-    "enabled": false
+    "enabled": true
   }
 }

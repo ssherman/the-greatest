@@ -27,9 +27,17 @@ class Authentication::WidgetComponentTest < ViewComponent::TestCase
   end
 
   test "does not render a button for a disabled provider" do
+    # Every real provider is enabled now, so the widget's respect for the
+    # flag is proven on a stubbed registry. Real ids are used because the
+    # template resolves an icon partial per id.
+    Services::AuthProviderRegistry.stubs(:all).returns({
+      "google" => {"firebase_id" => "google.com", "label" => "Google", "scopes" => [], "enabled" => true},
+      "apple" => {"firebase_id" => "apple.com", "label" => "Apple", "scopes" => [], "enabled" => false}
+    })
+
     render_inline(Authentication::WidgetComponent.new)
 
-    # Apple stays disabled -- Sign in with Apple is not configured (spec D9)
+    assert_selector "button[data-authentication-provider-param='google']", count: 1
     assert_no_selector "button[data-authentication-provider-param='apple']"
   end
 
@@ -50,7 +58,7 @@ class Authentication::WidgetComponentTest < ViewComponent::TestCase
     raw = page.find("[data-controller='authentication']")["data-authentication-providers-value"]
     parsed = JSON.parse(raw)
 
-    assert_equal %w[google twitter facebook], parsed.map { |p| p["id"] }
+    assert_equal %w[google twitter facebook apple], parsed.map { |p| p["id"] }
 
     # Indexed by id rather than position: `parsed.last` used to mean twitter,
     # and enabling Facebook silently moved these assertions onto a different
@@ -59,10 +67,15 @@ class Authentication::WidgetComponentTest < ViewComponent::TestCase
 
     assert_equal "twitter.com", by_id["twitter"]["firebase_id"]
     assert_equal [], by_id["twitter"]["scopes"], "the client needs the scope list to build the provider"
-    # Facebook is the only enabled provider with a non-empty scope list, so it
-    # is the one that proves scopes survive the trip to the client at all.
+    # Facebook proves a non-empty scope list survives the trip to the client.
     assert_equal "facebook.com", by_id["facebook"]["firebase_id"]
     assert_equal %w[public_profile email], by_id["facebook"]["scopes"]
+    # Apple's scopes are pinned on the client side too because they are
+    # load-bearing: without "email" Firebase requests no address from Apple
+    # under the multiple-accounts-per-email setting. The registry unit test
+    # carries the full explanation.
+    assert_equal "apple.com", by_id["apple"]["firebase_id"]
+    assert_equal %w[email name], by_id["apple"]["scopes"]
   end
 
   test "every registry provider has an icon partial, enabled or not" do

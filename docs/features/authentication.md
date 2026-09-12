@@ -1,7 +1,7 @@
 # Authentication
 
 ## Overview
-The Greatest uses **Firebase Authentication** on the client side with a **Rails session-based backend**. Users authenticate via Firebase (Google OAuth or email/password), the frontend sends a JWT to Rails, Rails validates it and creates a session. All subsequent requests use standard Rails cookie sessions.
+The Greatest uses **Firebase Authentication** on the client side with a **Rails session-based backend**. Users authenticate via Firebase (Google, Apple, Facebook, X, or email/password), the frontend sends a JWT to Rails, Rails validates it and creates a session. All subsequent requests use standard Rails cookie sessions.
 
 After authentication, **authorization** is handled by a separate domain-scoped system documented in [Domain-Scoped Authorization](domain-scoped-authorization.md).
 
@@ -41,7 +41,7 @@ sequenceDiagram
     JWT-->>AS: Decoded JWT payload
     AS->>AS: extract_provider_data(payload)
     AS->>UAS: UserAuthenticationService.call(provider_data:, signup_domain:)
-    UAS->>DB: Find by auth_uid, else by VERIFIED email, else create
+    UAS->>DB: Find by auth_uid, else by a TRUSTED-provider email (resolved from the provider record on a uid miss), else create
     UAS-->>AS: User record
     AS-->>RC: {success: true, user: User}
     RC->>RC: reset_session (fixation)
@@ -98,9 +98,11 @@ sequenceDiagram
 |----------|--------|---------------------|-----------------|
 | Google | Implemented | `google.com` | `google` (2) |
 | Email/Password | Implemented | `password` | `password` (4) |
-| Apple | Enum defined, not implemented | `apple.com` | `apple` (3) |
-| Facebook | Enum defined, not implemented | `facebook.com` | `facebook` (0) |
-| Twitter | Enum defined, not implemented | `twitter.com` | `twitter` (1) |
+| Apple | Implemented | `apple.com` | `apple` (3) |
+| Facebook | Implemented | `facebook.com` | `facebook` (0) |
+| X (Twitter) | Implemented | `twitter.com` | `twitter` (1) |
+
+The four OAuth providers are declared in `config/auth_providers.json`; [OAuth providers](oauth-providers.md) is the guide to adding one and to what each does differently.
 
 ## Security model
 
@@ -113,7 +115,7 @@ request body carries the JWT and nothing else.
 | Token is for **our** project | `aud` + `iss` checked with `verify_aud`/`verify_iss`; `project_id` is a required argument so no caller can skip it |
 | Identity | `sub` claim → `users.auth_uid`. Never an email from the request |
 | Provider | `firebase.sign_in_provider` claim, mapped through `PROVIDER_MAP`. Anything unmapped is refused |
-| Cross-identity linking | Only on a token asserting `email_verified: true`. An unverified email matching an existing account raises `UnverifiedEmailConflict` -- it never links and never creates a duplicate |
+| Cross-identity linking | Only when the token's `sign_in_provider` is in `AuthenticationService::TRUSTED_EMAIL_PROVIDERS` (or, for any provider, when the token asserts `email_verified: true`). The address is read from the Firebase **provider record** via `ProviderEmailResolver` on a uid miss, falling back to the token claim. `password` is deliberately absent from the allowlist, so a password token links only when it asserts `email_verified: true`; an unverified one whose email matches an existing account raises `UnverifiedEmailConflict` -- it never links and never creates a duplicate. See [OAuth providers](oauth-providers.md) § "Trust is not configuration" |
 | Session fixation | `reset_session` on both sign-in and sign-out |
 | Brute force / enumeration | `rate_limit` on `sign_in` and `check_provider`, keyed by `visitor_ip` |
 
@@ -142,18 +144,18 @@ token for any account.
 | File | Purpose |
 |------|---------|
 | `app/javascript/services/firebase_auth_service.js` | Central auth orchestrator (singleton). Initializes Firebase, manages auth state listeners, sends JWT to backend, dispatches custom events (`auth:success`, `auth:error`, `auth:signout`) |
-| `app/javascript/services/auth_providers/google_provider.js` | Google OAuth provider (singleton). Configures `GoogleAuthProvider` with profile/email scopes, initiates `signInWithRedirect()` |
+| `app/javascript/services/auth_providers/oauth_provider.js` | One class for every OAuth provider (singleton). Builds the Firebase provider from a registry entry — `PROVIDER_FACTORIES` maps `firebase_id` to constructor, scopes are added from config — and initiates `signInWithRedirect()` |
 | `app/javascript/services/auth_providers/email_provider.js` | Email/password provider (singleton). Handles sign-up, sign-in, password reset, email verification. Maps Firebase error codes to user-friendly messages |
 | `app/javascript/services/auth_handlers/redirect_handler.js` | Handles OAuth redirect results on page load (singleton). Processes redirect auth result, handles account conflict errors |
 | `app/javascript/services/firebase_loader.js` | Injects the `firebase-auth` bundle's `<script>` tag on demand and memoises the load at module scope. Also holds the sign-in-hint helpers (`likelySignedIn`, `markSignedIn`, `markPendingRedirect`, ...) that decide whether to load Firebase eagerly on page load |
-| `app/javascript/controllers/authentication_controller.js` | Stimulus controller for the auth UI. Manages multi-step email flow, Google sign-in button, navbar login/logout toggle, modal open/close, provider conflict detection. Reaches Firebase only through its `this.firebase()` accessor (see JS Bundling below) |
+| `app/javascript/controllers/authentication_controller.js` | Stimulus controller for the auth UI. Manages multi-step email flow, the OAuth buttons (one `signInWithOauth` action, provider id from a Stimulus param), navbar login/logout toggle, modal open/close, provider conflict detection. Reaches Firebase only through its `this.firebase()` accessor (see JS Bundling below) |
 
 ### Frontend (ViewComponent)
 
 | File | Purpose |
 |------|---------|
 | `app/components/authentication/widget_component.rb` | ViewComponent that renders the auth widget. Accepts `reload_after_auth` and `css_class` parameters |
-| `app/components/authentication/widget_component/widget_component.html.erb` | Auth widget template. Multi-step UI: email entry (with Google button) -> password entry (sign-in/sign-up toggle, forgot password link). Forgot password is an alternate view that replaces the password step |
+| `app/components/authentication/widget_component/widget_component.html.erb` | Auth widget template. Multi-step UI: email entry (with one button per enabled provider in `config/auth_providers.json`) -> password entry (sign-in/sign-up toggle, forgot password link). Forgot password is an alternate view that replaces the password step |
 
 ### Backend (Rails)
 
@@ -162,7 +164,7 @@ token for any account.
 | `app/controllers/auth_controller.rb` | Auth endpoints: `sign_in` (validate JWT, create session), `sign_out` (clear session), `check_provider` (detect OAuth conflicts). Skips CSRF for JSON requests |
 | `app/lib/services/authentication_service.rb` | Main auth orchestrator. Coordinates JWT validation -> data extraction -> user find/create. Handles provider naming quirks |
 | `app/lib/services/jwt_validation_service.rb` | Validates Firebase JWT using Google's public RS256 certificates. Fetches certs from `googleapis.com`, verifies signature and audience |
-| `app/lib/services/user_authentication_service.rb` | Finds existing users by `auth_uid` first, then by a **verified** email (relinking the account). An unverified email match raises `UnverifiedEmailConflict` instead of linking. Otherwise creates a new user. Stores `provider_data` as JSON, tracks `sign_in_count` |
+| `app/lib/services/user_authentication_service.rb` | Finds existing users by `auth_uid` first, then by a **trusted** email (relinking the account -- `email_trusted` comes from the provider allowlist, or from `email_verified: true`). An untrusted email match raises `UnverifiedEmailConflict` instead of linking. Otherwise creates a new user. Stores `provider_data` as JSON, tracks `sign_in_count` |
 | `app/controllers/application_controller.rb` | Defines `current_user` (reads `session[:user_id]`) and `signed_in?` helpers. Sets `current_domain` based on request host |
 | `app/models/user.rb` | User model with `external_provider` enum, `auth_uid`, `email_verified`, domain role methods. See schema at top of file |
 
@@ -245,25 +247,17 @@ Integration tests use `sign_in_as(user, stub_auth: true)` to bypass JWT validati
 
 ## Adding a New Auth Provider
 
-To add a new Firebase auth provider (e.g., Apple, GitHub), changes are needed at every layer:
+OAuth providers are declared in `config/auth_providers.json` and reach every layer from
+there — the button, the Stimulus action param, the Firebase factory map, `PROVIDER_MAP`,
+`check_provider`. The numbered per-file steps that used to live here described the
+pre-registry code (`google_provider.js`, a per-provider Stimulus action) and no longer
+match the app. Follow [OAuth providers](oauth-providers.md) instead; it lists the six
+places a provider touches and the lint tests that fail when they disagree.
 
-### Frontend
-1. **Create a new provider singleton** in `app/javascript/services/auth_providers/` following the pattern of `google_provider.js` or `email_provider.js`. Import the relevant Firebase auth method (e.g., `signInWithRedirect` for OAuth, direct methods for others).
-2. **Update the Stimulus controller** (`authentication_controller.js`) to add a new action method (e.g., `signInWithApple`) that calls the new provider through `await this.firebase()` -- never by importing the new provider module directly into the controller.
-3. **Update the widget template** (`widget_component.html.erb`) to add a new sign-in button wired to the Stimulus action.
-4. **Import the new provider** in `app/javascript/entrypoints/firebase_auth.js` and add it to the `window.__tgFirebase` object it builds. This is the ONLY file that should import it -- see Gotchas below.
-
-### Backend
-5. **Add the provider to the User enum** in `app/models/user.rb` if not already present. The enum is integer-backed so add new values at the end to avoid breaking existing data.
-6. **Add the provider to `PROVIDER_MAP`** in `authentication_service.rb`, mapping Firebase's `firebase.sign_in_provider` claim (e.g. `apple.com`) to the `external_provider` enum name. Anything not in the map raises `UnsupportedProviderError` and is refused before it reaches the database -- apple, facebook, and twitter are already mapped even though their frontend providers aren't implemented yet.
-7. **Update `check_provider`** in `auth_controller.rb` - The `oauth_providers` array already includes `apple`, `facebook`, `twitter`. Add any new provider name there.
-
-### Firebase Console
-8. **Enable the provider** in the Firebase Console under Authentication > Sign-in method.
-
-### Tests
-9. **Add a user fixture** with the new provider in `test/fixtures/users.yml`.
-10. **Add tests** for the new provider in `auth_controller_test.rb` and `authentication_service_test.rb`.
+Still true regardless of the registry: enable the provider in the Firebase Console under
+Authentication > Sign-in method, and — for any provider that validates redirect URLs per
+host (Apple and X both do) — register `https://<host>/__/auth/handler` for every host that
+renders the widget.
 
 ### Gotchas
 - Firebase uses `"google.com"` as `providerId` for OAuth but just `"password"` for email/password - don't assume a `.com` suffix for all providers.

@@ -85,6 +85,13 @@ Firebase omits the account-record email when another account already holds that
 address. Most Google and X users are the first account for their address; the test
 account's address sits on six Firebase accounts and collides every time.
 
+> **Corrected 2026-09-12.** The Apple row is not token evidence. Those 1,509 addresses
+> were posted by the legacy client from `providerData`, and `accounts:lookup` on 36 Apple
+> accounts found an account-record email on 0/36 and a provider-record email on 36/36.
+> For Apple, suppression is unconditional — the Facebook shape — so the collision-scoped
+> reading above does not hold for it. Google and X remain uninspected at the account
+> level. See `2026-09-12-sign-in-with-apple-design.md` F2.
+
 **F4 — `providerUserInfo` is the server-side original.** The account record carries a
 `providerUserInfo[]` array; the client SDK's `providerData` is its mirror, which is
 why the browser can see an address the token cannot. `accounts:lookup` returns it,
