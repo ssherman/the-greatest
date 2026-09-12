@@ -66,15 +66,23 @@ linter; running only `ruff check` has broken the build once.
 ## State as of 2026-09-12
 
 ```
-labels      204   researched  164   proposed  75    = 443 decided
-remaining     7   in /home/shane/ol-data/eval/needs-you.md
-
-remaining by stratum:
-  stale_ol_key 7
+labels      204   researched  171   proposed  75    = 450 decided
+remaining     0   -- /home/shane/ol-data/eval/needs-you.md is empty
 ```
 
-`researched.jsonl`: 133 match, 22 no_match, 9 ambiguous. `shared_key_collision`
-and `pseudonym_or_alt_name` are complete.
+`researched.jsonl`: 139 match, 22 no_match, 10 ambiguous. **The research loop is
+finished.** Every case the dossier ever handed back has an answer in
+`labels.jsonl` or `researched.jsonl`, or a proposal in `proposed.jsonl`. What
+remains is the open-items list below — chiefly the 75 unreviewed proposals.
+
+Researched cases by stratum: shared_key_collision 62 · high_frequency_title 40
+· non_latin_title 20 · degenerate_title 18 · stale_ol_key 12 · author_less_work
+11 · pseudonym_or_alt_name 8.
+
+**`stale_ol_key` was not stale.** All twelve keys resolve in the 2026-07-31
+dump; eleven were the right work or a thin duplicate of it, and the twelfth
+(Bierce) was one of two collections a merged row points at. Whatever made those
+keys "stale" when the pool was cut, it is not true of this dump.
 
 **The exception moves you to a clean record our identifiers also reach — never
 to a thinner record nothing of ours reaches.** Two `stale_ol_key` answers
@@ -88,10 +96,6 @@ blemishes (King John, Rebecca, Adichie's guided journal); the exception is for
 records that *are* two books (Colette's, Barthelme's, X-Factor's), and every
 time it has fired so far the clean record also carried an identifier of ours.
 
-**The first five `stale_ol_key` keys are not stale in this dump.** All five
-resolve in 2026-07-31, four were the right work and one a thin duplicate of it.
-The stratum was cut against an earlier dump; treat its "stale" label as a
-hypothesis, not a fact.
 
 **The brief's Pamela Anderson example is wrong, and so is the docstring built on
 it.** `shared_key_collision-075`: ISBN 9780316573481 sits on `OL38014589W`
@@ -176,14 +180,14 @@ cosmetic: the 75 proposals still exist and are still excluded from the list.
 
 ## What this has actually produced
 
-The labels are the least valuable output. Across 164 researched cases:
+The labels are the least valuable output. Across 171 researched cases:
 
 - **28 candidate-recall failures** — the right work was never produced by
   blocking. 9 of them in `non_latin_title` (every manga and manhwa volume
   found so far was under its English title), 8 in `degenerate_title`. These are
   the only cases that measure recall; without them recall is 100% by
   construction. `EvalCase.found_outside_blocking` finds them.
-- **46 wrong stored OL keys**, including Harari's *Nexus* keyed to a book about
+- **47 wrong stored OL keys**, including Harari's *Nexus* keyed to a book about
   bees, a Mike Omer thriller keyed to a Batman parody, Rilke's *Sonnets to
   Orpheus* keyed to the *Duino Elegies*, Nagano's 1978 photobook keyed to a
   2019 novel by a different Nagano, and T. C. Boyle's *Stories* keyed to *The
@@ -195,7 +199,7 @@ The labels are the least valuable output. Across 164 researched cases:
   record that holds the book among unrelated ones. Nine stored keys in the
   stratum were correct, and one (Wharton) was a duplicate of the same book
   rather than wrong.
-- **123 rationales carrying LOCALDATA findings** — wrong authors (Fritz Stern for
+- **130 rationales carrying LOCALDATA findings** — wrong authors (Fritz Stern for
   Jessica Stern; Doyle Brunson for Russell Brunson), missing co-authors, wrong
   years, ASINs sitting in the `isbn10` column, ISBNs naming study guides, stage
   adaptations and sequels.
