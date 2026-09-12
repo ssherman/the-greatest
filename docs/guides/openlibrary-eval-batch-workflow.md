@@ -66,21 +66,21 @@ linter; running only `ruff check` has broken the build once.
 ## State as of 2026-09-11
 
 ```
-labels      204   researched  105   proposed  75    = 384 decided
-remaining    66   in /home/shane/ol-data/eval/needs-you.md
+labels      204   researched  106   proposed  75    = 385 decided
+remaining    65   in /home/shane/ol-data/eval/needs-you.md
 
 remaining by stratum:
-  shared_key_collision 52 · stale_ol_key 12 · pseudonym_or_alt_name 2
+  shared_key_collision 52 · stale_ol_key 12 · pseudonym_or_alt_name 1
 ```
 
-`researched.jsonl`: 83 match, 18 no_match, 4 ambiguous.
+`researched.jsonl`: 84 match, 18 no_match, 4 ambiguous.
 
-`pseudonym_or_alt_name-012` (the Duden synonym dictionary) was deliberately
-**held back**, not recorded: the research model answered `no_match`, but the
-artifact holds three works titled `DUDEN.Das Woerterbuch der Synonyme`
-(OL35226610W/611W/612W, all one Hueber edition, ISBN 9783191117351, 336pp)
-that it never saw. Whether that Hueber licence edition is the same Duden title
-as our 2016 third edition is a web question. Re-run it with those keys named.
+**Holding a case back works.** `pseudonym_or_alt_name-012` was answered
+`no_match`; the artifact held three `DUDEN.Das Woerterbuch der Synonyme` works
+the research never saw. It was left in the dossier with the keys named, Shane
+re-ran it, and the research model reversed itself with the Hueber-to-Duden
+edition link the artifact could not supply. Do that rather than record a
+`no_match` the artifact contradicts, and rather than guess the web fact.
 
 When the dossier is regenerated with `--proposed` pointed at a throwaway, its
 header reads "0 proposed automatically" and names the throwaway path. That is
@@ -88,9 +88,9 @@ cosmetic: the 75 proposals still exist and are still excluded from the list.
 
 ## What this has actually produced
 
-The labels are the least valuable output. Across 105 researched cases:
+The labels are the least valuable output. Across 106 researched cases:
 
-- **20 candidate-recall failures** — the right work was never produced by
+- **21 candidate-recall failures** — the right work was never produced by
   blocking. 9 of them in `non_latin_title` (every manga and manhwa volume
   found so far was under its English title), 8 in `degenerate_title`. These are
   the only cases that measure recall; without them recall is 100% by
@@ -99,7 +99,7 @@ The labels are the least valuable output. Across 105 researched cases:
   bees, a Mike Omer thriller keyed to a Batman parody, Rilke's *Sonnets to
   Orpheus* keyed to the *Duino Elegies*, and Nagano's 1978 photobook keyed to a
   2019 novel by a different Nagano.
-- **64 rationales carrying LOCALDATA findings** — wrong authors (Fritz Stern for
+- **65 rationales carrying LOCALDATA findings** — wrong authors (Fritz Stern for
   Jessica Stern; Doyle Brunson for Russell Brunson), missing co-authors, wrong
   years, ASINs sitting in the `isbn10` column, ISBNs naming study guides, stage
   adaptations and sequels.
