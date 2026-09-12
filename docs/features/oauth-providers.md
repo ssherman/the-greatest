@@ -118,7 +118,7 @@ Firebase console needed nothing — 1,521 users had signed in with it before thi
 rendered a button.
 
 **Apple tokens carry no `email` claim, ever.** Measured 2026-09-12 on 36 Apple Firebase
-accounts: the account record had no email on 0/36; the provider record had it on 36/36.
+accounts: the account record carried an email on 0/36; the provider record on 36/36.
 It is the Facebook shape, and the same server-side lookup resolves it on a uid miss. The
 `users.email` values the legacy app stored came from the client's `providerData`, not from
 a token — do not read them as evidence about the claim.
