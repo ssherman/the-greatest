@@ -19,7 +19,7 @@ dependencies = [
 calibration = ["splink>=4.0,<5"]
 
 [dependency-groups]
-dev = ["pytest>=8.3,<9", "ruff>=0.7,<1"]
+dev = ["pytest>=9.0.3,<10", "ruff>=0.7,<1"]
 
 [build-system]
 requires = ["hatchling"]
