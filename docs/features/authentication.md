@@ -1,7 +1,7 @@
 # Authentication
 
 ## Overview
-The Greatest uses **Firebase Authentication** on the client side with a **Rails session-based backend**. Users authenticate via Firebase (Google OAuth or email/password), the frontend sends a JWT to Rails, Rails validates it and creates a session. All subsequent requests use standard Rails cookie sessions.
+The Greatest uses **Firebase Authentication** on the client side with a **Rails session-based backend**. Users authenticate via Firebase (Google, Apple, Facebook, X, or email/password), the frontend sends a JWT to Rails, Rails validates it and creates a session. All subsequent requests use standard Rails cookie sessions.
 
 After authentication, **authorization** is handled by a separate domain-scoped system documented in [Domain-Scoped Authorization](domain-scoped-authorization.md).
 
@@ -98,9 +98,11 @@ sequenceDiagram
 |----------|--------|---------------------|-----------------|
 | Google | Implemented | `google.com` | `google` (2) |
 | Email/Password | Implemented | `password` | `password` (4) |
-| Apple | Enum defined, not implemented | `apple.com` | `apple` (3) |
-| Facebook | Enum defined, not implemented | `facebook.com` | `facebook` (0) |
-| Twitter | Enum defined, not implemented | `twitter.com` | `twitter` (1) |
+| Apple | Implemented | `apple.com` | `apple` (3) |
+| Facebook | Implemented | `facebook.com` | `facebook` (0) |
+| X (Twitter) | Implemented | `twitter.com` | `twitter` (1) |
+
+The four OAuth providers are declared in `config/auth_providers.json`; [OAuth providers](oauth-providers.md) is the guide to adding one and to what each does differently.
 
 ## Security model
 
@@ -142,7 +144,7 @@ token for any account.
 | File | Purpose |
 |------|---------|
 | `app/javascript/services/firebase_auth_service.js` | Central auth orchestrator (singleton). Initializes Firebase, manages auth state listeners, sends JWT to backend, dispatches custom events (`auth:success`, `auth:error`, `auth:signout`) |
-| `app/javascript/services/auth_providers/google_provider.js` | Google OAuth provider (singleton). Configures `GoogleAuthProvider` with profile/email scopes, initiates `signInWithRedirect()` |
+| `app/javascript/services/auth_providers/oauth_provider.js` | One class for every OAuth provider (singleton). Builds the Firebase provider from a registry entry — `PROVIDER_FACTORIES` maps `firebase_id` to constructor, scopes are added from config — and initiates `signInWithRedirect()` |
 | `app/javascript/services/auth_providers/email_provider.js` | Email/password provider (singleton). Handles sign-up, sign-in, password reset, email verification. Maps Firebase error codes to user-friendly messages |
 | `app/javascript/services/auth_handlers/redirect_handler.js` | Handles OAuth redirect results on page load (singleton). Processes redirect auth result, handles account conflict errors |
 | `app/javascript/services/firebase_loader.js` | Injects the `firebase-auth` bundle's `<script>` tag on demand and memoises the load at module scope. Also holds the sign-in-hint helpers (`likelySignedIn`, `markSignedIn`, `markPendingRedirect`, ...) that decide whether to load Firebase eagerly on page load |
@@ -245,25 +247,17 @@ Integration tests use `sign_in_as(user, stub_auth: true)` to bypass JWT validati
 
 ## Adding a New Auth Provider
 
-To add a new Firebase auth provider (e.g., Apple, GitHub), changes are needed at every layer:
+OAuth providers are declared in `config/auth_providers.json` and reach every layer from
+there — the button, the Stimulus action param, the Firebase factory map, `PROVIDER_MAP`,
+`check_provider`. The numbered per-file steps that used to live here described the
+pre-registry code (`google_provider.js`, a per-provider Stimulus action) and no longer
+match the app. Follow [OAuth providers](oauth-providers.md) instead; it lists the six
+places a provider touches and the lint tests that fail when they disagree.
 
-### Frontend
-1. **Create a new provider singleton** in `app/javascript/services/auth_providers/` following the pattern of `google_provider.js` or `email_provider.js`. Import the relevant Firebase auth method (e.g., `signInWithRedirect` for OAuth, direct methods for others).
-2. **Update the Stimulus controller** (`authentication_controller.js`) to add a new action method (e.g., `signInWithApple`) that calls the new provider through `await this.firebase()` -- never by importing the new provider module directly into the controller.
-3. **Update the widget template** (`widget_component.html.erb`) to add a new sign-in button wired to the Stimulus action.
-4. **Import the new provider** in `app/javascript/entrypoints/firebase_auth.js` and add it to the `window.__tgFirebase` object it builds. This is the ONLY file that should import it -- see Gotchas below.
-
-### Backend
-5. **Add the provider to the User enum** in `app/models/user.rb` if not already present. The enum is integer-backed so add new values at the end to avoid breaking existing data.
-6. **Add the provider to `PROVIDER_MAP`** in `authentication_service.rb`, mapping Firebase's `firebase.sign_in_provider` claim (e.g. `apple.com`) to the `external_provider` enum name. Anything not in the map raises `UnsupportedProviderError` and is refused before it reaches the database -- apple, facebook, and twitter are already mapped even though their frontend providers aren't implemented yet.
-7. **Update `check_provider`** in `auth_controller.rb` - The `oauth_providers` array already includes `apple`, `facebook`, `twitter`. Add any new provider name there.
-
-### Firebase Console
-8. **Enable the provider** in the Firebase Console under Authentication > Sign-in method.
-
-### Tests
-9. **Add a user fixture** with the new provider in `test/fixtures/users.yml`.
-10. **Add tests** for the new provider in `auth_controller_test.rb` and `authentication_service_test.rb`.
+Still true regardless of the registry: enable the provider in the Firebase Console under
+Authentication > Sign-in method, and — for any provider that validates redirect URLs per
+host (Apple and X both do) — register `https://<host>/__/auth/handler` for every host that
+renders the widget.
 
 ### Gotchas
 - Firebase uses `"google.com"` as `providerId` for OAuth but just `"password"` for email/password - don't assume a `.com` suffix for all providers.

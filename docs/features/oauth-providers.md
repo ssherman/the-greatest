@@ -109,3 +109,51 @@ X supplies no email for a minority of sign-ins, and 20,063 legacy rows have none
 Those accounts are valid (`User#external_oauth_account?` relaxes the presence rule)
 but cannot be linked across providers. A later sign-in that does supply an address
 fills the blank — `UserAuthenticationService#update_existing` never overwrites one.
+
+## Apple
+
+Enabled 2026-09-12; see `docs/superpowers/specs/2026-09-12-sign-in-with-apple-design.md`.
+Apple was already live on the legacy site through this same Firebase project, so the
+Firebase console needed nothing — 1,521 users had signed in with it before this app
+rendered a button.
+
+**Apple tokens carry no `email` claim, ever.** Measured 2026-09-12 on 36 Apple Firebase
+accounts: the account record had no email on 0/36; the provider record had it on 36/36.
+It is the Facebook shape, and the same server-side lookup resolves it on a uid miss. The
+`users.email` values the legacy app stored came from the client's `providerData`, not from
+a token — do not read them as evidence about the claim.
+
+**Hide My Email is the majority case.** 966 of 1,509 Apple users with an address (64%) use
+a `@privaterelay.appleid.com` alias. An alias is unique per Apple user per developer team,
+so it can never match a Google or password row: an Apple user who also holds another
+account here keeps two rows. There is no key to combine on, so this is accepted, not
+deferred.
+
+Mail to an alias only arrives if the sending domain is registered under Certificates,
+Identifiers & Profiles → Services → *Sign in with Apple for Email Communication* with SPF
+passing. Every site sends from `MAIL_FROM_ADDRESS` at `thegreatestbooks.org`
+(`MailBranding#from`), and that domain is registered and green. Other rows on that page
+are inert; only a change of sending domain would need a new entry.
+
+**The scope list is load-bearing.** Under this project's "multiple accounts with the same
+email address" setting, Firebase requests no scopes for Apple unless the client passes
+them. `["email", "name"]` in the registry is what makes the provider record carry an
+address at all. `test/lib/services/auth_provider_registry_test.rb` pins it.
+
+**The name arrives once.** Apple sends the user's name only on the first authorization.
+Firebase keeps it on the account record (35/36 in the same measurement), so the token's
+`name` claim is present on later sign-ins and `update_existing` fills a blank
+`display_name` from it.
+
+**Return URLs are per host, no wildcards.** Firebase's return URL is
+`https://<authDomain>/__/auth/handler`, and `authDomain` here is the page's own hostname,
+so every host that renders the widget needs its own entry on the Services ID (Identifiers
+→ Services IDs → Sign in with Apple → Configure → Website URLs, then Continue → Save on
+the outer page or the dialog is discarded). Registered: `thegreatestbooks.org`,
+`dev.thegreatestbooks.org`, `new.thegreatestbooks.org`, `dev-new.thegreatestbooks.org`,
+`thegreatestmusic.org`, `dev.thegreatestmusic.org`, `thegreatest.games`,
+`dev.thegreatest.games`. Apple documents a cap of 10 website URLs for an individual
+enrollment; eight domains plus eight return URLs saved on this individual account, so the
+cap is not a joint count. A host missing from the list fails only at Apple's page, with
+"invalid_request — Invalid web redirect url" — the E2E stops at the Firebase handler and
+cannot see it, so a new host needs one manual click.
