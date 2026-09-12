@@ -41,7 +41,7 @@ sequenceDiagram
     JWT-->>AS: Decoded JWT payload
     AS->>AS: extract_provider_data(payload)
     AS->>UAS: UserAuthenticationService.call(provider_data:, signup_domain:)
-    UAS->>DB: Find by auth_uid, else by VERIFIED email, else create
+    UAS->>DB: Find by auth_uid, else by a TRUSTED-provider email (resolved from the provider record on a uid miss), else create
     UAS-->>AS: User record
     AS-->>RC: {success: true, user: User}
     RC->>RC: reset_session (fixation)
@@ -115,7 +115,7 @@ request body carries the JWT and nothing else.
 | Token is for **our** project | `aud` + `iss` checked with `verify_aud`/`verify_iss`; `project_id` is a required argument so no caller can skip it |
 | Identity | `sub` claim → `users.auth_uid`. Never an email from the request |
 | Provider | `firebase.sign_in_provider` claim, mapped through `PROVIDER_MAP`. Anything unmapped is refused |
-| Cross-identity linking | Only on a token asserting `email_verified: true`. An unverified email matching an existing account raises `UnverifiedEmailConflict` -- it never links and never creates a duplicate |
+| Cross-identity linking | Only when the token's `sign_in_provider` is in `AuthenticationService::TRUSTED_EMAIL_PROVIDERS` (or, for any provider, when the token asserts `email_verified: true`). The address is read from the Firebase **provider record** via `ProviderEmailResolver` on a uid miss, falling back to the token claim. `password` is never trusted: its email matching an existing account raises `UnverifiedEmailConflict` -- it never links and never creates a duplicate. See [OAuth providers](oauth-providers.md) § "Trust is not configuration" |
 | Session fixation | `reset_session` on both sign-in and sign-out |
 | Brute force / enumeration | `rate_limit` on `sign_in` and `check_provider`, keyed by `visitor_ip` |
 
@@ -148,14 +148,14 @@ token for any account.
 | `app/javascript/services/auth_providers/email_provider.js` | Email/password provider (singleton). Handles sign-up, sign-in, password reset, email verification. Maps Firebase error codes to user-friendly messages |
 | `app/javascript/services/auth_handlers/redirect_handler.js` | Handles OAuth redirect results on page load (singleton). Processes redirect auth result, handles account conflict errors |
 | `app/javascript/services/firebase_loader.js` | Injects the `firebase-auth` bundle's `<script>` tag on demand and memoises the load at module scope. Also holds the sign-in-hint helpers (`likelySignedIn`, `markSignedIn`, `markPendingRedirect`, ...) that decide whether to load Firebase eagerly on page load |
-| `app/javascript/controllers/authentication_controller.js` | Stimulus controller for the auth UI. Manages multi-step email flow, Google sign-in button, navbar login/logout toggle, modal open/close, provider conflict detection. Reaches Firebase only through its `this.firebase()` accessor (see JS Bundling below) |
+| `app/javascript/controllers/authentication_controller.js` | Stimulus controller for the auth UI. Manages multi-step email flow, the OAuth buttons (one `signInWithOauth` action, provider id from a Stimulus param), navbar login/logout toggle, modal open/close, provider conflict detection. Reaches Firebase only through its `this.firebase()` accessor (see JS Bundling below) |
 
 ### Frontend (ViewComponent)
 
 | File | Purpose |
 |------|---------|
 | `app/components/authentication/widget_component.rb` | ViewComponent that renders the auth widget. Accepts `reload_after_auth` and `css_class` parameters |
-| `app/components/authentication/widget_component/widget_component.html.erb` | Auth widget template. Multi-step UI: email entry (with Google button) -> password entry (sign-in/sign-up toggle, forgot password link). Forgot password is an alternate view that replaces the password step |
+| `app/components/authentication/widget_component/widget_component.html.erb` | Auth widget template. Multi-step UI: email entry (with one button per enabled provider in `config/auth_providers.json`) -> password entry (sign-in/sign-up toggle, forgot password link). Forgot password is an alternate view that replaces the password step |
 
 ### Backend (Rails)
 
@@ -164,7 +164,7 @@ token for any account.
 | `app/controllers/auth_controller.rb` | Auth endpoints: `sign_in` (validate JWT, create session), `sign_out` (clear session), `check_provider` (detect OAuth conflicts). Skips CSRF for JSON requests |
 | `app/lib/services/authentication_service.rb` | Main auth orchestrator. Coordinates JWT validation -> data extraction -> user find/create. Handles provider naming quirks |
 | `app/lib/services/jwt_validation_service.rb` | Validates Firebase JWT using Google's public RS256 certificates. Fetches certs from `googleapis.com`, verifies signature and audience |
-| `app/lib/services/user_authentication_service.rb` | Finds existing users by `auth_uid` first, then by a **verified** email (relinking the account). An unverified email match raises `UnverifiedEmailConflict` instead of linking. Otherwise creates a new user. Stores `provider_data` as JSON, tracks `sign_in_count` |
+| `app/lib/services/user_authentication_service.rb` | Finds existing users by `auth_uid` first, then by a **trusted** email (relinking the account -- `email_trusted` comes from the provider allowlist, or from `email_verified: true`). An untrusted email match raises `UnverifiedEmailConflict` instead of linking. Otherwise creates a new user. Stores `provider_data` as JSON, tracks `sign_in_count` |
 | `app/controllers/application_controller.rb` | Defines `current_user` (reads `session[:user_id]`) and `signed_in?` helpers. Sets `current_domain` based on request host |
 | `app/models/user.rb` | User model with `external_provider` enum, `auth_uid`, `email_verified`, domain role methods. See schema at top of file |
 

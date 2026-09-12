@@ -143,7 +143,10 @@ address at all. `test/lib/services/auth_provider_registry_test.rb` pins it.
 **The name arrives once.** Apple sends the user's name only on the first authorization.
 Firebase keeps it on the account record (35/36 in the same measurement), so the token's
 `name` claim is present on later sign-ins and `update_existing` fills a blank
-`display_name` from it.
+`display_name` from it. The 1-in-36 exception is permanent: an account whose first
+authorization left no `displayName` in Firebase never gets a `name` claim -- Apple does
+not resend it -- and `presence ||` leaves whatever the row already holds. The measured
+2026-09-12 sign-in was that case.
 
 **Return URLs are per host, no wildcards.** Firebase's return URL is
 `https://<authDomain>/__/auth/handler`, and `authDomain` here is the page's own hostname,
