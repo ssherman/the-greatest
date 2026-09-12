@@ -86,7 +86,10 @@ whether or not books has launched.
 - **Snapshot before bulk work:** `bin/snapshot-dev-db.sh --label pre-migration`, restore with
   `bin/snapshot-dev-db.sh --restore`. Turns an hours-long rebuild into a ~1 minute restore.
 - `bin/refresh-dev-db.sh` restores **everything** in the production backup — music, games and
-  books alike. `pg_restore` is invoked with no `-t`/`-T`/`-n` filters.
+  books alike. `pg_restore` is invoked with no `-t`/`-T`/`-n` filters. Expect the counts to move:
+  a refresh after the production migration took books from 126,330 to 157,806 and authors from
+  58,247 to 70,973. Anything **derived** from the dev database is stale afterwards and has to be
+  regenerated — the Open Library books export and its evaluation pool, for instance.
 
 **The test database is per-checkout.** `config/test_database_name.rb` names the test primary after
 the directory the checkout lives in, so each git worktree gets its own
@@ -222,5 +225,7 @@ wrong place.
 - `docs/summary.md` — architecture & goals · `docs/dev_setup.md` — local setup
 - `docs/features/` — feature docs (data_importers, authentication, rankings, search,
   saved_searches, ...)
+- `docs/data-quality/` — measured findings about the data we already hold, with the script
+  that produced them. Regenerate before acting: the numbers describe a moment, not a rule.
 - `docs/documentation.md` — documentation philosophy. **Code is the source of truth: we do NOT write
   class-level docs.** Features go in `docs/features/`, data models in `docs/object_models/`.

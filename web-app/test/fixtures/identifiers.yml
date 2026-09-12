@@ -71,3 +71,14 @@ duplicate_discogs_value:
   identifiable: animals (Music::Album)
   identifier_type: 203  # music_discogs_release_id
   value: "999999"  # Same value, different object - should be allowed
+
+# Books::Book Identifiers (open_library eval export coverage)
+war_and_peace_isbn13:
+  identifiable: war_and_peace (Books::Book)
+  identifier_type: 5  # books_work_isbn13
+  value: "9780140447934"
+
+war_and_peace_asin:
+  identifiable: war_and_peace (Books::Book)
+  identifier_type: 7  # books_work_asin
+  value: "B00JXPRBOU"
