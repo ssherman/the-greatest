@@ -66,14 +66,22 @@ linter; running only `ruff check` has broken the build once.
 ## State as of 2026-09-12
 
 ```
-labels      204   researched  142   proposed  75    = 421 decided
-remaining    29   in /home/shane/ol-data/eval/needs-you.md
+labels      204   researched  153   proposed  75    = 432 decided
+remaining    18   in /home/shane/ol-data/eval/needs-you.md
 
 remaining by stratum:
-  shared_key_collision 17 · stale_ol_key 12
+  stale_ol_key 12 · shared_key_collision 6
 ```
 
-`researched.jsonl`: 115 match, 21 no_match, 6 ambiguous.
+`researched.jsonl`: 124 match, 21 no_match, 8 ambiguous.
+
+**Identifier-first applied to a public-domain classic.** Wharton's *Tales of
+Men and Ghosts* (-049): our one ISBN sits on a 2012 CreateSpace record whose
+author is misspelt "Edith Warton"; the 38-edition canonical record carries
+nothing of ours. The brief's precedence (*The Brain*; Blue Period 6) gives the
+CreateSpace record, and that is what was recorded. If the desired outcome for
+classics is the canonical record when the ISBN-bearing one is print-on-demand,
+that is a rule change for the brief, and this label flips with it.
 
 **An expanded edition does not fire the exception.** The research model stepped
 outside the identifier-bearing Dark Phoenix Saga record because its other
@@ -131,24 +139,26 @@ cosmetic: the 75 proposals still exist and are still excluded from the list.
 
 ## What this has actually produced
 
-The labels are the least valuable output. Across 142 researched cases:
+The labels are the least valuable output. Across 153 researched cases:
 
-- **26 candidate-recall failures** — the right work was never produced by
+- **27 candidate-recall failures** — the right work was never produced by
   blocking. 9 of them in `non_latin_title` (every manga and manhwa volume
   found so far was under its English title), 8 in `degenerate_title`. These are
   the only cases that measure recall; without them recall is 100% by
   construction. `EvalCase.found_outside_blocking` finds them.
-- **37 wrong stored OL keys**, including Harari's *Nexus* keyed to a book about
+- **42 wrong stored OL keys**, including Harari's *Nexus* keyed to a book about
   bees, a Mike Omer thriller keyed to a Batman parody, Rilke's *Sonnets to
   Orpheus* keyed to the *Duino Elegies*, Nagano's 1978 photobook keyed to a
   2019 novel by a different Nagano, and T. C. Boyle's *Stories* keyed to *The
-  Adventures of Sherlock Holmes*. Twenty-five of the thirty-seven came from the
-  first thirty-five `shared_key_collision` cases — the stratum is defined by the
-  defect. Ten of those point at a *container* (an omnibus, a boxed set, a
-  collected-works volume, the whole novel for a volume-I row) rather than an
-  unrelated book, and two more at a grab-bag record that holds the book among
-  unrelated ones. Four stored keys in the stratum were correct.
-- **101 rationales carrying LOCALDATA findings** — wrong authors (Fritz Stern for
+  Adventures of Sherlock Holmes*. Thirty of the forty-two came from the first
+  forty-six `shared_key_collision` cases — the stratum is defined by the
+  defect. Eleven of those point at a *container* (an omnibus, a boxed set, a
+  collected-works volume, the whole novel for a volume-I row, *Aelita* alone for
+  an *Aelita + Garin* row) rather than an unrelated book, and three more at a
+  grab-bag record that holds the book among unrelated ones. Eight stored keys
+  in the stratum were correct, and one (Wharton) was a duplicate of the same
+  book rather than wrong.
+- **112 rationales carrying LOCALDATA findings** — wrong authors (Fritz Stern for
   Jessica Stern; Doyle Brunson for Russell Brunson), missing co-authors, wrong
   years, ASINs sitting in the `isbn10` column, ISBNs naming study guides, stage
   adaptations and sequels.
