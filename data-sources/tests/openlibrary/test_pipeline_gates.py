@@ -45,7 +45,7 @@ def test_a_clean_first_build_passes_every_gate(built):
     assert gates_passed(results)
 
 
-def test_the_evaluation_gate_is_declared_and_skipped_until_increment_2(built):
+def test_the_evaluation_gate_is_declared_and_skipped_until_the_harness_exists(built):
     con, paths = built
     results = run_gates(con, paths, previous_report=None)
     evaluation = next(r for r in results if r.name == "evaluation_set")
