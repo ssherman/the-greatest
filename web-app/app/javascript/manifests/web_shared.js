@@ -39,6 +39,9 @@ application.register("reviews--spoiler", Reviews__SpoilerController)
 import Reviews__WidgetController from "../controllers/reviews/widget_controller"
 application.register("reviews--widget", Reviews__WidgetController)
 
+import SavedSearchPickerController from "../controllers/saved_search_picker_controller"
+application.register("saved-search-picker", SavedSearchPickerController)
+
 import Shared__FormTokenController from "../controllers/shared/form_token_controller"
 application.register("shared--form-token", Shared__FormTokenController)
 // Deprecated alias. Public correction form pages are edge-cached for 24 hours and
