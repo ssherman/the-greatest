@@ -11,16 +11,22 @@
 #  exponent                           :decimal(10, 2)   default(3.0), not null
 #  global                             :boolean          default(TRUE), not null
 #  inherit_penalties                  :boolean          default(TRUE), not null
+#  last_refresh_error                 :text
+#  last_refreshed_at                  :datetime
 #  list_limit                         :integer
 #  max_list_dates_penalty_age         :integer          default(50)
 #  max_list_dates_penalty_percentage  :integer          default(80)
 #  min_list_weight                    :integer          default(1), not null
 #  name                               :string           not null
+#  needs_refresh                      :boolean          default(FALSE), not null
 #  primary                            :boolean          default(FALSE), not null
 #  primary_mapped_list_cutoff_limit   :integer
 #  published_at                       :datetime
+#  refresh_requested_at               :datetime
+#  refresh_status                     :integer          default(0), not null
 #  secondary_mapped_list_cutoff_limit :integer
 #  type                               :string           not null
+#  user_shared                        :boolean          default(FALSE), not null
 #  year                               :integer
 #  created_at                         :datetime         not null
 #  updated_at                         :datetime         not null
