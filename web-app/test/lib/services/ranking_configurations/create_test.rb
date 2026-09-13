@@ -114,6 +114,15 @@ module Services
         end
       end
 
+      test "an invalid penalty value adds errors to the returned configuration" do
+        submitted = {penalties(:books_penalty).id.to_s => {"enabled" => "1", "value" => "101"}}
+
+        result = Create.call(user: @user, entry: @entry, attributes: @attributes, penalties: submitted, start: :official, seed_lists: true)
+
+        refute result.success?
+        assert result.data[:ranking_configuration].errors[:base].any? { |message| message.include?("Value") }
+      end
+
       test "the fifth configuration succeeds and the sixth is refused" do
         (::RankingConfiguration::MAX_PER_USER - 1).times do |i|
           ::Books::RankingConfiguration.create!(name: "Existing #{i}", global: false, user: @user, min_list_weight: 0)

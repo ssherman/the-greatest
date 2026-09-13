@@ -44,7 +44,9 @@ module Services
         config.request_refresh!
         Result.new(success?: true, data: {ranking_configuration: config}, errors: [])
       rescue ActiveRecord::RecordInvalid => e
-        failure(config || configuration_class.new, e.record.errors.full_messages)
+        messages = e.record.errors.full_messages
+        messages.each { |message| config.errors.add(:base, message) } unless config.nil? || e.record.equal?(config)
+        failure(config || configuration_class.new, messages)
       end
 
       private
