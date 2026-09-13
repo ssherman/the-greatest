@@ -300,3 +300,21 @@ books_user_shared:
   inherit_penalties: true
   user: regular_user
   user_shared: true
+
+music_albums_user_shared:
+  type: Music::Albums::RankingConfiguration
+  name: "Shared User Music Albums Ranking"
+  description: "A user-owned music albums ranking that its owner shared by link"
+  global: false
+  primary: false
+  archived: false
+  algorithm_version: 1
+  exponent: 3.0
+  bonus_pool_percentage: 3.0
+  min_list_weight: 0
+  apply_list_dates_penalty: true
+  max_list_dates_penalty_age: 40
+  max_list_dates_penalty_percentage: 75
+  inherit_penalties: true
+  user: regular_user
+  user_shared: true

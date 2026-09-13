@@ -66,6 +66,12 @@ when none does — the weight calculator already skips penalties without a row.
 - The automatic run on create never passes through the controller action, so
   it does not count.
 - `low` is strict-priority behind `critical` and `default` (`config/sidekiq.yml`).
+- Admin bypasses all of this: `Admin::RankingConfigurationsController`'s
+  bulk actions run against every row of the type, user-owned included, when no
+  ids are selected, and its per-row "Refresh Rankings" action calls
+  `calculate_rankings_async` directly -- it does not go through
+  `request_refresh!`, so it ignores the owner lock and never touches
+  `refresh_status`/`needs_refresh`/`last_refresh_error`.
 
 ## Search indexing
 

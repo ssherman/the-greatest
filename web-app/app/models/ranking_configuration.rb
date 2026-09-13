@@ -76,8 +76,11 @@ class RankingConfiguration < ApplicationRecord
   belongs_to :secondary_mapped_list, class_name: "List", optional: true
 
   has_many :inherited_configurations, class_name: "RankingConfiguration", foreign_key: :inherited_from_id, dependent: :nullify, inverse_of: :inherited_from
-  has_many :ranked_items, dependent: :destroy
-  has_many :ranked_lists, dependent: :destroy
+  # delete_all, not destroy: RankedItem/RankedList have no callbacks, counter
+  # caches, touches or other dependents, and a destroyed configuration can own
+  # ~21k ranked_items -- one DELETE beats one DELETE per row.
+  has_many :ranked_items, dependent: :delete_all
+  has_many :ranked_lists, dependent: :delete_all
   has_many :penalty_applications, dependent: :destroy, inverse_of: :ranking_configuration
   has_many :penalties, through: :penalty_applications, inverse_of: :ranking_configurations
 

@@ -30,7 +30,11 @@ class RankingConfigurationPolicyTest < ActiveSupport::TestCase
   end
 
   test "scope returns only the user's own rows" do
-    assert_equal [@config.id, @shared.id].sort,
+    # regular_user also owns music_albums_user_shared (a different type) --
+    # the scope is type-agnostic, so it belongs in the expected set too.
+    other_type = ranking_configurations(:music_albums_user_shared)
+
+    assert_equal [@config.id, @shared.id, other_type.id].sort,
       RankingConfigurationPolicy::Scope.new(@owner, RankingConfiguration).resolve.pluck(:id).sort
     assert_empty RankingConfigurationPolicy::Scope.new(@admin, RankingConfiguration).resolve
     assert_empty RankingConfigurationPolicy::Scope.new(nil, RankingConfiguration).resolve

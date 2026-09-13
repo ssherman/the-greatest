@@ -30,6 +30,20 @@ module RankingConfigurations
       assert_nil @config.last_refresh_error
     end
 
+    test "an edit made mid-run leaves needs_refresh true even though the run succeeds" do
+      Rankings::BulkWeightCalculator.any_instance.expects(:call).returns(@clean_weights)
+      RankingConfiguration.any_instance.stubs(:calculate_rankings).with { |*|
+        @config.update_columns(needs_refresh: true)
+        true
+      }.returns(@success)
+
+      RefreshJob.new.perform(@config.id)
+
+      @config.reload
+      assert @config.refresh_idle?
+      assert @config.needs_refresh?, "an edit made while the run was in flight must survive the run's end"
+    end
+
     test "a ranking calculation failure marks the configuration failed and does not raise" do
       Rankings::BulkWeightCalculator.any_instance.expects(:call).returns(@clean_weights)
       RankingConfiguration.any_instance.expects(:calculate_rankings)

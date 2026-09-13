@@ -21,10 +21,14 @@ module RankingConfigurationGating
   def gate_ranking_configuration!(config)
     return if config.nil? || config.global?
 
-    unless config.user_shared? || config.user_id == current_user&.id
-      raise ActiveRecord::RecordNotFound
-    end
+    raise ActiveRecord::RecordNotFound unless viewer_may_see_ranking_configuration?(config)
 
     @custom_ranking_configuration = config
+  end
+
+  def viewer_may_see_ranking_configuration?(config)
+    return true if config.user_shared?
+
+    current_user.present? && config.user_id == current_user.id
   end
 end

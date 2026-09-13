@@ -23,7 +23,7 @@
           page, where the status panel and polling live. %>
       <div>
         <%= button_to "Refresh weights and rankings", refresh_my_ranking_configuration_path(config), method: :post,
-              class: "btn btn-primary btn-sm", disabled: config.refresh_in_progress? %>
+              class: "btn btn-primary btn-sm", disabled: !config.refresh_claimable? %>
       </div>
     </div>
   </section>

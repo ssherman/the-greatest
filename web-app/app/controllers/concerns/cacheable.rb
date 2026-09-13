@@ -44,11 +44,14 @@ module Cacheable
   end
 
   # A user-owned ranking configuration's pages are personal (and may be
-  # private), so they are never edge-cached. Every controller that resolves
-  # /rc/:id loads @ranking_configuration before it sets cache headers, which
-  # is what makes this one guard cover all of them; the controller tests for
-  # each /rc/ page pin that ordering.
+  # private), so they are never edge-cached. Not every controller stores the
+  # configuration it loaded in @ranking_configuration -- Music::ArtistsController
+  # loads two, into @album_rc and @song_rc -- so this also checks
+  # @custom_ranking_configuration, which RankingConfigurationGating#gate_ranking_configuration!
+  # sets for every user-owned configuration regardless of which ivar the
+  # caller asked load_ranking_configuration to use.
   def user_owned_ranking_configuration?
-    instance_variable_defined?(:@ranking_configuration) && @ranking_configuration&.user_owned?
+    @custom_ranking_configuration.present? ||
+      (instance_variable_defined?(:@ranking_configuration) && @ranking_configuration&.user_owned?)
   end
 end

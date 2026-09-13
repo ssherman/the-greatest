@@ -8,7 +8,9 @@ const IN_PROGRESS = ["queued", "running"]
 // While a refresh is queued or running, asks the owner-only state endpoint
 // every few seconds and reloads the page once the run has finished, so the
 // status panel, badge and Refresh button re-render from the server. The page
-// is complete without this -- a failed poll just tries again.
+// is complete without this -- a failed poll just tries again, except on a
+// 401/403/404 (session expired, or the configuration was deleted): that
+// response will never turn into a completed run, so the poller stops.
 export default class extends Controller {
   static values = { url: String, active: Boolean }
 
@@ -35,7 +37,10 @@ export default class extends Controller {
         headers: { Accept: "application/json" },
         signal: this.abortController.signal
       })
-      if (!response.ok) return
+      if (!response.ok) {
+        if ([401, 403, 404].includes(response.status)) clearInterval(this.timer)
+        return
+      }
 
       const data = await response.json()
       if (this.stopped || IN_PROGRESS.includes(data.refresh_status)) return

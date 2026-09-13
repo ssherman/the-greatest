@@ -29,9 +29,12 @@ module Services
 
         now = Time.current
         ::RankingConfiguration.transaction do
+          # unique_by turns a concurrent double-add into ON CONFLICT DO NOTHING
+          # instead of RecordNotUnique -- the candidates query above already
+          # excludes present lists, but that check and this insert are not atomic.
           ::RankedList.insert_all(candidates.map { |list_id|
             {list_id: list_id, ranking_configuration_id: config.id, created_at: now, updated_at: now}
-          })
+          }, unique_by: [:list_id, :ranking_configuration_id])
           config.update!(needs_refresh: true)
         end
 
