@@ -187,6 +187,21 @@ class My::RankingConfigurationsControllerTest < ActionDispatch::IntegrationTest
     assert_equal @config, @controller.view_assigns["ranking_configuration"]
   end
 
+  test "show enables the Refresh button for a stale run and disables it for a fresh one" do
+    sign_in_as @owner, stub_auth: true
+
+    @config.update_columns(refresh_status: RankingConfiguration.refresh_statuses[:running],
+      refresh_requested_at: (RankingConfiguration::REFRESH_STALE_AFTER + 1.minute).ago)
+    get my_ranking_configuration_path(@config)
+    assert_response :success
+    assert_select "form[action=?] button:not([disabled])", refresh_my_ranking_configuration_path(@config)
+
+    @config.update_columns(refresh_requested_at: Time.current)
+    get my_ranking_configuration_path(@config)
+    assert_response :success
+    assert_select "form[action=?] button[disabled]", refresh_my_ranking_configuration_path(@config)
+  end
+
   test "show 404s for a non-owner, a shared configuration included, and for a global one" do
     sign_in_as @stranger, stub_auth: true
     get my_ranking_configuration_path(@config)

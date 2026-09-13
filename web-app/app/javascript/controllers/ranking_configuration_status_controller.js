@@ -13,29 +13,40 @@ export default class extends Controller {
   static values = { url: String, active: Boolean }
 
   connect() {
+    this.stopped = false
+    this.abortController = null
     if (!this.activeValue || !this.hasUrlValue) return
     this.timer = setInterval(() => this.poll(), POLL_MS)
   }
 
   disconnect() {
+    this.stopped = true
     clearInterval(this.timer)
+    this.abortController?.abort()
   }
 
   async poll() {
+    if (this.abortController) return // a poll is already in flight
+
+    this.abortController = new AbortController()
     try {
       const response = await fetch(this.urlValue, {
         credentials: "same-origin",
-        headers: { Accept: "application/json" }
+        headers: { Accept: "application/json" },
+        signal: this.abortController.signal
       })
       if (!response.ok) return
 
       const data = await response.json()
-      if (IN_PROGRESS.includes(data.refresh_status)) return
+      if (this.stopped || IN_PROGRESS.includes(data.refresh_status)) return
 
       clearInterval(this.timer)
       window.Turbo.visit(window.location.href, { action: "replace" })
     } catch {
-      // Keep polling on a transient failure.
+      // Aborted by disconnect(), or a transient failure -- either way,
+      // there's nothing to do beyond what disconnect()/the next tick handles.
+    } finally {
+      this.abortController = null
     }
   }
 }
