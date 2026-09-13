@@ -259,7 +259,7 @@ primary is promoted, and makes it work for from-scratch configurations too.
 
 ### Model methods and plain controller code
 
-- `RankingConfiguration#request_refresh!` (§4) — the lock and the enqueue.
+- `Services::RankingConfigurations::RequestRefresh` — the lock and the enqueue (moved off the model after Codex review on PR #307; it also releases the claim when the enqueue fails).
 - Delete: `@ranking_configuration.destroy` in the controller.
 - Remove a list: `@ranking_configuration.ranked_lists.find_by!(list_id:).destroy` then
   `update!(needs_refresh: true)` in the lists controller.

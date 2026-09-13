@@ -23,7 +23,7 @@
     <% if @ranked_books.any? %>
       <div class="<%= Books::CardComponent::GRID_CONTAINER_CLASS %>">
         <% @ranked_books.each_with_index do |book, index| %>
-          <%= render Books::CardComponent.new(book: book, rank: book.ranked_position, index: index) %>
+          <%= render Books::CardComponent.new(book: book, rank: book.ranked_position, index: index, ranking_configuration: @ranking_configuration) %>
         <% end %>
       </div>
     <% else %>

@@ -292,6 +292,18 @@ module Books
       assert_nil @controller.view_assigns["custom_ranking_configuration"]
     end
 
+    test "book cards under a custom configuration keep the /rc/ prefix; the primary's do not" do
+      config = ranking_configurations(:books_user_shared)
+      RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: config, rank: 1, score: 100)
+
+      get "/rc/#{config.id}"
+      assert_select "a[href=?]", "/rc/#{config.id}/book/war-and-peace"
+
+      get "/"
+      assert_select "a[href=?]", "/book/war-and-peace"
+      assert_select "a[href^=?]", "/rc/", count: 0
+    end
+
     test "a shared user-owned configuration's page carries the custom-ranking banner" do
       config = ranking_configurations(:books_user_shared)
 

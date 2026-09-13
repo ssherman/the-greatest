@@ -40,9 +40,13 @@ when none does — the weight calculator already skips penalties without a row.
 - `app/lib/ranking_configurations/penalty_rows.rb`, `missing_lists_query.rb` —
   read-only helpers for the form and the lists page.
 - `app/lib/services/ranking_configurations/{create,save,add_lists}.rb` — the
-  transactional writes.
-- `RankingConfiguration#request_refresh!` — one atomic `UPDATE … WHERE` that
-  claims the lock and enqueues `RankingConfigurations::RefreshJob`.
+  transactional writes. `Create` locks the owner's `User` row so two
+  simultaneous creates cannot both pass the per-user cap.
+- `app/lib/services/ranking_configurations/request_refresh.rb` — one atomic
+  `UPDATE … WHERE` that claims the lock and enqueues
+  `RankingConfigurations::RefreshJob`; if the enqueue itself fails (Redis
+  unreachable) it releases the claim into `failed` with the reason so the next
+  click can retry instead of waiting out the stale window.
 - `app/sidekiq/ranking_configurations/refresh_job.rb` — weights then rankings,
   queue `low`, `retry: false`; the outcome lands on the row.
 - `app/controllers/my/ranking_configurations_controller.rb` and
@@ -70,7 +74,7 @@ when none does — the weight calculator already skips penalties without a row.
   bulk actions run against every row of the type, user-owned included, when no
   ids are selected, and its per-row "Refresh Rankings" action calls
   `calculate_rankings_async` directly -- it does not go through
-  `request_refresh!`, so it ignores the owner lock and never touches
+  `Services::RankingConfigurations::RequestRefresh`, so it ignores the owner lock and never touches
   `refresh_status`/`needs_refresh`/`last_refresh_error`.
 
 ## Search indexing

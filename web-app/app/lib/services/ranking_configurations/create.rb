@@ -36,12 +36,16 @@ module Services
         config.assign_attributes(attributes)
 
         ::RankingConfiguration.transaction do
+          # Serialises creates per owner so two simultaneous requests cannot
+          # both count four and both insert a sixth (the cap validation runs
+          # inside this lock). Same shape as ReadingGoals::SaveGoal.
+          ::User.lock.find(user.id)
           config.save!
           apply_penalties(config)
           seed_lists_from(primary, config) if official? && seed_lists
         end
 
-        config.request_refresh!
+        RequestRefresh.call(config: config)
         Result.new(success?: true, data: {ranking_configuration: config}, errors: [])
       rescue ActiveRecord::RecordInvalid => e
         messages = e.record.errors.full_messages

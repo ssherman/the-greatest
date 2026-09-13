@@ -123,6 +123,12 @@ module Services
         assert result.data[:ranking_configuration].errors[:base].any? { |message| message.include?("Value") }
       end
 
+      test "holds the owner's row lock while creating so the cap cannot be raced" do
+        assert_queries_match(/FROM "users" WHERE "users"."id" = \$1 LIMIT \$2 FOR UPDATE/) do
+          Create.call(user: @user, entry: @entry, attributes: @attributes, penalties: {}, start: :scratch, seed_lists: false)
+        end
+      end
+
       test "the fifth configuration succeeds and the sixth is refused" do
         (::RankingConfiguration::MAX_PER_USER - 1).times do |i|
           ::Books::RankingConfiguration.create!(name: "Existing #{i}", global: false, user: @user, min_list_weight: 0)

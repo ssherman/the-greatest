@@ -117,11 +117,16 @@ class My::RankingConfigurationsController < ApplicationController
   end
 
   def refresh
-    if @ranking_configuration.request_refresh!
+    result = Services::RankingConfigurations::RequestRefresh.call(config: @ranking_configuration)
+
+    if result.success?
       redirect_to my_ranking_configuration_path(@ranking_configuration),
         notice: "Refresh started. This usually takes a few minutes.", status: :see_other
-    else
+    elsif result.data[:reason] == :already_running
       refresh_already_running
+    else
+      redirect_to my_ranking_configuration_path(@ranking_configuration),
+        alert: result.errors.to_sentence, status: :see_other
     end
   end
 
@@ -130,7 +135,11 @@ class My::RankingConfigurationsController < ApplicationController
       refresh_status: @ranking_configuration.refresh_status,
       needs_refresh: @ranking_configuration.needs_refresh?,
       last_refreshed_at: @ranking_configuration.last_refreshed_at&.iso8601,
-      last_refresh_error: @ranking_configuration.last_refresh_error
+      last_refresh_error: @ranking_configuration.last_refresh_error,
+      # The poller reads this so a run that goes stale while the page is open
+      # is surfaced (reload → stalled copy + enabled button) instead of
+      # polling forever on a status that never leaves "running".
+      claimable: @ranking_configuration.refresh_claimable?
     }
   end
 

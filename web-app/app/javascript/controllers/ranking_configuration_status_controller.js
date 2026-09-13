@@ -43,7 +43,11 @@ export default class extends Controller {
       }
 
       const data = await response.json()
-      if (this.stopped || IN_PROGRESS.includes(data.refresh_status)) return
+      if (this.stopped) return
+      // Keep polling while the server still calls the run live. A run that
+      // has gone stale is claimable again: reload so the page shows the
+      // stalled copy and enables the Refresh button.
+      if (IN_PROGRESS.includes(data.refresh_status) && !data.claimable) return
 
       clearInterval(this.timer)
       window.Turbo.visit(window.location.href, { action: "replace" })

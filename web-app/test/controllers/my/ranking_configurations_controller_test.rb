@@ -387,6 +387,35 @@ class My::RankingConfigurationsControllerTest < ActionDispatch::IntegrationTest
 
   # --- state ---
 
+  test "refresh releases the claim and reports the failure when the job cannot be enqueued" do
+    RankingConfigurations::RefreshJob.stubs(:perform_async).raises(RedisClient::CannotConnectError, "redis is down")
+    sign_in_as @owner, stub_auth: true
+
+    post refresh_my_ranking_configuration_path(@config)
+
+    assert_redirected_to my_ranking_configuration_path(@config)
+    assert flash[:alert].present?
+    @config.reload
+    assert @config.refresh_failed?
+    assert @config.refresh_claimable?
+  end
+
+  test "state reports a stale run as claimable so the poller reloads" do
+    @config.update_columns(refresh_status: RankingConfiguration.refresh_statuses[:running],
+      refresh_requested_at: (RankingConfiguration::REFRESH_STALE_AFTER + 1.minute).ago)
+    sign_in_as @owner, stub_auth: true
+
+    get state_my_ranking_configuration_path(@config), as: :json
+
+    body = response.parsed_body
+    assert_equal "running", body["refresh_status"]
+    assert_equal true, body["claimable"]
+
+    @config.update_columns(refresh_requested_at: Time.current)
+    get state_my_ranking_configuration_path(@config), as: :json
+    assert_equal false, response.parsed_body["claimable"]
+  end
+
   test "state returns the refresh state as JSON for the owner" do
     @config.update_columns(refresh_status: RankingConfiguration.refresh_statuses[:failed],
       needs_refresh: true, last_refresh_error: "boom")
@@ -401,6 +430,7 @@ class My::RankingConfigurationsControllerTest < ActionDispatch::IntegrationTest
     assert_equal true, body["needs_refresh"]
     assert_equal "boom", body["last_refresh_error"]
     assert_nil body["last_refreshed_at"]
+    assert_equal true, body["claimable"], "a failed run is claimable"
   end
 
   test "state is 401 anonymous and 404 for a non-owner" do

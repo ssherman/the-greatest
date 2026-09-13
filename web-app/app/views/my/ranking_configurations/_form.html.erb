@@ -170,7 +170,7 @@
                           id: "#{dom}-enabled", class: "checkbox", aria: {label: "Apply #{row.penalty.name}"} %>
                   </td>
                   <td>
-                    <label for="<%= dom %>-value" class="font-medium"><%= row.penalty.name %></label>
+                    <label for="<%= dom %>-value" class="text-base font-semibold text-base-content"><%= row.penalty.name %></label>
                     <% if row.penalty.dynamic? %>
                       <span class="badge badge-ghost badge-sm ml-1">applied automatically</span>
                     <% end %>
