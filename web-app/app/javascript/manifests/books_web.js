@@ -10,8 +10,5 @@ application.register("books--nav-drawer", Books__NavDrawerController)
 import Books__ReadingGoalStateController from "../controllers/books/reading_goal_state_controller"
 application.register("books--reading-goal-state", Books__ReadingGoalStateController)
 
-import ClipboardCopyController from "../controllers/clipboard_copy_controller"
-application.register("clipboard-copy", ClipboardCopyController)
-
 import SavedSearchPickerController from "../controllers/saved_search_picker_controller"
 application.register("saved-search-picker", SavedSearchPickerController)

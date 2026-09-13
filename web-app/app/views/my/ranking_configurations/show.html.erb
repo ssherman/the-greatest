@@ -1,0 +1,69 @@
+<% content_for :page_title, "#{@ranking_configuration.name} | #{domain_name}" %>
+
+<div class="mx-auto max-w-3xl space-y-8">
+  <%= render "my/ranking_configurations/notice" %>
+
+  <header class="space-y-3">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <h1 class="text-3xl sm:text-4xl font-bold [overflow-wrap:anywhere]"><%= @ranking_configuration.name %></h1>
+      <span class="badge badge-outline"><%= @ranking_configuration.user_shared? ? "Shared" : "Private" %></span>
+    </div>
+    <% if @ranking_configuration.description.present? %>
+      <p class="text-base-content/70 [overflow-wrap:anywhere]"><%= @ranking_configuration.description %></p>
+    <% end %>
+    <% if @ranking_configuration.user_shared? %>
+      <div data-controller="clipboard-copy" class="flex flex-wrap items-center gap-2">
+        <label class="sr-only" for="ranking-share-url">Share link</label>
+        <%= text_field_tag nil, request.base_url + @entry.results_path.call(@ranking_configuration),
+              id: "ranking-share-url", readonly: true, class: "input input-sm w-full max-w-md",
+              data: {"clipboard-copy-target": "source"} %>
+        <button type="button" class="btn btn-sm btn-primary" data-action="clipboard-copy#copy">Copy link</button>
+      </div>
+    <% end %>
+  </header>
+
+  <%= render "my/ranking_configurations/status", ranking_configuration: @ranking_configuration %>
+
+  <section class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body gap-4">
+      <div class="flex items-center justify-between">
+        <h2 class="card-title">Settings and penalties</h2>
+        <%= link_to "Edit", edit_my_ranking_configuration_path(@ranking_configuration), class: "btn btn-sm btn-ghost" %>
+      </div>
+      <dl class="grid gap-3 sm:grid-cols-2 text-sm">
+        <div><dt class="text-base-content/70">Position bonus curve</dt><dd><%= @ranking_configuration.exponent.to_f %></dd></div>
+        <div><dt class="text-base-content/70">Bonus pool</dt><dd><%= @ranking_configuration.bonus_pool_percentage.to_f %>%</dd></div>
+        <div><dt class="text-base-content/70">Lowest possible weight</dt><dd><%= @ranking_configuration.min_list_weight %></dd></div>
+        <div>
+          <dt class="text-base-content/70">Recency adjustment</dt>
+          <dd>
+            <% if @ranking_configuration.apply_list_dates_penalty? %>
+              up to <%= @ranking_configuration.max_list_dates_penalty_percentage %>%, fading out over <%= @ranking_configuration.max_list_dates_penalty_age %> years
+            <% else %>
+              off
+            <% end %>
+          </dd>
+        </div>
+        <div><dt class="text-base-content/70">Penalties on</dt><dd><%= @penalties_on %> of <%= @penalties_total %></dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body gap-4">
+      <div class="flex items-center justify-between">
+        <h2 class="card-title">Lists</h2>
+        <%= link_to "Manage lists", my_ranking_configuration_lists_path(@ranking_configuration), class: "btn btn-sm btn-ghost" %>
+      </div>
+      <p class="text-sm">This ranking is built from <%= pluralize(number_with_delimiter(@lists_count), "list") %>.</p>
+    </div>
+  </section>
+
+  <div class="flex flex-wrap items-center gap-2">
+    <%= link_to "View rankings", @entry.results_path.call(@ranking_configuration), class: "btn btn-primary" %>
+    <%= link_to "Back to my rankings", my_ranking_configurations_path, class: "btn btn-ghost" %>
+    <%= button_to "Delete", my_ranking_configuration_path(@ranking_configuration), method: :delete,
+          class: "btn btn-error btn-outline ml-auto",
+          form: {data: {turbo_confirm: "Delete this ranking? This cannot be undone."}} %>
+  </div>
+</div>

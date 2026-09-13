@@ -15,6 +15,9 @@ application.register("authentication", AuthenticationController)
 import AutocompleteController from "../controllers/autocomplete_controller"
 application.register("autocomplete", AutocompleteController)
 
+import ClipboardCopyController from "../controllers/clipboard_copy_controller"
+application.register("clipboard-copy", ClipboardCopyController)
+
 import Contact__FormController from "../controllers/contact/form_controller"
 application.register("contact--form", Contact__FormController)
 

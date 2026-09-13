@@ -538,6 +538,37 @@ Rails.application.routes.draw do
     to: redirect("/searches/%{id}/page/%{page}", status: 301),
     constraints: {view_type: /grid|table/, id: /\d+/, page: /\d+/}
 
+  # My Rankings -- user-owned ranking configurations. Global routes like
+  # /searches: the controller resolves the domain from Current.domain through
+  # RankingConfigurations::Registry and 404s on a domain with no entry. Every
+  # route here is owner-only and never cached; the public view of a
+  # configuration is its /rc/:id page on the domain's own routes.
+  get "my/rankings", to: "my/ranking_configurations#index", as: :my_ranking_configurations
+  get "my/rankings/new", to: "my/ranking_configurations#new", as: :new_my_ranking_configuration
+  post "my/rankings", to: "my/ranking_configurations#create"
+  get "my/rankings/:id", to: "my/ranking_configurations#show", as: :my_ranking_configuration,
+    constraints: {id: /\d+/}
+  get "my/rankings/:id/edit", to: "my/ranking_configurations#edit", as: :edit_my_ranking_configuration,
+    constraints: {id: /\d+/}
+  patch "my/rankings/:id", to: "my/ranking_configurations#update", constraints: {id: /\d+/}
+  put "my/rankings/:id", to: "my/ranking_configurations#update", constraints: {id: /\d+/}
+  delete "my/rankings/:id", to: "my/ranking_configurations#destroy", constraints: {id: /\d+/}
+  post "my/rankings/:id/refresh", to: "my/ranking_configurations#refresh",
+    as: :refresh_my_ranking_configuration, constraints: {id: /\d+/}
+  get "my/rankings/:id/state", to: "my/ranking_configurations#state",
+    as: :state_my_ranking_configuration, constraints: {id: /\d+/}
+
+  get "my/rankings/:ranking_configuration_id/lists", to: "my/ranking_configurations/lists#index",
+    as: :my_ranking_configuration_lists, constraints: {ranking_configuration_id: /\d+/}
+  get "my/rankings/:ranking_configuration_id/lists/search", to: "my/ranking_configurations/lists#search",
+    as: :search_my_ranking_configuration_lists, constraints: {ranking_configuration_id: /\d+/}
+  post "my/rankings/:ranking_configuration_id/lists", to: "my/ranking_configurations/lists#create",
+    constraints: {ranking_configuration_id: /\d+/}
+  post "my/rankings/:ranking_configuration_id/lists/add_missing", to: "my/ranking_configurations/lists#add_missing",
+    as: :add_missing_my_ranking_configuration_lists, constraints: {ranking_configuration_id: /\d+/}
+  delete "my/rankings/:ranking_configuration_id/lists/:list_id", to: "my/ranking_configurations/lists#destroy",
+    as: :my_ranking_configuration_list, constraints: {ranking_configuration_id: /\d+/, list_id: /\d+/}
+
   # Domain-specific roots using Default controllers
   constraints DomainConstraint.new(Rails.application.config.domains[:music]) do
     get "rankings", to: "music/default#rankings", as: :music_rankings

@@ -1,0 +1,14 @@
+<% content_for :page_title, "Edit #{@ranking_configuration.name} | #{domain_name}" %>
+
+<div class="mx-auto max-w-3xl space-y-6">
+  <%= render "my/ranking_configurations/notice" %>
+
+  <div>
+    <h1 class="text-3xl sm:text-4xl font-bold [overflow-wrap:anywhere]">Edit <%= @ranking_configuration.name %></h1>
+    <p class="mt-2 text-base-content/70">Changes to settings or penalties take effect after you refresh weights and rankings.</p>
+  </div>
+
+  <%= render "my/ranking_configurations/form",
+        ranking_configuration: @ranking_configuration, entry: @entry, penalty_groups: @penalty_groups,
+        start: :official, seed_lists: false, official_list_count: 0 %>
+</div>

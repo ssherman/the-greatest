@@ -1,0 +1,215 @@
+<%
+  persisted = ranking_configuration.persisted?
+  noun = ranking_configuration.media_noun_plural
+  errors = ranking_configuration.errors
+  field_class = ->(attribute, base) { "#{base} w-full #{"input-error" if errors[attribute].any?}" }
+%>
+<%= form_with model: ranking_configuration, scope: :ranking_configuration,
+      url: persisted ? my_ranking_configuration_path(ranking_configuration) : my_ranking_configurations_path,
+      class: "space-y-6" do |form| %>
+  <% unless persisted %>
+    <%= hidden_field_tag :start, start, id: nil %>
+    <%= hidden_field_tag :kind, entry.kind, id: nil %>
+  <% end %>
+
+  <% if errors[:base].any? %>
+    <div class="alert alert-error" role="alert">
+      <ul class="list-disc list-inside">
+        <% errors[:base].each do |message| %><li><%= message %></li><% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <section class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body gap-5">
+      <h2 class="card-title">Details</h2>
+
+      <fieldset class="fieldset">
+        <%= form.label :name, "Name", class: "fieldset-legend" %>
+        <%= form.text_field :name, required: true, maxlength: 255,
+              class: field_class.call(:name, "input"),
+              aria: {describedby: "ranking-name-errors"} %>
+        <div id="ranking-name-errors" class="space-y-1 text-sm text-error">
+          <% errors.full_messages_for(:name).each do |message| %><p role="alert"><%= message %></p><% end %>
+        </div>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <%= form.label :description, "Description", class: "fieldset-legend" %>
+        <%= form.text_area :description, rows: 3, maxlength: 1000,
+              class: "textarea w-full #{"textarea-error" if errors[:description].any?}",
+              aria: {describedby: "ranking-description-help ranking-description-errors"} %>
+        <p id="ranking-description-help" class="text-sm text-base-content/70">Optional. Up to 1000 characters.</p>
+        <div id="ranking-description-errors" class="space-y-1 text-sm text-error">
+          <% errors.full_messages_for(:description).each do |message| %><p role="alert"><%= message %></p><% end %>
+        </div>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <label class="label cursor-pointer justify-start gap-3">
+          <%= form.check_box :user_shared, class: "checkbox", aria: {describedby: "ranking-shared-help"} %>
+          <span>Share via link</span>
+        </label>
+        <p id="ranking-shared-help" class="text-sm text-base-content/70">
+          Anyone with the link can view this ranking. Private rankings are visible only to you.
+        </p>
+      </fieldset>
+    </div>
+  </section>
+
+  <section class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body gap-5">
+      <h2 class="card-title">Settings</h2>
+      <p class="text-sm text-base-content/70">
+        How lists are weighed and how positions turn into scores. The official rankings' values are noted under each setting.
+      </p>
+
+      <fieldset class="fieldset">
+        <%= form.label :exponent, "Position bonus curve (exponent)", class: "fieldset-legend" %>
+        <%= form.number_field :exponent, min: 0.01, max: 10, step: 0.01, required: true,
+              class: field_class.call(:exponent, "input"),
+              aria: {describedby: "ranking-exponent-help ranking-exponent-errors"} %>
+        <p id="ranking-exponent-help" class="text-sm text-base-content/70">
+          How much more a #1 placement is worth than a low one. Higher values reward top spots more steeply. The official rankings use 3.
+        </p>
+        <div id="ranking-exponent-errors" class="space-y-1 text-sm text-error">
+          <% errors.full_messages_for(:exponent).each do |message| %><p role="alert"><%= message %></p><% end %>
+        </div>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <%= form.label :bonus_pool_percentage, "Bonus pool (%)", class: "fieldset-legend" %>
+        <%= form.number_field :bonus_pool_percentage, min: 0, max: 100, step: 0.1, required: true,
+              class: field_class.call(:bonus_pool_percentage, "input"),
+              aria: {describedby: "ranking-bonus-help ranking-bonus-errors"} %>
+        <p id="ranking-bonus-help" class="text-sm text-base-content/70">
+          The share of each list's weight set aside as a bonus for higher positions. At 0, position on a list doesn't matter. The official rankings use 3.
+        </p>
+        <div id="ranking-bonus-errors" class="space-y-1 text-sm text-error">
+          <% errors.full_messages_for(:bonus_pool_percentage).each do |message| %><p role="alert"><%= message %></p><% end %>
+        </div>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <%= form.label :min_list_weight, "Lowest possible weight", class: "fieldset-legend" %>
+        <%= form.number_field :min_list_weight, min: 0, max: 100, step: 1, required: true,
+              class: field_class.call(:min_list_weight, "input"),
+              aria: {describedby: "ranking-min-weight-help ranking-min-weight-errors"} %>
+        <p id="ranking-min-weight-help" class="text-sm text-base-content/70">
+          No list can fall below this weight no matter how many penalties apply. The official rankings use 0.
+        </p>
+        <div id="ranking-min-weight-errors" class="space-y-1 text-sm text-error">
+          <% errors.full_messages_for(:min_list_weight).each do |message| %><p role="alert"><%= message %></p><% end %>
+        </div>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <label class="label cursor-pointer justify-start gap-3">
+          <%= form.check_box :apply_list_dates_penalty, class: "checkbox", aria: {describedby: "ranking-recency-help"} %>
+          <span>Recency adjustment</span>
+        </label>
+        <p id="ranking-recency-help" class="text-sm text-base-content/70">
+          Reduce the credit a list gives to <%= noun %> published shortly before the list came out. Classics are unaffected.
+        </p>
+      </fieldset>
+
+      <div class="grid gap-5 sm:grid-cols-2">
+        <fieldset class="fieldset">
+          <%= form.label :max_list_dates_penalty_percentage, "Maximum recency reduction (%)", class: "fieldset-legend" %>
+          <%= form.number_field :max_list_dates_penalty_percentage, min: 1, max: 100, step: 1,
+                class: field_class.call(:max_list_dates_penalty_percentage, "input"),
+                aria: {describedby: "ranking-recency-pct-help ranking-recency-pct-errors"} %>
+          <p id="ranking-recency-pct-help" class="text-sm text-base-content/70">
+            How much a placement is reduced when the list and the <%= noun.singularize %> share a year. Only applies while Recency adjustment is on. The official rankings use 80.
+          </p>
+          <div id="ranking-recency-pct-errors" class="space-y-1 text-sm text-error">
+            <% errors.full_messages_for(:max_list_dates_penalty_percentage).each do |message| %><p role="alert"><%= message %></p><% end %>
+          </div>
+        </fieldset>
+
+        <fieldset class="fieldset">
+          <%= form.label :max_list_dates_penalty_age, "Recency reduction fades out after (years)", class: "fieldset-legend" %>
+          <%= form.number_field :max_list_dates_penalty_age, min: 1, max: 200, step: 1,
+                class: field_class.call(:max_list_dates_penalty_age, "input"),
+                aria: {describedby: "ranking-recency-age-help ranking-recency-age-errors"} %>
+          <p id="ranking-recency-age-help" class="text-sm text-base-content/70">
+            The reduction shrinks as the gap grows and disappears at this many years. Only applies while Recency adjustment is on. The official rankings use 50.
+          </p>
+          <div id="ranking-recency-age-errors" class="space-y-1 text-sm text-error">
+            <% errors.full_messages_for(:max_list_dates_penalty_age).each do |message| %><p role="alert"><%= message %></p><% end %>
+          </div>
+        </fieldset>
+      </div>
+    </div>
+  </section>
+
+  <section class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body gap-5">
+      <h2 class="card-title">Penalties</h2>
+      <p class="text-sm text-base-content/70">
+        Each penalty lowers the weight of the lists it applies to by the value you set (0–100%). Untick a penalty to switch it off.
+      </p>
+
+      <% penalty_groups.each do |group| %>
+        <h3 class="font-semibold"><%= group.title %></h3>
+        <div class="overflow-x-auto">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th scope="col">On</th>
+                <th scope="col">Penalty</th>
+                <th scope="col" class="w-32">Value (%)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% group.rows.each do |row| %>
+                <% dom = "penalty-#{row.penalty.id}" %>
+                <tr>
+                  <td>
+                    <%= check_box_tag "penalties[#{row.penalty.id}][enabled]", "1", row.enabled,
+                          id: "#{dom}-enabled", class: "checkbox", aria: {label: "Apply #{row.penalty.name}"} %>
+                  </td>
+                  <td>
+                    <label for="<%= dom %>-value" class="font-medium"><%= row.penalty.name %></label>
+                    <% if row.penalty.dynamic? %>
+                      <span class="badge badge-ghost badge-sm ml-1">applied automatically</span>
+                    <% end %>
+                    <% if row.penalty.description.present? %>
+                      <p class="text-sm text-base-content/70"><%= row.penalty.description %></p>
+                    <% end %>
+                  </td>
+                  <td>
+                    <%= number_field_tag "penalties[#{row.penalty.id}][value]", row.value,
+                          id: "#{dom}-value", min: 0, max: 100, step: 1, class: "input input-sm w-24" %>
+                  </td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% end %>
+    </div>
+  </section>
+
+  <% if !persisted && start == :official %>
+    <section class="card bg-base-100 border border-base-300 shadow-sm">
+      <div class="card-body gap-3">
+        <h2 class="card-title">Lists</h2>
+        <fieldset class="fieldset">
+          <label class="label cursor-pointer justify-start gap-3">
+            <%= check_box_tag :seed_lists, "1", seed_lists, class: "checkbox" %>
+            <span>Start with the <%= number_with_delimiter(official_list_count) %> lists from the official rankings</span>
+          </label>
+          <p class="text-sm text-base-content/70">You can add and remove lists after creating.</p>
+        </fieldset>
+      </div>
+    </section>
+  <% end %>
+
+  <div class="flex flex-wrap gap-2">
+    <%= form.submit persisted ? "Save changes" : "Create ranking", class: "btn btn-primary" %>
+    <%= link_to "Cancel",
+          persisted ? my_ranking_configuration_path(ranking_configuration) : my_ranking_configurations_path,
+          class: "btn btn-ghost" %>
+  </div>
+<% end %>

@@ -1,0 +1,24 @@
+<% content_for :page_title, "New Ranking | #{domain_name}" %>
+
+<div class="mx-auto max-w-3xl space-y-6">
+  <%= render "my/ranking_configurations/notice" %>
+
+  <div>
+    <h1 class="text-3xl sm:text-4xl font-bold">New ranking</h1>
+    <% if @start == :scratch %>
+      <p class="mt-2 text-base-content/70">
+        Starting from scratch: default settings, no penalties, no lists.
+        <%= link_to "Start from the official rankings instead", new_my_ranking_configuration_path(kind: @entry.kind), class: "link link-primary" %>.
+      </p>
+    <% else %>
+      <p class="mt-2 text-base-content/70">
+        Starting from the official rankings: their settings, penalties and lists are filled in below.
+        <%= link_to "Or start from scratch", new_my_ranking_configuration_path(kind: @entry.kind, start: "scratch"), class: "link link-primary" %>.
+      </p>
+    <% end %>
+  </div>
+
+  <%= render "my/ranking_configurations/form",
+        ranking_configuration: @ranking_configuration, entry: @entry, penalty_groups: @penalty_groups,
+        start: @start, seed_lists: @seed_lists, official_list_count: @official_list_count %>
+</div>
