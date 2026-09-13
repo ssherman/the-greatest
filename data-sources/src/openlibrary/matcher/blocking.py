@@ -160,7 +160,11 @@ def generate_candidates(
     # `guards_tripped` may carry "title_fp" for two different reasons: an
     # empty/too-short fingerprint (the `else` branch below, e.g. "!!!") or a
     # common title suppressed here. No downstream code distinguishes between
-    # them today.
+    # them in `guards_tripped` today -- but rule 6 below needs to, so
+    # `suppressed_common_title` tracks the second reason separately rather
+    # than testing `"title_fp" in guards_tripped` (ruling R39, amended: a
+    # too-short fingerprint has zero exact hits and rule 6's reasoning does
+    # not apply to it).
     #
     # This joins against all three title fingerprint variants (full/nosub/
     # noart). `eval/build_pool.py`'s own copy of rule 4 joins the full
@@ -170,6 +174,7 @@ def generate_candidates(
     # recall against labels, not against pool candidates, so this wider rule
     # can only raise measured recall, never lower it; see build_pool.py's
     # module docstring for the other half of this note.
+    suppressed_common_title = False
     if variants:
         load_rows(con, "q_title_fps4", [("title_fp", "VARCHAR")], [(fp,) for fp in variants])
         rows = con.execute(
@@ -182,6 +187,7 @@ def generate_candidates(
         ).fetchall()
         if any(freq > MAX_TITLE_FP_FREQ for _, freq in rows) or len(rows) > MAX_CANDIDATES_PER_RULE:
             result.guards_tripped.append("title_fp")
+            suppressed_common_title = True
         for work_key, freq in rows:
             if freq <= MAX_TITLE_FP_FREQ:
                 _add(result, work_key, "title_fp")
@@ -209,12 +215,16 @@ def generate_candidates(
 
     # Rule 6 -- trigram fallback, ONLY for the ~18% with no exact hit anywhere.
     # Fuzzy retrieval serves a fallback path, not a pillar; this is why the
-    # design does not carry a search engine. `"title_fp" not in
-    # guards_tripped` is required alongside `not result.candidates`: a title
-    # rule 4 suppressed for frequency HAD exact hits, so falling through to
-    # rule 6 there would resurrect ~200 near-identical works under a fuzzy
-    # label and defeat the guard rule 4 just tripped.
-    if not result.candidates and fps.full and "title_fp" not in result.guards_tripped:
+    # design does not carry a search engine. `not suppressed_common_title` is
+    # required alongside `not result.candidates`: a title rule 4 suppressed
+    # for frequency HAD exact hits, so falling through to rule 6 there would
+    # resurrect ~200 near-identical works under a fuzzy label and defeat the
+    # guard rule 4 just tripped. A genuinely short title (e.g. "Zen") also
+    # trips rule 4's "title_fp" guard, but for the OTHER reason -- it has no
+    # exact hits at all -- so that case must still reach rule 6; testing
+    # `suppressed_common_title` rather than `guards_tripped` membership is
+    # what keeps the two cases apart.
+    if not result.candidates and fps.full and not suppressed_common_title:
         rows = con.execute(
             f"""
             SELECT work_key FROM '{paths.table("works")}'

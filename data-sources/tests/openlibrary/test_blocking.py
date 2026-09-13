@@ -176,6 +176,19 @@ def test_a_suppressed_common_title_does_not_fall_through_to_trigram(con, fixture
     assert all("trigram" not in rules for rules in result.candidates.values())
 
 
+def test_a_genuinely_short_title_still_reaches_trigram(con, fixture_artifact):
+    """Amended ruling R39: rule 4's "title_fp" guard also trips for a title
+    whose every fingerprint variant is shorter than MIN_BLOCKING_FP_LENGTH --
+    a case with ZERO exact hits, unlike a suppressed common title. That case
+    must still reach rule 6; testing `guards_tripped` membership (the first,
+    regressed version of this fix) wrongly blocked it too. OL10266809W
+    ("Zen") is one of five such works in the corpus."""
+    result = generate_candidates(con, fixture_artifact, BlockingQuery(title="Zen"))
+    assert "title_fp" in result.guards_tripped
+    assert "OL10266809W" in result.candidates
+    assert "trigram" in result.candidates["OL10266809W"]
+
+
 def test_no_rule_ever_returns_more_than_the_cap(con, fixture_artifact):
     result = generate_candidates(
         con, fixture_artifact, BlockingQuery(title="the", author_names=["a"])
