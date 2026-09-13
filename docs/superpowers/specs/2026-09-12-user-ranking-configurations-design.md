@@ -395,8 +395,9 @@ A hidden `start` field carries the choice into `create`.
    are visible only to you."* On edit, the share link in a read-only input labelled
    "Share link" when shared.
 2. **Settings** — the six fields with plain-language explainers and HTML `min/max/step`
-   matching the validations; the two recency fields are hidden while the toggle is off
-   (`conditional_field_controller.js`). Copy uses `media_noun_plural`:
+   matching the validations; the two recency fields stay visible with help text saying
+   they only apply while the toggle is on (no JS — `conditional_field_controller.js` only
+   toggles on a `<select>`). Copy uses `media_noun_plural`:
    - *Position bonus curve (exponent)*, 0.01–10, step 0.01 — "How much more a #1 placement
      is worth than a low one. Higher values reward top spots more steeply. The official
      rankings use 3."
