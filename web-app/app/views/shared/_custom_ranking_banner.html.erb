@@ -1,0 +1,13 @@
+<%# Shown on every page under /rc/ for a user-owned configuration. Name only,
+    never the owner (spec §2 #6). The layout renders this when
+    RankingConfigurationGating set @custom_ranking_configuration. %>
+<%
+  entry = ::RankingConfigurations::Registry.for_config(ranking_configuration)
+  official_path = entry ? entry.official_rankings_path.call : "/"
+%>
+<div id="custom-ranking-banner" class="alert alert-info mb-6" role="status">
+  <span class="[overflow-wrap:anywhere]">
+    You're viewing a custom ranking: <strong><%= ranking_configuration.name %></strong>.
+    <%= link_to "See the official rankings →", official_path, class: "link font-medium" %>
+  </span>
+</div>

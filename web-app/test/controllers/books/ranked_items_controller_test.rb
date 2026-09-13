@@ -292,6 +292,25 @@ module Books
       assert_nil @controller.view_assigns["custom_ranking_configuration"]
     end
 
+    test "a shared user-owned configuration's page carries the custom-ranking banner" do
+      config = ranking_configurations(:books_user_shared)
+
+      get "/rc/#{config.id}"
+
+      assert_select "#custom-ranking-banner", count: 1
+      assert_select "#custom-ranking-banner a[href=?]", "/"
+    end
+
+    test "a global configuration's page carries no custom-ranking banner" do
+      get "/"
+      assert_select "#custom-ranking-banner", count: 0
+    end
+
+    test "the books nav links to My Rankings" do
+      get "/"
+      assert_select "#navbar_my_books a[href=?]", "/my/rankings", minimum: 1
+    end
+
     private
 
     # Bulk-inserts filler so tests can reach page 2+ against the controller's
