@@ -546,6 +546,57 @@ class RankingConfigurationTest < ActiveSupport::TestCase
     assert config.refresh_claimable?
   end
 
+  # --- request_refresh! (spec §4) ---
+
+  test "request_refresh! claims an idle configuration, clears the last error and enqueues the job" do
+    config = ranking_configurations(:books_user)
+    config.update_columns(last_refresh_error: "old")
+    RankingConfigurations::RefreshJob.expects(:perform_async).with(config.id).once
+
+    assert config.request_refresh!
+
+    config.reload
+    assert config.refresh_queued?
+    assert_nil config.last_refresh_error
+    assert_in_delta Time.current, config.refresh_requested_at, 5.seconds
+  end
+
+  test "request_refresh! claims a failed configuration" do
+    config = ranking_configurations(:books_user)
+    config.update_columns(refresh_status: RankingConfiguration.refresh_statuses[:failed])
+    RankingConfigurations::RefreshJob.expects(:perform_async).once
+
+    assert config.request_refresh!
+  end
+
+  test "request_refresh! returns false and enqueues nothing while a fresh refresh is in progress" do
+    config = ranking_configurations(:books_user)
+    config.update_columns(refresh_status: RankingConfiguration.refresh_statuses[:running],
+      refresh_requested_at: 5.minutes.ago)
+    RankingConfigurations::RefreshJob.expects(:perform_async).never
+
+    refute config.request_refresh!
+    assert config.reload.refresh_running?
+  end
+
+  test "request_refresh! reclaims a refresh abandoned longer than the stale window" do
+    config = ranking_configurations(:books_user)
+    config.update_columns(refresh_status: RankingConfiguration.refresh_statuses[:running],
+      refresh_requested_at: (RankingConfiguration::REFRESH_STALE_AFTER + 1.minute).ago)
+    RankingConfigurations::RefreshJob.expects(:perform_async).once
+
+    assert config.request_refresh!
+    assert config.reload.refresh_queued?
+  end
+
+  test "only one of two back-to-back request_refresh! calls wins" do
+    config = ranking_configurations(:books_user)
+    RankingConfigurations::RefreshJob.expects(:perform_async).once
+
+    assert config.request_refresh!
+    refute RankingConfiguration.find(config.id).request_refresh!
+  end
+
   test "max_list_dates_penalty_age is capped at 200 for every configuration" do
     config = ranking_configurations(:books_global)
     config.max_list_dates_penalty_age = 201

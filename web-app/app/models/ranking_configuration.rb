@@ -179,6 +179,25 @@ class RankingConfiguration < ApplicationRecord
     !refresh_in_progress? || refresh_stale?
   end
 
+  # Claims the refresh lock and enqueues the job. One atomic UPDATE ... WHERE:
+  # two simultaneous callers serialize on the row lock and the loser
+  # re-evaluates the WHERE against the winner's committed value, so at most one
+  # caller sees a changed row. The stale clause reclaims a row wedged by a
+  # worker killed mid-run, which no rescue can catch. Returns true when this
+  # call won.
+  def request_refresh!
+    statuses = self.class.refresh_statuses
+    claimed = RankingConfiguration.where(id: id)
+      .where("refresh_status IN (:free) OR refresh_requested_at < :stale",
+        free: [statuses[:idle], statuses[:failed]], stale: REFRESH_STALE_AFTER.ago)
+      .update_all(refresh_status: statuses[:queued], refresh_requested_at: Time.current, last_refresh_error: nil)
+    return false unless claimed == 1
+
+    reload
+    RankingConfigurations::RefreshJob.perform_async(id)
+    true
+  end
+
   def published?
     published_at.present?
   end
