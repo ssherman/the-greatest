@@ -61,7 +61,6 @@
 
   <div class="flex flex-wrap items-center gap-2">
     <%= link_to "View rankings", @entry.results_path.call(@ranking_configuration), class: "btn btn-primary" %>
-    <%= link_to "Back to my rankings", my_ranking_configurations_path, class: "btn btn-ghost" %>
     <%= button_to "Delete", my_ranking_configuration_path(@ranking_configuration), method: :delete,
           class: "btn btn-error btn-outline ml-auto",
           form: {data: {turbo_confirm: "Delete this ranking? This cannot be undone."}} %>
