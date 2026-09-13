@@ -29,6 +29,7 @@ from common.normalize import (
     title_fingerprints,
 )
 from openlibrary.eval.schema import STRATA, EvalBook
+from openlibrary.pipeline.duck import load_rows
 from openlibrary.pipeline.paths import ArtifactPaths
 
 app = typer.Typer(add_completion=False)
@@ -89,31 +90,6 @@ def load_books(path: Path) -> list[EvalBook]:
             if line.strip():
                 books.append(EvalBook.model_validate_json(line))
     return books
-
-
-def _load_rows(
-    con: duckdb.DuckDBPyConnection,
-    table: str,
-    columns: list[tuple[str, str]],
-    rows: list[tuple],
-) -> None:
-    """Replace `table` with `rows`, via CREATE TABLE + parameterized INSERT.
-
-    `con.register(name, list_of_dicts)` is rejected in this environment:
-    DuckDB's Python replacement scan only accepts a pandas DataFrame, a
-    DuckDBPyRelation, a pyarrow Table/Dataset/Scanner, or a NumPy ndarray --
-    and despite the docstring's expectation, pyarrow is NOT actually present
-    here (duckdb 1.5.5 does not pull it in transitively in this project's
-    lockfile, confirmed via `uv run python -c "import pyarrow"` failing with
-    ModuleNotFoundError). Adding it to pyproject.toml is out of scope for this
-    task. A parameterized `executemany` needs no extra dependency and binds
-    list-typed columns (VARCHAR[]) correctly.
-    """
-    col_defs = ", ".join(f"{name} {sql_type}" for name, sql_type in columns)
-    con.execute(f"CREATE OR REPLACE TABLE {table} ({col_defs})")
-    if rows:
-        placeholders = ", ".join(["?"] * len(columns))
-        con.executemany(f"INSERT INTO {table} VALUES ({placeholders})", rows)
 
 
 _EVAL_BOOKS_COLUMNS = [
@@ -188,7 +164,7 @@ def _register_books(con: duckdb.DuckDBPyConnection, books: list[EvalBook]) -> No
                 list(book.existing_ol_work_keys),
             )
         )
-    _load_rows(con, "eval_books", _EVAL_BOOKS_COLUMNS, rows)
+    load_rows(con, "eval_books", _EVAL_BOOKS_COLUMNS, rows)
 
 
 def naive_candidates(
@@ -406,7 +382,7 @@ def _stale_keys(con, paths: ArtifactPaths, books: list[EvalBook]) -> set[str]:
     keys = sorted({k for b in books for k in b.existing_ol_work_keys})
     if not keys:
         return set()
-    _load_rows(con, "stored_keys", [("work_key", "VARCHAR")], [(k,) for k in keys])
+    load_rows(con, "stored_keys", [("work_key", "VARCHAR")], [(k,) for k in keys])
     rows = con.execute(
         f"""
         SELECT s.work_key FROM stored_keys s
@@ -420,7 +396,7 @@ def _reused_isbns(con, paths: ArtifactPaths, books: list[EvalBook]) -> set[str]:
     values = sorted({v for b in books for v in b.isbn13})
     if not values:
         return set()
-    _load_rows(con, "stored_isbns", [("value", "VARCHAR")], [(v,) for v in values])
+    load_rows(con, "stored_isbns", [("value", "VARCHAR")], [(v,) for v in values])
     rows = con.execute(
         f"""
         SELECT i.value FROM '{paths.table("identifiers")}' i
@@ -442,7 +418,7 @@ def _authors_matching_only_alternate_names(con, paths, books) -> list[int]:
                 rows_in.append((book.book_id, fp))
     if not rows_in:
         return []
-    _load_rows(con, "eval_author_fps", [("book_id", "INTEGER"), ("name_fp", "VARCHAR")], rows_in)
+    load_rows(con, "eval_author_fps", [("book_id", "INTEGER"), ("name_fp", "VARCHAR")], rows_in)
     rows = con.execute(
         f"""
         -- `source` is a two-valued domain (authors.py labels the two halves of

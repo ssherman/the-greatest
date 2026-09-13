@@ -15,6 +15,7 @@ from pathlib import Path
 import duckdb
 
 from openlibrary.eval.schema import EvalCase
+from openlibrary.pipeline.duck import load_rows
 from openlibrary.pipeline.paths import ArtifactPaths
 
 CASES_DIR = Path(__file__).parent / "cases"
@@ -53,26 +54,6 @@ def verdict_counts(cases: Iterable[EvalCase]) -> dict[str, int]:
     return dict(collections.Counter(case.label.verdict for case in cases))
 
 
-def _load_rows(
-    con: duckdb.DuckDBPyConnection,
-    table: str,
-    columns: list[tuple[str, str]],
-    rows: list[tuple],
-) -> None:
-    """Replace `table` with `rows`, via CREATE TABLE + parameterized INSERT.
-
-    Mirrors `build_pool._load_rows`: `con.register(name, list_of_dicts)` is
-    rejected in this environment (DuckDB's Python replacement scan needs a
-    pandas DataFrame, a DuckDBPyRelation, or pyarrow, and none is available
-    here), so a parameterized `executemany` stands in for it.
-    """
-    col_defs = ", ".join(f"{name} {sql_type}" for name, sql_type in columns)
-    con.execute(f"CREATE OR REPLACE TABLE {table} ({col_defs})")
-    if rows:
-        placeholders = ", ".join(["?"] * len(columns))
-        con.executemany(f"INSERT INTO {table} VALUES ({placeholders})", rows)
-
-
 def resolve_keys(
     con: duckdb.DuckDBPyConnection,
     paths: ArtifactPaths,
@@ -82,7 +63,7 @@ def resolve_keys(
     wanted = [k for k in dict.fromkeys(keys) if k]
     if not wanted:
         return {}
-    _load_rows(con, "keys_to_resolve", [("work_key", "VARCHAR")], [(k,) for k in wanted])
+    load_rows(con, "keys_to_resolve", [("work_key", "VARCHAR")], [(k,) for k in wanted])
     rows = con.execute(
         f"""
         SELECT k.work_key,
@@ -117,7 +98,7 @@ def unknown_labeled_keys(
     if not labeled:
         return []
     resolved = resolve_keys(con, paths, [key for _, key in labeled])
-    _load_rows(
+    load_rows(
         con,
         "labeled_keys",
         [("case_id", "VARCHAR"), ("work_key", "VARCHAR")],

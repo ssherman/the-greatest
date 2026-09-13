@@ -21,7 +21,8 @@ from pathlib import Path
 
 import typer
 
-from openlibrary.eval.build_pool import _identifier_pairs, _load_rows, load_books
+from openlibrary.eval.build_pool import _identifier_pairs, load_books
+from openlibrary.pipeline.duck import load_rows
 from openlibrary.pipeline.paths import ArtifactPaths
 
 app = typer.Typer(add_completion=False)
@@ -57,7 +58,7 @@ def audit(root: Path, dump_date: str, books_path: Path, out_path: Path | None) -
         for book in books
         for id_type, value in _identifier_pairs(book)
     ]
-    _load_rows(
+    load_rows(
         con,
         "local_ids",
         [("book_id", "INTEGER"), ("id_type", "VARCHAR"), ("value", "VARCHAR")],
