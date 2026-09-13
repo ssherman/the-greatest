@@ -24,6 +24,9 @@ application.register("contact--form", Contact__FormController)
 import MembershipStateController from "../controllers/membership_state_controller"
 application.register("membership-state", MembershipStateController)
 
+import RankingConfigurationStatusController from "../controllers/ranking_configuration_status_controller"
+application.register("ranking-configuration-status", RankingConfigurationStatusController)
+
 import Reviews__ModalController from "../controllers/reviews/modal_controller"
 application.register("reviews--modal", Reviews__ModalController)
 

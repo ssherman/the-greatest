@@ -272,4 +272,128 @@ class My::RankingConfigurationsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to my_ranking_configurations_path
     assert flash[:notice].present?
   end
+
+  # --- refresh (spec §7) ---
+
+  test "refresh claims the lock, enqueues the job and redirects with a notice" do
+    sign_in_as @owner, stub_auth: true
+
+    with_fake_sidekiq do
+      post refresh_my_ranking_configuration_path(@config)
+      assert_equal 1, RankingConfigurations::RefreshJob.jobs.size
+    end
+
+    assert_redirected_to my_ranking_configuration_path(@config)
+    assert flash[:notice].present?
+    assert @config.reload.refresh_queued?
+  end
+
+  test "refresh is rejected while a run is in progress and does not spend the daily allowance" do
+    @config.update_columns(refresh_status: RankingConfiguration.refresh_statuses[:running], refresh_requested_at: Time.current)
+    sign_in_as @owner, stub_auth: true
+
+    with_fake_sidekiq do
+      (My::RankingConfigurationsController::REFRESH_LIMIT + 2).times do
+        post refresh_my_ranking_configuration_path(@config)
+        assert_redirected_to my_ranking_configuration_path(@config)
+        assert flash[:alert].present?
+      end
+      assert_empty RankingConfigurations::RefreshJob.jobs
+      assert @config.reload.refresh_running?
+
+      @config.update_columns(refresh_status: RankingConfiguration.refresh_statuses[:idle])
+      post refresh_my_ranking_configuration_path(@config)
+      assert flash[:notice].present?, "the rejected clicks did not count against the limit"
+      assert_equal 1, RankingConfigurations::RefreshJob.jobs.size
+    end
+  end
+
+  test "refresh reclaims a run abandoned longer than the stale window" do
+    @config.update_columns(refresh_status: RankingConfiguration.refresh_statuses[:running],
+      refresh_requested_at: (RankingConfiguration::REFRESH_STALE_AFTER + 1.minute).ago)
+    sign_in_as @owner, stub_auth: true
+
+    with_fake_sidekiq do
+      post refresh_my_ranking_configuration_path(@config)
+      assert_equal 1, RankingConfigurations::RefreshJob.jobs.size
+    end
+    assert flash[:notice].present?
+    assert @config.reload.refresh_queued?
+  end
+
+  test "the sixth refresh in a day is limited and claims nothing" do
+    sign_in_as @owner, stub_auth: true
+
+    with_fake_sidekiq do
+      My::RankingConfigurationsController::REFRESH_LIMIT.times do
+        @config.update_columns(refresh_status: RankingConfiguration.refresh_statuses[:idle])
+        post refresh_my_ranking_configuration_path(@config)
+        assert flash[:notice].present?
+      end
+
+      @config.update_columns(refresh_status: RankingConfiguration.refresh_statuses[:idle])
+      post refresh_my_ranking_configuration_path(@config)
+
+      assert_redirected_to my_ranking_configuration_path(@config)
+      assert flash[:alert].present?
+      assert @config.reload.refresh_idle?
+      assert_equal My::RankingConfigurationsController::REFRESH_LIMIT, RankingConfigurations::RefreshJob.jobs.size
+    end
+  end
+
+  test "the daily limit is per user" do
+    sign_in_as @owner, stub_auth: true
+    with_fake_sidekiq do
+      My::RankingConfigurationsController::REFRESH_LIMIT.times do
+        @config.update_columns(refresh_status: RankingConfiguration.refresh_statuses[:idle])
+        post refresh_my_ranking_configuration_path(@config)
+      end
+      @config.update_columns(refresh_status: RankingConfiguration.refresh_statuses[:idle])
+      post refresh_my_ranking_configuration_path(@config)
+      assert flash[:alert].present?
+
+      other_config = Books::RankingConfiguration.create!(name: "Theirs", global: false, user: @stranger, min_list_weight: 0)
+      sign_in_as @stranger, stub_auth: true
+      post refresh_my_ranking_configuration_path(other_config)
+      assert flash[:notice].present?
+      assert other_config.reload.refresh_queued?
+    end
+  end
+
+  test "a non-owner cannot refresh" do
+    sign_in_as @stranger, stub_auth: true
+
+    with_fake_sidekiq do
+      post refresh_my_ranking_configuration_path(@config)
+      assert_response :not_found
+      assert_empty RankingConfigurations::RefreshJob.jobs
+    end
+  end
+
+  # --- state ---
+
+  test "state returns the refresh state as JSON for the owner" do
+    @config.update_columns(refresh_status: RankingConfiguration.refresh_statuses[:failed],
+      needs_refresh: true, last_refresh_error: "boom")
+    sign_in_as @owner, stub_auth: true
+
+    get state_my_ranking_configuration_path(@config), as: :json
+
+    assert_response :success
+    assert_match "no-store", response.headers["Cache-Control"].to_s
+    body = response.parsed_body
+    assert_equal "failed", body["refresh_status"]
+    assert_equal true, body["needs_refresh"]
+    assert_equal "boom", body["last_refresh_error"]
+    assert_nil body["last_refreshed_at"]
+  end
+
+  test "state is 401 anonymous and 404 for a non-owner" do
+    get state_my_ranking_configuration_path(@config), as: :json
+    assert_response :unauthorized
+
+    sign_in_as @stranger, stub_auth: true
+    get state_my_ranking_configuration_path(@config), as: :json
+    assert_response :not_found
+  end
 end

@@ -8,12 +8,27 @@ class My::RankingConfigurationsController < ApplicationController
   include DomainLayout
   include RankingConfigurationOwnerScoped
 
+  REFRESH_LIMIT = 5
+  REFRESH_WINDOW = 24.hours
+
   layout :resolve_layout
 
   before_action :prevent_caching
   before_action :require_domain_support!
   before_action :require_signed_in!
-  before_action :set_ranking_configuration, only: [:show, :edit, :update, :destroy]
+  before_action :set_ranking_configuration, only: [:show, :edit, :update, :destroy, :refresh, :state]
+  before_action :reject_refresh_in_progress, only: :refresh
+
+  # Five manual refreshes per user per rolling day. Declared after the two
+  # filters above so a click during a run is rejected before it counts, and
+  # keyed by user id, never request.remote_ip (the Cloudflare edge IP). with:
+  # is required: Rails' default raises and renders an HTML error body.
+  rate_limit to: REFRESH_LIMIT, within: REFRESH_WINDOW,
+    by: -> { current_user.id },
+    with: -> { refresh_limited },
+    store: Rails.application.config.x.rate_limit_store,
+    name: "ranking-configuration-refresh",
+    only: :refresh
 
   def index
     types = domain_entries.map(&:ranking_configuration_class)
@@ -101,7 +116,39 @@ class My::RankingConfigurationsController < ApplicationController
     redirect_to my_ranking_configurations_path, notice: "Your ranking was deleted.", status: :see_other
   end
 
+  def refresh
+    if @ranking_configuration.request_refresh!
+      redirect_to my_ranking_configuration_path(@ranking_configuration),
+        notice: "Refresh started. This usually takes a few minutes.", status: :see_other
+    else
+      refresh_already_running
+    end
+  end
+
+  def state
+    render json: {
+      refresh_status: @ranking_configuration.refresh_status,
+      needs_refresh: @ranking_configuration.needs_refresh?,
+      last_refreshed_at: @ranking_configuration.last_refreshed_at&.iso8601,
+      last_refresh_error: @ranking_configuration.last_refresh_error
+    }
+  end
+
   private
+
+  def reject_refresh_in_progress
+    refresh_already_running unless @ranking_configuration.refresh_claimable?
+  end
+
+  def refresh_already_running
+    redirect_to my_ranking_configuration_path(@ranking_configuration),
+      alert: "A refresh is already running for this ranking.", status: :see_other
+  end
+
+  def refresh_limited
+    redirect_to my_ranking_configuration_path(@ranking_configuration),
+      alert: "You've used all #{REFRESH_LIMIT} refreshes for today. Try again later.", status: :see_other
+  end
 
   def entry_for_new
     return domain_entries.first if domain_entries.one?
