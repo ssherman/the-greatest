@@ -165,24 +165,61 @@ def load_work_views(
     thousands for a 400-edition classic, times up to 500 candidates now that
     blocking rule 5 admits a whole author shelf. Aggregating each side first
     keeps every join one-row-per-work.
+
+    EVERY table this function touches is filtered down to `wanted_works`
+    in its own CTE before it is joined to anything else -- including the
+    nominally 1:1 tables (`works`, `work_details`, `year_evidence`,
+    `popularity`), not only the two aggregates. Ruling R44 fixed the
+    aggregates first (`work_authors`/`editions` are 44.7M/56.6M rows, and
+    grouping either in full before filtering down OOM'd on the very first
+    real-artifact call, ~43s, at any thread count). That alone was not
+    enough: `works` and `work_details` are themselves ~41.5M/~41.4M rows,
+    and joining `wanted_works` inline against the full parquet scan left
+    DuckDB's join-order optimizer free to reorder the remaining LEFT JOINs
+    -- confirmed via `EXPLAIN`, whose cardinality estimate for the final
+    projection was ~41.5M rows, not 500, meaning it was choosing physical
+    plans as if the filter barely narrowed anything, and building a hash
+    table over one of the multi-million-row sides. Pre-filtering every
+    relation via its own `wanted_works` CTE removes that choice entirely:
+    every join the final SELECT performs is between relations DuckDB knows
+    are already work_keys-sized, so there is no large side left for a bad
+    estimate to pick.
     """
     if not work_keys:
         return {}
     load_rows(con, "wanted_works", [("work_key", "VARCHAR")], [(k,) for k in work_keys])
     rows = con.execute(
         f"""
-        WITH agg_authors AS (
+        WITH filtered_works AS (
+          SELECT w.* FROM wanted_works ww
+          JOIN '{paths.table("works")}' w USING (work_key)
+        ),
+        filtered_details AS (
+          SELECT d.* FROM wanted_works ww
+          JOIN '{paths.table("work_details")}' d USING (work_key)
+        ),
+        filtered_year_evidence AS (
+          SELECT y.* FROM wanted_works ww
+          JOIN '{paths.table("year_evidence")}' y USING (work_key)
+        ),
+        filtered_popularity AS (
+          SELECT p.* FROM wanted_works ww
+          JOIN '{paths.table("popularity")}' p USING (work_key)
+        ),
+        agg_authors AS (
           SELECT wa.work_key, list(DISTINCT a.name ORDER BY a.name) AS author_names
-          FROM '{paths.table("work_authors")}' wa
+          FROM wanted_works ww
+          JOIN '{paths.table("work_authors")}' wa USING (work_key)
           JOIN '{paths.table("authors")}' a USING (author_key)
           WHERE a.name IS NOT NULL
           GROUP BY wa.work_key
         ),
         agg_languages AS (
-          SELECT work_key, list(DISTINCT language_code ORDER BY language_code) AS languages
-          FROM '{paths.table("editions")}'
-          WHERE language_code IS NOT NULL
-          GROUP BY work_key
+          SELECT e.work_key, list(DISTINCT e.language_code ORDER BY e.language_code) AS languages
+          FROM wanted_works ww
+          JOIN '{paths.table("editions")}' e USING (work_key)
+          WHERE e.language_code IS NOT NULL
+          GROUP BY e.work_key
         )
         SELECT
           w.work_key, w.title, w.title_fp, w.title_fp_nosub, w.title_fp_noart,
@@ -193,11 +230,10 @@ def load_work_views(
           COALESCE(p.ratings_count, 0),
           COALESCE(aa.author_names, []) AS author_names,
           COALESCE(al.languages, [])    AS languages
-        FROM '{paths.table("works")}' w
-        JOIN wanted_works USING (work_key)
-        LEFT JOIN '{paths.table("work_details")}' d USING (work_key)
-        LEFT JOIN '{paths.table("year_evidence")}' y USING (work_key)
-        LEFT JOIN '{paths.table("popularity")}' p USING (work_key)
+        FROM filtered_works w
+        LEFT JOIN filtered_details d USING (work_key)
+        LEFT JOIN filtered_year_evidence y USING (work_key)
+        LEFT JOIN filtered_popularity p USING (work_key)
         LEFT JOIN agg_authors aa USING (work_key)
         LEFT JOIN agg_languages al USING (work_key)
         """
