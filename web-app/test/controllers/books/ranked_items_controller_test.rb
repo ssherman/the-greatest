@@ -248,6 +248,50 @@ module Books
       assert_select "meta[name=robots][content^=index]"
     end
 
+    # --- user-owned configurations at /rc/:id (spec §9) ---
+
+    test "a shared user-owned configuration renders for an anonymous visitor and is never cached" do
+      config = ranking_configurations(:books_user_shared)
+
+      get "/rc/#{config.id}"
+
+      assert_response :success
+      assert_match "no-store", response.headers["Cache-Control"].to_s
+      refute_match "public", response.headers["Cache-Control"].to_s
+      assert_equal config, @controller.view_assigns["custom_ranking_configuration"]
+    end
+
+    test "a private user-owned configuration 404s for anonymous visitors and non-owners" do
+      config = ranking_configurations(:books_user)
+
+      get "/rc/#{config.id}"
+      assert_response :not_found
+
+      sign_in_as users(:editor_user), stub_auth: true
+      get "/rc/#{config.id}"
+      assert_response :not_found
+    end
+
+    test "a private user-owned configuration renders for its owner without caching" do
+      config = ranking_configurations(:books_user)
+      sign_in_as users(:regular_user), stub_auth: true
+
+      get "/rc/#{config.id}"
+
+      assert_response :success
+      assert_match "no-store", response.headers["Cache-Control"].to_s
+      assert_equal config, @controller.view_assigns["custom_ranking_configuration"]
+    end
+
+    test "a global configuration is still edge-cached and sets no custom banner" do
+      get "/rc/#{@rc.id}"
+
+      assert_response :success
+      assert_match "public", response.headers["Cache-Control"].to_s
+      assert_match "max-age=21600", response.headers["Cache-Control"].to_s
+      assert_nil @controller.view_assigns["custom_ranking_configuration"]
+    end
+
     private
 
     # Bulk-inserts filler so tests can reach page 2+ against the controller's
