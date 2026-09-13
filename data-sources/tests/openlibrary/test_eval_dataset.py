@@ -227,10 +227,9 @@ def test_unknown_labeled_keys_reports_a_dangling_redirects_source(fixture_artifa
     assert ("a-1", DANGLING_SOURCE) in unknown
 
 
-@pytest.mark.artifact
-def test_the_real_set_meets_its_quotas_and_has_enough_negatives():
-    if not os.environ.get("OL_DATA_ROOT"):
-        pytest.skip("set OL_DATA_ROOT to check the real evaluation set")
+def test_the_committed_set_meets_its_quotas_and_has_enough_negatives():
+    # Reads only the committed JSONL, so it runs everywhere -- a malformed or
+    # duplicate row, or a quota regression, must fail plain `uv run pytest`.
     cases = load_cases()
     assert len(cases) >= MIN_CASES
     assert verdict_counts(cases).get("no_match", 0) >= MIN_NO_MATCH_CASES
