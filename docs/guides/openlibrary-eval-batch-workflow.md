@@ -73,7 +73,7 @@ remaining     0   -- /home/shane/ol-data/eval/needs-you.md is empty
 `researched.jsonl`: 212 match, 22 no_match, 10 ambiguous, all `agent_confirmed`.
 **The research loop is finished**, and the proposals have been reviewed: 73 of
 the 75 were verified against the artifact on 2026-09-12 (every key re-derived,
-23 rule fields corrected — 19 to `duplicate_work`, 2 to `translation`), accepted
+21 rule fields corrected — 19 to `duplicate_work`, 2 to `translation`), accepted
 by Shane, and moved into `researched.jsonl`. Their rationales begin "Proposed by
 the identifier rule" so they can be told apart from the hand-researched rows.
 The review itself is `/home/shane/ol-data/eval/proposals-review.md`.
