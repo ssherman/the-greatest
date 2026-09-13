@@ -11,7 +11,10 @@ Neither gates the other; an author-resolution failure costs rules 3 and 5 and
 leaves 1, 4 and 6 firing.
 
 Every rule has a volume guard. A rule that would return too much does not fire
-and says so: a visible gap beats a query that never returns.
+and says so: a visible gap beats a query that never returns. The one
+exception is rule 5, whose own cap is `MAX_SHELF_SIZE` rather than
+`MAX_CANDIDATES_PER_RULE`: once an author resolves, the scorer -- not
+blocking -- is meant to read the whole shelf.
 """
 
 from __future__ import annotations
@@ -158,6 +161,15 @@ def generate_candidates(
     # empty/too-short fingerprint (the `else` branch below, e.g. "!!!") or a
     # common title suppressed here. No downstream code distinguishes between
     # them today.
+    #
+    # This joins against all three title fingerprint variants (full/nosub/
+    # noart). `eval/build_pool.py`'s own copy of rule 4 joins the full
+    # fingerprint only, because the evaluation pool is frozen and already
+    # labeled -- a case whose only match is a nosub/noart variant is a
+    # candidate the pool's strata never saw. The evaluation harness measures
+    # recall against labels, not against pool candidates, so this wider rule
+    # can only raise measured recall, never lower it; see build_pool.py's
+    # module docstring for the other half of this note.
     if variants:
         load_rows(con, "q_title_fps4", [("title_fp", "VARCHAR")], [(fp,) for fp in variants])
         rows = con.execute(
@@ -192,13 +204,17 @@ def generate_candidates(
         if len(rows) > MAX_SHELF_SIZE:
             result.guards_tripped.append("author_shelf")
         else:
-            for (work_key,) in rows[:MAX_CANDIDATES_PER_RULE]:
+            for (work_key,) in rows:
                 _add(result, work_key, "author_shelf")
 
     # Rule 6 -- trigram fallback, ONLY for the ~18% with no exact hit anywhere.
     # Fuzzy retrieval serves a fallback path, not a pillar; this is why the
-    # design does not carry a search engine.
-    if not result.candidates and fps.full:
+    # design does not carry a search engine. `"title_fp" not in
+    # guards_tripped` is required alongside `not result.candidates`: a title
+    # rule 4 suppressed for frequency HAD exact hits, so falling through to
+    # rule 6 there would resurrect ~200 near-identical works under a fuzzy
+    # label and defeat the guard rule 4 just tripped.
+    if not result.candidates and fps.full and "title_fp" not in result.guards_tripped:
         rows = con.execute(
             f"""
             SELECT work_key FROM '{paths.table("works")}'

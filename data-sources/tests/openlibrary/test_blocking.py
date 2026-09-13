@@ -14,6 +14,7 @@ import pytest
 
 from openlibrary.matcher.blocking import (
     MAX_CANDIDATES_PER_RULE,
+    MAX_SHELF_SIZE,
     MAX_TITLE_FP_FREQ,
     RULES,
     BlockingQuery,
@@ -158,13 +159,33 @@ def test_a_high_frequency_title_trips_the_guard_and_does_not_fire(con, fixture_a
     assert all("title_fp" not in rules for rules in result.candidates.values())
 
 
+def test_a_suppressed_common_title_does_not_fall_through_to_trigram(con, fixture_artifact):
+    """Ruling R39: a title rule 4 suppresses for frequency HAD exact hits, so
+    rule 6 must not resurrect them under a fuzzy label just because nothing
+    else fired -- that would silently defeat the guard rule 4 just tripped."""
+    row = con.execute(
+        f"""
+        SELECT title FROM '{fixture_artifact.table("works")}'
+        WHERE title_fp_freq > {MAX_TITLE_FP_FREQ} LIMIT 1
+        """
+    ).fetchone()
+    assert row is not None, "corpus lost the freq > MAX_TITLE_FP_FREQ shared-title block"
+    (title,) = row
+    result = generate_candidates(con, fixture_artifact, BlockingQuery(title=title))
+    assert result.candidates == {}
+    assert all("trigram" not in rules for rules in result.candidates.values())
+
+
 def test_no_rule_ever_returns_more_than_the_cap(con, fixture_artifact):
     result = generate_candidates(
         con, fixture_artifact, BlockingQuery(title="the", author_names=["a"])
     )
     for rule in RULES:
         count = sum(1 for rules in result.candidates.values() if rule in rules)
-        assert count <= MAX_CANDIDATES_PER_RULE
+        # Rule 5's own cap is MAX_SHELF_SIZE, not MAX_CANDIDATES_PER_RULE: once
+        # an author resolves, the scorer is meant to read the whole shelf.
+        cap = MAX_SHELF_SIZE if rule == "author_shelf" else MAX_CANDIDATES_PER_RULE
+        assert count <= cap
 
 
 def test_an_author_resolution_failure_does_not_disable_the_title_rules(con, fixture_artifact):

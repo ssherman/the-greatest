@@ -9,6 +9,12 @@ the matcher is judged against; if tuning the matcher could change which cases
 exist or which candidates a labeler saw, the metrics would measure nothing. A
 work key the labeler enters by hand and that no rule here produced is recorded
 as `found_outside_blocking` -- that is how a recall failure becomes visible.
+
+Rule 4 here joins the book's full title fingerprint only; `matcher/blocking.py`'s
+own rule 4 joins all three variants (full/nosub/noart). That is a deliberate
+divergence, not a bug to fix by making the two match: this pool is frozen and
+already labeled, so it is not to be redrawn -- see blocking.py's rule 4 for why
+the wider join there can only raise measured recall.
 """
 
 from __future__ import annotations
