@@ -74,13 +74,21 @@ class My::RankingConfigurations::ListsController < ApplicationController
     scope = @ranking_configuration.ranked_lists
       .includes(:list)
       .order(Arel.sql("ranked_lists.weight DESC NULLS LAST, ranked_lists.id ASC"))
-    @pagy, @ranked_lists = pagy(scope, limit: PER_PAGE, page: clamped_page(scope))
+    count = scope.count
+    # Every mutation replies from a POST/DELETE, so Pagy's default nav links --
+    # built from request.path plus request.GET.merge(request.POST) -- would
+    # carry the mutation's own path (a 404 for GET, or none at all) and its
+    # whole body (list_ids[], the CSRF token). path: pins every link back to
+    # the index GET; querify: strips the composed params down to just page.
+    @pagy, @ranked_lists = pagy(scope, limit: PER_PAGE, page: clamped_page(count), count: count,
+      path: my_ranking_configuration_lists_path(@ranking_configuration),
+      querify: ->(query_params) { query_params.keep_if { |key, _| key == "page" } })
   end
 
   # After a removal the requested page can lie past the end; clamp rather
   # than let Pagy raise or render an empty page.
-  def clamped_page(scope)
-    last = [(scope.count - 1) / PER_PAGE + 1, 1].max
+  def clamped_page(count)
+    last = [(count - 1) / PER_PAGE + 1, 1].max
     params[:page].to_i.clamp(1, last)
   end
 

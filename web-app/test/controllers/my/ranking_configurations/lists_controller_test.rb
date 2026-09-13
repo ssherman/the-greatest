@@ -14,6 +14,7 @@ class My::RankingConfigurations::ListsControllerTest < ActionDispatch::Integrati
     @mine = Books::List.create!(name: "Mine Already", source: "Time", status: :active)
     @other = Books::List.create!(name: "Unattached Active", source: "NYT", status: :active)
     @approved = Books::List.create!(name: "Approved Not Active", source: "NYT", status: :approved)
+    @games_active = Games::List.create!(name: "Games NYT", source: "NYT", status: :active)
     RankedList.create!(list: @official, ranking_configuration: @primary, weight: 70)
     RankedList.create!(list: @mine, ranking_configuration: @config, weight: 55)
   end
@@ -78,6 +79,7 @@ class My::RankingConfigurations::ListsControllerTest < ActionDispatch::Integrati
     assert_includes values, @other.id
     refute_includes values, @approved.id
     refute_includes values, lists(:games_list).id
+    refute_includes values, @games_active.id, "an active list of the WRONG domain's type must be excluded"
 
     get search_my_ranking_configuration_lists_path(@config, q: "Mine Already"), as: :json
     assert_empty response.parsed_body, "lists already in the configuration are excluded"
@@ -160,6 +162,39 @@ class My::RankingConfigurations::ListsControllerTest < ActionDispatch::Integrati
 
     assert_response :success
     assert_equal 1, @controller.view_assigns["pagy"].page
+  end
+
+  test "destroy's replacement frame paginates back to the index, not the mutation url" do
+    sign_in_as @owner, stub_auth: true
+    # @mine (weight 55) sorts below every one of these, so it lands on page 2.
+    55.times { |i| @config.ranked_lists.create!(list: Books::List.create!(name: "Bulk #{i}", source: "T", status: :active), weight: 200 - i) }
+
+    delete my_ranking_configuration_list_path(@config, @mine.id), params: {page: 2}, headers: TURBO
+
+    assert_response :success
+    index_path = my_ranking_configuration_lists_path(@config)
+    hrefs = Nokogiri::HTML5.fragment(response.body).css("nav a[href]").map { |a| a["href"] }
+    refute_empty hrefs, "expected pagination links in the replacement frame"
+    hrefs.each do |href|
+      assert_equal index_path, href.split("?", 2).first, "expected #{href.inspect} to point back at the lists index, not the mutation url"
+      refute_match(/authenticity_token|list_ids/, href, "expected #{href.inspect} to carry only the page param")
+    end
+
+    get hrefs.first
+    assert_response :success
+  end
+
+  test "add_missing's replacement frame paginates back to the index, not the mutation url" do
+    sign_in_as @owner, stub_auth: true
+    55.times { |i| @config.ranked_lists.create!(list: Books::List.create!(name: "Extra #{i}", source: "T", status: :active), weight: 200 - i) }
+
+    post add_missing_my_ranking_configuration_lists_path(@config), params: {page: 2}, headers: TURBO
+
+    assert_response :success
+    index_path = my_ranking_configuration_lists_path(@config)
+    hrefs = Nokogiri::HTML5.fragment(response.body).css("nav a[href]").map { |a| a["href"] }
+    refute_empty hrefs, "expected pagination links in the replacement frame"
+    hrefs.each { |href| assert_equal index_path, href.split("?", 2).first, "expected #{href.inspect} to point back at the lists index, not the mutation url" }
   end
 
   test "a non-owner cannot add or remove lists" do
