@@ -16,24 +16,33 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-# ASPIRATIONAL, not planned. Labelling stopped at 204 human cases by Shane's
-# decision on 2026-09-07, and these numbers were left as written rather than
-# quietly lowered to match. Nothing enforces them: the `evaluation_set`
-# pipeline gate is `skipped`.
+# Completed 2026-09-12: 204 human labels (`cases/labels.jsonl`) plus 244
+# `agent_confirmed` labels (`cases/researched.jsonl`, each researched with an
+# outside model and then verified against the artifact by an agent) -- 448
+# ground truth cases in total, measured against the real 2026-07-31 artifact.
+# Every stratum below is at quota except `pseudonym_or_alt_name` (29/30) and
+# `author_less_work` (19/20); each one's missing case sits in
+# `cases/proposed.jsonl` as an unconfirmed `agent` proposal, which
+# `dataset.load_cases()` excludes by default until it is confirmed.
 #
-# The reason is not fatigue. 29,777 of 157,805 local books carry a merge
-# signature -- more than one isbn13, or an alternate_title -- because merging
-# book A into B copies A's identifiers onto B. A merged row's identifiers
-# legitimately fan out to several distinct OL works, so "which single work is
-# this book" has no answer for it. Book #28542 'Selected Poems' reaches Agee,
-# Celan and Chaucer. 41% of the cases left when this was called were that
-# shape, and a label there teaches the matcher nothing.
+# Hand-labelling everything was never going to reach 450: 29,777 of 157,805
+# local books carry a merge signature -- more than one isbn13, or an
+# alternate_title -- because merging book A into B copies A's identifiers onto
+# B. A merged row's identifiers legitimately fan out to several distinct OL
+# works, so "which single work is this book" has no answer for it. Book
+# #28542 'Selected Poems' reaches Agee, Celan and Chaucer. 41% of the
+# available cases were that shape, and a label there teaches the matcher
+# nothing -- which is why triage and research (see openlibrary.eval.triage)
+# replaced hand-labelling for the harder second half of the set.
 #
-# What those hand-made labels DO establish is the band that matters: where our identifiers
-# reach exactly one surfaced work, Shane's label agreed 77/79, and 63/63
-# outside collection strata. See openlibrary.eval.triage, which also records
-# why the opposite rule -- calling an unreachable book a no_match -- is unsafe
-# at 38/57.
+# What the hand-made labels DO establish is the band that matters: where our
+# identifiers reach exactly one surfaced work, Shane's label agreed 77/79, and
+# 63/63 outside collection strata. See openlibrary.eval.triage, which also
+# records why the opposite rule -- calling an unreachable book a no_match --
+# is unsafe at 38/57.
+#
+# The `evaluation_set` pipeline gate stays `skipped` until Task 28 wires the
+# matcher's evaluation harness to it.
 MIN_CASES = 300
 MAX_CASES = 500
 MIN_NO_MATCH_CASES = 20

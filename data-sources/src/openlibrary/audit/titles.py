@@ -27,7 +27,8 @@ from pathlib import Path
 import typer
 
 from common.normalize import fingerprint
-from openlibrary.eval.build_pool import _load_rows, load_books
+from openlibrary.eval.build_pool import load_books
+from openlibrary.pipeline.duck import load_rows
 from openlibrary.pipeline.paths import ArtifactPaths
 
 app = typer.Typer(add_completion=False)
@@ -175,7 +176,7 @@ def audit(root: Path, dump_date: str, books_path: Path, out_path: Path | None) -
             counts["fingerprint_changes"] += 1
             rows.append((book.book_id, book.title, raw_fp, clean_fp))
 
-    _load_rows(
+    load_rows(
         con,
         "local_titles",
         [

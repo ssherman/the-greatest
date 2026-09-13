@@ -136,12 +136,15 @@ def run_gates(
         )
     )
 
-    # 5. Evaluation set -- the contract exists now, the check arrives in Increment 3.
+    # 5. Evaluation set -- the labeled set exists (Increment 2 is complete);
+    # the regression check itself arrives with the matcher's evaluation
+    # harness (Task 28).
     results.append(
         GateResult(
             name="evaluation_set",
             status="skipped",
-            detail="no labeled evaluation set yet (Increment 2)",
+            detail="labeled set exists (448 cases); regression check arrives with the harness"
+            " (Task 28)",
             observed={},
         )
     )

@@ -36,3 +36,27 @@ def connect(
     if threads is not None:
         connection.execute(f"SET threads={threads};")
     return connection
+
+
+def load_rows(
+    con: duckdb.DuckDBPyConnection,
+    table: str,
+    columns: list[tuple[str, str]],
+    rows: list[tuple],
+) -> None:
+    """Replace `table` with `rows`, via CREATE TABLE + parameterized INSERT.
+
+    `con.register(name, list_of_dicts)` is rejected in this environment:
+    DuckDB's Python replacement scan only accepts a pandas DataFrame, a
+    DuckDBPyRelation, a pyarrow Table/Dataset/Scanner, or a NumPy ndarray --
+    and despite the docstring's expectation, pyarrow is NOT actually present
+    here (duckdb 1.5.5 does not pull it in transitively in this project's
+    lockfile, confirmed via `uv run python -c "import pyarrow"` failing with
+    ModuleNotFoundError). A parameterized `executemany` needs no extra
+    dependency and binds list-typed columns (VARCHAR[]) correctly.
+    """
+    col_defs = ", ".join(f"{name} {sql_type}" for name, sql_type in columns)
+    con.execute(f"CREATE OR REPLACE TABLE {table} ({col_defs})")
+    if rows:
+        placeholders = ", ".join(["?"] * len(columns))
+        con.executemany(f"INSERT INTO {table} VALUES ({placeholders})", rows)
