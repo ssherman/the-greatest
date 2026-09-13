@@ -1,0 +1,180 @@
+# Open Library Data Service
+
+A read-only backend book-data source built from Open Library's monthly dumps.
+Lives in `data-sources/` at the project root, **not** inside `web-app/`.
+
+Design: `docs/superpowers/specs/2026-09-01-open-library-data-service-design.md`
+Plan: `docs/superpowers/plans/2026-09-01-open-library-data-service.md`
+
+## What it is
+
+Six dumps are distilled into ten Parquet tables, queried by DuckDB, and served by
+a small FastAPI process. It never writes to Rails, holds nothing that is not
+rebuildable from a dump, and is never on a public request path.
+
+## Building an artifact
+
+    cd data-sources
+    uv sync --locked
+    uv run python -m openlibrary.pipeline.build --root /home/shane/ol-data --memory-limit 16GB
+
+Downloads six dumps (all must resolve to the same date), distills, derives,
+validates and reports. A failed gate leaves the previous version live.
+
+## Measured build, 2026-07-31
+
+The first full build against real dumps. All ten tables produced, every gate passed.
+
+| Table | Rows | Size |
+|---|---:|---:|
+| editions | 56,615,822 | 3.14 GB |
+| works | 41,504,065 | 2.53 GB |
+| identifiers | 120,498,957 | 1.86 GB |
+| work_details | 22,448,953 | 0.91 GB |
+| authors | 15,380,614 | 0.43 GB |
+| author_names | 15,692,571 | 0.42 GB |
+| work_authors | 44,739,141 | 0.36 GB |
+| year_evidence | 41,372,692 | 0.34 GB |
+| popularity | 41,406,604 | 0.22 GB |
+| redirects | 1,790,272 | 0.016 GB |
+
+Total artifact size: **10.23 GB** (10,234,375,552 bytes)
+Total build time: **~497 s** (~8.3 minutes), dominated by `editions_staging` at 201 s
+(the single-threaded 12.5 GB gzip scan)
+
+The design estimated 5-8 GB. The measured artifact is 10.23 GB -- larger than
+estimated, and dominated by exactly the two tables the design predicted would
+dominate: `editions` (3.14 GB) and `identifiers` (1.86 GB, 120M rows against
+an estimated ~100M). This is a measurement, not a shortfall: Parquet size was
+always a measured output of the real dump, never a design assumption, and the
+estimate undercounted `editions`' width.
+
+### `identifiers` is distinct on the whole row
+
+One edition asserting one identifier is one piece of evidence, however many of
+its fields said so. The first build did not enforce that: `isbn_any` unions an
+edition's `isbn_10` and `isbn_13` lists and every branch converts each raw
+value to BOTH canonical forms, so an edition carrying equivalent ISBN-10 and
+ISBN-13 emitted each canonical form twice; separately, an ASIN present in both
+`identifiers.amazon` and an `amazon:` `source_records` entry emitted twice.
+
+Measured on 2026-07-31: **145,964,239 rows against 120,498,957 distinct --
+25,465,282 duplicates, 17.4% of the table** (isbn10 12,510,971, isbn13
+12,510,930, asin 439,839, lccn 1,753, oclc 1,654, goodreads 135). Distinct on
+all five columns equals distinct on `(id_type, value, edition_key, work_key)`,
+so `checksum_ok` never disagrees within a grain and no aggregation choice is
+needed. A `SELECT DISTINCT` over the union now enforces it, costing ~8 s of the
+editions stage and 0.17 GB less on disk.
+
+The table is still deliberately **not** unique on `value`: after the fix,
+1,138,510 ISBN-13 values remain attached to more than one work. That ambiguity
+is the point of an evidence table, and a caller is meant to see it.
+
+Sanity against the design's published figures: `works` 41,504,065 and
+`authors` 15,380,614 match exactly. `work_authors` came in at 44,739,141
+against a published 44,739,082 -- a difference of 59, noted and not chased.
+
+### Gate results
+
+| Gate | Status | Detail |
+|---|---|---|
+| row_counts | pass | all tables within tolerance |
+| field_coverage | pass | coverage within tolerance |
+| redirect_closure | pass | 1,790,272 redirects, 26 cycles, 3,356 dangling |
+| canary_lookups | pass | all canaries resolve |
+| evaluation_set | skipped | no labeled evaluation set yet (Increment 2) |
+
+Only `work` and `author` redirects are resolved against a table, and only they
+can be `is_dangling = true`: 2,573 of 1,128,948 work redirects and 783 of
+545,334 author ones. For the 115,990 `edition` and `other` redirects nothing
+checks the target, so `is_dangling` is NULL rather than `false` -- claiming
+they resolve would be an assertion nobody made. (25 of those 115,990 are
+`false` rather than NULL because they are cycles, which have no terminal to
+dangle.)
+
+**An in-place rebuild has no row-count safety net.** `load_previous_report`
+only reads version directories strictly *earlier* than the one being built, so
+rebuilding an existing dump date finds no previous report and `row_counts`
+compares against nothing. The `identifiers` deduplication below dropped that
+table by 17.4% and the gate passed without comment. That is correct for a first
+build of a date; it is worth knowing before treating a green in-place rebuild
+as evidence that nothing moved.
+
+### The fixture corpus carries a negative class on purpose
+
+`data-sources/tests/fixtures/` is a 683-line, 433 KB sample of the real dumps,
+regenerated by `extract_fixtures.py`. A sample of real data is almost all happy
+path, and this one was: a mutation sweep found whole categories of test that
+could not fail, all from one cause. The corpus contained **0** works sharing a
+title fingerprint, **0** ISBNs failing their check digit, **0** ISBNs attached
+to two works, **0** work-entity dangling redirects, **0** non-Latin-*script*
+titles, and **0** works with a declared year but no editions -- so the
+`checksum_ok` column, blocking rule 4's frequency guard, the `field_coverage`
+gate and the whole of `assign_strata` had nothing that could fail against them.
+Only 4 of the 12 evaluation strata were reachable.
+
+Nine real works are now seeded by key for the exact property each supplies
+(`NEGATIVE_CLASS_WORKS`), two edition predicates select real wrong check
+digits, one real dangling work redirect is carried explicitly, and a marked
+synthetic block of 51 works shares one title so `title_fp_freq` can exceed
+`MAX_TITLE_FP_FREQ`. `test_fixture_corpus.py` asserts each class is still
+present: **when one of those fails after a regeneration, restore the row --
+deleting the assertion silently returns the guard above it to being
+untestable.**
+
+Two things the corpus cannot show, both left as they are. A title in one
+non-Latin script alone fingerprints to the empty string, so `degenerate_title`
+claims it before `non_latin_title` ever sees it -- all 30 `non_latin_title`
+cases in the 450-case pool are mixed-script. And synthetic keys must stay clear
+of real key space: the highest real work key in the dump is `OL45845863W`, so
+anything with eight or fewer digits can collide, and the first attempt at the
+synthetic block did, quietly attaching 52 real editions to works that should
+have had none.
+
+### The books export leaves out Playwright's leftovers
+
+`Books::OpenLibrary::EvalExport` feeds the evaluation pool with every
+`Books::Book`, and the development database is not only real books. Every admin
+E2E spec titles its fixture with a trailing `${Date.now()}` -- `E2E Smoke Book
+1784091457158`, `Tag Book 1785655579265` -- and nothing cleans them up, so
+**126** of them had accumulated. None carries a single identifier, 97 have no
+author, and they were eligible for every stratum in the pool: one draw put
+**20 of the 450** hand-labelling cases on them, 19 in `author_less_work` alone.
+
+The filter keys on the epoch-millisecond stamp rather than the per-spec title
+prefixes, because the stamp is what every spec has in common and a new spec
+with a new prefix would walk straight past a prefix list. Measured against the
+development database: it matches 126 rows -- exactly the same 126 the prefix
+list matches -- and no genuine book. The export went 126,330 -> 126,204, and
+`rake open_library:export_books` now prints what it skipped, because a filter
+that quietly starts matching real books is the failure worth catching.
+
+This is a filter, not a cleanup: the rows are still in the development
+database. Deleting them is a separate decision, and the dev database is not
+disposable.
+
+### Known weaknesses, measured at scale
+
+- **Year regex took the first digit run -- fixed.** `work_details.declared_year`
+  was extracted from free-text `first_publish_date_raw` with a first-digit-run
+  regex, so a value like `"December 31, 1991"` yielded `31`, not `1991`.
+  Measured at the time: **241,714 of 22,448,953** `work_details` rows (1.1%)
+  carried a `declared_year < 1000` as a result. The regex was replaced with a
+  pattern that matches a four-digit run (or a negative one-to-four-digit run,
+  for ancient/BCE works) instead of the first digit run of any length, so a
+  spelled-out date's day no longer wins over its year. Rebuilding the
+  2026-07-31 artifact with the fix dropped the count to **87** (a 99.96%
+  reduction); all gates still pass. A residual is accepted, not fixed: a
+  hyphen used as a date separator (`"12-12-2008"`, `"OCTOBER-2008"`) still
+  reads as a negative sign, since the regex engine has no lookaround to tell
+  it apart from a genuine negative (BCE) year -- measured at 7 rows out of
+  ~4.4M dated rows.
+- **Editions pointing at a work that no longer exists in `works`.** `year_evidence`
+  is anchored on `works`, so an edition whose `work_key` was merged or redirected
+  away never contributes its year to the surviving work. **4,516 editions**
+  (out of 56.6M) have a `work_key` absent from `works`; of the **444** distinct
+  orphaned work keys involved, **361 (81%)** are found as a `source_key` in
+  `redirects` -- meaning most of these are real merges whose edition-year evidence
+  is silently lost, not just dangling references to keys OL deleted outright.
+
+Everything else is left for Task 40.
