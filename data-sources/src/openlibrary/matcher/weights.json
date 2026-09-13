@@ -1,0 +1,22 @@
+{
+  "matcher_version": 1,
+  "calibrated": false,
+  "calibrated_at": null,
+  "feature_weights": {
+    "title_similarity": 1.0,
+    "title_variant_exact": 1.0,
+    "subtitle_agreement": 1.0,
+    "author_overlap": 1.0,
+    "author_name_similarity": 1.0,
+    "year_agreement": 1.0,
+    "identifier_agreement": 1.0,
+    "language_agreement": 1.0,
+    "popularity_prior": 0.1
+  },
+  "conflict_penalties": {
+    "identifier": 0.35
+  },
+  "accept_threshold": 0.9,
+  "reject_threshold": 0.4,
+  "margin_threshold": 0.05
+}
