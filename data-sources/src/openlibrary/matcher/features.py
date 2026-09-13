@@ -76,6 +76,18 @@ def extract(
     ours = fingerprint(query.title)
     variants = {work.title_fp, work.title_fp_nosub, work.title_fp_noart}
 
+    # An empty title fingerprint is ABSENCE, not disagreement (ruling R40):
+    # protects the 30 `degenerate_title` evaluation cases and the ~1.5% of
+    # works whose title_fp is empty from scoring as if they disagreed on
+    # title. When both sides carry a fingerprint but it differs, 0.0 for
+    # title_variant_exact stands -- that IS disagreement between two present
+    # values.
+    title_score: float | None = None
+    variant_score: float | None = None
+    if ours and work.title_fp:
+        title_score = title_similarity(ours, work.title_fp)
+        variant_score = 1.0 if ours in variants else 0.0
+
     our_authors = {fingerprint(n) for n in query.author_names if fingerprint(n)}
     their_authors = {fingerprint(n) for n in work.author_names if fingerprint(n)}
 
@@ -109,8 +121,8 @@ def extract(
     popularity = math.log1p(signal) / math.log1p(100_000)
 
     return {
-        "title_similarity": title_similarity(ours, work.title_fp or ""),
-        "title_variant_exact": 1.0 if ours and ours in variants else 0.0,
+        "title_similarity": title_score,
+        "title_variant_exact": variant_score,
         "subtitle_agreement": subtitle_score,
         "author_overlap": set_overlap(our_authors, their_authors),
         "author_name_similarity": author_similarity,

@@ -114,6 +114,32 @@ def test_popularity_is_a_feature_but_never_an_identity_feature():
     assert 0.0 <= values["popularity_prior"] <= 1.0
 
 
+# Ruling R40: an empty title fingerprint is ABSENCE, not disagreement. "!!!"
+# fingerprints to "" -- the 30 `degenerate_title` evaluation cases and the
+# ~1.5% of works whose title_fp is itself empty must not score as if they
+# disagreed on title.
+def test_a_degenerate_query_title_yields_none_not_a_disagreement_score():
+    values = extract(BlockingQuery(title="!!!"), _work())
+    assert values["title_similarity"] is None
+    assert values["title_variant_exact"] is None
+
+
+def test_a_degenerate_candidate_title_fp_yields_none_too():
+    values = extract(
+        BlockingQuery(title="The Great Gatsby"),
+        _work(title_fp="", title_fp_nosub="", title_fp_noart=""),
+    )
+    assert values["title_similarity"] is None
+    assert values["title_variant_exact"] is None
+
+
+def test_present_but_differing_titles_still_score_a_real_disagreement():
+    # Two present fingerprints that differ are DISAGREEMENT, not absence --
+    # unlike the degenerate cases above, this must stay 0.0.
+    values = extract(BlockingQuery(title="War and Peace"), _work())
+    assert values["title_variant_exact"] == 0.0
+
+
 def test_load_work_views_returns_one_view_per_wanted_key_with_aggregates(fixture_artifact):
     con = connect(fixture_artifact, memory_limit="1GB")
     try:

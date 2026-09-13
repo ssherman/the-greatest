@@ -27,6 +27,13 @@ def test_unrelated_titles_score_low():
     assert title_similarity("the great gatsby", "war and peace") < 0.4
 
 
+def test_title_similarity_is_none_when_either_side_is_empty():
+    # An empty fingerprint is ABSENCE, not disagreement (ruling R40): a
+    # punctuation-only title must not score as if it disagreed with a real one.
+    assert title_similarity("", "ulysses") is None
+    assert title_similarity("ulysses", "") is None
+
+
 def test_set_overlap_is_none_when_either_side_is_empty():
     # Absence is NEUTRAL, not negative: with 1.004 authors per book, a missing
     # co-author is a fact about our data, not evidence about the candidate.

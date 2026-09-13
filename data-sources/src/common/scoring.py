@@ -1,9 +1,12 @@
 """Source-agnostic comparators.
 
-Every comparator returns a value in [0, 1] when both sides carry information,
-and None when either does not. None means NEUTRAL. It must never be coerced to
-0.0 by a caller: absence of evidence is not evidence of absence, and our local
-data is sparse enough that the difference decides most matches.
+The NUMERIC comparators (`title_similarity`, `set_overlap`, `year_agreement`)
+return a value in [0, 1] when both sides carry information, and None when
+either does not; `identifier_agreement` returns an `Agreement` literal
+instead, with `"absent"` playing the same role. None (or "absent") means
+NEUTRAL and must never be coerced to a disagreement score by a caller:
+absence of evidence is not evidence of absence, and our local data is sparse
+enough that the difference decides most matches.
 """
 
 from __future__ import annotations
@@ -19,8 +22,9 @@ Agreement = Literal["agree", "conflict", "absent"]
 YEAR_DECAY = 10.0
 
 
-def title_similarity(left: str, right: str) -> float:
-    """Best-of-three rapidfuzz ratio, in [0, 1].
+def title_similarity(left: str, right: str) -> float | None:
+    """Best-of-three rapidfuzz ratio, in [0, 1], or None when either
+    fingerprint is empty.
 
     No single comparator wins on both distortions titles actually show up
     with: token-set/token-sort ignore word order, so they recover a
@@ -29,9 +33,13 @@ def title_similarity(left: str, right: str) -> float:
     covers that case instead. Taking the max lets whichever comparator fits
     the pair carry the score, without needing fuzzy machinery in the
     blocking layer to know in advance which distortion it is looking at.
+
+    An empty fingerprint is ABSENCE, not disagreement (ruling R40): a
+    punctuation-only title fingerprints to "", and scoring that as 0.0 would
+    read as strong disagreement rather than as no title information at all.
     """
     if not left or not right:
-        return 0.0
+        return None
     return (
         max(
             fuzz.token_set_ratio(left, right),
