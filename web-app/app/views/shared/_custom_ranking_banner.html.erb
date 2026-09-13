@@ -5,7 +5,11 @@
   entry = ::RankingConfigurations::Registry.for_config(ranking_configuration)
   official_path = entry ? entry.official_rankings_path.call : "/"
 %>
-<div id="custom-ranking-banner" class="alert alert-info mb-6" role="status">
+<%# alert-soft, not the solid alert: the books theme pairs a mid-blue info with a
+    near-black info-content, and the solid variant reads as a dark slab. The soft
+    variant tints the background; text-base-content keeps the copy readable
+    (daisyUI would otherwise colour it info, which is too light on the tint). %>
+<div id="custom-ranking-banner" class="alert alert-info alert-soft text-base-content mb-6" role="status">
   <span class="[overflow-wrap:anywhere]">
     You're viewing a custom ranking: <strong><%= ranking_configuration.name %></strong>.
     <%= link_to "See the official rankings →", official_path, class: "link font-medium" %>
