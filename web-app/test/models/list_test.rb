@@ -527,4 +527,13 @@ class ListTest < ActiveSupport::TestCase
       Books::List.create!(name: "Dupe favs", status: :active, auto_generated_kind: :user_favorites)
     end
   end
+
+  test "name_with_source appends source and year when present" do
+    list = Books::List.new(name: "Guardian 100", source: "The Guardian", year_published: 2003)
+    assert_equal "Guardian 100 (The Guardian, 2003)", list.name_with_source
+
+    assert_equal "Guardian 100 (The Guardian)", Books::List.new(name: "Guardian 100", source: "The Guardian").name_with_source
+    assert_equal "Guardian 100 (2003)", Books::List.new(name: "Guardian 100", year_published: 2003).name_with_source
+    assert_equal "Guardian 100", Books::List.new(name: "Guardian 100").name_with_source
+  end
 end
