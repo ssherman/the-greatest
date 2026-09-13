@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import pytest
 
+from common.normalize import MIN_BLOCKING_FP_LENGTH
 from openlibrary.matcher.blocking import (
     MAX_CANDIDATES_PER_RULE,
     MAX_SHELF_SIZE,
@@ -50,7 +51,7 @@ def test_all_six_rules_are_declared():
 
 def test_an_existing_key_produces_a_candidate(con, fixture_artifact):
     (key,) = con.execute(
-        f"SELECT work_key FROM '{fixture_artifact.table('works')}' LIMIT 1"
+        f"SELECT work_key FROM '{fixture_artifact.table('works')}' ORDER BY work_key LIMIT 1"
     ).fetchone()
     result = generate_candidates(
         con, fixture_artifact, BlockingQuery(title="x", existing_ol_key=key)
@@ -87,7 +88,7 @@ def test_an_identifier_produces_a_candidate_and_may_produce_several(con, fixture
         f"""
         SELECT value, count(DISTINCT work_key) FROM '{fixture_artifact.table("identifiers")}'
         WHERE id_type = 'isbn13' AND work_key IS NOT NULL
-        GROUP BY value ORDER BY 2 DESC LIMIT 1
+        GROUP BY value ORDER BY 2 DESC, value LIMIT 1
         """
     ).fetchone()
     assert row is not None, "corpus lost the isbn13 identifiers this test needs"
@@ -99,12 +100,16 @@ def test_an_identifier_produces_a_candidate_and_may_produce_several(con, fixture
 
 
 def test_title_and_author_together_fire_the_precision_rule(con, fixture_artifact):
+    # `length(w.title_fp) >= MIN_BLOCKING_FP_LENGTH`, not just `<> ''`: a
+    # too-short fingerprint (e.g. "Zen") never enters `variants` and could
+    # never fire rule 4/author_title_fp regardless of the author (ruling R43).
     row = con.execute(
         f"""
         SELECT w.title, a.name FROM '{fixture_artifact.table("works")}' w
         JOIN '{fixture_artifact.table("work_authors")}' wa USING (work_key)
         JOIN '{fixture_artifact.table("authors")}' a USING (author_key)
-        WHERE w.title_fp <> '' AND a.name_fp <> '' LIMIT 1
+        WHERE length(w.title_fp) >= {MIN_BLOCKING_FP_LENGTH} AND a.name_fp <> ''
+        ORDER BY w.work_key, a.author_key LIMIT 1
         """
     ).fetchone()
     assert row is not None, "corpus lost a work with a fingerprintable title and author"
@@ -121,7 +126,8 @@ def test_the_author_shelf_rule_fires_without_needing_a_title_match(con, fixture_
         f"""
         SELECT a.name FROM '{fixture_artifact.table("authors")}' a
         JOIN '{fixture_artifact.table("work_authors")}' wa USING (author_key)
-        WHERE a.name_fp <> '' GROUP BY a.name HAVING count(*) >= 1 LIMIT 1
+        WHERE a.name_fp <> '' GROUP BY a.name HAVING count(*) >= 1
+        ORDER BY a.name LIMIT 1
         """
     ).fetchone()
     assert row is not None, "corpus lost an author with works"
@@ -149,7 +155,8 @@ def test_a_high_frequency_title_trips_the_guard_and_does_not_fire(con, fixture_a
     row = con.execute(
         f"""
         SELECT title FROM '{fixture_artifact.table("works")}'
-        WHERE title_fp_freq > {MAX_TITLE_FP_FREQ} LIMIT 1
+        WHERE title_fp_freq > {MAX_TITLE_FP_FREQ}
+        ORDER BY work_key LIMIT 1
         """
     ).fetchone()
     assert row is not None, "corpus lost the freq > MAX_TITLE_FP_FREQ shared-title block"
@@ -166,7 +173,8 @@ def test_a_suppressed_common_title_does_not_fall_through_to_trigram(con, fixture
     row = con.execute(
         f"""
         SELECT title FROM '{fixture_artifact.table("works")}'
-        WHERE title_fp_freq > {MAX_TITLE_FP_FREQ} LIMIT 1
+        WHERE title_fp_freq > {MAX_TITLE_FP_FREQ}
+        ORDER BY work_key LIMIT 1
         """
     ).fetchone()
     assert row is not None, "corpus lost the freq > MAX_TITLE_FP_FREQ shared-title block"
@@ -202,9 +210,13 @@ def test_no_rule_ever_returns_more_than_the_cap(con, fixture_artifact):
 
 
 def test_an_author_resolution_failure_does_not_disable_the_title_rules(con, fixture_artifact):
+    # `length(title_fp) >= MIN_BLOCKING_FP_LENGTH`, not just `<> ''`: a
+    # too-short fingerprint (e.g. "Zen") never enters `variants` and could
+    # never fire rule 4 regardless of the author (ruling R43).
     row = con.execute(
         f"SELECT title FROM '{fixture_artifact.table('works')}' "
-        "WHERE title_fp <> '' AND title_fp_freq = 1 LIMIT 1"
+        f"WHERE length(title_fp) >= {MIN_BLOCKING_FP_LENGTH} AND title_fp_freq = 1 "
+        "ORDER BY work_key LIMIT 1"
     ).fetchone()
     assert row is not None, "corpus lost a uniquely fingerprinted title"
     result = generate_candidates(
