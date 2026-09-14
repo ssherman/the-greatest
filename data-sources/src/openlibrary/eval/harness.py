@@ -51,7 +51,7 @@ import openlibrary.matcher.blocking
 import openlibrary.matcher.features
 from openlibrary.eval.dataset import load_cases, resolve_keys
 from openlibrary.eval.schema import EvalCase, Verdict
-from openlibrary.matcher.blocking import BlockingQuery, generate_candidates
+from openlibrary.matcher.blocking import RULES, BlockingQuery, generate_candidates
 from openlibrary.matcher.decide import Decision, decide, rank
 from openlibrary.matcher.features import conflicts, extract, load_work_views
 from openlibrary.matcher.scorer import MATCHER_VERSION, Weights, load_weights, score_features
@@ -358,6 +358,38 @@ def run(
     return evaluate(prepare(con, paths, cases), weights)
 
 
+class RuleRecall(BaseModel):
+    reached: int = 0  # labelled works reached by a candidate carrying this rule
+    only: int = 0  # labelled works reached by candidates carrying NO other rule
+
+
+def rule_recall_split(prepared: list[PreparedCase]) -> dict[str, RuleRecall]:
+    """Which blocking rules actually find the labelled works (R62).
+
+    For every case whose label names a work, the rules on every candidate
+    that resolves to that work are pooled; a rule is credited with `reached`
+    when it is in the pool and with `only` when it is the whole pool. `only`
+    is the load-bearing number: a rule with `reached` > 0 and `only` == 0
+    never found anything another rule did not, and Increment 4 can retire it
+    without losing a labelled work. Pure Python over prepared cases, so it
+    costs nothing extra on a cached run.
+    """
+    split = {rule: RuleRecall() for rule in RULES}
+    for case in prepared:
+        expected = case.expected_work_key
+        if not expected:
+            continue
+        pool: set[str] = set()
+        for candidate in case.candidates:
+            if _same(case.resolved, candidate.work_key, expected):
+                pool.update(candidate.rules)
+        for rule in pool:
+            split[rule].reached += 1
+            if pool == {rule}:
+                split[rule].only += 1
+    return split
+
+
 def _cache_header(paths: ArtifactPaths, n_cases: int) -> dict:
     return {
         "dump_date": paths.dump_date,
@@ -483,6 +515,12 @@ def main(
     total_positives = [o for o in outcomes if o.expected_work_key is not None]
     total_misses = sum(1 for o in total_positives if o.candidate_rank is None)
     typer.echo(f"\nrecall misses (positives): {total_misses} of {len(total_positives)}")
+
+    # R62: per blocking rule, how many labelled works a candidate carrying
+    # that rule reached, and how many were reached by NO other rule.
+    typer.echo(f"\nby blocking rule ({len(total_positives)} labelled works):")
+    for rule, recall in rule_recall_split(prepared).items():
+        typer.echo(f"  {rule:16} reached={recall.reached:<4} only_by_this_rule={recall.only}")
 
 
 if __name__ == "__main__":

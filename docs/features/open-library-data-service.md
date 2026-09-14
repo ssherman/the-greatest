@@ -82,7 +82,7 @@ against a published 44,739,082 -- a difference of 59, noted and not chased.
 | field_coverage | pass | coverage within tolerance |
 | redirect_closure | pass | 1,790,272 redirects, 26 cycles, 3,356 dangling |
 | canary_lookups | pass | all canaries resolve |
-| evaluation_set | pass | no regression on the labeled set (prepared cache, 0.6s) |
+| evaluation_set | pass | no regression on the labeled set (prepared cache, 0.5s) |
 
 `evaluation_set` (Task 28) runs the harness against the 448-case labeled set
 and fails the build if any of six metrics regresses past the bound pinned in
@@ -97,11 +97,18 @@ rather than going unenforced. It skips instead of
 failing when there is nothing to check against: no labeled cases, no pinned
 thresholds, or -- against an artifact whose labeled works are mostly absent
 from it, such as the test suite's fixture corpus -- "not the labelled dump".
-Evaluating costs ~4.5s/case with no prepared cache available (~31 minutes for
-the full 448-case set) and well under a second with one, which is what the
-0.6s above reflects; `run_gates` never supplies a cache path explicitly, so a
-real build pays the full cost unless a prepared-cache file already sits at
-the conventional path under the artifact's `tmp/` directory.
+Evaluating costs ~4.5s/case with no prepared cache (~31 minutes for the
+full 448-case set) and well under a second with one, which is what the
+timing above reflects -- that row was produced by calling `evaluation_gate`
+directly with an explicit `prepared_cache=` after the cache had been rebuilt
+against this artifact. **A real build always pays the full cost** (R60):
+`run_gates` calls the gate with no cache path and the gate never looks for
+one on its own, because its job is to evaluate the labelled set against the
+artifact it is gating, and an in-place rebuild of the same dump date would
+otherwise have been gated against the previous build's candidates. An
+explicit `prepared_cache` is for callers who can vouch for it, and even then
+the file is refused unless its header's artifact timestamp and code
+fingerprint match (see "the prepared-cases cache" below).
 
 Only `work` and `author` redirects are resolved against a table, and only they
 can be `is_dangling = true`: 2,573 of 1,128,948 work redirects and 783 of
@@ -200,18 +207,20 @@ Everything else is left for Task 40.
 
 ## Matcher, measured
 
-Task 27 calibrated the matcher's weight vector against the 448-case labelled set (`data-sources/src/openlibrary/eval/cases/`) and, separately, made one bounded attempt to have Splink do that instead. Four readings, same 448 cases, same real 2026-07-31 artifact:
+Task 27 calibrated the matcher's weight vector against the 448-case labelled set (`data-sources/src/openlibrary/eval/cases/`) and, separately, made one bounded attempt to have Splink do that instead; the whole-branch review of Increment 3 then changed the decision stage (matcher v2, below). Six readings, same 448 cases, same real 2026-07-31 artifact:
 
 | Reading | recall@5 | recall@10 | recall@50 | precision@accept | FALSE MERGE | false reject | abstention | correct no-match |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | 1. Equal weights, primary author names only (Task 26) | 0.895 | 0.927 | 0.951 | 0.843 | 0.1572 | -- | 0.596 | 0.179 |
 | 2. Equal weights, alternate names (Task 26b) | 0.897 | 0.930 | 0.949 | 0.868 | 0.1322 | -- | 0.576 | 0.149 |
 | 3. Calibration v1 (original objective) | 0.903 | 0.932 | 0.949 | 0.966 | 0.0345 | *(not measured; see below)* | 0.094 | 0.955 |
-| 4. Calibration, final (amended objective) | 0.886 | 0.922 | 0.943 | 0.980 | 0.0201 | 0.0027 | 0.643 | 0.134 |
+| 4. Calibration, final (amended objective) -- matcher v1 as shipped | 0.886 | 0.922 | 0.943 | 0.980 | 0.0201 | 0.0027 | 0.643 | 0.134 |
+| 5. Matcher v2 decision rules, reading 4's weights, before the R59 reject-band extension | 0.886 | 0.922 | 0.943 | 0.993 | 0.0068 | 0.0027 | 0.658 | 0.090 |
+| 6. **Matcher v2, shipped** (v2 rules, reading 4's vector re-validated, `language_agreement` 0.0) | 0.886 | 0.922 | 0.943 | **0.993** | **0.0068** | **0.0000** | 0.661 | 0.090 |
 
-`recall misses (positives)` is **16 of 370 in all four rows**, unchanged -- it is a property of blocking, never of weights (see the R45/R46 invariant in Task 26b). Readings 1 and 2 predate `false_reject_rate` (added in reading 4's fix round); reading 3's held-out-split value, computed retroactively against the same code, is in the TEST table below.
+`recall misses (positives)` is **16 of 370 in all six rows**, unchanged -- it is a property of blocking, never of weights or decision rules (see the R45/R46 invariant in Task 26b). Readings 1 and 2 predate `false_reject_rate` (added in reading 4's fix round); reading 3's held-out-split value, computed retroactively against the same code, is in the TEST table below.
 
-Reading 3 looks like the best row on every column it reports -- precision 0.966, false merge 0.0345, abstention *down* to 0.094 -- and that is exactly the trap: it bought that abstention rate by silently converting true matches into rejects, which reading 3's own objective could not see. Reading 4 is the one actually shipped (`weights.json` carries it, `calibrated: true`).
+Reading 3 looks like the best row on every column it reports -- precision 0.966, false merge 0.0345, abstention *down* to 0.094 -- and that is exactly the trap: it bought that abstention rate by silently converting true matches into rejects, which reading 3's own objective could not see. Reading 4 was matcher v1 as shipped at the end of Task 28. Reading 6 is what ships now: the same weight vector under the v2 decision rules, which took the false-merge rate from 3 accepts in 149 to 1 in 146 and the false rejects to zero. The remaining false merge is `high_frequency_title-017`, whose label is a recorded **contested tiebreak** -- the matcher accepted the work carrying the book's exact ISBN; the labeller chose a duplicate work on contamination grounds and wrote "flip to OL19760957W if identifier-first should hold". The cost of v2 is three correct no-matches (9 -> 6 of 67) and one correct accept: `no_candidates-036` is R59 working as ruled (a frequency-suppressed title with nothing else to look up now abstains); `shared_key_collision-080` is an R58 cost (its best candidate carried author evidence only and a score under the reject threshold -- v1 rejected it on the score, v2 abstains for want of identity evidence, because the identity guard runs before the threshold bands); `degenerate_title-015` is the correct accept R58 was predicted to lose (a `match` v1 accepted on author agreement alone); and one no-match is rule 6's arbitrary fallbacks landing on the other side of the reject threshold this rebuild (see "Why rule 6 is noise" below). R59 also turned `degenerate_title-007` (labelled `ambiguous`, shelf refused) from a wrong reject into a correct abstain. Re-scoring the v2 cache under the v1 decision rules isolates the rules from the rebuild: the rules alone move exactly eight decisions -- the seven named here plus `no_candidates-030` -- and account for false merge 0.0201 -> 0.0068, false reject 0.0054 -> 0.0000, correct no-match 0.119 -> 0.090.
 
 ### Baseline 2, by stratum (equal weights, alternate names)
 
@@ -248,6 +257,71 @@ stale_ol_key               n=30   correct=21   false_merges=0    recall_miss=0
 ```
 
 Every stratum's false-merge count is 0 or 1 (down from baseline 2's 0-5). The cost is `correct` falling in several strata that baseline 2 answered by getting lucky on volume rather than on identity evidence -- `isbn_reuse` (9 -> 2) and `shared_key_collision` (22 -> 21) most visibly. `isbn_reuse` is by construction a stratum where one ISBN points at more than one work: the calibrated weights would rather abstain on that ambiguity than guess, which is the design's stated preference (false merge cost 10x an abstention) working as intended, not a regression in what the matcher "knows".
+
+### Why v2: two decision-stage gaps, one stale-key path
+
+The whole-branch review of Increment 3 read the v1 false merges and the v1 false reject case by case and found that neither the weights nor the labels were at fault -- the decision stage was:
+
+- **Author agreement alone was identity evidence (R58).** `decide`'s guard was "any feature but the popularity prior", and `author_overlap` + `author_name_similarity` carried two of the largest calibrated weights. A candidate reached through an author shelf whose title could not be compared at all (a Bengali or Cyrillic title fingerprints to the empty string, so every title feature is `None` under R40) therefore scored its author agreement as the whole weighted mean: `degenerate_title-013` accepted at 0.913 and `pseudonym_or_alt_name-001` at 0.946, both labelled `no_match`, 2 of the 3 v1 false merges. Identity evidence is now an allow-list -- a present title feature (`title_similarity`, `title_variant_exact`, `subtitle_agreement`) or `identifier_agreement == 1.0`; author, year, language and popularity can move a score but never carry an accept on their own.
+- **A refused search was a negative (R59).** Every blocking rule has a volume cap, and a tripped cap was recorded in `guards_tripped` -- which nothing downstream read. `degenerate_title-014` (Agatha Christie, Cyrillic title, shelf 1,226 works > `MAX_SHELF_SIZE` 500) came back with zero candidates and `decide` said `reject`: "not in Open Library", recorded as fact, for a book whose author's shelf the matcher had declined to open. `BlockingResult.volume_guards_tripped` now names the rules whose *cap* tripped (as distinct from the empty/short-fingerprint `title_fp` guard, which means "nothing to look up"), `PreparedCase` carries it, and `decide` abstains -- "search refused for volume: author_shelf" -- both with zero candidates and when every candidate scores under the reject threshold. The second half was added after the rebuild showed it was needed: `no_candidates-030` ("Donne Innamorate", D.H. Lawrence's shelf refused) reached the reject band on 200 rule-6 fallbacks, none of them the book, best 0.397 against a 0.4 threshold. Correct no-match cases that abstain for this reason are the accepted cost: on this set, under the shipped weights, the zero-candidate half costs one (`no_candidates-036`) and the reject-band half none.
+- **Rule 1 returned stale work keys (R41).** `identifiers.work_key` is whatever the edition recorded; on 2026-07-31 it is a redirect *source* for 270 works (9,216 rows) and absent from `works` for 294. Rule 1 now resolves through `redirects` and drops keys not in `works`, because under R35 a stale hit in `identifier_hits` turns the true work into an identifier *conflict*. No labelled case hit this (0 of 448); the rebuild confirmed identical rule-1 hits on every identifier-bearing case.
+
+`MATCHER_VERSION` is 2 because the first two change what the same candidates and the same weights decide. The prepared cache was rebuilt (31 minutes) since rule 1 changes what `prepare` produces.
+
+**Why rule 6 is noise, measured.** Investigating `no_candidates-030` explained why it had read as an *abstain* under v1 and a *reject* now with the same weights: DuckDB's `jaccard()` is character-**set** Jaccard, not trigram similarity. For the fingerprint `donne innamorate`, 10,494,985 works clear the 0.55 floor and 973 tie at exactly 1.0, so `ORDER BY ... LIMIT 200` returns an arbitrary 200 of those ties -- a different set on every `prepare` (the connection sets `preserve_insertion_order=false`). In the per-rule split below rule 6 reached **zero** labelled works. It is a candidate for retirement in Increment 4; until then the R59 extension makes the shelf-refused cases deterministic, but a rule-6-only case with no volume guard can still flip between `reject` and `abstain` from one rebuild to the next when one arbitrary fallback happens to clear the reject threshold.
+
+### Matcher v2, by stratum (reading 6)
+
+```
+anthology_or_collection    n=30   correct=7    false_merges=0    recall_miss=0
+author_less_work           n=19   correct=11   false_merges=0    recall_miss=0
+degenerate_title           n=20   correct=6    false_merges=0    recall_miss=3
+easy_baseline              n=60   correct=38   false_merges=0    recall_miss=0
+high_frequency_title       n=40   correct=27   false_merges=1    recall_miss=0
+isbn_reuse                 n=30   correct=2    false_merges=0    recall_miss=0
+no_candidates              n=50   correct=2    false_merges=0    recall_miss=5
+no_popularity_signal       n=30   correct=11   false_merges=0    recall_miss=0
+non_latin_title            n=30   correct=4    false_merges=0    recall_miss=2
+pseudonym_or_alt_name      n=29   correct=13   false_merges=0    recall_miss=2
+shared_key_collision       n=80   correct=20   false_merges=0    recall_miss=4
+stale_ol_key               n=30   correct=21   false_merges=0    recall_miss=0
+```
+
+Against reading 4: `degenerate_title` and `pseudonym_or_alt_name` each lose their one false merge (R58); `degenerate_title`'s `correct` is unchanged at 6 because it trades `-015` (a correct author-only accept, now an abstain) for `-007` (an `ambiguous` case whose refused shelf now abstains instead of rejecting); `no_candidates` loses two `correct` (`-036` under R59 and one rule-6 flicker) and `shared_key_collision` one (`-080`, an R58 abstain on an author-only candidate v1 had rejected on score). Nothing else moves.
+
+### Recall by blocking rule (reading 6)
+
+For each blocking rule, how many of the 370 labelled works a candidate carrying that rule reached, and how many were reached by **no other rule** (`harness.rule_recall_split`, printed by the harness CLI). Increment 4 needs this to decide what blocking can shed:
+
+| rule | reached | only by this rule |
+|---|---:|---:|
+| identifier | 285 | 35 |
+| existing_key | 80 | 2 |
+| author_title_fp | 196 | 2 |
+| title_fp | 169 | 6 |
+| author_shelf | 261 | 32 |
+| trigram | 0 | 0 |
+
+Rules 1 (identifiers) and 5 (the author shelf) are load-bearing -- 67 labelled works are reached by one of them alone. Rules 2 and 3 are almost entirely redundant with the others and rule 6 has never reached a labelled work (see above).
+
+### The v2 calibration: what the search found, and why reading 4's vector still ships
+
+`MATCHER_VERSION` 2 changes what the same candidates and weights decide, so the vector was re-fitted per the procedure: cache rebuilt, `calibrate` run cold from `equal_weights()` with the fixed seed. R61 made the calibration honest about coverage first: per-feature presence over the training split is measured and printed, and a feature no training pair ever exercised is pinned to weight 0.0 and removed from the search knobs -- `language_agreement` had **0 present values in 40,735 pairs** (the labelled books carry no language; the feature cannot fire without one) and had shipped at 1.0 under `calibrated: true`. The written file now also records `method: "random-search"`.
+
+The cold start (seed 20260901, 2000 steps) then converged into a poor basin: its last improvement was at step 271 (TRAIN objective 0.3959, four false merges left in the training split), 6000 steps only reached 0.4027, and two other seeds did no better (TEST objectives -1.05 and -0.09 on their own splits). Meanwhile reading 4's vector, re-scored under the v2 rules, sits at TRAIN 0.8090 / TEST 0.9339 -- a better vector was already known. So the CLI's documented warm start was run: `--base <reading 4's file>`, whose write gate demands a TEST win over both equal weights (0.6056) and the base. The search moved one knob (`reject_threshold`, TRAIN 0.8090 -> 0.8097) and lost on TEST (0.9339 -> 0.9286), and the CLI left the file untouched. The vector that ships is therefore reading 4's, under `matcher_version: 2`, with `language_agreement` set to 0.0 per R61 (verified to change no score and no decision on the labelled set) and `calibrated_at` left at the time it was actually fitted. Writing the cold-start result would have shipped a false-merge rate of 0.0355 and re-pinned the gate to hide it.
+
+**TEST-split objective, v2 rules** (`min_accept_rate=0.3`, same seed and split as the v1 table):
+
+| Weights | false_merge | false_reject | precision | abstain | objective |
+|---|---:|---:|---:|---:|---:|
+| `equal_weights()` | 0.0303 | 0.0000 | 0.970 | 0.611 | 0.6056 |
+| v2 cold start, seed 20260901, 2000 steps (written, superseded) | 0.0169 | 0.0064 | 0.983 | 0.644 | 0.7427 |
+| `--base` warm start from reading 4's vector | 0.0000 | 0.0064 | 1.000 | 0.650 | 0.9286 |
+| **reading 4's vector under v2 rules (shipped)** | **0.0000** | **0.0000** | **1.000** | 0.661 | **0.9339** |
+
+The corrected handback diagnosis, while on the subject of the objective: the ~64-66% abstention rate is not where the abstention cost (0.1 per abstention) balanced anything. The shipped vector accepts 146 of 448 cases, an accept rate of 0.326 against the objective's hard floor of 0.30 -- the search drove accepts down as far as the floor allowed because every accept it gave up removed false-merge risk at ten times the price of the abstention it created. **The accept-rate floor is the binding constraint**; lowering the abstention cost would change nothing, and raising the floor is the only knob that would trade abstentions back for accepts.
+
+**Gate and cache policy.** The build gate evaluates the labelled set against the artifact it is gating and never reads a prepared cache on its own (R60); the cache header now fingerprints the artifact build and the four modules whose code determines what `prepare` produces, so a stale cache is refused with the mismatch printed rather than documented as a hazard. The thresholds in `thresholds.json` are re-pinned from reading 6 with the same headroom policy as Task 28, stated per bound in the file's own comments (see also `tests/openlibrary/test_pipeline_gates.py`): recall@10 >= 0.90, false merge <= 0.015 (two merges in 146 accepts pass, three fail), precision >= 0.98, abstention <= 0.70, correct no-match >= 0.05 (four points under the measured 0.090 because rule 6's flicker can move it by two or three cases of 67), false reject <= 0.005 (one passes, two fail).
 
 ### The split, the objective, and why it changed mid-task
 
@@ -292,19 +366,20 @@ Splink 4.0.16 (the `calibration` extra) is a record-linkage model: `Linker` take
 
 `harness.prepare` measured at ~4.5s/case across all 448 cases (33m25s on the first full run, 31m9s on a rebuild) -- almost entirely un-indexed Parquet scans in blocking rules 1-5 (`identifiers` alone is 120M rows, scanned fresh per case) plus roughly 1.5s of `load_work_views`. Weights never touch this: `prepare` runs it once, `evaluate` re-scores the result in pure Python in milliseconds, which is what makes a 2000-iteration search over 268 cases finish in minutes rather than the ~90 hours a naive per-iteration `prepare` would cost.
 
-R54 adds a cache on top of that split: `write_prepared_cache`/`read_prepared_cache` (in `harness.py`) persist a `prepare()` result to a JSON file keyed by `dump_date`, `matcher_version`, and case count. Both CLIs take `--prepared-cache PATH`; the artifact-side copy used for this task lives at `/home/shane/ol-data/tmp/prepared-2026-07-31.json` (scratch space on the artifact host, **not** committed to the repo). The first run against a given path writes it (~31 minutes); every run after loads it in seconds. **Delete the file** after any change to blocking rules, `matcher.features`, or the labelled case set (`cases/*.jsonl`) -- the header check catches a changed dump date, a bumped `MATCHER_VERSION`, or a different case count, but a change to blocking or scoring logic that leaves all three unchanged would otherwise serve stale prepared candidates silently.
+R54 adds a cache on top of that split: `write_prepared_cache`/`read_prepared_cache` (in `harness.py`) persist a `prepare()` result to a JSON file. Both CLIs take `--prepared-cache PATH`; the artifact-side copy used for this task lives at `/home/shane/ol-data/tmp/prepared-2026-07-31.json` (scratch space on the artifact host, **not** committed to the repo). The first run against a given path writes it (~31 minutes); every run after loads it in seconds. The header carries five values and the file is trusted only when all five match (R60): `dump_date`, `matcher_version`, `n_cases`, `artifact_built_at` (the version directory's `manifest.json` timestamp, so a same-date rebuild of the artifact invalidates it) and `code_sha256` (over the bytes of `matcher/blocking.py`, `matcher/features.py`, `common/normalize.py` and `common/scoring.py`, so a code change to any of the four invalidates it). The header detects an artifact rebuild or a code change to those four modules; other changes that alter what `prepare` produces without moving any of the five -- a relabel of the case set that keeps its count, an edit to `harness.prepare` or `dataset.resolve_keys` -- still need a manual delete. (`decide.py` and `scorer.py` do not: they run on top of the cached candidates in `evaluate`, which is the whole point of the split.)
 
 ### Increment 3 is complete
 
 All four of the increment's stated completion criteria hold: the harness
 reports all six metrics (recall@5/10/50, precision@accept, false-merge,
-false-reject, abstention, correct-no-match) against the real 2026-07-31
-artifact and the real 448-case labeled set (see "Matcher, measured" above);
-`weights.json` says whether it is calibrated and by which method
-(`calibrated: true`, `calibrated_at` timestamped, the method documented under
-"The split, the objective, and why it changed mid-task"); `thresholds.json`
-records the measured numbers from the final calibrated run rather than
-aspirations, each with a `measured` sibling recorded beside it; and the build
-now fails its evaluation gate if the matcher regresses past any of those
-thresholds (Task 28, `evaluation_gate` in `pipeline/gates.py`) -- verified
-against the real artifact above, where it reports `pass`.
+false-reject, abstention, correct-no-match) plus the per-rule recall split
+against the real 2026-07-31 artifact and the real 448-case labeled set (see
+"Matcher, measured" above); `weights.json` says whether it is calibrated and
+by which method (`calibrated: true`, `calibrated_at` timestamped,
+`method: "random-search"`, `matcher_version: 2`); `thresholds.json` records
+the measured numbers from the shipped v2 reading rather than aspirations,
+each with a `measured` sibling recorded beside it; and the build fails its
+evaluation gate if the matcher regresses past any of those thresholds (Task
+28, `evaluation_gate` in `pipeline/gates.py`), always against the artifact
+being built (R60) -- verified against the real artifact above, where it
+reports `pass`.

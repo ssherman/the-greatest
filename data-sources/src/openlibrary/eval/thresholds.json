@@ -1,22 +1,22 @@
 {
   "measured_at": "2026-09-14",
   "dump_date": "2026-07-31",
-  "matcher_version": 1,
+  "matcher_version": 2,
   "n_cases": 448,
   "weights_calibrated_at": "2026-09-14T05:27:09.847557+00:00",
-  "source": "final calibrated run, seed 20260901, prepared cache",
-  "min_candidate_recall_10": 0.90,
-  "max_false_merge_rate": 0.03,
-  "min_precision_at_accept": 0.95,
-  "max_abstention_rate": 0.70,
-  "min_correct_no_match_rate": 0.10,
-  "max_false_reject_rate": 0.01,
+  "source": "v2 decision rules (R58/R59/R41) with the v1 random-search vector re-validated under them, seed 20260901, prepared cache; the v2 cold start (TEST 0.7427) and the --base warm start (TEST 0.9286) both failed the write gate against this vector's 0.9339",
+  "min_candidate_recall_10": 0.9,
+  "max_false_merge_rate": 0.015,
+  "min_precision_at_accept": 0.98,
+  "max_abstention_rate": 0.7,
+  "min_correct_no_match_rate": 0.05,
+  "max_false_reject_rate": 0.005,
   "measured": {
-    "min_candidate_recall_10": 0.922,
-    "max_false_merge_rate": 0.0201,
-    "min_precision_at_accept": 0.980,
-    "max_abstention_rate": 0.643,
-    "min_correct_no_match_rate": 0.134,
-    "max_false_reject_rate": 0.0027
+    "min_candidate_recall_10": 0.9216,
+    "max_false_merge_rate": 0.0068,
+    "min_precision_at_accept": 0.9932,
+    "max_abstention_rate": 0.6607,
+    "min_correct_no_match_rate": 0.0896,
+    "max_false_reject_rate": 0.0
   }
 }

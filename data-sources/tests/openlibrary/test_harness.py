@@ -31,6 +31,7 @@ from openlibrary.eval.harness import (
     evaluate,
     prepare,
     read_prepared_cache,
+    rule_recall_split,
     run,
     write_prepared_cache,
 )
@@ -520,6 +521,48 @@ def test_artifact_built_at_falls_back_to_the_build_report_then_none(tmp_path):
     assert harness.artifact_built_at(paths) == "2026-09-03T06:21:00.384098+00:00"
     paths.manifest_path.write_text(json.dumps({"built_at": "2026-09-03T06:21:00.384484+00:00"}))
     assert harness.artifact_built_at(paths) == "2026-09-03T06:21:00.384484+00:00"
+
+
+def test_rule_recall_split_credits_reached_and_only(tmp_path):
+    """Three labelled works: one reached by two rules (neither gets `only`),
+    one reached by the shelf alone through a candidate whose stale key
+    resolves to the labelled work, one missed entirely. A no_match case
+    contributes nothing."""
+
+    def case(case_id, expected, candidates, resolved=None):
+        return PreparedCase(
+            case_id=case_id,
+            stratum="s",
+            expected_work_key=expected,
+            expected_verdict="match" if expected else "no_match",
+            candidates=candidates,
+            resolved=resolved or {},
+        )
+
+    prepared = [
+        case(
+            "two-rules",
+            "OL1W",
+            [
+                PreparedCandidate(work_key="OL1W", rules=["title_fp", "author_shelf"]),
+                PreparedCandidate(work_key="OL9W", rules=["trigram"]),
+            ],
+        ),
+        case(
+            "shelf-only-via-redirect",
+            "OL2W",
+            [PreparedCandidate(work_key="OL2oldW", rules=["author_shelf"])],
+            resolved={"OL2oldW": "OL2W", "OL2W": "OL2W"},
+        ),
+        case("missed", "OL3W", [PreparedCandidate(work_key="OL8W", rules=["title_fp"])]),
+        case("negative", None, [PreparedCandidate(work_key="OL7W", rules=["identifier"])]),
+    ]
+    split = rule_recall_split(prepared)
+    assert (split["title_fp"].reached, split["title_fp"].only) == (1, 0)
+    assert (split["author_shelf"].reached, split["author_shelf"].only) == (2, 1)
+    assert (split["trigram"].reached, split["trigram"].only) == (0, 0)
+    assert (split["identifier"].reached, split["identifier"].only) == (0, 0)
+    assert set(split) == set(harness.RULES)
 
 
 # The whole point of the prepare/evaluate split (Task 27's calibration search
