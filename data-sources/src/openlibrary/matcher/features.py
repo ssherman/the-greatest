@@ -206,12 +206,18 @@ def load_work_views(
           SELECT p.* FROM wanted_works ww
           JOIN '{paths.table("popularity")}' p USING (work_key)
         ),
+        -- author_names, not authors: authors.name is the primary name only,
+        -- but blocking reaches a work through EITHER of author_names' two
+        -- `source` values (primary and alternate) -- so a candidate blocked
+        -- via a pseudonym or alternate name (ruling R46) needs that same
+        -- alternate name here too, or author_overlap/author_name_similarity
+        -- never see the evidence that got it blocked in the first place.
         agg_authors AS (
-          SELECT wa.work_key, list(DISTINCT a.name ORDER BY a.name) AS author_names
+          SELECT wa.work_key, list(DISTINCT an.name ORDER BY an.name) AS author_names
           FROM wanted_works ww
           JOIN '{paths.table("work_authors")}' wa USING (work_key)
-          JOIN '{paths.table("authors")}' a USING (author_key)
-          WHERE a.name IS NOT NULL
+          JOIN '{paths.table("author_names")}' an USING (author_key)
+          WHERE an.name IS NOT NULL
           GROUP BY wa.work_key
         ),
         agg_languages AS (

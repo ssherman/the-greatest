@@ -3,12 +3,13 @@ import json
 import pytest
 
 from openlibrary.matcher.blocking import BlockingQuery
-from openlibrary.matcher.features import FEATURES, WorkView
+from openlibrary.matcher.features import FEATURES, WorkView, conflicts, extract
 from openlibrary.matcher.scorer import (
     MATCHER_VERSION,
     Weights,
     load_weights,
     score_candidate,
+    score_features,
 )
 
 
@@ -152,6 +153,27 @@ def test_scores_are_bounded():
     for query, identifier_hits in cases:
         scored = score_candidate(query, _work(), [], weights, identifier_hits=identifier_hits)
         assert 0.0 <= scored.score <= 1.0
+
+
+# score_features is score_candidate's arithmetic extracted verbatim so the
+# calibration search loop (Task 27) can re-score a prepared candidate without
+# re-running extract/conflicts per weight vector. This pins them equal, field
+# for field, so the extraction cannot silently drift from score_candidate.
+def test_score_features_is_what_score_candidate_computes():
+    weights = load_weights()
+    query = BlockingQuery(title="The Great Gatsby", author_names=["F. Scott Fitzgerald"], year=1925)
+    work = _work()
+    rules = ["author_title_fp"]
+
+    via_candidate = score_candidate(query, work, rules, weights)
+    via_features = score_features(
+        work.work_key, extract(query, work), conflicts(query, work), rules, weights
+    )
+
+    assert via_candidate.score == via_features.score
+    assert via_candidate.evidence == via_features.evidence
+    assert via_candidate.conflicts == via_features.conflicts
+    assert via_candidate.rules == via_features.rules
 
 
 def test_weights_round_trip_through_json(tmp_path):

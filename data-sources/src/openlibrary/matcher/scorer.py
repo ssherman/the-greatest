@@ -70,17 +70,21 @@ def load_weights(path: Path | None = None) -> Weights:
     return Weights.model_validate(json.loads(Path(path or WEIGHTS_PATH).read_text()))
 
 
-def score_candidate(
-    query: BlockingQuery,
-    work: WorkView,
+def score_features(
+    work_key: str,
+    values: dict[str, float | None],
+    found_conflicts: list[str],
     rules: list[str],
     weights: Weights,
-    *,
-    identifier_hits: frozenset[str] = frozenset(),
 ) -> ScoredCandidate:
-    values = extract(query, work, identifier_hits=identifier_hits)
-    found_conflicts = conflicts(query, work, identifier_hits=identifier_hits)
+    """The weighted-mean-minus-penalties arithmetic, on already-extracted inputs.
 
+    Split out of `score_candidate` (Task 26b) so that the calibration search
+    (Task 27) can call `prepare` once per split -- blocking, `load_work_views`,
+    `extract` and `conflicts`, ~4.5s/case, almost all DuckDB -- and then call
+    this, pure Python, thousands of times per weight vector without touching
+    DuckDB again.
+    """
     numerator = 0.0
     denominator = 0.0
     evidence: dict[str, dict] = {}
@@ -99,9 +103,22 @@ def score_candidate(
     score = max(0.0, min(1.0, base - penalty))
 
     return ScoredCandidate(
-        work_key=work.work_key,
+        work_key=work_key,
         score=score,
         rules=list(rules),
         evidence=evidence,
         conflicts=found_conflicts,
     )
+
+
+def score_candidate(
+    query: BlockingQuery,
+    work: WorkView,
+    rules: list[str],
+    weights: Weights,
+    *,
+    identifier_hits: frozenset[str] = frozenset(),
+) -> ScoredCandidate:
+    values = extract(query, work, identifier_hits=identifier_hits)
+    found_conflicts = conflicts(query, work, identifier_hits=identifier_hits)
+    return score_features(work.work_key, values, found_conflicts, rules, weights)

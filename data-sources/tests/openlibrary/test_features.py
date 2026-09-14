@@ -140,6 +140,54 @@ def test_present_but_differing_titles_still_score_a_real_disagreement():
     assert values["title_variant_exact"] == 0.0
 
 
+# R46: blocking reaches works through author_names (primary AND alternate),
+# but WorkView.author_names used to come from authors.name (primaries only) --
+# so author_overlap/author_name_similarity never saw the alternate name that
+# got the candidate blocked in the first place (the pseudonym_or_alt_name
+# stratum scored 0/29 as a result). agg_authors now aggregates from
+# author_names, both sources.
+def test_load_work_views_author_names_includes_alternate_names(fixture_artifact):
+    con = connect(fixture_artifact, memory_limit="1GB")
+    try:
+        # An alternate-name author with no work in the corpus exists (most of
+        # them), so the author and its work are found together in one
+        # deterministic query rather than two independent LIMIT 1s -- the
+        # second of which could come up empty for a corpus author nobody
+        # co-authored a book with.
+        author_key, work_key = con.execute(
+            f"""
+            SELECT an.author_key, wa.work_key
+            FROM '{fixture_artifact.table("author_names")}' an
+            JOIN '{fixture_artifact.table("work_authors")}' wa USING (author_key)
+            WHERE an.source = 'alternate'
+            ORDER BY an.author_key, wa.work_key
+            LIMIT 1
+            """
+        ).fetchone()
+        names = con.execute(
+            f"""
+            SELECT name, source FROM '{fixture_artifact.table("author_names")}'
+            WHERE author_key = ?
+            """,
+            [author_key],
+        ).fetchall()
+        primary_names = {name for name, source in names if source == "primary"}
+        alternate_names = {name for name, source in names if source == "alternate"}
+        assert primary_names, (
+            "fixture author needs a primary name to make this assertion meaningful"
+        )
+        assert alternate_names, (
+            "fixture author needs an alternate name to make this assertion meaningful"
+        )
+
+        view = load_work_views(con, fixture_artifact, [work_key])[work_key]
+
+        assert primary_names & set(view.author_names)
+        assert alternate_names & set(view.author_names)
+    finally:
+        con.close()
+
+
 def test_load_work_views_returns_one_view_per_wanted_key_with_aggregates(fixture_artifact):
     con = connect(fixture_artifact, memory_limit="1GB")
     try:

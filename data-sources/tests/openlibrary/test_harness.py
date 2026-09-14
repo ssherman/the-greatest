@@ -22,7 +22,7 @@ import datetime
 import pytest
 
 from common.normalize import MIN_BLOCKING_FP_LENGTH
-from openlibrary.eval.harness import Metrics, run
+from openlibrary.eval.harness import Metrics, evaluate, prepare, run
 from openlibrary.eval.schema import EvalBook, EvalCandidate, EvalCase, EvalLabel
 from openlibrary.matcher.scorer import load_weights
 from openlibrary.pipeline.duck import connect
@@ -232,3 +232,49 @@ def test_metrics_are_all_finite_even_with_no_accepts(fixture_artifact):
     assert metrics.n_cases == 0
     assert metrics.precision_at_accept == 0.0
     assert metrics.false_merge_rate == 0.0
+
+
+# The whole point of the prepare/evaluate split (Task 27's calibration search
+# calls prepare once per split and evaluate thousands of times) is that it
+# must not change what run() measures. This is the equivalence pin.
+def test_run_equals_evaluate_of_prepare(fixture_artifact, cases):
+    weights = load_weights()
+    con = connect(fixture_artifact, memory_limit="1GB")
+    with contextlib.closing(con):
+        run_metrics, run_outcomes = run(con, fixture_artifact, cases, weights)
+        prepared = prepare(con, fixture_artifact, cases)
+        eval_metrics, eval_outcomes = evaluate(prepared, weights)
+
+    assert run_metrics.model_dump() == eval_metrics.model_dump()
+    assert [o.model_dump() for o in run_outcomes] == [o.model_dump() for o in eval_outcomes]
+
+
+def test_evaluate_needs_no_connection(fixture_artifact, cases):
+    weights = load_weights()
+    con = connect(fixture_artifact, memory_limit="1GB")
+    prepared = prepare(con, fixture_artifact, cases)
+    con.close()
+
+    # Must not touch DuckDB: the connection above is already closed. A
+    # `prepare` that leaked a `con` reference into `evaluate` would raise here.
+    metrics, outcomes = evaluate(prepared, weights)
+    assert metrics.n_cases == len(cases)
+    assert len(outcomes) == len(cases)
+
+
+def test_evaluate_with_different_weights_changes_only_scoring(fixture_artifact, cases):
+    weights = load_weights()
+    impossible = weights.model_copy(update={"accept_threshold": 1.01})
+
+    con = connect(fixture_artifact, memory_limit="1GB")
+    with contextlib.closing(con):
+        prepared = prepare(con, fixture_artifact, cases)
+
+    baseline_metrics, _ = evaluate(prepared, weights)
+    starved_metrics, _ = evaluate(prepared, impossible)
+
+    # Recall is a property of blocking, not weights (R45's invariant): the
+    # same `prepared` re-scored with a threshold nothing can clear must still
+    # report identical candidate recall, even though nothing gets accepted.
+    assert starved_metrics.n_accepted == 0
+    assert starved_metrics.candidate_recall == baseline_metrics.candidate_recall

@@ -6,6 +6,15 @@ abstention costs a review. Everything else is context for it.
 Every comparison resolves both sides through redirects (`dataset.resolve_keys`),
 so a label written against one dump and an answer produced from another do not
 disagree merely because Open Library merged something.
+
+`run` is `evaluate(prepare(...), ...)` (Task 26b): the uncalibrated baseline
+took 4.5s/case, almost all of it in blocking and `load_work_views`, and Task
+27's calibration search calls the equivalent of `run` once per weight vector
+it tries -- roughly 200 iterations over the full 448-case set, which at the
+old per-call cost is 200 * ~20min ~= 67 hours. Weights affect only scoring and
+deciding, never blocking, views, features or conflicts, so `prepare` does
+every DuckDB-touching step ONCE and `evaluate` re-scores the result in pure
+Python in milliseconds, as many times as calibration needs.
 """
 
 from __future__ import annotations
@@ -17,11 +26,11 @@ import typer
 from pydantic import BaseModel, Field
 
 from openlibrary.eval.dataset import load_cases, resolve_keys
-from openlibrary.eval.schema import EvalCase
+from openlibrary.eval.schema import EvalCase, Verdict
 from openlibrary.matcher.blocking import BlockingQuery, generate_candidates
 from openlibrary.matcher.decide import Decision, decide, rank
-from openlibrary.matcher.features import load_work_views
-from openlibrary.matcher.scorer import Weights, load_weights, score_candidate
+from openlibrary.matcher.features import conflicts, extract, load_work_views
+from openlibrary.matcher.scorer import Weights, load_weights, score_features
 from openlibrary.pipeline.paths import ArtifactPaths
 
 app = typer.Typer(add_completion=False)
@@ -51,6 +60,25 @@ class Metrics(BaseModel):
     correct_no_match_rate: float = 0.0
 
 
+class PreparedCandidate(BaseModel):
+    work_key: str
+    rules: list[str] = Field(default_factory=list)
+    values: dict[str, float | None] = Field(default_factory=dict)
+    conflicts: list[str] = Field(default_factory=list)
+
+
+class PreparedCase(BaseModel):
+    case_id: str
+    stratum: str
+    expected_work_key: str | None
+    expected_verdict: Verdict
+    candidates: list[PreparedCandidate] = Field(default_factory=list)
+    # The `resolve_keys` map for the expected key plus every candidate key,
+    # fetched once here so `evaluate` never needs a connection (ruling: one
+    # `resolve_keys` call per case, not one query per candidate).
+    resolved: dict[str, str] = Field(default_factory=dict)
+
+
 def _query_for(case: EvalCase) -> BlockingQuery:
     book = case.book
     return BlockingQuery(
@@ -76,16 +104,20 @@ def _same(resolved: dict[str, str], a: str | None, b: str | None) -> bool:
     return bool(a and b and resolved.get(a, a) == resolved.get(b, b))
 
 
-def run(
+def prepare(
     con: duckdb.DuckDBPyConnection,
     paths: ArtifactPaths,
     cases: list[EvalCase],
-    weights: Weights,
-) -> tuple[Metrics, list[CaseOutcome]]:
-    outcomes: list[CaseOutcome] = []
-    recall_hits = dict.fromkeys(RECALL_AT, 0)
-    n_positive = 0
+) -> list[PreparedCase]:
+    """Blocking + `load_work_views` + `extract`/`conflicts` + `resolve_keys`, once.
 
+    Everything here touches DuckDB and is independent of `weights` -- it is
+    the expensive pass `evaluate` is split off from, so it runs once per
+    split rather than once per weight vector Task 27's search tries.
+    Candidates without a view are dropped here, exactly as `run` dropped them
+    before this split.
+    """
+    prepared: list[PreparedCase] = []
     for case in cases:
         query = _query_for(case)
         blocking = generate_candidates(con, paths, query)
@@ -93,13 +125,16 @@ def run(
             k for k, rules in blocking.candidates.items() if "identifier" in rules
         )
         views = load_work_views(con, paths, list(blocking.candidates))
-        scored = [
-            score_candidate(query, views[key], rules, weights, identifier_hits=identifier_hits)
+        candidates = [
+            PreparedCandidate(
+                work_key=key,
+                rules=rules,
+                values=extract(query, views[key], identifier_hits=identifier_hits),
+                conflicts=conflicts(query, views[key], identifier_hits=identifier_hits),
+            )
             for key, rules in blocking.candidates.items()
             if key in views
         ]
-        ordered = rank(scored)
-        decision = decide(scored, weights)
 
         expected = case.label.work_key
         resolved = resolve_keys(
@@ -107,6 +142,43 @@ def run(
             paths,
             [expected, *blocking.candidates] if expected else list(blocking.candidates),
         )
+
+        prepared.append(
+            PreparedCase(
+                case_id=case.case_id,
+                stratum=case.stratum,
+                expected_work_key=expected,
+                expected_verdict=case.label.verdict,
+                candidates=candidates,
+                resolved=resolved,
+            )
+        )
+    return prepared
+
+
+def evaluate(
+    prepared: list[PreparedCase],
+    weights: Weights,
+) -> tuple[Metrics, list[CaseOutcome]]:
+    """`score_features` + `rank` + `decide` + the outcome/metrics logic.
+
+    Pure Python: no `con`, no `paths`. Safe to call thousands of times per
+    `prepare`d split, one call per weight vector Task 27's search tries.
+    """
+    outcomes: list[CaseOutcome] = []
+    recall_hits = dict.fromkeys(RECALL_AT, 0)
+    n_positive = 0
+
+    for case in prepared:
+        scored = [
+            score_features(c.work_key, c.values, c.conflicts, c.rules, weights)
+            for c in case.candidates
+        ]
+        ordered = rank(scored)
+        decision = decide(scored, weights)
+
+        expected = case.expected_work_key
+        resolved = case.resolved
 
         candidate_rank: int | None = None
         if expected:
@@ -119,11 +191,11 @@ def run(
                 if candidate_rank is not None and candidate_rank <= k:
                     recall_hits[k] += 1
 
-        if case.label.verdict == "match":
+        if case.expected_verdict == "match":
             same_as_expected = _same(resolved, decision.work_key, expected)
             correct = decision.verdict == "accept" and same_as_expected
             false_merge = decision.verdict == "accept" and not correct
-        elif case.label.verdict == "no_match":
+        elif case.expected_verdict == "no_match":
             correct = decision.verdict == "reject"
             false_merge = decision.verdict == "accept"
         else:  # ambiguous -- abstaining is the right answer
@@ -135,7 +207,7 @@ def run(
                 case_id=case.case_id,
                 stratum=case.stratum,
                 expected_work_key=expected,
-                expected_verdict=case.label.verdict,
+                expected_verdict=case.expected_verdict,
                 decision=decision,
                 candidate_rank=candidate_rank,
                 correct=correct,
@@ -168,6 +240,15 @@ def run(
         ),
     )
     return metrics, outcomes
+
+
+def run(
+    con: duckdb.DuckDBPyConnection,
+    paths: ArtifactPaths,
+    cases: list[EvalCase],
+    weights: Weights,
+) -> tuple[Metrics, list[CaseOutcome]]:
+    return evaluate(prepare(con, paths, cases), weights)
 
 
 @app.command()
