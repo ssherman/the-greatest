@@ -465,6 +465,16 @@ Rails.application.routes.draw do
     get "deletion_policy", to: "pages#deletion", as: :deletion_policy, constraints: {format: /html/}
   end
 
+  # The API contract, on every real host, unauthenticated and edge-cacheable:
+  # the one /api/ path that SHOULD cache. Served outside Api::V1::BaseController
+  # (which authenticates) -- see Api::V1::OpenapiController.
+  constraints DomainConstraint.new(
+    [:books, :music, :games].map { |domain| Rails.application.config.domains[domain] }.join(",")
+  ) do
+    get "api/v1/openapi", to: "api/v1/openapi#show", as: :api_v1_openapi,
+      defaults: {format: :json}, constraints: {format: :json}
+  end
+
   # Legacy books URL. ~15 years of inbound links point at /support.
   get "support", to: redirect("/membership", status: 301)
 

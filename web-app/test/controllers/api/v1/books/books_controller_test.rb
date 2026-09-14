@@ -30,6 +30,7 @@ module Api
 
         test "index lists ranked books best first with meta and links" do
           get "/api/v1/books", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
 
           assert_response :success
           assert_equal "application/json; charset=utf-8", response.content_type
@@ -48,6 +49,7 @@ module Api
 
         test "index paginates" do
           get "/api/v1/books?page=2&per_page=2", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
 
           assert_response :success
           assert_equal ["of-mice-and-men"], json[:data].map { |b| b[:slug] }
@@ -58,6 +60,7 @@ module Api
 
         test "a page past the end is an empty 200" do
           get "/api/v1/books?page=9", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
 
           assert_response :success
           assert_equal [], json[:data]
@@ -67,6 +70,7 @@ module Api
         test "invalid pagination parameters are a 400 problem" do
           {"page=0" => /page/, "page=abc" => /page/, "per_page=101" => /per_page/, "per_page=0" => /per_page/}.each do |query, detail|
             get "/api/v1/books?#{query}", headers: bearer(ApiTokenSecrets::MEMBER)
+            assert_api_response_conform(status: 400)
 
             assert_response :bad_request, query
             assert_equal "application/problem+json; charset=utf-8", response.content_type
@@ -79,6 +83,7 @@ module Api
           ::Books::RankingConfiguration.stubs(:default_primary).returns(nil)
 
           get "/api/v1/books", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
 
           assert_response :success
           assert_equal [], json[:data]
@@ -97,6 +102,7 @@ module Api
 
         test "show renders the full book" do
           get "/api/v1/books/#{@war_and_peace.slug}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
 
           assert_response :success
           assert_equal "war-and-peace", json[:data][:slug]
@@ -108,6 +114,7 @@ module Api
 
         test "show of an unranked book has a null rank" do
           get "/api/v1/books/#{books_books(:got).slug}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
 
           assert_response :success
           assert_nil json[:data][:rank]
@@ -115,6 +122,7 @@ module Api
 
         test "show of an unknown slug is a 404 problem" do
           get "/api/v1/books/no-such-book", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 404)
 
           assert_response :not_found
           assert_equal "application/problem+json; charset=utf-8", response.content_type
@@ -123,6 +131,7 @@ module Api
 
         test "show does not fall back to a primary-key lookup" do
           get "/api/v1/books/#{@war_and_peace.id}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 404)
 
           assert_response :not_found
         end
@@ -145,6 +154,7 @@ module Api
 
         test "no token is a 401 with a bare Bearer challenge" do
           get "/api/v1/books"
+          assert_api_conform(status: 401)
 
           assert_response :unauthorized
           assert_equal "Bearer", response.headers["WWW-Authenticate"]
@@ -155,12 +165,17 @@ module Api
 
         test "a token in a query parameter is not honoured -- still a 401" do
           get "/api/v1/books?access_token=#{ApiTokenSecrets::MEMBER}"
+          # Response-only: access_token is deliberately an undocumented query
+          # parameter -- request validation raises UnknownQueryParameterError
+          # on exactly the input this test exists to send.
+          assert_api_response_conform(status: 401)
 
           assert_response :unauthorized
         end
 
         test "an unknown token is a 401 invalid_token" do
           get "/api/v1/books", headers: bearer("tg_#{"z" * 40}")
+          assert_api_conform(status: 401)
 
           assert_response :unauthorized
           assert_equal %(Bearer error="invalid_token"), response.headers["WWW-Authenticate"]
@@ -169,6 +184,7 @@ module Api
 
         test "an expired token is a 401 invalid_token" do
           get "/api/v1/books", headers: bearer(ApiTokenSecrets::EXPIRED)
+          assert_api_conform(status: 401)
 
           assert_response :unauthorized
           assert_equal "invalid_token", json[:code]
@@ -178,12 +194,14 @@ module Api
           sign_in_as(users(:regular_user), stub_auth: true)
 
           get "/api/v1/books"
+          assert_api_conform(status: 401)
 
           assert_response :unauthorized
         end
 
         test "a non-member's token is a 403 membership_required with no challenge" do
           get "/api/v1/books", headers: bearer(ApiTokenSecrets::NON_MEMBER)
+          assert_api_conform(status: 403)
 
           assert_response :forbidden
           assert_nil response.headers["WWW-Authenticate"]
@@ -192,6 +210,7 @@ module Api
 
         test "a service account needs no membership and gets the system limits" do
           get "/api/v1/books", headers: bearer(ApiTokenSecrets::SERVICE)
+          assert_api_conform(status: 200)
 
           assert_response :success
           assert_equal Rails.application.config.x.api.rate_limits[:system][:per_minute].to_s, response.headers["X-RateLimit-Limit"]
@@ -201,6 +220,7 @@ module Api
 
         test "a token without books:read is a 403 insufficient_scope with a scope challenge" do
           get "/api/v1/books", headers: bearer(ApiTokenSecrets::MUSIC_ONLY)
+          assert_api_conform(status: 403)
 
           assert_response :forbidden
           assert_equal %(Bearer error="insufficient_scope", scope="books:read"), response.headers["WWW-Authenticate"]
@@ -243,6 +263,7 @@ module Api
           Services::Api::RateLimiter.stubs(:hit).returns(Services::Api::RateLimiter::Verdict.new(minute: minute, day: day))
 
           get "/api/v1/books", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 429)
 
           assert_response :too_many_requests
           assert_match(/\A\d+\z/, response.headers["Retry-After"])
@@ -264,6 +285,7 @@ module Api
           assert_no_queries do
             get "/api/v1/books", headers: headers
           end
+          assert_api_conform(status: 429)
 
           assert_response :too_many_requests
           assert_equal "rate_limited", json[:code]

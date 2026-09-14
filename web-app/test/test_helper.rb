@@ -3,6 +3,7 @@ require_relative "../config/environment"
 require "rails/test_help"
 require "mocha/minitest"
 require "webmock/minitest"
+require "openapi_first"
 require_relative "support/turbo_frame_links"
 require_relative "support/stripe_webhook_helper"
 require_relative "support/firebase_token_helper"
@@ -17,6 +18,17 @@ Sidekiq.testing!(:inline)
 
 # Configure WebMock to prevent real HTTP requests during tests
 WebMock.disable_net_connect!(allow_localhost: true)
+
+# Every API integration test validates its request and response against the
+# contract with assert_api_conform (see test/support/api_conformance.rb).
+# report_coverage is OFF: openapi_first's own gate runs at process exit and
+# exits 2 whenever coverage is under 100% -- which is every scoped run
+# (`bin/rails test test/models/...`). test/integration/api/v1/contract_coverage_test.rb
+# is the gate instead: it exercises every documented response itself.
+OpenapiFirst::Test.setup do |test|
+  test.register(Rails.root.join("config/api/v1/openapi.yaml").to_s)
+  test.report_coverage = false
+end
 
 module ActiveSupport
   class TestCase

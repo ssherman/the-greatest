@@ -1,0 +1,354 @@
+openapi: 3.1.0
+info:
+  title: The Greatest API
+  version: "1"
+  description: |
+    Read access to the ranked catalogues of The Greatest Books, The Greatest Music and
+    The Greatest Games. Every endpoint except this document needs a bearer token; tokens
+    are a membership benefit. Version 1 evolves additively: fields are added, never
+    renamed, removed or retyped.
+servers:
+  - url: https://thegreatestbooks.org
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/openapi.json:
+    get:
+      operationId: getOpenapi
+      summary: This document
+      security: []
+      responses:
+        "200":
+          description: The OpenAPI 3.1 document as JSON, with `servers` set to the host it was fetched from.
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/v1/books:
+    get:
+      operationId: listBooks
+      summary: Books in rank order
+      description: The Greatest Books' primary ranking, best first. Only ranked books appear.
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of ranked books.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/books/{slug}:
+    get:
+      operationId: getBook
+      summary: One book
+      parameters:
+        - $ref: "#/components/parameters/slug"
+      responses:
+        "200":
+          description: The book.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: A personal access token (`tg_…`). Create one at /developers/tokens.
+  parameters:
+    page:
+      name: page
+      in: query
+      description: 1-based page number. A page past the end returns an empty `data` array.
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    per_page:
+      name: per_page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    slug:
+      name: slug
+      in: path
+      required: true
+      schema:
+        type: string
+  headers:
+    X-RateLimit-Limit:
+      description: Requests allowed per calendar minute.
+      schema: {type: integer}
+    X-RateLimit-Remaining:
+      description: Requests left in the current minute.
+      schema: {type: integer}
+    X-RateLimit-Reset:
+      description: Unix time at which the minute window resets.
+      schema: {type: integer}
+    X-RateLimit-Daily-Limit:
+      description: Requests allowed per UTC day.
+      schema: {type: integer}
+    X-RateLimit-Daily-Remaining:
+      description: Requests left today.
+      schema: {type: integer}
+    X-RateLimit-Daily-Reset:
+      description: Unix time of the next 00:00 UTC.
+      schema: {type: integer}
+    Retry-After:
+      description: Seconds until the exhausted window resets.
+      schema: {type: integer}
+    WWW-Authenticate:
+      description: RFC 6750 challenge.
+      schema: {type: string}
+  responses:
+    BadRequest:
+      description: A query parameter is malformed or out of range.
+      headers:
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
+        X-RateLimit-Daily-Limit:
+          $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+        X-RateLimit-Daily-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+        X-RateLimit-Daily-Reset:
+          $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Unauthorized:
+      description: No token, or a token that is malformed, unknown, revoked or expired.
+      headers:
+        WWW-Authenticate:
+          $ref: "#/components/headers/WWW-Authenticate"
+          required: true
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Forbidden:
+      description: The token is valid but its account is not a member (`membership_required`) or lacks the scope this host needs (`insufficient_scope`).
+      headers:
+        WWW-Authenticate:
+          $ref: "#/components/headers/WWW-Authenticate"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFound:
+      description: No record with that slug.
+      headers:
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
+        X-RateLimit-Daily-Limit:
+          $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+        X-RateLimit-Daily-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+        X-RateLimit-Daily-Reset:
+          $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    TooManyRequests:
+      description: A rate-limit window is exhausted. `Retry-After` says when it resets.
+      headers:
+        Retry-After:
+          $ref: "#/components/headers/Retry-After"
+          required: true
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/X-RateLimit-Limit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/X-RateLimit-Remaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/X-RateLimit-Reset"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    Problem:
+      description: RFC 9457 Problem Details with a stable `code`.
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        code:
+          type: string
+          enum: [unauthenticated, invalid_token, membership_required, insufficient_scope, not_found, invalid_parameter, rate_limited]
+        detail:
+          type: string
+    PaginationMeta:
+      type: object
+      required: [page, per_page, total_count, total_pages]
+      properties:
+        page: {type: integer, minimum: 1}
+        per_page: {type: integer, minimum: 1, maximum: 100}
+        total_count: {type: integer, minimum: 0}
+        total_pages: {type: integer, minimum: 1}
+    PaginationLinks:
+      type: object
+      required: [self, next, prev, first, last]
+      properties:
+        self: {type: string, format: uri}
+        next: {type: [string, "null"], format: uri}
+        prev: {type: [string, "null"], format: uri}
+        first: {type: string, format: uri}
+        last: {type: string, format: uri}
+    AuthorSummary:
+      type: object
+      required: [id, slug, name]
+      properties:
+        id: {type: integer}
+        slug: {type: string}
+        name: {type: string}
+    Book:
+      type: object
+      required: [id, slug, title, subtitle, first_published_year, rank, authors, cover_url, url, api_url]
+      properties:
+        id: {type: integer}
+        slug: {type: string}
+        title: {type: string}
+        subtitle: {type: [string, "null"]}
+        first_published_year: {type: [integer, "null"]}
+        rank:
+          type: [integer, "null"]
+          description: Position in the site's primary ranking; null when unranked.
+        authors:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuthorSummary"
+        cover_url: {type: [string, "null"], format: uri}
+        url: {type: string, format: uri, description: The book's page on the site.}
+        api_url: {type: string, format: uri}
+    BookFull:
+      allOf:
+        - $ref: "#/components/schemas/Book"
+        - type: object
+          required: [sort_title, alternate_titles, book_kind, book_length, page_range, word_count, description, original_language, categories, countries]
+          properties:
+            sort_title: {type: [string, "null"]}
+            alternate_titles:
+              type: array
+              items: {type: string}
+            book_kind:
+              type: string
+              enum: [standalone, collection]
+            book_length:
+              type: [string, "null"]
+              enum: [very_short, short, medium, moderate, long, very_long, null]
+            page_range: {type: [string, "null"]}
+            word_count: {type: [integer, "null"]}
+            description: {type: [string, "null"]}
+            original_language:
+              type: [object, "null"]
+              required: [id, slug, name]
+              properties:
+                id: {type: integer}
+                slug: {type: string}
+                name: {type: string}
+            categories:
+              type: array
+              items:
+                type: object
+                required: [id, slug, name, category_type]
+                properties:
+                  id: {type: integer}
+                  slug: {type: [string, "null"]}
+                  name: {type: string}
+                  category_type: {type: string}
+            countries:
+              type: array
+              items:
+                type: object
+                required: [id, slug, name]
+                properties:
+                  id: {type: integer}
+                  slug: {type: string}
+                  name: {type: string}
+    BookCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Book"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+    BookItem:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/BookFull"
