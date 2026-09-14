@@ -5,6 +5,7 @@ class ApplicationController < ActionController::Base
   include ApplicationHelper
   include Pundit::Authorization
   include Cacheable
+  include RankingConfigurationGating
 
   rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
   rescue_from Pundit::NotAuthorizedError, with: :user_not_authorized
@@ -108,6 +109,7 @@ class ApplicationController < ActionController::Base
       raise ActiveRecord::RecordNotFound
     end
 
+    gate_ranking_configuration!(ranking_config)
     instance_variable_set(instance_var, ranking_config)
   end
 end

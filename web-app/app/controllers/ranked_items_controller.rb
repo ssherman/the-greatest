@@ -13,6 +13,8 @@ class RankedItemsController < ApplicationController
     end
 
     raise ActiveRecord::RecordNotFound unless @ranking_configuration
+
+    gate_ranking_configuration!(@ranking_configuration)
   end
 
   def validate_ranking_configuration_type

@@ -15,11 +15,17 @@ application.register("authentication", AuthenticationController)
 import AutocompleteController from "../controllers/autocomplete_controller"
 application.register("autocomplete", AutocompleteController)
 
+import ClipboardCopyController from "../controllers/clipboard_copy_controller"
+application.register("clipboard-copy", ClipboardCopyController)
+
 import Contact__FormController from "../controllers/contact/form_controller"
 application.register("contact--form", Contact__FormController)
 
 import MembershipStateController from "../controllers/membership_state_controller"
 application.register("membership-state", MembershipStateController)
+
+import RankingConfigurationStatusController from "../controllers/ranking_configuration_status_controller"
+application.register("ranking-configuration-status", RankingConfigurationStatusController)
 
 import Reviews__ModalController from "../controllers/reviews/modal_controller"
 application.register("reviews--modal", Reviews__ModalController)
@@ -32,6 +38,9 @@ application.register("reviews--spoiler", Reviews__SpoilerController)
 
 import Reviews__WidgetController from "../controllers/reviews/widget_controller"
 application.register("reviews--widget", Reviews__WidgetController)
+
+import SavedSearchPickerController from "../controllers/saved_search_picker_controller"
+application.register("saved-search-picker", SavedSearchPickerController)
 
 import Shared__FormTokenController from "../controllers/shared/form_token_controller"
 application.register("shared--form-token", Shared__FormTokenController)

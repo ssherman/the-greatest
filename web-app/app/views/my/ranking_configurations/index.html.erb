@@ -1,0 +1,60 @@
+<% content_for :page_title, "My Rankings | #{domain_name}" %>
+
+<div class="space-y-8">
+  <%= render "my/ranking_configurations/notice" %>
+
+  <header class="flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h1 class="text-3xl sm:text-4xl font-bold">My Rankings</h1>
+      <p class="mt-2 text-base-content/70">Your own versions of the rankings: pick the lists, tune the settings, share the result.</p>
+    </div>
+    <% if @at_limit %>
+      <div class="text-right">
+        <button type="button" class="btn btn-primary" disabled>New ranking</button>
+        <p class="mt-1 text-sm text-base-content/70">You've reached the limit of <%= RankingConfiguration::MAX_PER_USER %> rankings.</p>
+      </div>
+    <% else %>
+      <%= link_to "New ranking", new_my_ranking_configuration_path, class: "btn btn-primary" %>
+    <% end %>
+  </header>
+
+  <% if @ranking_configurations.any? %>
+    <div class="grid gap-4 lg:grid-cols-2">
+      <% @ranking_configurations.each do |config| %>
+        <% entry = ::RankingConfigurations::Registry.for_config(config) %>
+        <article class="card bg-base-100 border border-base-300 shadow-sm">
+          <div class="card-body gap-3">
+            <div class="flex flex-wrap items-start justify-between gap-2">
+              <h2 class="card-title [overflow-wrap:anywhere]">
+                <%= link_to config.name, my_ranking_configuration_path(config), class: "link" %>
+              </h2>
+              <div class="flex gap-2">
+                <span class="badge badge-outline"><%= config.user_shared? ? "Shared" : "Private" %></span>
+                <%= render "my/ranking_configurations/status_badge", ranking_configuration: config %>
+              </div>
+            </div>
+            <% if config.description.present? %>
+              <p class="text-base-content/70 [overflow-wrap:anywhere]"><%= config.description %></p>
+            <% end %>
+            <p class="text-sm text-base-content/70">
+              <% if config.last_refreshed_at %>
+                Last refreshed <%= time_ago_in_words(config.last_refreshed_at) %> ago.
+              <% else %>
+                Not calculated yet.
+              <% end %>
+            </p>
+            <div class="card-actions justify-end">
+              <%= link_to "Manage", my_ranking_configuration_path(config), class: "btn btn-sm btn-primary" %>
+              <%= link_to "View rankings", entry.results_path.call(config), class: "btn btn-sm btn-ghost" %>
+            </div>
+          </div>
+        </article>
+      <% end %>
+    </div>
+  <% else %>
+    <div class="text-center py-16">
+      <h2 class="text-2xl font-bold mb-2">No rankings yet</h2>
+      <p class="text-base-content/70">Create one to build the rankings your way.</p>
+    </div>
+  <% end %>
+</div>

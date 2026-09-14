@@ -1,0 +1,7 @@
+<%# Public layouts render no flash; this feature renders its own inside each view. %>
+<% if flash[:notice].present? %>
+  <div class="alert alert-success" role="status"><span><%= flash[:notice] %></span></div>
+<% end %>
+<% if flash[:alert].present? %>
+  <div class="alert alert-error" role="alert"><span><%= flash[:alert] %></span></div>
+<% end %>

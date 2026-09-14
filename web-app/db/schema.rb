@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_03_230057) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_13_014759) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -932,20 +932,26 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_03_230057) do
     t.boolean "global", default: true, null: false
     t.boolean "inherit_penalties", default: true, null: false
     t.bigint "inherited_from_id"
+    t.text "last_refresh_error"
+    t.datetime "last_refreshed_at"
     t.integer "list_limit"
     t.integer "max_list_dates_penalty_age", default: 50
     t.integer "max_list_dates_penalty_percentage", default: 80
     t.integer "min_list_weight", default: 1, null: false
     t.string "name", null: false
+    t.boolean "needs_refresh", default: false, null: false
     t.boolean "primary", default: false, null: false
     t.integer "primary_mapped_list_cutoff_limit"
     t.bigint "primary_mapped_list_id"
     t.datetime "published_at"
+    t.datetime "refresh_requested_at"
+    t.integer "refresh_status", default: 0, null: false
     t.integer "secondary_mapped_list_cutoff_limit"
     t.bigint "secondary_mapped_list_id"
     t.string "type", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id"
+    t.boolean "user_shared", default: false, null: false
     t.integer "year"
     t.index ["inherited_from_id"], name: "index_ranking_configurations_on_inherited_from_id"
     t.index ["primary_mapped_list_id"], name: "index_ranking_configurations_on_primary_mapped_list_id"

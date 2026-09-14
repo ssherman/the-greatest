@@ -170,6 +170,20 @@ module Books
         "query count grew from #{small} to #{large} as books were added -- N+1 on the all-books page"
     end
 
+    test "an author page under a shared user-owned configuration is never cached" do
+      config = ranking_configurations(:books_user_shared)
+
+      get "/rc/#{config.id}/author/#{@author.slug}"
+
+      assert_response :success
+      assert_match "no-store", response.headers["Cache-Control"].to_s
+    end
+
+    test "an author page under a private user-owned configuration 404s for a non-owner" do
+      get "/rc/#{ranking_configurations(:books_user).id}/author/#{@author.slug}"
+      assert_response :not_found
+    end
+
     private
 
     def seed_ranked_books_for_author(count)

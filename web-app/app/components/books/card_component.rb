@@ -8,15 +8,28 @@ class Books::CardComponent < ViewComponent::Base
   GRID_CONTAINER_CLASS = "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 " \
     "lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6"
 
-  def initialize(book:, rank: nil, index: nil)
+  def initialize(book:, rank: nil, index: nil, ranking_configuration: nil)
     @book = book
     @rank = rank
     @index = index
+    @ranking_configuration = ranking_configuration
   end
 
   private
 
-  attr_reader :book, :rank, :index
+  attr_reader :book, :rank, :index, :ranking_configuration
+
+  # Under /rc/<id> the card keeps the viewer inside that configuration, so the
+  # book page shows its rank there and a custom ranking keeps its banner. The
+  # primary stays on the canonical, prefix-free URL (same rule as
+  # Books::FilterPath#prefix).
+  def book_link_path
+    if ranking_configuration.nil? || ranking_configuration.primary?
+      book_path(book.slug)
+    else
+      book_path(book.slug, ranking_configuration_id: ranking_configuration.id)
+    end
+  end
 
   def author_names
     book.book_authors.map { |book_author| book_author.author.name }.join(", ")

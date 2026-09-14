@@ -413,9 +413,11 @@ module Admin
         test "should execute index action without any IDs and process all configurations" do
           sign_in_as(@admin_user, stub_auth: true)
 
-          # When no IDs provided, should process ALL configurations of this type
-          BulkCalculateWeightsJob.expects(:perform_async).with(@ranking_configuration.id)
-          BulkCalculateWeightsJob.expects(:perform_async).with(@secondary_configuration.id)
+          # When no IDs provided, should process ALL configurations of this type,
+          # user-owned rows (e.g. music_albums_user_shared) included.
+          ::Music::Albums::RankingConfiguration.pluck(:id).each do |id|
+            BulkCalculateWeightsJob.expects(:perform_async).with(id)
+          end
 
           post index_action_admin_albums_ranking_configurations_path(
             action_name: "BulkCalculateWeights"

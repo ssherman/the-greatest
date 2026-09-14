@@ -1,0 +1,16 @@
+<%# Shown on every page under /rc/ for a user-owned configuration. Name only,
+    never the owner (spec §2 #6). The layout renders this when
+    RankingConfigurationGating set @custom_ranking_configuration. %>
+<%
+  entry = ::RankingConfigurations::Registry.for_config(ranking_configuration)
+  official_path = entry ? entry.official_rankings_path.call : "/"
+%>
+<%# Styled like the page's other boxes (the hero, the cards): white on the cream
+    background with the base-300 border, centred. Not an alert-info -- the books
+    theme's info blue sits outside the palette this page uses. %>
+<div id="custom-ranking-banner" class="bg-base-100 border border-base-300 rounded-xl px-6 py-4 mb-6 text-center" role="status">
+  <p class="[overflow-wrap:anywhere]">
+    You're viewing a custom ranking: <strong><%= ranking_configuration.name %></strong>.
+    <%= link_to "See the official rankings →", official_path, class: "link link-primary font-medium" %>
+  </p>
+</div>

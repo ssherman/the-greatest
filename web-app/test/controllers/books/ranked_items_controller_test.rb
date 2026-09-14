@@ -248,6 +248,81 @@ module Books
       assert_select "meta[name=robots][content^=index]"
     end
 
+    # --- user-owned configurations at /rc/:id (spec §9) ---
+
+    test "a shared user-owned configuration renders for an anonymous visitor and is never cached" do
+      config = ranking_configurations(:books_user_shared)
+
+      get "/rc/#{config.id}"
+
+      assert_response :success
+      assert_match "no-store", response.headers["Cache-Control"].to_s
+      refute_match "public", response.headers["Cache-Control"].to_s
+      assert_equal config, @controller.view_assigns["custom_ranking_configuration"]
+    end
+
+    test "a private user-owned configuration 404s for anonymous visitors and non-owners" do
+      config = ranking_configurations(:books_user)
+
+      get "/rc/#{config.id}"
+      assert_response :not_found
+
+      sign_in_as users(:editor_user), stub_auth: true
+      get "/rc/#{config.id}"
+      assert_response :not_found
+    end
+
+    test "a private user-owned configuration renders for its owner without caching" do
+      config = ranking_configurations(:books_user)
+      sign_in_as users(:regular_user), stub_auth: true
+
+      get "/rc/#{config.id}"
+
+      assert_response :success
+      assert_match "no-store", response.headers["Cache-Control"].to_s
+      assert_equal config, @controller.view_assigns["custom_ranking_configuration"]
+    end
+
+    test "a global configuration is still edge-cached and sets no custom banner" do
+      get "/rc/#{@rc.id}"
+
+      assert_response :success
+      assert_match "public", response.headers["Cache-Control"].to_s
+      assert_match "max-age=21600", response.headers["Cache-Control"].to_s
+      assert_nil @controller.view_assigns["custom_ranking_configuration"]
+    end
+
+    test "book cards under a custom configuration keep the /rc/ prefix; the primary's do not" do
+      config = ranking_configurations(:books_user_shared)
+      RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: config, rank: 1, score: 100)
+
+      get "/rc/#{config.id}"
+      assert_select "a[href=?]", "/rc/#{config.id}/book/war-and-peace"
+
+      get "/"
+      assert_select "a[href=?]", "/book/war-and-peace"
+      assert_select "a[href^=?]", "/rc/", count: 0
+    end
+
+    test "a shared user-owned configuration's page carries the custom-ranking banner" do
+      config = ranking_configurations(:books_user_shared)
+
+      get "/rc/#{config.id}"
+
+      assert_select "#custom-ranking-banner", count: 1
+      assert_select "#custom-ranking-banner a[href=?]", "/"
+    end
+
+    test "a global configuration's page carries no custom-ranking banner" do
+      get "/"
+      assert_select "#custom-ranking-banner", count: 0
+    end
+
+    test "the books nav links to My Rankings" do
+      get "/"
+      assert_select "#navbar_my_books a[href=?]", "/my/rankings", minimum: 1
+    end
+
     private
 
     # Bulk-inserts filler so tests can reach page 2+ against the controller's
