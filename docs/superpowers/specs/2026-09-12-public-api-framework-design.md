@@ -503,18 +503,14 @@ with a negative class, not just the happy path.
 
 ## Rollout
 
-**Edge, per zone (books, music, games) — Shane, before the first production call:**
-
-1. A custom rule matching `starts_with(http.request.uri.path, "/api/")` with action
-   *Skip → Super Bot Fight Mode*, placed **above** the comma / `/rc/` / `.csv` challenge rules
-   so a future filter parameter containing a comma is not challenged. Log-first: create it as
-   *Log* for a day and confirm it matches only `/api/` traffic before switching to Skip. Rule
-   changes here have cost real revenue before.
-2. Confirm no host-scoped cache rule that overrides origin headers covers `/api/`. Responses are
-   `private, no-store`, which Cloudflare honours by default. `/api/v1/openapi.json` is the one
-   path that should cache.
-3. After deploy, from outside: `curl -A python-requests/2.32 https://thegreatestbooks.org/api/v1/books`
-   must be a 401 with `WWW-Authenticate: Bearer`, not a challenge page.
+**Edge — superseded.** The three steps this section originally listed (skip SBFM only, log
+first, place above the comma/`/rc/`/`.csv` rules) were wrong in ways that would have broken
+the API: the books zone's edge rate limit (20 per 30 s, managed challenge) sits below the API's
+own limits, so rate limiting must be skipped too; the rule must be scoped to
+`new.thegreatestbooks.org` because the books zone also fronts the legacy hosts; a skip rule has
+no log mode; and the rules that fire on `/api/` are the bad-ASN/country challenges, not the
+path-matched ones. The live rules are in the `the-greatest-cloudflare` repo and were verified
+2026-09-14. `docs/features/public-api.md` § Edge is the current description.
 
 **Migrations.** `api_tokens` (new table) and `users.account_kind integer NOT NULL DEFAULT 0`
 (non-rewriting on Postgres 11+). Both run against a production snapshot first: a failing
