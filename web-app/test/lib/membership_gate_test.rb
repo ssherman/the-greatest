@@ -13,6 +13,10 @@ class MembershipGateTest < ActiveSupport::TestCase
     refute MembershipGate.members_only?(:ranked_lists)
   end
 
+  test "the API is registered as a members-only feature" do
+    assert MembershipGate.members_only?(:api)
+  end
+
   test "every registered feature carries a human description" do
     # The registry exists to be read by a person asking "what is behind the
     # paywall?". A bare key with no description does not answer that.

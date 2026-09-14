@@ -3,9 +3,26 @@ require_relative "../config/environment"
 require "rails/test_help"
 require "mocha/minitest"
 require "webmock/minitest"
+require "openapi_first"
+
+# openapi_first prefers multi_json whenever it is in the bundle (it is, via
+# opensearch-ruby) and calls MultiJson.load / .dump, which multi_json 1.21+
+# deprecates with a printed line per test process. Same library, its current
+# names -- a new warning line is a regression here, and this is the cause,
+# not a filter. Delete once openapi_first calls MultiJSON.parse itself.
+module OpenapiFirst
+  module JSON
+    def self.parse(string) = MultiJSON.parse(string)
+
+    def self.generate(object) = MultiJSON.generate(object)
+  end
+end
 require_relative "support/turbo_frame_links"
 require_relative "support/stripe_webhook_helper"
 require_relative "support/firebase_token_helper"
+require_relative "support/api_token_secrets"
+require_relative "support/api_conformance"
+require_relative "support/sql_capture"
 
 # Configure Sidekiq to run jobs inline during tests
 # Sidekiq 9 removes `require "sidekiq/testing"`. Sidekiq.testing! loads sidekiq/test_api
@@ -15,8 +32,27 @@ Sidekiq.testing!(:inline)
 # Configure WebMock to prevent real HTTP requests during tests
 WebMock.disable_net_connect!(allow_localhost: true)
 
+# Every API integration test validates its request and response against the
+# contract with assert_api_conform (see test/support/api_conformance.rb).
+# report_coverage is OFF: openapi_first's own gate runs at process exit and
+# exits 2 whenever coverage is under 100% -- which is every scoped run
+# (`bin/rails test test/models/...`). test/integration/api/v1/contract_coverage_test.rb
+# is the gate instead: it exercises every documented response itself.
+OpenapiFirst::Test.setup do |test|
+  test.register(Rails.root.join("config/api/v1/openapi.yaml").to_s)
+  test.report_coverage = false
+  # Without this, an invalid response raises inside the gem's own
+  # after_response_validation hook (an ERROR), not through our assertion (a
+  # FAILURE) -- raise_error: false on the explicit validate_response call in
+  # assert_api_response_conform only controls that one call's own raising, not
+  # this separate hook that fires on every validate_response/validate_request.
+  test.response_raise_error = false
+end
+
 module ActiveSupport
   class TestCase
+    include SqlCapture
+
     # Capped, not :number_of_processors. Several agents run suites at once in
     # separate worktrees, and every worker holds one Postgres connection, so an
     # unbounded count per run exhausts the server: measured 2026-08-24, three
