@@ -339,7 +339,9 @@ timestamps ISO 8601 UTC, ids integers. Every URL is absolute and built from
 
 **Pagination.** `page` (integer ≥ 1, default 1), `per_page` (1–100, default 50). Non-integer or
 out-of-range → 400 `invalid_parameter`. A page past the last returns 200 with `data: []` and
-truthful `meta` (Pagy's empty-page overflow) — what an iterating client expects.
+truthful `meta` — what an iterating client expects, and the same empty-page behaviour Pagy
+gives the site. The API does its own parsing (`Api::Page`) rather than going through Pagy's
+controller helper, which reads the page from the request and cannot answer 400.
 
 **Errors.** RFC 9457, `Content-Type: application/problem+json`, built in one place
 (`Api::Problem`):
