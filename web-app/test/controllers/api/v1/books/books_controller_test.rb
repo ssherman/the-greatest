@@ -16,6 +16,12 @@ module Api
           RankedItem.create!(item: @war_and_peace, ranking_configuration: @rc, rank: 1, score: 100)
           RankedItem.create!(item: @crime, ranking_configuration: @rc, rank: 2, score: 90)
           RankedItem.create!(item: @mice, ranking_configuration: @rc, rank: 3, score: 80)
+          # Only war_and_peace's fixtures carry a book_authors row -- without these,
+          # per_page=1 vs per_page=3 exercise identical (empty) nested author
+          # preloads and the N+1 test below can't tell an included association from
+          # a dropped one.
+          ::Books::BookAuthor.create!(book: @crime, author: books_authors(:king), position: 1, role: 0)
+          ::Books::BookAuthor.create!(book: @mice, author: books_authors(:bachman), position: 1, role: 0)
         end
 
         def json = response.parsed_body.deep_symbolize_keys
@@ -127,6 +133,14 @@ module Api
           assert_response :not_found
         end
 
+        test "this route only exists on the books host" do
+          host! "dev.thegreatestmusic.org"
+
+          get "/api/v1/books", headers: bearer(ApiTokenSecrets::MEMBER)
+
+          assert_response :not_found
+        end
+
         # --- authentication ------------------------------------------------------
 
         test "no token is a 401 with a bare Bearer challenge" do
@@ -137,6 +151,12 @@ module Api
           assert_equal "application/problem+json; charset=utf-8", response.content_type
           assert_equal "unauthenticated", json[:code]
           assert_equal 401, json[:status]
+        end
+
+        test "a token in a query parameter is not honoured -- still a 401" do
+          get "/api/v1/books?access_token=#{ApiTokenSecrets::MEMBER}"
+
+          assert_response :unauthorized
         end
 
         test "an unknown token is a 401 invalid_token" do
@@ -185,6 +205,7 @@ module Api
           assert_response :forbidden
           assert_equal %(Bearer error="insufficient_scope", scope="books:read"), response.headers["WWW-Authenticate"]
           assert_equal "insufficient_scope", json[:code]
+          RATE_HEADERS.each { |name| assert response.headers[name].present?, name }
         end
 
         # --- rate limiting -------------------------------------------------------
@@ -232,17 +253,23 @@ module Api
 
         test "too many unauthenticated requests from one address is a 429 before any lookup" do
           limit = Rails.application.config.x.api.unauthenticated_per_minute
-          limit.times { get "/api/v1/books", headers: {"CF-Connecting-IP" => "203.0.113.7"} }
+          # A well-formed but unknown token, not a bare request: a blank
+          # Authorization header never reaches ApiToken.authenticate's DB lookup
+          # regardless of ordering, so it can't tell a correctly-ordered peek
+          # (skip the lookup once over the limit) from a regression that runs
+          # the lookup first and checks the limit after.
+          headers = bearer("tg_#{"z" * 40}").merge("CF-Connecting-IP" => "203.0.113.7")
+          limit.times { get "/api/v1/books", headers: headers }
 
           assert_no_queries do
-            get "/api/v1/books", headers: {"CF-Connecting-IP" => "203.0.113.7"}
+            get "/api/v1/books", headers: headers
           end
 
           assert_response :too_many_requests
           assert_equal "rate_limited", json[:code]
           assert response.headers["Retry-After"].present?
 
-          get "/api/v1/books", headers: {"CF-Connecting-IP" => "203.0.113.8"}
+          get "/api/v1/books", headers: bearer("tg_#{"z" * 40}").merge("CF-Connecting-IP" => "203.0.113.8")
           assert_response :unauthorized
         end
 
