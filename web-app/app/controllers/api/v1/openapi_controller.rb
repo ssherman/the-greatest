@@ -6,7 +6,6 @@ module Api
     # Not a BaseController subclass on purpose: that base authenticates.
     class OpenapiController < ActionController::API
       include CurrentDomain
-      include Cacheable
 
       def show
         expires_in 1.hour, public: true

@@ -4,6 +4,19 @@ require "rails/test_help"
 require "mocha/minitest"
 require "webmock/minitest"
 require "openapi_first"
+
+# openapi_first prefers multi_json whenever it is in the bundle (it is, via
+# opensearch-ruby) and calls MultiJson.load / .dump, which multi_json 1.21+
+# deprecates with a printed line per test process. Same library, its current
+# names -- a new warning line is a regression here, and this is the cause,
+# not a filter. Delete once openapi_first calls MultiJSON.parse itself.
+module OpenapiFirst
+  module JSON
+    def self.parse(string) = MultiJSON.parse(string)
+
+    def self.generate(object) = MultiJSON.dump(object)
+  end
+end
 require_relative "support/turbo_frame_links"
 require_relative "support/stripe_webhook_helper"
 require_relative "support/firebase_token_helper"
@@ -28,6 +41,12 @@ WebMock.disable_net_connect!(allow_localhost: true)
 OpenapiFirst::Test.setup do |test|
   test.register(Rails.root.join("config/api/v1/openapi.yaml").to_s)
   test.report_coverage = false
+  # Without this, an invalid response raises inside the gem's own
+  # after_response_validation hook (an ERROR), not through our assertion (a
+  # FAILURE) -- raise_error: false on the explicit validate_response call in
+  # assert_api_response_conform only controls that one call's own raising, not
+  # this separate hook that fires on every validate_response/validate_request.
+  test.response_raise_error = false
 end
 
 module ActiveSupport

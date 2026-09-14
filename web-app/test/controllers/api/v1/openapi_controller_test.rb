@@ -16,6 +16,9 @@ module Api
         assert body["paths"].key?("/api/v1/books")
         assert_match(/public/, response.headers["Cache-Control"])
         assert_match(/max-age=3600/, response.headers["Cache-Control"])
+        # What "edge-cacheable" actually depends on: Cloudflare bypasses cache
+        # whenever a Set-Cookie header is present, regardless of Cache-Control.
+        assert_nil response.headers["Set-Cookie"]
       end
 
       test "stamps the music host when fetched there" do

@@ -43,6 +43,7 @@ module Api
 
         test "index excludes unranked books" do
           get "/api/v1/books", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
 
           refute_includes json[:data].map { |b| b[:slug] }, books_books(:got).slug
         end
@@ -232,6 +233,7 @@ module Api
 
         test "every authenticated response carries the six rate-limit headers" do
           get "/api/v1/books", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
 
           RATE_HEADERS.each { |name| assert_match(/\A\d+\z/, response.headers[name].to_s, name) }
           limits = Rails.application.config.x.api.rate_limits[:member]
@@ -242,6 +244,7 @@ module Api
 
         test "error responses after authentication carry the headers too" do
           get "/api/v1/books/no-such-book", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 404)
 
           assert_response :not_found
           RATE_HEADERS.each { |name| assert response.headers[name].present?, name }
@@ -249,6 +252,7 @@ module Api
 
         test "a 401 carries only the minute triple, describing the IP window" do
           get "/api/v1/books"
+          assert_api_conform(status: 401)
 
           assert_equal Rails.application.config.x.api.unauthenticated_per_minute.to_s, response.headers["X-RateLimit-Limit"]
           assert response.headers["X-RateLimit-Remaining"].present?
