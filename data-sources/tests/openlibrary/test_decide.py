@@ -1,5 +1,31 @@
 from openlibrary.matcher.decide import decide, rank
-from openlibrary.matcher.scorer import ScoredCandidate, load_weights
+from openlibrary.matcher.features import FEATURES
+from openlibrary.matcher.scorer import MATCHER_VERSION, ScoredCandidate, Weights
+
+
+def _equal_weights() -> Weights:
+    """An equal-weights `Weights`, built inline -- NOT `load_weights()`.
+
+    `weights.json` is the real, calibrated shipped file (Task 27); every
+    test below asserts a specific accept/reject/abstain boundary against a
+    literal score, so it needs the FIXED thresholds those literals were
+    written against (0.9 / 0.4 / 0.05), not whatever the latest calibration
+    run happened to produce. `decide()` never reads `feature_weights` --
+    only the three thresholds -- so their values here don't matter, but a
+    valid `Weights` still needs exactly the declared `FEATURES` keys. This
+    module must not import `openlibrary.eval`, so it is not shared with
+    `test_scorer.py`'s `_weights_payload`.
+    """
+    return Weights(
+        matcher_version=MATCHER_VERSION,
+        calibrated=False,
+        calibrated_at=None,
+        feature_weights=dict.fromkeys(FEATURES, 1.0),
+        conflict_penalties={"identifier": 0.35},
+        accept_threshold=0.9,
+        reject_threshold=0.4,
+        margin_threshold=0.05,
+    )
 
 
 def _c(work_key: str, score: float, conflicts=None, evidence=None) -> ScoredCandidate:
@@ -15,13 +41,13 @@ def _c(work_key: str, score: float, conflicts=None, evidence=None) -> ScoredCand
 
 
 def test_no_candidates_is_a_reject_not_a_crash():
-    decision = decide([], load_weights())
+    decision = decide([], _equal_weights())
     assert decision.verdict == "reject"
     assert decision.work_key is None
 
 
 def test_a_clear_winner_is_accepted():
-    weights = load_weights()
+    weights = _equal_weights()
     decision = decide([_c("OL1W", 0.97), _c("OL2W", 0.40)], weights)
     assert decision.verdict == "accept"
     assert decision.work_key == "OL1W"
@@ -31,29 +57,29 @@ def test_a_clear_winner_is_accepted():
 def test_a_high_score_with_a_thin_margin_abstains():
     # THE failure this exists to prevent: five duplicate works, one picked at
     # 0.94 while another scores 0.93.
-    decision = decide([_c("OL1W", 0.94), _c("OL2W", 0.93)], load_weights())
+    decision = decide([_c("OL1W", 0.94), _c("OL2W", 0.93)], _equal_weights())
     assert decision.verdict == "abstain"
     assert "margin" in decision.reason
 
 
 def test_everything_below_the_reject_threshold_is_rejected():
-    decision = decide([_c("OL1W", 0.10), _c("OL2W", 0.05)], load_weights())
+    decision = decide([_c("OL1W", 0.10), _c("OL2W", 0.05)], _equal_weights())
     assert decision.verdict == "reject"
 
 
 def test_a_middling_score_abstains_rather_than_guessing():
-    decision = decide([_c("OL1W", 0.65)], load_weights())
+    decision = decide([_c("OL1W", 0.65)], _equal_weights())
     assert decision.verdict == "abstain"
 
 
 def test_a_conflict_on_the_best_candidate_can_never_be_accepted():
-    decision = decide([_c("OL1W", 0.99, conflicts=["identifier"])], load_weights())
+    decision = decide([_c("OL1W", 0.99, conflicts=["identifier"])], _equal_weights())
     assert decision.verdict == "abstain"
     assert "conflict" in decision.reason
 
 
 def test_a_single_candidate_has_an_infinite_margin_in_effect():
-    decision = decide([_c("OL1W", 0.97)], load_weights())
+    decision = decide([_c("OL1W", 0.97)], _equal_weights())
     assert decision.verdict == "accept"
     assert decision.margin is not None
 
@@ -78,7 +104,7 @@ def test_popularity_alone_can_never_be_accepted():
     }
     decision = decide(
         [_c("OL1W", 1.0, evidence=evidence)],
-        load_weights(),
+        _equal_weights(),
     )
     assert decision.verdict == "abstain"
     assert "identity" in decision.reason
@@ -104,6 +130,6 @@ def test_an_identity_feature_alongside_the_prior_is_enough():
     }
     decision = decide(
         [_c("OL1W", 1.0, evidence=evidence)],
-        load_weights(),
+        _equal_weights(),
     )
     assert decision.verdict == "accept"

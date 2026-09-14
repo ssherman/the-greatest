@@ -206,11 +206,14 @@ def splink_weights(prepared_train: list[PreparedCase]) -> Weights | None:
     match weights into the weighted-mean shape `scorer.score_features`
     expects. None of that is reachable from `PreparedCase` as it stands.
 
-    Returns `None` -- with the specific reason `typer.echo`'d -- when the
-    `calibration` extra is not installed, or when the attempt above fails as
-    expected. If a fit ever succeeds, its comparisons are translated into
-    `Weights.feature_weights` on a best-effort basis and returned so the
-    caller can evaluate it on the held-out split like any other candidate.
+    Always returns `None`, with the specific reason `typer.echo`'d: either
+    the `calibration` extra is not installed, or the attempt above fails as
+    demonstrated (every time it has been tried, against the real Splink
+    4.0.16 API). There is deliberately no "translate a successful fit"
+    branch here -- writing one would mean committing code no run of this
+    function has ever exercised, for an outcome the analysis above shows
+    cannot occur with this data shape. "Splink never produced a fit to
+    evaluate" is itself the design's requested Splink evaluation result.
     """
     try:
         import pandas as pd
@@ -257,9 +260,24 @@ def splink_weights(prepared_train: list[PreparedCase]) -> Weights | None:
         )
         linker.training.estimate_m_from_pairwise_labels("pairwise_labels")
     except Exception as exc:
+        # Splink's error carries ~260 lines of the generated SQL it failed on
+        # (useful once, while diagnosing this -- see the docstring for the
+        # exact reproduction); only its final line ("Error was: ...") says
+        # what actually went wrong, so that is what gets echoed.
+        # Splink's own message carries ~260 lines of the SQL it generated and
+        # failed on (useful once, while diagnosing this -- see the docstring
+        # for the reproduction); the actual "what went wrong" is the one line
+        # starting "Error was: ..." a few lines before the end (the true
+        # last line is just the `^` caret DuckDB prints under the offending
+        # token, not text worth echoing).
+        lines = str(exc).strip().splitlines()
+        reason_line = next(
+            (line.strip() for line in lines if line.strip().startswith("Error was:")),
+            lines[-1].strip() if lines else "",
+        )
         typer.echo(
-            "  splink: estimate_m_from_pairwise_labels failed -- "
-            f"{type(exc).__name__}: {exc}\n"
+            f"  splink: estimate_m_from_pairwise_labels failed -- "
+            f"{type(exc).__name__}: {reason_line}\n"
             "  Reason: Splink projects `l.<feature>` and `r.<feature>` for every "
             "declared Comparison from BOTH linked frames; our 'books' side (built "
             "from PreparedCase, which carries only case_id) has none of the 9 "
@@ -268,35 +286,6 @@ def splink_weights(prepared_train: list[PreparedCase]) -> Weights | None:
             "openlibrary.eval.calibrate.splink_weights's docstring for what a real "
             "integration would need."
         )
-        return None
-
-    # Unexpected: the attempt above is designed to fail for the structural
-    # reason documented above. If Splink's own behaviour ever changes such
-    # that it does not, translate on a best-effort basis and let the caller's
-    # held-out evaluation be the judge -- per the design, a translation that
-    # is not straightforward is itself a legitimate finding to report.
-    typer.echo("  splink: fit succeeded (unexpectedly) -- attempting to translate match weights")
-    try:
-        fitted: dict[str, float] = {}
-        for comparison in linker._settings_obj.comparisons:
-            ratios = [
-                level.m_probability / level.u_probability
-                for level in comparison.comparison_levels
-                if not level.is_null_level and level.u_probability
-            ]
-            if ratios:
-                fitted[comparison.output_column_name] = max(ratios)
-        if set(fitted) != set(FEATURES):
-            typer.echo("  splink: fitted comparisons do not cover every declared feature")
-            return None
-        top = max(fitted.values())
-        if top <= 0:
-            typer.echo("  splink: fitted weights were non-positive; discarding")
-            return None
-        base = load_weights()
-        return base.model_copy(update={"feature_weights": {k: v / top for k, v in fitted.items()}})
-    except Exception as exc:  # pragma: no cover - unreachable given the above
-        typer.echo(f"  splink: translation was not straightforward ({type(exc).__name__}: {exc})")
         return None
 
 
@@ -320,7 +309,9 @@ def main(
         None,
         "--base",
         help="Start the search from this weights file instead of equal_weights() "
-        "(R55). Also becomes the printed 'baseline on TEST' comparison.",
+        "(R55). equal_weights() is still evaluated and printed either way "
+        "(Minor #3), and the write gate is the MAX of the two scores -- a "
+        "search seeded here must beat equal weights too, not just this file.",
     ),
 ) -> None:
     paths = ArtifactPaths(root=root, dump_date=dump_date)
@@ -357,20 +348,40 @@ def main(
     # R55: `equal_weights()`, not `load_weights()` -- this module's own CLI is
     # what overwrites weights.json, so reading it back as "the baseline" is
     # only ever true on a never-calibrated checkout. `--base` opts in to a
-    # warm start from a specific file (e.g. a previous calibration round)
-    # when a cold start from equal weights underperforms it.
-    base = load_weights(base_path) if base_path else equal_weights()
-    baseline_label = f"from {base_path}" if base_path else "all weights equal"
-    baseline_metrics, _ = evaluate(prepared_test, base)
-    baseline_score = objective(baseline_metrics, min_accept_rate=DEFAULT_MIN_ACCEPT_RATE)
+    # warm start from a specific file (e.g. a previous calibration round) IN
+    # ADDITION to that equal-weights floor, never instead of it (Minor #3):
+    # a search seeded from a weak `--base` file must still beat plain equal
+    # weights, not merely beat the file it happened to start from.
+    equal = equal_weights()
+    equal_metrics, _ = evaluate(prepared_test, equal)
+    equal_score = objective(equal_metrics, min_accept_rate=DEFAULT_MIN_ACCEPT_RATE)
     typer.echo(
-        f"baseline ({baseline_label}) on TEST: "
-        f"false_merge={baseline_metrics.false_merge_rate:.4f} "
-        f"false_reject={baseline_metrics.false_reject_rate:.4f} "
-        f"precision={baseline_metrics.precision_at_accept:.3f} "
-        f"abstain={baseline_metrics.abstention_rate:.3f} "
-        f"objective={baseline_score:.4f}"
+        f"baseline (all weights equal) on TEST: "
+        f"false_merge={equal_metrics.false_merge_rate:.4f} "
+        f"false_reject={equal_metrics.false_reject_rate:.4f} "
+        f"precision={equal_metrics.precision_at_accept:.3f} "
+        f"abstain={equal_metrics.abstention_rate:.3f} "
+        f"objective={equal_score:.4f}"
     )
+
+    if base_path:
+        base = load_weights(base_path)
+        base_metrics, _ = evaluate(prepared_test, base)
+        base_score = objective(base_metrics, min_accept_rate=DEFAULT_MIN_ACCEPT_RATE)
+        typer.echo(
+            f"start (--base {base_path}) on TEST: "
+            f"false_merge={base_metrics.false_merge_rate:.4f} "
+            f"false_reject={base_metrics.false_reject_rate:.4f} "
+            f"precision={base_metrics.precision_at_accept:.3f} "
+            f"abstain={base_metrics.abstention_rate:.3f} "
+            f"objective={base_score:.4f}"
+        )
+    else:
+        base, base_score = equal, equal_score
+
+    # The floor the chosen result must clear to be written: whichever of
+    # equal weights or the (optional) `--base` file already scores higher.
+    floor_score = max(equal_score, base_score)
 
     searched, train_score = search_weights(
         prepared_train, base=base, iterations=iterations, seed=seed
@@ -399,21 +410,27 @@ def main(
             chosen, chosen_score, label = fitted, fitted_score, "splink"
 
     # Per the design: an overfitted weight vector on ~270 training cases is
-    # worse than an honest uncalibrated one. If nothing beat the baseline on
-    # the held-out split, keep weights.json exactly as it is.
-    if chosen_score <= baseline_score:
+    # worse than an honest uncalibrated one. If nothing beat the FLOOR --
+    # equal weights, and the `--base` file too when one was given (Minor
+    # #3) -- on the held-out split, leave `out` exactly as it is. This
+    # message describes what was (not) done, not what `out` currently
+    # contains -- that could be a prior calibration, an untouched default,
+    # or (with `--base`) the file just read above, and asserting which
+    # would be exactly the kind of claim this task's other bugs were made
+    # of.
+    if chosen_score <= floor_score:
         typer.echo(
-            f"NEITHER searched ({label} objective {chosen_score:.4f}) nor the baseline "
-            f"({baseline_score:.4f}) on TEST favors calibration -- keeping equal weights, "
-            f"{out} left unchanged (calibrated stays false)."
+            f"{label} objective {chosen_score:.4f} does not beat the floor "
+            f"(max of equal weights and any --base file: {floor_score:.4f}) on TEST -- "
+            f"leaving {out} untouched."
         )
         return
 
     chosen.calibrated = True
     chosen.calibrated_at = datetime.datetime.now(datetime.UTC).isoformat()
-    Path(out).write_text(json.dumps(chosen.model_dump(), indent=2))
+    Path(out).write_text(json.dumps(chosen.model_dump(), indent=2) + "\n")
     typer.echo(
-        f"{label} beat the baseline on TEST ({chosen_score:.4f} > {baseline_score:.4f}): "
+        f"{label} beat the floor on TEST ({chosen_score:.4f} > {floor_score:.4f}): "
         f"wrote {label} weights to {out} (train objective {train_score:.4f})"
     )
 

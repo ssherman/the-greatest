@@ -44,6 +44,26 @@ def _weights_payload(**feature_weight_overrides):
     }
 
 
+def _equal_weights() -> Weights:
+    """The pre-calibration equal-weights `Weights`, built inline.
+
+    NOT `load_weights()`: that now reads the real, calibrated (non-equal)
+    shipped file (Task 27), so an arithmetic or decision test asserting a
+    specific numeric relationship needs a fixed, known weight vector of its
+    own rather than whatever `weights.json` currently holds. Only the two
+    shipped-file tests directly below (and the round-trip test further down)
+    are actually about the shipped file and read it via `load_weights()`.
+
+    `popularity_prior=0.1` (not `_weights_payload()`'s bare default of 1.0
+    for every key): the arithmetic below is written against the design's
+    original placeholder, which always down-weighted the prior -- popularity
+    is a tie-breaker, never identity evidence, and at a full weight of 1.0 a
+    work with zero popularity signal (every `_work()` fixture here) drags an
+    otherwise-perfect match's score down by a full unweighted term.
+    """
+    return Weights.model_validate(_weights_payload(popularity_prior=0.1))
+
+
 def test_the_shipped_weight_file_declares_how_it_was_calibrated():
     """Task 27 (R55) calibrated `weights.json` for real: it now declares
     `calibrated=True` with a non-empty `calibrated_at` timestamp, rather than
@@ -63,24 +83,27 @@ def test_every_feature_has_a_weight():
 
 def test_a_perfect_match_scores_near_one():
     query = BlockingQuery(title="The Great Gatsby", author_names=["F. Scott Fitzgerald"], year=1925)
-    scored = score_candidate(query, _work(), ["author_title_fp"], load_weights())
+    scored = score_candidate(query, _work(), ["author_title_fp"], _equal_weights())
     assert scored.score > 0.9
 
 
 def test_an_unrelated_candidate_scores_low():
     query = BlockingQuery(title="War and Peace", author_names=["Leo Tolstoy"], year=1869)
-    scored = score_candidate(query, _work(), ["title_fp"], load_weights())
+    scored = score_candidate(query, _work(), ["title_fp"], _equal_weights())
     assert scored.score < 0.4
 
 
 def test_absence_is_neutral_not_negative():
-    weights = load_weights()
+    weights = _equal_weights()
     full = BlockingQuery(title="The Great Gatsby", author_names=["F. Scott Fitzgerald"], year=1925)
     thin = BlockingQuery(title="The Great Gatsby")
     # Dropping our author and year removes evidence. It must not remove SCORE:
-    # local sparsity is a fact about us, not about the candidate.
+    # local sparsity is a fact about us, not about the candidate. On equal
+    # weights the real gap is ~0.028; the bug this guards against (treating
+    # absence as disagreement) would widen it to ~0.37, so abs=0.05 actually
+    # discriminates rather than passing on either arithmetic.
     assert score_candidate(thin, _work(), ["title_fp"], weights).score == pytest.approx(
-        score_candidate(full, _work(), ["title_fp"], weights).score, abs=0.15
+        score_candidate(full, _work(), ["title_fp"], weights).score, abs=0.05
     )
 
 
@@ -88,7 +111,7 @@ def test_absence_is_neutral_not_negative():
 # field, and the evidence is `identifier_hits` -- the set of work keys
 # blocking's identifier rule reached -- compared against this work's own key.
 def test_an_identifier_conflict_pushes_the_score_down():
-    weights = load_weights()
+    weights = _equal_weights()
     query = BlockingQuery(title="The Great Gatsby")
     work = _work()
     clean = score_candidate(query, work, ["title_fp"], weights)
@@ -101,7 +124,7 @@ def test_an_identifier_conflict_pushes_the_score_down():
 
 
 def test_an_identifier_hit_on_this_work_raises_the_score():
-    weights = load_weights()
+    weights = _equal_weights()
     query = BlockingQuery(title="The Great Gatsby")
     work = _work()
     clean = score_candidate(query, work, ["title_fp"], weights)
@@ -121,7 +144,7 @@ def test_an_identifier_hit_on_this_work_raises_the_score():
 # accounts for AT LEAST 0.35 of the drop -- proving the subtraction actually
 # happens rather than merely being ordered correctly by coincidence.
 def test_an_identifier_conflict_penalty_is_actually_subtracted():
-    weights = load_weights()
+    weights = _equal_weights()
     query = BlockingQuery(title="The Great Gatsby")
     work = _work()
     clean = score_candidate(query, work, ["title_fp"], weights)
@@ -133,7 +156,7 @@ def test_an_identifier_conflict_penalty_is_actually_subtracted():
 
 def test_evidence_is_inspectable_per_feature():
     scored = score_candidate(
-        BlockingQuery(title="The Great Gatsby"), _work(), ["title_fp"], load_weights()
+        BlockingQuery(title="The Great Gatsby"), _work(), ["title_fp"], _equal_weights()
     )
     # A score nobody can take apart is a score nobody can trust.
     for name, entry in scored.evidence.items():
@@ -143,14 +166,14 @@ def test_evidence_is_inspectable_per_feature():
 
 def test_absent_features_appear_in_the_evidence_with_a_null_value():
     scored = score_candidate(
-        BlockingQuery(title="The Great Gatsby"), _work(), ["title_fp"], load_weights()
+        BlockingQuery(title="The Great Gatsby"), _work(), ["title_fp"], _equal_weights()
     )
     assert scored.evidence["year_agreement"]["value"] is None
     assert scored.evidence["year_agreement"]["contribution"] == 0.0
 
 
 def test_scores_are_bounded():
-    weights = load_weights()
+    weights = _equal_weights()
     cases = [
         (BlockingQuery(title="The Great Gatsby"), frozenset({"OL2W"})),
         (BlockingQuery(title=""), frozenset()),
@@ -165,7 +188,7 @@ def test_scores_are_bounded():
 # re-running extract/conflicts per weight vector. This pins them equal, field
 # for field, so the extraction cannot silently drift from score_candidate.
 def test_score_features_is_what_score_candidate_computes():
-    weights = load_weights()
+    weights = _equal_weights()
     query = BlockingQuery(title="The Great Gatsby", author_names=["F. Scott Fitzgerald"], year=1925)
     work = _work()
     rules = ["author_title_fp"]

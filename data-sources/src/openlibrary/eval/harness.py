@@ -19,10 +19,12 @@ Python in milliseconds, as many times as calibration needs.
 `write_prepared_cache`/`read_prepared_cache` (R54) persist a `prepare()` pass
 to a JSON file keyed by dump date, matcher version and case count, so a
 second run of either CLI against the same artifact and case set costs
-seconds instead of the ~31-minute DuckDB pass. A change to blocking,
-`matcher.features`, or the labelled case set invalidates the cache silently
-by construction (the header no longer matches) -- delete the file to force a
-rebuild after any such change.
+seconds instead of the ~31-minute DuckDB pass. That header check catches a
+changed dump date, a bumped `MATCHER_VERSION`, or a different case count --
+nothing else. It carries no fingerprint of blocking's or `matcher.features`'
+actual code, so a change to either (or to the labelled case set) that leaves
+those three values unchanged would go undetected and serve stale prepared
+candidates: delete the cache file by hand after any such change.
 """
 
 from __future__ import annotations
