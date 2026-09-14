@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from openlibrary.eval.harness import Metrics
@@ -85,6 +87,105 @@ def test_the_evaluation_gate_reports_a_real_status_once_labels_exist(built):
     # the report's real-artifact GateResult).
     assert evaluation.status == "skipped"
     assert "absent from this artifact" in evaluation.detail
+
+
+# ---------------------------------------------------------------------------
+# R60: the evaluation gate must be able to FAIL, and to pass, on the fixture
+# artifact -- in seconds, with no prepared cache, against a labelled set whose
+# works the artifact actually holds (`fixture_labelled_cases`, shared with the
+# harness tests). `load_cases` and `THRESHOLDS_PATH` are looked up lazily
+# inside `evaluation_gate`, so monkeypatching the module attributes is enough.
+# ---------------------------------------------------------------------------
+
+# Bounds that make a real claim about the fixture set independent of whatever
+# weights.json currently holds: blocking reaches all ten labelled works by
+# their unique titles, nothing is merged wrongly, no true match is rejected,
+# the one negative is rejected. Precision and abstention depend on the
+# calibrated weights, so they are left at their loosest.
+_FIXTURE_THRESHOLDS = {
+    "min_candidate_recall_10": 1.0,
+    "max_false_merge_rate": 0.0,
+    "min_precision_at_accept": 0.0,
+    "max_abstention_rate": 1.0,
+    "min_correct_no_match_rate": 1.0,
+    "max_false_reject_rate": 0.0,
+}
+
+
+def _pin(monkeypatch, tmp_path, cases, thresholds: dict) -> None:
+    monkeypatch.setattr("openlibrary.eval.dataset.load_cases", lambda: cases)
+    thresholds_path = tmp_path / "thresholds.json"
+    thresholds_path.write_text(json.dumps(thresholds))
+    monkeypatch.setattr("openlibrary.eval.harness.THRESHOLDS_PATH", thresholds_path)
+
+
+def test_the_evaluation_gate_passes_on_a_labelled_set_the_artifact_holds(
+    built, monkeypatch, tmp_path, fixture_labelled_cases
+):
+    con, paths = built
+    _pin(monkeypatch, tmp_path, fixture_labelled_cases, _FIXTURE_THRESHOLDS)
+
+    results = run_gates(con, paths, previous_report=None)
+
+    evaluation = next(r for r in results if r.name == "evaluation_set")
+    assert evaluation.status == "pass", evaluation.detail
+    assert "prepared fresh" in evaluation.detail  # R60: no cache was consulted
+    assert evaluation.observed["n_cases"] == len(fixture_labelled_cases)
+    assert evaluation.observed["candidate_recall"][10] == 1.0
+    assert gates_passed(results)
+
+
+def test_the_evaluation_gate_fails_when_recall_regresses(
+    built, monkeypatch, tmp_path, fixture_labelled_cases
+):
+    """One case relabelled to a work the artifact does not hold: recall@10
+    drops to 9/10 against a pinned floor of 1.0, and the gate must say so by
+    name. (One unknown of ten labelled keeps R50's skip from firing -- that
+    needs more than half absent.)"""
+    con, paths = built
+    cases = list(fixture_labelled_cases)
+    cases[0] = cases[0].model_copy(
+        update={"label": cases[0].label.model_copy(update={"work_key": "OL999999999W"})}
+    )
+    _pin(monkeypatch, tmp_path, cases, _FIXTURE_THRESHOLDS)
+
+    results = run_gates(con, paths, previous_report=None)
+
+    evaluation = next(r for r in results if r.name == "evaluation_set")
+    assert evaluation.status == "fail"
+    assert "recall@10 0.9000 < 1.0000" in evaluation.detail
+    assert evaluation.observed["candidate_recall"][10] == 0.9
+    assert not gates_passed(results)
+
+
+def test_the_evaluation_gate_never_reads_a_prepared_cache_it_was_not_given(
+    built, monkeypatch, tmp_path, fixture_labelled_cases
+):
+    """R60: a cache file at the conventional path under the artifact's tmp/
+    -- written by an earlier CLI run, possibly against an earlier build --
+    must not be picked up by `run_gates`. Plant one whose content would make
+    the gate FAIL; the gate must prepare fresh and pass."""
+    from openlibrary.eval.harness import PreparedCase, write_prepared_cache
+
+    con, paths = built
+    _pin(monkeypatch, tmp_path, fixture_labelled_cases, _FIXTURE_THRESHOLDS)
+    poisoned = [
+        PreparedCase(
+            case_id=c.case_id,
+            stratum=c.stratum,
+            expected_work_key=c.label.work_key,
+            expected_verdict=c.label.verdict,
+            candidates=[],  # every labelled work "missed" -> recall 0
+        )
+        for c in fixture_labelled_cases
+    ]
+    write_prepared_cache(paths.tmp_dir / f"prepared-{paths.dump_date}.json", paths, poisoned)
+
+    results = run_gates(con, paths, previous_report=None)
+
+    evaluation = next(r for r in results if r.name == "evaluation_set")
+    assert evaluation.status == "pass", evaluation.detail
+    assert "prepared fresh" in evaluation.detail
 
 
 def test_threshold_failures_is_empty_when_every_metric_clears_its_bound():

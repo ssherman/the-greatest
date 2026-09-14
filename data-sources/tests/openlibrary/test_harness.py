@@ -1,11 +1,12 @@
 """Tests for the evaluation harness: run the matcher over labeled cases.
 
 Uses the session-scoped `fixture_artifact` (see tests/conftest.py) rather than
-building a fresh artifact per test. The `authored_unique_works` discovery query
-is pinned to a shape the committed fixture corpus is known to hold -- a
-uniquely-fingerprinted, authored title -- with an explicit `ORDER BY` so the
-selection is deterministic (ruling R43: with `preserve_insertion_order=false`,
-an unordered `LIMIT` is flaky).
+building a fresh artifact per test. The `fixture_labelled_works` discovery
+query (tests/conftest.py, shared with the gate tests) is pinned to a shape the
+committed fixture corpus is known to hold -- a uniquely-fingerprinted,
+authored title -- with an explicit `ORDER BY` so the selection is
+deterministic (ruling R43: with `preserve_insertion_order=false`, an
+unordered `LIMIT` is flaky).
 
 The false-merge and abstention tests are constructed to FORCE their outcome
 (same title and authors as a real fixture work, mislabeled) rather than
@@ -18,10 +19,11 @@ from __future__ import annotations
 
 import contextlib
 import datetime
+import json
 
 import pytest
 
-from common.normalize import MIN_BLOCKING_FP_LENGTH
+from openlibrary.eval import harness
 from openlibrary.eval.harness import (
     Metrics,
     PreparedCandidate,
@@ -36,6 +38,7 @@ from openlibrary.eval.schema import EvalBook, EvalCandidate, EvalCase, EvalLabel
 from openlibrary.matcher.features import FEATURES
 from openlibrary.matcher.scorer import MATCHER_VERSION, Weights, load_weights
 from openlibrary.pipeline.duck import connect
+from openlibrary.pipeline.paths import ArtifactPaths
 
 
 def _equal_weights() -> Weights:
@@ -59,29 +62,11 @@ def _equal_weights() -> Weights:
 
 
 @pytest.fixture(scope="module")
-def authored_unique_works(fixture_artifact):
-    """First 12 works (by work_key) with a unique, fingerprintable title and
-    at least one author -- the shape both the metrics tests and the
-    deterministic false-merge tests below build their cases from."""
-    con = connect(fixture_artifact, memory_limit="1GB")
-    with contextlib.closing(con):
-        rows = con.execute(
-            f"""
-            SELECT w.work_key, w.title, list(DISTINCT a.name) AS names
-            FROM '{fixture_artifact.table("works")}' w
-            JOIN '{fixture_artifact.table("work_authors")}' wa USING (work_key)
-            JOIN '{fixture_artifact.table("authors")}' a USING (author_key)
-            WHERE w.title_fp <> '' AND length(w.title_fp) >= {MIN_BLOCKING_FP_LENGTH}
-              AND w.title_fp_freq = 1 AND a.name IS NOT NULL
-            GROUP BY w.work_key, w.title
-            ORDER BY w.work_key
-            LIMIT 12
-            """
-        ).fetchall()
-    assert len(rows) >= 12, (
-        "fixture corpus lost the uniquely-titled, authored works this test needs"
-    )
-    return [(work_key, title, list(names or [])) for work_key, title, names in rows]
+def authored_unique_works(fixture_labelled_works):
+    """See `fixture_labelled_works` in tests/conftest.py -- shared with the
+    gate tests, which need a labelled set whose works the fixture artifact
+    actually contains."""
+    return fixture_labelled_works
 
 
 @pytest.fixture(scope="module")
@@ -95,42 +80,8 @@ def work_b(authored_unique_works):
 
 
 @pytest.fixture(scope="module")
-def cases(authored_unique_works):
-    built = []
-    for index, (work_key, title, names) in enumerate(authored_unique_works[:10], start=1):
-        built.append(
-            EvalCase(
-                case_id=f"easy_baseline-{index:03d}",
-                stratum="easy_baseline",
-                book=EvalBook(book_id=index, title=title, author_names=list(names)),
-                candidates_shown=[EvalCandidate(work_key=work_key, rules=["title_fp"])],
-                label=EvalLabel(
-                    verdict="match",
-                    work_key=work_key,
-                    identity_rule="same_work",
-                    rationale="Constructed from the artifact for the harness test.",
-                    labeled_at=datetime.date(2026, 9, 2),
-                    labeled_against_dump_date="2026-07-31",
-                ),
-            )
-        )
-    built.append(
-        EvalCase(
-            case_id="no_candidates-001",
-            stratum="no_candidates",
-            book=EvalBook(book_id=999, title="Zzzz Nothing Like This Exists Anywhere"),
-            candidates_shown=[],
-            label=EvalLabel(
-                verdict="no_match",
-                work_key=None,
-                identity_rule="not_in_open_library",
-                rationale="Checked Open Library by hand; nothing corresponds.",
-                labeled_at=datetime.date(2026, 9, 2),
-                labeled_against_dump_date="2026-07-31",
-            ),
-        )
-    )
-    return built
+def cases(fixture_labelled_cases):
+    return fixture_labelled_cases
 
 
 def test_harness_returns_metrics_and_one_outcome_per_case(fixture_artifact, cases):
@@ -429,6 +380,16 @@ def test_prepare_records_the_volume_guards_blocking_tripped(fixture_artifact):
     assert by_id["nonsense-001"].volume_guards_tripped == []
 
 
+def _artifact(tmp_path, dump_date: str = "2026-07-31", built_at: str | None = None):
+    """A version directory with (optionally) a manifest carrying `built_at`,
+    the shape `artifact_built_at` reads."""
+    paths = ArtifactPaths(root=tmp_path, dump_date=dump_date)
+    paths.ensure()
+    if built_at:
+        paths.manifest_path.write_text(json.dumps({"dump_date": dump_date, "built_at": built_at}))
+    return paths
+
+
 def test_prepared_cache_round_trips_through_a_file(tmp_path):
     prepared = [
         PreparedCase(
@@ -451,27 +412,90 @@ def test_prepared_cache_round_trips_through_a_file(tmp_path):
             expected_work_key=None,
             expected_verdict="no_match",
             candidates=[],
+            volume_guards_tripped=["author_shelf"],
             resolved={},
         ),
     ]
+    paths = _artifact(tmp_path, built_at="2026-09-03T06:21:00+00:00")
     path = tmp_path / "cache.json"
-    write_prepared_cache(path, "2026-07-31", prepared)
+    write_prepared_cache(path, paths, prepared)
 
-    loaded = read_prepared_cache(path, "2026-07-31", n_cases=2)
+    loaded = read_prepared_cache(path, paths, n_cases=2)
 
     assert loaded is not None
     assert [p.model_dump() for p in loaded] == [p.model_dump() for p in prepared]
     # None values must survive the JSON round trip, not turn into 0.0 or vanish.
     assert loaded[0].candidates[0].values["year_agreement"] is None
+    # R59's field must survive too -- it decides abstain vs reject downstream.
+    assert loaded[1].volume_guards_tripped == ["author_shelf"]
+
+    header = json.loads(path.read_text())
+    assert header["artifact_built_at"] == "2026-09-03T06:21:00+00:00"
+    assert header["code_sha256"] == harness.code_sha256()
 
 
 def test_prepared_cache_header_mismatch_returns_none(tmp_path):
+    paths = _artifact(tmp_path)
     path = tmp_path / "cache.json"
-    write_prepared_cache(path, "2026-07-31", [])
+    write_prepared_cache(path, paths, [])
 
-    assert read_prepared_cache(path, "2026-08-31", n_cases=0) is None  # dump_date differs
-    assert read_prepared_cache(path, "2026-07-31", n_cases=5) is None  # n_cases differs
-    assert read_prepared_cache(tmp_path / "missing.json", "2026-07-31", n_cases=0) is None
+    other_date = ArtifactPaths(root=tmp_path, dump_date="2026-08-31")
+    assert read_prepared_cache(path, other_date, n_cases=0) is None  # dump_date differs
+    assert read_prepared_cache(path, paths, n_cases=5) is None  # n_cases differs
+    assert read_prepared_cache(tmp_path / "missing.json", paths, n_cases=0) is None
+    # The control: the same artifact, the same count, the same code -> loads.
+    assert read_prepared_cache(path, paths, n_cases=0) == []
+
+
+def test_a_rebuilt_artifact_invalidates_the_prepared_cache(tmp_path):
+    """R60: a same-date rebuild leaves dump_date, matcher_version and n_cases
+    all unchanged -- the first header would have served the OLD artifact's
+    candidates as the new artifact's evaluation. The manifest's `built_at`
+    is what moves."""
+    paths = _artifact(tmp_path, built_at="2026-09-03T06:21:00+00:00")
+    path = tmp_path / "cache.json"
+    write_prepared_cache(path, paths, [])
+    assert read_prepared_cache(path, paths, n_cases=0) == []
+
+    paths.manifest_path.write_text(
+        json.dumps({"dump_date": paths.dump_date, "built_at": "2026-10-01T00:00:00+00:00"})
+    )
+    assert read_prepared_cache(path, paths, n_cases=0) is None
+
+
+def test_a_code_change_to_a_fingerprinted_module_invalidates_the_prepared_cache(
+    tmp_path, monkeypatch
+):
+    """R60: the header hashes the BYTES of the four modules whose code decides
+    what `prepare` produces. Stand a scratch file in for them so the test can
+    change one without editing the real source."""
+    module = tmp_path / "blocking_stand_in.py"
+    module.write_text("MAX_SHELF_SIZE = 500\n")
+    monkeypatch.setattr(harness, "CODE_FINGERPRINT_FILES", (module,))
+
+    paths = _artifact(tmp_path)
+    path = tmp_path / "cache.json"
+    write_prepared_cache(path, paths, [])
+    assert read_prepared_cache(path, paths, n_cases=0) == []
+
+    module.write_text("MAX_SHELF_SIZE = 1500\n")
+    assert read_prepared_cache(path, paths, n_cases=0) is None
+
+
+def test_code_sha256_covers_the_four_modules_that_shape_prepare():
+    names = [p.name for p in harness.CODE_FINGERPRINT_FILES]
+    assert names == ["blocking.py", "features.py", "normalize.py", "scoring.py"]
+    assert all(p.exists() for p in harness.CODE_FINGERPRINT_FILES)
+    assert len(harness.code_sha256()) == 64
+
+
+def test_artifact_built_at_falls_back_to_the_build_report_then_none(tmp_path):
+    paths = _artifact(tmp_path)
+    assert harness.artifact_built_at(paths) is None
+    paths.report_path.write_text(json.dumps({"built_at": "2026-09-03T06:21:00.384098+00:00"}))
+    assert harness.artifact_built_at(paths) == "2026-09-03T06:21:00.384098+00:00"
+    paths.manifest_path.write_text(json.dumps({"built_at": "2026-09-03T06:21:00.384484+00:00"}))
+    assert harness.artifact_built_at(paths) == "2026-09-03T06:21:00.384484+00:00"
 
 
 # The whole point of the prepare/evaluate split (Task 27's calibration search

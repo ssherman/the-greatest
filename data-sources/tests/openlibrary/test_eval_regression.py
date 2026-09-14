@@ -100,7 +100,10 @@ def test_the_matcher_does_not_regress_against_the_labeled_set():
 
     # R51: with the prepared cache this costs seconds; without it, ~31
     # minutes. OL_PREPARED_CACHE overrides; otherwise fall back to the
-    # conventional path used by the CLI and the build gate, if it exists.
+    # conventional path the CLIs write, if it exists. (The build gate itself
+    # never does this -- R60 -- but a test may: `read_prepared_cache` still
+    # refuses the file unless its artifact timestamp and code fingerprint
+    # match the artifact and code under test.)
     cache_env = os.environ.get("OL_PREPARED_CACHE")
     default_cache = paths.tmp_dir / f"prepared-{dump_date}.json"
     cache_path = (
@@ -109,7 +112,7 @@ def test_the_matcher_does_not_regress_against_the_labeled_set():
 
     con = connect(paths, memory_limit="8GB")
     try:
-        prepared = read_prepared_cache(cache_path, dump_date, len(cases)) if cache_path else None
+        prepared = read_prepared_cache(cache_path, paths, len(cases)) if cache_path else None
         if prepared is not None:
             metrics, _ = evaluate(prepared, load_weights())
         else:

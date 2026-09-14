@@ -302,8 +302,9 @@ def main(
         None,
         "--prepared-cache",
         help="Cache the prepare() pass at this path across runs (~31min the "
-        "first time, seconds after -- R54). A change to blocking, "
-        "matcher.features, or the labelled case set requires deleting this file.",
+        "first time, seconds after -- R54). The header detects an artifact "
+        "rebuild or a code change to blocking/features/normalize/scoring (R60); "
+        "a relabel that keeps the case count still needs a manual delete.",
     ),
     base_path: Path | None = typer.Option(  # noqa: B008
         None,
@@ -325,9 +326,7 @@ def main(
     # PreparedCase list along the same train/test partition, so nothing
     # downstream of this line touches DuckDB again. R54: skip the pass
     # entirely when a matching prepared-cases cache is on disk.
-    prepared = (
-        read_prepared_cache(prepared_cache, dump_date, len(cases)) if prepared_cache else None
-    )
+    prepared = read_prepared_cache(prepared_cache, paths, len(cases)) if prepared_cache else None
     if prepared is not None:
         typer.echo(f"loaded {len(prepared)} prepared cases from {prepared_cache}")
     else:
@@ -338,7 +337,7 @@ def main(
         prepared = prepare(con, paths, cases)
         con.close()
         if prepared_cache:
-            write_prepared_cache(prepared_cache, dump_date, prepared)
+            write_prepared_cache(prepared_cache, paths, prepared)
             typer.echo(f"wrote {len(prepared)} prepared cases to {prepared_cache}")
 
     prepared_by_id = {p.case_id: p for p in prepared}

@@ -202,12 +202,17 @@ def evaluation_gate(
     cases name, without also skipping a future real dump that is merely
     missing a handful of keys to normal Open Library churn.
 
-    Costs ~4.5s/case with no prepared cache available (~31 minutes for the
-    full 448-case set), and seconds when one is (R51/R54): `prepared_cache`
-    defaults to the conventional path under `paths.tmp_dir` if a file already
-    sits there, and is read but never written here -- this gate is read-only
-    on the artifact's scratch space. `run_gates` always calls this with the
-    default (no explicit cache path).
+    Costs ~4.5s/case with no prepared cache (~31 minutes for the full
+    448-case set) -- and that is the cost a real build pays, by design (R51
+    accepted it for a monthly build; R60 made it the only option). The gate's
+    job is to evaluate the labelled set against the artifact it is gating, so
+    it NEVER looks for a cache on its own: `run_gates` calls this with
+    `prepared_cache=None`, which means `prepare` against `con`. An explicit
+    `prepared_cache` is for callers who can vouch for it -- the CLIs, tests,
+    and a one-off check against an already-built artifact -- and even then
+    `read_prepared_cache` refuses a file whose header's artifact timestamp or
+    code fingerprint does not match this artifact and this code. The file is
+    read, never written, here.
     """
     try:
         from openlibrary.eval.dataset import load_cases, unknown_labeled_keys
@@ -236,14 +241,8 @@ def evaluation_gate(
         return GateResult("evaluation_set", "skipped", "no pinned thresholds")
     thresholds = json.loads(THRESHOLDS_PATH.read_text())
 
-    if prepared_cache is None:
-        default_cache = paths.tmp_dir / f"prepared-{paths.dump_date}.json"
-        prepared_cache = default_cache if default_cache.exists() else None
-
     started = time.monotonic()
-    prepared = (
-        read_prepared_cache(prepared_cache, paths.dump_date, len(cases)) if prepared_cache else None
-    )
+    prepared = read_prepared_cache(prepared_cache, paths, len(cases)) if prepared_cache else None
     from_cache = prepared is not None
     if prepared is None:
         prepared = prepare(con, paths, cases)

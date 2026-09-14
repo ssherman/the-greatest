@@ -18,18 +18,26 @@ only scoring and deciding, never blocking, views, features or conflicts, so
 result in pure Python in milliseconds, as many times as calibration needs.
 
 `write_prepared_cache`/`read_prepared_cache` (R54) persist a `prepare()` pass
-to a JSON file keyed by dump date, matcher version and case count, so a
-second run of either CLI against the same artifact and case set costs
-seconds instead of the ~31-minute DuckDB pass. That header check catches a
-changed dump date, a bumped `MATCHER_VERSION`, or a different case count --
-nothing else. It carries no fingerprint of blocking's or `matcher.features`'
-actual code, so a change to either (or to the labelled case set) that leaves
-those three values unchanged would go undetected and serve stale prepared
-candidates: delete the cache file by hand after any such change.
+to a JSON file so a second run of either CLI against the same artifact and
+case set costs seconds instead of the ~31-minute DuckDB pass. The header
+carries five values and the file is trusted only when all five match (R60):
+dump date, `MATCHER_VERSION`, case count, `artifact_built_at` (the version
+directory's `manifest.json` timestamp -- a same-date REBUILD of the artifact
+produces different candidates from the same code) and `code_sha256` (over
+the bytes of `matcher/blocking.py`, `matcher/features.py`,
+`common/normalize.py`, `common/scoring.py` -- the code that determines what
+`prepare` produces). Those two fingerprints are what the first version of
+this header lacked: a stale cache is now DETECTED, not documented. What the
+header still cannot see is a change that leaves all five unchanged -- a
+relabel of the case set that keeps its count, or an edit to `prepare` /
+`load_work_views` plumbing outside those four files -- and that still needs a
+manual delete. The build gate never reads a cache implicitly at all; see
+`pipeline.gates.evaluation_gate`.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -37,6 +45,10 @@ import duckdb
 import typer
 from pydantic import BaseModel, Field
 
+import common.normalize
+import common.scoring
+import openlibrary.matcher.blocking
+import openlibrary.matcher.features
 from openlibrary.eval.dataset import load_cases, resolve_keys
 from openlibrary.eval.schema import EvalCase, Verdict
 from openlibrary.matcher.blocking import BlockingQuery, generate_candidates
@@ -69,6 +81,41 @@ THRESHOLD_CHECKS: tuple[tuple[str, str, str, str], ...] = (
     ("correct no-match", "min", "correct_no_match_rate", "min_correct_no_match_rate"),
     ("false-reject", "max", "false_reject_rate", "max_false_reject_rate"),
 )
+
+
+# R60: the source files whose bytes decide what `prepare` produces, in the
+# order they are hashed. Blocking chooses the candidates, `features` extracts
+# their values (and `load_work_views` lives there too), and both lean on the
+# two `common` modules for every fingerprint and similarity.
+CODE_FINGERPRINT_FILES: tuple[Path, ...] = (
+    Path(openlibrary.matcher.blocking.__file__),
+    Path(openlibrary.matcher.features.__file__),
+    Path(common.normalize.__file__),
+    Path(common.scoring.__file__),
+)
+
+
+def code_sha256() -> str:
+    """sha256 over the bytes of `CODE_FINGERPRINT_FILES`, in that order."""
+    digest = hashlib.sha256()
+    for path in CODE_FINGERPRINT_FILES:
+        digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def artifact_built_at(paths: ArtifactPaths) -> str | None:
+    """The artifact's build timestamp: `manifest.json`'s `built_at`, falling
+    back to `build_report.json`'s, else None (a version directory nothing has
+    finished building)."""
+    for candidate in (paths.manifest_path, paths.report_path):
+        if candidate.exists():
+            try:
+                built_at = json.loads(candidate.read_text()).get("built_at")
+            except (OSError, json.JSONDecodeError):
+                continue
+            if built_at:
+                return built_at
+    return None
 
 
 class CaseOutcome(BaseModel):
@@ -311,33 +358,45 @@ def run(
     return evaluate(prepare(con, paths, cases), weights)
 
 
-def write_prepared_cache(path: Path, dump_date: str, prepared: list[PreparedCase]) -> None:
+def _cache_header(paths: ArtifactPaths, n_cases: int) -> dict:
+    return {
+        "dump_date": paths.dump_date,
+        "matcher_version": MATCHER_VERSION,
+        "n_cases": n_cases,
+        "artifact_built_at": artifact_built_at(paths),
+        "code_sha256": code_sha256(),
+    }
+
+
+def write_prepared_cache(path: Path, paths: ArtifactPaths, prepared: list[PreparedCase]) -> None:
     """Persist a `prepare()` result so a later run can skip the DuckDB pass.
 
-    The header (`dump_date`, `matcher_version`, `n_cases`) is what
-    `read_prepared_cache` checks before trusting the file -- see that
-    function for what invalidates it.
+    The header (`dump_date`, `matcher_version`, `n_cases`, `artifact_built_at`,
+    `code_sha256`) is what `read_prepared_cache` checks before trusting the
+    file -- see that function for what invalidates it.
     """
     payload = {
-        "dump_date": dump_date,
-        "matcher_version": MATCHER_VERSION,
-        "n_cases": len(prepared),
+        **_cache_header(paths, len(prepared)),
         "cases": [p.model_dump() for p in prepared],
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload))
 
 
-def read_prepared_cache(path: Path, dump_date: str, n_cases: int) -> list[PreparedCase] | None:
+def read_prepared_cache(
+    path: Path, paths: ArtifactPaths, n_cases: int
+) -> list[PreparedCase] | None:
     """Load a `write_prepared_cache` file when its header matches, else `None`.
 
-    A cache is only valid for the exact dump date, matcher version, and case
-    count it was built from -- a change to blocking, `matcher.features`, or
-    the labelled case set changes what `prepare` would produce without
-    necessarily changing `n_cases`, but `matcher_version` exists precisely so
-    a scoring-relevant code change can bump it and invalidate every cache.
-    Never raises: a missing, corrupt, or mismatched file just means "rebuild",
-    and the reason is echoed so a stale-cache run isn't a silent surprise.
+    A cache is only valid for the exact dump date, matcher version, case
+    count, artifact build (R60: `manifest.json`'s `built_at` -- an in-place
+    rebuild of the same dump date yields different candidates from the same
+    code) and code fingerprint (sha256 of the four files in
+    `CODE_FINGERPRINT_FILES`) it was written under. `matcher_version` still
+    exists for a change those cannot see -- decision semantics, say -- that
+    should invalidate every cache anyway. Never raises: a missing, corrupt,
+    or mismatched file just means "rebuild", and the reason is echoed so a
+    stale-cache run isn't a silent surprise.
     """
     if not path.exists():
         return None
@@ -347,7 +406,7 @@ def read_prepared_cache(path: Path, dump_date: str, n_cases: int) -> list[Prepar
         typer.echo(f"  prepared-cache {path} unreadable ({exc}); rebuilding")
         return None
 
-    expected = {"dump_date": dump_date, "matcher_version": MATCHER_VERSION, "n_cases": n_cases}
+    expected = _cache_header(paths, n_cases)
     mismatches = {
         key: (want, payload.get(key)) for key, want in expected.items() if payload.get(key) != want
     }
@@ -369,26 +428,25 @@ def main(
         None,
         "--prepared-cache",
         help="Cache the prepare() pass at this path across runs (~31min the "
-        "first time, seconds after). A change to blocking, matcher.features, "
-        "or the labelled case set requires deleting this file.",
+        "first time, seconds after). The header detects an artifact rebuild or "
+        "a code change to blocking/features/normalize/scoring; a relabel that "
+        "keeps the case count still needs a manual delete.",
     ),
 ) -> None:
+    paths = ArtifactPaths(root=root, dump_date=dump_date)
     cases = load_cases()
 
-    prepared = (
-        read_prepared_cache(prepared_cache, dump_date, len(cases)) if prepared_cache else None
-    )
+    prepared = read_prepared_cache(prepared_cache, paths, len(cases)) if prepared_cache else None
     if prepared is not None:
         typer.echo(f"loaded {len(prepared)} prepared cases from {prepared_cache}")
     else:
         from openlibrary.pipeline.duck import connect
 
-        paths = ArtifactPaths(root=root, dump_date=dump_date)
         con = connect(paths, memory_limit="8GB")
         prepared = prepare(con, paths, cases)
         con.close()
         if prepared_cache:
-            write_prepared_cache(prepared_cache, dump_date, prepared)
+            write_prepared_cache(prepared_cache, paths, prepared)
             typer.echo(f"wrote {len(prepared)} prepared cases to {prepared_cache}")
 
     metrics, outcomes = evaluate(prepared, load_weights())
