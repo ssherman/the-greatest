@@ -272,6 +272,16 @@ def _middling_candidate() -> PreparedCandidate:
     )
 
 
+def _noise_candidate() -> PreparedCandidate:
+    """A rule-6 fallback: a fuzzy title hit that is NOT the labelled work,
+    scoring well under the reject threshold."""
+    return PreparedCandidate(
+        work_key="OL9W",
+        rules=["trigram"],
+        values={**dict.fromkeys(FEATURES), "title_similarity": 0.2, "popularity_prior": 0.0},
+    )
+
+
 def test_a_refused_search_abstains_and_is_not_a_false_reject():
     """R59: the false reject the labelled set actually contained
     (degenerate_title-014) was a `match` whose author shelf was over
@@ -285,12 +295,18 @@ def test_a_refused_search_abstains_and_is_not_a_false_reject():
     the one genuine `reject` on a `match` counts, over the three `match`
     cases, never over all four."""
     refused = _prepared("refused-shelf", "match", volume_guards=["author_shelf"])
+    refused_noise = _prepared(
+        "refused-shelf-with-noise",
+        "match",
+        candidates=[_noise_candidate()],
+        volume_guards=["author_shelf"],
+    )
     middling = _prepared("middling", "match", candidates=[_middling_candidate()])
     ambiguous_empty = _prepared("ambiguous-empty", "ambiguous")
     real_false_reject = _prepared("really-rejected", "match")
 
     metrics, outcomes = evaluate(
-        [refused, middling, ambiguous_empty, real_false_reject], _equal_weights()
+        [refused, refused_noise, middling, ambiguous_empty, real_false_reject], _equal_weights()
     )
     by_id = {o.case_id: o for o in outcomes}
 
@@ -301,14 +317,22 @@ def test_a_refused_search_abstains_and_is_not_a_false_reject():
     assert by_id["refused-shelf"].false_merge is False
     assert by_id["refused-shelf"].correct is False
 
+    # no_candidates-030's shape: the shelf was refused and rule 6 filled in
+    # fuzzy fallbacks that all score under the reject threshold. Still an
+    # abstain -- the refused shelf, not the noise, is the evidence.
+    assert by_id["refused-shelf-with-noise"].decision.verdict == "abstain"
+    assert "search refused for volume: author_shelf" in (
+        by_id["refused-shelf-with-noise"].decision.reason
+    )
+
     assert by_id["middling"].decision.verdict == "abstain"
     assert by_id["ambiguous-empty"].decision.verdict == "reject"
     assert by_id["really-rejected"].decision.verdict == "reject"
 
-    # 1 reject among the 3 `match` cases; the ambiguous reject is not in
+    # 1 reject among the 4 `match` cases; the ambiguous reject is not in
     # either the numerator or the denominator.
-    assert metrics.false_reject_rate == pytest.approx(1 / 3)
-    assert metrics.abstention_rate == pytest.approx(2 / 4)
+    assert metrics.false_reject_rate == pytest.approx(1 / 4)
+    assert metrics.abstention_rate == pytest.approx(3 / 5)
 
 
 def test_a_refused_search_on_a_no_match_case_is_not_a_correct_no_match():

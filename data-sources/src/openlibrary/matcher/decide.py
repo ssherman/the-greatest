@@ -18,12 +18,19 @@ priors of the same kind: they can raise or lower a score, never carry an
 accept on their own. `IDENTITY_FEATURES` is the allow-list; the earlier
 guard (R42) was "anything but popularity", which let those cases through.
 
-A refused search is not a negative (ruling R59). When blocking returned no
-candidates because a rule's volume cap tripped -- an author shelf over
-`MAX_SHELF_SIZE`, an identifier on more than `MAX_CANDIDATES_PER_RULE`
-works -- there WAS something there that the matcher declined to fetch, and
-`reject` would record "not in Open Library" as fact. `degenerate_title-014`
-(Agatha Christie, Cyrillic title; shelf 1,226 > 500) was the v1 false reject.
+A refused search is not a negative (ruling R59). When a rule's volume cap
+tripped -- an author shelf over `MAX_SHELF_SIZE`, an identifier on more than
+`MAX_CANDIDATES_PER_RULE` works -- there WAS something there that the matcher
+declined to fetch, and `reject` would record "not in Open Library" as fact.
+That holds with zero candidates (`degenerate_title-014`: Agatha Christie,
+Cyrillic title, shelf 1,226 > 500 -- the v1 false reject) and equally when
+the only candidates are weak: `no_candidates-030` ("Donne Innamorate", D.H.
+Lawrence's shelf refused) reached the reject band on 200 rule-6 fallbacks,
+none of them the book, best 0.397 against a 0.4 threshold. Below the reject
+threshold means "not found" only when the search was allowed to look, so a
+tripped volume guard turns the reject band into an abstain too. Accept and
+the middle band are untouched: a clear winner among the candidates that
+WERE fetched is still a clear winner.
 """
 
 from __future__ import annotations
@@ -79,11 +86,12 @@ def decide(
     """accept / abstain / reject over already-scored candidates.
 
     `volume_guards_tripped` is `BlockingResult.volume_guards_tripped`: the
-    blocking rules whose volume CAP fired. With no candidates at all it is
-    what separates "not found" (reject) from "found too much to fetch"
-    (abstain, R59). An empty or too-short title fingerprint is NOT a volume
-    guard -- it has zero hits, and with nothing else firing the honest
-    answer is still "not found".
+    blocking rules whose volume CAP fired. It is what separates "not found"
+    (reject) from "found too much to fetch" (abstain, R59) -- both with no
+    candidates at all and when every candidate scores under the reject
+    threshold. An empty or too-short title fingerprint is NOT a volume guard
+    -- it has zero hits, and with nothing else firing the honest answer is
+    still "not found".
     """
     if not candidates:
         if volume_guards_tripped:
@@ -118,13 +126,21 @@ def decide(
         )
 
     if best.score < weights.reject_threshold:
+        below = f"best score {best.score:.3f} below reject threshold {weights.reject_threshold:.3f}"
+        if volume_guards_tripped:
+            return Decision(
+                verdict="abstain",
+                work_key=best.work_key,
+                score=best.score,
+                margin=margin,
+                reason=f"{below}; search refused for volume: {', '.join(volume_guards_tripped)}",
+            )
         return Decision(
             verdict="reject",
             work_key=best.work_key,
             score=best.score,
             margin=margin,
-            reason=f"best score {best.score:.3f} below reject threshold "
-            f"{weights.reject_threshold:.3f}",
+            reason=below,
         )
 
     if best.score >= weights.accept_threshold and margin >= weights.margin_threshold:

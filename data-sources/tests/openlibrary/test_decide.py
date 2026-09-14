@@ -57,6 +57,35 @@ def test_no_candidates_with_a_tripped_volume_guard_abstains_instead(  # R59
     assert decision.reason == "no candidates; search refused for volume: author_shelf"
 
 
+def test_weak_candidates_with_a_tripped_volume_guard_abstain_instead_of_rejecting():
+    """R59, extended: the labelled false reject that survived the zero-candidate
+    rule was no_candidates-030 ("Donne Innamorate", D.H. Lawrence) -- shelf
+    refused for volume, then rule 6 filled 200 fuzzy fallbacks none of which
+    is the book, best 0.397 < 0.4. "Below the reject threshold" is only "not
+    in Open Library" when the search was allowed to look; here it was not."""
+    decision = decide(
+        [_c("OL1W", 0.39), _c("OL2W", 0.38)],
+        _equal_weights(),
+        volume_guards_tripped=["author_shelf"],
+    )
+    assert decision.verdict == "abstain"
+    assert decision.work_key == "OL1W"
+    assert decision.reason == (
+        "best score 0.390 below reject threshold 0.400; search refused for volume: author_shelf"
+    )
+
+
+def test_a_volume_guard_does_not_touch_the_accept_or_middle_bands():
+    """The extension only converts the reject band. A clear winner still
+    accepts and a middling score still abstains for its own reason."""
+    weights = _equal_weights()
+    accepted = decide([_c("OL1W", 0.97)], weights, volume_guards_tripped=["author_shelf"])
+    assert accepted.verdict == "accept"
+    middling = decide([_c("OL1W", 0.65)], weights, volume_guards_tripped=["author_shelf"])
+    assert middling.verdict == "abstain"
+    assert "between reject and accept" in middling.reason
+
+
 def test_no_candidates_and_no_volume_guard_is_still_a_reject():
     """The control for the test above: an empty `volume_guards_tripped` --
     including the case where only the empty/short-fingerprint `title_fp`
