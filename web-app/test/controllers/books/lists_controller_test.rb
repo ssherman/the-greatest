@@ -270,6 +270,31 @@ module Books
       assert_select "a[href=?]", "/lists/new"
     end
 
+    test "the lists index for a shared user-owned configuration is never cached" do
+      config = ranking_configurations(:books_user_shared)
+
+      get "/rc/#{config.id}/lists"
+
+      assert_response :success
+      assert_match "no-store", response.headers["Cache-Control"].to_s
+    end
+
+    test "the lists index for a private user-owned configuration 404s for a non-owner" do
+      get "/rc/#{ranking_configurations(:books_user).id}/lists"
+      assert_response :not_found
+    end
+
+    test "a list page under a shared user-owned configuration is never cached" do
+      config = ranking_configurations(:books_user_shared)
+      list = Books::List.create!(name: "Shared config list", source: "Test", status: :active)
+      RankedList.create!(list: list, ranking_configuration: config, weight: 50)
+
+      get "/rc/#{config.id}/lists/#{list.id}"
+
+      assert_response :success
+      assert_match "no-store", response.headers["Cache-Control"].to_s
+    end
+
     private
 
     def seed_lists(count)

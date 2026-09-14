@@ -1,0 +1,17 @@
+<% content_for :page_title, "Lists — #{@ranking_configuration.name} | #{domain_name}" %>
+
+<div class="mx-auto max-w-4xl space-y-6">
+  <%= render "my/ranking_configurations/notice" %>
+
+  <div>
+    <p class="text-sm">
+      <%= link_to "← #{@ranking_configuration.name}", my_ranking_configuration_path(@ranking_configuration), class: "link [overflow-wrap:anywhere]" %>
+    </p>
+    <h1 class="text-3xl sm:text-4xl font-bold">Lists</h1>
+    <p class="mt-2 text-base-content/70">
+      Choose which lists feed this ranking. Only active lists count, and changes take effect after a refresh.
+    </p>
+  </div>
+
+  <%= render "my/ranking_configurations/lists/frame" %>
+</div>

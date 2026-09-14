@@ -45,6 +45,8 @@ class Games::RankedItemsController < RankedItemsController
     else
       self.class.ranking_configuration_class.default_primary
     end
+
+    gate_ranking_configuration!(@ranking_configuration)
   end
 
   def parse_year_filter

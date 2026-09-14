@@ -1,0 +1,14 @@
+<% content_for :page_title, "New Ranking | #{domain_name}" %>
+
+<div class="mx-auto max-w-2xl space-y-6">
+  <h1 class="text-3xl sm:text-4xl font-bold">New ranking</h1>
+  <p class="text-base-content/70">Which ranking do you want to build your own version of?</p>
+  <ul class="menu bg-base-100 border border-base-300 rounded-box w-full">
+    <% @entries.each do |entry| %>
+      <li>
+        <%= link_to entry.ranking_configuration_class.constantize.new.media_noun_plural.capitalize,
+              new_my_ranking_configuration_path(kind: entry.kind) %>
+      </li>
+    <% end %>
+  </ul>
+</div>

@@ -11,16 +11,22 @@
 #  exponent                           :decimal(10, 2)   default(3.0), not null
 #  global                             :boolean          default(TRUE), not null
 #  inherit_penalties                  :boolean          default(TRUE), not null
+#  last_refresh_error                 :text
+#  last_refreshed_at                  :datetime
 #  list_limit                         :integer
 #  max_list_dates_penalty_age         :integer          default(50)
 #  max_list_dates_penalty_percentage  :integer          default(80)
 #  min_list_weight                    :integer          default(1), not null
 #  name                               :string           not null
+#  needs_refresh                      :boolean          default(FALSE), not null
 #  primary                            :boolean          default(FALSE), not null
 #  primary_mapped_list_cutoff_limit   :integer
 #  published_at                       :datetime
+#  refresh_requested_at               :datetime
+#  refresh_status                     :integer          default(0), not null
 #  secondary_mapped_list_cutoff_limit :integer
 #  type                               :string           not null
+#  user_shared                        :boolean          default(FALSE), not null
 #  year                               :integer
 #  created_at                         :datetime         not null
 #  updated_at                         :datetime         not null
@@ -498,5 +504,118 @@ class RankingConfigurationTest < ActiveSupport::TestCase
       ranking_configurations(:books_global).one_year_penalty_name
     assert_nil ranking_configurations(:games_global).one_year_penalty_name
     assert_nil ranking_configurations(:music_albums_global).one_year_penalty_name
+  end
+
+  # --- user-owned configuration rules (spec §4, §11) ---
+
+  test "user_owned? is the inverse of global?" do
+    assert ranking_configurations(:books_user).user_owned?
+    refute ranking_configurations(:books_global).user_owned?
+  end
+
+  test "refresh_status defaults to idle and exposes prefixed predicates" do
+    config = ranking_configurations(:books_user)
+    assert config.refresh_idle?
+    refute config.refresh_in_progress?
+
+    config.refresh_status = :queued
+    assert config.refresh_in_progress?
+    config.refresh_status = :running
+    assert config.refresh_in_progress?
+    config.refresh_status = :failed
+    refute config.refresh_in_progress?
+  end
+
+  test "refresh_stale? is true only for an in-progress refresh older than the stale window" do
+    config = ranking_configurations(:books_user)
+    refute config.refresh_stale?
+
+    config.assign_attributes(refresh_status: :running, refresh_requested_at: 30.minutes.ago)
+    refute config.refresh_stale?
+    refute config.refresh_claimable?
+
+    config.refresh_requested_at = (RankingConfiguration::REFRESH_STALE_AFTER + 1.minute).ago
+    assert config.refresh_stale?
+    assert config.refresh_claimable?
+  end
+
+  test "refresh_claimable? is true when idle or failed" do
+    config = ranking_configurations(:books_user)
+    assert config.refresh_claimable?
+    config.refresh_status = :failed
+    assert config.refresh_claimable?
+  end
+
+  test "max_list_dates_penalty_age is capped at 200 for every configuration" do
+    config = ranking_configurations(:books_global)
+    config.max_list_dates_penalty_age = 201
+    refute config.valid?
+    assert_includes config.errors[:max_list_dates_penalty_age], "must be less than or equal to 200"
+
+    config.max_list_dates_penalty_age = 200
+    assert config.valid?
+  end
+
+  test "min_list_weight must be 0..100 on a user-owned configuration only" do
+    user_config = ranking_configurations(:books_user)
+    user_config.min_list_weight = -1
+    refute user_config.valid?
+    user_config.min_list_weight = 101
+    refute user_config.valid?
+    user_config.min_list_weight = 100
+    assert user_config.valid?
+
+    global_config = ranking_configurations(:books_global)
+    global_config.min_list_weight = -50
+    assert global_config.valid?, "the books primary stores -50 and must stay valid"
+  end
+
+  test "description is capped at 1000 characters on a user-owned configuration only" do
+    user_config = ranking_configurations(:books_user)
+    user_config.description = "x" * 1001
+    refute user_config.valid?
+
+    global_config = ranking_configurations(:books_global)
+    global_config.description = "x" * 1001
+    assert global_config.valid?
+  end
+
+  test "a user-owned configuration cannot be primary" do
+    config = ranking_configurations(:books_user)
+    config.primary = true
+    refute config.valid?
+    assert_includes config.errors[:primary], "cannot be set on a user-owned configuration"
+  end
+
+  test "a user may own at most MAX_PER_USER configurations of one type" do
+    user = users(:regular_user)
+    existing = RankingConfiguration.where(type: "Books::RankingConfiguration", user_id: user.id).count
+    (RankingConfiguration::MAX_PER_USER - existing).times do |i|
+      Books::RankingConfiguration.create!(name: "Cap #{i}", global: false, user: user, min_list_weight: 0)
+    end
+
+    overflow = Books::RankingConfiguration.new(name: "One too many", global: false, user: user, min_list_weight: 0)
+    refute overflow.valid?
+    assert_includes overflow.errors[:base], "You can have at most #{RankingConfiguration::MAX_PER_USER} rankings"
+
+    other_type = Games::RankingConfiguration.new(name: "Games is separate", global: false, user: user, min_list_weight: 0)
+    assert other_type.valid?, "the cap is per configuration type"
+  end
+
+  test "the cap does not block updates to an existing configuration at the limit" do
+    user = users(:regular_user)
+    existing = RankingConfiguration.where(type: "Books::RankingConfiguration", user_id: user.id).count
+    (RankingConfiguration::MAX_PER_USER - existing).times do |i|
+      Books::RankingConfiguration.create!(name: "Cap #{i}", global: false, user: user, min_list_weight: 0)
+    end
+
+    config = ranking_configurations(:books_user)
+    config.name = "Renamed at the cap"
+    assert config.valid?
+  end
+
+  test "RANKING_SETTINGS names the six user-tunable attributes" do
+    assert_equal %w[exponent bonus_pool_percentage min_list_weight apply_list_dates_penalty
+      max_list_dates_penalty_age max_list_dates_penalty_percentage], RankingConfiguration::RANKING_SETTINGS
   end
 end
