@@ -14,7 +14,7 @@ module OpenapiFirst
   module JSON
     def self.parse(string) = MultiJSON.parse(string)
 
-    def self.generate(object) = MultiJSON.dump(object)
+    def self.generate(object) = MultiJSON.generate(object)
   end
 end
 require_relative "support/turbo_frame_links"
