@@ -15,10 +15,19 @@ old per-call cost is 200 * ~20min ~= 67 hours. Weights affect only scoring and
 deciding, never blocking, views, features or conflicts, so `prepare` does
 every DuckDB-touching step ONCE and `evaluate` re-scores the result in pure
 Python in milliseconds, as many times as calibration needs.
+
+`write_prepared_cache`/`read_prepared_cache` (R54) persist a `prepare()` pass
+to a JSON file keyed by dump date, matcher version and case count, so a
+second run of either CLI against the same artifact and case set costs
+seconds instead of the ~31-minute DuckDB pass. A change to blocking,
+`matcher.features`, or the labelled case set invalidates the cache silently
+by construction (the header no longer matches) -- delete the file to force a
+rebuild after any such change.
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import duckdb
@@ -30,7 +39,7 @@ from openlibrary.eval.schema import EvalCase, Verdict
 from openlibrary.matcher.blocking import BlockingQuery, generate_candidates
 from openlibrary.matcher.decide import Decision, decide, rank
 from openlibrary.matcher.features import conflicts, extract, load_work_views
-from openlibrary.matcher.scorer import Weights, load_weights, score_features
+from openlibrary.matcher.scorer import MATCHER_VERSION, Weights, load_weights, score_features
 from openlibrary.pipeline.paths import ArtifactPaths
 
 app = typer.Typer(add_completion=False)
@@ -56,6 +65,7 @@ class Metrics(BaseModel):
     candidate_recall: dict[int, float] = Field(default_factory=dict)
     precision_at_accept: float = 0.0
     false_merge_rate: float = 0.0
+    false_reject_rate: float = 0.0
     abstention_rate: float = 0.0
     correct_no_match_rate: float = 0.0
 
@@ -218,6 +228,12 @@ def evaluate(
     n = len(outcomes)
     accepted = [o for o in outcomes if o.decision.verdict == "accept"]
     negatives = [o for o in outcomes if o.expected_verdict == "no_match"]
+    # R53: cases the label calls a real match. A `reject` decision on one of
+    # these silently turns a true match into what looks like a brand-new,
+    # unrelated book -- a false reject, distinct from (and previously
+    # invisible next to) an abstention, which at least flags itself for
+    # review.
+    matches = [o for o in outcomes if o.expected_verdict == "match"]
 
     metrics = Metrics(
         n_cases=n,
@@ -231,6 +247,11 @@ def evaluate(
         ),
         false_merge_rate=(
             sum(1 for o in accepted if o.false_merge) / len(accepted) if accepted else 0.0
+        ),
+        false_reject_rate=(
+            sum(1 for o in matches if o.decision.verdict == "reject") / len(matches)
+            if matches
+            else 0.0
         ),
         abstention_rate=(
             sum(1 for o in outcomes if o.decision.verdict == "abstain") / n if n else 0.0
@@ -251,23 +272,96 @@ def run(
     return evaluate(prepare(con, paths, cases), weights)
 
 
+def write_prepared_cache(path: Path, dump_date: str, prepared: list[PreparedCase]) -> None:
+    """Persist a `prepare()` result so a later run can skip the DuckDB pass.
+
+    The header (`dump_date`, `matcher_version`, `n_cases`) is what
+    `read_prepared_cache` checks before trusting the file -- see that
+    function for what invalidates it.
+    """
+    payload = {
+        "dump_date": dump_date,
+        "matcher_version": MATCHER_VERSION,
+        "n_cases": len(prepared),
+        "cases": [p.model_dump() for p in prepared],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload))
+
+
+def read_prepared_cache(path: Path, dump_date: str, n_cases: int) -> list[PreparedCase] | None:
+    """Load a `write_prepared_cache` file when its header matches, else `None`.
+
+    A cache is only valid for the exact dump date, matcher version, and case
+    count it was built from -- a change to blocking, `matcher.features`, or
+    the labelled case set changes what `prepare` would produce without
+    necessarily changing `n_cases`, but `matcher_version` exists precisely so
+    a scoring-relevant code change can bump it and invalidate every cache.
+    Never raises: a missing, corrupt, or mismatched file just means "rebuild",
+    and the reason is echoed so a stale-cache run isn't a silent surprise.
+    """
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        typer.echo(f"  prepared-cache {path} unreadable ({exc}); rebuilding")
+        return None
+
+    expected = {"dump_date": dump_date, "matcher_version": MATCHER_VERSION, "n_cases": n_cases}
+    mismatches = {
+        key: (want, payload.get(key)) for key, want in expected.items() if payload.get(key) != want
+    }
+    if mismatches:
+        details = ", ".join(
+            f"{key} expected {want!r} got {got!r}" for key, (want, got) in mismatches.items()
+        )
+        typer.echo(f"  prepared-cache {path} header mismatch ({details}); rebuilding")
+        return None
+
+    return [PreparedCase.model_validate(c) for c in payload["cases"]]
+
+
 @app.command()
 def main(
     root: Path = typer.Option(Path("/home/shane/ol-data"), "--root"),  # noqa: B008
     dump_date: str = typer.Option(..., "--dump-date"),
+    prepared_cache: Path | None = typer.Option(  # noqa: B008
+        None,
+        "--prepared-cache",
+        help="Cache the prepare() pass at this path across runs (~31min the "
+        "first time, seconds after). A change to blocking, matcher.features, "
+        "or the labelled case set requires deleting this file.",
+    ),
 ) -> None:
-    from openlibrary.pipeline.duck import connect
+    cases = load_cases()
 
-    paths = ArtifactPaths(root=root, dump_date=dump_date)
-    con = connect(paths, memory_limit="8GB")
-    metrics, outcomes = run(con, paths, load_cases(), load_weights())
-    con.close()
+    prepared = (
+        read_prepared_cache(prepared_cache, dump_date, len(cases)) if prepared_cache else None
+    )
+    if prepared is not None:
+        typer.echo(f"loaded {len(prepared)} prepared cases from {prepared_cache}")
+    else:
+        from openlibrary.pipeline.duck import connect
+
+        paths = ArtifactPaths(root=root, dump_date=dump_date)
+        con = connect(paths, memory_limit="8GB")
+        prepared = prepare(con, paths, cases)
+        con.close()
+        if prepared_cache:
+            write_prepared_cache(prepared_cache, dump_date, prepared)
+            typer.echo(f"wrote {len(prepared)} prepared cases to {prepared_cache}")
+
+    metrics, outcomes = evaluate(prepared, load_weights())
 
     typer.echo(f"cases                 {metrics.n_cases}")
     for k, value in sorted(metrics.candidate_recall.items()):
         typer.echo(f"candidate recall @{k:<3}  {value:.3f}")
     typer.echo(f"precision @ accept    {metrics.precision_at_accept:.3f}")
     typer.echo(f"FALSE MERGE RATE      {metrics.false_merge_rate:.4f}  <- the one to watch")
+    typer.echo(
+        f"false reject rate     {metrics.false_reject_rate:.4f}  (true matches decided no-match)"
+    )
     typer.echo(f"abstention rate       {metrics.abstention_rate:.3f}")
     typer.echo(
         f"correct no-match      {metrics.correct_no_match_rate:.3f} "

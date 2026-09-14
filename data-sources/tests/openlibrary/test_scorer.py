@@ -44,11 +44,16 @@ def _weights_payload(**feature_weight_overrides):
     }
 
 
-def test_the_shipped_weight_file_declares_itself_uncalibrated_until_task_27():
+def test_the_shipped_weight_file_declares_how_it_was_calibrated():
+    """Task 27 (R55) calibrated `weights.json` for real: it now declares
+    `calibrated=True` with a non-empty `calibrated_at` timestamp, rather than
+    the pre-calibration placeholder this test used to pin (`calibrated=False`,
+    `calibrated_at=None`)."""
     weights = load_weights()
     assert weights.matcher_version == MATCHER_VERSION
-    if not weights.calibrated:
-        assert weights.calibrated_at is None
+    assert weights.calibrated is True
+    assert isinstance(weights.calibrated_at, str) and weights.calibrated_at
+    assert set(weights.feature_weights) == set(FEATURES)
 
 
 def test_every_feature_has_a_weight():

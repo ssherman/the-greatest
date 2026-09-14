@@ -22,7 +22,16 @@ import datetime
 import pytest
 
 from common.normalize import MIN_BLOCKING_FP_LENGTH
-from openlibrary.eval.harness import Metrics, evaluate, prepare, run
+from openlibrary.eval.harness import (
+    Metrics,
+    PreparedCandidate,
+    PreparedCase,
+    evaluate,
+    prepare,
+    read_prepared_cache,
+    run,
+    write_prepared_cache,
+)
 from openlibrary.eval.schema import EvalBook, EvalCandidate, EvalCase, EvalLabel
 from openlibrary.matcher.scorer import load_weights
 from openlibrary.pipeline.duck import connect
@@ -232,6 +241,85 @@ def test_metrics_are_all_finite_even_with_no_accepts(fixture_artifact):
     assert metrics.n_cases == 0
     assert metrics.precision_at_accept == 0.0
     assert metrics.false_merge_rate == 0.0
+    assert metrics.false_reject_rate == 0.0
+
+
+def test_a_match_case_with_no_candidates_counts_as_a_false_reject(fixture_artifact):
+    """Book title matches nothing in the fixture corpus, so blocking surfaces
+    no candidates and `decide` returns `reject` ("no candidates") -- forced,
+    not hoped for, exactly like the false-merge tests above. The label says
+    `match`, so a `reject` decision here is a real false reject: a true match
+    silently turned into what looks like a new, unrelated book."""
+    case = EvalCase(
+        case_id="forced_false_reject-no_candidates",
+        stratum="no_candidates",
+        book=EvalBook(book_id=9004, title="Zzzq Nothing Whatsoever Blocks To This Title"),
+        candidates_shown=[],
+        label=EvalLabel(
+            verdict="match",
+            work_key="OL999999999W",
+            identity_rule="same_work",
+            rationale="Constructed to force a false reject: nothing in the fixture "
+            "corpus can possibly block to this title, so decide() rejects a case "
+            "labelled as a real match.",
+            labeled_at=datetime.date(2026, 9, 2),
+            labeled_against_dump_date="2026-07-31",
+        ),
+    )
+    con = connect(fixture_artifact, memory_limit="1GB")
+    with contextlib.closing(con):
+        metrics, outcomes = run(con, fixture_artifact, [case], load_weights())
+    outcome = outcomes[0]
+    assert outcome.decision.verdict == "reject", (
+        f"expected no candidates to block for a nonsense title; got "
+        f"{outcome.decision.verdict!r} ({outcome.decision.reason})"
+    )
+    assert metrics.false_reject_rate == 1.0
+
+
+def test_prepared_cache_round_trips_through_a_file(tmp_path):
+    prepared = [
+        PreparedCase(
+            case_id="c1",
+            stratum="easy_baseline",
+            expected_work_key="OL1W",
+            expected_verdict="match",
+            candidates=[
+                PreparedCandidate(
+                    work_key="OL1W",
+                    rules=["title_fp"],
+                    values={"title_similarity": 1.0, "year_agreement": None},
+                ),
+            ],
+            resolved={"OL1W": "OL1W"},
+        ),
+        PreparedCase(
+            case_id="c2",
+            stratum="no_candidates",
+            expected_work_key=None,
+            expected_verdict="no_match",
+            candidates=[],
+            resolved={},
+        ),
+    ]
+    path = tmp_path / "cache.json"
+    write_prepared_cache(path, "2026-07-31", prepared)
+
+    loaded = read_prepared_cache(path, "2026-07-31", n_cases=2)
+
+    assert loaded is not None
+    assert [p.model_dump() for p in loaded] == [p.model_dump() for p in prepared]
+    # None values must survive the JSON round trip, not turn into 0.0 or vanish.
+    assert loaded[0].candidates[0].values["year_agreement"] is None
+
+
+def test_prepared_cache_header_mismatch_returns_none(tmp_path):
+    path = tmp_path / "cache.json"
+    write_prepared_cache(path, "2026-07-31", [])
+
+    assert read_prepared_cache(path, "2026-08-31", n_cases=0) is None  # dump_date differs
+    assert read_prepared_cache(path, "2026-07-31", n_cases=5) is None  # n_cases differs
+    assert read_prepared_cache(tmp_path / "missing.json", "2026-07-31", n_cases=0) is None
 
 
 # The whole point of the prepare/evaluate split (Task 27's calibration search
