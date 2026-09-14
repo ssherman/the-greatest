@@ -9,7 +9,7 @@ module Api
 
       def show
         expires_in 1.hour, public: true
-        render json: ::Api::OpenapiDocument.for_host(::Api::Host.base_url)
+        render json: ::Api::OpenapiDocument.for_host(::Api::Host.base_url, domain: Current.domain)
       end
     end
   end

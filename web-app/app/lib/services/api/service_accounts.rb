@@ -20,17 +20,23 @@ module Services
         unknown = scopes.reject { |scope| ::Api::Scopes.known?(scope) }
         return failure("unknown scope(s): #{unknown.join(", ")}") if unknown.any?
 
-        user = User.transaction do
-          User.service.find_or_create_by!(email: User.service_account_email(name)) do |account|
+        # One transaction for the account and its first token: a token that fails
+        # validation (blank TOKEN_NAME, blank scopes) must not leave behind an
+        # orphan service account. On the find branch the rollback is a no-op.
+        result = nil
+        User.transaction do
+          user = User.service.find_or_create_by!(email: User.service_account_email(name)) do |account|
             account.display_name = name
             account.name = name
             account.role = :user
             account.account_kind = :service
             account.email_verified = false
           end
-        end
 
-        mint_for(user, token_name: token_name, scopes: scopes)
+          result = mint_for(user, token_name: token_name, scopes: scopes)
+          raise ActiveRecord::Rollback unless result.success?
+        end
+        result
       end
 
       def self.mint(name:, token_name:, scopes:)
@@ -49,10 +55,10 @@ module Services
       end
 
       def self.mint_for(user, token_name:, scopes:)
-        token, secret = ApiToken.generate(user: user, name: token_name, scopes: scopes)
-        return failure(*token.errors.full_messages) unless token.persisted?
+        minted = Tokens.generate(user: user, name: token_name, scopes: scopes)
+        return failure(*minted.errors) unless minted.success?
 
-        success(user: user, token: token, secret: secret)
+        success(user: user, token: minted.data[:token], secret: minted.data[:secret])
       end
       private_class_method :mint_for
 

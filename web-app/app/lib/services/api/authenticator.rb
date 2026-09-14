@@ -27,13 +27,13 @@ module Services
         header = @request.authorization
         return failure(:unauthenticated) if header.blank?
 
-        token = bearer_value(header).then { |secret| secret && ApiToken.authenticate(secret) }
+        token = bearer_value(header).then { |secret| secret && Tokens.authenticate(secret) }
         return failure(:invalid_token) if token.nil?
 
         user = token.user
         return failure(:membership_required) if user.person? && !user.member?
 
-        token.touch_last_used!
+        Tokens.record_use(token)
         success(::Api::Principal.new(
           user: user,
           token: token,

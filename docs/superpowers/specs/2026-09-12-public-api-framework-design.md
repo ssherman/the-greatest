@@ -198,17 +198,20 @@ unauthenticated.
 | `last_used_at` | datetime, null | written at most once per 5 minutes via `update_column` |
 | timestamps | | |
 
-**`ApiToken`** (global namespace, like `User` and `List`):
+**`ApiToken`** (global namespace, like `User` and `List`) is the persistence layer only —
+skinny model, fat service. Validation: name presence/length; scopes non-empty, every scope
+known, every scope mintable by `user`; at most **10** tokens per user; `expired?`. Revoke =
+`destroy`.
 
-- `ApiToken.generate(user:, name:, scopes:, expires_at: nil)` → `[record, secret]`. The secret
-  is `"tg_" + SecureRandom.alphanumeric(40)` (~238 bits) and exists only in that return value.
-- `ApiToken.authenticate(secret)` → record or nil. Rejects anything not matching
+**`Services::Api::Tokens`** owns the lifecycle (Result pattern):
+
+- `Tokens.generate(user:, name:, scopes:, expires_at: nil)` → `Result` whose `data` is
+  `{token:, secret:}`. The secret is `"tg_" + SecureRandom.alphanumeric(40)` (~238 bits) and
+  exists only in that return value; on validation failure nothing is stored.
+- `Tokens.authenticate(secret)` → record or nil. Rejects anything not matching
   `/\Atg_[A-Za-z0-9]{40}\z/` before touching the database; finds by digest; re-checks the digest
   with `ActiveSupport::SecurityUtils.secure_compare`; returns nil when expired.
-- `touch_last_used!` — no-op if `last_used_at` is within the last 5 minutes.
-- Validation: name presence/length; scopes non-empty, every scope known, every scope mintable
-  by `user`; at most **10** tokens per user.
-- Revoke = `destroy`.
+- `Tokens.record_use(token)` — no-op if `last_used_at` is within the last 5 minutes.
 
 **`Services::Api::Authenticator.call(request)`** returns a `Result` whose `data` is an
 `Api::Principal` (`user`, `token`, `scopes`, `tier`) or whose `errors` carry one code:
@@ -473,7 +476,7 @@ with a negative class, not just the happy path.
 - **Models.** `ApiToken`: `generate` returns the secret once and stores only the digest;
   `authenticate` rejects unknown, expired and malformed secrets and never queries on a malformed
   one; scope validation against the registry and against `mintable_by`; the 10-token cap;
-  `touch_last_used!` throttling. `User`: `account_kind`, the skipped default-lists callback,
+  `record_use` throttling. `User`: `account_kind`, the skipped default-lists callback,
   service email shape.
 - **Services.** `Authenticator`: one test per failure code; service-account membership bypass;
   tier resolution. `RateLimiter`: both windows, the boundary, reset timestamps, a rejected request

@@ -298,7 +298,7 @@ module Api
           freeze_time do
             limit = Rails.application.config.x.api.unauthenticated_per_minute
             # A well-formed but unknown token, not a bare request: a blank
-            # Authorization header never reaches ApiToken.authenticate's DB lookup
+            # Authorization header never reaches Services::Api::Tokens.authenticate's DB lookup
             # regardless of ordering, so it can't tell a correctly-ordered peek
             # (skip the lookup once over the limit) from a regression that runs
             # the lookup first and checks the limit after.

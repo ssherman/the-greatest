@@ -25,6 +25,7 @@ paths:
               schema:
                 type: object
   /api/v1/books:
+    x-domain: books
     get:
       operationId: listBooks
       summary: Books in rank order
@@ -61,6 +62,7 @@ paths:
         "429":
           $ref: "#/components/responses/TooManyRequests"
   /api/v1/books/{slug}:
+    x-domain: books
     get:
       operationId: getBook
       summary: One book

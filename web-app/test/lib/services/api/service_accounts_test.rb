@@ -18,8 +18,8 @@ module Services
         token = result.data[:token]
         assert_equal "default", token.name
         assert_equal ["books:read", "music:read"], token.scopes
-        assert_match ApiToken::SECRET_FORMAT, result.data[:secret]
-        assert_equal token, ApiToken.authenticate(result.data[:secret])
+        assert_match Tokens::SECRET_FORMAT, result.data[:secret]
+        assert_equal token, Tokens.authenticate(result.data[:secret])
       end
 
       test "create is find-or-create on the account and always mints a new token" do
@@ -49,6 +49,25 @@ module Services
         end
       end
 
+      test "create rolls the account back when its first token fails validation" do
+        assert_no_difference ["User.count", "ApiToken.count"] do
+          result = ServiceAccounts.create(name: "blank-token-name", scopes: ["books:read"], token_name: "")
+
+          refute result.success?
+          assert(result.errors.any? { |message| message.include?("Name") })
+        end
+        assert_nil User.find_by(email: User.service_account_email("blank-token-name"))
+      end
+
+      test "create with an existing account and a failing token leaves the account untouched" do
+        account = users(:agent_runner_service_account)
+
+        assert_no_difference ["User.count", "ApiToken.count"] do
+          refute ServiceAccounts.create(name: "agent-runner", scopes: ["books:read"], token_name: "").success?
+        end
+        assert account.reload.persisted?
+      end
+
       test "mint adds a token to an existing service account" do
         user = users(:agent_runner_service_account)
 
@@ -72,7 +91,7 @@ module Services
         assert_difference "ApiToken.count", -1 do
           assert ServiceAccounts.revoke(id: token.id).success?
         end
-        assert_nil ApiToken.authenticate(ApiTokenSecrets::SERVICE)
+        assert_nil Tokens.authenticate(ApiTokenSecrets::SERVICE)
       end
 
       test "revoke of an unknown id fails" do

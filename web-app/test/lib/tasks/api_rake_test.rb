@@ -16,9 +16,9 @@ class ApiRakeTest < ActiveSupport::TestCase
     end
 
     secret = out.strip
-    assert_match ApiToken::SECRET_FORMAT, secret
+    assert_match Services::Api::Tokens::SECRET_FORMAT, secret
     assert_equal 1, out.lines.size
-    token = ApiToken.authenticate(secret)
+    token = Services::Api::Tokens.authenticate(secret)
     assert_equal ["books:read", "games:read"], token.scopes
     assert_equal "rake-made@service-accounts.thegreatest.invalid", token.user.email
   end
@@ -35,7 +35,7 @@ class ApiRakeTest < ActiveSupport::TestCase
       capture_io { Rake::Task["api:service_account:token"].invoke }
     end
 
-    token = ApiToken.authenticate(out.strip)
+    token = Services::Api::Tokens.authenticate(out.strip)
     assert_equal users(:agent_runner_service_account), token.user
     assert_equal "prod-2", token.name
   end

@@ -1,52 +1,20 @@
 require "test_helper"
 
+# Persistence-layer tests only. Minting, resolving a secret and recording use
+# are Services::Api::Tokens (test/lib/services/api/tokens_test.rb).
 class ApiTokenTest < ActiveSupport::TestCase
   setup do
     @user = users(:regular_user)
   end
 
-  test "generate returns the secret once and stores only its digest and prefix" do
-    token, secret = ApiToken.generate(user: @user, name: "agent", scopes: ["books:read"])
-
-    assert token.persisted?
-    assert_match ApiToken::SECRET_FORMAT, secret
-    assert_equal Digest::SHA256.hexdigest(secret), token.token_digest
-    assert_equal secret[0, 12], token.token_prefix
-    assert_nil token.expires_at
-    refute ApiToken.column_names.include?("secret")
-    refute token.attributes.value?(secret)
+  def build(**overrides)
+    ApiToken.new({user: @user, name: "agent", scopes: ["books:read"],
+                  token_digest: Digest::SHA256.hexdigest("tg_#{SecureRandom.alphanumeric(40)}"),
+                  token_prefix: "tg_123456789"}.merge(overrides))
   end
 
-  test "generate with an expiry" do
-    freeze_time do
-      token, _secret = ApiToken.generate(user: @user, name: "short", scopes: ["books:read"], expires_at: 30.days.from_now)
-
-      assert_equal 30.days.from_now, token.expires_at
-    end
-  end
-
-  test "authenticate finds a live token by its secret" do
-    assert_equal api_tokens(:regular_user_token), ApiToken.authenticate(ApiTokenSecrets::MEMBER)
-  end
-
-  test "authenticate returns nil for an unknown secret" do
-    assert_nil ApiToken.authenticate("tg_#{"z" * 40}")
-  end
-
-  test "authenticate returns nil for an expired token" do
-    assert_nil ApiToken.authenticate(ApiTokenSecrets::EXPIRED)
-  end
-
-  test "authenticate rejects a malformed secret without querying" do
-    queries = capture_sql do
-      assert_nil ApiToken.authenticate(nil)
-      assert_nil ApiToken.authenticate("")
-      assert_nil ApiToken.authenticate("not-a-token")
-      assert_nil ApiToken.authenticate("tg_short")
-      assert_nil ApiToken.authenticate("tg_#{"m" * 40}!")
-    end
-
-    assert_equal 0, queries.size
+  test "a well-formed token is valid" do
+    assert build.valid?
   end
 
   test "expired? is false with no expiry, false before it, true at and after it" do
@@ -60,54 +28,48 @@ class ApiTokenTest < ActiveSupport::TestCase
     assert token.expired?
   end
 
-  test "touch_last_used! writes once, then not again within five minutes" do
-    token = api_tokens(:regular_user_token)
-    assert_nil token.last_used_at
-
-    freeze_time do
-      token.touch_last_used!
-      assert_equal Time.current, token.reload.last_used_at
-
-      travel 4.minutes
-      token.touch_last_used!
-      assert_equal 4.minutes.ago, token.reload.last_used_at
-
-      travel 2.minutes
-      token.touch_last_used!
-      assert_equal Time.current, token.reload.last_used_at
-    end
-  end
-
   test "requires a name of at most 60 characters" do
-    token, _secret = ApiToken.generate(user: @user, name: "", scopes: ["books:read"])
-    refute token.persisted?
+    token = build(name: "")
+    refute token.valid?
     assert_includes token.errors[:name], "can't be blank"
 
-    token, _secret = ApiToken.generate(user: @user, name: "x" * 61, scopes: ["books:read"])
-    refute token.persisted?
+    token = build(name: "x" * 61)
+    refute token.valid?
     assert token.errors[:name].any?
   end
 
-  test "requires at least one scope" do
-    token, _secret = ApiToken.generate(user: @user, name: "empty", scopes: [])
+  test "requires a digest and a prefix" do
+    refute build(token_digest: nil).valid?
+    refute build(token_prefix: nil).valid?
+  end
 
-    refute token.persisted?
+  test "the digest is unique" do
+    token = build(token_digest: api_tokens(:regular_user_token).token_digest)
+
+    refute token.valid?
+    assert token.errors[:token_digest].any?
+  end
+
+  test "requires at least one scope" do
+    token = build(scopes: [])
+
+    refute token.valid?
     assert token.errors[:scopes].any?
   end
 
   test "rejects an unknown scope" do
-    token, _secret = ApiToken.generate(user: @user, name: "bad", scopes: ["books:read", "films:read"])
+    token = build(scopes: ["books:read", "films:read"])
 
-    refute token.persisted?
+    refute token.valid?
     assert_includes token.errors[:scopes].join, "films:read"
   end
 
   test "rejects a scope the owner may not mint" do
     Api::Scopes.stubs(:mintable_by).with(@user).returns(["books:read"])
 
-    token, _secret = ApiToken.generate(user: @user, name: "greedy", scopes: ["books:read", "music:read"])
+    token = build(scopes: ["books:read", "music:read"])
 
-    refute token.persisted?
+    refute token.valid?
     assert_includes token.errors[:scopes].join, "music:read"
   end
 
@@ -115,19 +77,19 @@ class ApiTokenTest < ActiveSupport::TestCase
     cap = Rails.application.config.x.api.max_tokens_per_user
     existing = @user.api_tokens.count
     (cap - existing).times do |n|
-      token, _secret = ApiToken.generate(user: @user, name: "fill-#{n}", scopes: ["books:read"])
-      assert token.persisted?, token.errors.full_messages.join(", ")
+      assert build(name: "fill-#{n}").save, "token #{n} should save"
     end
 
-    token, _secret = ApiToken.generate(user: @user, name: "one-too-many", scopes: ["books:read"])
+    token = build(name: "one-too-many")
 
-    refute token.persisted?
+    refute token.save
     assert token.errors[:base].any?
   end
 
   test "destroying a user destroys their tokens" do
     user = User.create!(email: "temp-token-owner@example.com", role: :user, email_verified: false, display_name: "Temp")
-    ApiToken.generate(user: user, name: "t", scopes: ["books:read"])
+    ApiToken.create!(user: user, name: "t", scopes: ["books:read"],
+      token_digest: Digest::SHA256.hexdigest("tg_#{SecureRandom.alphanumeric(40)}"), token_prefix: "tg_abcdefghi")
 
     assert_difference("ApiToken.count", -1) { user.destroy! }
   end
