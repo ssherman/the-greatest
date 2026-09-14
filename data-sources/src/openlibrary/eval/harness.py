@@ -1,4 +1,4 @@
-"""Run the matcher over the labeled set and report the five metrics.
+"""Run the matcher over the labeled set and report the six metrics.
 
 False-merge rate is the one to watch: a wrong merge destroys data, an
 abstention costs a review. Everything else is context for it.
@@ -8,13 +8,14 @@ so a label written against one dump and an answer produced from another do not
 disagree merely because Open Library merged something.
 
 `run` is `evaluate(prepare(...), ...)` (Task 26b): the uncalibrated baseline
-took 4.5s/case, almost all of it in blocking and `load_work_views`, and Task
-27's calibration search calls the equivalent of `run` once per weight vector
-it tries -- roughly 200 iterations over the full 448-case set, which at the
-old per-call cost is 200 * ~20min ~= 67 hours. Weights affect only scoring and
-deciding, never blocking, views, features or conflicts, so `prepare` does
-every DuckDB-touching step ONCE and `evaluate` re-scores the result in pure
-Python in milliseconds, as many times as calibration needs.
+took 4.5s/case, almost all of it in blocking and `load_work_views` -- 448
+cases * 4.5s ~= 34 min for the full set, ~20 min for the 268-case train
+split -- and Task 27's calibration search calls the equivalent of `run` once
+per weight vector it tries -- roughly 200 iterations over the train split,
+which at the old per-call cost is 200 * ~20min ~= 67 hours. Weights affect
+only scoring and deciding, never blocking, views, features or conflicts, so
+`prepare` does every DuckDB-touching step ONCE and `evaluate` re-scores the
+result in pure Python in milliseconds, as many times as calibration needs.
 
 `write_prepared_cache`/`read_prepared_cache` (R54) persist a `prepare()` pass
 to a JSON file keyed by dump date, matcher version and case count, so a
@@ -118,6 +119,10 @@ class PreparedCase(BaseModel):
     expected_work_key: str | None
     expected_verdict: Verdict
     candidates: list[PreparedCandidate] = Field(default_factory=list)
+    # R59: `BlockingResult.volume_guards_tripped` for this case -- the rules
+    # that found something and refused to fetch it. With zero candidates it
+    # is what `decide` needs to abstain rather than reject.
+    volume_guards_tripped: list[str] = Field(default_factory=list)
     # The `resolve_keys` map for the expected key plus every candidate key,
     # fetched once here so `evaluate` never needs a connection (ruling: one
     # `resolve_keys` call per case, not one query per candidate).
@@ -166,9 +171,7 @@ def prepare(
     for case in cases:
         query = _query_for(case)
         blocking = generate_candidates(con, paths, query)
-        identifier_hits = frozenset(
-            k for k, rules in blocking.candidates.items() if "identifier" in rules
-        )
+        identifier_hits = blocking.identifier_hits
         views = load_work_views(con, paths, list(blocking.candidates))
         candidates = [
             PreparedCandidate(
@@ -195,6 +198,7 @@ def prepare(
                 expected_work_key=expected,
                 expected_verdict=case.label.verdict,
                 candidates=candidates,
+                volume_guards_tripped=list(blocking.volume_guards_tripped),
                 resolved=resolved,
             )
         )
@@ -220,7 +224,7 @@ def evaluate(
             for c in case.candidates
         ]
         ordered = rank(scored)
-        decision = decide(scored, weights)
+        decision = decide(scored, weights, volume_guards_tripped=case.volume_guards_tripped)
 
         expected = case.expected_work_key
         resolved = case.resolved

@@ -15,6 +15,14 @@ and says so: a visible gap beats a query that never returns. The one
 exception is rule 5, whose own cap is `MAX_SHELF_SIZE` rather than
 `MAX_CANDIDATES_PER_RULE`: once an author resolves, the scorer -- not
 blocking -- is meant to read the whole shelf.
+
+A tripped guard is reported two ways (ruling R59). `guards_tripped` names
+every rule that declined to fire, for any reason; `volume_guards_tripped` is
+the subset that declined because there WAS something and it was too much to
+fetch -- a cap or the title-frequency limit. The difference matters when
+nothing else fires: zero candidates with a volume guard tripped means "found,
+refused" and the decider abstains; zero candidates with only the empty/short
+fingerprint `title_fp` guard means "nothing to find" and it rejects.
 """
 
 from __future__ import annotations
@@ -64,12 +72,28 @@ class BlockingQuery(BaseModel):
 class BlockingResult(BaseModel):
     candidates: dict[str, list[str]] = Field(default_factory=dict)
     guards_tripped: list[str] = Field(default_factory=list)
+    # R59: the rules whose volume CAP tripped -- identifier, author_title_fp,
+    # title_fp (frequency or cap, NOT the empty/short-fingerprint case),
+    # author_shelf. Always a subset of `guards_tripped`.
+    volume_guards_tripped: list[str] = Field(default_factory=list)
+
+    @property
+    def identifier_hits(self) -> frozenset[str]:
+        """The works our identifiers reached (rule 1) -- the set `features.extract`
+        and `features.conflicts` compare each candidate against (R35)."""
+        return frozenset(k for k, rules in self.candidates.items() if "identifier" in rules)
 
 
 def _add(result: BlockingResult, work_key: str, rule: str) -> None:
     rules = result.candidates.setdefault(work_key, [])
     if rule not in rules:
         rules.append(rule)
+
+
+def _volume_guard(result: BlockingResult, rule: str) -> None:
+    """Record a cap/frequency guard in BOTH lists (R59)."""
+    result.guards_tripped.append(rule)
+    result.volume_guards_tripped.append(rule)
 
 
 def generate_candidates(
@@ -83,6 +107,19 @@ def generate_candidates(
     author_fps = [fp for fp in (fingerprint(n) for n in query.author_names) if fp]
 
     # Rule 1 -- identifiers. Deterministic; may legitimately return several works.
+    #
+    # `i.work_key` is whatever the EDITION recorded, and editions go stale
+    # (ruling R41): measured on 2026-07-31, `identifiers.work_key` is a
+    # redirect SOURCE for 270 distinct works (9,216 rows) and absent from
+    # `works` altogether for 294. Returning such a key verbatim is worse than
+    # a miss: `load_work_views` has no view for it, so it is dropped as a
+    # candidate -- but it stays in `identifier_hits`, and under R35 every REAL
+    # candidate (including the redirect's target, i.e. the true work) then
+    # reads as an identifier CONFLICT and the decider abstains. So the key is
+    # resolved through `redirects` here (entity = 'work', cycles excluded)
+    # and anything still absent from `works` is dropped before it can poison
+    # the hit set. `work_authors` has 0 stale keys, so rules 3 and 5 need no
+    # such step.
     identifiers = identifier_pairs(
         isbn13=query.isbn13,
         isbn10=query.isbn10,
@@ -95,14 +132,19 @@ def generate_candidates(
         load_rows(con, "q_ids", [("id_type", "VARCHAR"), ("value", "VARCHAR")], identifiers)
         rows = con.execute(
             f"""
-            SELECT DISTINCT i.work_key FROM '{paths.table("identifiers")}' i
+            SELECT DISTINCT COALESCE(r.terminal_key, i.work_key) AS work_key
+            FROM '{paths.table("identifiers")}' i
             JOIN q_ids q ON q.id_type = i.id_type AND q.value = i.value
+            LEFT JOIN '{paths.table("redirects")}' r
+              ON r.source_key = i.work_key AND r.entity = 'work' AND NOT r.is_cycle
             WHERE i.work_key IS NOT NULL
+              AND COALESCE(r.terminal_key, i.work_key)
+                  IN (SELECT work_key FROM '{paths.table("works")}')
             LIMIT {MAX_CANDIDATES_PER_RULE + 1}
             """
         ).fetchall()
         if len(rows) > MAX_CANDIDATES_PER_RULE:
-            result.guards_tripped.append("identifier")
+            _volume_guard(result, "identifier")
         else:
             for (work_key,) in rows:
                 _add(result, work_key, "identifier")
@@ -143,7 +185,7 @@ def generate_candidates(
             """
         ).fetchall()
         if len(rows) > MAX_CANDIDATES_PER_RULE:
-            result.guards_tripped.append("author_title_fp")
+            _volume_guard(result, "author_title_fp")
         else:
             for (work_key,) in rows:
                 _add(result, work_key, "author_title_fp")
@@ -159,12 +201,12 @@ def generate_candidates(
     #
     # `guards_tripped` may carry "title_fp" for two different reasons: an
     # empty/too-short fingerprint (the `else` branch below, e.g. "!!!") or a
-    # common title suppressed here. No downstream code distinguishes between
-    # them in `guards_tripped` today -- but rule 6 below needs to, so
-    # `suppressed_common_title` tracks the second reason separately rather
-    # than testing `"title_fp" in guards_tripped` (ruling R39, amended: a
-    # too-short fingerprint has zero exact hits and rule 6's reasoning does
-    # not apply to it).
+    # common title suppressed here. Only the second is a VOLUME guard and
+    # goes into `volume_guards_tripped` too (R59); rule 6 below also needs
+    # the distinction, so `suppressed_common_title` tracks the second reason
+    # separately rather than testing `"title_fp" in guards_tripped` (ruling
+    # R39, amended: a too-short fingerprint has zero exact hits and rule 6's
+    # reasoning does not apply to it).
     #
     # This joins against all three title fingerprint variants (full/nosub/
     # noart). `eval/build_pool.py`'s own copy of rule 4 joins the full
@@ -186,12 +228,15 @@ def generate_candidates(
             """
         ).fetchall()
         if any(freq > MAX_TITLE_FP_FREQ for _, freq in rows) or len(rows) > MAX_CANDIDATES_PER_RULE:
-            result.guards_tripped.append("title_fp")
+            _volume_guard(result, "title_fp")
             suppressed_common_title = True
         for work_key, freq in rows:
             if freq <= MAX_TITLE_FP_FREQ:
                 _add(result, work_key, "title_fp")
     else:
+        # An empty or too-short fingerprint: nothing to look up, so a guard
+        # but NOT a volume guard (R59) -- there is no "something" here that
+        # was refused.
         result.guards_tripped.append("title_fp")
 
     # Rule 5 -- the author's whole shelf. Once an author resolves, no search is
@@ -208,7 +253,7 @@ def generate_candidates(
             """
         ).fetchall()
         if len(rows) > MAX_SHELF_SIZE:
-            result.guards_tripped.append("author_shelf")
+            _volume_guard(result, "author_shelf")
         else:
             for (work_key,) in rows:
                 _add(result, work_key, "author_shelf")

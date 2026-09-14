@@ -33,8 +33,29 @@ from openlibrary.eval.harness import (
     write_prepared_cache,
 )
 from openlibrary.eval.schema import EvalBook, EvalCandidate, EvalCase, EvalLabel
-from openlibrary.matcher.scorer import load_weights
+from openlibrary.matcher.features import FEATURES
+from openlibrary.matcher.scorer import MATCHER_VERSION, Weights, load_weights
 from openlibrary.pipeline.duck import connect
+
+
+def _equal_weights() -> Weights:
+    """The design's equal-weights placeholder, built inline -- NOT
+    `load_weights()`, which reads the real calibrated file (Task 27) whose
+    numbers change on every calibration run. The forced-outcome tests below
+    assert what "all feature weights 1.0" does with an exact title/author
+    match, so they need exactly that vector. Constructed here rather than
+    imported from `openlibrary.eval.calibrate` to keep this module's imports
+    to the harness under test."""
+    return Weights(
+        matcher_version=MATCHER_VERSION,
+        calibrated=False,
+        calibrated_at=None,
+        feature_weights={**dict.fromkeys(FEATURES, 1.0), "popularity_prior": 0.1},
+        conflict_penalties={"identifier": 0.35},
+        accept_threshold=0.9,
+        reject_threshold=0.4,
+        margin_threshold=0.05,
+    )
 
 
 @pytest.fixture(scope="module")
@@ -161,7 +182,7 @@ def test_a_false_merge_is_an_accept_on_the_wrong_work(fixture_artifact, work_a, 
     )
     con = connect(fixture_artifact, memory_limit="1GB")
     with contextlib.closing(con):
-        _, outcomes = run(con, fixture_artifact, [case], load_weights())
+        _, outcomes = run(con, fixture_artifact, [case], _equal_weights())
     outcome = outcomes[0]
     assert outcome.decision.verdict == "accept", (
         f"expected the uncalibrated matcher to accept {a_key!r} on its own exact "
@@ -194,7 +215,7 @@ def test_a_no_match_case_accepted_onto_any_work_counts_as_a_false_merge(fixture_
     )
     con = connect(fixture_artifact, memory_limit="1GB")
     with contextlib.closing(con):
-        _, outcomes = run(con, fixture_artifact, [case], load_weights())
+        _, outcomes = run(con, fixture_artifact, [case], _equal_weights())
     outcome = outcomes[0]
     assert outcome.decision.verdict == "accept", (
         f"expected the uncalibrated matcher to accept {a_key!r} on its own exact "
@@ -275,6 +296,137 @@ def test_a_match_case_with_no_candidates_counts_as_a_false_reject(fixture_artifa
         f"{outcome.decision.verdict!r} ({outcome.decision.reason})"
     )
     assert metrics.false_reject_rate == 1.0
+
+
+def _prepared(case_id: str, verdict: str, *, candidates=(), volume_guards=()) -> PreparedCase:
+    return PreparedCase(
+        case_id=case_id,
+        stratum="no_candidates",
+        expected_work_key="OL1W" if verdict != "no_match" else None,
+        expected_verdict=verdict,
+        candidates=list(candidates),
+        volume_guards_tripped=list(volume_guards),
+        resolved={"OL1W": "OL1W"},
+    )
+
+
+def _middling_candidate() -> PreparedCandidate:
+    """One candidate whose only present feature is a 0.65 title similarity:
+    between the equal-weights reject (0.4) and accept (0.9) thresholds, so
+    `decide` abstains on it."""
+    return PreparedCandidate(
+        work_key="OL1W",
+        rules=["title_fp"],
+        values={**dict.fromkeys(FEATURES), "title_similarity": 0.65, "popularity_prior": 0.0},
+    )
+
+
+def test_a_refused_search_abstains_and_is_not_a_false_reject():
+    """R59: the false reject the labelled set actually contained
+    (degenerate_title-014) was a `match` whose author shelf was over
+    MAX_SHELF_SIZE -- zero candidates, but not because nothing was there.
+    `evaluate` hands the prepared case's volume guards to `decide`, which
+    abstains; and an abstention on a match is a review, not a false reject.
+
+    The other two cases pin T27's deferred #10 around it: an abstained
+    `match` (middling score) is not a false reject either, and an
+    `ambiguous` case is excluded from the false-reject denominator -- only
+    the one genuine `reject` on a `match` counts, over the three `match`
+    cases, never over all four."""
+    refused = _prepared("refused-shelf", "match", volume_guards=["author_shelf"])
+    middling = _prepared("middling", "match", candidates=[_middling_candidate()])
+    ambiguous_empty = _prepared("ambiguous-empty", "ambiguous")
+    real_false_reject = _prepared("really-rejected", "match")
+
+    metrics, outcomes = evaluate(
+        [refused, middling, ambiguous_empty, real_false_reject], _equal_weights()
+    )
+    by_id = {o.case_id: o for o in outcomes}
+
+    assert by_id["refused-shelf"].decision.verdict == "abstain"
+    assert by_id["refused-shelf"].decision.reason == (
+        "no candidates; search refused for volume: author_shelf"
+    )
+    assert by_id["refused-shelf"].false_merge is False
+    assert by_id["refused-shelf"].correct is False
+
+    assert by_id["middling"].decision.verdict == "abstain"
+    assert by_id["ambiguous-empty"].decision.verdict == "reject"
+    assert by_id["really-rejected"].decision.verdict == "reject"
+
+    # 1 reject among the 3 `match` cases; the ambiguous reject is not in
+    # either the numerator or the denominator.
+    assert metrics.false_reject_rate == pytest.approx(1 / 3)
+    assert metrics.abstention_rate == pytest.approx(2 / 4)
+
+
+def test_a_refused_search_on_a_no_match_case_is_not_a_correct_no_match():
+    """The other side of R59: abstaining on a `no_match` whose shelf was too
+    big is honest but not correct -- `correct_no_match_rate` only counts
+    `reject`. This is the cost the ruling accepted (+2 abstains) and it must
+    show in the metric, not be hidden as a correct answer."""
+    refused = _prepared("refused-no-match", "no_match", volume_guards=["author_shelf"])
+    plain = _prepared("plain-no-match", "no_match")
+
+    metrics, outcomes = evaluate([refused, plain], _equal_weights())
+    by_id = {o.case_id: o for o in outcomes}
+
+    assert by_id["refused-no-match"].decision.verdict == "abstain"
+    assert by_id["refused-no-match"].correct is False
+    assert by_id["plain-no-match"].decision.verdict == "reject"
+    assert by_id["plain-no-match"].correct is True
+    assert metrics.correct_no_match_rate == pytest.approx(0.5)
+
+
+def test_prepare_records_the_volume_guards_blocking_tripped(fixture_artifact):
+    """The corpus's 51-work "Selected Poems" block is a frequency-suppressed
+    title (a volume guard, R59); a nonsense title trips nothing."""
+    con = connect(fixture_artifact, memory_limit="1GB")
+    with contextlib.closing(con):
+        (common_title,) = con.execute(
+            f"""
+            SELECT title FROM '{fixture_artifact.table("works")}'
+            WHERE title_fp_freq > 50 ORDER BY work_key LIMIT 1
+            """
+        ).fetchone()
+        prepared = prepare(
+            con,
+            fixture_artifact,
+            [
+                EvalCase(
+                    case_id="common-001",
+                    stratum="high_frequency_title",
+                    book=EvalBook(book_id=1, title=common_title),
+                    candidates_shown=[],
+                    label=EvalLabel(
+                        verdict="no_match",
+                        work_key=None,
+                        identity_rule="not_in_open_library",
+                        rationale="Constructed: a frequency-suppressed title.",
+                        labeled_at=datetime.date(2026, 9, 2),
+                        labeled_against_dump_date="2026-07-31",
+                    ),
+                ),
+                EvalCase(
+                    case_id="nonsense-001",
+                    stratum="no_candidates",
+                    book=EvalBook(book_id=2, title="Zzzq Nothing Whatsoever Blocks To This Title"),
+                    candidates_shown=[],
+                    label=EvalLabel(
+                        verdict="no_match",
+                        work_key=None,
+                        identity_rule="not_in_open_library",
+                        rationale="Constructed: nothing blocks.",
+                        labeled_at=datetime.date(2026, 9, 2),
+                        labeled_against_dump_date="2026-07-31",
+                    ),
+                ),
+            ],
+        )
+    by_id = {p.case_id: p for p in prepared}
+    assert by_id["common-001"].volume_guards_tripped == ["title_fp"]
+    assert by_id["common-001"].candidates == []
+    assert by_id["nonsense-001"].volume_guards_tripped == []
 
 
 def test_prepared_cache_round_trips_through_a_file(tmp_path):

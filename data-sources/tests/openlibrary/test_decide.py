@@ -46,6 +46,26 @@ def test_no_candidates_is_a_reject_not_a_crash():
     assert decision.work_key is None
 
 
+def test_no_candidates_with_a_tripped_volume_guard_abstains_instead(  # R59
+):
+    """Blocking found something and refused to fetch it (a 1,226-work author
+    shelf, an identifier on 200+ works). That is not "not in Open Library";
+    recording it as a reject was the v1 false reject (degenerate_title-014)."""
+    decision = decide([], _equal_weights(), volume_guards_tripped=["author_shelf"])
+    assert decision.verdict == "abstain"
+    assert decision.work_key is None
+    assert decision.reason == "no candidates; search refused for volume: author_shelf"
+
+
+def test_no_candidates_and_no_volume_guard_is_still_a_reject():
+    """The control for the test above: an empty `volume_guards_tripped` --
+    including the case where only the empty/short-fingerprint `title_fp`
+    guard fired, which is not a volume guard -- keeps the reject."""
+    decision = decide([], _equal_weights(), volume_guards_tripped=[])
+    assert decision.verdict == "reject"
+    assert decision.reason == "no candidates"
+
+
 def test_a_clear_winner_is_accepted():
     weights = _equal_weights()
     decision = decide([_c("OL1W", 0.97), _c("OL2W", 0.40)], weights)
@@ -117,12 +137,12 @@ def test_an_identity_feature_alongside_the_prior_is_enough():
             "weight": 0.1,
             "contribution": 0.1,
         },
-        "author_overlap": {
+        "title_similarity": {
             "value": 1.0,
             "weight": 1.0,
             "contribution": 1.0,
         },
-        "title_similarity": {
+        "author_overlap": {
             "value": None,
             "weight": 1.0,
             "contribution": 0.0,
@@ -133,3 +153,59 @@ def test_an_identity_feature_alongside_the_prior_is_enough():
         _equal_weights(),
     )
     assert decision.verdict == "accept"
+
+
+def _present(**values: float) -> dict:
+    """Evidence with the named features present and every other feature
+    absent, as `score_features` writes it."""
+    evidence = {name: {"value": None, "weight": 1.0, "contribution": 0.0} for name in FEATURES}
+    for name, value in values.items():
+        evidence[name] = {"value": value, "weight": 1.0, "contribution": value}
+    return evidence
+
+
+# Ruling R58: author agreement identifies the author, not the book. The two
+# measured false merges this closes (degenerate_title-013, pseudonym_or_alt_
+# name-001) both scored 0.91-0.95 on author_overlap + author_name_similarity
+# with no title feature present -- a Bengali/Cyrillic title against a Latin
+# fingerprint yields None for every title feature (R40), so the weighted mean
+# WAS the author agreement.
+def test_author_agreement_alone_can_never_be_accepted():
+    evidence = _present(author_overlap=1.0, author_name_similarity=1.0, popularity_prior=0.5)
+    decision = decide([_c("OL1W", 1.0, evidence=evidence)], _equal_weights())
+    assert decision.verdict == "abstain"
+    assert decision.reason == (
+        "no identity evidence: only author/year/language/popularity are present"
+    )
+
+
+def test_year_and_language_alongside_author_still_do_not_make_identity():
+    evidence = _present(
+        author_overlap=1.0, author_name_similarity=1.0, year_agreement=1.0, language_agreement=1.0
+    )
+    decision = decide([_c("OL1W", 1.0, evidence=evidence)], _equal_weights())
+    assert decision.verdict == "abstain"
+    assert "identity" in decision.reason
+
+
+def test_author_agreement_with_a_present_title_feature_is_accepted():
+    evidence = _present(author_overlap=1.0, author_name_similarity=1.0, title_similarity=0.96)
+    decision = decide([_c("OL1W", 0.98, evidence=evidence)], _equal_weights())
+    assert decision.verdict == "accept"
+
+
+def test_author_agreement_with_an_agreeing_identifier_is_accepted():
+    evidence = _present(author_overlap=1.0, author_name_similarity=1.0, identifier_agreement=1.0)
+    decision = decide([_c("OL1W", 1.0, evidence=evidence)], _equal_weights())
+    assert decision.verdict == "accept"
+
+
+def test_a_disagreeing_identifier_is_not_identity_evidence():
+    """identifier_agreement == 0.0 is a conflict, not a comparison of the
+    book itself; only 1.0 counts. (In practice a 0.0 also arrives with a
+    `conflicts` entry and abstains one check earlier -- this pins the guard
+    on its own.)"""
+    evidence = _present(author_overlap=1.0, author_name_similarity=1.0, identifier_agreement=0.0)
+    decision = decide([_c("OL1W", 0.95, evidence=evidence)], _equal_weights())
+    assert decision.verdict == "abstain"
+    assert "identity" in decision.reason

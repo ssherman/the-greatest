@@ -189,12 +189,16 @@ def _forced_false_merge_prepared() -> list[PreparedCase]:
     accept-rate floor and give the search something to protect). One case
     whose only surfaced candidate is a REAL false merge under the base
     (all-weights-equal) scorer: its lone identity feature is
-    `language_agreement=1.0`, which alone clears the accept threshold with
-    plenty of margin. One clean true negative with no candidates at all.
+    `subtitle_agreement=1.0` -- a title feature, so R58's identity guard
+    lets it through -- which alone scores 1.0/1.1 = 0.909 and clears the
+    0.9 accept threshold with no runner-up. (It was `language_agreement`
+    before R58; language is no longer identity evidence and abstains on its
+    own, which is the guard doing its job, not a false merge to fix.) One
+    clean true negative with no candidates at all.
 
     With base weights this scores: precision 0.667, false_merge_rate 0.333 --
     a bad objective, dominated by FALSE_MERGE_COST. There IS a reachable fix
-    within a single hill-climb step -- either lowering `language_agreement`'s
+    within a single hill-climb step -- either lowering `subtitle_agreement`'s
     weight enough to drop the false merge's score under 0.9, or raising
     `accept_threshold` just past it -- and both cost nothing on the two clean
     matches, whose margin over the base threshold is far larger, so a real
@@ -223,7 +227,7 @@ def _forced_false_merge_prepared() -> list[PreparedCase]:
             PreparedCandidate(
                 work_key="OL3X",
                 rules=["author_shelf"],
-                values=_values(language_agreement=1.0, popularity_prior=0.0),
+                values=_values(subtitle_agreement=1.0, popularity_prior=0.0),
             )
         ],
     )
