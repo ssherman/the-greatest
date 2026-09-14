@@ -52,6 +52,7 @@ class User < ApplicationRecord
   has_many :reviews, dependent: :destroy
   has_many :memberships, dependent: :nullify
   has_many :books_reading_goals, class_name: "Books::ReadingGoal", dependent: :destroy
+  has_many :api_tokens, dependent: :destroy
 
   # Every foreign key into users needs one of these. Postgres rejects a DELETE
   # that would orphan a referencing row, so a missing has_many turns
@@ -76,6 +77,9 @@ class User < ApplicationRecord
   enum :external_provider, [:facebook, :twitter, :google, :apple, :password]
 
   after_create :create_default_user_lists
+
+  # Replaced by the account_kind enum in the next commit.
+  def service? = false
 
   # Presence is conditional on the provider, not on auth_uid: password users
   # hold an auth_uid too, so keying on it would exempt exactly the accounts

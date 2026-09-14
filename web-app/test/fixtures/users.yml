@@ -166,3 +166,14 @@ books_viewer_user:
   role: 0
   email_verified: true
   original_signup_domain: thegreatestbooks.org
+
+# A service account: the internal Python agent framework authenticates as this.
+# No auth_uid, no external_provider, no membership; an email on a TLD (.invalid)
+# that can never resolve, so no identity provider can ever vouch for it.
+agent_runner_service_account:
+  email: agent-runner@service-accounts.thegreatest.invalid
+  display_name: agent-runner
+  name: agent-runner
+  role: 0
+  email_verified: false
+  original_signup_domain: thegreatestbooks.org
