@@ -131,13 +131,4 @@ class ApiTokenTest < ActiveSupport::TestCase
 
     assert_difference("ApiToken.count", -1) { user.destroy! }
   end
-
-  private
-
-  def capture_sql
-    queries = []
-    callback = ->(_n, _s, _f, _i, payload) { queries << payload[:sql] unless payload[:name] == "SCHEMA" }
-    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { yield }
-    queries
-  end
 end

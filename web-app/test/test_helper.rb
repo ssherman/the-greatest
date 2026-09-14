@@ -7,6 +7,8 @@ require_relative "support/turbo_frame_links"
 require_relative "support/stripe_webhook_helper"
 require_relative "support/firebase_token_helper"
 require_relative "support/api_token_secrets"
+require_relative "support/api_conformance"
+require_relative "support/sql_capture"
 
 # Configure Sidekiq to run jobs inline during tests
 # Sidekiq 9 removes `require "sidekiq/testing"`. Sidekiq.testing! loads sidekiq/test_api
@@ -18,6 +20,8 @@ WebMock.disable_net_connect!(allow_localhost: true)
 
 module ActiveSupport
   class TestCase
+    include SqlCapture
+
     # Capped, not :number_of_processors. Several agents run suites at once in
     # separate worktrees, and every worker holds one Postgres connection, so an
     # unbounded count per run exhausts the server: measured 2026-08-24, three

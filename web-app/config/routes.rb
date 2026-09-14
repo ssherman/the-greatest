@@ -580,6 +580,18 @@ Rails.application.routes.draw do
   end
 
   constraints DomainConstraint.new(Rails.application.config.domains[:books]) do
+    # Public API, books resources. JSON only: `defaults` means no extension is
+    # needed, `constraints` means /api/v1/books.xml matches nothing (a routing
+    # 404, not a 406). Domain comes from the host, like everything else.
+    # Spec: docs/superpowers/specs/2026-09-12-public-api-framework-design.md
+    namespace :api, defaults: {format: :json}, constraints: {format: :json} do
+      namespace :v1 do
+        scope module: :books do
+          resources :books, only: [:index, :show], param: :slug
+        end
+      end
+    end
+
     get "my/reading-goals", to: "books/my/reading_goals#index", as: :books_my_reading_goals
     get "my/reading-goals/new", to: "books/my/reading_goals#new", as: :new_books_my_reading_goal
     post "my/reading-goals", to: "books/my/reading_goals#create"
