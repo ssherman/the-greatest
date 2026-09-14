@@ -116,6 +116,21 @@ def derived_con(derived_artifact):
     connection.close()
 
 
+def test_language_must_be_a_marc_code_not_iso():
+    """R61: `editions.language_code` is MARC (eng/ger/fre/spa). An ISO 639-1
+    code would compare unequal to every edition -- a silent "disagree" on
+    every candidate -- so the query refuses it and tells the caller to map."""
+    with pytest.raises(ValueError, match="MARC"):
+        BlockingQuery(title="x", language="de")
+    with pytest.raises(ValueError, match="MARC"):
+        BlockingQuery(title="x", language="GER")
+    with pytest.raises(ValueError, match="MARC"):
+        BlockingQuery(title="x", language="eng ")
+    assert BlockingQuery(title="x", language="ger").language == "ger"
+    assert BlockingQuery(title="x", language=None).language is None
+    assert BlockingQuery(title="x").language is None
+
+
 def test_all_six_rules_are_declared():
     assert RULES == (
         "identifier",

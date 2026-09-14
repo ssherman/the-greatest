@@ -14,6 +14,7 @@ import json
 
 from openlibrary.eval.calibrate import (
     equal_weights,
+    feature_presence,
     objective,
     search_weights,
     splink_weights,
@@ -295,6 +296,73 @@ def test_search_weights_output_round_trips_through_weights_json():
     round_tripped = Weights.model_validate(json.loads(json.dumps(searched.model_dump())))
     assert round_tripped == searched
     assert set(round_tripped.feature_weights) == set(FEATURES)
+
+
+# ---------------------------------------------------------------------------
+# Ruling R61: a feature no training pair exercised has weight 0.0, not "1.0,
+# untouched". `_forced_false_merge_prepared` never gives `language_agreement`
+# a value (and `subtitle_agreement` only on the forced false merge), so it is
+# the natural specimen.
+# ---------------------------------------------------------------------------
+
+
+def test_feature_presence_is_the_fraction_of_candidate_values_present():
+    prepared = _forced_false_merge_prepared()
+    presence = feature_presence(prepared)
+    # 5 candidates in all: two strong matches, two weak distractors, one
+    # forced false merge.
+    assert set(presence) == set(FEATURES)
+    assert presence["title_similarity"] == 0.8  # every candidate but the false merge
+    assert presence["subtitle_agreement"] == 0.2  # the false merge only
+    assert presence["language_agreement"] == 0.0
+    assert presence["popularity_prior"] == 1.0
+
+
+def test_feature_presence_with_no_candidates_is_zero_everywhere():
+    empty = PreparedCase(
+        case_id="e", stratum="s", expected_work_key=None, expected_verdict="no_match"
+    )
+    assert feature_presence([empty]) == dict.fromkeys(FEATURES, 0.0)
+    assert feature_presence([]) == dict.fromkeys(FEATURES, 0.0)
+
+
+def test_an_unexercised_feature_is_pinned_to_zero_and_never_moved():
+    prepared = _forced_false_merge_prepared()
+    base = equal_weights()
+    assert base.feature_weights["language_agreement"] == 1.0  # the base does NOT say 0
+
+    searched, _ = search_weights(prepared, base=base, iterations=2000, seed=20260901)
+
+    assert searched.feature_weights["language_agreement"] == 0.0
+    # And the base is untouched: the pin happens on the search's own copy.
+    assert base.feature_weights["language_agreement"] == 1.0
+
+
+def test_an_unexercised_feature_stays_at_zero_across_seeds():
+    """If `language_agreement` were still a knob, some seed among these would
+    move it off 0.0 with ~2000 draws over 12 knobs -- one seed passing by
+    luck is not evidence that it was removed from the knob list."""
+    prepared = _forced_false_merge_prepared()
+    for seed in (1, 2, 3, 20260901):
+        searched, _ = search_weights(prepared, base=equal_weights(), iterations=400, seed=seed)
+        assert searched.feature_weights["language_agreement"] == 0.0, seed
+
+
+def test_an_exercised_feature_can_still_move():
+    """The control: presence > 0 keeps a feature in the knob list. Over 2000
+    steps with 11 knobs at least one present feature weight leaves 1.0."""
+    prepared = _forced_false_merge_prepared()
+    searched, _ = search_weights(prepared, base=equal_weights(), iterations=2000, seed=20260901)
+    moved = [
+        name
+        for name in FEATURES
+        if name != "language_agreement" and searched.feature_weights[name] != 1.0
+    ]
+    assert moved, "no exercised feature weight moved in 2000 steps"
+
+
+def test_equal_weights_declares_no_method():
+    assert equal_weights().method is None
 
 
 def test_splink_weights_returns_none_when_the_extra_is_unavailable_or_the_shape_mismatches():

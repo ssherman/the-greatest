@@ -2,6 +2,7 @@
   "matcher_version": 1,
   "calibrated": true,
   "calibrated_at": "2026-09-14T05:27:09.847557+00:00",
+  "method": "random-search",
   "feature_weights": {
     "title_similarity": 1.0,
     "title_variant_exact": 0.3269387239193572,

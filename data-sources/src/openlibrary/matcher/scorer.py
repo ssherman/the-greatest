@@ -4,9 +4,12 @@ A weighted mean over the features that are PRESENT, minus conflict penalties.
 Absent features touch neither numerator nor denominator, which is what makes
 "absence is neutral" true in the arithmetic and not merely in the comment.
 
-Weights are learned offline (Task 27) and loaded from weights.json. Splink does
-the learning; this scorer carries the learned numbers, so the batch pass and the
-interactive path agree by construction.
+Weights are learned offline (Task 27, `openlibrary.eval.calibrate`) and loaded
+from weights.json: a seeded random coordinate search over the labelled set did
+the learning (`method: "random-search"` in the file). Splink was evaluated for
+the job and could not consume pair-level features -- see `calibrate.splink_weights`.
+This scorer carries the learned numbers, so the batch pass and the interactive
+path agree by construction.
 """
 
 from __future__ import annotations
@@ -27,6 +30,9 @@ class Weights(BaseModel):
     matcher_version: int
     calibrated: bool
     calibrated_at: str | None = None
+    # How the numbers were fitted ("random-search"); None for the uncalibrated
+    # placeholder `calibrate.equal_weights()`.
+    method: str | None = None
     feature_weights: dict[str, float]
     conflict_penalties: dict[str, float] = Field(default_factory=dict)
     accept_threshold: float

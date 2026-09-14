@@ -27,8 +27,10 @@ fingerprint `title_fp` guard means "nothing to find" and it rejects.
 
 from __future__ import annotations
 
+import re
+
 import duckdb
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from common.normalize import (
     MIN_BLOCKING_FP_LENGTH,
@@ -54,7 +56,23 @@ MAX_SHELF_SIZE = 500
 TRIGRAM_MIN_SIMILARITY = 0.55
 
 
+# The artifact's `editions.language_code` vocabulary is MARC (eng, ger, fre,
+# spa, ...), three lowercase letters -- not ISO 639-1 (en, de, fr, es). A
+# query carrying an ISO code would compare as "disagree" against every
+# edition and never as "agree" (ruling R61).
+_MARC_LANGUAGE_CODE = re.compile(r"^[a-z]{3}$")
+
+
 class BlockingQuery(BaseModel):
+    """One book, as the matcher sees it.
+
+    `language` must be a MARC language code (`^[a-z]{3}$`) or None: the
+    artifact's `editions.language_code` is MARC and `features.extract` compares
+    the two strings for equality. The CALLER maps whatever it holds (an ISO
+    639-1 `en`, a Rails `Language` row) to MARC before constructing the query;
+    an ISO code is rejected here rather than silently scoring as disagreement.
+    """
+
     title: str
     subtitle: str | None = None
     author_names: list[str] = Field(default_factory=list)
@@ -67,6 +85,16 @@ class BlockingQuery(BaseModel):
     oclc: list[str] = Field(default_factory=list)
     lccn: list[str] = Field(default_factory=list)
     existing_ol_key: str | None = None
+
+    @field_validator("language")
+    @classmethod
+    def _language_is_a_marc_code(cls, value: str | None) -> str | None:
+        if value is not None and not _MARC_LANGUAGE_CODE.match(value):
+            raise ValueError(
+                f"language must be a 3-letter lowercase MARC code (eng, ger, fre, spa), "
+                f"got {value!r}; map ISO codes before building the query"
+            )
+        return value
 
 
 class BlockingResult(BaseModel):

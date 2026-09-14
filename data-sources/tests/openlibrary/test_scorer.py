@@ -73,6 +73,7 @@ def test_the_shipped_weight_file_declares_how_it_was_calibrated():
     assert weights.matcher_version == MATCHER_VERSION
     assert weights.calibrated is True
     assert isinstance(weights.calibrated_at, str) and weights.calibrated_at
+    assert weights.method == "random-search"
     assert set(weights.feature_weights) == set(FEATURES)
 
 

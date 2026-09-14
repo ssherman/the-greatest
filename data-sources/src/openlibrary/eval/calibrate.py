@@ -16,6 +16,16 @@ weights.json:
 Honest about the sample: 300-500 labeled cases split 60/40 is small. These
 weights are better than "all equal", not optimal. The seed, the split and the
 objective are recorded so the next round is comparable.
+
+Honest about coverage too (ruling R61): a feature no training pair ever
+exercised -- every candidate value None -- cannot be calibrated, and a weight
+the search never had a reason to move is not "1.0, learned", it is "1.0,
+untouched". `search_weights` measures per-feature presence over the training
+split first, pins any zero-presence feature to weight 0.0, and keeps it out of
+the knob list; the written file then says what was actually fitted. Measured
+on 2026-07-31: `language_agreement` had 0 present values in 40,735 pairs,
+because the evaluation set's books carry no language and the feature never
+fires without one.
 """
 
 from __future__ import annotations
@@ -60,6 +70,24 @@ ABSTENTION_COST = 1.0
 # module's own CLI -- `search_weights` takes it as an explicit parameter so
 # tests and callers can vary it.
 DEFAULT_MIN_ACCEPT_RATE = 0.3
+
+
+def feature_presence(prepared: list[PreparedCase]) -> dict[str, float]:
+    """Per feature, the fraction of candidate values that are not None.
+
+    0.0 for every feature when there are no candidates at all. A feature at
+    exactly 0.0 was never exercised by this split and R61 pins its weight
+    to 0.0 rather than leaving the base value in place as if it were learned.
+    """
+    counts = dict.fromkeys(FEATURES, 0)
+    total = 0
+    for case in prepared:
+        for candidate in case.candidates:
+            total += 1
+            for name in FEATURES:
+                if candidate.values.get(name) is not None:
+                    counts[name] += 1
+    return {name: (counts[name] / total if total else 0.0) for name in FEATURES}
 
 
 def equal_weights() -> Weights:
@@ -136,15 +164,37 @@ def search_weights(
     pure Python, no DuckDB -- which is what makes a few thousand iterations
     cheap where re-running `harness.run` per iteration was not (~200 * 20min
     != 67 hours).
+
+    Ruling R61: before the first step, per-feature presence over
+    `prepared_train` is measured and printed; a feature with ZERO presence
+    is set to weight 0.0 in the starting point and is not a knob -- the
+    search could never observe a move on it, so leaving `base`'s value
+    there would ship an unfitted number under a `calibrated: true` label.
     """
+    presence = feature_presence(prepared_train)
+    typer.echo("  feature presence over the training split (fraction of pairs with a value):")
+    for name in FEATURES:
+        typer.echo(f"    {name:24} {presence[name]:.3f}")
+
     rng = random.Random(seed)
     best = copy.deepcopy(base)
+    for name in FEATURES:
+        if presence[name] == 0.0 and best.feature_weights[name] != 0.0:
+            typer.echo(f"    {name}: uncalibrated -> 0.0 (never present; not a search knob)")
+            best.feature_weights[name] = 0.0
+    knobs = [
+        *(name for name in FEATURES if presence[name] > 0.0),
+        "accept_threshold",
+        "reject_threshold",
+        "margin_threshold",
+    ]
+
     best_metrics, _ = evaluate(prepared_train, best)
     best_score = objective(best_metrics, min_accept_rate=min_accept_rate)
 
     for step in range(iterations):
         candidate = copy.deepcopy(best)
-        knob = rng.choice([*FEATURES, "accept_threshold", "reject_threshold", "margin_threshold"])
+        knob = rng.choice(knobs)
         if knob in candidate.feature_weights:
             candidate.feature_weights[knob] = max(
                 0.0, candidate.feature_weights[knob] + rng.uniform(-0.4, 0.4)
@@ -260,10 +310,6 @@ def splink_weights(prepared_train: list[PreparedCase]) -> Weights | None:
         )
         linker.training.estimate_m_from_pairwise_labels("pairwise_labels")
     except Exception as exc:
-        # Splink's error carries ~260 lines of the generated SQL it failed on
-        # (useful once, while diagnosing this -- see the docstring for the
-        # exact reproduction); only its final line ("Error was: ...") says
-        # what actually went wrong, so that is what gets echoed.
         # Splink's own message carries ~260 lines of the SQL it generated and
         # failed on (useful once, while diagnosing this -- see the docstring
         # for the reproduction); the actual "what went wrong" is the one line
@@ -287,6 +333,16 @@ def splink_weights(prepared_train: list[PreparedCase]) -> Weights | None:
             "integration would need."
         )
         return None
+
+    # Unreachable against Splink 4.0.16 with this data shape (see the
+    # docstring). If a future Splink accepts the frames, there is still no
+    # translation from its per-level match weights to `Weights` -- so say so
+    # rather than fall off the end and return None as if nothing happened.
+    typer.echo(
+        "  splink: estimate_m_from_pairwise_labels unexpectedly succeeded; no translation "
+        "from Splink match weights to scorer.Weights exists yet, so its fit is not used"
+    )
+    return None
 
 
 @app.command()
@@ -427,6 +483,7 @@ def main(
 
     chosen.calibrated = True
     chosen.calibrated_at = datetime.datetime.now(datetime.UTC).isoformat()
+    chosen.method = label
     Path(out).write_text(json.dumps(chosen.model_dump(), indent=2) + "\n")
     typer.echo(
         f"{label} beat the floor on TEST ({chosen_score:.4f} > {floor_score:.4f}): "
