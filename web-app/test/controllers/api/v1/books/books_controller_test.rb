@@ -292,26 +292,31 @@ module Api
         end
 
         test "too many unauthenticated requests from one address is a 429 before any lookup" do
-          limit = Rails.application.config.x.api.unauthenticated_per_minute
-          # A well-formed but unknown token, not a bare request: a blank
-          # Authorization header never reaches ApiToken.authenticate's DB lookup
-          # regardless of ordering, so it can't tell a correctly-ordered peek
-          # (skip the lookup once over the limit) from a regression that runs
-          # the lookup first and checks the limit after.
-          headers = bearer("tg_#{"z" * 40}").merge("CF-Connecting-IP" => "203.0.113.7")
-          limit.times { get "/api/v1/books", headers: headers }
+          # RateLimiter keys the IP window on the calendar minute -- without freeze_time
+          # a boundary rolling between the warm-up loop and the guarded request below
+          # would hand the guarded request a fresh window and turn the 429 into a 401.
+          freeze_time do
+            limit = Rails.application.config.x.api.unauthenticated_per_minute
+            # A well-formed but unknown token, not a bare request: a blank
+            # Authorization header never reaches ApiToken.authenticate's DB lookup
+            # regardless of ordering, so it can't tell a correctly-ordered peek
+            # (skip the lookup once over the limit) from a regression that runs
+            # the lookup first and checks the limit after.
+            headers = bearer("tg_#{"z" * 40}").merge("CF-Connecting-IP" => "203.0.113.7")
+            limit.times { get "/api/v1/books", headers: headers }
 
-          assert_no_queries do
-            get "/api/v1/books", headers: headers
+            assert_no_queries do
+              get "/api/v1/books", headers: headers
+            end
+            assert_api_conform(status: 429)
+
+            assert_response :too_many_requests
+            assert_equal "rate_limited", json[:code]
+            assert response.headers["Retry-After"].present?
+
+            get "/api/v1/books", headers: bearer("tg_#{"z" * 40}").merge("CF-Connecting-IP" => "203.0.113.8")
+            assert_response :unauthorized
           end
-          assert_api_conform(status: 429)
-
-          assert_response :too_many_requests
-          assert_equal "rate_limited", json[:code]
-          assert response.headers["Retry-After"].present?
-
-          get "/api/v1/books", headers: bearer("tg_#{"z" * 40}").merge("CF-Connecting-IP" => "203.0.113.8")
-          assert_response :unauthorized
         end
 
         # --- caching -------------------------------------------------------------
