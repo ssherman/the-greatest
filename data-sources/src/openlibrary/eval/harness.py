@@ -48,6 +48,11 @@ app = typer.Typer(add_completion=False)
 
 RECALL_AT = (5, 10, 50)
 
+# The pinned regression thresholds (Task 28) -- read by the pipeline gate and
+# by tests/openlibrary/test_eval_regression.py, both against this one path,
+# never a CWD-relative string.
+THRESHOLDS_PATH = Path(__file__).parent / "thresholds.json"
+
 
 class CaseOutcome(BaseModel):
     case_id: str

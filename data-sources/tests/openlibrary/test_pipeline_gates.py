@@ -1,13 +1,41 @@
 import pytest
 
+from openlibrary.eval.harness import Metrics
 from openlibrary.pipeline.authors import build_authors, stage_authors
 from openlibrary.pipeline.derive import build_popularity, build_work_authors, build_year_evidence
 from openlibrary.pipeline.duck import connect
 from openlibrary.pipeline.editions import build_editions, stage_editions
-from openlibrary.pipeline.gates import CANARY_WORK_KEYS, gates_passed, run_gates
+from openlibrary.pipeline.gates import CANARY_WORK_KEYS, gates_passed, run_gates, threshold_failures
 from openlibrary.pipeline.paths import ArtifactPaths
 from openlibrary.pipeline.redirects import build_redirects
 from openlibrary.pipeline.works import build_works, stage_works
+
+# A metrics reading that clears every one of gates.threshold_failures's five
+# bounds, mirroring the final calibration run -- see thresholds.json's
+# `measured` block, which these numbers are copied from.
+_PASSING_THRESHOLDS = {
+    "min_candidate_recall_10": 0.90,
+    "max_false_merge_rate": 0.03,
+    "min_precision_at_accept": 0.95,
+    "max_abstention_rate": 0.70,
+    "min_correct_no_match_rate": 0.10,
+}
+
+
+def _metrics(**overrides) -> Metrics:
+    base = dict(
+        n_cases=448,
+        n_accepted=100,
+        n_no_match_cases=67,
+        candidate_recall={5: 0.886, 10: 0.922, 50: 0.943},
+        precision_at_accept=0.980,
+        false_merge_rate=0.0201,
+        false_reject_rate=0.0027,
+        abstention_rate=0.643,
+        correct_no_match_rate=0.134,
+    )
+    base.update(overrides)
+    return Metrics(**base)
 
 
 @pytest.fixture()
@@ -45,11 +73,29 @@ def test_a_clean_first_build_passes_every_gate(built):
     assert gates_passed(results)
 
 
-def test_the_evaluation_gate_is_declared_and_skipped_until_the_harness_exists(built):
+def test_the_evaluation_gate_reports_a_real_status_once_labels_exist(built):
     con, paths = built
     results = run_gates(con, paths, previous_report=None)
     evaluation = next(r for r in results if r.name == "evaluation_set")
+    # The fixture corpus is a 683-line sample of the real dumps -- nearly all
+    # 370 works the 448-case labeled set names are absent from it, so R50
+    # makes "skipped" the honest, deterministic answer here. Against the real
+    # 2026-07-31 artifact the same gate reports "pass" or "fail" instead (see
+    # the report's real-artifact GateResult).
     assert evaluation.status == "skipped"
+    assert "absent from this artifact" in evaluation.detail
+
+
+def test_threshold_failures_is_empty_when_every_metric_clears_its_bound():
+    assert threshold_failures(_metrics(), _PASSING_THRESHOLDS) == []
+
+
+def test_threshold_failures_names_each_metric_that_misses_its_bound():
+    metrics = _metrics(false_merge_rate=0.05, abstention_rate=0.90)
+    failures = threshold_failures(metrics, _PASSING_THRESHOLDS)
+    assert len(failures) == 2
+    assert any("false-merge" in f for f in failures)
+    assert any("abstention" in f for f in failures)
 
 
 def test_a_row_count_collapse_against_a_previous_build_fails(built):

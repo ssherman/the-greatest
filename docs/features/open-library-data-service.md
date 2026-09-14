@@ -82,7 +82,22 @@ against a published 44,739,082 -- a difference of 59, noted and not chased.
 | field_coverage | pass | coverage within tolerance |
 | redirect_closure | pass | 1,790,272 redirects, 26 cycles, 3,356 dangling |
 | canary_lookups | pass | all canaries resolve |
-| evaluation_set | skipped | no labeled evaluation set yet (Increment 2) |
+| evaluation_set | pass | no regression on the labeled set (prepared cache, 0.6s) |
+
+`evaluation_set` (Task 28) runs the harness against the 448-case labeled set
+and fails the build if any of five metrics regresses past the bound pinned in
+`openlibrary/eval/thresholds.json` -- recall@10, false-merge rate,
+precision@accept, abstention rate, correct-no-match rate, each with headroom
+below (or above) the value measured on the final calibrated run, recorded
+alongside it as `thresholds.json`'s `measured` sibling. It skips instead of
+failing when there is nothing to check against: no labeled cases, no pinned
+thresholds, or -- against an artifact whose labeled works are mostly absent
+from it, such as the test suite's fixture corpus -- "not the labelled dump".
+Evaluating costs ~4.5s/case with no prepared cache available (~31 minutes for
+the full 448-case set) and well under a second with one, which is what the
+0.6s above reflects; `run_gates` never supplies a cache path explicitly, so a
+real build pays the full cost unless a prepared-cache file already sits at
+the conventional path under the artifact's `tmp/` directory.
 
 Only `work` and `author` redirects are resolved against a table, and only they
 can be `is_dangling = true`: 2,573 of 1,128,948 work redirects and 783 of
@@ -274,3 +289,18 @@ Splink 4.0.16 (the `calibration` extra) is a record-linkage model: `Linker` take
 `harness.prepare` measured at ~4.5s/case across all 448 cases (33m25s on the first full run, 31m9s on a rebuild) -- almost entirely un-indexed Parquet scans in blocking rules 1-5 (`identifiers` alone is 120M rows, scanned fresh per case) plus roughly 1.5s of `load_work_views`. Weights never touch this: `prepare` runs it once, `evaluate` re-scores the result in pure Python in milliseconds, which is what makes a 2000-iteration search over 268 cases finish in minutes rather than the ~90 hours a naive per-iteration `prepare` would cost.
 
 R54 adds a cache on top of that split: `write_prepared_cache`/`read_prepared_cache` (in `harness.py`) persist a `prepare()` result to a JSON file keyed by `dump_date`, `matcher_version`, and case count. Both CLIs take `--prepared-cache PATH`; the artifact-side copy used for this task lives at `/home/shane/ol-data/tmp/prepared-2026-07-31.json` (scratch space on the artifact host, **not** committed to the repo). The first run against a given path writes it (~31 minutes); every run after loads it in seconds. **Delete the file** after any change to blocking rules, `matcher.features`, or the labelled case set (`cases/*.jsonl`) -- the header check catches a changed dump date, a bumped `MATCHER_VERSION`, or a different case count, but a change to blocking or scoring logic that leaves all three unchanged would otherwise serve stale prepared candidates silently.
+
+### Increment 3 is complete
+
+All four of the increment's stated completion criteria hold: the harness
+reports all five metrics (recall@5/10/50, precision@accept, false-merge,
+false-reject, abstention, correct-no-match) against the real 2026-07-31
+artifact and the real 448-case labeled set (see "Matcher, measured" above);
+`weights.json` says whether it is calibrated and by which method
+(`calibrated: true`, `calibrated_at` timestamped, the method documented under
+"The split, the objective, and why it changed mid-task"); `thresholds.json`
+records the measured numbers from the final calibrated run rather than
+aspirations, each with a `measured` sibling recorded beside it; and the build
+now fails its evaluation gate if the matcher regresses past any of those
+thresholds (Task 28, `evaluation_gate` in `pipeline/gates.py`) -- verified
+against the real artifact above, where it reports `pass`.
