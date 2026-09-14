@@ -69,7 +69,10 @@ module Api
         end
 
         test "invalid pagination parameters are a 400 problem" do
-          {"page=0" => /page/, "page=abc" => /page/, "per_page=101" => /per_page/, "per_page=0" => /per_page/}.each do |query, detail|
+          {
+            "page=0" => /page/, "page=abc" => /page/, "per_page=101" => /per_page/, "per_page=0" => /per_page/,
+            "page=#{2**31}" => /page/, "page=5_0" => /page/
+          }.each do |query, detail|
             get "/api/v1/books?#{query}", headers: bearer(ApiTokenSecrets::MEMBER)
             assert_api_response_conform(status: 400)
 
@@ -78,6 +81,14 @@ module Api
             assert_equal "invalid_parameter", json[:code]
             assert_match detail, json[:detail]
           end
+        end
+
+        test "a page at the ceiling is an empty 200, not a 500" do
+          get "/api/v1/books?page=#{2**31 - 1}", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
+
+          assert_response :success
+          assert_equal [], json[:data]
         end
 
         test "index with no primary ranking configuration is an empty 200" do
@@ -207,6 +218,10 @@ module Api
           assert_response :forbidden
           assert_nil response.headers["WWW-Authenticate"]
           assert_equal "membership_required", json[:code]
+          assert response.headers["X-RateLimit-Limit"].present?
+          assert response.headers["X-RateLimit-Remaining"].present?
+          assert response.headers["X-RateLimit-Reset"].present?
+          assert_nil response.headers["X-RateLimit-Daily-Limit"]
         end
 
         test "a service account needs no membership and gets the system limits" do

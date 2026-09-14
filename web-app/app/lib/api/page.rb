@@ -14,21 +14,25 @@ module Api
 
     DEFAULT_PER_PAGE = 50
     MAX_PER_PAGE = 100
+    MAX_PAGE = 2**31 - 1
 
     attr_reader :page, :per_page, :total_count
 
     def self.from_params(params, total_count:)
       new(
-        page: integer(params[:page], name: "page", default: 1, min: 1),
+        page: integer(params[:page], name: "page", default: 1, min: 1, max: MAX_PAGE),
         per_page: integer(params[:per_page], name: "per_page", default: DEFAULT_PER_PAGE, min: 1, max: MAX_PER_PAGE),
         total_count: total_count
       )
     end
 
+    # Digits only -- rejects underscores ("5_0", which Integer() would read as 50),
+    # leading/trailing whitespace, and signs before they ever reach Integer().
     def self.integer(raw, name:, default:, min:, max: nil)
       return default if raw.nil?
 
-      value = Integer(raw.to_s, 10, exception: false)
+      str = raw.to_s
+      value = /\A\d+\z/.match?(str) ? Integer(str, 10, exception: false) : nil
       in_range = value && value >= min && (max.nil? || value <= max)
       return value if in_range
 

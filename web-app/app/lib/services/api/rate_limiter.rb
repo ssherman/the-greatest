@@ -90,7 +90,13 @@ module Services
       # new count. One second of slack so a key never outlives its window by
       # less than the clock granularity.
       def increment(key, limit, reset_at)
-        count = store.increment(key, 1, expires_in: (reset_at - now).ceil + 1)
+        # ActiveSupport::Cache::RedisCacheStore#increment runs inside Rails' failsafe,
+        # which swallows Redis::BaseError/ConnectionPool::Error and returns nil on a
+        # Redis outage. Treat that as zero and fail OPEN, matching the rest of the app's
+        # limiters (the `rate_limit` macro guards `if count && count > to`, and
+        # peek_unauthenticated above already `.to_i`s a nil read) -- a Redis outage must
+        # not take the API down.
+        count = store.increment(key, 1, expires_in: (reset_at - now).ceil + 1) || 0
         Window.new(limit: limit, remaining: [limit - count, 0].max, reset_at: reset_at, exceeded: count > limit)
       end
     end

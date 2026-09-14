@@ -30,6 +30,11 @@ module Api
         return
       end
 
+      # Every failed-auth outcome below -- membership_required included -- counts
+      # against the visitor-IP window, so a rejected token can't be replayed for
+      # free database load.
+      apply_rate_limit_headers(Services::Api::RateLimiter.hit_unauthenticated(visitor_ip))
+
       case result.errors.first
       when :membership_required
         render_problem(::Api::Problem.new(
@@ -37,11 +42,9 @@ module Api
           detail: "API access is a membership benefit. Membership covers every site."
         ))
       when :unauthenticated
-        apply_rate_limit_headers(Services::Api::RateLimiter.hit_unauthenticated(visitor_ip))
         render_problem(::Api::Problem.new(:unauthenticated, detail: "Send a personal access token as `Authorization: Bearer <token>`."),
           www_authenticate: "Bearer")
       else
-        apply_rate_limit_headers(Services::Api::RateLimiter.hit_unauthenticated(visitor_ip))
         render_problem(::Api::Problem.new(:invalid_token, detail: "The token is malformed, unknown, revoked or expired."),
           www_authenticate: %(Bearer error="invalid_token"))
       end

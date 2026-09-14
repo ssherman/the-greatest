@@ -223,11 +223,11 @@ Tier: `user.service? ? :system : :member`. The membership check runs only for `p
 accounts and only after the token resolved, so a revoked-membership token is a 403 with a
 body that says why, not a 401 that looks like a typo.
 
-**Unauthenticated failures** are counted per visitor IP (`VisitorIp`) in the rate limiter,
-60 per minute; beyond that the answer is 429 before the database is consulted. This bounds
-load from junk; it is not a defence against guessing, which 238 bits already makes futile —
-and that is also why the known origin-bypass hole that defeats every IP-keyed limit in this app
-does not matter here.
+**Unauthenticated failures (401) and `membership_required` (403)** are counted per visitor IP
+(`VisitorIp`) in the rate limiter, 60 per minute; beyond that the answer is 429 before the
+database is consulted. This bounds load from junk; it is not a defence against guessing, which
+238 bits already makes futile — and that is also why the known origin-bypass hole that defeats
+every IP-keyed limit in this app does not matter here.
 
 ### 3. Service accounts and scopes
 
@@ -254,7 +254,7 @@ so the output pipes straight into the Python framework's secrets:
 
 ```
 bin/rails api:service_account:create NAME=agent-runner SCOPES=books:read,music:read,games:read
-bin/rails api:service_account:token  NAME=agent-runner TOKEN_NAME=prod-2
+bin/rails api:service_account:token  NAME=agent-runner TOKEN_NAME=prod-2 SCOPES=books:read
 bin/rails api:token:revoke ID=42
 ```
 
@@ -317,9 +317,9 @@ X-RateLimit-Daily-Reset: 1789603200      # next 00:00 UTC
 
 A 429 adds `Retry-After: <seconds>` and a problem body naming the exhausted window.
 
-An **unauthenticated** response (401, or the 429 from the IP window) has no principal and
-therefore no daily window: it carries only the minute triple, describing the IP window
-(limit 60).
+An **unauthenticated** response (401, the `membership_required` 403, or the 429 from the IP
+window) has no principal and therefore no daily window: it carries only the minute triple,
+describing the IP window (limit 60).
 
 ### 5. Response format
 

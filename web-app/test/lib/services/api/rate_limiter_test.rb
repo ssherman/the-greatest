@@ -113,6 +113,21 @@ module Services
         assert_equal 0, peek.minute.remaining
       end
 
+      test "a store that fails its increment fails open" do
+        # ActiveSupport::Cache::RedisCacheStore#increment runs inside Rails' failsafe,
+        # which swallows a Redis outage and returns nil instead of raising. A nil count
+        # must not turn into a 500 for every authenticated (or unauthenticated) request.
+        @store.stubs(:increment).returns(nil)
+
+        verdict = limiter.hit(@member)
+        refute verdict.exceeded?
+        assert_equal 3, verdict.minute.remaining
+
+        verdict = limiter.hit_unauthenticated("203.0.113.9")
+        refute verdict.exceeded?
+        assert_equal 2, verdict.minute.remaining
+      end
+
       test "the class methods use the app's store and config" do
         verdict = RateLimiter.hit(@member)
 

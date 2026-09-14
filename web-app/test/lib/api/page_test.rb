@@ -44,11 +44,18 @@ module Api
 
     test "rejects non-integers and out-of-range values with a message naming the parameter" do
       error = assert_raises(Page::InvalidParameter) { Page.from_params(params(page: "abc"), total_count: 1) }
-      assert_match(/page must be an integer 1 or greater/, error.message)
+      assert_match(/page must be an integer between 1 and 2147483647/, error.message)
 
       assert_raises(Page::InvalidParameter) { Page.from_params(params(page: "0"), total_count: 1) }
       assert_raises(Page::InvalidParameter) { Page.from_params(params(page: "-1"), total_count: 1) }
       assert_raises(Page::InvalidParameter) { Page.from_params(params(page: "1.5"), total_count: 1) }
+      assert_raises(Page::InvalidParameter) { Page.from_params(params(page: "5_0"), total_count: 1) }
+      assert_raises(Page::InvalidParameter) { Page.from_params(params(page: "+1"), total_count: 1) }
+      assert_raises(Page::InvalidParameter) { Page.from_params(params(page: " 1"), total_count: 1) }
+      assert_raises(Page::InvalidParameter) { Page.from_params(params(page: (2**31).to_s), total_count: 1) }
+
+      page = Page.from_params(params(page: (2**31 - 1).to_s), total_count: 1)
+      assert_equal 2**31 - 1, page.page
 
       error = assert_raises(Page::InvalidParameter) { Page.from_params(params(per_page: "101"), total_count: 1) }
       assert_match(/per_page must be an integer between 1 and 100/, error.message)
