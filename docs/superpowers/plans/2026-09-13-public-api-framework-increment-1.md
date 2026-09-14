@@ -1239,7 +1239,9 @@ module Services
         refute verdict.minute.exceeded?
         assert_equal 2, verdict.minute.remaining
         assert_equal 0, verdict.day.remaining
-        assert verdict.day.exceeded?
+        refute verdict.day.exceeded?, "the fifth of five is at the limit, not over it"
+
+        assert limiter(now: NOW + 60).hit(@member).day.exceeded?
       end
 
       test "the day window resets at midnight UTC" do
@@ -1999,7 +2001,7 @@ module Api
         end
 
         test "full trait resolves the primary summary description" do
-          @book.assign_description(source: :openai, content: "A long Russian novel.", kind: :summary)
+          @book.assign_description(source: :ai_generated, content: "A long Russian novel.", kind: :summary)
           @book.save!
 
           assert_equal "A long Russian novel.", BookResource.new(@book.reload, with_traits: :full).to_h[:description]
@@ -2483,10 +2485,12 @@ module Api
 
         test "responses are never cacheable by a shared cache" do
           get "/api/v1/books", headers: bearer(ApiTokenSecrets::MEMBER)
-          assert_equal "private, no-store", response.headers["Cache-Control"]
+          assert_includes response.headers["Cache-Control"], "no-store"
+          assert_includes response.headers["Cache-Control"], "private"
 
           get "/api/v1/books"
-          assert_equal "private, no-store", response.headers["Cache-Control"]
+          assert_includes response.headers["Cache-Control"], "no-store"
+          assert_includes response.headers["Cache-Control"], "private"
         end
       end
     end
