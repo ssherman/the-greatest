@@ -8,9 +8,12 @@ class CalculateRankingsJob
 
     if result.success?
       Rails.logger.info "Successfully calculated rankings for configuration #{ranking_configuration_id}"
-      if ranking_configuration.type == "Books::RankingConfiguration"
+      # Both side effects are about the site's official books ranking. A
+      # year rollup or a user-owned configuration recalculating must not
+      # recompute global author rankings or reindex search.
+      if ranking_configuration.type == "Books::RankingConfiguration" && ranking_configuration.default_primary?
         Books::CalculateAuthorRankingsJob.perform_async
-        Books::ReindexRankedFieldsJob.perform_async if ranking_configuration.default_primary?
+        Books::ReindexRankedFieldsJob.perform_async
       end
     else
       Rails.logger.error "Failed to calculate rankings for configuration #{ranking_configuration_id}: #{result.errors}"

@@ -1,0 +1,33 @@
+<% config = ranking_configuration %>
+<section id="ranking-status" class="card bg-base-100 border border-base-300 shadow-sm"
+         data-controller="ranking-configuration-status"
+         data-ranking-configuration-status-url-value="<%= state_my_ranking_configuration_path(config) %>"
+         data-ranking-configuration-status-active-value="<%= config.refresh_in_progress? && !config.refresh_stale? %>">
+  <div class="card-body gap-3">
+    <div class="flex flex-wrap items-center gap-3">
+      <h2 class="card-title">Status</h2>
+      <%= render "my/ranking_configurations/status_badge", ranking_configuration: config %>
+    </div>
+
+    <% if config.refresh_stale? %>
+      <p>The last refresh seems to have stalled. You can try again.</p>
+    <% elsif config.refresh_in_progress? %>
+      <p>Calculating weights and rankings. This usually takes a few minutes — this page will update when it's done.</p>
+    <% elsif config.refresh_failed? %>
+      <p class="[overflow-wrap:anywhere]">The last refresh failed<% if config.last_refresh_error.present? %>: <%= config.last_refresh_error %><% end %>. You can try again.</p>
+    <% elsif config.needs_refresh? %>
+      <p>Your changes haven't been applied yet. Refresh weights and rankings to see them.</p>
+    <% else %>
+      <p>Up to date<% if config.last_refreshed_at %> — last refreshed <%= time_ago_in_words(config.last_refreshed_at) %> ago<% end %>.</p>
+    <% end %>
+
+    <div>
+      <%= button_to "Refresh weights and rankings", refresh_my_ranking_configuration_path(config), method: :post,
+            class: "btn btn-primary btn-sm", disabled: !config.refresh_claimable?,
+            data: {turbo_submits_with: "Starting…"} %>
+      <p class="mt-2 text-xs text-base-content/70">
+        Up to <%= My::RankingConfigurationsController::REFRESH_LIMIT %> refreshes a day. The first calculation after creating a ranking doesn't count.
+      </p>
+    </div>
+  </div>
+</section>

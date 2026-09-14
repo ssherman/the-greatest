@@ -1,0 +1,13 @@
+<%
+  config = ranking_configuration
+  label, css = if config.refresh_in_progress?
+    ["Calculating", "badge-info"]
+  elsif config.refresh_failed?
+    ["Failed", "badge-error"]
+  elsif config.needs_refresh?
+    ["Needs refresh", "badge-warning"]
+  else
+    ["Up to date", "badge-success"]
+  end
+%>
+<span class="badge <%= css %>"><%= label %></span>

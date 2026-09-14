@@ -232,5 +232,23 @@ module Books
       assert_response :success
       assert_select "input[name='category_slugs[]'][value=novels]"
     end
+
+    test "the filter modal for a private user-owned configuration 404s for a non-owner" do
+      get "/filters", params: {ranking_configuration_id: ranking_configurations(:books_user).id}
+      assert_response :not_found
+    end
+
+    test "the filter modal for a shared user-owned configuration renders" do
+      config = ranking_configurations(:books_user_shared)
+
+      get "/filters", params: {ranking_configuration_id: config.id}
+
+      # #show always redirects (Books::FilterPath.call, status: :see_other) --
+      # with no category/country/year params it redirects to the rc-prefixed
+      # root. Asserting the redirect target (rather than :success, which a 303
+      # can never satisfy) is what proves the gate let the request through
+      # instead of 404ing it.
+      assert_redirected_to "/rc/#{config.id}"
+    end
   end
 end

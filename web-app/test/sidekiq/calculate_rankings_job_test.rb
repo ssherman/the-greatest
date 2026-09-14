@@ -97,4 +97,15 @@ class CalculateRankingsJobTest < ActiveSupport::TestCase
 
     CalculateRankingsJob.new.perform(config.id)
   end
+
+  test "does not enqueue the author ranking job for a non-primary books configuration" do
+    config = ranking_configurations(:books_user)
+    RankingConfiguration.any_instance
+      .expects(:calculate_rankings)
+      .returns(ItemRankings::Calculator::Result.new(success?: true, data: [], errors: []))
+    Books::CalculateAuthorRankingsJob.expects(:perform_async).never
+    Books::ReindexRankedFieldsJob.expects(:perform_async).never
+
+    CalculateRankingsJob.new.perform(config.id)
+  end
 end

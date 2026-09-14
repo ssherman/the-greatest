@@ -101,6 +101,7 @@ class Books::FiltersController < ApplicationController
     return if params[:ranking_configuration_id].blank?
 
     @ranking_configuration = Books::RankingConfiguration.find(params[:ranking_configuration_id])
+    gate_ranking_configuration!(@ranking_configuration)
   end
 
   # params, not request.path_parameters: this endpoint is reached as

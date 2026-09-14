@@ -1,0 +1,135 @@
+<%
+  config = @ranking_configuration
+  entry = current_entry
+  page = @pagy.page
+  list_detail = ->(list) { [list.source.presence, list.year_published].compact.join(", ") }
+%>
+<%# target: "_top" releases every link (list names go to public pages); the
+    forms that must stay in the frame opt back in with data-turbo-frame, and
+    pagination via series_nav's anchor_string. %>
+<%= turbo_frame_tag "rc_lists", target: "_top", class: "block space-y-8" do %>
+  <% if @frame_notice.present? %>
+    <div class="alert alert-success" role="status"><span><%= @frame_notice %></span></div>
+  <% end %>
+
+  <section class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body gap-3">
+      <div class="flex flex-wrap items-center gap-3">
+        <h2 class="card-title">Status</h2>
+        <%= render "my/ranking_configurations/status_badge", ranking_configuration: config %>
+        <span class="text-sm text-base-content/70">Your ranking has <%= pluralize(number_with_delimiter(@pagy.count), "list") %>.</span>
+      </div>
+      <%# Deliberately NOT opted into the frame: this navigates to the manage
+          page, where the status panel and polling live. %>
+      <div>
+        <%= button_to "Refresh weights and rankings", refresh_my_ranking_configuration_path(config), method: :post,
+              class: "btn btn-primary btn-sm", disabled: !config.refresh_claimable? %>
+      </div>
+    </div>
+  </section>
+
+  <section class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body gap-4">
+      <h2 class="card-title">Add lists</h2>
+      <%= form_with url: my_ranking_configuration_lists_path(config), method: :post,
+            data: {turbo_frame: "rc_lists"}, class: "space-y-3" do |form| %>
+        <%= hidden_field_tag :page, page, id: nil %>
+        <fieldset class="fieldset" data-controller="saved-search-picker"
+                  data-saved-search-picker-url-value="<%= search_my_ranking_configuration_lists_path(config) %>"
+                  data-saved-search-picker-name-value="list_ids[]">
+          <legend class="fieldset-legend">Search lists</legend>
+          <div class="relative">
+            <input type="search" class="input w-full" placeholder="Search by list name or source"
+                   aria-label="Search lists" autocomplete="off"
+                   data-saved-search-picker-target="query"
+                   data-action="input->saved-search-picker#search keydown->saved-search-picker#suppressEnter">
+            <div class="hidden absolute dropdown-content p-2 shadow-lg bg-base-100 rounded-box w-full mt-1 max-h-80 overflow-y-auto z-[9999] left-0 top-full flex flex-col gap-1"
+                 data-saved-search-picker-target="results"></div>
+          </div>
+          <div class="flex flex-wrap gap-2 mt-2" data-saved-search-picker-target="chips"></div>
+        </fieldset>
+        <%= form.submit "Add selected lists", class: "btn btn-primary btn-sm" %>
+      <% end %>
+    </div>
+  </section>
+
+  <section class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body gap-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 class="card-title">In the official rankings but not in yours (<%= number_with_delimiter(@missing.size) %>)</h2>
+        <% if @missing.any? %>
+          <%= button_to "Add all #{number_with_delimiter(@missing.size)}", add_missing_my_ranking_configuration_lists_path(config),
+                method: :post, params: {page: page}, class: "btn btn-sm btn-secondary",
+                form: {data: {turbo_frame: "rc_lists"}} %>
+        <% end %>
+      </div>
+      <% if @missing.any? %>
+        <div class="overflow-x-auto">
+          <table class="table table-sm">
+            <thead>
+              <tr><th scope="col">List</th><th scope="col">Official weight</th><th scope="col"><span class="sr-only">Add</span></th></tr>
+            </thead>
+            <tbody>
+              <% @missing.each do |ranked_list| %>
+                <tr id="missing-list-<%= ranked_list.list_id %>">
+                  <td class="[overflow-wrap:anywhere]">
+                    <%= link_to ranked_list.list.name, entry.list_path.call(ranked_list.list), class: "link" %>
+                    <% detail = list_detail.call(ranked_list.list) %>
+                    <% if detail.present? %><span class="text-sm text-base-content/70">(<%= detail %>)</span><% end %>
+                  </td>
+                  <td><%= ranked_list.weight.presence || "—" %></td>
+                  <td>
+                    <%= button_to "Add", my_ranking_configuration_lists_path(config), method: :post,
+                          params: {list_ids: [ranked_list.list_id], page: page}, class: "btn btn-xs btn-primary",
+                          form: {data: {turbo_frame: "rc_lists"}} %>
+                  </td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% else %>
+        <p class="text-sm text-base-content/70">Your ranking includes every official list.</p>
+      <% end %>
+    </div>
+  </section>
+
+  <section class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body gap-4">
+      <h2 class="card-title">Your lists (<%= number_with_delimiter(@pagy.count) %>)</h2>
+      <% if @ranked_lists.any? %>
+        <div class="overflow-x-auto">
+          <table class="table table-sm">
+            <thead>
+              <tr><th scope="col">List</th><th scope="col">Weight</th><th scope="col"><span class="sr-only">Remove</span></th></tr>
+            </thead>
+            <tbody>
+              <% @ranked_lists.each do |ranked_list| %>
+                <tr id="ranked-list-<%= ranked_list.list_id %>">
+                  <td class="[overflow-wrap:anywhere]">
+                    <%= link_to ranked_list.list.name, entry.list_path.call(ranked_list.list), class: "link" %>
+                    <% detail = list_detail.call(ranked_list.list) %>
+                    <% if detail.present? %><span class="text-sm text-base-content/70">(<%= detail %>)</span><% end %>
+                  </td>
+                  <td><%= ranked_list.weight.presence || "not yet calculated" %></td>
+                  <td>
+                    <%= button_to "Remove", my_ranking_configuration_list_path(config, ranked_list.list_id), method: :delete,
+                          params: {page: page}, class: "btn btn-xs btn-ghost",
+                          form: {data: {turbo_frame: "rc_lists", turbo_confirm: "Remove #{ranked_list.list.name} from your ranking?"}} %>
+                  </td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+        <% if @pagy.pages > 1 %>
+          <div class="flex justify-center py-2">
+            <%== @pagy.series_nav(anchor_string: 'data-turbo-frame="rc_lists"') %>
+          </div>
+        <% end %>
+      <% else %>
+        <p class="text-sm text-base-content/70">No lists yet. Search above or add the official lists.</p>
+      <% end %>
+    </div>
+  </section>
+<% end %>

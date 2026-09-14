@@ -11,16 +11,22 @@
 #  exponent                           :decimal(10, 2)   default(3.0), not null
 #  global                             :boolean          default(TRUE), not null
 #  inherit_penalties                  :boolean          default(TRUE), not null
+#  last_refresh_error                 :text
+#  last_refreshed_at                  :datetime
 #  list_limit                         :integer
 #  max_list_dates_penalty_age         :integer          default(50)
 #  max_list_dates_penalty_percentage  :integer          default(80)
 #  min_list_weight                    :integer          default(1), not null
 #  name                               :string           not null
+#  needs_refresh                      :boolean          default(FALSE), not null
 #  primary                            :boolean          default(FALSE), not null
 #  primary_mapped_list_cutoff_limit   :integer
 #  published_at                       :datetime
+#  refresh_requested_at               :datetime
+#  refresh_status                     :integer          default(0), not null
 #  secondary_mapped_list_cutoff_limit :integer
 #  type                               :string           not null
+#  user_shared                        :boolean          default(FALSE), not null
 #  year                               :integer
 #  created_at                         :datetime         not null
 #  updated_at                         :datetime         not null
@@ -47,6 +53,22 @@
 #  fk_rails_...  (user_id => users.id)
 #
 class RankingConfiguration < ApplicationRecord
+  # How many configurations one user may own per type (books, albums, songs, ...).
+  MAX_PER_USER = 5
+
+  # An in-progress refresh older than this is treated as abandoned -- the worker
+  # was killed before its rescue could run -- and may be claimed again.
+  REFRESH_STALE_AFTER = 1.hour
+
+  # The attributes a user can tune and that change the computed result. Editing
+  # any of these marks a user-owned configuration as needing a refresh.
+  RANKING_SETTINGS = %w[
+    exponent bonus_pool_percentage min_list_weight apply_list_dates_penalty
+    max_list_dates_penalty_age max_list_dates_penalty_percentage
+  ].freeze
+
+  enum :refresh_status, {idle: 0, queued: 1, running: 2, failed: 3}, prefix: :refresh
+
   # Associations
   belongs_to :inherited_from, class_name: "RankingConfiguration", optional: true, inverse_of: :inherited_configurations
   belongs_to :user, optional: true
@@ -54,8 +76,11 @@ class RankingConfiguration < ApplicationRecord
   belongs_to :secondary_mapped_list, class_name: "List", optional: true
 
   has_many :inherited_configurations, class_name: "RankingConfiguration", foreign_key: :inherited_from_id, dependent: :nullify, inverse_of: :inherited_from
-  has_many :ranked_items, dependent: :destroy
-  has_many :ranked_lists, dependent: :destroy
+  # delete_all, not destroy: RankedItem/RankedList have no callbacks, counter
+  # caches, touches or other dependents, and a destroyed configuration can own
+  # ~21k ranked_items -- one DELETE beats one DELETE per row.
+  has_many :ranked_items, dependent: :delete_all
+  has_many :ranked_lists, dependent: :delete_all
   has_many :penalty_applications, dependent: :destroy, inverse_of: :ranking_configuration
   has_many :penalties, through: :penalty_applications, inverse_of: :ranking_configurations
 
@@ -66,17 +91,24 @@ class RankingConfiguration < ApplicationRecord
   validates :bonus_pool_percentage, presence: true, numericality: {greater_than_or_equal_to: 0, less_than_or_equal_to: 100}
   validates :min_list_weight, presence: true, numericality: {only_integer: true}
   validates :list_limit, numericality: {only_integer: true, greater_than: 0}, allow_nil: true
-  validates :max_list_dates_penalty_age, numericality: {only_integer: true, greater_than: 0}, allow_nil: true
+  validates :max_list_dates_penalty_age, numericality: {only_integer: true, greater_than: 0, less_than_or_equal_to: 200}, allow_nil: true
   validates :max_list_dates_penalty_percentage, numericality: {only_integer: true, greater_than: 0, less_than_or_equal_to: 100}, allow_nil: true
   validates :primary_mapped_list_cutoff_limit, numericality: {only_integer: true, greater_than: 0}, allow_nil: true
   validates :secondary_mapped_list_cutoff_limit, numericality: {only_integer: true, greater_than: 0}, allow_nil: true
   validates :year, numericality: {only_integer: true, greater_than: 0}, allow_nil: true
+
+  # User-owned only. The books primary stores -50 and must stay valid; the
+  # weight calculator floors at 0 anyway (see #weight_floor).
+  validates :min_list_weight, numericality: {only_integer: true, greater_than_or_equal_to: 0, less_than_or_equal_to: 100}, if: :user_owned?
+  validates :description, length: {maximum: 1000}, if: :user_owned?
 
   # Custom validations
   validate :only_one_primary_per_type, if: :primary?
   validate :global_configurations_cannot_have_user
   validate :user_configurations_cannot_be_global
   validate :inherited_from_must_be_same_type, if: :inherited_from_id?
+  validate :user_owned_cannot_be_primary, if: :primary?
+  validate :user_owned_within_limit, on: :create, if: :user_owned?
 
   # Scopes
   scope :global, -> { where(global: true) }
@@ -132,6 +164,22 @@ class RankingConfiguration < ApplicationRecord
 
   def default_primary?
     self.class.default_primary&.id == id
+  end
+
+  def user_owned?
+    !global?
+  end
+
+  def refresh_in_progress?
+    refresh_queued? || refresh_running?
+  end
+
+  def refresh_stale?
+    refresh_in_progress? && refresh_requested_at.present? && refresh_requested_at < REFRESH_STALE_AFTER.ago
+  end
+
+  def refresh_claimable?
+    !refresh_in_progress? || refresh_stale?
   end
 
   def published?
@@ -262,5 +310,16 @@ class RankingConfiguration < ApplicationRecord
     self.class.where(type: type, primary: true)
       .where.not(id: id)
       .update_all(primary: false)
+  end
+
+  def user_owned_cannot_be_primary
+    errors.add(:primary, "cannot be set on a user-owned configuration") if user_owned?
+  end
+
+  def user_owned_within_limit
+    return if user_id.blank?
+
+    owned = RankingConfiguration.where(type: type, user_id: user_id).count
+    errors.add(:base, "You can have at most #{MAX_PER_USER} rankings") if owned >= MAX_PER_USER
   end
 end

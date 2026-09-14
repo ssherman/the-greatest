@@ -150,6 +150,13 @@ class List < ApplicationRecord
     penalties.user_specific
   end
 
+  # "Name (Source, 2003)" for pickers and tables. A display string, so it
+  # lives on the model rather than in a helper.
+  def name_with_source
+    detail = [source.presence, year_published].compact.join(", ")
+    detail.present? ? "#{name} (#{detail})" : name
+  end
+
   def parse_with_ai!
     Services::Lists::ImportService.call(self)
   end

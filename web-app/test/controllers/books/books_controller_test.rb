@@ -517,6 +517,20 @@ module Books
       assert_response :success
     end
 
+    test "a book page under a shared user-owned configuration is never cached" do
+      config = ranking_configurations(:books_user_shared)
+
+      get "/rc/#{config.id}/book/#{@book.slug}"
+
+      assert_response :success
+      assert_match "no-store", response.headers["Cache-Control"].to_s
+    end
+
+    test "a book page under a private user-owned configuration 404s for a non-owner" do
+      get "/rc/#{ranking_configurations(:books_user).id}/book/#{@book.slug}"
+      assert_response :not_found
+    end
+
     # Deliberately not declared `private`, for the same reason count_queries below
     # is not.
     def detail_value(key)

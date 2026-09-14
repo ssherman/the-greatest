@@ -33,6 +33,15 @@ module Music
       assert_includes response.body, artist.year_formed.to_s
     end
 
+    test "a user-owned album ranking configuration is never edge-cached" do
+      config = ranking_configurations(:music_albums_user_shared)
+
+      get artist_path(music_artists(:pink_floyd), ranking_configuration_id: config.id)
+
+      assert_response :success
+      assert_includes response.headers["Cache-Control"], "no-store"
+    end
+
     test "should return 404 for non-existent artist" do
       get artist_path("non-existent-artist")
       assert_response :not_found
