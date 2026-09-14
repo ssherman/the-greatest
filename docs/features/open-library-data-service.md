@@ -85,11 +85,15 @@ against a published 44,739,082 -- a difference of 59, noted and not chased.
 | evaluation_set | pass | no regression on the labeled set (prepared cache, 0.6s) |
 
 `evaluation_set` (Task 28) runs the harness against the 448-case labeled set
-and fails the build if any of five metrics regresses past the bound pinned in
+and fails the build if any of six metrics regresses past the bound pinned in
 `openlibrary/eval/thresholds.json` -- recall@10, false-merge rate,
-precision@accept, abstention rate, correct-no-match rate, each with headroom
-below (or above) the value measured on the final calibrated run, recorded
-alongside it as `thresholds.json`'s `measured` sibling. It skips instead of
+precision@accept, abstention rate, correct-no-match rate, and false-reject
+rate -- each with headroom below (or above) the value measured on the final
+calibrated run, recorded alongside it as `thresholds.json`'s `measured`
+sibling; all six checks live in one table, `harness.THRESHOLD_CHECKS`, shared
+by the gate and by `tests/openlibrary/test_eval_regression.py`, so a
+threshold pinned in the JSON without a matching entry there fails a test
+rather than going unenforced. It skips instead of
 failing when there is nothing to check against: no labeled cases, no pinned
 thresholds, or -- against an artifact whose labeled works are mostly absent
 from it, such as the test suite's fixture corpus -- "not the labelled dump".
@@ -293,7 +297,7 @@ R54 adds a cache on top of that split: `write_prepared_cache`/`read_prepared_cac
 ### Increment 3 is complete
 
 All four of the increment's stated completion criteria hold: the harness
-reports all five metrics (recall@5/10/50, precision@accept, false-merge,
+reports all six metrics (recall@5/10/50, precision@accept, false-merge,
 false-reject, abstention, correct-no-match) against the real 2026-07-31
 artifact and the real 448-case labeled set (see "Matcher, measured" above);
 `weights.json` says whether it is calibrated and by which method

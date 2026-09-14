@@ -10,8 +10,8 @@ from openlibrary.pipeline.paths import ArtifactPaths
 from openlibrary.pipeline.redirects import build_redirects
 from openlibrary.pipeline.works import build_works, stage_works
 
-# A metrics reading that clears every one of gates.threshold_failures's five
-# bounds, mirroring the final calibration run -- see thresholds.json's
+# A metrics reading that clears every one of gates.threshold_failures's six
+# bounds (R56), mirroring the final calibration run -- see thresholds.json's
 # `measured` block, which these numbers are copied from.
 _PASSING_THRESHOLDS = {
     "min_candidate_recall_10": 0.90,
@@ -19,6 +19,7 @@ _PASSING_THRESHOLDS = {
     "min_precision_at_accept": 0.95,
     "max_abstention_rate": 0.70,
     "min_correct_no_match_rate": 0.10,
+    "max_false_reject_rate": 0.01,
 }
 
 
@@ -91,11 +92,12 @@ def test_threshold_failures_is_empty_when_every_metric_clears_its_bound():
 
 
 def test_threshold_failures_names_each_metric_that_misses_its_bound():
-    metrics = _metrics(false_merge_rate=0.05, abstention_rate=0.90)
+    metrics = _metrics(false_merge_rate=0.05, abstention_rate=0.90, false_reject_rate=0.05)
     failures = threshold_failures(metrics, _PASSING_THRESHOLDS)
-    assert len(failures) == 2
+    assert len(failures) == 3
     assert any("false-merge" in f for f in failures)
     assert any("abstention" in f for f in failures)
+    assert any("false-reject" in f for f in failures)
 
 
 def test_a_row_count_collapse_against_a_previous_build_fails(built):

@@ -6,6 +6,13 @@ either a code change or a data change -- and these thresholds are what makes
 that difference visible. They are pinned from the measured numbers of the
 final calibration run (`thresholds.json`'s `measured` block), with headroom
 in the safe direction, never from ambition.
+
+Every assertion here iterates `harness.THRESHOLD_CHECKS` -- the same table
+`pipeline.gates.threshold_failures` (the build gate) iterates -- rather than
+naming the six metrics a second time (R56): a threshold added to
+`thresholds.json` without a matching entry in `THRESHOLD_CHECKS`, or the
+other way around, fails `test_threshold_checks_names_exactly_the_pinned_thresholds`
+below instead of silently going unchecked on one side.
 """
 
 from __future__ import annotations
@@ -17,21 +24,27 @@ from pathlib import Path
 import pytest
 
 from openlibrary.eval.dataset import load_cases
-from openlibrary.eval.harness import THRESHOLDS_PATH, evaluate, read_prepared_cache, run
+from openlibrary.eval.harness import (
+    THRESHOLD_CHECKS,
+    THRESHOLDS_PATH,
+    evaluate,
+    read_prepared_cache,
+    run,
+    threshold_value,
+)
 from openlibrary.matcher.scorer import MATCHER_VERSION, load_weights
 from openlibrary.pipeline.duck import connect
 from openlibrary.pipeline.paths import ArtifactPaths
 
-# bound key -> the direction that is safe: "min" means the metric must be at
-# least this bound, "max" means at most. Mirrors gates.threshold_failures's
-# five checks plus the false-reject bound this test also pins.
-_DIRECTIONS = {
-    "min_candidate_recall_10": "min",
-    "max_false_merge_rate": "max",
-    "min_precision_at_accept": "min",
-    "max_abstention_rate": "max",
-    "min_correct_no_match_rate": "min",
-    "max_false_reject_rate": "max",
+# Everything in thresholds.json that is provenance, not a pinned bound.
+_METADATA_KEYS = {
+    "measured_at",
+    "dump_date",
+    "matcher_version",
+    "n_cases",
+    "weights_calibrated_at",
+    "source",
+    "measured",
 }
 
 
@@ -49,14 +62,23 @@ def test_thresholds_are_recorded_with_the_matcher_version_they_were_measured_on(
     assert data["measured_at"]
 
 
+def test_threshold_checks_names_exactly_the_pinned_thresholds():
+    """A threshold added to thresholds.json without a matching THRESHOLD_CHECKS
+    entry (or vice versa) must fail here, not go unchecked on one side."""
+    data = _thresholds()
+    pinned_keys = set(data) - _METADATA_KEYS
+    checks_keys = {key for _, _, _, key in THRESHOLD_CHECKS}
+    assert checks_keys == pinned_keys
+    assert checks_keys == set(data["measured"])
+
+
 def test_every_threshold_has_a_measured_sibling_within_its_headroom():
     """The "measured, not aspirational" invariant, checked in code: each pinned
     bound must sit on the safe side of the value it was measured from -- a
     minimum at or below what was measured, a maximum at or above it."""
     data = _thresholds()
     measured = data["measured"]
-    assert set(measured) == set(_DIRECTIONS)
-    for key, direction in _DIRECTIONS.items():
+    for _, direction, _, key in THRESHOLD_CHECKS:
         bound = data[key]
         value = measured[key]
         if direction == "min":
@@ -95,9 +117,10 @@ def test_the_matcher_does_not_regress_against_the_labeled_set():
     finally:
         con.close()
 
-    assert metrics.candidate_recall[10] >= thresholds["min_candidate_recall_10"]
-    assert metrics.false_merge_rate <= thresholds["max_false_merge_rate"]
-    assert metrics.precision_at_accept >= thresholds["min_precision_at_accept"]
-    assert metrics.abstention_rate <= thresholds["max_abstention_rate"]
-    assert metrics.correct_no_match_rate >= thresholds["min_correct_no_match_rate"]
-    assert metrics.false_reject_rate <= thresholds["max_false_reject_rate"]
+    for label, direction, attribute, key in THRESHOLD_CHECKS:
+        bound = thresholds[key]
+        value = threshold_value(metrics, attribute)
+        if direction == "min":
+            assert value >= bound, f"{label}: {value:.4f} < {bound:.4f}"
+        else:
+            assert value <= bound, f"{label}: {value:.4f} > {bound:.4f}"

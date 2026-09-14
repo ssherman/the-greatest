@@ -163,18 +163,22 @@ def threshold_failures(metrics: Metrics, thresholds: dict) -> list[str]:
 
     A pure function on purpose: the pass/fail logic can be exercised with a
     hand-built `Metrics` and a hand-built thresholds dict, with no built
-    artifact, no labeled set, and no matcher import required.
+    artifact, no labeled set, and no matcher import required beyond this one
+    (deliberately lazy, matching `evaluation_gate`'s docstring).
+
+    Iterates `harness.THRESHOLD_CHECKS` -- the SAME table
+    `tests/openlibrary/test_eval_regression.py` iterates for the artifact
+    regression assertions and the "every threshold has a measured sibling"
+    check (R56), so a threshold added to `thresholds.json` without a matching
+    entry there, or here, fails a test rather than silently going unchecked
+    on one side.
     """
-    checks = (
-        ("recall@10", "min", metrics.candidate_recall.get(10, 0.0), "min_candidate_recall_10"),
-        ("false-merge", "max", metrics.false_merge_rate, "max_false_merge_rate"),
-        ("precision@accept", "min", metrics.precision_at_accept, "min_precision_at_accept"),
-        ("abstention", "max", metrics.abstention_rate, "max_abstention_rate"),
-        ("correct no-match", "min", metrics.correct_no_match_rate, "min_correct_no_match_rate"),
-    )
+    from openlibrary.eval.harness import THRESHOLD_CHECKS, threshold_value
+
     failures = []
-    for label, direction, value, key in checks:
+    for label, direction, attribute, key in THRESHOLD_CHECKS:
         bound = thresholds[key]
+        value = threshold_value(metrics, attribute)
         if direction == "min" and value < bound:
             failures.append(f"{label} {value:.4f} < {bound:.4f}")
         elif direction == "max" and value > bound:

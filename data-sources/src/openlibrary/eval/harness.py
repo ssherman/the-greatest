@@ -53,6 +53,22 @@ RECALL_AT = (5, 10, 50)
 # never a CWD-relative string.
 THRESHOLDS_PATH = Path(__file__).parent / "thresholds.json"
 
+# R56: the one table of what "regressed" means, each entry
+# (label, direction, metrics_attribute, thresholds_key). Both
+# `pipeline.gates.threshold_failures` (the build gate) and
+# tests/openlibrary/test_eval_regression.py (the regression test and its
+# "every threshold has a measured sibling" check) iterate this SAME tuple --
+# a threshold pinned in thresholds.json without a matching entry here, or
+# vice versa, fails a test rather than silently going unchecked on one side.
+THRESHOLD_CHECKS: tuple[tuple[str, str, str, str], ...] = (
+    ("recall@10", "min", "candidate_recall", "min_candidate_recall_10"),
+    ("false-merge", "max", "false_merge_rate", "max_false_merge_rate"),
+    ("precision@accept", "min", "precision_at_accept", "min_precision_at_accept"),
+    ("abstention", "max", "abstention_rate", "max_abstention_rate"),
+    ("correct no-match", "min", "correct_no_match_rate", "min_correct_no_match_rate"),
+    ("false-reject", "max", "false_reject_rate", "max_false_reject_rate"),
+)
+
 
 class CaseOutcome(BaseModel):
     case_id: str
@@ -75,6 +91,18 @@ class Metrics(BaseModel):
     false_reject_rate: float = 0.0
     abstention_rate: float = 0.0
     correct_no_match_rate: float = 0.0
+
+
+def threshold_value(metrics: Metrics, attribute: str) -> float:
+    """The value a `THRESHOLD_CHECKS` entry's `metrics_attribute` names.
+
+    Every attribute but one is a plain float field on `Metrics`; `candidate_recall`
+    is a dict keyed by the depths in `RECALL_AT`, and every `THRESHOLD_CHECKS`
+    entry that names it means recall@10 specifically -- the only recall depth
+    a threshold is pinned against.
+    """
+    value = getattr(metrics, attribute)
+    return value.get(10, 0.0) if attribute == "candidate_recall" else value
 
 
 class PreparedCandidate(BaseModel):
