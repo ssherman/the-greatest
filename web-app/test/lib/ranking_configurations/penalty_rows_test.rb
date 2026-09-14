@@ -6,6 +6,10 @@ module RankingConfigurations
   class PenaltyRowsTest < ActiveSupport::TestCase
     setup do
       @entry = Registry.find(:books, "books")
+      # global_penalty is static; the catalogue only lists a static penalty
+      # tagged on an active list of the entry's kind.
+      active = Books::List.create!(name: "Active tagged list", source: "T", status: :active)
+      ListPenalty.create!(list: active, penalty: penalties(:global_penalty))
     end
 
     test "returns every catalogue penalty for the entry, grouped by category title" do

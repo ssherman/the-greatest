@@ -43,15 +43,30 @@ module RankingConfigurations
       assert_equal "/", entry.official_rankings_path.call
     end
 
-    test "penalties_for returns the catalogue for the entry, excluding user-specific penalties" do
+    test "penalties_for keeps every dynamic penalty and excludes user-specific ones" do
       entry = Registry.find(:books, "books")
       penalties = Registry.penalties_for(entry)
 
-      assert_includes penalties, penalties(:global_penalty)
-      assert_includes penalties, penalties(:books_penalty)
+      assert_includes penalties, penalties(:books_penalty), "dynamic penalties always fire"
+      assert_includes penalties, penalties(:dynamic_penalty)
       refute_includes penalties, penalties(:user_penalty)
       refute_includes penalties, penalties(:user_books_penalty)
       refute_includes penalties, penalties(:games_penalty)
+    end
+
+    test "penalties_for excludes a static penalty tagged on no active list of the entry's kind" do
+      entry = Registry.find(:books, "books")
+      static = penalties(:global_penalty)
+      # The fixture tags it only on books_list (approved) and lists of other kinds.
+      refute_includes Registry.penalties_for(entry), static
+
+      games_active = Games::List.create!(name: "Active games list", source: "T", status: :active)
+      ListPenalty.create!(list: games_active, penalty: static)
+      refute_includes Registry.penalties_for(entry), static, "a tag on another kind's list does not count"
+
+      books_active = Books::List.create!(name: "Active books list", source: "T", status: :active)
+      ListPenalty.create!(list: books_active, penalty: static)
+      assert_includes Registry.penalties_for(entry), static
     end
   end
 end

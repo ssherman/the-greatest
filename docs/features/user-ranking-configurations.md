@@ -33,6 +33,13 @@ type. Model-wide: `max_list_dates_penalty_age` ≤ 200.
 A penalty is **on** when a `PenaltyApplication` row exists for it and **off**
 when none does — the weight calculator already skips penalties without a row.
 
+The penalties offered (`RankingConfigurations::Registry.penalties_for`) are the
+ones that can change a result: every dynamic penalty, plus the static penalties
+tagged (`ListPenalty`) on at least one **active** list of the domain's kind. A
+static penalty no active list carries is inert whatever value it holds, so it
+is hidden from the form and left out of the manage page's "N of M" count — and
+a penalty deleted from the catalogue drops out automatically.
+
 ## Where the code is
 
 - `app/lib/ranking_configurations/registry.rb` — one `Entry` per user-creatable

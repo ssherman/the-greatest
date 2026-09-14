@@ -97,7 +97,10 @@ class My::RankingConfigurationsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, form.min_list_weight
     assert_equal :official, @controller.view_assigns["start"]
     enabled = @controller.view_assigns["penalty_groups"].flat_map(&:rows).select(&:enabled).map { |row| row.penalty.id }
-    assert_equal @primary.penalty_applications.pluck(:penalty_id).sort, enabled.sort
+    catalogue_ids = RankingConfigurations::Registry.penalties_for(RankingConfigurations::Registry.find(:books, "books")).pluck(:id)
+    expected = @primary.penalty_applications.pluck(:penalty_id) & catalogue_ids
+    assert expected.any?, "the primary must apply at least one catalogue penalty for this test to mean anything"
+    assert_equal expected.sort, enabled.sort
     assert_equal @primary.ranked_lists.count, @controller.view_assigns["official_list_count"]
   end
 

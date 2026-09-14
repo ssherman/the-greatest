@@ -82,8 +82,11 @@ class My::RankingConfigurationsController < ApplicationController
   def show
     @entry = current_entry
     @lists_count = @ranking_configuration.ranked_lists.count
-    @penalties_on = @ranking_configuration.penalty_applications.count
-    @penalties_total = ::RankingConfigurations::Registry.penalties_for(@entry).count
+    catalogue = ::RankingConfigurations::Registry.penalties_for(@entry)
+    @penalties_total = catalogue.count
+    # Only catalogue rows: a row for a penalty that has since become inert
+    # (no active list carries it) is neither shown nor counted.
+    @penalties_on = @ranking_configuration.penalty_applications.where(penalty_id: catalogue.select(:id)).count
   end
 
   def edit

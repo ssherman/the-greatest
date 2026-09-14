@@ -411,7 +411,9 @@ A hidden `start` field carries the choice into `create`.
      list and the ‹book› share a year. The official rankings use 80."
    - *Recency reduction fades out after (years)*, 1–200 — "The reduction shrinks as the gap
      grows and disappears at this many years. The official rankings use 50."
-3. **Penalties** — every penalty in `entry.penalty_classes` with `user_id: nil`, grouped
+3. **Penalties** — every penalty in `entry.penalty_classes` with `user_id: nil` that can
+   change a result (all dynamic ones, plus static ones tagged on at least one active list
+   of the entry's kind — amended after Shane's review of PR #307), grouped
    under the existing `Penalty.category_title` headings, each row: checkbox, name,
    description, value 0–100. Dynamic penalties carry an "applied automatically" note (the
    value is their maximum). Defaults: official value and on for penalties the official

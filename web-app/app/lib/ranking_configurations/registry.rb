@@ -51,10 +51,19 @@ module RankingConfigurations
       ENTRIES.find { |entry| entry.ranking_configuration_class == config.type }
     end
 
-    # The penalties a user may switch on for this kind: the catalogue rows,
-    # never another user's private penalties.
+    # The penalties a user may switch on for this kind: the catalogue rows
+    # (never another user's private penalties) that can actually change a
+    # result. A dynamic penalty fires from list attributes, so it always can.
+    # A static penalty only acts through ListPenalty tags, so one tagged on no
+    # active list of this kind is inert whatever value it is given -- showing
+    # it would invite a user to enable something that never moves a ranking.
     def self.penalties_for(entry)
-      ::Penalty.where(type: entry.penalty_classes, user_id: nil)
+      catalogue = ::Penalty.where(type: entry.penalty_classes, user_id: nil)
+      tagged = ::ListPenalty.joins(:list)
+        .where(lists: {type: entry.list_class, status: ::List.statuses[:active]})
+        .select(:penalty_id)
+
+      catalogue.where.not(dynamic_type: nil).or(catalogue.where(dynamic_type: nil, id: tagged))
     end
   end
 end

@@ -12,6 +12,9 @@ module Services
         @config.penalty_applications.destroy_all
         @on = penalties(:books_penalty)
         @off = penalties(:global_penalty)
+        # @off is static; it is only in the catalogue while tagged on an active list.
+        active = ::Books::List.create!(name: "Active tagged list", source: "T", status: :active)
+        ::ListPenalty.create!(list: active, penalty: @off)
         @config.penalty_applications.create!(penalty: @on, value: 20)
         @current = {@on.id.to_s => {"enabled" => "1", "value" => "20"}}
       end
