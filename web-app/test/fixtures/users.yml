@@ -5,6 +5,7 @@
 # Table name: users
 #
 #  id                     :bigint           not null, primary key
+#  account_kind           :integer          default(0), not null
 #  auth_data              :jsonb
 #  auth_uid               :string
 #  confirmation_sent_at   :datetime
@@ -175,5 +176,6 @@ agent_runner_service_account:
   display_name: agent-runner
   name: agent-runner
   role: 0
+  account_kind: 1
   email_verified: false
   original_signup_domain: thegreatestbooks.org

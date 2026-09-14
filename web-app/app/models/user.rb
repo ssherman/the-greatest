@@ -3,6 +3,7 @@
 # Table name: users
 #
 #  id                     :bigint           not null, primary key
+#  account_kind           :integer          default(0), not null
 #  auth_data              :jsonb
 #  auth_uid               :string
 #  confirmation_sent_at   :datetime
@@ -76,10 +77,20 @@ class User < ApplicationRecord
   enum :role, [:user, :admin, :editor]
   enum :external_provider, [:facebook, :twitter, :google, :apple, :password]
 
-  after_create :create_default_user_lists
+  # person: a human who signs in through Firebase. service: an internal
+  # principal (the Python agent framework) that holds API tokens and nothing
+  # else -- it cannot sign in (UserAuthenticationService scopes every lookup to
+  # .person), has no membership, and gets the system rate tier.
+  enum :account_kind, {person: 0, service: 1}
 
-  # Replaced by the account_kind enum in the next commit.
-  def service? = false
+  SERVICE_ACCOUNT_EMAIL_DOMAIN = "service-accounts.thegreatest.invalid"
+  SERVICE_ACCOUNT_NAME_FORMAT = /\A[a-z0-9-]+\z/
+
+  # RFC 2606 reserves .invalid: the address can never resolve, so no identity
+  # provider can ever assert it and the email-linking path can never match it.
+  def self.service_account_email(name) = "#{name}@#{SERVICE_ACCOUNT_EMAIL_DOMAIN}"
+
+  after_create :create_default_user_lists, unless: :service?
 
   # Presence is conditional on the provider, not on auth_uid: password users
   # hold an auth_uid too, so keying on it would exempt exactly the accounts

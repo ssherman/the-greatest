@@ -535,4 +535,46 @@ class UserAuthenticationServiceTest < ActiveSupport::TestCase
 
     assert_equal existing.id, user.id
   end
+
+  # --- service accounts are invisible to sign-in -----------------------------
+
+  test "a service account is never found by auth_uid" do
+    service = users(:agent_runner_service_account)
+    service.update_column(:auth_uid, "svc_uid_123")
+
+    result = Services::UserAuthenticationService.call(provider_data: provider_data(user_id: "svc_uid_123", email: "someone@example.com"))
+
+    refute_equal service, result
+    assert result.person?
+  end
+
+  test "a service account is never linked by a trusted email" do
+    service = users(:agent_runner_service_account)
+
+    # find_user's .person scope excludes the service row from both the uid
+    # and the email lookup, so this falls through to build_new -- which then
+    # collides with the service account's own address on :email's uniqueness
+    # validation (ActiveRecord::RecordInvalid, raised before any INSERT, so no
+    # row is created). A .invalid address can never be asserted by a real
+    # provider, so this collision path is unreachable in production; what this
+    # test documents is that the guard never LINKS the service account, even
+    # though it can't complete the resulting create either.
+    assert_no_difference "User.count" do
+      assert_raises(ActiveRecord::RecordInvalid) do
+        Services::UserAuthenticationService.call(
+          provider_data: provider_data(user_id: "new_uid_9", email: service.email, email_verified: true, email_trusted: true)
+        )
+      end
+    end
+    assert_nil service.reload.auth_uid
+  end
+
+  test "a person with the same email shape is still found" do
+    person = users(:regular_user)
+    person.update_column(:auth_uid, "person_uid_1")
+
+    result = Services::UserAuthenticationService.call(provider_data: provider_data(user_id: "person_uid_1", email: person.email))
+
+    assert_equal person, result
+  end
 end
