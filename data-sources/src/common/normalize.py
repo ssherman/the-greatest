@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 NORMALIZER_VERSION = 1
@@ -190,6 +191,73 @@ def normalize_goodreads(raw: str | None) -> str | None:
         return None
     match = _DIGITS.match(str(raw).strip())
     return match.group(0) if match else None
+
+
+def identifier_pairs(
+    *,
+    isbn13: Iterable[str] = (),
+    isbn10: Iterable[str] = (),
+    asin: Iterable[str] = (),
+    goodreads_id: Iterable[str] = (),
+    oclc: Iterable[str] = (),
+    lccn: Iterable[str] = (),
+) -> list[tuple[str, str]]:
+    """Canonicalize raw identifiers into sorted, deduplicated (id_type, value) pairs.
+
+    Source-agnostic on purpose: both the matcher's blocking rule 1 (built from
+    a query someone typed) and the evaluation pool's candidate generation (a
+    book already stored locally) need the same canonicalization before an
+    exact-equality join against `identifiers.parquet`, whose values are
+    already run through `isbn13_sql` / `isbn10_sql` / `asin_sql` /
+    `goodreads_sql` (see pipeline/editions.py). A raw value in any other form
+    -- a hyphenated ISBN, a lowercase ISBN-10 check digit, a slugged Goodreads
+    id -- would silently miss that join. Every value here is pushed through
+    the matching Python normalizer (the twin of the SQL one); a value that
+    normalizes to None is dropped rather than kept raw.
+
+    An ISBN contributes both its isbn13 and isbn10 forms, because the
+    identifiers table stores both per edition. An ASIN contributes
+    ("asin", value) and, when it also parses as an ISBN -- true for most
+    Amazon book ASINs, which are the title's ISBN-10 -- both ISBN forms too.
+    """
+    pairs: set[tuple[str, str]] = set()
+
+    for value in [*isbn13, *isbn10]:
+        normalized = normalize_isbn(value)
+        if normalized is None:
+            continue
+        if normalized.isbn13:
+            pairs.add(("isbn13", normalized.isbn13))
+        if normalized.isbn10:
+            pairs.add(("isbn10", normalized.isbn10))
+
+    for value in asin:
+        cleaned = normalize_asin(value)
+        if cleaned is not None:
+            pairs.add(("asin", cleaned))
+        normalized = normalize_isbn(value)
+        if normalized is not None:
+            if normalized.isbn13:
+                pairs.add(("isbn13", normalized.isbn13))
+            if normalized.isbn10:
+                pairs.add(("isbn10", normalized.isbn10))
+
+    for value in goodreads_id:  # [GOODREADS]
+        cleaned = normalize_goodreads(value)
+        if cleaned is not None:
+            pairs.add(("goodreads", cleaned))
+
+    for value in oclc:
+        cleaned = normalize_oclc(value)
+        if cleaned is not None:
+            pairs.add(("oclc", cleaned))
+
+    for value in lccn:
+        cleaned = normalize_lccn(value)
+        if cleaned is not None:
+            pairs.add(("lccn", cleaned))
+
+    return sorted(pairs)
 
 
 def _isbn_clean_sql(expr: str) -> str:
