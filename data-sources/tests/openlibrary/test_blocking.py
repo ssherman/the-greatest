@@ -15,7 +15,7 @@ import shutil
 
 import pytest
 
-from common.normalize import MIN_BLOCKING_FP_LENGTH
+from common.normalize import MIN_BLOCKING_FP_LENGTH, title_fingerprints
 from openlibrary.matcher.blocking import (
     MAX_CANDIDATES_PER_RULE,
     MAX_SHELF_SIZE,
@@ -427,3 +427,142 @@ def test_an_oversized_author_shelf_is_a_volume_guard_with_no_candidates(
     assert result.candidates == {}
     assert set(result.guards_tripped) == {"title_fp", "author_shelf"}
     assert result.volume_guards_tripped == ["author_shelf"]
+
+
+# ---------------------------------------------------------------------------
+# R64 / Codex P1 (PR #308): rule 6 must guard its own volume like rules 1-5.
+# ---------------------------------------------------------------------------
+
+# Two made-up, multi-word titles with no plausible corpus collision (checked
+# empirically against the committed fixture corpus: zero exact title_fp
+# matches, and the overflow title's max jaccard against a REAL fixture work is
+# 0.6086 -- itself already above TRIGRAM_MIN_SIMILARITY, which only reinforces
+# the point rule 6 exists to guard against). No author names, identifiers, or
+# existing_ol_key are supplied, so rules 1, 2, 3 and 5 cannot fire and every
+# candidate below comes from rule 6 alone.
+TRIGRAM_OVERFLOW_QUERY_TITLE = "Wandering Quokka Xylophone Zephyr"
+TRIGRAM_CONTROL_QUERY_TITLE = "Frazzled Yak Jamboree Vortex"
+TRIGRAM_CONTROL_COUNT = 5
+
+
+@pytest.fixture(scope="module")
+def trigram_artifact(fixture_artifact, tmp_path_factory) -> ArtifactPaths:
+    """A `works` table rewritten to hold ONLY two synthetic blocks that isolate
+    rule 6 from every other rule: MAX_CANDIDATES_PER_RULE + 1 works tied at
+    jaccard 1.0 against TRIGRAM_OVERFLOW_QUERY_TITLE (the documented, common
+    failure mode -- DuckDB's `jaccard` compares character SETS, so 973 works
+    tied at 1.0 against a real query in production), and TRIGRAM_CONTROL_COUNT
+    works tied at 1.0 against TRIGRAM_CONTROL_QUERY_TITLE, under the cap.
+
+    Each synthetic block's title_fp is its query's fingerprint reversed: same
+    character set (so the same jaccard similarity), but a different string --
+    a trigram tie, never an exact rule-4 hit.
+
+    Deliberately NOT unioned with the fixture corpus's own `works` rows (every
+    other derived-artifact fixture in this file is): the committed corpus
+    carries one work whose title_fp is '' (a legitimate degenerate-title
+    shape other tests need), and `jaccard('', x)` raises in DuckDB rather than
+    comparing unequal. The plain `title_fp <> ''` guard filters it out of the
+    fixture corpus's own 94-row table today, but adding ~200 more rows changes
+    DuckDB's query plan enough that the filter and the jaccard call stop
+    evaluating in the safe order and the same query raises. Rule 6's own
+    `WHERE`/`ORDER BY` clauses are unchanged by this fix either way -- this
+    fixture just needs a `works` table without that row so the derived
+    artifact exercises the volume guard, not an unrelated crash.
+    """
+    root = tmp_path_factory.mktemp("ol-artifact-trigram")
+    derived = ArtifactPaths(root=root, dump_date=fixture_artifact.dump_date)
+    derived.ensure()
+    for table in TABLES:
+        shutil.copyfile(fixture_artifact.table(table), derived.table(table))
+
+    overflow_fp = title_fingerprints(TRIGRAM_OVERFLOW_QUERY_TITLE).full
+    control_fp = title_fingerprints(TRIGRAM_CONTROL_QUERY_TITLE).full
+    overflow_synthetic_fp = overflow_fp[::-1]
+    control_synthetic_fp = control_fp[::-1]
+    assert overflow_synthetic_fp != overflow_fp
+    assert control_synthetic_fp != control_fp
+
+    overflow_count = MAX_CANDIDATES_PER_RULE + 1
+
+    con = connect(derived, memory_limit="1GB")
+    with contextlib.closing(con):
+        con.execute(
+            f"""
+            COPY (
+              SELECT
+                'OLTRIGOVER' || lpad(CAST(i AS VARCHAR), 4, '0') || 'W' AS work_key,
+                '{TRIGRAM_OVERFLOW_QUERY_TITLE}'                        AS title,
+                '{overflow_synthetic_fp}'                               AS title_fp,
+                '{overflow_synthetic_fp}'                               AS title_fp_nosub,
+                '{overflow_synthetic_fp}'                               AS title_fp_noart,
+                CAST({overflow_count} AS INTEGER)                       AS title_fp_freq,
+                CAST({overflow_count} AS INTEGER)                       AS title_fp_nosub_freq,
+                CAST({overflow_count} AS INTEGER)                       AS title_fp_noart_freq,
+                CAST(0 AS SMALLINT)                                     AS author_count,
+                1                                                       AS revision,
+                DATE '2026-07-31'                                       AS last_modified
+              FROM range({overflow_count}) t(i)
+              UNION ALL
+              SELECT
+                'OLTRIGCTRL' || lpad(CAST(i AS VARCHAR), 4, '0') || 'W' AS work_key,
+                '{TRIGRAM_CONTROL_QUERY_TITLE}'                         AS title,
+                '{control_synthetic_fp}'                                AS title_fp,
+                '{control_synthetic_fp}'                                AS title_fp_nosub,
+                '{control_synthetic_fp}'                                AS title_fp_noart,
+                CAST({TRIGRAM_CONTROL_COUNT} AS INTEGER)                AS title_fp_freq,
+                CAST({TRIGRAM_CONTROL_COUNT} AS INTEGER)                AS title_fp_nosub_freq,
+                CAST({TRIGRAM_CONTROL_COUNT} AS INTEGER)                AS title_fp_noart_freq,
+                CAST(0 AS SMALLINT)                                     AS author_count,
+                1                                                       AS revision,
+                DATE '2026-07-31'                                       AS last_modified
+              FROM range({TRIGRAM_CONTROL_COUNT}) t(i)
+            ) TO '{derived.table("works")}' (FORMAT parquet)
+            """
+        )
+    return derived
+
+
+@pytest.fixture()
+def trigram_con(trigram_artifact):
+    connection = connect(trigram_artifact, memory_limit="1GB")
+    yield connection
+    connection.close()
+
+
+def test_rule_six_suppresses_itself_when_the_fuzzy_search_overflows_its_cap(
+    trigram_con, trigram_artifact
+):
+    """R64 / Codex P1 (PR #308): more than MAX_CANDIDATES_PER_RULE works tie at
+    jaccard 1.0 -- a known common case, since DuckDB's `jaccard` compares
+    character sets, not substrings. The old `LIMIT MAX_CANDIDATES_PER_RULE`
+    hid the overflow and admitted an arbitrary 200 of the ties without ever
+    recording a volume guard, so the decider treated an incomplete fuzzy
+    search as authoritative (this is the `no_candidates-030` false reject:
+    973 works tied at jaccard 1.0, the labelled work outside the arbitrary
+    200). Rule 6 must now follow rules 1, 3, 4 and 5: query for cap + 1,
+    and when more come back, admit nothing and record the guard."""
+    result = generate_candidates(
+        trigram_con, trigram_artifact, BlockingQuery(title=TRIGRAM_OVERFLOW_QUERY_TITLE)
+    )
+    assert "trigram" in result.guards_tripped
+    assert "trigram" in result.volume_guards_tripped
+    assert all("trigram" not in rules for rules in result.candidates.values())
+
+
+def test_a_trigram_match_set_under_the_cap_still_tags_candidates_and_trips_no_guard(
+    trigram_con, trigram_artifact
+):
+    """The control for the overflow test above: under the cap, rule 6 behaves
+    exactly as before -- every tied work admitted and tagged, no guard. Under
+    the cap the candidate set is deterministic (the fix's wanted side effect):
+    this closes the "rule 6 is nondeterministic" carry-forward from the v2
+    measurement, which held only because an overflowing search fell back to
+    DuckDB's arbitrary `LIMIT` ordering."""
+    result = generate_candidates(
+        trigram_con, trigram_artifact, BlockingQuery(title=TRIGRAM_CONTROL_QUERY_TITLE)
+    )
+    assert "trigram" not in result.guards_tripped
+    assert "trigram" not in result.volume_guards_tripped
+    fired = {key for key, rules in result.candidates.items() if "trigram" in rules}
+    assert len(fired) == TRIGRAM_CONTROL_COUNT

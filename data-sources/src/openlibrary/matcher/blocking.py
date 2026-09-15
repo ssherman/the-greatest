@@ -297,6 +297,22 @@ def generate_candidates(
     # exact hits at all -- so that case must still reach rule 6; testing
     # `suppressed_common_title` rather than `guards_tripped` membership is
     # what keeps the two cases apart.
+    #
+    # Same volume-guard contract as rules 1, 3, 4 and 5 (ruling R64): query for
+    # cap + 1 and, if more come back, admit nothing and record the guard
+    # instead. DuckDB's `jaccard` compares character SETS, not substrings, so
+    # more than MAX_CANDIDATES_PER_RULE works tying at 1.0 is a known common
+    # case -- 973 works tied against one real query in the measured corpus --
+    # and the old bare `LIMIT MAX_CANDIDATES_PER_RULE` hid that overflow,
+    # silently admitting an arbitrary 200 of the ties and never telling the
+    # decider the fuzzy search was incomplete (`no_candidates-030`: the
+    # labelled work sat outside that arbitrary 200). An unbounded fuzzy search
+    # must not look authoritative any more than an unbounded exact one does.
+    # Wanted side effect: under the cap the candidate set is now
+    # deterministic, which closes the "rule 6 is nondeterministic" carry
+    # forward from the v2 measurement -- that flakiness was rule 6 falling
+    # back to DuckDB's arbitrary `LIMIT` ordering on an overflowing search,
+    # not something inherent to the rule.
     if not result.candidates and fps.full and not suppressed_common_title:
         rows = con.execute(
             f"""
@@ -304,11 +320,14 @@ def generate_candidates(
             WHERE title_fp <> ''
               AND jaccard(title_fp, ?) >= {TRIGRAM_MIN_SIMILARITY}
             ORDER BY jaccard(title_fp, ?) DESC
-            LIMIT {MAX_CANDIDATES_PER_RULE}
+            LIMIT {MAX_CANDIDATES_PER_RULE + 1}
             """,
             [fps.full, fps.full],
         ).fetchall()
-        for (work_key,) in rows:
-            _add(result, work_key, "trigram")
+        if len(rows) > MAX_CANDIDATES_PER_RULE:
+            _volume_guard(result, "trigram")
+        else:
+            for (work_key,) in rows:
+                _add(result, work_key, "trigram")
 
     return result
