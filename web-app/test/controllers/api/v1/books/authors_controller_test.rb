@@ -163,6 +163,8 @@ module Api
         end
 
         test "show of an unranked author has a null rank" do
+          RankedItem.create!(item: books_authors(:garnett), ranking_configuration: ranking_configurations(:books_authors_secondary), rank: 1, score: 100)
+
           get "/api/v1/authors/#{books_authors(:garnett).slug}", headers: bearer(ApiTokenSecrets::MEMBER)
           assert_api_conform(status: 200)
 
@@ -252,6 +254,7 @@ module Api
 
         test "responses are never cacheable by a shared cache" do
           get "/api/v1/authors", headers: bearer(ApiTokenSecrets::MEMBER)
+          assert_api_conform(status: 200)
 
           assert_includes response.headers["Cache-Control"], "no-store"
           assert_includes response.headers["Cache-Control"], "private"
