@@ -11,6 +11,7 @@ module Api
     class ContractCoverageTest < ActionDispatch::IntegrationTest
       EXERCISES = {
         ["GET", "/api/v1/openapi.json", "200"] => -> { get "/api/v1/openapi.json" },
+        ["GET", "/api/v1/openapi.json", "429"] => -> { with_exhausted_ip_window { get "/api/v1/openapi.json" } },
         ["GET", "/api/v1/books", "200"] => -> { get "/api/v1/books", headers: bearer(ApiTokenSecrets::MEMBER) },
         ["GET", "/api/v1/books", "400"] => -> { get "/api/v1/books?page=0", headers: bearer(ApiTokenSecrets::MEMBER) },
         ["GET", "/api/v1/books", "401"] => -> { get "/api/v1/books" },
@@ -48,6 +49,14 @@ module Api
       end
 
       private
+
+      def with_exhausted_ip_window
+        minute = Services::Api::RateLimiter::Window.new(limit: 60, remaining: 0, reset_at: 30.seconds.from_now, exceeded: true)
+        Services::Api::RateLimiter.stubs(:hit_unauthenticated).returns(Services::Api::RateLimiter::Verdict.new(minute: minute, day: nil))
+        yield
+      ensure
+        Services::Api::RateLimiter.unstub(:hit_unauthenticated)
+      end
 
       def with_exhausted_limit
         minute = Services::Api::RateLimiter::Window.new(limit: 60, remaining: 0, reset_at: 30.seconds.from_now, exceeded: true)

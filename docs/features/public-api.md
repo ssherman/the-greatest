@@ -42,8 +42,11 @@ source of truth; this section only records what they must do and why.
   has an edge rate limit of 20 requests per 30 s with a managed challenge, below the API's own
   60/min (member) and 600/min (system) — Cloudflare would challenge a member at their
   permitted rate, and a challenge is a block for an API client. The rule also skips the
-  bad-ASN and country challenge rules (`ruleset: current`) for the same reason; auth plus the
-  per-IP 401 window (`Services::Api::RateLimiter`) gate the API instead.
+  bad-ASN and country challenge rules (`ruleset: current`) for the same reason. What gates
+  the prefix instead: auth plus the per-IP unauthenticated window
+  (`Services::Api::RateLimiter`) for every authenticated endpoint, and that same per-IP window
+  on `/api/v1/openapi.json`, the one unauthenticated route — so nothing under `/api/` is
+  unlimited once the edge steps aside.
 - **Scoped to the API-serving host.** The books zone also fronts the legacy site (apex,
   `www`), which has no `/api/`; the rule applies to `new.thegreatestbooks.org` only. Music and
   games are zone-wide, and answer Rails' 404 on `/api/` until their resources ship.
@@ -53,7 +56,8 @@ source of truth; this section only records what they must do and why.
   https://new.thegreatestbooks.org/api/v1/books` → 401 with `WWW-Authenticate: Bearer` and
   `X-RateLimit-Limit: 60`.
 - **Caching:** API responses are `private, no-store`, so nothing edge-caches them.
-  `/api/v1/openapi.json` sends `public, max-age=3600` but is served `DYNAMIC` today because
+  `/api/v1/openapi.json` sends `public, max-age=3600` (and no rate headers, so a cached copy
+  cannot mislead) but is served `DYNAMIC` today because
   `new.thegreatestbooks.org` has no Cloudflare cache rule at all (books' cache-everything
   covers apex and `www` only). Pre-existing, affects the new site's HTML too, and worth fixing
   before books launches — not an app bug.

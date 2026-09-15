@@ -19,11 +19,13 @@ paths:
       security: []
       responses:
         "200":
-          description: The OpenAPI 3.1 document as JSON, with `servers` set to the host it was fetched from.
+          description: The OpenAPI 3.1 document as JSON, with `servers` set to the host it was fetched from and only the paths that host serves.
           content:
             application/json:
               schema:
                 type: object
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/books:
     x-domain: books
     get:
