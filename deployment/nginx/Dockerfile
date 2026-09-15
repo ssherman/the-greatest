@@ -14,6 +14,11 @@ RUN chmod +x /usr/local/sbin/install-ngxblocker
 RUN /usr/local/sbin/install-ngxblocker -x
 RUN /usr/local/sbin/setup-ngxblocker -x -e conf
 
+# Drop the base image's stock server block (listens on [::]:80, serves /usr/share/nginx/html).
+# It is not ours, it answers any Host on IPv6 inside the container, and it is what the
+# healthcheck hits when `localhost` resolves to ::1. Our servers are the only servers.
+RUN rm -f /etc/nginx/conf.d/default.conf
+
 # Origin lockdown (docs/superpowers/specs/2026-09-14-origin-lockdown-design.md):
 # Cloudflare's ranges become real_ip + geo snippets at build time, so every deploy
 # (which rebuilds this image --no-cache) refreshes them. A bad fetch fails the build.

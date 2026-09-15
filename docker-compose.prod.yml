@@ -77,6 +77,7 @@ services:
       - ./deployment/nginx/the-greatest.conf.template:/etc/nginx/templates/the-greatest.conf.template:ro
       - ./deployment/nginx/snippets/ssl-params.conf:/etc/nginx/snippets/ssl-params.conf:ro
       - ./deployment/nginx/snippets/proxy-params.conf:/etc/nginx/snippets/proxy-params.conf:ro
+      - ./deployment/nginx/snippets/cloudflare-only.conf:/etc/nginx/snippets/cloudflare-only.conf:ro
       - /etc/letsencrypt/live:/etc/letsencrypt/live:ro
       - /etc/letsencrypt/archive:/etc/letsencrypt/archive:ro
       - /etc/letsencrypt/renewal:/etc/letsencrypt/renewal:ro

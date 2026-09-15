@@ -2,6 +2,18 @@ upstream rails_app {
     server ${WEB_HOST}:${WEB_PORT} fail_timeout=0;
 }
 
+# Origin lockdown (docs/superpowers/specs/2026-09-14-origin-lockdown-design.md §5.1).
+# Unknown Host on 80 and unknown/missing SNI on 443 get nothing -- not even a certificate.
+server {
+    listen 80 default_server;
+    return 444;
+}
+
+server {
+    listen 443 ssl default_server;
+    ssl_reject_handshake on;
+}
+
 server {
     listen 80;
     server_name thegreatestmusic.org www.thegreatestmusic.org
@@ -9,20 +21,17 @@ server {
                 thegreatestmovies.org www.thegreatestmovies.org
                 new.thegreatestbooks.org;
 
+    include /etc/nginx/snippets/cloudflare-only.conf;
+
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
     }
 
+    # Redirect only. Under Full/Strict SSL Cloudflare never sends an HTTPS visitor to
+    # port 80, so the old "proxy to Rails when X-Forwarded-Proto is https" branch had no
+    # legitimate caller -- it was the path a forged header used to reach Rails directly.
     location / {
-        # Only redirect if not already HTTPS (check Cloudflare header)
-        if ($http_x_forwarded_proto != "https") {
-            return 301 https://$host$request_uri;
-        }
-
-        # If already HTTPS via Cloudflare, proxy to Rails
-        proxy_pass http://rails_app;
-        proxy_redirect off;
-        include /etc/nginx/snippets/proxy-params.conf;
+        return 301 https://$host$request_uri;
     }
 }
 
@@ -35,6 +44,7 @@ server {
     ssl_certificate_key ${KEY_PATH}/thegreatestmusic.org/privkey.pem;
 
     include /etc/nginx/snippets/ssl-params.conf;
+    include /etc/nginx/snippets/cloudflare-only.conf;
 
     return 301 https://thegreatestmusic.org$request_uri;
 }
@@ -48,6 +58,7 @@ server {
     ssl_certificate_key ${KEY_PATH}/thegreatestmusic.org/privkey.pem;
 
     include /etc/nginx/snippets/ssl-params.conf;
+    include /etc/nginx/snippets/cloudflare-only.conf;
     include /etc/nginx/bots.d/blockbots.conf;
     include /etc/nginx/bots.d/ddos.conf;
 
@@ -76,6 +87,7 @@ server {
     ssl_certificate_key ${KEY_PATH}/thegreatest.games/privkey.pem;
 
     include /etc/nginx/snippets/ssl-params.conf;
+    include /etc/nginx/snippets/cloudflare-only.conf;
 
     return 301 https://thegreatest.games$request_uri;
 }
@@ -89,6 +101,7 @@ server {
     ssl_certificate_key ${KEY_PATH}/thegreatest.games/privkey.pem;
 
     include /etc/nginx/snippets/ssl-params.conf;
+    include /etc/nginx/snippets/cloudflare-only.conf;
     include /etc/nginx/bots.d/blockbots.conf;
     include /etc/nginx/bots.d/ddos.conf;
 
@@ -117,6 +130,7 @@ server {
     ssl_certificate_key ${KEY_PATH}/thegreatestmovies.org/privkey.pem;
 
     include /etc/nginx/snippets/ssl-params.conf;
+    include /etc/nginx/snippets/cloudflare-only.conf;
 
     return 301 https://thegreatestmovies.org$request_uri;
 }
@@ -130,6 +144,7 @@ server {
     ssl_certificate_key ${KEY_PATH}/thegreatestmovies.org/privkey.pem;
 
     include /etc/nginx/snippets/ssl-params.conf;
+    include /etc/nginx/snippets/cloudflare-only.conf;
     include /etc/nginx/bots.d/blockbots.conf;
     include /etc/nginx/bots.d/ddos.conf;
 
@@ -158,6 +173,7 @@ server {
     ssl_certificate_key ${KEY_PATH}/new.thegreatestbooks.org/privkey.pem;
 
     include /etc/nginx/snippets/ssl-params.conf;
+    include /etc/nginx/snippets/cloudflare-only.conf;
     include /etc/nginx/bots.d/blockbots.conf;
     include /etc/nginx/bots.d/ddos.conf;
 
