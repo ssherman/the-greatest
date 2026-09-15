@@ -13,6 +13,7 @@ import datetime
 import json
 
 from openlibrary.eval.calibrate import (
+    calibration_write_gate,
     equal_weights,
     feature_presence,
     objective,
@@ -363,6 +364,144 @@ def test_an_exercised_feature_can_still_move():
 
 def test_equal_weights_declares_no_method():
     assert equal_weights().method is None
+
+
+# ---------------------------------------------------------------------------
+# R65: the write gate's floor includes whatever `--out` already holds, not
+# just equal weights and the (optional) `--base` file -- a bare cold start
+# scored against only equal weights once beat that weak floor (TEST 0.7416)
+# while scoring far below the vector it would have silently overwritten
+# (0.9339), and was stopped only by a human reading the numbers.
+# ---------------------------------------------------------------------------
+
+
+def _one_clean_match_prepared() -> list[PreparedCase]:
+    """One unambiguous match that `equal_weights()` accepts correctly, so its
+    own objective here is a clean 1.0 -- a fixed point simple enough to
+    reason about the floor with, independent of whatever `equal_score`/
+    `chosen_score` a test passes in for the OTHER two floor candidates."""
+    return [
+        PreparedCase(
+            case_id="clean-match",
+            stratum="easy_baseline",
+            expected_work_key="OL1A",
+            expected_verdict="match",
+            candidates=[_strong_match("OL1A", 0.5)],
+        )
+    ]
+
+
+def _calibrated_copy_of_equal_weights() -> Weights:
+    calibrated = equal_weights()
+    calibrated.calibrated = True
+    calibrated.calibrated_at = "2026-01-01T00:00:00+00:00"
+    calibrated.method = "random-search"
+    return calibrated
+
+
+def test_write_gate_leaves_the_file_untouched_when_the_current_out_wins(tmp_path):
+    """R65: a `chosen` result that beats BOTH equal weights and `--base` must
+    still lose to `out`'s own current vector when that vector scores higher
+    on the same TEST split -- otherwise a bare cold start need only clear
+    the (typically much weaker) equal-weights floor to overwrite a
+    demonstrably better vector already shipped."""
+    prepared_test = _one_clean_match_prepared()
+    out = tmp_path / "weights.json"
+    out.write_text(json.dumps(_calibrated_copy_of_equal_weights().model_dump(), indent=2) + "\n")
+    before = out.read_bytes()
+
+    wrote = calibration_write_gate(
+        prepared_test,
+        equal_score=0.5,
+        base_score=0.6,
+        chosen=equal_weights(),
+        # Beats both equal_score and base_score above, but `out`'s own
+        # vector scores a clean 1.0 on `prepared_test` (see the fixture) --
+        # the floor this chosen result must ALSO clear.
+        chosen_score=0.9,
+        train_score=0.9,
+        label="random-search",
+        out=out,
+    )
+
+    assert wrote is False
+    assert out.read_bytes() == before, "the write gate must not touch a floor it lost to"
+
+
+def test_write_gate_ignores_an_out_file_that_is_not_calibrated(tmp_path):
+    """The floor-widening is for a SHIPPED vector specifically -- `out` still
+    existing but never calibrated (e.g. a checked-out `equal_weights()`
+    placeholder) has no claim over a search result that already beat plain
+    equal weights, so it must not block the write."""
+    prepared_test = _one_clean_match_prepared()
+    out = tmp_path / "weights.json"
+    out.write_text(json.dumps(equal_weights().model_dump(), indent=2) + "\n")  # calibrated=False
+
+    wrote = calibration_write_gate(
+        prepared_test,
+        equal_score=0.5,
+        base_score=0.5,
+        chosen=equal_weights(),
+        chosen_score=0.9,
+        train_score=0.9,
+        label="random-search",
+        out=out,
+    )
+
+    assert wrote is True
+    written = json.loads(out.read_text())
+    assert written["calibrated"] is True
+    assert written["method"] == "random-search"
+
+
+def test_write_gate_behaves_as_before_when_out_does_not_exist(tmp_path):
+    """The control for the two tests above: with no `--out` file present at
+    all (a fresh checkout), the floor is just `max(equal_score, base_score)`
+    as it was before R65, and a `chosen` result that beats it writes exactly
+    as it always did."""
+    prepared_test = _one_clean_match_prepared()
+    out = tmp_path / "weights.json"
+    assert not out.exists()
+
+    wrote = calibration_write_gate(
+        prepared_test,
+        equal_score=0.5,
+        base_score=0.5,
+        chosen=equal_weights(),
+        chosen_score=0.9,
+        train_score=0.9,
+        label="random-search",
+        out=out,
+    )
+
+    assert wrote is True
+    written = json.loads(out.read_text())
+    assert written["calibrated"] is True
+    assert written["calibrated_at"] is not None
+    assert written["method"] == "random-search"
+
+
+def test_write_gate_names_which_floor_won_when_it_declines_to_write(tmp_path, capsys):
+    """The "not written" message must name which of the three floor
+    candidates actually won, not just its value -- otherwise a human reading
+    the log has to reconstruct which one was decisive."""
+    prepared_test = _one_clean_match_prepared()
+    out = tmp_path / "weights.json"
+    out.write_text(json.dumps(_calibrated_copy_of_equal_weights().model_dump(), indent=2) + "\n")
+
+    wrote = calibration_write_gate(
+        prepared_test,
+        equal_score=0.5,
+        base_score=0.6,
+        chosen=equal_weights(),
+        chosen_score=0.9,
+        train_score=0.9,
+        label="random-search",
+        out=out,
+    )
+
+    assert wrote is False
+    assert f"current ({out})" in capsys.readouterr().out
 
 
 def test_splink_weights_returns_none_when_the_extra_is_unavailable_or_the_shape_mismatches():

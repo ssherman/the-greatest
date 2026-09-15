@@ -13,14 +13,14 @@ from openlibrary.pipeline.redirects import build_redirects
 from openlibrary.pipeline.works import build_works, stage_works
 
 # A metrics reading that clears every one of gates.threshold_failures's six
-# bounds (R56), mirroring the v2 reading -- see thresholds.json, whose pinned
-# bounds and `measured` block these numbers are copied from.
+# bounds (R56), mirroring the reading 7 / R64 reading -- see thresholds.json,
+# whose pinned bounds and `measured` block these numbers are copied from.
 _PASSING_THRESHOLDS = {
     "min_candidate_recall_10": 0.90,
     "max_false_merge_rate": 0.015,
     "min_precision_at_accept": 0.98,
     "max_abstention_rate": 0.70,
-    "min_correct_no_match_rate": 0.05,
+    "min_correct_no_match_rate": 0.04,
     "max_false_reject_rate": 0.005,
 }
 
@@ -34,8 +34,8 @@ def _metrics(**overrides) -> Metrics:
         precision_at_accept=0.993,
         false_merge_rate=0.0068,
         false_reject_rate=0.0,
-        abstention_rate=0.661,
-        correct_no_match_rate=0.090,
+        abstention_rate=0.665,
+        correct_no_match_rate=0.060,
     )
     base.update(overrides)
     return Metrics(**base)

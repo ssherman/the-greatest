@@ -217,6 +217,83 @@ def search_weights(
     return best, best_score
 
 
+def calibration_write_gate(
+    prepared_test: list[PreparedCase],
+    *,
+    equal_score: float,
+    base_score: float,
+    chosen: Weights,
+    chosen_score: float,
+    train_score: float,
+    label: str,
+    out: Path,
+    min_accept_rate: float = DEFAULT_MIN_ACCEPT_RATE,
+) -> bool:
+    """R65: decide whether `chosen` beats the floor and, if so, write it to `out`.
+
+    The floor is the max of `equal_score`, `base_score` and -- when `out`
+    already holds a CALIBRATED vector -- that vector's own score on
+    `prepared_test`. Without this third candidate, a bare cold start (no
+    `--base`) only has to clear `equal_score` to overwrite whatever is
+    already shipped: this is not hypothetical -- a cold start against the
+    real 448-case set once scored TEST 0.7416, comfortably above the
+    equal-weights floor (0.6044) and far below the vector it would have
+    silently replaced (0.9339), and was stopped only by a human reading the
+    numbers rather than by this gate. An UNcalibrated `out` (missing, or
+    still the `equal_weights()` placeholder) is not a floor: it has no claim
+    over a search result that already beat equal weights on its own.
+
+    Returns whether `out` was written, so a caller and a test can both tell
+    without re-reading the file. The "not written" message names which floor
+    actually won -- equal weights, `--base`, or `out`'s own current vector --
+    not just its value, so a human reading the log does not have to
+    reconstruct which of the three was decisive.
+    """
+    floor_score, floor_label = equal_score, "equal weights"
+    if base_score > floor_score:
+        floor_score, floor_label = base_score, "--base file"
+    if out.exists():
+        current = load_weights(out)
+        if current.calibrated:
+            current_metrics, _ = evaluate(prepared_test, current)
+            current_score = objective(current_metrics, min_accept_rate=min_accept_rate)
+            typer.echo(
+                f"current ({out}) on TEST: "
+                f"false_merge={current_metrics.false_merge_rate:.4f} "
+                f"false_reject={current_metrics.false_reject_rate:.4f} "
+                f"precision={current_metrics.precision_at_accept:.3f} "
+                f"abstain={current_metrics.abstention_rate:.3f} "
+                f"objective={current_score:.4f}"
+            )
+            if current_score > floor_score:
+                floor_score, floor_label = current_score, f"current ({out})"
+
+    # Per the design: an overfitted weight vector on ~270 training cases is
+    # worse than an honest uncalibrated one. If nothing beat the FLOOR, leave
+    # `out` exactly as it is. This message describes what was (not) done, not
+    # what `out` currently contains -- that could be a prior calibration, an
+    # untouched default, or (with `--base`) the file just read above, and
+    # asserting which would be exactly the kind of claim this task's other
+    # bugs were made of.
+    if chosen_score <= floor_score:
+        typer.echo(
+            f"{label} objective {chosen_score:.4f} does not beat the floor "
+            f"({floor_label} at {floor_score:.4f}) on TEST -- leaving {out} untouched."
+        )
+        return False
+
+    chosen.calibrated = True
+    chosen.calibrated_at = datetime.datetime.now(datetime.UTC).isoformat()
+    chosen.method = label
+    out.write_text(json.dumps(chosen.model_dump(), indent=2) + "\n")
+    typer.echo(
+        f"{label} beat the floor ({floor_label} at {floor_score:.4f}) on TEST "
+        f"({chosen_score:.4f} > {floor_score:.4f}): wrote {label} weights to {out} "
+        f"(train objective {train_score:.4f})"
+    )
+    return True
+
+
 def splink_weights(prepared_train: list[PreparedCase]) -> Weights | None:
     """One concrete, bounded attempt to fit m/u probabilities with Splink.
 
@@ -434,10 +511,6 @@ def main(
     else:
         base, base_score = equal, equal_score
 
-    # The floor the chosen result must clear to be written: whichever of
-    # equal weights or the (optional) `--base` file already scores higher.
-    floor_score = max(equal_score, base_score)
-
     searched, train_score = search_weights(
         prepared_train, base=base, iterations=iterations, seed=seed
     )
@@ -464,30 +537,19 @@ def main(
         if fitted_score > chosen_score:
             chosen, chosen_score, label = fitted, fitted_score, "splink"
 
-    # Per the design: an overfitted weight vector on ~270 training cases is
-    # worse than an honest uncalibrated one. If nothing beat the FLOOR --
-    # equal weights, and the `--base` file too when one was given (Minor
-    # #3) -- on the held-out split, leave `out` exactly as it is. This
-    # message describes what was (not) done, not what `out` currently
-    # contains -- that could be a prior calibration, an untouched default,
-    # or (with `--base`) the file just read above, and asserting which
-    # would be exactly the kind of claim this task's other bugs were made
-    # of.
-    if chosen_score <= floor_score:
-        typer.echo(
-            f"{label} objective {chosen_score:.4f} does not beat the floor "
-            f"(max of equal weights and any --base file: {floor_score:.4f}) on TEST -- "
-            f"leaving {out} untouched."
-        )
-        return
-
-    chosen.calibrated = True
-    chosen.calibrated_at = datetime.datetime.now(datetime.UTC).isoformat()
-    chosen.method = label
-    Path(out).write_text(json.dumps(chosen.model_dump(), indent=2) + "\n")
-    typer.echo(
-        f"{label} beat the floor on TEST ({chosen_score:.4f} > {floor_score:.4f}): "
-        f"wrote {label} weights to {out} (train objective {train_score:.4f})"
+    # R65: the floor `chosen` must clear also includes whatever `out` already
+    # holds, evaluated fresh on this TEST split -- see
+    # `calibration_write_gate`'s docstring for why that third candidate is
+    # not optional.
+    calibration_write_gate(
+        prepared_test,
+        equal_score=equal_score,
+        base_score=base_score,
+        chosen=chosen,
+        chosen_score=chosen_score,
+        train_score=train_score,
+        label=label,
+        out=out,
     )
 
 
