@@ -252,12 +252,44 @@ docker system df
 
 ## Security
 
-- All secrets managed via environment variables
-- SSL certificates with strong ciphers (TLS 1.2+)
-- HSTS headers enabled
+### Origin lockdown
+
+The origin serves a page only when all three of these hold (design:
+`docs/superpowers/specs/2026-09-14-origin-lockdown-design.md`):
+
+1. **The connection comes from a Cloudflare IP range.** `deployment/nginx/bin/generate-cloudflare-snippets.sh`
+   runs at image build and turns Cloudflare's published list into a `geo` map on
+   `$realip_remote_addr`; every named server block returns 444 (connection closed, no
+   response) when it says no. Every deploy rebuilds the image, so the list refreshes itself;
+   a bad fetch fails the build instead of shipping a permissive list.
+2. **The request names one of our hostnames.** A `default_server` on port 80 returns 444 for
+   any other `Host`; a `default_server` on 443 uses `ssl_reject_handshake`, so an unknown or
+   missing SNI never even sees a certificate. Port 80 only redirects — it no longer proxies
+   to Rails on `X-Forwarded-Proto: https`.
+3. **Cloudflare presented its origin-pull client certificate** (Authenticated Origin Pulls,
+   `ssl_client_certificate` + `ssl_verify_client` in `snippets/ssl-params.conf`, CA in
+   `deployment/nginx/certs/`, expires 2029-11-01). The matching Cloudflare setting is
+   `tls_client_auth: on`, managed by `cfrules` in the private `the-greatest-cloudflare` repo.
+
+The same Cloudflare list feeds `real_ip_header CF-Connecting-IP`, so nginx's `$remote_addr`,
+the access log, the bot-blocker's per-IP limits, and Rails' `request.remote_ip` are the
+visitor's address, not the Cloudflare edge's. The access log carries `cf=<peer> verify=<AOP result>`.
+
+**Accepted residual:** Cloudflare's shared origin-pull certificate proves "from Cloudflare's
+network", not "from our zones". An attacker with a Cloudflare *Enterprise* account could use
+Host-header override through their own zone. Spec §9 lists the two ways to close that later.
+
+**Verify after any nginx change:** `deployment/scripts/verify-origin-lockdown.sh` from a
+machine outside Cloudflare. Locally, `deployment/nginx/test/local-lockdown-test.sh` exercises
+the whole matrix against a throwaway container.
+
+### Everything else
+
+- All secrets managed via environment variables (SOPS/age)
+- SSL certificates with strong ciphers (TLS 1.2+), HSTS enabled
 - Bad bot blocking active
-- UFW firewall (ports 22, 80, 443)
-- Fail2ban for SSH protection
+- UFW firewall (22, 80, 443) and fail2ban for SSH — note that Docker-published ports do not
+  obey UFW, which is why the origin lockdown lives in nginx rather than the host firewall
 - Non-root user for Rails processes
 
 ## Troubleshooting

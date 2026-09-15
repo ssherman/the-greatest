@@ -598,18 +598,8 @@ are worth fixing in the deployment configuration:
   `request.host` without knowing about this hazard, present or future, and Rails' own comment in
   that file calls it out as DNS-rebinding protection for exactly this reason. Setting it is small
   and has no known downside; there's just no code path in this branch that strictly requires it.
-- **Configure nginx's `real_ip` module with Cloudflare's published IP ranges.** Today nginx has no
-  `real_ip` configuration at all (`deployment/nginx/nginx.conf`), so `request.remote_ip` inside
-  Rails resolves to the Cloudflare edge IP that proxied the request, not the visitor's own IP —
-  every visitor behind the same Cloudflare PoP looks identical to Rails. `MembershipController`'s
-  anonymous rate limits (on `:donate` and the `:thanks` return page) already prefer Cloudflare's
-  `CF-Connecting-IP` header over `request.remote_ip` for exactly this reason (see the
-  `#visitor_ip` comment there), which is correct **only** for traffic that actually passed through
-  Cloudflare. A request sent straight to the origin's IP (bypassing Cloudflare entirely) can set
-  `CF-Connecting-IP` to anything it likes, since nothing verifies the request came from
-  Cloudflare's edge — that forges past the anonymous donation rate limit completely. The real fix
-  is nginx's `real_ip` module (`set_real_ip_from` for each of Cloudflare's published ranges,
-  `real_ip_header CF-Connecting-IP`), which makes Rails trust the header only when the *connecting*
-  nginx peer is actually one of Cloudflare's own IPs — closing the forgery path structurally
-  instead of by convention. This is a deployment/nginx change, not an application code change,
-  which is why it's listed here rather than fixed in this branch.
+- **Configure nginx's `real_ip` module with Cloudflare's published IP ranges.** Done —
+  `deployment/nginx/bin/generate-cloudflare-snippets.sh` generates `set_real_ip_from` for every
+  Cloudflare range plus `real_ip_header CF-Connecting-IP` at image build, and the origin now
+  refuses connections that are not from Cloudflare at all, so a forged `CF-Connecting-IP` cannot
+  reach Rails. Design: `docs/superpowers/specs/2026-09-14-origin-lockdown-design.md`.
