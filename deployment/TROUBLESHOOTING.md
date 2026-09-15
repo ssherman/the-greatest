@@ -8,7 +8,7 @@ Common issues and solutions for The Greatest production deployment.
 - [Database Issues](#database-issues)
 - [SSL Certificate Issues](#ssl-certificate-issues)
 - [Nginx Issues](#nginx-issues)
-- [Origin Lockdown](#origin-lockdown)
+  - [Origin Lockdown](#origin-lockdown)
 - [Performance Issues](#performance-issues)
 - [Disk Space Issues](#disk-space-issues)
 - [Network Issues](#network-issues)
@@ -298,7 +298,7 @@ docker compose -f docker-compose.prod.yml exec nginx nginx -t
 
 ### Origin Lockdown
 
-The origin answers only Cloudflare (see README → Security → Origin lockdown). Three ways it
+The origin answers only Cloudflare (see README → Security → Origin Lockdown). Three ways it
 shows up when something is off:
 
 **Every request returns 495 or 400 mentioning a client certificate.**

@@ -1,6 +1,6 @@
 # Deployment Scripts
 
-This directory contains scripts for managing SSL certificates using Let's Encrypt and Cloudflare DNS validation.
+This directory contains scripts for managing SSL certificates using Let's Encrypt and Cloudflare DNS validation, and for verifying the origin lockdown.
 
 ## Overview
 
@@ -55,7 +55,7 @@ sudo ./deployment/scripts/renew-certs.sh
 
 ### verify-origin-lockdown.sh
 
-Confirms the origin serves only Cloudflare (README → Security → Origin lockdown). Run from a
+Confirms the origin serves only Cloudflare (README → Security → Origin Lockdown). Run from a
 machine **outside** Cloudflare's network, after every nginx change or server rebuild.
 
 **Usage:**

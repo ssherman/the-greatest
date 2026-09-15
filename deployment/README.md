@@ -252,7 +252,7 @@ docker system df
 
 ## Security
 
-### Origin lockdown
+### Origin Lockdown
 
 The origin serves a page only when all three of these hold (design:
 `docs/superpowers/specs/2026-09-14-origin-lockdown-design.md`):
@@ -270,6 +270,9 @@ The origin serves a page only when all three of these hold (design:
    `ssl_client_certificate` + `ssl_verify_client` in `snippets/ssl-params.conf`, CA in
    `deployment/nginx/certs/`, expires 2029-11-01). The matching Cloudflare setting is
    `tls_client_auth: on`, managed by `cfrules` in the private `the-greatest-cloudflare` repo.
+   Rolling out in stages: nginx runs `ssl_verify_client optional` (verifies a certificate when
+   one is presented, still serves without one) until production logs show `verify=SUCCESS` on
+   every port-443 request; the switch to `on` is what makes this condition mandatory.
 
 The same Cloudflare list feeds `real_ip_header CF-Connecting-IP`, so nginx's `$remote_addr`,
 the access log, the bot-blocker's per-IP limits, and Rails' `request.remote_ip` are the
@@ -283,7 +286,7 @@ Host-header override through their own zone. Spec §9 lists the two ways to clos
 machine outside Cloudflare. Locally, `deployment/nginx/test/local-lockdown-test.sh` exercises
 the whole matrix against a throwaway container.
 
-### Everything else
+### Everything Else
 
 - All secrets managed via environment variables (SOPS/age)
 - SSL certificates with strong ciphers (TLS 1.2+), HSTS enabled
