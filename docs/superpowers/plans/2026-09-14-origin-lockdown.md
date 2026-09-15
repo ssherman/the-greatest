@@ -1177,6 +1177,10 @@ In `deployment/nginx/snippets/ssl-params.conf`, change `ssl_verify_client option
 
 with the real date from Checkpoint B.
 
+Also in `deployment/README.md`, under "Security → Origin Lockdown", delete the sentence that
+begins `Rolling out in stages: nginx runs `ssl_verify_client optional`` (added during Task 5's
+review) — once `on` ships, condition 3 is mandatory and the caveat would be wrong.
+
 - [ ] **Step 2: Run the local harness — it must adapt**
 
 Run: `deployment/nginx/test/local-lockdown-test.sh`
@@ -1185,7 +1189,7 @@ Expected: all probes pass, with A1 now reporting `curl exit 0, http 400` and B3 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add deployment/nginx/snippets/ssl-params.conf
+git add deployment/nginx/snippets/ssl-params.conf deployment/README.md
 git commit -m "feat(nginx): enforce Authenticated Origin Pulls (ssl_verify_client on)
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
