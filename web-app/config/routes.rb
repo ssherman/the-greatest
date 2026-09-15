@@ -598,6 +598,7 @@ Rails.application.routes.draw do
       namespace :v1 do
         scope module: :books do
           resources :books, only: [:index, :show], param: :slug
+          resources :authors, only: [:index, :show], param: :slug
         end
       end
     end
