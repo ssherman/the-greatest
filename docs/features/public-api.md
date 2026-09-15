@@ -4,7 +4,7 @@ Spec: `docs/superpowers/specs/2026-09-12-public-api-framework-design.md`. Code i
 
 ## Shape
 
-- Per-site path, JSON only: `https://thegreatestbooks.org/api/v1/books`, `/api/v1/books/{slug}`. The domain comes from the host. Music and games resources are later increments.
+- Per-site path, JSON only: `https://thegreatestbooks.org/api/v1/books`, `/api/v1/books/{slug}`, `/api/v1/authors`, `/api/v1/authors/{slug}`. The domain comes from the host. Indexes are the site's primary ranking, best first; when there is no primary author ranking yet `/api/v1/authors` is a 200 with empty `data`. Lookup is by slug only, and author show does not embed books — a paginated `/api/v1/authors/{slug}/books` is the planned follow-up. Music and games resources are later increments.
 - Contract: `web-app/config/api/v1/openapi.yaml`, served at `GET /api/v1/openapi.json` (public, cached an hour). Path items carry `x-domain`, and the served document keeps only the paths routed on the host it was fetched from — the music host's copy does not advertise `/api/v1/books`. Every API integration test validates against it (`assert_api_conform`), and `test/integration/api/v1/contract_coverage_test.rb` fails if a documented response is not exercised.
 - Envelope `{"data": …}`; collections add `meta` and `links`. Errors are RFC 9457 `application/problem+json` with a stable `code` (`Api::Problem`).
 
@@ -64,4 +64,4 @@ source of truth; this section only records what they must do and why.
 
 ## Not yet
 
-`/developers` and `/developers/tokens` (increment 3), authors (increment 2), search, filters, music/games, OAuth/MCP.
+`/developers` and `/developers/tokens` (increment 3), `/api/v1/authors/{slug}/books`, search, filters, music/games, OAuth/MCP.
