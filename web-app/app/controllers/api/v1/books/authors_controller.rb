@@ -11,11 +11,12 @@ module Api
       class AuthorsController < BaseController
         def index
           ranking_configuration = ::Books::Authors::RankingConfiguration.default_primary
-          # The shared query preloads descriptions for the site; the compact
-          # resource needs the primary image too, merged here rather than in the
-          # query so the site does not pay for a preload it never reads.
+          # The shared query preloads descriptions for the site's ranked page;
+          # the compact resource renders none, so drop that preload and declare
+          # only what this payload reads. The site is untouched.
           relation = ranking_configuration && ::Books::RankedAuthorsQuery
             .call(ranking_configuration: ranking_configuration)
+            .except(:includes)
             .includes(item: {primary_image: {file_attachment: :blob}})
 
           render_ranked_page(relation, path: "/api/v1/authors") do |ranked_item|

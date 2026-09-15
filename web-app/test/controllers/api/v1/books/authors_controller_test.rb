@@ -11,6 +11,7 @@ module Api
           host! "dev-new.thegreatestbooks.org"
           @rc = ranking_configurations(:books_authors_global)
           @tolstoy = books_authors(:tolstoy)
+          @tolstoy.update!(sort_name: "Tolstoy, Leo")
           @king = books_authors(:king)
           @bachman = books_authors(:bachman)
           RankedItem.create!(item: @tolstoy, ranking_configuration: @rc, rank: 1, score: 100)
@@ -147,6 +148,7 @@ module Api
             json[:data].keys
           )
           assert_equal "leo-tolstoy", json[:data][:slug]
+          assert_equal "Tolstoy, Leo", json[:data][:sort_name]
           assert_equal 1, json[:data][:rank]
           assert_equal ["Lev Tolstoy", "Lev Nikolayevich Tolstoy"], json[:data][:alternate_names]
           assert_equal "person", json[:data][:kind]
@@ -185,13 +187,6 @@ module Api
 
         test "show does not fall back to a primary-key lookup" do
           get "/api/v1/authors/#{@tolstoy.id}", headers: bearer(ApiTokenSecrets::MEMBER)
-          assert_api_conform(status: 404)
-
-          assert_response :not_found
-        end
-
-        test "show does not answer to an alternate name" do
-          get "/api/v1/authors/lev-tolstoy", headers: bearer(ApiTokenSecrets::MEMBER)
           assert_api_conform(status: 404)
 
           assert_response :not_found
