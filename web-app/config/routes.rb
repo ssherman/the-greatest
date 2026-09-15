@@ -465,6 +465,16 @@ Rails.application.routes.draw do
     get "deletion_policy", to: "pages#deletion", as: :deletion_policy, constraints: {format: /html/}
   end
 
+  # The API contract, on every real host, unauthenticated and edge-cacheable:
+  # the one /api/ path that SHOULD cache. Served outside Api::V1::BaseController
+  # (which authenticates) -- see Api::V1::OpenapiController.
+  constraints DomainConstraint.new(
+    [:books, :music, :games].map { |domain| Rails.application.config.domains[domain] }.join(",")
+  ) do
+    get "api/v1/openapi", to: "api/v1/openapi#show", as: :api_v1_openapi,
+      defaults: {format: :json}, constraints: {format: :json}
+  end
+
   # Legacy books URL. ~15 years of inbound links point at /support.
   get "support", to: redirect("/membership", status: 301)
 
@@ -580,6 +590,18 @@ Rails.application.routes.draw do
   end
 
   constraints DomainConstraint.new(Rails.application.config.domains[:books]) do
+    # Public API, books resources. JSON only: `defaults` means no extension is
+    # needed, `constraints` means /api/v1/books.xml matches nothing (a routing
+    # 404, not a 406). Domain comes from the host, like everything else.
+    # Spec: docs/superpowers/specs/2026-09-12-public-api-framework-design.md
+    namespace :api, defaults: {format: :json}, constraints: {format: :json} do
+      namespace :v1 do
+        scope module: :books do
+          resources :books, only: [:index, :show], param: :slug
+        end
+      end
+    end
+
     get "my/reading-goals", to: "books/my/reading_goals#index", as: :books_my_reading_goals
     get "my/reading-goals/new", to: "books/my/reading_goals#new", as: :new_books_my_reading_goal
     post "my/reading-goals", to: "books/my/reading_goals#create"

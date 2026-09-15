@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_13_014759) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_14_031308) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -59,6 +59,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_13_014759) do
     t.bigint "user_id"
     t.index ["parent_type", "parent_id"], name: "index_ai_chats_on_parent"
     t.index ["user_id"], name: "index_ai_chats_on_user_id"
+  end
+
+  create_table "api_tokens", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "expires_at"
+    t.datetime "last_used_at"
+    t.string "name", null: false
+    t.string "scopes", default: [], null: false, array: true
+    t.string "token_digest", null: false
+    t.string "token_prefix", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["token_digest"], name: "index_api_tokens_on_token_digest", unique: true
+    t.index ["user_id"], name: "index_api_tokens_on_user_id"
   end
 
   create_table "billing_plans", force: :cascade do |t|
@@ -1075,6 +1089,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_13_014759) do
   end
 
   create_table "users", force: :cascade do |t|
+    t.integer "account_kind", default: 0, null: false
     t.jsonb "auth_data"
     t.string "auth_uid"
     t.datetime "confirmation_sent_at"
@@ -1109,6 +1124,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_13_014759) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "ai_chats", "users"
+  add_foreign_key "api_tokens", "users"
   add_foreign_key "books_author_relationships", "books_authors", column: "from_author_id"
   add_foreign_key "books_author_relationships", "books_authors", column: "to_author_id"
   add_foreign_key "books_book_authors", "books_authors", column: "author_id"

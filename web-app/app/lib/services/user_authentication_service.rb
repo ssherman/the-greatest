@@ -2,6 +2,7 @@
 #
 # The lookup order is the security boundary:
 #
+#   0. account_kind: service rows are excluded from every step below.
 #   1. auth_uid == the token's `sub`. Exact, and it came out of a signature.
 #   2. a VERIFIED email. Control of an address proves ownership of the account
 #      that uses it, so this relinks -- a V1 user imported under one uid who
@@ -74,7 +75,11 @@ module Services
     def email_trusted? = provider_data[:email_trusted] == true
 
     def find_user
-      by_uid = User.find_by(auth_uid: uid)
+      # .person on both lookups: a service account (account_kind: service) holds
+      # API tokens and must never be reachable through sign-in. Scoping here makes
+      # it invisible to the uid AND the email path, rather than merely unlikely
+      # to match -- the email path is the documented takeover route.
+      by_uid = User.person.find_by(auth_uid: uid)
       return by_uid if by_uid
       return nil if email.nil?
 
@@ -82,7 +87,7 @@ module Services
       # case-insensitively duplicate email rows, and this lookup sits on the
       # security boundary (see the class comment). Without an explicit order,
       # which row wins is Postgres's choice and can change between query plans.
-      by_email = User.where("LOWER(email) = ?", email).order(:id).first
+      by_email = User.person.where("LOWER(email) = ?", email).order(:id).first
       return nil if by_email.nil?
       raise UnverifiedEmailConflict, "untrusted email matches an existing account" unless email_trusted?
 
