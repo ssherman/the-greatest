@@ -18,14 +18,15 @@
 #   <local-ips-json> replaces the network fetch (tests).
 set -euo pipefail
 
-out_dir="${1:?usage: $0 <output-dir> [<local-ips-json>]}"
+fail() { echo "generate-cloudflare-snippets: $*" >&2; exit 1; }
+
+[ $# -ge 1 ] || fail "usage: $0 <output-dir> [<local-ips-json>]"
+out_dir="$1"
 source_json="${2:-}"
 url="https://api.cloudflare.com/client/v4/ips"
 
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
-
-fail() { echo "generate-cloudflare-snippets: $*" >&2; exit 1; }
 
 if [ -n "$source_json" ]; then
   cp "$source_json" "$tmp"

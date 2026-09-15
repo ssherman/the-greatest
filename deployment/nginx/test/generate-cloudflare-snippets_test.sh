@@ -78,5 +78,13 @@ bad "non-CIDR IPv4 entry is rejected" "$(jq '.result.ipv4_cidrs[0] = "not a cidr
 bad "non-CIDR IPv6 entry is rejected" "$(jq '.result.ipv6_cidrs[0] = "2606:4700::/32; evil"' "$fixture")"
 bad "empty body is rejected" ''
 
+# --- no arguments: usage error with proper format ---
+output=$("$gen" 2>&1 || true)
+if echo "$output" | grep -q '^generate-cloudflare-snippets: usage:'; then
+  pass "no arguments shows usage error with proper format"
+else
+  fail "no arguments shows usage error with proper format" "$(echo "$output" | head -1)"
+fi
+
 echo
 if [ "$failures" -eq 0 ]; then echo "all generator tests passed"; else echo "$failures generator test(s) failed"; exit 1; fi
