@@ -240,8 +240,10 @@ list), and there is deliberately no committed copy to go stale.
 ### 5.4 Cloudflare side (`the-greatest-cloudflare`, private)
 
 `tls_client_auth` becomes a managed setting next to `ssl`: `pull` reads
-`GET /zones/:id/settings/tls_client_auth`, `diff` compares it when declared, `apply` PATCHes
-`{"value": "on"|"off"}`, `verify` asserts live == declared. Tests mirror the `ssl` ones. The
+`GET /zones/:id/settings/tls_client_auth`, `diff` reports drift on it exactly as it does for
+`ssl` (the settings digest covers every declared key), `apply` PATCHes
+`{"value": "on"|"off"}`, and `validate!` rejects any value other than `on`/`off`. Tests
+mirror the `ssl` ones. The
 three zone files declare `tls_client_auth: on` with a comment pointing at this spec and at the
 nginx side that consumes it. On books the comment also records that the legacy origin receives
 and ignores the certificate.
