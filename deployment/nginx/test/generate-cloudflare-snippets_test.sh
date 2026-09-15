@@ -76,6 +76,8 @@ bad "too few IPv4 ranges is rejected" \
 bad "missing IPv6 list is rejected" "$(jq 'del(.result.ipv6_cidrs)' "$fixture")"
 bad "non-CIDR IPv4 entry is rejected" "$(jq '.result.ipv4_cidrs[0] = "not a cidr"' "$fixture")"
 bad "non-CIDR IPv6 entry is rejected" "$(jq '.result.ipv6_cidrs[0] = "2606:4700::/32; evil"' "$fixture")"
+bad "catch-all IPv4 range is rejected" "$(jq '.result.ipv4_cidrs += ["0.0.0.0/0"]' "$fixture")"
+bad "catch-all IPv6 range is rejected" "$(jq '.result.ipv6_cidrs += ["::/0"]' "$fixture")"
 bad "empty body is rejected" ''
 
 # --- no arguments: usage error with proper format ---

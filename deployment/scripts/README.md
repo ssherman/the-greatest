@@ -64,10 +64,11 @@ deployment/scripts/verify-origin-lockdown.sh                  # production IP
 ORIGIN_IP=<ip> deployment/scripts/verify-origin-lockdown.sh   # a rebuilt server
 ```
 
-**What it checks:** six direct-to-IP probes that must be refused (correct SNI, no SNI,
-unknown SNI, forged `X-Forwarded-Proto` on port 80, unknown `Host`, our `Host` on port 80)
-and three through-Cloudflare `/api/` probes that must answer with a `cf-ray`. Exit 0 only when
-all nine pass. A direct probe that gets a page or a redirect is the failure it exists to catch.
+**What it checks:** seven direct-to-IP probes that must be refused (correct SNI, no SNI,
+unknown SNI, correct SNI with a foreign `Host`, forged `X-Forwarded-Proto` on port 80, unknown
+`Host`, our `Host` on port 80) and three through-Cloudflare `/api/` probes that must answer with
+a `cf-ray`. Exit 0 only when all ten pass. A direct probe that gets a page or a redirect is the
+failure it exists to catch.
 
 ## Automatic Renewal
 

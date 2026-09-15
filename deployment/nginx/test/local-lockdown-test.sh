@@ -85,6 +85,7 @@ run_nginx() {   # run_nginx [extra docker run args...]
   # "connection refused" (curl exit 7) unambiguous: once nginx is listening, port 80
   # answers 444 (exit 52) and port 443 rejects the SNI-less handshake (exit 35).
   for _ in $(seq 1 120); do
+    docker inspect -f '{{.State.Running}}' "$ctr" 2>/dev/null | grep -q true || break
     docker exec "$ctr" curl -s -o /dev/null --max-time 2 http://127.0.0.1:80/ >/dev/null 2>&1; a=$?
     docker exec "$ctr" curl -sk -o /dev/null --max-time 2 https://127.0.0.1:443/ >/dev/null 2>&1; b=$?
     [ "$a" -ne 7 ] && [ "$b" -ne 7 ] && return 0
@@ -126,6 +127,8 @@ expect_exit "A3 HTTPS with unknown SNI is rejected at handshake" "35" -k --resol
 expect_exit "A4 HTTP with forged X-Forwarded-Proto is refused" "52 56" -H "Host: $music" -H "X-Forwarded-Proto: https" "http://127.0.0.1:$http_port/"
 expect_exit "A5 HTTP with unknown Host is refused"        "52 56" -H "Host: evil.test" "http://127.0.0.1:$http_port/"
 expect_exit "A6 HTTP for our Host is refused"             "52 56" -H "Host: new.thegreatestbooks.org" "http://127.0.0.1:$http_port/"
+# nginx answers 421 itself when Host != SNI on a server with ssl_verify_client; no page is served.
+expect_exit "A8 HTTPS correct SNI but foreign Host is refused" "52 56 92 http:421" -k --resolve "$music:$https_port:127.0.0.1" -H "Host: evil.test" "https://$music:$https_port/"
 if docker exec "$ctr" curl -sf -o /dev/null -H "Host: $music" http://localhost:80/up; then
   pass "A7 loopback healthcheck still passes"
 else
@@ -151,6 +154,7 @@ expect_http "B4 HTTP with forged X-Forwarded-Proto only redirects (proxy branch 
   -H "Host: $music" -H "X-Forwarded-Proto: https" "http://127.0.0.1:$http_port/"
 expect_exit "B5 HTTPS with unknown SNI is still rejected" "35" -k --resolve "evil.test:$https_port:127.0.0.1" "https://evil.test:$https_port/"
 expect_exit "B6 HTTP with unknown Host is still refused"  "52 56" -H "Host: evil.test" "http://127.0.0.1:$http_port/"
+expect_exit "B7 HTTPS correct SNI but foreign Host is refused" "52 56 92 http:421" -k --resolve "$music:$https_port:127.0.0.1" -H "Host: evil.test" "https://$music:$https_port/"
 
 echo
 if [ "$failures" -eq 0 ]; then echo "all lockdown probes passed"; else echo "$failures lockdown probe(s) failed"; exit 1; fi

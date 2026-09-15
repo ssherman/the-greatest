@@ -261,7 +261,9 @@ The origin serves a page only when all three of these hold (design:
    runs at image build and turns Cloudflare's published list into a `geo` map on
    `$realip_remote_addr`; every named server block returns 444 (connection closed, no
    response) when it says no. Every deploy rebuilds the image, so the list refreshes itself;
-   a bad fetch fails the build instead of shipping a permissive list.
+   a bad fetch fails the build instead of shipping a permissive list. The image and the
+   bind-mounted config must be rebuilt together; a failed build is not a rollback — see
+   TROUBLESHOOTING.
 2. **The request names one of our hostnames.** A `default_server` on port 80 returns 444 for
    any other `Host`; a `default_server` on 443 uses `ssl_reject_handshake`, so an unknown or
    missing SNI never even sees a certificate. Port 80 only redirects — it no longer proxies

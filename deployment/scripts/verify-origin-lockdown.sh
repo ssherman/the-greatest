@@ -6,11 +6,12 @@
 #   ORIGIN_IP=203.0.113.5 deployment/scripts/verify-origin-lockdown.sh   # a rebuilt server
 #
 # Direct probes must be refused: connection closed (curl 52/56), handshake rejected (35),
-# refused (7), timed out (28), stream closed (92, HTTP/2), or nginx's 400 "No required SSL
-# certificate was sent" once Authenticated Origin Pulls is enforced. Anything that looks
-# like a page or a redirect is a failure. Through-Cloudflare probes use /api/ paths, which
-# skip Super Bot Fight Mode, and must carry a cf-ray with an origin-generated status (401
-# or 404) -- never 403, 5xx, or a Cloudflare 52x. Spec:
+# refused (7), timed out (28), stream closed (92, HTTP/2), nginx's 400 "No required SSL
+# certificate was sent" once Authenticated Origin Pulls is enforced, or nginx's own 421
+# Misdirected Request (Host does not match SNI). Anything that looks like a page or a
+# redirect is a failure. Through-Cloudflare probes use /api/ paths, which skip Super Bot
+# Fight Mode, and must carry a cf-ray with an origin-generated status (401 or 404) -- never
+# 403, 5xx, or a Cloudflare 52x. Spec:
 # docs/superpowers/specs/2026-09-14-origin-lockdown-design.md §6-7.
 set -uo pipefail
 
@@ -25,7 +26,7 @@ direct_refused() {   # direct_refused <name> <curl args...>
   local code rc
   code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -k -A "$ua" "$@"); rc=$?
   case "$rc:$code" in
-    7:*|28:*|35:*|52:*|56:*|92:*|0:400) pass "$name (curl exit $rc, http $code)" ;;
+    7:*|28:*|35:*|52:*|56:*|92:*|0:400|0:421) pass "$name (curl exit $rc, http $code)" ;;
     *) fail "$name" "curl exit $rc, http $code -- the origin answered directly" ;;
   esac
 }
@@ -44,6 +45,7 @@ echo "== direct to $ORIGIN_IP (must all be refused)"
 direct_refused "HTTPS with correct SNI"            --resolve "thegreatestmusic.org:443:$ORIGIN_IP" "https://thegreatestmusic.org/"
 direct_refused "HTTPS with no SNI"                 "https://$ORIGIN_IP/"
 direct_refused "HTTPS with unknown SNI"            --resolve "evil.test:443:$ORIGIN_IP" "https://evil.test/"
+direct_refused "HTTPS with correct SNI, foreign Host" --resolve "thegreatestmusic.org:443:$ORIGIN_IP" -H "Host: evil.test" "https://thegreatestmusic.org/"
 direct_refused "HTTP with forged X-Forwarded-Proto" -H "Host: thegreatestmusic.org" -H "X-Forwarded-Proto: https" "http://$ORIGIN_IP/"
 direct_refused "HTTP with unknown Host"            -H "Host: evil.test" "http://$ORIGIN_IP/"
 direct_refused "HTTP for new.thegreatestbooks.org" -H "Host: new.thegreatestbooks.org" "http://$ORIGIN_IP/"

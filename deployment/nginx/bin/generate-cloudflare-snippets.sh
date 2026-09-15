@@ -48,9 +48,11 @@ v4_re='^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$'
 v6_re='^[0-9A-Fa-f:]+/[0-9]{1,3}$'
 while IFS= read -r cidr; do
   [[ "$cidr" =~ $v4_re ]] || fail "unexpected IPv4 entry: $cidr"
+  [[ "$cidr" != */0 ]] || fail "refusing catch-all range: $cidr"
 done < <(jq -r '.result.ipv4_cidrs[]' "$tmp")
 while IFS= read -r cidr; do
   [[ "$cidr" =~ $v6_re ]] || fail "unexpected IPv6 entry: $cidr"
+  [[ "$cidr" != */0 ]] || fail "refusing catch-all range: $cidr"
 done < <(jq -r '.result.ipv6_cidrs[]' "$tmp")
 
 etag=$(jq -r '.result.etag // "unknown"' "$tmp")

@@ -62,7 +62,7 @@ hosting-provider-specific, nothing new running at request time.
 |---|---|
 | 1 | **Cloudflare-only connections are enforced with a `geo` map on `$realip_remote_addr`, not `allow`/`deny`.** The realip module rewrites `$remote_addr` to the visitor's IP before the access module runs, so `allow <cloudflare ranges>; deny all;` would reject every legitimate visitor. `$realip_remote_addr` keeps the connection's real peer. |
 | 2 | **Non-Cloudflare connections get `return 444`** (nginx closes the connection with no response) on both 80 and 443. `127.0.0.1/32` and `::1/128` are in the map so the container healthcheck keeps working. |
-| 3 | **Unknown SNI on 443 gets `ssl_reject_handshake on`** in a `default_server`. No certificate is sent, so IP-scanning certificate indexers stop learning the hostnames, and a no-SNI `curl https://45.33.28.21` fails at the handshake. Unknown `Host` on 80 gets a `default_server` returning 444. |
+| 3 | **Unknown SNI on 443 gets `ssl_reject_handshake on`** in a `default_server`. No certificate is sent, so IP-scanning certificate indexers stop learning the hostnames, and a no-SNI `curl https://45.33.28.21` fails at the handshake. Unknown `Host` on 80 gets a `default_server` returning 444. The same server also `return 444`s, because nginx re-selects the virtual server by `Host` after the handshake and a foreign `Host` on a correct-SNI connection would otherwise reach it. |
 | 4 | **The port-80 proxy branch is deleted.** Under Full/Strict SSL Cloudflare never sends an HTTPS visitor to origin port 80, so `if ($http_x_forwarded_proto != "https") … else proxy_pass` has no legitimate caller — it is the branch that lets an attacker's *Flexible*-mode zone reach Rails today (§3). Port 80 becomes redirect-only for our hostnames. |
 | 5 | **Authenticated Origin Pulls uses Cloudflare's global certificate**, enabled by the zone setting `tls_client_auth`. The CA (`authenticated_origin_pull_ca.pem`, SHA-256 `9A:1A:C2:B4:BE:15:F9:F2:7E:EE:20:A7:34:CB:A4:E9:89:8F:61:00:1B:3B:D7:C8:4B:69:B5:6A:3E:25:A2:B9`, expires 2029-11-01) is committed with those facts in its header comment. It proves "from Cloudflare's network" — the same thing decision 1 proves — but without depending on a list, and Cloudflare holds the keys. |
 | 6 | **Rollout is nginx `optional` → Cloudflare on → nginx `on`.** `optional` accepts Cloudflare's no-certificate requests today and starts verifying the moment Cloudflare presents one. The step that could 495 every request (Cloudflare on, if the CA were wrong) is the one with the fastest rollback: a single settings PATCH through `cfrules`, not a redeploy. |
@@ -183,6 +183,7 @@ server {                       # unknown Host on 80
 server {                       # unknown or missing SNI on 443
     listen 443 ssl default_server;
     ssl_reject_handshake on;
+    return 444;
 }
 
 server {
@@ -193,6 +194,9 @@ server {
     location / { return 301 https://$host$request_uri; }
 }
 ```
+
+A correct-SNI connection whose `Host` names a different server gets nginx's own 421
+(Misdirected Request) because `ssl_verify_client` is set; that is also "no page".
 
 Every existing `:443` server block adds `include /etc/nginx/snippets/cloudflare-only.conf;`
 after its `include …/ssl-params.conf;`. Nothing else in the blocks changes.

@@ -12,6 +12,8 @@ server {
 server {
     listen 443 ssl default_server;
     ssl_reject_handshake on;
+    # A correct-SNI handshake followed by a foreign Host header lands here; say nothing.
+    return 444;
 }
 
 server {

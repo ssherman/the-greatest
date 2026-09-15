@@ -122,6 +122,9 @@ configure per server. Confirm it from your machine:
 ORIGIN_IP=<NEW_IP> deployment/scripts/verify-origin-lockdown.sh
 ```
 
+Until DNS points at the new server, only the direct probes say anything about it — the
+through-Cloudflare probes are still testing the old origin.
+
 ---
 
 ## Decrypting Secrets
