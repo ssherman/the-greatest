@@ -32,9 +32,35 @@ bin/rails api:token:revoke ID=42
 
 Each prints only the secret. `Services::UserAuthenticationService` scopes every lookup to `User.person`, so a service account can never sign in or be linked.
 
-## Deploy prerequisites (edge)
+## Edge (Cloudflare)
 
-Per zone: a Cloudflare custom rule `starts_with(http.request.uri.path, "/api/")` → Skip Super Bot Fight Mode, above the comma/`/rc/`/`.csv` challenge rules, created as Log first. Confirm no cache-everything rule covers `/api/`. Verify from outside with a non-browser user agent: `GET /api/v1/books` must be a 401 with `WWW-Authenticate`, not a challenge page.
+The rules live in the `the-greatest-cloudflare` repo (managed with `cfrules`) — that is the
+source of truth; this section only records what they must do and why.
+
+- **Skip Super Bot Fight Mode AND Cloudflare rate limiting** for
+  `starts_with(http.request.uri.path, "/api/")`. SBFM alone is not enough: the books zone
+  has an edge rate limit of 20 requests per 30 s with a managed challenge, below the API's own
+  60/min (member) and 600/min (system) — Cloudflare would challenge a member at their
+  permitted rate, and a challenge is a block for an API client. The rule also skips the
+  bad-ASN and country challenge rules (`ruleset: current`) for the same reason. What gates
+  the prefix instead: auth plus the per-IP unauthenticated window
+  (`Services::Api::RateLimiter`) for every authenticated endpoint, and that same per-IP window
+  on `/api/v1/openapi.json`, the one unauthenticated route — so nothing under `/api/` is
+  unlimited once the edge steps aside.
+- **Scoped to the API-serving host.** The books zone also fronts the legacy site (apex,
+  `www`), which has no `/api/`; the rule applies to `new.thegreatestbooks.org` only. Music and
+  games are zone-wide, and answer Rails' 404 on `/api/` until their resources ship.
+- A skip rule has no log mode and `starts_with("/api/")` cannot over-match, so there is no
+  log-first step.
+- **Verified 2026-09-14** with a scripted user agent through Cloudflare: `GET
+  https://new.thegreatestbooks.org/api/v1/books` → 401 with `WWW-Authenticate: Bearer` and
+  `X-RateLimit-Limit: 60`.
+- **Caching:** API responses are `private, no-store`, so nothing edge-caches them.
+  `/api/v1/openapi.json` sends `public, max-age=3600` (and no rate headers, so a cached copy
+  cannot mislead) but is served `DYNAMIC` today because
+  `new.thegreatestbooks.org` has no Cloudflare cache rule at all (books' cache-everything
+  covers apex and `www` only). Pre-existing, affects the new site's HTML too, and worth fixing
+  before books launches — not an app bug.
 
 ## Not yet
 

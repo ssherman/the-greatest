@@ -54,6 +54,42 @@ module Api
         assert_equal ["x-domain", "get"], response.parsed_body.dig("paths", "/api/v1/books").keys
       end
 
+      test "a successful response carries no rate-limit headers, so the cached copy cannot mislead" do
+        host! "dev-new.thegreatestbooks.org"
+
+        get "/api/v1/openapi.json"
+
+        assert_response :success
+        assert_nil response.headers["X-RateLimit-Limit"]
+        assert_nil response.headers["X-RateLimit-Remaining"]
+      end
+
+      test "the document is behind the per-IP unauthenticated window" do
+        host! "dev-new.thegreatestbooks.org"
+        limit = Rails.application.config.x.api.unauthenticated_per_minute
+
+        freeze_time do
+          limit.times do
+            get "/api/v1/openapi.json", headers: {"CF-Connecting-IP" => "203.0.113.42"}
+            assert_response :success
+          end
+
+          get "/api/v1/openapi.json", headers: {"CF-Connecting-IP" => "203.0.113.42"}
+
+          assert_response :too_many_requests
+          assert_api_conform(status: 429)
+          assert_equal "application/problem+json; charset=utf-8", response.content_type
+          assert_equal "rate_limited", response.parsed_body["code"]
+          assert_match(/\A\d+\z/, response.headers["Retry-After"])
+          assert_equal "0", response.headers["X-RateLimit-Remaining"]
+          assert_nil response.headers["X-RateLimit-Daily-Limit"]
+          refute_match(/public/, response.headers["Cache-Control"].to_s)
+
+          get "/api/v1/openapi.json", headers: {"CF-Connecting-IP" => "203.0.113.43"}
+          assert_response :success
+        end
+      end
+
       test "the document itself is valid enough to load" do
         assert_kind_of Hash, ::Api::OpenapiDocument.raw
         assert_equal ["/api/v1/openapi.json", "/api/v1/books", "/api/v1/books/{slug}"], ::Api::OpenapiDocument.raw["paths"].keys
