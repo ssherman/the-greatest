@@ -23,7 +23,7 @@ module Services
           end
         end
         finalize
-        {success: true, data: {model: model_key, count: @count}}
+        {success: true, data: {model: model_key, count: @count}.merge(extra_result_data)}
       rescue => e
         {success: false, error: e.message, data: {model: model_key, count: @count}}
       end
@@ -37,6 +37,12 @@ module Services
       end
 
       def finalize
+      end
+
+      # Extra keys a subclass wants in the success result's data (counts it kept
+      # during finalize, for instance). Default: none.
+      def extra_result_data
+        {}
       end
     end
   end

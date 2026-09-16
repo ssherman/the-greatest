@@ -115,9 +115,12 @@ namespace :data_migration do
     pp Services::BooksMigration::PenaltyApplicationMigrator.call
   end
 
-  desc "Migrate legacy list_con_lists into list_penalties (static penalties only)"
+  desc "Migrate legacy list_con_lists into list_penalties (static penalties only) and set Books::List#num_years_covered from the year-span statics + config/books_migration/num_years_covered.yml"
   task list_penalties: :environment do
     pp Services::BooksMigration::ListPenaltyMigrator.call
+    result = Services::BooksMigration::NumYearsCoveredMigrator.call
+    pp result
+    abort "num_years_covered migration failed: #{result[:error]}" unless result[:success]
   end
 
   namespace :num_years_covered do

@@ -13,6 +13,7 @@ class DataMigrationRakeTaskTest < ActiveSupport::TestCase
       data_migration:reading_goals
       data_migration:verify_reading_goals
       data_migration:num_years_covered:derive
+      data_migration:list_penalties
       data_migration:all
     ].each { |name| Rake::Task[name].reenable if Rake::Task.task_defined?(name) }
   end
@@ -82,5 +83,25 @@ class DataMigrationRakeTaskTest < ActiveSupport::TestCase
 
     out, _err = capture_io { Rake::Task["data_migration:num_years_covered:derive"].invoke }
     assert_match(/kept 3 existing entries, added 1/, out)
+  end
+
+  test "list_penalties runs the num_years_covered migrator after the list-penalty migrator" do
+    order = sequence("list_penalties")
+    Services::BooksMigration::ListPenaltyMigrator.expects(:call).once.in_sequence(order)
+      .returns(success: true, data: {model: "ListPenalty", count: 1})
+    Services::BooksMigration::NumYearsCoveredMigrator.expects(:call).once.in_sequence(order)
+      .returns(success: true, data: {model: "Books::List#num_years_covered", count: 1})
+
+    capture_io { Rake::Task["data_migration:list_penalties"].invoke }
+  end
+
+  test "list_penalties aborts when the num_years_covered migrator fails" do
+    Services::BooksMigration::ListPenaltyMigrator.stubs(:call).returns(success: true, data: {model: "ListPenalty", count: 1})
+    Services::BooksMigration::NumYearsCoveredMigrator.stubs(:call).returns(success: false, error: "entry 5: 0 is not a positive integer")
+
+    _out, err = capture_io do
+      assert_raises(SystemExit) { Rake::Task["data_migration:list_penalties"].invoke }
+    end
+    assert_match(/num_years_covered migration failed: entry 5/, err)
   end
 end
