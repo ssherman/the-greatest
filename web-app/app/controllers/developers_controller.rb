@@ -41,11 +41,13 @@ class DevelopersController < ApplicationController
     @indexable = true
   end
 
-  # One row per (method, path). `$ref` parameters are named by the last path
-  # segment of the reference (#/components/parameters/page -> "page"). Only
-  # HTTP_METHODS keys are operations; a path item can also carry `summary`,
-  # `description`, `parameters` or `servers` at its own level, and those are
-  # not operations to describe.
+  # One row per (method, path). Only HTTP_METHODS keys are operations; a path
+  # item can also carry `summary`, `description`, `parameters` or `servers` at
+  # its own level, and those are not operations to describe.
+  #
+  # `parameters` holds the QUERY parameters only. The view labels them as
+  # such, and `slug` (in: path) is already visible in the path as `{slug}`;
+  # listing it under "query parameters" told readers to send `?slug=`.
   def operations_for(document)
     document.fetch("paths").flat_map do |path, item|
       item.slice(*HTTP_METHODS).map do |method, operation|
@@ -55,11 +57,20 @@ class DevelopersController < ApplicationController
           operation_id: operation.fetch("operationId"),
           summary: operation["summary"],
           description: operation["description"],
-          parameters: Array(operation["parameters"]).map { |parameter| parameter["$ref"]&.split("/")&.last || parameter["name"] },
+          parameters: query_parameter_names(document, operation),
           statuses: operation.fetch("responses").keys,
           public: operation["security"] == []
         )
       end
+    end
+  end
+
+  # A `$ref` parameter is resolved through components/parameters so its `in`
+  # is read from the definition, not guessed from the name.
+  def query_parameter_names(document, operation)
+    Array(operation["parameters"]).filter_map do |parameter|
+      resolved = parameter["$ref"] ? document.dig("components", "parameters", parameter["$ref"].split("/").last) : parameter
+      resolved["name"] if resolved&.dig("in") == "query"
     end
   end
 

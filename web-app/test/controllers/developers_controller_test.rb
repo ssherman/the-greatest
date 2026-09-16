@@ -69,6 +69,23 @@ class DevelopersControllerTest < ActionDispatch::IntegrationTest
     assert_select "[id=?]", "endpoint-listAuthors", count: 0
   end
 
+  # `slug` is `in: path` in the contract and already shows in the path as
+  # `{slug}`; listing it as a query parameter told readers to send `?slug=`.
+  # Parameter locations come from components/parameters, not from the name.
+  test "lists query parameters only, never a path parameter" do
+    host! host_for(:books)
+
+    get developers_path
+
+    %w[listBooks listAuthors].each do |operation_id|
+      assert_select "[id=endpoint-#{operation_id}] code", text: "page"
+      assert_select "[id=endpoint-#{operation_id}] code", text: "per_page"
+    end
+    %w[getBook getAuthor].each do |operation_id|
+      assert_select "[id=endpoint-#{operation_id}] code", text: "slug", count: 0
+    end
+  end
+
   # Api::Problem#to_h points `type` at <host>/developers#errors-<code>. A code
   # without an anchor here is a dangling type URI on every error the API sends.
   test "has an anchor for every problem code" do
