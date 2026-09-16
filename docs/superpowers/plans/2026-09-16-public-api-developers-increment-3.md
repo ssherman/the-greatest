@@ -872,8 +872,11 @@ end
 
       <fieldset class="fieldset">
         <%= form.label :expires_in, "Expires", for: "api_token_expires_in", class: "fieldset-legend" %>
+        <%# Option values are STRINGS: options_for_select compares the selected
+            value with Array#include?, and the re-rendered form passes back the
+            posted string, so an integer 90 would never show as selected. %>
         <%= form.select :expires_in,
-              [["Never", ""], ["In 30 days", 30], ["In 90 days", 90], ["In a year", 365]],
+              [["Never", ""], ["In 30 days", "30"], ["In 90 days", "90"], ["In a year", "365"]],
               {selected: local_assigns[:expires_in_value]},
               id: "api_token_expires_in",
               class: "select w-full" %>
@@ -1624,7 +1627,8 @@ test.describe('Books API token page, signed in as a non-member', () => {
     await page.goto('/developers');
 
     await expect(page.getByRole('heading', { level: 1, name: /API/ })).toBeVisible();
-    await expect(page.locator('article#developers').getByRole('link', { name: '/developers/tokens' })).toBeVisible();
+    // .first(): the docs page links to the token page from two sentences.
+    await expect(page.locator('article#developers').getByRole('link', { name: '/developers/tokens' }).first()).toBeVisible();
   });
 });
 ```
@@ -1648,11 +1652,14 @@ const SECRET = /^tg_[A-Za-z0-9]{40}$/;
 // already-handled dialog.
 async function revokeLeftovers(page: Page) {
   await page.goto('/developers/tokens');
-  for (;;) {
-    const revoke = page.getByRole('button', { name: `Revoke ${TOKEN_NAME}`, exact: true }).first();
-    if ((await revoke.count()) === 0) break;
-    await revoke.click();
-    await expect(revoke).toHaveCount(0);
+  const revokes = page.getByRole('button', { name: `Revoke ${TOKEN_NAME}`, exact: true });
+  let remaining = await revokes.count();
+  while (remaining > 0) {
+    await revokes.first().click();
+    // Wait on the whole set, not on .first(): with two leftovers, .first()
+    // simply resolves to the next one and never reaches count 0.
+    await expect(revokes).toHaveCount(remaining - 1);
+    remaining -= 1;
   }
 }
 
