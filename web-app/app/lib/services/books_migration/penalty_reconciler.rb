@@ -14,7 +14,9 @@ module Services
     # values exist before the statics (and their list_penalties) vanish. Before a
     # static goes, any list it tags that still has no num_years_covered gets the
     # legacy bucket, so the step is safe to run alone -- NumYearsCoveredMigrator's
-    # reviewed values overwrite it on the next list_penalties run.
+    # reviewed values overwrite it on the next list_penalties run. The one case it
+    # cannot settle alone, a valueless list tagged by two year-span statics, fails
+    # loud and points at list_penalties rather than guessing a winner.
     class PenaltyReconciler
       MERGES = {
         "List: honorable mention" => "List: is a follow up/honorable mention to a different list",
@@ -101,6 +103,13 @@ module Services
         end
 
         repoint_id_map(source_ids, target.id)
+        conflicted = valueless_lists_with_two_year_tags(source_ids)
+        if conflicted.any?
+          raise "#{conflicted.size} list(s) tagged by more than one year-span static still have no " \
+            "num_years_covered (ids #{conflicted.first(10).inspect}); run data_migration:list_penalties " \
+            "first -- it settles the winner from the legacy configuration"
+        end
+
         sources.each do |source|
           bucket = PenaltyResolver::YEAR_SPAN_BUCKETS.fetch(source.name)
           tagged = source.list_penalties.select(:list_id)
@@ -109,6 +118,16 @@ module Services
           source.destroy! # dependent: :destroy takes its list_penalties and applications
           @counts[:penalties_destroyed] += 1
         end
+      end
+
+      # The backfill writes one bucket per list; a valueless list carrying two
+      # year-span tags has no winner this step can pick -- the legacy
+      # configuration decides, and only NumYearsCoveredMigrator can read it.
+      def valueless_lists_with_two_year_tags(source_ids)
+        ListPenalty.where(penalty_id: source_ids)
+          .joins(:list).where(lists: {num_years_covered: nil})
+          .group(:list_id).having("COUNT(*) > 1")
+          .pluck(:list_id).sort
       end
 
       def repoint_id_map(source_ids, target_id)

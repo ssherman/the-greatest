@@ -195,4 +195,35 @@ class Services::BooksMigration::PenaltyReconcilerTest < ActiveSupport::TestCase
     assert_equal ZERO, result[:data]
     assert ListPenalty.exists?(list: @list_a, penalty: source), "the merge must have rolled back too"
   end
+
+  # Only the legacy configuration can say which of two year-span tags wins
+  # (NumYearsCoveredMigrator applies that rule); the reconciler must not guess.
+  test "fails loud when a list with no num_years_covered is tagged by two year-span statics" do
+    one_year = year_source(ONE_YEAR)
+    ten_years = year_source("List: only covers 10 years")
+    ListPenalty.create!(list: @list_a, penalty: one_year)
+    ListPenalty.create!(list: @list_a, penalty: ten_years)
+
+    result = R.call
+
+    refute result[:success]
+    assert_match(/data_migration:list_penalties/, result[:error])
+    assert_match(/#{@list_a.id}/, result[:error])
+    assert ::Books::Penalty.exists?(one_year.id), "the transaction must roll back"
+    assert_nil @list_a.reload.num_years_covered
+  end
+
+  test "two year-span tags on a list that already has a value are not a conflict" do
+    one_year = year_source(ONE_YEAR)
+    ten_years = year_source("List: only covers 10 years")
+    reviewed = ::Books::List.create!(name: "Reviewed", num_years_covered: 7)
+    ListPenalty.create!(list: reviewed, penalty: one_year)
+    ListPenalty.create!(list: reviewed, penalty: ten_years)
+
+    result = R.call
+
+    assert result[:success], result[:error]
+    assert_equal 7, reviewed.reload.num_years_covered
+    assert_equal 2, result[:data][:penalties_destroyed]
+  end
 end

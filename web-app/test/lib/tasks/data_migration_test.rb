@@ -13,6 +13,7 @@ class DataMigrationRakeTaskTest < ActiveSupport::TestCase
       data_migration:reading_goals
       data_migration:verify_reading_goals
       data_migration:num_years_covered:derive
+      data_migration:penalties
       data_migration:list_penalties
       data_migration:penalties:reconcile
       data_migration:all
@@ -104,6 +105,38 @@ class DataMigrationRakeTaskTest < ActiveSupport::TestCase
       assert_raises(SystemExit) { Rake::Task["data_migration:list_penalties"].invoke }
     end
     assert_match(/num_years_covered migration failed: entry 5/, err)
+  end
+
+  # penalties:reconcile follows in `all` and destroys rows; a migrator failure
+  # before it must stop the chain, not be printed and walked past.
+  test "list_penalties aborts before the num_years_covered migrator when the list-penalty migrator fails" do
+    Services::BooksMigration::ListPenaltyMigrator.stubs(:call).returns(success: false, error: "no migrated Books::List for legacy list_con_lists.list_id=9")
+    Services::BooksMigration::NumYearsCoveredMigrator.expects(:call).never
+
+    _out, err = capture_io do
+      assert_raises(SystemExit) { Rake::Task["data_migration:list_penalties"].invoke }
+    end
+    assert_match(/list_penalties migration failed: no migrated Books::List/, err)
+  end
+
+  test "penalties aborts when the penalty migrator fails, before the application migrator" do
+    Services::BooksMigration::PenaltyMigrator.stubs(:call).returns(success: false, error: "no migrated ranking_configurations")
+    Services::BooksMigration::PenaltyApplicationMigrator.expects(:call).never
+
+    _out, err = capture_io do
+      assert_raises(SystemExit) { Rake::Task["data_migration:penalties"].invoke }
+    end
+    assert_match(/penalties migration failed \(Penalty\): no migrated ranking_configurations/, err)
+  end
+
+  test "penalties aborts when the application migrator fails" do
+    Services::BooksMigration::PenaltyMigrator.stubs(:call).returns(success: true, data: {model: "Penalty", count: 1})
+    Services::BooksMigration::PenaltyApplicationMigrator.stubs(:call).returns(success: false, error: "key not found: 42", data: {model: "PenaltyApplication", count: 0})
+
+    _out, err = capture_io do
+      assert_raises(SystemExit) { Rake::Task["data_migration:penalties"].invoke }
+    end
+    assert_match(/penalties migration failed \(PenaltyApplication\): key not found: 42/, err)
   end
 
   test "penalties:reconcile invokes the reconciler" do

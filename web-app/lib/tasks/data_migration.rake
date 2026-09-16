@@ -111,8 +111,16 @@ namespace :data_migration do
 
   desc "Migrate legacy list_cons into penalties + penalty_applications (active RCs; reuse Global seeds)"
   task penalties: :environment do
-    pp Services::BooksMigration::PenaltyMigrator.call
-    pp Services::BooksMigration::PenaltyApplicationMigrator.call
+    # penalties:reconcile follows in `all` and destroys rows, so a failure here
+    # stops the chain rather than being printed and walked past.
+    {
+      "Penalty" => Services::BooksMigration::PenaltyMigrator,
+      "PenaltyApplication" => Services::BooksMigration::PenaltyApplicationMigrator
+    }.each do |label, migrator|
+      result = migrator.call
+      pp result
+      abort "penalties migration failed (#{label}): #{result[:error]}" unless result[:success]
+    end
   end
 
   namespace :penalties do
@@ -126,7 +134,9 @@ namespace :data_migration do
 
   desc "Migrate legacy list_con_lists into list_penalties (static penalties only) and set Books::List#num_years_covered from the year-span statics + config/books_migration/num_years_covered.yml"
   task list_penalties: :environment do
-    pp Services::BooksMigration::ListPenaltyMigrator.call
+    result = Services::BooksMigration::ListPenaltyMigrator.call
+    pp result
+    abort "list_penalties migration failed: #{result[:error]}" unless result[:success]
     result = Services::BooksMigration::NumYearsCoveredMigrator.call
     pp result
     abort "num_years_covered migration failed: #{result[:error]}" unless result[:success]
