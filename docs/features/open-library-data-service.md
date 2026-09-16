@@ -674,12 +674,18 @@ as `"skipped:<field>"` (R105) so a human can see it. `authors` and `subjects` al
 service's diff but are never applied -- creating authors or categories from them belongs to the
 batch reconciliation spec (see "What this plan deliberately does not build" in the plan), not this
 provider. An accept also `find_or_initialize_by`s a `books_work_openlibrary_id` identifier on the
-book.
+book, plus one identifier per `isbn13`/`isbn10`/`asin`/`goodreads_id` value the query carried (R112)
+-- these are the CALLER's own assertions about the book, the same trust as the title, and are never
+persisted from the service's `record`. Re-running `Importer.call(isbn13: [...])` used to create a
+second book on every call, because the first run's identifier never made it onto the book the finder
+would otherwise have found on the second run.
 
-### Verdict to result (R107)
+### Verdict to result (R107/R113)
 
-`accept` -> apply fills, write the identifier, `success_result`. `abstain` ->
-`failure_result(["Open Library abstained: <decision.reason>"])`. `reject` ->
+`accept` -> apply fills, then a guard: if the book's `title` is still blank (an identifier-only
+import whose diff never filled a title), `failure_result` naming the accepted candidate's key rather
+than writing any identifier (R113) -- otherwise write the identifier(s), `success_result`. `abstain`
+-> `failure_result(["Open Library abstained: <decision.reason>"])`. `reject` ->
 `failure_result(["Open Library rejected: <decision.reason>"])`. `#populate`'s rescue clause is a
 bare `rescue => e` (catches any `StandardError`), not a match on
 `Books::OpenLibrary::Exceptions::Error` specifically: every client exception (circuit open, timeout,

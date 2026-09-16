@@ -167,6 +167,10 @@ section for the full contract).
   conflict or an enrichment is left alone and reported in `data_populated` as `"skipped:<field>"`.
   Authors and subjects are never applied from this provider -- creating authors or categories from
   them belongs to a separate reconciliation effort.
+- **Idempotency:** re-running `Importer.call` with any identifier is idempotent (identifier-first
+  finder; the provider persists the query's identifiers on accept); a title+author-only import is
+  NOT idempotent yet because the provider creates no author rows (that is the reconciliation
+  spec's), so the finder's title+author fallback cannot see an importer-created book.
 
 ## Usage Examples
 
