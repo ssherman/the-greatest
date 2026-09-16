@@ -12,6 +12,7 @@ from openlibrary.api.deps import (
     MissingTable,
     Settings,
     SymlinkedVersion,
+    VersionMismatch,
     WeightsMismatch,
     open_artifact,
 )
@@ -28,13 +29,18 @@ def client(fixture_artifact):
         yield test_client
 
 
-def test_version_reports_the_dump_and_both_code_versions(client):
+def test_version_reports_the_dump_and_both_code_versions(client, fixture_artifact):
     body = client.get("/version").json()
+    manifest = json.loads(fixture_artifact.manifest_path.read_text())
     assert body["source"] == "openlibrary"
     assert body["dump_date"] == "2026-07-31"
-    # "Did the data change or did the code?" needs separate answers.
-    assert "normalizer_version" in body
-    assert "pipeline_version" in body
+    # "Did the data change or did the code?" needs separate answers -- and
+    # they must describe the ARTIFACT (R93), not merely whatever code happens
+    # to be running (the fixture build was made by this running code, so the
+    # manifest values equal the constants -- assert against the manifest to
+    # prove that's what the field actually sources from).
+    assert body["normalizer_version"] == manifest["normalizer_version"]
+    assert body["pipeline_version"] == manifest["pipeline_version"]
     assert "matcher_version" in body
 
 
@@ -101,6 +107,33 @@ def test_a_manifest_without_the_gates_flag_refuses_to_boot(tmp_path, fixture_art
     paths.manifest_path.write_text(json.dumps(manifest))
 
     with pytest.raises(GatesFailed):
+        open_artifact(_settings(paths))
+
+
+def test_a_normalizer_version_mismatch_refuses_to_boot_naming_both_versions(
+    tmp_path, fixture_artifact
+):
+    """R93: an artifact built by an older or newer image must not be served --
+    /version and every envelope would misreport provenance, and the matcher
+    would silently join on fingerprints the artifact computed with a
+    different normalizer."""
+    paths = _copied_version(tmp_path, fixture_artifact)
+    manifest = json.loads(paths.manifest_path.read_text())
+    manifest["normalizer_version"] = 999
+    paths.manifest_path.write_text(json.dumps(manifest))
+
+    with pytest.raises(VersionMismatch, match="normalizer_version") as exc_info:
+        open_artifact(_settings(paths))
+    assert "999" in str(exc_info.value)
+
+
+def test_a_manifest_missing_the_pipeline_version_refuses_to_boot(tmp_path, fixture_artifact):
+    paths = _copied_version(tmp_path, fixture_artifact)
+    manifest = json.loads(paths.manifest_path.read_text())
+    del manifest["pipeline_version"]
+    paths.manifest_path.write_text(json.dumps(manifest))
+
+    with pytest.raises(VersionMismatch, match="pipeline_version"):
         open_artifact(_settings(paths))
 
 

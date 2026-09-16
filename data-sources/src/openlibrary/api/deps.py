@@ -14,10 +14,14 @@ creates, mkdirs, or writes under the artifact root.
 directory; a missing table; a missing manifest or one whose gates did not
 pass (R91 -- `build.py` writes `manifest.json` with `gates_passed: false`
 and all ten tables BEFORE raising on a failed gate, so a gate-failed
-directory looks complete on disk); a weights/matcher version mismatch.
-Only then does it connect. `build_report.json` and the code's
-`eval/thresholds.json` are read ONCE here into `ArtifactState` so a
-malformed file is a boot failure naming the file, never a 500 per request.
+directory looks complete on disk); a manifest whose normalizer/pipeline
+version does not match the running code (R93 -- an artifact built by an
+older or newer image would otherwise misreport its own provenance, and the
+matcher would silently join on fingerprints computed by a different
+normalizer); a weights/matcher version mismatch. Only then does it connect.
+`build_report.json` and the code's `eval/thresholds.json` are read ONCE
+here into `ArtifactState` so a malformed file is a boot failure naming the
+file, never a 500 per request.
 """
 
 from __future__ import annotations
@@ -52,6 +56,11 @@ class SymlinkedVersion(RuntimeError):
     A symlink flip does not affect a process holding open file handles, so the
     API must be pointed at an explicit, real version directory.
     """
+
+
+class VersionMismatch(RuntimeError):
+    """manifest.json's normalizer_version or pipeline_version does not match
+    the version the running code is at."""
 
 
 class WeightsMismatch(RuntimeError):
@@ -148,6 +157,19 @@ def open_artifact(settings: Settings) -> ArtifactState:
             f"(manifest gates_passed={manifest.get('gates_passed')!r}); refusing to serve it"
         )
 
+    for field_name, running_value in (
+        ("normalizer_version", NORMALIZER_VERSION),
+        ("pipeline_version", PIPELINE_VERSION),
+    ):
+        artifact_value = manifest.get(field_name)
+        if artifact_value != running_value:
+            raise VersionMismatch(
+                f"version {settings.data_version} has {field_name}={artifact_value!r} in its "
+                f"manifest, but the running code is {field_name}={running_value!r} -- the "
+                "artifact's provenance would misreport, and the matcher would join on "
+                "fingerprints computed by a different version"
+            )
+
     weights = load_weights()
     if weights.matcher_version != MATCHER_VERSION:
         raise WeightsMismatch(
@@ -171,8 +193,8 @@ def open_artifact(settings: Settings) -> ArtifactState:
         source_version=SourceVersion(
             source=SOURCE,
             dump_date=settings.data_version,
-            normalizer_version=NORMALIZER_VERSION,
-            pipeline_version=PIPELINE_VERSION,
+            normalizer_version=manifest["normalizer_version"],
+            pipeline_version=manifest["pipeline_version"],
             matcher_version=MATCHER_VERSION,
         ),
         weights=weights,
