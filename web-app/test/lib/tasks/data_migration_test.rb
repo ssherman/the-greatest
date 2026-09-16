@@ -12,6 +12,7 @@ class DataMigrationRakeTaskTest < ActiveSupport::TestCase
     %w[
       data_migration:reading_goals
       data_migration:verify_reading_goals
+      data_migration:num_years_covered:derive
       data_migration:all
     ].each { |name| Rake::Task[name].reenable if Rake::Task.task_defined?(name) }
   end
@@ -70,5 +71,16 @@ class DataMigrationRakeTaskTest < ActiveSupport::TestCase
       assert_raises(SystemExit) { Rake::Task["data_migration:verify_reading_goals"].invoke }
     end
     assert_match(/reading_goals verification failed: wrong goal count; unexpected target schema/, err)
+  end
+
+  test "num_years_covered:derive derives from legacy rows and appends to the review file" do
+    rows = [{id: 7, name: "Best of the 1990s", description: nil, year_published: 2001, bucket: 10, buckets: [10]}]
+    Services::BooksMigration::NumYearsCoveredDeriver.expects(:legacy_rows).once.returns(rows)
+    Services::BooksMigration::NumYearsCoveredFile.expects(:append).once.with { |entries|
+      entries.size == 1 && entries.first.id == 7 && entries.first.years == 10
+    }.returns(kept: 3, added: 1)
+
+    out, _err = capture_io { Rake::Task["data_migration:num_years_covered:derive"].invoke }
+    assert_match(/kept 3 existing entries, added 1/, out)
   end
 end

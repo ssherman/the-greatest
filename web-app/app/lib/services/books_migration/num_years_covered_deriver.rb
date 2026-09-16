@@ -31,6 +31,37 @@ module Services
         rows.map { |row| new(row, current_year).entry }
       end
 
+      # The rows `call` wants, read from the legacy database: every list carrying a
+      # year-span static on an ACTIVE legacy configuration (the same set the
+      # migration maps), with its bucket from the highest configuration id and every
+      # bucket it carries for the CONFLICT flag. Legacy-only on purpose: the file can
+      # be regenerated before, after, or without a migration run.
+      def self.legacy_rows
+        buckets = PenaltyResolver::YEAR_SPAN_BUCKETS
+        active_ids = LegacyBooks::RankingConfiguration.where(archived: false).pluck(:id)
+        cons = LegacyBooks::ListCon
+          .where(name: buckets.keys, ranking_configuration_id: active_ids)
+          .pluck(:id, :name, :ranking_configuration_id)
+          .to_h { |id, name, rc_id| [id, [rc_id, buckets.fetch(name)]] }
+        pairs = LegacyBooks::ListConList
+          .where(list_con_id: cons.keys)
+          .joins("JOIN ranked_lists ON ranked_lists.id = list_con_lists.ranked_list_id")
+          .pluck(Arel.sql("ranked_lists.list_id"), :list_con_id)
+        by_list = pairs.group_by(&:first).transform_values { |ps| ps.map { |_, con_id| cons.fetch(con_id) } }
+
+        LegacyBooks::List.where(id: by_list.keys).order(:id).map do |list|
+          hits = by_list.fetch(list.id)
+          {
+            id: list.id,
+            name: list.name,
+            description: list.description,
+            year_published: list.year_published,
+            bucket: hits.max_by(&:first).last,
+            buckets: hits.map(&:last).uniq
+          }
+        end
+      end
+
       def initialize(row, current_year)
         @row = row
         @current_year = current_year

@@ -120,6 +120,16 @@ namespace :data_migration do
     pp Services::BooksMigration::ListPenaltyMigrator.call
   end
 
+  namespace :num_years_covered do
+    desc "Write/append config/books_migration/num_years_covered.yml from legacy year-span list_cons (active RCs); existing entries are kept"
+    task derive: :environment do
+      rows = Services::BooksMigration::NumYearsCoveredDeriver.legacy_rows
+      entries = Services::BooksMigration::NumYearsCoveredDeriver.call(rows)
+      result = Services::BooksMigration::NumYearsCoveredFile.append(entries)
+      puts "#{Services::BooksMigration::NumYearsCoveredFile::PATH}: kept #{result[:kept]} existing entries, added #{result[:added]} (#{entries.size} lists derived)"
+    end
+  end
+
   desc "Migrate legacy user_lists into Books::UserList (preserve id; list_type + view_mode symbol-remap)"
   task user_lists: :environment do
     pp Services::BooksMigration::UserListMigrator.call
