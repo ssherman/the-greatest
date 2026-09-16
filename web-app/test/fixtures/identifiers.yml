@@ -82,3 +82,13 @@ war_and_peace_asin:
   identifiable: war_and_peace (Books::Book)
   identifier_type: 7  # books_work_asin
   value: "B00JXPRBOU"
+
+crime_and_punishment_openlibrary:
+  identifiable: crime_and_punishment (Books::Book)
+  identifier_type: 2  # books_work_openlibrary_id
+  value: "OL262758W"
+
+of_mice_and_men_goodreads:
+  identifiable: of_mice_and_men (Books::Book)
+  identifier_type: 3  # books_work_goodreads_id
+  value: "36593969"

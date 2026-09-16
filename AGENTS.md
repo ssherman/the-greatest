@@ -47,6 +47,17 @@ web-app/test/             # mirrors app/, namespaced to match (module Music; cla
 docs/                     # project root, NOT web-app/
 ```
 
+## The Python data service (`data-sources/`)
+
+Python lives in `data-sources/` at the project root, a **sibling of `web-app/`, never inside
+it**. Run Python commands from `data-sources/` and Rails commands from `web-app/`. Dependencies
+are `uv` with a committed lockfile — every install uses `uv sync --locked`, which fails on drift
+instead of silently resolving something new. The built artifact lives outside the repo at
+`/home/shane/ol-data/versions/<dump-date>/` and is mounted into the service read-only. Four
+boundaries, enforced structurally: it never writes to Rails; it holds nothing that is not
+rebuildable from a dump; it is never on a public request path; no covers, no public search, no
+serving. See `docs/features/open-library-data-service.md`.
+
 ## The development database is not disposable
 
 **`bin/refresh-dev-db.sh` restores the whole production dump, books included.** It runs
