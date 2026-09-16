@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from openlibrary.api import meta
+from openlibrary.api import meta, retrieval
 from openlibrary.api.deps import ArtifactState, Settings, open_artifact
 
 
@@ -31,6 +31,7 @@ def create_app(state: ArtifactState | None = None) -> FastAPI:
     app = FastAPI(title="Open Library data service", version="0.1.0", lifespan=lifespan)
     app.state.artifact = artifact_state
     app.include_router(meta.router)
+    app.include_router(retrieval.router)
     return app
 
 
