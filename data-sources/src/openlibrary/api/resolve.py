@@ -19,13 +19,15 @@ call over the returned candidates (never a per-candidate query) -- see
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Literal
 
 import duckdb
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-from common.schemas import DiffEntry, Envelope, SourceKey, classify_diff
+from common.normalize import fingerprint, name_fingerprint
+from common.schemas import DiffEntry, DiffKind, Envelope, SourceKey, classify_diff
 from openlibrary.api.deps import ArtifactState, cursor, get_state
 from openlibrary.api.retrieval import WorkRecord, fetch_works
 from openlibrary.matcher.blocking import BlockingQuery, generate_candidates
@@ -81,6 +83,15 @@ class ResolveCandidate(BaseModel):
     every other candidate's `verdict` is a threshold-only readout --
     `"reject"` when its score is below `weights.reject_threshold`, else
     `"abstain"` -- so a non-top candidate is never `"accept"` (ruling R73).
+
+    `margin` is this candidate's score minus the NEXT-ranked candidate's
+    score, computed over the full ranking before `limit` truncates what is
+    returned. A candidate with no next-ranked candidate to compare against
+    -- including the top candidate when it is the only one -- has its own
+    score as its margin: the same convention `decide()` uses for an absent
+    runner-up (`runner_up = 0.0`). That convention is what makes
+    `candidates[0].margin == decision.margin` hold whenever the top
+    candidate is present in the response (ruling R85).
     """
 
     key: SourceKey
@@ -103,6 +114,27 @@ class ResolveResponse(BaseModel):
 # ----------------------------------------------------------------------------- diff
 
 
+def _text_diff_kind(ours: str | None, theirs: str | None) -> DiffKind:
+    """Ruling R86: compare two text fields by FINGERPRINT
+    (`common.normalize.fingerprint`), not raw string equality, so
+    "The great Gatsby" vs "The Great Gatsby" reads as `agreement` rather
+    than a `conflict` a human has to clear. Falls through to `classify_diff`
+    on the RAW values whenever either side has no usable fingerprint, so
+    "both empty" is still `absent` and "one empty" is still `fill`."""
+    ours_fp = fingerprint(ours)
+    theirs_fp = fingerprint(theirs)
+    if ours_fp and theirs_fp and ours_fp == theirs_fp:
+        return "agreement"
+    return classify_diff(ours, theirs)
+
+
+def _list_diff_kind(ours: list[str], theirs: list[str], fp: Callable[[str], str]) -> DiffKind:
+    """Ruling R86: the list counterpart of `_text_diff_kind` -- fingerprint
+    every element (`fp`) before handing the two lists to `classify_diff`, so
+    its set/enrichment logic runs on normalized names, not raw ones."""
+    return classify_diff([fp(v) for v in ours], [fp(v) for v in theirs])
+
+
 def build_diff(request: ResolveRequest, record: WorkRecord) -> list[DiffEntry]:
     """The work-level diff between the query and one candidate's retrieval record.
 
@@ -112,8 +144,17 @@ def build_diff(request: ResolveRequest, record: WorkRecord) -> list[DiffEntry]:
     surrounding edition-year evidence collapsed into a single number),
     `authors` (primary names only, both sides), and `subjects` (the request
     never carries any, so `ours=[]` here and this is a `fill` whenever OL
-    has subjects at all). Each entry's `kind` comes from
-    `common.schemas.classify_diff`.
+    has subjects at all).
+
+    Ruling R86: `title`/`subtitle` are compared by fingerprint
+    (`_text_diff_kind`) and `authors`/`subjects` element-wise by fingerprint
+    (`_list_diff_kind`, `name_fingerprint` for authors and `fingerprint` for
+    subjects) -- a case/punctuation-only difference (or "F. Scott
+    Fitzgerald" vs "F. Scott FITZGERALD") reads as `agreement`, which is
+    what makes a 126k-row pass tractable rather than 126k manual reviews.
+    Every `DiffEntry.ours`/`.theirs` below still carries the RAW value --
+    fingerprints are compared, never displayed. `first_published_year` is
+    numeric and unaffected: it still goes straight to `classify_diff`.
 
     Edition-level fields -- isbn13, languages, page_count, publisher, series
     -- are deliberately NOT diffed here: a work has many editions and no
@@ -122,16 +163,37 @@ def build_diff(request: ResolveRequest, record: WorkRecord) -> list[DiffEntry]:
     """
     theirs_year = record.year_evidence.declared_year if record.year_evidence else None
     theirs_authors = [author.name for author in record.authors]
-    fields: list[tuple[str, object, object]] = [
-        ("title", request.title, record.title),
-        ("subtitle", request.subtitle, record.subtitle),
-        ("first_published_year", request.year, theirs_year),
-        ("authors", request.author_names, theirs_authors),
-        ("subjects", [], record.subjects),
-    ]
     return [
-        DiffEntry(field=name, ours=ours, theirs=theirs, kind=classify_diff(ours, theirs))
-        for name, ours, theirs in fields
+        DiffEntry(
+            field="title",
+            ours=request.title,
+            theirs=record.title,
+            kind=_text_diff_kind(request.title, record.title),
+        ),
+        DiffEntry(
+            field="subtitle",
+            ours=request.subtitle,
+            theirs=record.subtitle,
+            kind=_text_diff_kind(request.subtitle, record.subtitle),
+        ),
+        DiffEntry(
+            field="first_published_year",
+            ours=request.year,
+            theirs=theirs_year,
+            kind=classify_diff(request.year, theirs_year),
+        ),
+        DiffEntry(
+            field="authors",
+            ours=request.author_names,
+            theirs=theirs_authors,
+            kind=_list_diff_kind(request.author_names, theirs_authors, name_fingerprint),
+        ),
+        DiffEntry(
+            field="subjects",
+            ours=[],
+            theirs=record.subjects,
+            kind=_list_diff_kind([], record.subjects, fingerprint),
+        ),
     ]
 
 
@@ -180,7 +242,12 @@ def resolve(
     # Per-candidate margin to the next-ranked candidate, computed over the
     # FULL ranking before `limit` truncates the returned list: a candidate's
     # margin is a fact about the field it was found in, not an artifact of
-    # how many results the caller asked to see (0.0 for the last).
+    # how many results the caller asked to see. A candidate with no
+    # next-ranked candidate -- the last in the ranking, including a lone
+    # candidate -- has its OWN score as its margin: the same "absent
+    # runner-up counts as 0.0" convention `decide()` uses for
+    # `decision.margin` (ruling R85), which is exactly what keeps
+    # `candidates[0].margin == decision.margin`.
     margins = [
         ranked[i].score - (ranked[i + 1].score if i + 1 < len(ranked) else 0.0)
         for i in range(len(ranked))
