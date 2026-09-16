@@ -153,15 +153,6 @@ class RankingConfiguration < ApplicationRecord
     media_noun_plural.capitalize
   end
 
-  # The static one-year penalty this domain tags its year rollups with, or nil
-  # when the domain penalises time scope dynamically instead. Books is the only
-  # domain with a static penalty; games, albums and songs apply the dynamic
-  # Global::Penalty "List: number of years covered", which reads
-  # list.num_years_covered and therefore needs no tag.
-  def one_year_penalty_name
-    nil
-  end
-
   def default_primary?
     self.class.default_primary&.id == id
   end
