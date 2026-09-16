@@ -170,6 +170,54 @@ module DataImporters
           assert_empty ::Identifier.where(identifiable_type: "Books::Book", value: new_isbn)
         end
 
+        test "R115: a blank isbn13 alongside a real one persists exactly one identifier row" do
+          stub_open_library_client
+          new_isbn = "9780061120084"
+          stub_request(:post, "#{BASE_URL}/resolve").to_return(
+            status: 200,
+            body: accept_response(
+              diff: [
+                {"field" => "title", "ours" => nil, "theirs" => "The Old Man and the Sea", "kind" => "fill"},
+                {"field" => "first_published_year", "ours" => nil, "theirs" => 1952, "kind" => "fill"}
+              ],
+              record: work_record_hash(title: "The Old Man and the Sea")
+            ).to_json
+          )
+
+          result = nil
+          assert_difference "::Books::Book.count", 1 do
+            result = Importer.call(isbn13: [new_isbn, ""])
+          end
+
+          assert result.success?
+          assert result.item.persisted?
+          assert_equal 1, result.item.identifiers.where(identifier_type: :books_work_isbn13).count
+        end
+
+        test "R115: a duplicated isbn13 collapses to exactly one identifier row" do
+          stub_open_library_client
+          new_isbn = "9780345391803"
+          stub_request(:post, "#{BASE_URL}/resolve").to_return(
+            status: 200,
+            body: accept_response(
+              diff: [
+                {"field" => "title", "ours" => nil, "theirs" => "The Old Man and the Sea", "kind" => "fill"},
+                {"field" => "first_published_year", "ours" => nil, "theirs" => 1952, "kind" => "fill"}
+              ],
+              record: work_record_hash(title: "The Old Man and the Sea")
+            ).to_json
+          )
+
+          result = nil
+          assert_difference "::Books::Book.count", 1 do
+            result = Importer.call(isbn13: [new_isbn, new_isbn])
+          end
+
+          assert result.success?
+          assert result.item.persisted?
+          assert_equal 1, result.item.identifiers.where(identifier_type: :books_work_isbn13).count
+        end
+
         test "an invalid query raises ArgumentError" do
           assert_raises(ArgumentError) { Importer.call(title: nil) }
         end

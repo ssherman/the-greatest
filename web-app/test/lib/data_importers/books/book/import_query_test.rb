@@ -125,6 +125,26 @@ module DataImporters
           assert_equal "OL262758W", query.open_library_work_key
         end
 
+        # ------------------------------------------------------- R115: normalization
+
+        test "R115: identifier arrays drop blanks and duplicates" do
+          query = ImportQuery.new(title: "War and Peace", isbn13: ["", "X", "X", nil])
+
+          assert_equal ["X"], query.isbn13
+        end
+
+        test "R115: a blank open_library_work_key normalizes to nil" do
+          query = ImportQuery.new(title: "War and Peace", open_library_work_key: "")
+
+          assert_nil query.open_library_work_key
+        end
+
+        test "R115: a query with only a blank isbn13 is invalid (no identifier present)" do
+          query = ImportQuery.new(title: nil, isbn13: [""])
+
+          refute query.valid?
+        end
+
         test "year is accessible as a reader" do
           query = ImportQuery.new(title: "War and Peace", year: 1869)
 

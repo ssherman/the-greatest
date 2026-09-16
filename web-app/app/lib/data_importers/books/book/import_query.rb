@@ -13,11 +13,18 @@ module DataImporters
           @title = title
           @author_names = Array(author_names)
           @year = year
-          @isbn13 = Array(isbn13)
-          @isbn10 = Array(isbn10)
-          @asin = Array(asin)
-          @goodreads_id = Array(goodreads_id)
-          @open_library_work_key = open_library_work_key
+          # R115: normalize ONCE, here, at the root -- a blank or duplicate
+          # identifier must never reach the finder, the wire, or an
+          # identifier row. `[""].any?` is true, so an unfiltered blank made
+          # `identifier_present?` pass validation for a query that carried no
+          # real identifier, and an unfiltered duplicate made the provider's
+          # find_or_initialize_by loop build two unsaved sibling Identifiers
+          # (which can't see each other) instead of one.
+          @isbn13 = Array(isbn13).compact_blank.uniq
+          @isbn10 = Array(isbn10).compact_blank.uniq
+          @asin = Array(asin).compact_blank.uniq
+          @goodreads_id = Array(goodreads_id).compact_blank.uniq
+          @open_library_work_key = open_library_work_key.presence
         end
 
         def valid?
