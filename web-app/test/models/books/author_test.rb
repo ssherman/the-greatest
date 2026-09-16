@@ -126,5 +126,30 @@ module Books
 
       assert_includes Books::Author.where(gender: :female), garnett
     end
+
+    # primary_ranked_item: the API's show reads the author's rank through this
+    # (mirrors Books::Book#primary_ranked_item).
+    test "primary_ranked_item is the row in the default primary author ranking" do
+      author = books_authors(:tolstoy)
+      RankedItem.create!(item: author, ranking_configuration: ranking_configurations(:books_authors_secondary), rank: 9, score: 10)
+      RankedItem.create!(item: author, ranking_configuration: ranking_configurations(:books_authors_global), rank: 2, score: 90)
+
+      assert_equal 2, Books::Author.find(author.id).primary_ranked_item.rank
+    end
+
+    test "primary_ranked_item is nil for an author the primary ranking does not rank" do
+      author = books_authors(:king)
+      RankedItem.create!(item: author, ranking_configuration: ranking_configurations(:books_authors_secondary), rank: 1, score: 100)
+
+      assert_nil Books::Author.find(author.id).primary_ranked_item
+    end
+
+    test "primary_ranked_item is nil when there is no primary author ranking" do
+      author = books_authors(:tolstoy)
+      RankedItem.create!(item: author, ranking_configuration: ranking_configurations(:books_authors_global), rank: 1, score: 100)
+      Books::Authors::RankingConfiguration.stubs(:default_primary).returns(nil)
+
+      assert_nil Books::Author.find(author.id).primary_ranked_item
+    end
   end
 end

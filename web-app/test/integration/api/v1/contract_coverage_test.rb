@@ -21,12 +21,23 @@ module Api
         ["GET", "/api/v1/books/{slug}", "401"] => -> { get "/api/v1/books/war-and-peace" },
         ["GET", "/api/v1/books/{slug}", "403"] => -> { get "/api/v1/books/war-and-peace", headers: bearer(ApiTokenSecrets::NON_MEMBER) },
         ["GET", "/api/v1/books/{slug}", "404"] => -> { get "/api/v1/books/no-such-book", headers: bearer(ApiTokenSecrets::MEMBER) },
-        ["GET", "/api/v1/books/{slug}", "429"] => -> { with_exhausted_limit { get "/api/v1/books/war-and-peace", headers: bearer(ApiTokenSecrets::MEMBER) } }
+        ["GET", "/api/v1/books/{slug}", "429"] => -> { with_exhausted_limit { get "/api/v1/books/war-and-peace", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/authors", "200"] => -> { get "/api/v1/authors", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/authors", "400"] => -> { get "/api/v1/authors?page=0", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/authors", "401"] => -> { get "/api/v1/authors" },
+        ["GET", "/api/v1/authors", "403"] => -> { get "/api/v1/authors", headers: bearer(ApiTokenSecrets::MUSIC_ONLY) },
+        ["GET", "/api/v1/authors", "429"] => -> { with_exhausted_limit { get "/api/v1/authors", headers: bearer(ApiTokenSecrets::MEMBER) } },
+        ["GET", "/api/v1/authors/{slug}", "200"] => -> { get "/api/v1/authors/#{books_authors(:tolstoy).slug}", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/authors/{slug}", "401"] => -> { get "/api/v1/authors/leo-tolstoy" },
+        ["GET", "/api/v1/authors/{slug}", "403"] => -> { get "/api/v1/authors/leo-tolstoy", headers: bearer(ApiTokenSecrets::NON_MEMBER) },
+        ["GET", "/api/v1/authors/{slug}", "404"] => -> { get "/api/v1/authors/no-such-author", headers: bearer(ApiTokenSecrets::MEMBER) },
+        ["GET", "/api/v1/authors/{slug}", "429"] => -> { with_exhausted_limit { get "/api/v1/authors/leo-tolstoy", headers: bearer(ApiTokenSecrets::MEMBER) } }
       }.freeze
 
       setup do
         host! "dev-new.thegreatestbooks.org"
         RankedItem.create!(item: books_books(:war_and_peace), ranking_configuration: ranking_configurations(:books_global), rank: 1, score: 100)
+        RankedItem.create!(item: books_authors(:tolstoy), ranking_configuration: ranking_configurations(:books_authors_global), rank: 1, score: 100)
       end
 
       test "the map and the document describe the same responses" do

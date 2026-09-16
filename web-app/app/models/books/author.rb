@@ -49,6 +49,13 @@ class Books::Author < ApplicationRecord
   has_many :category_items, as: :item, dependent: :destroy, inverse_of: :item
   has_many :categories, through: :category_items, class_name: "Books::Category"
   has_many :ranked_items, as: :item, dependent: :destroy
+  # Scoped to the primary AUTHOR ranking (Books::Authors::, not Books::). The
+  # lambda runs once per query, not once per record, so a preload costs one
+  # query for the batch and the value is always read live. Derived from
+  # ranked_items, so Books::Author::Merger has nothing extra to migrate.
+  has_one :primary_ranked_item,
+    -> { where(ranking_configuration_id: Books::Authors::RankingConfiguration.default_primary&.id) },
+    as: :item, class_name: "RankedItem"
 
   validates :name, presence: true
   validates :kind, presence: true
