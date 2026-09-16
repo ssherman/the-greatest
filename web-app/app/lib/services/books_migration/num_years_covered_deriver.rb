@@ -75,13 +75,19 @@ module Services
         return [25, "quarter century"] if text.match?(QUARTER_CENTURY)
         if (m = text.match(SINCE))
           from = m[1].to_i
-          published = publication_year
-          return [published - from + 1, "since #{from}, published #{published}"] if published > from
+          published, substituted = publication_year
+          if published > from
+            flag_no_year_published if substituted
+            return [published - from + 1, "since #{from}, published #{published}"]
+          end
         end
         return [10, "decade"] if text.match?(DECADE)
         if text.match?(TWENTY_FIRST)
-          published = publication_year
-          return [published - 2000, "21st century so far, published #{published}"] if published > 2000
+          published, substituted = publication_year
+          if published > 2000
+            flag_no_year_published if substituted
+            return [published - 2000, "21st century so far, published #{published}"]
+          end
         end
         return [100, "century"] if text.match?(CENTURY)
         return [nil, "millennium: left to the reviewer"] if text.match?(MILLENNIUM)
@@ -89,12 +95,19 @@ module Services
         nil
       end
 
+      # => [year, substituted?]. Does not flag by itself -- the caller only
+      # knows whether the substituted year was actually used once its own
+      # guard (published > from / published > 2000) passes, so flagging
+      # happens there, not here.
       def publication_year
-        return @row[:year_published] if @row[:year_published]
+        return [@row[:year_published], false] if @row[:year_published]
 
+        [@current_year, true]
+      end
+
+      def flag_no_year_published
         flag = "NO year_published (used #{@current_year})"
         @flags << flag unless @flags.include?(flag)
-        @current_year
       end
     end
   end

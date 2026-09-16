@@ -119,6 +119,13 @@ class Services::BooksMigration::NumYearsCoveredDeriverTest < ActiveSupport::Test
     assert_equal({1 => 24}, YAML.safe_load(e.to_line))
   end
 
+  test "a since-year that falls through leaves no year_published flag behind" do
+    e = derive(name: "Since 2026", year_published: nil, bucket: 10, buckets: [10])
+    assert_equal 10, e.years
+    assert_equal "unparsed", e.reason
+    assert_empty e.flags
+  end
+
   test "to_line appends flags after the reason" do
     e = derive(name: "The New Vanguard", description: "Novels of the 21st century.", year_published: nil)
     assert_match(/\(25 -> 21st century so far, published 2026; FROM DESCRIPTION; NO year_published \(used 2026\)\)\z/, e.to_line)
