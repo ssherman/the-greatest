@@ -619,7 +619,14 @@ keeps the 10 s default.
 `CircuitBreaker` is Redis-backed, via `REDIS_POOL` (injectable for tests), because `Rails.cache` is
 `:null_store` in test and `:memory_store` in development and cannot carry breaker state across
 processes. Key `circuit:books:open_library` (`BaseClient` constructs it with
-`key: "books:open_library"`); `failure_threshold` 5; `cooldown` 60 s.
+`key: "books:open_library"`); `failure_threshold` 5; `cooldown` 60 s. The Redis hash's own TTL is
+`2 * cooldown`, not `cooldown` (R118): `opened_at` must still be readable at the exact instant the
+cooldown ends, whatever moment the next call actually arrives, so `#call` can tell a half-open
+probe apart from a fresh, fully-closed breaker. A failed half-open probe re-opens the circuit
+immediately -- `failures` is forced up to at least `failure_threshold` and `opened_at` is stamped
+`now`, regardless of what the stored counter says, because it may itself have expired between the
+read and the probe. Only a dead process with no calls at all for a full two cooldowns finally lets
+the key expire and the breaker reset to fresh.
 
 Which errors count (R99/R109/R110): inside `BaseClient#perform`, the HTTP call and the JSON parse
 both happen inside `breaker.call`'s block. A Faraday timeout or connection failure, a 5xx (raised as

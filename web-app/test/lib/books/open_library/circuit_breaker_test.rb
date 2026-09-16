@@ -111,6 +111,64 @@ module Books
         assert_not @breaker.open?
         assert_equal "ok", @breaker.call { "ok" }
       end
+
+      # R118 (Codex, PR #315): record_failure expired both `failures` and
+      # `opened_at` exactly when the cooldown ended. A failing half-open
+      # probe then restarted `hincrby` at 1, so the circuit stayed closed
+      # and permitted more requests during a continuing outage. Masked
+      # before this fix by FakeRedis#expire being a no-op.
+
+      test "R118: a failed half-open probe re-opens the circuit, and the next call raises CircuitOpenError without invoking the block" do
+        3.times do
+          assert_raises(RuntimeError) { @breaker.call { raise "boom" } }
+        end
+
+        travel_to(61.seconds.from_now) do
+          assert_raises(RuntimeError) { @breaker.call { raise "boom again" } }
+          assert @breaker.open?
+
+          invoked = false
+          assert_raises(Books::OpenLibrary::Exceptions::CircuitOpenError) do
+            @breaker.call { invoked = true }
+          end
+          assert_not invoked
+        end
+      end
+
+      test "R118: accumulated sub-threshold failure state survives past one cooldown (expiry is 2x cooldown)" do
+        2.times do
+          assert_raises(RuntimeError) { @breaker.call { raise "boom" } }
+        end
+        assert_not @breaker.open?
+
+        travel_to(61.seconds.from_now) do
+          assert_raises(RuntimeError) { @breaker.call { raise "boom again" } }
+          assert @breaker.open?
+        end
+      end
+
+      test "R118: a dead process's state clears after two full cooldowns of silence, so one failure does not re-open it" do
+        3.times do
+          assert_raises(RuntimeError) { @breaker.call { raise "boom" } }
+        end
+
+        travel_to(121.seconds.from_now) do
+          assert_not @breaker.open?
+
+          assert_raises(RuntimeError) { @breaker.call { raise "boom" } }
+          assert_not @breaker.open?
+        end
+      end
+
+      test "FakeRedis#expire actually drops the key once its TTL elapses" do
+        redis = FakeRedis.new
+        redis.hset("k", "f", "v")
+        redis.expire("k", 60)
+
+        travel_to(61.seconds.from_now) do
+          assert_equal({}, redis.hgetall("k"))
+        end
+      end
     end
   end
 end
