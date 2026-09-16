@@ -13,9 +13,16 @@ read-only, and a flag that cannot enforce anything is worse than no flag: it
 tells a future caller they are safe when they are not. What actually enforces
 read-only is the container's `:ro` bind mount and never issuing a COPY against a
 version directory.
+
+`temp_directory` defaults to `paths.tmp_dir` (the pipeline's own spill
+directory, under the artifact root). The API passes an explicit directory
+instead: its artifact root is mounted read-only, so `paths.tmp_dir` cannot be
+created there.
 """
 
 from __future__ import annotations
+
+from pathlib import Path
 
 import duckdb
 
@@ -27,12 +34,14 @@ def connect(
     *,
     memory_limit: str = "8GB",
     threads: int | None = None,
+    temp_directory: Path | None = None,
 ) -> duckdb.DuckDBPyConnection:
     connection = duckdb.connect(database=":memory:")
     connection.execute("SET preserve_insertion_order=false;")
     connection.execute(f"SET memory_limit='{memory_limit}';")
-    paths.tmp_dir.mkdir(parents=True, exist_ok=True)
-    connection.execute(f"SET temp_directory='{paths.tmp_dir}';")
+    spill_dir = paths.tmp_dir if temp_directory is None else temp_directory
+    spill_dir.mkdir(parents=True, exist_ok=True)
+    connection.execute(f"SET temp_directory='{spill_dir}';")
     if threads is not None:
         connection.execute(f"SET threads={threads};")
     return connection
