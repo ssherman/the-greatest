@@ -151,8 +151,9 @@ for item in response.json()["data"]:
     <p>
       Errors are <a href="https://www.rfc-editor.org/rfc/rfc9457">RFC 9457</a>
       problem documents (<code>application/problem+json</code>) with a stable
-      <code>code</code> to switch on. <code>401</code> and <code>403</code> responses
-      also carry a <code>WWW-Authenticate: Bearer</code> challenge.
+      <code>code</code> to switch on. <code>401</code> responses, and the
+      <code>insufficient_scope</code> <code>403</code>, also carry a
+      <code>WWW-Authenticate: Bearer</code> challenge.
     </p>
     <div class="not-prose overflow-x-auto">
       <table id="errors-table" class="table">

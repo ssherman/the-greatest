@@ -22,6 +22,7 @@ class DevelopersController < ApplicationController
   before_action :mark_indexable
 
   Operation = Struct.new(:method, :path, :operation_id, :summary, :description, :parameters, :statuses, :public, keyword_init: true)
+  HTTP_METHODS = %w[get put post delete options head patch trace].freeze
 
   def show
     @base_url = Api::Host.base_url
@@ -41,10 +42,13 @@ class DevelopersController < ApplicationController
   end
 
   # One row per (method, path). `$ref` parameters are named by the last path
-  # segment of the reference (#/components/parameters/page -> "page").
+  # segment of the reference (#/components/parameters/page -> "page"). Only
+  # HTTP_METHODS keys are operations; a path item can also carry `summary`,
+  # `description`, `parameters` or `servers` at its own level, and those are
+  # not operations to describe.
   def operations_for(document)
     document.fetch("paths").flat_map do |path, item|
-      item.except(Api::OpenapiDocument::DOMAIN_KEY).map do |method, operation|
+      item.slice(*HTTP_METHODS).map do |method, operation|
         Operation.new(
           method: method.upcase,
           path: path,

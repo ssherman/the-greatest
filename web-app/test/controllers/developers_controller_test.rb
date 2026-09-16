@@ -31,6 +31,9 @@ class DevelopersControllerTest < ActionDispatch::IntegrationTest
 
     assert_includes response.headers["Cache-Control"], "public"
     assert_includes response.headers["Cache-Control"], "max-age=86400"
+    # A cookie makes Cloudflare bypass the cache entirely; PagesControllerTest
+    # asserts the same for the policy pages.
+    assert_nil response.headers["Set-Cookie"]
   end
 
   # The page is served from the Cloudflare cache, so one per-visitor byte in it

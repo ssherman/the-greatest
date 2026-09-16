@@ -74,6 +74,15 @@ test.describe('Books API tokens, as a member', () => {
     expect(body.data).toHaveLength(1);
     expect(body.data[0]).toHaveProperty('rank');
 
+    // Shown once also means no Turbo snapshot: a Drive visit away and Back
+    // restores the cached page without a request, so the panel must be
+    // marked data-turbo-temporary or it would come back here.
+    await page.getByTestId('new-token').getByRole('link', { name: 'How to use it' }).click();
+    await expect(page).toHaveURL(/\/developers#quick-start$/);
+    await page.goBack();
+    await expect(page).toHaveURL(/\/developers\/tokens$/);
+    await expect(page.getByTestId('token-secret')).toHaveCount(0);
+
     // Shown once: a reload has no secret on it.
     await page.reload();
     await expect(page.getByTestId('token-secret')).toHaveCount(0);

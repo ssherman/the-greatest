@@ -147,6 +147,7 @@ module Developers
       assert_equal ["books:read", "music:read"], token.scopes
       assert_nil token.expires_at
       assert_select "turbo-stream[action=update][target=developers_new_token] [data-testid=token-secret][value=?]", secret_in_body
+      assert_select "turbo-stream[action=update][target=developers_new_token] [data-testid=new-token][data-turbo-temporary]"
       assert_select "turbo-stream[action=replace][target=developers_tokens] [id=?]", dom_id(token)
       assert_select "turbo-stream[action=replace][target=developers_token_form] form[action=?]", developers_tokens_path
     end
