@@ -94,7 +94,7 @@
 365: 1   # Robert Holdstock Award  (1 -> one-year bucket, never parsed)
 366: 1   # Dragon Awards  (1 -> one-year bucket, never parsed)
 369: 100   # The Modern Philosophical Classics  (100 -> century; FROM DESCRIPTION)
-375: 10   # Zeit Literaturkanon  (75 -> decade; FROM DESCRIPTION)
+375: 65   # Zeit Literaturkanon  (75 -> decade; FROM DESCRIPTION) — corrected: Zeit Literaturkanon: 70 novels published 1945–2009, ten per decade — span 65
 376: 75   # The 100 Best Crime Novels and Thrillers since 1945  (75 -> since 1945, published 2019)
 377: 100   # The 50 best books of the past 100 years  (100 -> past 100 years)
 380: 20   # The New Canon: What’s the Most Influential Book of the Past 20 Years?  (25 -> past 20 years)
@@ -118,10 +118,10 @@
 433: 19   # The 21 best books of the 21st century  (25 -> 21st century so far, published 2019)
 434: 24   # What the New York Times Missed: 71 More of the Best Books of the 21st Century  (25 -> 21st century so far, published 2024)
 435: 24   # Not the NYT list: 100 fine books from around the world (and not just the USA) of the 21st century  (25 -> 21st century so far, published 2024)
-436: 10   # The Big Jubilee Read  (75 -> decade; FROM DESCRIPTION)
+436: 70   # The Big Jubilee Read  (75 -> decade; FROM DESCRIPTION) — corrected: The Big Jubilee Read: ten per decade of Elizabeth II's reign, 1952–2022 — 70
 437: 25   # 25 Novels to Understand Our Reality from 2000 to The Present  (25 -> since 2000, published 2024)
-439: 100   # Best 20th Century Books up to 1924  (25 -> century)
-440: 100   # Choosing the Century's(20th) Favorite Books(1924)  (25 -> century)
+439: 25   # Best 20th Century Books up to 1924  (25 -> century) — corrected: 1924 Literary Digest "best of the 20th century": the century had run 1900–1924 — 25
+440: 25   # Choosing the Century's(20th) Favorite Books(1924)  (25 -> century) — corrected: same list, second copy — 25
 443: 100   # Books that Shaped the Century  (100 -> century)
 444: 50   # Top 25 Best Fiction Books on China: Understanding Contemporary China through Modern Literary Fiction    (50 -> unparsed)
 448: 50   # The 50 Best Memoirs of the Past 50 Years  (50 -> past 50 years)
@@ -132,7 +132,7 @@
 476: 20   #  21 books for the XXI century  (25 -> 21st century so far, published 2020)
 478: 25   # Truelit's 100 Best Books of the Quarter Century  (25 -> quarter century)
 480: 31   # The Best Japanese Work of Fiction Published in Japanese during Japan’s Heisei era  (25 -> range 1989-2019; FROM DESCRIPTION)
-496: 25   # Top ten Brazilian novels of the last twenty years  (25 -> unparsed)
+496: 20   # Top ten Brazilian novels of the last twenty years  (25 -> unparsed) — corrected: "Top ten Brazilian novels of the last twenty years" — twenty
 498: 100   # The Century's Most Significant Swedish Books  (100 -> century)
 505: 100   # Ray Monk's Top 10 Philosophy Books of the 20th Century  (100 -> century)
 519: 100   # The Best Of The Century  (100 -> century)
@@ -154,7 +154,7 @@
 567: 24   # Best Australian Books of the 21st century (The Conversation)  (25 -> 21st century so far, published 2024)
 568: 24   # 20 Best New Zealand Books of the 21st Century  (25 -> 21st century so far, published 2024)
 571: 41   # The Best of the Booker  (75 -> since 1968, published 2008; FROM DESCRIPTION)
-572: 10   # The Golden Man Booker  (50 -> decade; FROM DESCRIPTION)
+572: 50   # The Golden Man Booker  (50 -> decade; FROM DESCRIPTION) — corrected: The Golden Man Booker: all winners since 1969 — 50 years
 585: 75   # 40 Most Important Books, 1927-2001  (75 -> range 1927-2001)
 586: 1   # Nordic Council Literature Prize  (1 -> one-year bucket, never parsed)
 593: 10   # The Best Of The 1980s  (10 -> decade)

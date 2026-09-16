@@ -65,6 +65,17 @@ class Services::BooksMigration::NumYearsCoveredDeriverTest < ActiveSupport::Test
     assert_equal 10, derive(name: "The 24 Best Books of the Decade").years
   end
 
+  test "ten per decade is not a decade list" do
+    e = derive(name: "Zeit Literaturkanon", description: "70 European novels published between 1945 and 2009, ten titles for each decade.", year_published: 2010, bucket: 75, buckets: [75])
+    assert_equal 65, e.years
+    assert_match(/range 1945-2009/, e.reason)
+  end
+
+  test "every decade and per decade do not match the decade rule either" do
+    assert_equal 75, derive(name: "Ten from every decade", bucket: 75, buckets: [75]).years
+    assert_equal 75, derive(name: "Ten per decade", bucket: 75, buckets: [75]).years
+  end
+
   test "21st century is publication year minus 2000" do
     assert_equal 24, derive(name: "100 Best Books of the 21st Century", year_published: 2024).years
     assert_equal 15, derive(name: "The 21st Century's 12 Greatest Novels", year_published: 2015).years

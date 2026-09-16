@@ -17,12 +17,12 @@ module Services
       end
 
       YEAR = "(1[5-9]\\d\\d|20[0-2]\\d)"
-      RANGE = /\b#{YEAR}\s*(?:-|to|through|until)\s*#{YEAR}\b/i
+      RANGE = /\b#{YEAR}\s*(?:-|to|through|until|and)\s*#{YEAR}\b/i
       PAST_N = /\b(?:past|last|previous)\s+(\d{1,3})\s+years\b/i
       HALF_CENTURY = /\bhalf[- ]century\b/i
       QUARTER_CENTURY = /\bquarter[- ]century\b/i
       SINCE = /\b(?:since|from)\s+#{YEAR}\b/i
-      DECADE = /\b(?:19|20)\d0s\b|\b[2-9]0s\b|\bdecade\b/i
+      DECADE = /\b(?:19|20)\d0s\b|\b[2-9]0s\b|(?<!each |per |every )\bdecade\b/i
       TWENTY_FIRST = /\b21st[- ]century\b|\bXXI\b/i
       CENTURY = /\b(?:20th|twentieth)[- ]century\b|\bcentury\b|\b100 years\b|\bwieku\b/i
       MILLENNIUM = /\bmillenni/i
