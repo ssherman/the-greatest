@@ -394,3 +394,73 @@ evaluation gate if the matcher regresses past any of those thresholds (Task
 28, `evaluation_gate` in `pipeline/gates.py`), always against the artifact
 being built (R60) -- verified against the real artifact above, where it
 reports `pass`.
+
+## Service, measured
+
+Task 34 built the image, brought it up against the real 2026-07-31 artifact,
+and timed every endpoint. All numbers below are real-artifact wall clock on
+this box: ~27 cores available to DuckDB, `OL_API_MEMORY_LIMIT` at its default
+8GB, and every query an un-indexed Parquet scan (no table here carries an
+index). A smaller container will be slower roughly in proportion to how many
+cores it gets -- these numbers are not portable to a differently-sized box
+without that adjustment.
+
+| Endpoint | Wall clock | Source |
+|---|---|---|
+| `GET /works/{key}` | 0.63-0.89 s | Task 31 |
+| `GET /works/{key}/editions` | 1.6-2.2 s (1.73 s re-measured after R84a) | Task 31 / Task 32 |
+| `GET /authors/{key}` | 0.04 s | Task 31 |
+| `GET /authors/{key}/works` (shelf) | 0.56-0.77 s | Task 31 |
+| `GET /identifiers/{type}/{value}` | 0.17-0.19 s | Task 31 |
+| `POST /works/batch` (100 keys) | 1.43 s | Task 32 |
+| `POST /authors/batch` | 0.13 s | Task 32 |
+| `POST /resolve` (labelled case) | 4.85-4.89 s | Task 33 |
+| `POST /resolve` (Gatsby, title+author+year) | 5.0-5.03 s (Task 33); 5.4 s wall via `curl` through the Task 34 container | Task 33 / Task 34 |
+
+**What this means for Increment 5's Rails client:**
+
+- **Read timeouts:** at least 30 s for `/resolve` (it is consistently ~5 s
+  against a fixture-sized query on a 27-core box; a colder or smaller box, or
+  a query that blocks wider, has real room to run longer) and at least 10 s
+  for any retrieval endpoint (`/works/{key}/editions` is the slowest single
+  lookup at up to 2.2 s, and that number moves with cores, not with request
+  size).
+- **One `/resolve` at a time.** Each call is `harness.prepare`'s own
+  un-indexed scan over `identifiers` (120M rows) plus four other blocking
+  rules -- it saturates however many cores DuckDB is given. Firing two at
+  once does not make either one faster; it makes both slower. The client
+  should serialize `/resolve` calls, not pool them.
+- **Retrieval goes through the batch endpoints.** 100 works in one
+  `POST /works/batch` call costs ~1.4 s total versus ~0.7-0.9 s **per work**
+  through the singular `GET /works/{key}` -- a ~50-60x reduction in wall
+  clock for a 100-work page. Any Rails code fetching more than a couple of
+  records should batch.
+
+**The read-only mount proof.** `docker compose exec api sh -c 'touch
+/data/versions/2026-07-31/works.parquet'` and `mkdir /data/tmp/probe` both
+fail with "Read-only file system" (Task 34, Step 4). What enforces this is
+the compose file's `:ro` bind mount on `/data` -- nothing in DuckDB itself
+refuses a write, and there is no DuckDB flag that would. The one place the
+service does write is `OL_API_TEMP_DIR` (DuckDB's spill directory), which
+defaults to the container's own `/tmp` -- writable, and never under the
+artifact mount.
+
+**Version pinning.** The API always opens an explicit `OL_DATA_VERSION`
+directory (`deps.open_artifact`), never a symlink: `deps.SymlinkedVersion` is
+raised and the process refuses to boot if `versions/<date>` turns out to be a
+symlink, because a symlink flip would not affect a process already holding
+open file handles into the old target. Compose reads the version from the
+environment (`OL_DATA_VERSION`, defaulting to `2026-07-31` for this box) so a
+new build can be pinned without touching the compose file.
+
+**The Gatsby example, as the shape of an abstain.** `POST /resolve` with
+`{"title": "The Great Gatsby", "author_names": ["F. Scott Fitzgerald"],
+"year": 1925}` against the real artifact returns `verdict: "abstain"`, top
+candidate `OL468431W`, score ~0.986, margin ~0.028 -- a runner-up scores
+~0.957, close enough that the calibrated matcher declines to call it rather
+than guess. This is not a bug: `weights.json`'s `accept_threshold`/
+`reject_threshold`/margin gap are the calibrated matcher's real, measured
+behaviour on this title (see "Matcher, measured" above), and the accept
+threshold is a deliberately deferred dial -- tightening or loosening it is a
+calibration decision for whoever operates the service, not something this
+task changes.
