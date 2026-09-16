@@ -1,10 +1,13 @@
 namespace :e2e do
-  def playwright_email
+  # One value from e2e/.env. Read from the file rather than ENV because these
+  # tasks run from a shell that has not loaded that file, and dotenv only loads
+  # web-app/.env.
+  def playwright_env(key)
     env_file = Rails.root.join("e2e", ".env")
     abort "Missing #{env_file}. Copy e2e/.env.example and fill it in." unless File.exist?(env_file)
 
-    email = File.readlines(env_file)
-      .grep(/\APLAYWRIGHT_ADMIN_EMAIL=/)
+    value = File.readlines(env_file)
+      .grep(/\A#{key}=/)
       .first
       &.split("=", 2)
       &.last
@@ -12,9 +15,11 @@ namespace :e2e do
       &.delete_prefix('"')
       &.delete_suffix('"')
 
-    abort "PLAYWRIGHT_ADMIN_EMAIL not set in #{env_file}" if email.blank?
-    email
+    abort "#{key} not set in #{env_file}" if value.blank?
+    value
   end
+
+  def playwright_email = playwright_env("PLAYWRIGHT_ADMIN_EMAIL")
 
   desc "Grant the Playwright admin account (e2e/.env PLAYWRIGHT_ADMIN_EMAIL) the global admin role"
   task admin: :environment do
@@ -32,6 +37,30 @@ namespace :e2e do
 
     user.update!(role: :admin)
     puts "#{email} (id #{user.id}) is now a global admin."
+  end
+
+  desc "Grant the Playwright member account (e2e/.env PLAYWRIGHT_MEMBER_EMAIL) a comped membership"
+  task member: :environment do
+    email = playwright_env("PLAYWRIGHT_MEMBER_EMAIL")
+    user = User.find_by(email: email)
+
+    if user.nil?
+      abort <<~MSG
+        No User with email #{email}.
+
+        The account must exist in Firebase AND in this database. Sign in once through
+        the browser as that account to create the Rails User record, then re-run this task.
+      MSG
+    end
+
+    # find_or_initialize_by on (user, source): the index on those two columns
+    # makes this idempotent, so re-running after a dev-database refresh is safe.
+    # A comp with no end date grants access until someone deactivates it.
+    membership = user.memberships.find_or_initialize_by(source: :comped)
+    membership.assign_attributes(status: :active, current_period_end: nil, note: "Playwright member account (bin/rails e2e:member)")
+    membership.save!
+
+    puts "#{email} (id #{user.id}) is a comped member."
   end
 
   desc "Ensure the Playwright account owns one public and one private books list, each with items"

@@ -36,7 +36,7 @@ web-app/
   e2e/
     playwright.config.ts          # Playwright configuration
     tsconfig.json                 # TypeScript config for e2e tests
-    .env                          # PLAYWRIGHT_ADMIN_EMAIL, PLAYWRIGHT_ADMIN_PASSWORD (gitignored)
+    .env                          # PLAYWRIGHT_ADMIN_EMAIL, PLAYWRIGHT_ADMIN_PASSWORD, PLAYWRIGHT_MEMBER_EMAIL, PLAYWRIGHT_MEMBER_PASSWORD (gitignored)
     auth/
       auth.setup.ts               # Global auth setup: login + save storage state
     fixtures/
@@ -116,11 +116,30 @@ confusing way (see Troubleshooting).
 the `users` table; the test account survives in Firebase but comes back as a plain `user`, and every
 admin spec then fails.
 
+### The member account
+
+`PLAYWRIGHT_ADMIN_EMAIL` is deliberately **not** a member: `tests/books/account/membership.spec.ts`
+proves the paywall turns a signed-in non-member away, and comping that account would make those
+tests vacuous. Members-only flows (the first is the API token page, `tests/books/member/`) use a
+second account:
+
+1. Create another email/password user in the Firebase project.
+2. Put it in `e2e/.env` as `PLAYWRIGHT_MEMBER_EMAIL` and `PLAYWRIGHT_MEMBER_PASSWORD`.
+3. Sign in once through the browser on `dev-new.thegreatestbooks.org` so the Rails `User` row exists.
+4. `bin/rails e2e:member` grants it a comped membership. Idempotent; re-run after a dev-database refresh,
+   like `e2e:admin`.
+
+The `books-member` Playwright project signs this account in (`auth/books-member-auth.setup.ts`) and
+matches `tests/books/member/**`. Specs there create real rows on the shared dev database and must
+clean up after themselves; `developers-tokens.spec.ts` revokes its own tokens before and after.
+
 ### 3. Environment File
 Create `web-app/e2e/.env` (gitignored):
 ```env
 PLAYWRIGHT_ADMIN_EMAIL=your-test-account@example.com
 PLAYWRIGHT_ADMIN_PASSWORD="your-password-here"
+PLAYWRIGHT_MEMBER_EMAIL=your-member-test-account@example.com
+PLAYWRIGHT_MEMBER_PASSWORD="your-password-here"
 ```
 **Important**: Quote the password value if it contains `#` or other special characters — dotenv treats unquoted `#` as an inline comment delimiter.
 
