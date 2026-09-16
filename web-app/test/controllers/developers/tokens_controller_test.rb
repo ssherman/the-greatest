@@ -123,5 +123,190 @@ module Developers
       assert_select "form[action=?]", developers_tokens_path, count: 0
       assert_select "[data-testid=token-cap-reached]", 1
     end
+
+    # --- create -----------------------------------------------------------------
+
+    def create_token(params, user: users(:editor_user))
+      sign_in_as(user, stub_auth: true)
+      post developers_tokens_path, params: {api_token: params}, headers: TURBO
+    end
+
+    def secret_in_body = response.body[/tg_[A-Za-z0-9]{40}/]
+
+    test "a member creates a token and the secret is in the stream exactly once" do
+      assert_difference -> { users(:editor_user).api_tokens.count }, 1 do
+        create_token({name: "laptop", scopes: ["books:read", "music:read"], expires_in: ""})
+      end
+
+      assert_response :success
+      assert_equal "text/vnd.turbo-stream.html; charset=utf-8", response.content_type
+      assert_equal 1, response.body.scan(/tg_[A-Za-z0-9]{40}/).size
+      token = Services::Api::Tokens.authenticate(secret_in_body)
+      assert_equal users(:editor_user), token.user
+      assert_equal "laptop", token.name
+      assert_equal ["books:read", "music:read"], token.scopes
+      assert_nil token.expires_at
+      assert_select "turbo-stream[action=update][target=developers_new_token] [data-testid=token-secret][value=?]", secret_in_body
+      assert_select "turbo-stream[action=replace][target=developers_tokens] [id=?]", dom_id(token)
+      assert_select "turbo-stream[action=replace][target=developers_token_form] form[action=?]", developers_tokens_path
+    end
+
+    test "the secret is not in the list, a redirect or the flash" do
+      create_token({name: "laptop", scopes: ["books:read"], expires_in: ""})
+      secret = secret_in_body
+
+      assert_nil response.location
+      assert_nil flash[:notice]
+      assert_select "turbo-stream[target=developers_tokens]", text: /#{Regexp.escape(secret)}/, count: 0
+
+      get developers_tokens_path
+      assert_no_match(/#{Regexp.escape(secret)}/, response.body)
+    end
+
+    test "an expiry from the list sets expires_at" do
+      freeze_time do
+        create_token({name: "short", scopes: ["books:read"], expires_in: "30"})
+
+        assert_equal 30.days.from_now, Services::Api::Tokens.authenticate(secret_in_body).expires_at
+      end
+    end
+
+    test "an expiry not on the list is refused" do
+      assert_no_difference -> { ApiToken.count } do
+        create_token({name: "tampered", scopes: ["books:read"], expires_in: "7"})
+      end
+
+      assert_response :unprocessable_entity
+      assert_equal "text/vnd.turbo-stream.html; charset=utf-8", response.content_type
+      assert_select "turbo-stream[action=replace][target=developers_token_form] [data-testid=token-form-error]"
+      assert_select "turbo-stream[target=developers_new_token]", count: 0
+    end
+
+    test "no scopes is a 422 that keeps what was typed" do
+      assert_no_difference -> { ApiToken.count } do
+        create_token({name: "nothing", expires_in: "90"})
+      end
+
+      assert_response :unprocessable_entity
+      assert_select "turbo-stream[target=developers_token_form] input[name='api_token[name]'][value=nothing]"
+      assert_select "turbo-stream[target=developers_token_form] select[name='api_token[expires_in]'] option[value='90'][selected]"
+      assert_select "turbo-stream[target=developers_token_form] input[type=checkbox][checked]", count: 0
+    end
+
+    test "a scope a member may not mint is a 422" do
+      assert_no_difference -> { ApiToken.count } do
+        create_token({name: "greedy", scopes: ["books:read", "books:admin"], expires_in: ""})
+      end
+
+      assert_response :unprocessable_entity
+    end
+
+    test "a blank name is a 422" do
+      assert_no_difference -> { ApiToken.count } do
+        create_token({name: "   ", scopes: ["books:read"], expires_in: ""})
+      end
+
+      assert_response :unprocessable_entity
+    end
+
+    test "the cap is enforced and the form becomes the notice" do
+      user = users(:editor_user)
+      (cap - 1).times { |i| Services::Api::Tokens.generate(user: user, name: "t#{i}", scopes: ["books:read"]) }
+
+      create_token({name: "last", scopes: ["books:read"], expires_in: ""}, user: user)
+      assert_response :success
+      assert_select "turbo-stream[target=developers_token_form] [data-testid=token-cap-reached]"
+
+      assert_no_difference -> { user.api_tokens.count } do
+        post developers_tokens_path, params: {api_token: {name: "one too many", scopes: ["books:read"], expires_in: ""}}, headers: TURBO
+      end
+      assert_response :unprocessable_entity
+    end
+
+    test "a scalar api_token param is a 422, not a 500" do
+      sign_in_as(users(:editor_user), stub_auth: true)
+
+      post developers_tokens_path, params: {api_token: "junk"}, headers: TURBO
+
+      assert_response :unprocessable_entity
+    end
+
+    test "create is never cached" do
+      create_token({name: "laptop", scopes: ["books:read"], expires_in: ""})
+
+      assert_includes response.headers["Cache-Control"], "no-store"
+    end
+
+    test "a non-member cannot create a token" do
+      assert_no_difference -> { ApiToken.count } do
+        create_token({name: "nope", scopes: ["books:read"], expires_in: ""}, user: users(:books_viewer_user))
+      end
+
+      assert_redirected_to membership_path
+    end
+
+    test "a signed-out visitor cannot create a token" do
+      assert_no_difference -> { ApiToken.count } do
+        post developers_tokens_path, params: {api_token: {name: "nope", scopes: ["books:read"], expires_in: ""}}, headers: TURBO
+      end
+
+      assert_redirected_to membership_path
+    end
+
+    # --- destroy ---------------------------------------------------------------
+
+    test "a member revokes their own token and the list refreshes" do
+      sign_in_as(users(:regular_user), stub_auth: true)
+      token = api_tokens(:regular_user_token)
+
+      assert_difference -> { users(:regular_user).api_tokens.count }, -1 do
+        delete developers_token_path(token), headers: TURBO
+      end
+
+      assert_response :success
+      assert_equal "text/vnd.turbo-stream.html; charset=utf-8", response.content_type
+      assert_select "turbo-stream[action=replace][target=developers_tokens] [id=?]", dom_id(token), count: 0
+      assert_select "turbo-stream[action=replace][target=developers_tokens] [id=?]", dom_id(api_tokens(:regular_user_music_only_token))
+      assert_select "turbo-stream[action=replace][target=developers_token_form]"
+      assert_select "turbo-stream[target=developers_new_token]", count: 0
+      assert_nil Services::Api::Tokens.authenticate(ApiTokenSecrets::MEMBER)
+    end
+
+    test "revoking below the cap brings the form back" do
+      user = users(:editor_user)
+      made = cap.times.map { |i| Services::Api::Tokens.generate(user: user, name: "t#{i}", scopes: ["books:read"]).data[:token] }
+      sign_in_as(user, stub_auth: true)
+
+      delete developers_token_path(made.first), headers: TURBO
+
+      assert_select "turbo-stream[target=developers_token_form] form[action=?]", developers_tokens_path
+      assert_select "turbo-stream[target=developers_token_form] [data-testid=token-cap-reached]", count: 0
+    end
+
+    test "a member cannot revoke another account's token" do
+      sign_in_as(users(:regular_user), stub_auth: true)
+
+      assert_no_difference -> { ApiToken.count } do
+        delete developers_token_path(api_tokens(:non_member_token)), headers: TURBO
+      end
+
+      assert_response :not_found
+    end
+
+    test "a signed-out visitor cannot revoke" do
+      assert_no_difference -> { ApiToken.count } do
+        delete developers_token_path(api_tokens(:regular_user_token)), headers: TURBO
+      end
+
+      assert_redirected_to membership_path
+    end
+
+    test "destroy is never cached" do
+      sign_in_as(users(:regular_user), stub_auth: true)
+
+      delete developers_token_path(api_tokens(:regular_user_token)), headers: TURBO
+
+      assert_includes response.headers["Cache-Control"], "no-store"
+    end
   end
 end
