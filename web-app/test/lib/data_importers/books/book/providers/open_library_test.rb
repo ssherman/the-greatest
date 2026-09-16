@@ -227,6 +227,43 @@ module DataImporters
             end
           end
 
+          # ---------------------------------------------------- R106: query never wins
+
+          test "R106: a persisted book's own title, year, authors and identifiers win over a conflicting query" do
+            book = books_books(:war_and_peace)
+            query = ImportQuery.new(
+              title: "War and Peace (a different edition title)",
+              year: 1999,
+              isbn13: ["9781234567897"]
+            )
+            stub_resolve(resolve_response(verdict: "accept", diff: []))
+
+            @provider.populate(book, query: query)
+
+            assert_requested(:post, "#{BASE_URL}/resolve") do |req|
+              body = JSON.parse(req.body)
+              body["title"] == "War and Peace" &&
+                body["year"] == 1869 &&
+                body["author_names"] == ["Leo Tolstoy"] &&
+                body["isbn13"].sort == %w[9780140447934 9781234567897].sort &&
+                body["isbn13"].uniq == body["isbn13"] &&
+                body["asin"] == ["B00JXPRBOU"] &&
+                !body.key?("existing_ol_key")
+            end
+          end
+
+          test "R106: existing_ol_key is sent when the query supplies an open_library_work_key" do
+            book = books_books(:war_and_peace)
+            query = ImportQuery.new(title: nil, open_library_work_key: "OL999W")
+            stub_resolve(resolve_response(verdict: "accept", diff: []))
+
+            @provider.populate(book, query: query)
+
+            assert_requested(:post, "#{BASE_URL}/resolve") do |req|
+              JSON.parse(req.body)["existing_ol_key"] == "OL999W"
+            end
+          end
+
           # ------------------------------------------------------ authors/subjects
 
           test "authors and subjects diff entries are never applied or reported" do

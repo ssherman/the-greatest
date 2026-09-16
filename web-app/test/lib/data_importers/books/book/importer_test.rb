@@ -21,7 +21,7 @@ module DataImporters
           ::Books::OpenLibrary::Client.stubs(:new).returns(client)
         end
 
-        def accept_response(diff:)
+        def accept_response(diff:, record: nil)
           {
             "source_version" => {"source" => "openlibrary", "dump_date" => "2026-07-31", "normalizer_version" => 1,
                                  "pipeline_version" => 1, "matcher_version" => 2},
@@ -45,10 +45,24 @@ module DataImporters
                   "evidence" => {},
                   "conflicts" => [],
                   "diff" => diff,
-                  "record" => nil
+                  "record" => record
                 }
               ]
             }
+          }
+        end
+
+        def work_record_hash(title:, key: "OL468431W")
+          {
+            "key" => {"source" => "openlibrary", "key" => key},
+            "redirected_from" => [],
+            "title" => title,
+            "subtitle" => nil,
+            "description" => nil,
+            "authors" => [],
+            "subjects" => [],
+            "year_evidence" => nil,
+            "popularity" => nil
           }
         end
 
@@ -98,6 +112,62 @@ module DataImporters
           assert_equal existing, result.item
           assert_equal "Filled description", result.item.reload.description
           assert_requested :post, "#{BASE_URL}/resolve", times: 1
+        end
+
+        test "identifier-only import persists the query's identifier alongside the accepted OL key, and a second call is idempotent" do
+          stub_open_library_client
+          new_isbn = "9781234567897"
+          stub_request(:post, "#{BASE_URL}/resolve").to_return(
+            status: 200,
+            body: accept_response(
+              diff: [
+                {"field" => "title", "ours" => nil, "theirs" => "The Old Man and the Sea", "kind" => "fill"},
+                {"field" => "first_published_year", "ours" => nil, "theirs" => 1952, "kind" => "fill"}
+              ],
+              record: work_record_hash(title: "The Old Man and the Sea")
+            ).to_json
+          )
+
+          first_result = nil
+          assert_difference "::Books::Book.count", 1 do
+            first_result = Importer.call(isbn13: [new_isbn])
+          end
+
+          assert first_result.success?
+          assert first_result.item.persisted?
+          assert_equal "The Old Man and the Sea", first_result.item.title
+          assert_equal 1952, first_result.item.first_published_year
+          assert first_result.item.identifiers.exists?(identifier_type: :books_work_openlibrary_id, value: "OL468431W")
+          assert first_result.item.identifiers.exists?(identifier_type: :books_work_isbn13, value: new_isbn)
+
+          second_result = nil
+          assert_no_difference "::Books::Book.count" do
+            second_result = Importer.call(isbn13: [new_isbn])
+          end
+
+          assert second_result.success?
+          assert_equal first_result.item, second_result.item
+          assert_requested :post, "#{BASE_URL}/resolve", times: 1
+        end
+
+        test "no-title guard: an identifier-only import whose diff never fills a title fails without creating a book" do
+          stub_open_library_client
+          new_isbn = "9780316769488"
+          stub_request(:post, "#{BASE_URL}/resolve").to_return(
+            status: 200,
+            body: accept_response(diff: [
+              {"field" => "title", "ours" => nil, "theirs" => nil, "kind" => "absent"}
+            ]).to_json
+          )
+
+          result = nil
+          assert_no_difference "::Books::Book.count" do
+            result = Importer.call(isbn13: [new_isbn])
+          end
+
+          assert result.failure?
+          assert_includes result.all_errors.join, "no title"
+          assert_empty ::Identifier.where(identifiable_type: "Books::Book", value: new_isbn)
         end
 
         test "an invalid query raises ArgumentError" do

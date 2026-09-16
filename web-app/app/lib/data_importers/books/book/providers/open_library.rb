@@ -41,7 +41,7 @@ module DataImporters
             resolution = client.resolve(**resolve_args(book, query))
 
             if resolution.accept?
-              apply_accept(book, resolution)
+              apply_accept(book, resolution, query)
             elsif resolution.abstain?
               failure_result(errors: ["Open Library abstained: #{resolution.decision.reason}"])
             else
@@ -55,18 +55,48 @@ module DataImporters
 
           # The service guarantees an accept decision names a candidate with
           # that key, but this is defensive rather than trusted blindly.
-          def apply_accept(book, resolution)
+          def apply_accept(book, resolution, query)
             candidate = resolution.accepted
             return failure_result(errors: ["Open Library accepted with no matching candidate"]) unless candidate
 
-            data_populated = apply_fills(book, candidate) + report_skipped(candidate)
+            filled = apply_fills(book, candidate)
+
+            # R113: ImporterBase#run_providers_with_saving skips save! when
+            # item.valid? is false but still keeps this provider's success --
+            # so an identifier-only import whose title diff was "absent"
+            # (never filled) would otherwise report success with nothing
+            # persisted. Bail before any identifier gets stamped on a book
+            # that cannot be saved.
+            if book.title.blank?
+              return failure_result(errors: ["Open Library accepted #{candidate.work_key} but the book still has no title"])
+            end
+
+            data_populated = filled + report_skipped(candidate)
 
             book.identifiers.find_or_initialize_by(
               identifier_type: :books_work_openlibrary_id,
               value: candidate.work_key
             )
 
+            persist_query_identifiers(book, query)
+
             success_result(data_populated: data_populated)
+          end
+
+          # R112: these are the CALLER's assertions about the book (the same
+          # trust as the title), not service data -- never persisted from the
+          # service's `record`. Re-running Importer.call(isbn13: [...]) twice
+          # used to create two books: apply_accept persisted only the OL key,
+          # so the finder's identifier lookup on the second run had nothing
+          # of the query's own identifiers to find.
+          def persist_query_identifiers(book, query)
+            return unless query
+
+            IDENTIFIER_TYPE_BY_QUERY_FIELD.each do |query_field, identifier_type|
+              Array(query.public_send(query_field)).each do |value|
+                book.identifiers.find_or_initialize_by(identifier_type: identifier_type, value: value)
+              end
+            end
           end
 
           # Only a fill on a field that is actually blank locally gets
