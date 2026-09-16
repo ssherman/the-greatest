@@ -619,7 +619,14 @@ keeps the 10 s default.
 `CircuitBreaker` is Redis-backed, via `REDIS_POOL` (injectable for tests), because `Rails.cache` is
 `:null_store` in test and `:memory_store` in development and cannot carry breaker state across
 processes. Key `circuit:books:open_library` (`BaseClient` constructs it with
-`key: "books:open_library"`); `failure_threshold` 5; `cooldown` 60 s.
+`key: "books:open_library"`); `failure_threshold` 5; `cooldown` 60 s. The Redis hash's own TTL is
+`2 * cooldown`, not `cooldown` (R118): `opened_at` must still be readable at the exact instant the
+cooldown ends, whatever moment the next call actually arrives, so `#call` can tell a half-open
+probe apart from a fresh, fully-closed breaker. A failed half-open probe re-opens the circuit
+immediately -- `failures` is forced up to at least `failure_threshold` and `opened_at` is stamped
+`now`, regardless of what the stored counter says, because it may itself have expired between the
+read and the probe. Only a dead process with no calls at all for a full two cooldowns finally lets
+the key expire and the breaker reset to fresh.
 
 Which errors count (R99/R109/R110): inside `BaseClient#perform`, the HTTP call and the JSON parse
 both happen inside `breaker.call`'s block. A Faraday timeout or connection failure, a 5xx (raised as
@@ -656,7 +663,7 @@ query's `author_names` case-insensitively. A title with no author names never ma
 data holds many same-title works, and disambiguating them is the matcher's job, not the finder's.
 The finder never calls the Open Library service.
 
-### The provider's write rule (R105/R106/R107)
+### The provider's write rule (R105/R106/R107/R117)
 
 `Providers::OpenLibrary#resolve_args` builds the `/resolve` body from the *book's own current
 state* -- title, subtitle, description, author names, year, `existing_ol_key`, and the union of the
@@ -665,12 +672,23 @@ alone (R106), so the service's `diff.ours` is always what the book actually hold
 never drops an identifier the query no longer repeats. `Importer#initialize_item` seeds a new book
 with `title` *and* `first_published_year`, because a title-only seed would make the query's year
 look like the book's own value and the service would score it as agreement rather than a fill.
+`description` in that request is the book's *primary* description content
+(`book.primary_description&.content`, `Descriptions::Resolver`), never the legacy
+`books_books.description` column, which no book page reads.
 
 On `accept`, only the four fillable columns the diff covers -- `title`, `subtitle`, `description`,
-`first_published_year` (`FILLABLE_FIELDS`) -- are ever written, and only when the local column is
-blank (belt and braces alongside the service's own "ours was absent" judgment). A populated column
-the service calls a `conflict` or an `enrichment` is left untouched and recorded in `data_populated`
-as `"skipped:<field>"` (R105) so a human can see it. `authors` and `subjects` also appear in the
+`first_published_year` (`FILLABLE_FIELDS`) -- are ever written, and only when the local field is
+blank (belt and braces alongside the service's own "ours was absent" judgment). `title`, `subtitle`
+and `first_published_year` write straight to the column; a `description` fill instead goes through
+`Describable#assign_description(source: :openlibrary, content: entry.theirs, source_url:
+"https://openlibrary.org/works/<key>")` (R117) onto the autosaved `descriptions` association --
+same precedent as `DataImporters::Games::Game::Providers::Igdb` -- and "locally blank" for
+description means `book.primary_description.nil?`, not an empty column. A re-run's fill is
+naturally idempotent: once a primary description exists, the gate skips the field entirely, and
+even without that gate `assign_description` updates the existing `source: openlibrary` row instead
+of creating a second one. A populated column the service calls a `conflict` or an `enrichment` is
+left untouched and recorded in `data_populated` as `"skipped:<field>"` (R105) so a human can see
+it. `authors` and `subjects` also appear in the
 service's diff but are never applied -- creating authors or categories from them belongs to the
 batch reconciliation spec (see "What this plan deliberately does not build" in the plan), not this
 provider. An accept also `find_or_initialize_by`s a `books_work_openlibrary_id` identifier on the

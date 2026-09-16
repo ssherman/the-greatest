@@ -102,12 +102,36 @@ module DataImporters
           # Only a fill on a field that is actually blank locally gets
           # written -- belt and braces alongside the service's own "ours was
           # absent" judgment.
+          #
+          # R117: books_books.description is read by no book page and is
+          # scheduled for deletion (Books::Book) -- the displayed text lives
+          # in the descriptions table. A "description" fill is never written
+          # to that column; it goes through Describable#assign_description
+          # onto the autosaved descriptions association instead (same
+          # precedent as DataImporters::Games::Game::Providers::Igdb), and
+          # "locally blank" for description means no primary description,
+          # not an empty column.
           def apply_fills(book, candidate)
             candidate.fills.filter_map do |entry|
               next unless FILLABLE_FIELDS.include?(entry.field)
-              next unless book[entry.field].blank?
 
-              book[entry.field] = entry.theirs
+              if entry.field == "description"
+                next unless book.primary_description.nil?
+
+                # license: the book page renders the provenance link only for cc0 /
+                # cc_by_sa_4 rows; the books migration classifies Open Library text as cc0.
+                book.assign_description(
+                  source: :openlibrary,
+                  content: entry.theirs,
+                  source_url: "https://openlibrary.org/works/#{candidate.work_key}",
+                  license: :cc0
+                )
+              else
+                next unless book[entry.field].blank?
+
+                book[entry.field] = entry.theirs
+              end
+
               entry.field
             end
           end
@@ -126,7 +150,7 @@ module DataImporters
             {
               title: book.title.presence || query&.title,
               subtitle: book.subtitle,
-              description: book.description,
+              description: book.primary_description&.content,
               author_names: author_names_for(book, query),
               year: book.first_published_year || query&.year,
               isbn13: identifier_values(book, query, :isbn13),
