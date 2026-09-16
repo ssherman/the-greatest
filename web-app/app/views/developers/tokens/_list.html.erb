@@ -1,0 +1,45 @@
+<%# The member's tokens. Root id is the Turbo Stream target both write actions
+    replace, so the empty state and the row set always agree with the database. %>
+<section id="developers_tokens" class="mb-10">
+  <h2 class="text-xl font-semibold mb-3">Your tokens</h2>
+  <% if tokens.empty? %>
+    <p class="text-base-content/70">You have no tokens yet.</p>
+  <% else %>
+    <div class="overflow-x-auto">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Token</th>
+            <th>Scopes</th>
+            <th>Created</th>
+            <th>Last used</th>
+            <th>Expires</th>
+            <th><span class="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% tokens.each do |token| %>
+            <tr id="<%= dom_id(token) %>">
+              <td><%= token.name %></td>
+              <%# The stored display prefix. The secret itself is not in the
+                  database and cannot appear here. %>
+              <td><code><%= token.token_prefix %>…</code></td>
+              <td><%= token.scopes.join(", ") %></td>
+              <td><%= token.created_at.to_date.to_fs(:long) %></td>
+              <td><%= token.last_used_at ? "#{time_ago_in_words(token.last_used_at)} ago" : "Never" %></td>
+              <td><%= token.expires_at ? token.expires_at.to_date.to_fs(:long) : "Never" %></td>
+              <td>
+                <%= button_to "Revoke", developers_token_path(token),
+                      method: :delete,
+                      class: "btn btn-sm btn-outline",
+                      "aria-label": "Revoke #{token.name}",
+                      form: {data: {turbo_confirm: "Revoke #{token.name}? Anything using it stops working immediately."}} %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% end %>
+</section>

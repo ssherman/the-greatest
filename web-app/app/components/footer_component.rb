@@ -65,10 +65,13 @@ class FooterComponent < ViewComponent::Base
 
   # Contact is NOT here. It is a button that opens the contact dialog, not a
   # link, so the template renders it separately -- see the Site column.
+  # "API" is the public API's documentation; the footer and the /members card
+  # are its only links in (spec D14: no header nav item).
   def site_links
     links = [["News", helpers.news_path]]
     links << ["Ranking Details", rankings_path] if rankings_path
     links << ["Support", helpers.membership_path]
+    links << ["API", helpers.developers_path]
     links
   end
 
