@@ -115,6 +115,15 @@ namespace :data_migration do
     pp Services::BooksMigration::PenaltyApplicationMigrator.call
   end
 
+  namespace :penalties do
+    desc "Merge duplicate Books penalties into their globals and year-span statics into num_years_covered (idempotent; repairs a DB migrated before the resolver changes)"
+    task reconcile: :environment do
+      result = Services::BooksMigration::PenaltyReconciler.call
+      pp result
+      abort "penalties:reconcile failed: #{result[:error]}" unless result[:success]
+    end
+  end
+
   desc "Migrate legacy list_con_lists into list_penalties (static penalties only) and set Books::List#num_years_covered from the year-span statics + config/books_migration/num_years_covered.yml"
   task list_penalties: :environment do
     pp Services::BooksMigration::ListPenaltyMigrator.call
@@ -301,7 +310,7 @@ namespace :data_migration do
   task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers, :edition_amazon_identifiers,
     :categories, :category_items, :book_attributes, :book_type_categories, :countries,
     :book_countries, :external_links, :lists, :list_items, :ranking_configurations,
-    :ranked_lists, :penalties, :list_penalties, :user_lists, :user_list_items,
+    :ranked_lists, :penalties, :list_penalties, "penalties:reconcile", :user_lists, :user_list_items,
     :reading_goals, :saved_searches, :reviews, :corrections, :news_posts,
     "user_favorites_lists:rebuild"]
 end

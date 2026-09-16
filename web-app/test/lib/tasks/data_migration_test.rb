@@ -14,6 +14,7 @@ class DataMigrationRakeTaskTest < ActiveSupport::TestCase
       data_migration:verify_reading_goals
       data_migration:num_years_covered:derive
       data_migration:list_penalties
+      data_migration:penalties:reconcile
       data_migration:all
     ].each { |name| Rake::Task[name].reenable if Rake::Task.task_defined?(name) }
   end
@@ -103,5 +104,24 @@ class DataMigrationRakeTaskTest < ActiveSupport::TestCase
       assert_raises(SystemExit) { Rake::Task["data_migration:list_penalties"].invoke }
     end
     assert_match(/num_years_covered migration failed: entry 5/, err)
+  end
+
+  test "penalties:reconcile invokes the reconciler" do
+    Services::BooksMigration::PenaltyReconciler.expects(:call).once.returns(success: true, data: {penalties_destroyed: 0})
+    capture_io { Rake::Task["data_migration:penalties:reconcile"].invoke }
+  end
+
+  test "penalties:reconcile aborts when the reconciler fails" do
+    Services::BooksMigration::PenaltyReconciler.stubs(:call).returns(success: false, error: "no num_years_covered Global::Penalty seeded")
+    _out, err = capture_io do
+      assert_raises(SystemExit) { Rake::Task["data_migration:penalties:reconcile"].invoke }
+    end
+    assert_match(/penalties:reconcile failed: no num_years_covered/, err)
+  end
+
+  test "penalties:reconcile runs immediately after list_penalties in the all task" do
+    prerequisites = Rake::Task["data_migration:all"].prerequisites
+    assert_equal prerequisites.index("list_penalties") + 1, prerequisites.index("penalties:reconcile")
+    assert_operator prerequisites.index("penalties"), :<, prerequisites.index("list_penalties")
   end
 end
