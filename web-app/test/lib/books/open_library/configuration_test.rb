@@ -5,7 +5,17 @@ require "test_helper"
 module Books
   module OpenLibrary
     class ConfigurationTest < ActiveSupport::TestCase
+      def setup
+        @original_env = ENV["OPEN_LIBRARY_SERVICE_URL"]
+      end
+
+      def teardown
+        ENV["OPEN_LIBRARY_SERVICE_URL"] = @original_env
+      end
+
       test "defaults to the docker-published loopback address" do
+        ENV.delete("OPEN_LIBRARY_SERVICE_URL")
+
         assert_equal "http://127.0.0.1:8080", Books::OpenLibrary::Configuration.new.base_url
       end
 
@@ -13,8 +23,6 @@ module Books
         ENV["OPEN_LIBRARY_SERVICE_URL"] = "https://example.test"
 
         assert_equal "https://example.test", Books::OpenLibrary::Configuration.new.base_url
-      ensure
-        ENV.delete("OPEN_LIBRARY_SERVICE_URL")
       end
 
       test "an explicit base_url wins over the environment variable" do
@@ -23,8 +31,6 @@ module Books
         config = Books::OpenLibrary::Configuration.new(base_url: "http://override.test")
 
         assert_equal "http://override.test", config.base_url
-      ensure
-        ENV.delete("OPEN_LIBRARY_SERVICE_URL")
       end
 
       test "sets a descriptive user agent by default" do
@@ -53,16 +59,12 @@ module Books
         ENV["OPEN_LIBRARY_SERVICE_URL"] = ""
 
         assert_raises(Books::OpenLibrary::Exceptions::ConfigurationError) { Books::OpenLibrary::Configuration.new }
-      ensure
-        ENV.delete("OPEN_LIBRARY_SERVICE_URL")
       end
 
       test "rejects a non-http base url" do
         ENV["OPEN_LIBRARY_SERVICE_URL"] = "ftp://example.test"
 
         assert_raises(Books::OpenLibrary::Exceptions::ConfigurationError) { Books::OpenLibrary::Configuration.new }
-      ensure
-        ENV.delete("OPEN_LIBRARY_SERVICE_URL")
       end
 
       test "has the documented timeouts" do

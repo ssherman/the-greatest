@@ -262,6 +262,20 @@ module Books
         assert_nil result["OL999W"]
       end
 
+      test "#works_batch keys the result by the REQUESTED key, even when the record's own key is a redirect target" do
+        stub_request(:post, "#{BASE_URL}/works/batch")
+          .with(body: {keys: ["OL1W"]}.to_json)
+          .to_return(
+            status: 200,
+            body: envelope({"OL1W" => work_record_hash(key: "OL468431W", redirected_from: ["OL1W"])}).to_json
+          )
+
+        result = @client.works_batch(["OL1W"])
+
+        assert_equal ["OL1W"], result.keys
+        assert_equal "OL468431W", result["OL1W"].key
+      end
+
       test "#works_batch with 501 keys raises ArgumentError before making a request" do
         keys = Array.new(501) { |i| "OL#{i}W" }
 
@@ -363,14 +377,17 @@ module Books
       end
 
       test "#resolve returns a Resolution whose candidates are in the served order, never re-sorted" do
-        stub_request(:post, "#{BASE_URL}/resolve").to_return(status: 200, body: resolve_response_body.to_json)
+        # Serve the higher-scored candidate SECOND -- the fixture's own order
+        # happens to be descending by score, which made the old version of
+        # this test pass even if the client silently re-sorted by score.
+        body = resolve_response_body
+        body["data"]["candidates"] = body["data"]["candidates"].reverse
+        stub_request(:post, "#{BASE_URL}/resolve").to_return(status: 200, body: body.to_json)
 
         resolution = @client.resolve(title: "The Great Gatsby", author_names: ["F. Scott Fitzgerald"], year: 1925)
 
         assert_instance_of Books::OpenLibrary::Resolution, resolution
-        assert_equal ["OL468431W", "OL999W"], resolution.candidates.map(&:work_key)
-        scores = resolution.candidates.map(&:score)
-        assert_operator scores.first, :>=, scores.last
+        assert_equal ["OL999W", "OL468431W"], resolution.candidates.map(&:work_key)
       end
 
       test "#resolve exposes decision.reason and resolves #accepted to the matching candidate on accept" do
@@ -403,6 +420,19 @@ module Books
         assert resolution.abstain?
         assert_not resolution.accept?
         assert_nil resolution.decision.key
+        assert_nil resolution.accepted
+      end
+
+      test "#resolve on a reject decision exposes reject? true and a nil #accepted" do
+        stub_request(:post, "#{BASE_URL}/resolve").to_return(
+          status: 200,
+          body: resolve_response_body(decision_verdict: "reject", decision_key: nil, second_verdict: "reject").to_json
+        )
+
+        resolution = @client.resolve(title: "The Great Gatsby")
+
+        assert resolution.reject?
+        assert_not resolution.accept?
         assert_nil resolution.accepted
       end
 

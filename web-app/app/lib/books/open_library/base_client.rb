@@ -87,7 +87,7 @@ module Books
 
       def classify_response(response, path, start_time)
         case response.status
-        when 200
+        when 200..299
           {result: success_result(response, path, start_time)}
         when 404
           {error: Exceptions::NotFoundError.new("Not found", response.status, response.body)}
