@@ -53,7 +53,7 @@ def load_rows(
     columns: list[tuple[str, str]],
     rows: list[tuple],
 ) -> None:
-    """Replace `table` with `rows`, via CREATE TABLE + parameterized INSERT.
+    """Replace `table` with `rows`, via CREATE TEMP TABLE + parameterized INSERT.
 
     `con.register(name, list_of_dicts)` is rejected in this environment:
     DuckDB's Python replacement scan only accepts a pandas DataFrame, a
@@ -63,9 +63,19 @@ def load_rows(
     lockfile, confirmed via `uv run python -c "import pyarrow"` failing with
     ModuleNotFoundError). A parameterized `executemany` needs no extra
     dependency and binds list-typed columns (VARCHAR[]) correctly.
+
+    TEMP, not a plain table (R82): the API runs one DuckDB cursor per request
+    (see `openlibrary.api.deps.cursor`). Cursors opened from the same
+    connection share the catalog for plain tables, but each cursor gets its
+    own temp schema (verified) -- and the matcher's blocking/scoring queries
+    load fixed scratch-table names (`q_ids`, `q_author_fps`, ...), so a plain
+    `CREATE OR REPLACE TABLE` would let two concurrent requests race on the
+    same name and read each other's rows. Semantics for the single-connection,
+    single-threaded pipeline (which never has two cursors alive at once) are
+    unchanged.
     """
     col_defs = ", ".join(f"{name} {sql_type}" for name, sql_type in columns)
-    con.execute(f"CREATE OR REPLACE TABLE {table} ({col_defs})")
+    con.execute(f"CREATE OR REPLACE TEMP TABLE {table} ({col_defs})")
     if rows:
         placeholders = ", ".join(["?"] * len(columns))
         con.executemany(f"INSERT INTO {table} VALUES ({placeholders})", rows)
