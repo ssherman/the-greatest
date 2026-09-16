@@ -39,6 +39,8 @@ module Api
         end
 
         test "a rank of nil passed explicitly stays nil" do
+          RankedItem.create!(item: @book, ranking_configuration: ranking_configurations(:books_global), rank: 3, score: 90)
+
           assert_nil BookResource.new(@book, params: {rank: nil}).to_h[:rank]
         end
 

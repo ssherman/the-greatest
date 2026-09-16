@@ -98,6 +98,79 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+  /api/v1/authors:
+    x-domain: books
+    get:
+      operationId: listAuthors
+      summary: Authors in rank order
+      description: The Greatest Books' primary author ranking, best first. Only ranked authors appear. Empty until an author ranking has been calculated.
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/per_page"
+      responses:
+        "200":
+          description: A page of ranked authors.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /api/v1/authors/{slug}:
+    x-domain: books
+    get:
+      operationId: getAuthor
+      summary: One author
+      description: The author alone. Their books are not embedded; a paginated sub-collection is a later addition.
+      parameters:
+        - $ref: "#/components/parameters/slug"
+      responses:
+        "200":
+          description: The author.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/X-RateLimit-Limit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Remaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/X-RateLimit-Reset"
+            X-RateLimit-Daily-Limit:
+              $ref: "#/components/headers/X-RateLimit-Daily-Limit"
+            X-RateLimit-Daily-Remaining:
+              $ref: "#/components/headers/X-RateLimit-Daily-Remaining"
+            X-RateLimit-Daily-Reset:
+              $ref: "#/components/headers/X-RateLimit-Daily-Reset"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
 components:
   securitySchemes:
     bearerAuth:
@@ -357,3 +430,50 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/BookFull"
+    Author:
+      type: object
+      required: [id, slug, name, sort_name, birth_year, death_year, rank, image_url, url, api_url]
+      properties:
+        id: {type: integer}
+        slug: {type: string}
+        name: {type: string}
+        sort_name: {type: [string, "null"]}
+        birth_year: {type: [integer, "null"]}
+        death_year: {type: [integer, "null"]}
+        rank:
+          type: [integer, "null"]
+          description: Position in the site's primary author ranking; null when unranked.
+        image_url: {type: [string, "null"], format: uri}
+        url: {type: string, format: uri, description: The author's page on the site.}
+        api_url: {type: string, format: uri}
+    AuthorFull:
+      allOf:
+        - $ref: "#/components/schemas/Author"
+        - type: object
+          required: [alternate_names, kind, description]
+          properties:
+            alternate_names:
+              type: array
+              items: {type: string}
+            kind:
+              type: string
+              enum: [person, organization, pseudonym, collective]
+            description: {type: [string, "null"]}
+    AuthorCollection:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Author"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+        links:
+          $ref: "#/components/schemas/PaginationLinks"
+    AuthorItem:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/AuthorFull"
