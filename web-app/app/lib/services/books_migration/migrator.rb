@@ -4,7 +4,7 @@ module Services
     # (as String-keyed attribute hashes), transforms + upserts each through the
     # real new-model AR class, with search indexing suppressed for the load.
     # Idempotent — safe to re-run. Subclasses define legacy_model, model_key, and
-    # upsert_row(attrs); optionally finalize.
+    # upsert_row(attrs); optionally finalize and extra_result_data.
     class Migrator
       BATCH_SIZE = 1000
 

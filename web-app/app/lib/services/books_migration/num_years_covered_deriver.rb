@@ -12,7 +12,7 @@ module Services
       Entry = Struct.new(:id, :years, :name, :bucket, :reason, :flags, keyword_init: true) do
         def to_line
           note = flags.any? ? "; #{flags.join("; ")}" : ""
-          "#{id}: #{years}   # #{name}  (#{bucket} -> #{reason}#{note})"
+          "#{id}: #{years}   # #{name.to_s.tr("\n", " ")}  (#{bucket} -> #{reason}#{note})"
         end
       end
 

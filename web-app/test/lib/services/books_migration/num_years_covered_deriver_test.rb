@@ -130,6 +130,12 @@ class Services::BooksMigration::NumYearsCoveredDeriverTest < ActiveSupport::Test
     assert_equal({1 => 24}, YAML.safe_load(e.to_line))
   end
 
+  test "to_line flattens a newline in the name" do
+    e = derive(name: "Line one\nline two", bucket: 25, buckets: [25])
+    assert_equal({1 => 25}, YAML.safe_load(e.to_line))
+    refute_includes e.to_line, "\n"
+  end
+
   test "a since-year that falls through leaves no year_published flag behind" do
     e = derive(name: "Since 2026", year_published: nil, bucket: 10, buckets: [10])
     assert_equal 10, e.years

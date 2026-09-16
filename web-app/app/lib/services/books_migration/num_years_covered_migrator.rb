@@ -9,7 +9,11 @@ module Services
     # conflict. Plain overwrite (update_all), so it is idempotent and a re-run
     # re-applies an edited file. Lists with no year-span row are never touched.
     # Scoped to active legacy configurations via the "Books::RankingConfiguration"
-    # map, like every other penalty-side migrator.
+    # map, like every other penalty-side migrator. Rows are selected by legacy
+    # list_con NAME rather than through the "Penalty" id map on purpose: on a
+    # database migrated before the resolver learned YEAR_SPAN_BUCKETS that map
+    # still points the seven names at the Books statics, and this migrator has to
+    # work there too (PenaltyReconciler repairs the rest).
     class NumYearsCoveredMigrator < Migrator
       private
 
