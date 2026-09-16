@@ -1,0 +1,195 @@
+<%
+  content_for :page_title, "API | #{domain_name}"
+  content_for :meta_description, "Read The Greatest's rankings from your own scripts and apps. Documentation for the #{domain_name} API: tokens, rate limits, endpoints and errors."
+%>
+
+<%# Identical HTML for every visitor: this page is served from the Cloudflare
+    edge cache. Never read current_user here. The endpoint list comes from the
+    OpenAPI document for this host, so it cannot say something the contract
+    does not. Anchors: the section ids below, endpoint-<operationId> per row,
+    and errors-<code> per problem code (Api::Problem#to_h links to those). %>
+<article id="developers" class="max-w-3xl mx-auto px-4 py-10">
+  <div class="prose max-w-none">
+    <h1>The <%= domain_name %> API</h1>
+
+    <p>
+      Read the rankings on this site from your own scripts and apps. Every request
+      is JSON, every list comes back in rank order, and the same token works on
+      The Greatest Books, The Greatest Music and The Greatest Games.
+    </p>
+    <p>
+      Tokens are a benefit of <%= link_to "membership", membership_path %>. Members
+      create and revoke them at <%= link_to "/developers/tokens", developers_tokens_path %>.
+      Reading this page needs nothing.
+    </p>
+
+    <h2 id="quick-start">Quick start</h2>
+    <p>Put your token in an environment variable and send it as a bearer token:</p>
+<pre><code>export THE_GREATEST_TOKEN=tg_your_token_here
+curl -H "Authorization: Bearer $THE_GREATEST_TOKEN" \
+  "<%= @example_url %>?per_page=5"</code></pre>
+    <p>The same call in Python:</p>
+<pre><code>import os
+import requests
+
+token = os.environ["THE_GREATEST_TOKEN"]
+response = requests.get(
+    "<%= @example_url %>",
+    headers={"Authorization": f"Bearer {token}"},
+    params={"per_page": 5},
+)
+response.raise_for_status()
+for item in response.json()["data"]:
+    print(item["rank"], item["url"])</code></pre>
+
+    <h2 id="authentication">Authentication</h2>
+    <p>
+      A token looks like <code>tg_</code> followed by 40 letters and digits. It is
+      shown once, when you create it. We store only a hash, so nobody can read it
+      back later, including us. If you lose one, revoke it and create another.
+    </p>
+    <ul>
+      <li>Send it on every request as <code>Authorization: Bearer &lt;token&gt;</code>.</li>
+      <li>Keep it out of code and out of version control. An environment variable is the usual place.</li>
+      <li>A token works on all three sites. Its scopes decide which: <code>books:read</code>, <code>music:read</code>, <code>games:read</code>.</li>
+      <li>If a token leaks, revoke it at <%= link_to "/developers/tokens", developers_tokens_path %>. Anything using it gets a 401 from that moment.</li>
+      <li>A token cannot sign in to the site and cannot write anything.</li>
+    </ul>
+
+    <h2 id="rate-limits">Rate limits</h2>
+    <p>
+      Limits apply to your account, not to each token, so creating more tokens
+      does not create more quota. Two windows run at once: a minute and a UTC day.
+    </p>
+    <div class="not-prose overflow-x-auto">
+      <table id="rate-limits-table" class="table">
+        <thead>
+          <tr><th>Account</th><th>Per minute</th><th>Per day (UTC)</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Member</td>
+            <td><%= @rate_limits.dig(:member, :per_minute) %></td>
+            <td><%= @rate_limits.dig(:member, :per_day) %></td>
+          </tr>
+          <tr>
+            <td>Service account</td>
+            <td><%= @rate_limits.dig(:system, :per_minute) %></td>
+            <td><%= @rate_limits.dig(:system, :per_day) %></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Every authenticated response carries six headers. The first three describe
+      the minute window, the last three the day:
+    </p>
+    <ul>
+      <li><code>X-RateLimit-Limit</code>, <code>X-RateLimit-Remaining</code>, <code>X-RateLimit-Reset</code> (Unix time the minute window resets)</li>
+      <li><code>X-RateLimit-Daily-Limit</code>, <code>X-RateLimit-Daily-Remaining</code>, <code>X-RateLimit-Daily-Reset</code></li>
+    </ul>
+    <p>
+      When either window is exhausted the response is <code>429</code> with a
+      <code>Retry-After</code> header in seconds. Requests without a valid token are
+      limited separately, <%= @unauthenticated_per_minute %> per minute per IP address.
+    </p>
+
+    <h2 id="endpoints">Endpoints on this site</h2>
+    <p>
+      The contract is an OpenAPI 3.1 document at
+      <%= link_to "/api/v1/openapi.json", "/api/v1/openapi.json" %>, with
+      <code>servers</code> set to this host and only the paths this host serves.
+      Generate a client from it, or read the summary below.
+    </p>
+    <% if @operations.none? { |operation| !operation.public } %>
+      <p>
+        No ranked catalogue is on the API for this site yet. The Greatest Books
+        went first; the same token works there, and this list grows as each
+        site's resources ship.
+      </p>
+    <% end %>
+    <div class="not-prose">
+      <dl class="space-y-6">
+        <% @operations.each do |operation| %>
+          <div id="endpoint-<%= operation.operation_id %>">
+            <dt class="font-mono">
+              <span class="badge badge-neutral"><%= operation.method %></span>
+              <code><%= operation.path %></code>
+              <% if operation.public %>
+                <span class="badge badge-ghost">no token needed</span>
+              <% end %>
+            </dt>
+            <dd class="mt-1">
+              <p class="font-semibold"><%= operation.summary %></p>
+              <% if operation.description.present? %>
+                <p><%= operation.description %></p>
+              <% end %>
+              <p class="text-sm text-base-content/70">
+                <% if operation.parameters.any? %>
+                  Query parameters:
+                  <% operation.parameters.each_with_index do |name, index| %><%= ", " if index.positive? %><code><%= name %></code><% end %>.
+                <% end %>
+                Responses: <%= operation.statuses.join(", ") %>.
+              </p>
+            </dd>
+          </div>
+        <% end %>
+      </dl>
+    </div>
+
+    <h2 id="pagination">Pagination</h2>
+    <p>
+      Collections take <code>page</code> (from 1) and <code>per_page</code> (1 to
+      100, default 50). The response wraps the rows in <code>data</code> and adds
+      <code>meta</code> (<code>page</code>, <code>per_page</code>,
+      <code>total_count</code>, <code>total_pages</code>) and <code>links</code>
+      (<code>self</code>, <code>next</code>, <code>prev</code>; absent ones are
+      <code>null</code>). A page past the end is an empty <code>200</code>.
+    </p>
+
+    <h2 id="errors">Errors</h2>
+    <p>
+      Errors are <a href="https://www.rfc-editor.org/rfc/rfc9457">RFC 9457</a>
+      problem documents (<code>application/problem+json</code>) with a stable
+      <code>code</code> to switch on. <code>401</code> and <code>403</code> responses
+      also carry a <code>WWW-Authenticate: Bearer</code> challenge.
+    </p>
+    <div class="not-prose overflow-x-auto">
+      <table id="errors-table" class="table">
+        <thead>
+          <tr><th>Status</th><th><code>code</code></th><th>When</th></tr>
+        </thead>
+        <tbody>
+          <%
+            # One line per Api::Problem code. The table is driven by the
+            # registry so a new code without a row here fails the anchor test
+            # rather than shipping a dangling type URI.
+            reasons = {
+              unauthenticated: "No Authorization header was sent.",
+              invalid_token: "The token is malformed, unknown, revoked or expired.",
+              membership_required: "The token's owner has no active membership.",
+              insufficient_scope: "The token lacks the scope this endpoint needs; the WWW-Authenticate header names it.",
+              not_found: "Nothing on this site has that slug.",
+              invalid_parameter: "A query parameter is out of range; detail says which.",
+              rate_limited: "A rate-limit window is exhausted; Retry-After says how long to wait."
+            }
+          %>
+          <% Api::Problem::DEFINITIONS.each do |code, (status, _title)| %>
+            <tr id="errors-<%= code %>">
+              <td><%= status %></td>
+              <td><code><%= code %></code></td>
+              <td><%= reasons.fetch(code) %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 id="versioning">Versioning</h2>
+    <p>
+      This is version 1 and it only grows. Fields are added; none is renamed,
+      removed or retyped. If a change ever needs to break that promise it will be
+      a new version at a new path, and <code>/api/v1/</code> will keep working.
+    </p>
+  </div>
+</article>

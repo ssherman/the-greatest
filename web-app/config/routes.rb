@@ -475,6 +475,23 @@ Rails.application.routes.draw do
       defaults: {format: :json}, constraints: {format: :json}
   end
 
+  # The public API's two pages. /developers is documentation: identical for
+  # every visitor, edge-cached like the policy pages, and it lists only the
+  # endpoints THIS host serves (Api::OpenapiDocument.for_host). /developers/tokens
+  # is where a member mints and revokes tokens: members only, never cached, and
+  # its writes answer in Turbo Streams (Developers::TokensController). Global
+  # routes with a per-domain layout, domain-constrained like /news for the same
+  # reason. No header nav item (spec D14): the links in are the footer and the
+  # /members card.
+  constraints DomainConstraint.new(
+    [:books, :music, :games].map { |domain| Rails.application.config.domains[domain] }.join(",")
+  ) do
+    get "developers", to: "developers#show", as: :developers, constraints: {format: /html/}
+    namespace :developers do
+      resources :tokens, only: [:index, :create, :destroy]
+    end
+  end
+
   # Legacy books URL. ~15 years of inbound links point at /support.
   get "support", to: redirect("/membership", status: 301)
 
