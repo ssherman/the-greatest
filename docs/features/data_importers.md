@@ -162,8 +162,11 @@ section for the full contract).
   names are present. A title alone never matches -- the local data holds many same-title works,
   and disambiguating them is the matcher's job, not the finder's.
 - **Provider** calls the service's `/resolve` endpoint with the *book's* current state (not just
-  the query) and, on an accept verdict, applies fills only to blank scalar columns (`title`,
-  `subtitle`, `description`, `first_published_year`). A populated column the service calls a
+  the query) and, on an accept verdict, applies fills only to blank fields (`title`, `subtitle`,
+  `description`, `first_published_year`). `title`, `subtitle` and `first_published_year` are blank
+  scalar columns; `description` is stored as a `descriptions` row (`source: openlibrary`) via
+  `Describable#assign_description`, never the legacy `books_books.description` column, and "ours"
+  sent to the service is the book's primary description. A populated field the service calls a
   conflict or an enrichment is left alone and reported in `data_populated` as `"skipped:<field>"`.
   Authors and subjects are never applied from this provider -- creating authors or categories from
   them belongs to a separate reconciliation effort.

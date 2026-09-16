@@ -73,7 +73,7 @@ module DataImporters
 
           test "accept verdict fills empty fields and reports them in data_populated" do
             book = ::Books::Book.new(title: "The Great Gatsby")
-            stub_resolve(resolve_response(verdict: "accept", diff: [
+            stub_resolve(resolve_response(verdict: "accept", key: "OL468431W", diff: [
               diff_entry(field: "first_published_year", ours: nil, theirs: 1925, kind: "fill"),
               diff_entry(field: "description", ours: nil, theirs: "A story of the Jazz Age", kind: "fill")
             ]))
@@ -82,7 +82,10 @@ module DataImporters
 
             assert result.success?
             assert_equal 1925, book.first_published_year
-            assert_equal "A story of the Jazz Age", book.description
+            assert_equal "A story of the Jazz Age", book.primary_description.content
+            assert_equal "openlibrary", book.primary_description.source
+            assert_equal "https://openlibrary.org/works/OL468431W", book.primary_description.source_url
+            assert_nil book.description
             assert_equal "The Great Gatsby", book.title
             assert_includes result.data_populated, "first_published_year"
             assert_includes result.data_populated, "description"
@@ -104,7 +107,8 @@ module DataImporters
           end
 
           test "an enrichment on a populated field is left alone and reported as skipped" do
-            book = ::Books::Book.new(title: "War and Peace", description: "Our own description")
+            book = ::Books::Book.new(title: "War and Peace")
+            book.assign_description(source: :manual, content: "Our own description")
             stub_resolve(resolve_response(verdict: "accept", diff: [
               diff_entry(field: "description", ours: "Our own description", theirs: "Their longer description", kind: "enrichment")
             ]))
@@ -112,7 +116,8 @@ module DataImporters
             result = @provider.populate(book, query: nil)
 
             assert result.success?
-            assert_equal "Our own description", book.description
+            assert_equal "Our own description", book.primary_description.content
+            assert_nil book.description
             assert_includes result.data_populated, "skipped:description"
           end
 
@@ -127,6 +132,7 @@ module DataImporters
             refute result.success?
             assert_nil book.first_published_year
             assert_nil book.description
+            assert_nil book.primary_description
             assert_includes result.errors.join, "margin too small"
           end
 
@@ -139,6 +145,7 @@ module DataImporters
             refute result.success?
             assert_nil book.first_published_year
             assert_nil book.description
+            assert_nil book.primary_description
             assert_includes result.errors.join, "no plausible candidate"
           end
 
@@ -157,6 +164,26 @@ module DataImporters
             identifiers = book.identifiers.where(identifier_type: :books_work_openlibrary_id)
             assert_equal 1, identifiers.count
             assert_equal "OL262758W", identifiers.first.value
+          end
+
+          # ------------------------------------------------------------ description
+
+          test "a description fill is written via assign_description, never a second row on a re-run" do
+            book = ::Books::Book.new(title: "The Great Gatsby")
+            stub_resolve(resolve_response(verdict: "accept", key: "OL468431W", diff: [
+              diff_entry(field: "description", ours: nil, theirs: "A story of the Jazz Age", kind: "fill")
+            ]))
+
+            2.times do
+              result = @provider.populate(book, query: nil)
+              assert result.success?
+              book.save!
+            end
+
+            descriptions = book.descriptions.where(source: :openlibrary)
+            assert_equal 1, descriptions.count
+            assert_equal "A story of the Jazz Age", descriptions.first.content
+            assert_nil book.description
           end
 
           # -------------------------------------------------------- error handling
@@ -224,6 +251,30 @@ module DataImporters
               body["title"] == "War and Peace" &&
                 body["author_names"] == ["Leo Tolstoy"] &&
                 body["isbn13"] == ["9780140447934"]
+            end
+          end
+
+          test "R117: the request's description is the book's PRIMARY description content, never the legacy column" do
+            book = ::Books::Book.new(title: "War and Peace")
+            book.assign_description(source: :manual, content: "Our own description")
+            book.save!
+            stub_resolve(resolve_response(verdict: "accept", diff: []))
+
+            @provider.populate(book, query: nil)
+
+            assert_requested(:post, "#{BASE_URL}/resolve") do |req|
+              JSON.parse(req.body)["description"] == "Our own description"
+            end
+          end
+
+          test "R117: description is omitted from the request when the book has no primary description" do
+            book = ::Books::Book.new(title: "The Great Gatsby")
+            stub_resolve(resolve_response(verdict: "accept", diff: []))
+
+            @provider.populate(book, query: nil)
+
+            assert_requested(:post, "#{BASE_URL}/resolve") do |req|
+              !JSON.parse(req.body).key?("description")
             end
           end
 

@@ -91,16 +91,23 @@ module DataImporters
           assert result.success?
           assert result.item.persisted?
           assert_equal "The Great Gatsby", result.item.title
-          assert_equal "A novel set in the Jazz Age", result.item.description
+          assert_nil result.item.description
+          descriptions = result.item.descriptions.where(source: :openlibrary)
+          assert_equal 1, descriptions.count
+          assert_equal "A novel set in the Jazz Age", descriptions.first.content
+          assert_equal "https://openlibrary.org/works/OL468431W", descriptions.first.source_url
           assert result.item.identifiers.exists?(identifier_type: :books_work_openlibrary_id, value: "OL468431W")
         end
 
         test "force_providers runs providers against an existing book" do
           stub_open_library_client
+          # war_and_peace already carries a primary description via fixtures
+          # (war_and_peace_ai), so a "fill" on description there would be
+          # unrealistic -- subtitle is the fixture's genuinely blank field.
           stub_request(:post, "#{BASE_URL}/resolve").to_return(
             status: 200,
             body: accept_response(diff: [
-              {"field" => "description", "ours" => nil, "theirs" => "Filled description", "kind" => "fill"}
+              {"field" => "subtitle", "ours" => nil, "theirs" => "A Novel", "kind" => "fill"}
             ]).to_json
           )
           existing = books_books(:war_and_peace)
@@ -110,7 +117,7 @@ module DataImporters
 
           assert result.success?
           assert_equal existing, result.item
-          assert_equal "Filled description", result.item.reload.description
+          assert_equal "A Novel", result.item.reload.subtitle
           assert_requested :post, "#{BASE_URL}/resolve", times: 1
         end
 
@@ -225,10 +232,13 @@ module DataImporters
         test "item: given runs the provider against that item without calling the finder" do
           Finder.any_instance.expects(:call).never
           stub_open_library_client
+          # war_and_peace already carries a primary description via fixtures
+          # (war_and_peace_ai) -- subtitle is the fixture's genuinely blank
+          # field, so a "fill" there is realistic.
           stub_request(:post, "#{BASE_URL}/resolve").to_return(
             status: 200,
             body: accept_response(diff: [
-              {"field" => "description", "ours" => nil, "theirs" => "Filled via item", "kind" => "fill"}
+              {"field" => "subtitle", "ours" => nil, "theirs" => "A Novel", "kind" => "fill"}
             ]).to_json
           )
           book = books_books(:war_and_peace)
@@ -237,7 +247,7 @@ module DataImporters
 
           assert result.success?
           assert_equal book, result.item
-          assert_equal "Filled via item", result.item.reload.description
+          assert_equal "A Novel", result.item.reload.subtitle
         end
       end
     end
