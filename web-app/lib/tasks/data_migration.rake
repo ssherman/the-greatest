@@ -111,13 +111,45 @@ namespace :data_migration do
 
   desc "Migrate legacy list_cons into penalties + penalty_applications (active RCs; reuse Global seeds)"
   task penalties: :environment do
-    pp Services::BooksMigration::PenaltyMigrator.call
-    pp Services::BooksMigration::PenaltyApplicationMigrator.call
+    # penalties:reconcile follows in `all` and destroys rows, so a failure here
+    # stops the chain rather than being printed and walked past.
+    {
+      "Penalty" => Services::BooksMigration::PenaltyMigrator,
+      "PenaltyApplication" => Services::BooksMigration::PenaltyApplicationMigrator
+    }.each do |label, migrator|
+      result = migrator.call
+      pp result
+      abort "penalties migration failed (#{label}): #{result[:error]}" unless result[:success]
+    end
   end
 
-  desc "Migrate legacy list_con_lists into list_penalties (static penalties only)"
+  namespace :penalties do
+    desc "Merge duplicate Books penalties into their globals and year-span statics into num_years_covered (idempotent; repairs a DB migrated before the resolver changes)"
+    task reconcile: :environment do
+      result = Services::BooksMigration::PenaltyReconciler.call
+      pp result
+      abort "penalties:reconcile failed: #{result[:error]}" unless result[:success]
+    end
+  end
+
+  desc "Migrate legacy list_con_lists into list_penalties (static penalties only) and set Books::List#num_years_covered from the year-span statics + config/books_migration/num_years_covered.yml"
   task list_penalties: :environment do
-    pp Services::BooksMigration::ListPenaltyMigrator.call
+    result = Services::BooksMigration::ListPenaltyMigrator.call
+    pp result
+    abort "list_penalties migration failed: #{result[:error]}" unless result[:success]
+    result = Services::BooksMigration::NumYearsCoveredMigrator.call
+    pp result
+    abort "num_years_covered migration failed: #{result[:error]}" unless result[:success]
+  end
+
+  namespace :num_years_covered do
+    desc "Write/append config/books_migration/num_years_covered.yml from legacy year-span list_cons (active RCs); existing entries are kept"
+    task derive: :environment do
+      rows = Services::BooksMigration::NumYearsCoveredDeriver.legacy_rows
+      entries = Services::BooksMigration::NumYearsCoveredDeriver.call(rows)
+      result = Services::BooksMigration::NumYearsCoveredFile.append(entries)
+      puts "#{Services::BooksMigration::NumYearsCoveredFile::PATH}: kept #{result[:kept]} existing entries, added #{result[:added]} (#{entries.size} lists derived)"
+    end
   end
 
   desc "Migrate legacy user_lists into Books::UserList (preserve id; list_type + view_mode symbol-remap)"
@@ -288,7 +320,7 @@ namespace :data_migration do
   task all: [:languages, :users, :authors, :books, :book_authors, :editions, :identifiers, :edition_amazon_identifiers,
     :categories, :category_items, :book_attributes, :book_type_categories, :countries,
     :book_countries, :external_links, :lists, :list_items, :ranking_configurations,
-    :ranked_lists, :penalties, :list_penalties, :user_lists, :user_list_items,
+    :ranked_lists, :penalties, :list_penalties, "penalties:reconcile", :user_lists, :user_list_items,
     :reading_goals, :saved_searches, :reviews, :corrections, :news_posts,
     "user_favorites_lists:rebuild"]
 end
