@@ -336,7 +336,7 @@ def test_editions_reach_through_a_stale_work_key(client, fixture_artifact):
         f"""
         SELECT e.work_key FROM '{fixture_artifact.table("editions")}' e
         JOIN '{fixture_artifact.table("redirects")}' r ON r.source_key = e.work_key
-        WHERE r.entity = 'work' AND NOT r.is_cycle
+        WHERE r.entity = 'work' AND NOT r.is_cycle AND NOT r.is_dangling
         ORDER BY e.work_key LIMIT 1
         """
     ).fetchone()
@@ -459,6 +459,7 @@ def test_a_redirected_identifiers_work_key_resolves_to_the_terminal(client, fixt
         SELECT i.id_type, i.value FROM '{fixture_artifact.table("identifiers")}' i
         JOIN '{fixture_artifact.table("redirects")}' r
           ON r.source_key = i.work_key AND r.entity = 'work' AND NOT r.is_cycle
+             AND NOT r.is_dangling
         WHERE i.work_key IS NOT NULL
         ORDER BY i.id_type, i.value LIMIT 1
         """

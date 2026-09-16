@@ -1,10 +1,12 @@
-"""Retrieval endpoints: the five GETs an agent reaches for on day one.
+"""Retrieval endpoints: the five GETs an agent reaches for on day one, plus batch.
 
     GET /works/{work_key}              full work record
     GET /works/{work_key}/editions      language, pages, publisher, year, ISBNs, binding
     GET /authors/{author_key}
     GET /authors/{author_key}/works     the shelf -- paginated, popularity-ordered
     GET /identifiers/{type}/{value}     -> work(s), always a LIST
+    POST /works/batch                   up to MAX_BATCH keys -> {requested_key: record | null}
+    POST /authors/batch                 same shape, for authors
 
 REDIRECT TRANSPARENCY (see common.schemas): a merged key returns the terminal
 record plus `redirected_from`, so the 9.9% stale keys resolve instead of
@@ -15,9 +17,12 @@ chain-walking here.
 ONE QUERY PATH (ruling R71): `fetch_works` and `fetch_authors` are set-based --
 they take a list of keys and return a dict keyed by the REQUESTED key, `None`
 for a key that does not resolve to a real record. The singular endpoints below
-call them with a list of one. Task 32's batch endpoints will call the same
-functions with up to 500; there is deliberately no second lookup path.
-`resolve_work_key` is the one-key convenience over the same resolver.
+call them with a list of one; the batch endpoints (Task 32) call them with up
+to `MAX_BATCH`. There is deliberately no second lookup path -- both are thin
+wrappers, and the fetchers' own order-preserving dedup means the batch routes
+never reorder or re-dedupe. `resolve_work_key` is the one-key convenience over
+the same resolver (R84: via `_resolve_terminals` plus a small `works`
+existence check, not the full `fetch_works` join set).
 
 Every query in this module runs on the request's own cursor
 (`deps.cursor(state)`), never on `state.connection` -- see `deps.py`. Scratch
@@ -27,6 +32,7 @@ concurrent requests cannot collide on a shared scratch-table name.
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 import duckdb
@@ -52,6 +58,8 @@ SOURCE = "openlibrary"
 
 WORK_KEY_PATTERN = r"^OL\d+W$"
 AUTHOR_KEY_PATTERN = r"^OL\d+A$"
+
+MAX_BATCH = 500
 
 
 def _key(key: str) -> SourceKey:
@@ -139,6 +147,10 @@ class IdentifierHit(BaseModel):
     editions: list[SourceKey] = Field(default_factory=list)
     id_type: str
     value: str
+
+
+class BatchRequest(BaseModel):
+    keys: list[str] = Field(max_length=MAX_BATCH)
 
 
 # ------------------------------------------------------------------------ resolution
@@ -273,13 +285,27 @@ def fetch_works(
 def resolve_work_key(
     cur: duckdb.DuckDBPyConnection, paths: ArtifactPaths, key: str
 ) -> tuple[str | None, list[str]]:
-    """The one-key convenience over `fetch_works`'s resolver: terminal key (or
+    """The one-key convenience over `_resolve_terminals`: terminal key (or
     None if the key does not resolve to a real work) plus the chain it came
-    from (`[key]` if redirected, else `[]`)."""
-    record = fetch_works(cur, paths, [key]).get(key)
-    if record is None:
+    from (`[key]` if redirected, else `[]`).
+
+    R84: resolves through `_resolve_terminals` plus a small `works` existence
+    check, rather than running `fetch_works`'s full join set just to discard
+    everything but the key.
+    """
+    terminal_by_requested = _resolve_terminals(cur, paths, [key], entity="work")
+    terminal = terminal_by_requested.get(key)
+    if terminal is None:
         return None, []
-    return record.key.key, [rf.key for rf in record.redirected_from]
+    exists = cur.execute(
+        f"""
+        SELECT 1 FROM '{paths.table("works")}' WHERE work_key = ? LIMIT 1
+        """,
+        [terminal],
+    ).fetchone()
+    if exists is None:
+        return None, []
+    return terminal, [key] if key != terminal else []
 
 
 # -------------------------------------------------------------------------- authors
@@ -590,3 +616,39 @@ def get_identifier(
     with cursor(state) as cur:
         hits = _fetch_identifier_hits(cur, state.paths, id_type, normalized)
     return Envelope(source_version=state.source_version, data=hits)
+
+
+# ----------------------------------------------------------------------------- batch
+
+
+def _reject_malformed_keys(keys: list[str], pattern: str) -> None:
+    invalid = [k for k in keys if not re.match(pattern, k)]
+    if invalid:
+        raise HTTPException(status_code=422, detail=f"malformed key(s): {', '.join(invalid)}")
+
+
+@router.post("/works/batch", response_model=Envelope[dict[str, WorkRecord | None]])
+def get_works_batch(
+    request: BatchRequest,
+    state: ArtifactState = Depends(get_state),
+):
+    """Thin wrapper over `fetch_works` (ruling R71) -- one query for the whole
+    batch, no loop of singular lookups. `fetch_works` already dedupes its
+    `keys` argument order-preservingly, so its returned dict is keyed by the
+    requested key in request order with no reordering needed here."""
+    _reject_malformed_keys(request.keys, WORK_KEY_PATTERN)
+    with cursor(state) as cur:
+        records = fetch_works(cur, state.paths, request.keys)
+    return Envelope(source_version=state.source_version, data=records)
+
+
+@router.post("/authors/batch", response_model=Envelope[dict[str, AuthorRecord | None]])
+def get_authors_batch(
+    request: BatchRequest,
+    state: ArtifactState = Depends(get_state),
+):
+    """Same shape as `get_works_batch`, over `fetch_authors`."""
+    _reject_malformed_keys(request.keys, AUTHOR_KEY_PATTERN)
+    with cursor(state) as cur:
+        records = fetch_authors(cur, state.paths, request.keys)
+    return Envelope(source_version=state.source_version, data=records)
