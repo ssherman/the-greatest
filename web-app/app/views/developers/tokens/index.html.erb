@@ -1,0 +1,20 @@
+<% content_for :page_title, "API tokens | #{domain_name}" %>
+
+<div class="container mx-auto max-w-3xl px-4 py-10">
+  <h1 class="text-3xl font-bold mb-2">API tokens</h1>
+  <p class="text-base-content/70 mb-8">
+    A token lets a script or an app read the rankings through the
+    <%= link_to "API", developers_path, class: "link" %>. One token works on every
+    site. Each is shown once, when you create it. If one leaks, revoke it here and
+    create another.
+  </p>
+
+  <%= render "developers/tokens/list", tokens: @tokens %>
+
+  <%# Filled by create.turbo_stream.erb with the once-only secret panel. Its own
+      region, separate from the form, so a later revoke (which refreshes the
+      form) can never wipe a secret the member has not copied yet. %>
+  <div id="developers_new_token"></div>
+
+  <%= render "developers/tokens/form", tokens: @tokens %>
+</div>
