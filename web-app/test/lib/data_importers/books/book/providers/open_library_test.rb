@@ -85,6 +85,7 @@ module DataImporters
             assert_equal "A story of the Jazz Age", book.primary_description.content
             assert_equal "openlibrary", book.primary_description.source
             assert_equal "https://openlibrary.org/works/OL468431W", book.primary_description.source_url
+            assert_predicate book.primary_description, :license_cc0?
             assert_nil book.description
             assert_equal "The Great Gatsby", book.title
             assert_includes result.data_populated, "first_published_year"

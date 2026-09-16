@@ -118,10 +118,13 @@ module DataImporters
               if entry.field == "description"
                 next unless book.primary_description.nil?
 
+                # license: the book page renders the provenance link only for cc0 /
+                # cc_by_sa_4 rows; the books migration classifies Open Library text as cc0.
                 book.assign_description(
                   source: :openlibrary,
                   content: entry.theirs,
-                  source_url: "https://openlibrary.org/works/#{candidate.work_key}"
+                  source_url: "https://openlibrary.org/works/#{candidate.work_key}",
+                  license: :cc0
                 )
               else
                 next unless book[entry.field].blank?

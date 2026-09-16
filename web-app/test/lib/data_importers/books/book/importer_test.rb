@@ -96,6 +96,7 @@ module DataImporters
           assert_equal 1, descriptions.count
           assert_equal "A novel set in the Jazz Age", descriptions.first.content
           assert_equal "https://openlibrary.org/works/OL468431W", descriptions.first.source_url
+          assert_predicate descriptions.first, :license_cc0?
           assert result.item.identifiers.exists?(identifier_type: :books_work_openlibrary_id, value: "OL468431W")
         end
 
