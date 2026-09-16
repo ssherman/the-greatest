@@ -1254,5 +1254,91 @@ module Rankings
 
       assert_equal 100, calculator.call
     end
+
+    # --- Books temporal coverage: log curve ---------------------------------
+
+    def books_temporal_config(max_value)
+      config = Books::RankingConfiguration.create!(
+        name: "Books Temporal #{SecureRandom.hex(4)}",
+        global: true,
+        min_list_weight: 1
+      )
+      penalty = Global::Penalty.create!(
+        name: "Years covered #{SecureRandom.hex(4)}",
+        dynamic_type: :num_years_covered
+      )
+      PenaltyApplication.create!(penalty: penalty, ranking_configuration: config, value: max_value)
+      config
+    end
+
+    def temporal_entry(ranked_list)
+      ranked_list.reload.calculated_weight_details["penalties"].find { |p| p["source"] == "dynamic_temporal" }
+    end
+
+    test "books temporal penalty follows the log curve at the legacy bucket points" do
+      config = books_temporal_config(50)
+      one_decimal = {1 => 50.0, 5 => 34.8, 10 => 28.3, 25 => 19.6, 50 => 13.1, 75 => 9.3, 100 => 6.5}
+
+      one_decimal.each do |years, expected|
+        list = Books::List.create!(name: "Covers #{years} years", status: :approved, num_years_covered: years)
+        ranked = RankedList.create!(list: list, ranking_configuration: config)
+        WeightCalculatorV1.new(ranked).call
+
+        entry = temporal_entry(ranked)
+        exact = 50 * (1.0 - Math.log(years) / Math.log(WeightCalculatorV1::BOOKS_FULL_COVERAGE_YEARS))
+        assert_in_delta expected, entry["value"], 0.05, "#{years} years (one decimal)"
+        assert_in_delta exact, entry["value"], 1e-9, "#{years} years (exact)"
+        assert_equal 200, entry["calculation"]["full_coverage_years"]
+        assert_equal "Books::List", entry["calculation"]["media_type"]
+        assert_equal (100 - exact).round, ranked.reload.weight, "#{years} years weight"
+      end
+    end
+
+    test "books temporal penalty is zero at and beyond full coverage" do
+      config = books_temporal_config(50)
+
+      [200, 500].each do |years|
+        list = Books::List.create!(name: "Covers #{years} years", status: :approved, num_years_covered: years)
+        ranked = RankedList.create!(list: list, ranking_configuration: config)
+        weight = WeightCalculatorV1.new(ranked).call
+
+        assert_equal 100, weight, "#{years} years should carry no temporal penalty"
+        assert_nil temporal_entry(ranked), "#{years} years should record no dynamic_temporal entry"
+      end
+    end
+
+    test "books temporal penalty never exceeds the application value" do
+      config = books_temporal_config(30)
+      list = Books::List.create!(name: "Covers 1 year", status: :approved, num_years_covered: 1)
+      ranked = RankedList.create!(list: list, ranking_configuration: config)
+      WeightCalculatorV1.new(ranked).call
+
+      assert_in_delta 30.0, temporal_entry(ranked)["value"], 1e-9
+      assert_equal 70, ranked.reload.weight
+    end
+
+    # The extraction must be behaviour-preserving for every other domain: the
+    # quadratic, its exponent and its details keys are exactly what they were.
+    test "music temporal penalty keeps the quadratic curve and its details" do
+      config = Music::Albums::RankingConfiguration.create!(
+        name: "Music Temporal #{SecureRandom.hex(4)}",
+        global: true,
+        min_list_weight: 1
+      )
+      penalty = Global::Penalty.create!(name: "Years covered #{SecureRandom.hex(4)}", dynamic_type: :num_years_covered)
+      PenaltyApplication.create!(penalty: penalty, ranking_configuration: config, value: 40)
+      list = Music::Albums::List.create!(name: "Best of the 1990s", status: :approved, num_years_covered: 10)
+      ranked = RankedList.create!(list: list, ranking_configuration: config)
+      WeightCalculatorV1.new(ranked).call
+
+      entry = temporal_entry(ranked)
+      calc = entry["calculation"]
+      assert_equal "max_value * ((1.0 - ratio) ** exponent)", calc["formula"]
+      assert_equal 2.0, calc["exponent"]
+      assert_equal "Music::Albums::List", calc["media_type"]
+      assert_nil calc["full_coverage_years"]
+      assert_in_delta 40 * ((1.0 - 10.0 / calc["max_year_range"])**2), entry["value"], 1e-9
+      assert_equal (100 - entry["value"]).round, ranked.reload.weight
+    end
   end
 end
