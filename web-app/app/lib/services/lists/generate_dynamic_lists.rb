@@ -252,15 +252,10 @@ module Services
 
       # Attaches tags only. The value of a tag is a per-configuration editorial
       # judgement, so this never creates a PenaltyApplication -- the same division
-      # of labour GenerateUserFavorites settled on.
+      # of labour GenerateUserFavorites settled on. Time scope needs no tag in any
+      # domain: the dynamic Global::Penalty "List: number of years covered" reads
+      # the num_years_covered value assert_fields sets.
       def assert_penalties(top_list, overflow_list)
-        one_year = one_year_penalty
-        if one_year
-          [top_list, overflow_list].each do |list|
-            list.list_penalties.find_or_create_by!(penalty: one_year)
-          end
-        end
-
         honorable_mention = ::Global::Penalty.find_by(name: HONORABLE_MENTION_PENALTY_NAME)
         if honorable_mention
           overflow_list.list_penalties.find_or_create_by!(penalty: honorable_mention)
@@ -271,23 +266,6 @@ module Services
               "will not be penalised as an honorable mention"
           }
         end
-      end
-
-      def one_year_penalty
-        name = @config.one_year_penalty_name
-        # Games, albums and songs penalise time scope with the dynamic
-        # Global::Penalty "List: number of years covered", which fires off the
-        # num_years_covered value assert_fields sets. No tag needed, and no warning.
-        return nil if name.blank?
-
-        penalty = ::Penalty.find_by(name: name)
-        if penalty.nil?
-          Rails.logger.warn {
-            "#{self.class.name}: no Penalty named #{name.inspect}; the #{@config.year} " \
-              "#{@config.generated_list_noun} rollups will not carry a one-year penalty"
-          }
-        end
-        penalty
       end
 
       def ensure_ranked_list(list)

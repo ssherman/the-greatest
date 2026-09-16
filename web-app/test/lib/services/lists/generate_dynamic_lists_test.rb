@@ -376,16 +376,6 @@ module Services
         assert_equal true, broken.high_quality_source
       end
 
-      test "tags both lists with the domain's one-year penalty" do
-        rank(@books)
-        penalty = penalties(:books_one_year_penalty)
-
-        result = generate
-
-        assert_includes result.data[:top_list].penalties, penalty
-        assert_includes result.data[:overflow_list].penalties, penalty
-      end
-
       test "tags only the overflow list as an honorable mention" do
         rank(@books)
         penalty = penalties(:honorable_mention_penalty)
@@ -405,14 +395,19 @@ module Services
         assert_equal overflow.penalties.count, overflow.penalties.distinct.count
       end
 
-      test "warns and continues when the domain's one-year penalty is missing" do
+      # Time scope is the dynamic num_years_covered global's job in every domain now;
+      # the books static that used to be tagged here is gone. assert_fields already
+      # sets num_years_covered: 1, which is all the dynamic penalty reads.
+      test "does not tag the rollups with a static time-scope penalty" do
         rank(@books)
-        penalties(:books_one_year_penalty).destroy!
 
         result = generate
 
-        assert result.success?, result.errors.inspect
-        assert_empty result.data[:top_list].penalties.where(type: "Books::Penalty")
+        [result.data[:top_list], result.data[:overflow_list]].each do |list|
+          assert_empty list.penalties.static.where(category: :list_time_scope),
+            "#{list.name} carries a static time-scope tag"
+          assert_equal 1, list.num_years_covered
+        end
       end
 
       # Attaching the tag is a fact about the list. Choosing what it is worth is an
