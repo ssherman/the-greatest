@@ -9,8 +9,33 @@ Plan: `docs/superpowers/plans/2026-09-01-open-library-data-service.md`
 ## What it is
 
 Six dumps are distilled into ten Parquet tables, queried by DuckDB, and served by
-a small FastAPI process. It never writes to Rails, holds nothing that is not
-rebuildable from a dump, and is never on a public request path.
+a small FastAPI process. Four boundaries, enforced structurally rather than by
+convention:
+
+1. **It never writes to Rails.** It returns candidates with evidence and a score; Rails, a human,
+   or later an agent decides.
+2. **It holds nothing that is not rebuildable from a dump.** A rebuild proposes; it can never
+   overwrite a decision recorded elsewhere.
+3. **It is never on a public request path.** Background and import jobs only, with timeouts and a
+   circuit breaker -- see "Rails client (Increment 5)" below.
+4. **No covers, no public search, no serving.**
+
+### The ten tables
+
+| Table | Purpose |
+|---|---|
+| `works` | Work skeleton -- minimal columns, every work. |
+| `work_details` | Sparse rich fields, split out so blocking queries never have to read them. |
+| `authors` | Author skeleton. |
+| `author_names` | Exploded name -> author_key, including alternate names. |
+| `work_authors` | Exploded work/author pairs. |
+| `editions` | Narrow per-edition columns: work, title, year, language, pages, publisher, format, series. The tenth table -- not in the spec's original nine (see "Two departures from the spec" below). |
+| `identifiers` | ISBN/OCLC/LCCN/ASIN/Goodreads -> edition -> work, derived from editions. |
+| `year_evidence` | Year *candidates* per work (declared year, min/second-min/modal edition year), never collapsed to one answer. |
+| `popularity` | Edition, reading-log and rating counts. |
+| `redirects` | Transitively resolved Open Library redirects, cycles flagged. |
+
+Row counts and on-disk sizes for the real 2026-07-31 build are in "Measured build" below.
 
 ## Building an artifact
 
@@ -20,6 +45,24 @@ rebuildable from a dump, and is never on a public request path.
 
 Downloads six dumps (all must resolve to the same date), distills, derives,
 validates and reports. A failed gate leaves the previous version live.
+
+### Promoting a new version
+
+Point `OL_DATA_VERSION` at the new dump date and restart the API container.
+Compose reads the version from the environment rather than a symlink, so a
+new build can be pinned without touching the compose file
+(`data-sources/docker-compose.yml`; see also `data-sources/README.md`,
+"Running the API"):
+
+    OL_DATA_VERSION=<new-date> docker compose up -d api
+
+The service refuses to boot against a version directory with no
+`manifest.json`, or one whose manifest does not record `gates_passed: true`
+("Version pinning" under "Service, measured" below), so pointing at an
+unfinished or failed build fails loudly rather than serving stale or partial
+data. Once the new version is confirmed good, delete the old version
+directory under `/home/shane/ol-data/versions/` to reclaim the ~10 GB it
+holds.
 
 ## Measured build, 2026-07-31
 
@@ -203,7 +246,31 @@ disposable.
   `redirects` -- meaning most of these are real merges whose edition-year evidence
   is silently lost, not just dangling references to keys OL deleted outright.
 
-Everything else is left for Task 40.
+### Two departures from the spec, current status
+
+The design spec's artifact section listed nine tables, and its blocking rule 1 named
+"ISBN / OCLC / LCCN / ASIN." Both departures were decided before the first build and both are
+shipped in the 2026-07-31 artifact measured above.
+
+**A tenth table, `editions`.** The spec's nine tables carried no per-edition columns, but
+`GET /works/{work_key}/editions` needs language, pages, publisher, year, ISBNs and binding, and
+`year_evidence` is derived from edition years -- none of those columns existed anywhere. `editions`
+supplies both, produced by the same pass over the 12.5 GB dump that produces `identifiers`, so it
+cost one extra `COPY` from staging rather than a second read. Status: shipped -- 56,615,822 rows,
+3.14 GB, in the table above.
+
+**`[GOODREADS]` identifiers.** The spec's blocking rule 1 named ISBN/OCLC/LCCN/ASIN only. Goodreads
+was added as a fifth identifier type on the strength of the development database's coverage (95.0%
+of our books carry a Goodreads ID, higher than ISBN's 88.1%; OCLC and LCCN are on zero of them) and
+because the OL editions dump itself carries `identifiers.goodreads` on roughly 12.5% of editions --
+the highest-coverage join key available, costing one more row type in a table already keyed by
+identifier type. Status: shipped -- `identifiers` carries a `goodreads` id_type (135 of the
+25,465,282 duplicate rows removed by the dedup fix above were Goodreads duplicates, out of
+120,498,957 distinct rows total), blocking rule 1 includes it, and the Rails client's `resolve`,
+`ImportQuery` and `Providers::OpenLibrary` all carry `goodreads_id` as a first-class field (see
+"Rails client (Increment 5)" below). Goodreads-related code in `data-sources/` carries a
+`[GOODREADS]` marker as a locator, not a hedge, so every touchpoint is greppable if the field ever
+needs revisiting.
 
 ## Matcher, measured
 
@@ -398,7 +465,22 @@ reports `pass`.
 ## Service, measured
 
 Task 34 built the image, brought it up against the real 2026-07-31 artifact,
-and timed every endpoint. All numbers below are real-artifact wall clock on
+and timed every endpoint.
+
+**Routes** (`data-sources/src/openlibrary/api/{meta,retrieval,resolve}.py`; full request/response
+shapes and curl examples are in `data-sources/README.md`, "Running the API"):
+
+    GET  /version
+    GET  /works/{key}
+    GET  /works/{key}/editions
+    GET  /authors/{key}
+    GET  /authors/{key}/works
+    GET  /identifiers/{type}/{value}
+    POST /works/batch
+    POST /authors/batch
+    POST /resolve
+
+All numbers below are real-artifact wall clock on
 this box: ~27 cores available to DuckDB, `OL_API_MEMORY_LIMIT` at its default
 8GB, and every query an un-indexed Parquet scan (no table here carries an
 index). A smaller container will be slower roughly in proportion to how many
@@ -498,6 +580,132 @@ behaviour on this title (see "Matcher, measured" above), and the accept
 threshold is a deliberately deferred dial -- tightening or loosening it is a
 calibration decision for whoever operates the service, not something this
 task changes.
+
+## Rails client (Increment 5)
+
+`web-app/app/lib/books/open_library/{configuration,exceptions,circuit_breaker,base_client,client,
+work,author,candidate,resolution,edition,shelf_entry,identifier_hit}.rb` and
+`web-app/app/lib/data_importers/books/book/{import_query,finder,importer,providers/open_library}.rb`.
+
+### Layering
+
+`Configuration` (base URL, timeouts, user agent, logger; validates the URL is HTTP/HTTPS) is built
+once per `BaseClient`/`Client`. `BaseClient` is the Faraday layer: `#get`/`#post` run every request
+through a `CircuitBreaker`, classify the HTTP response into `Exceptions::*`, and parse JSON.
+`Client` wraps `BaseClient` and returns typed value objects -- `Work`, `Author`, `Edition`,
+`ShelfEntry`, `IdentifierHit`, `Resolution` (which nests `Candidate` and `Decision`) -- instead of
+raw parsed-JSON hashes, so a caller cannot come to depend on a wire key name that moves under it.
+`DataImporters::Books::Book` (`ImportQuery`, `Finder`, `Importer`, `Providers::OpenLibrary`) sits
+above `Client` and is the only caller of `#resolve`.
+
+### Timeouts (R95)
+
+`Configuration` carries three numbers, not one: `timeout` 10 s (retrieval calls --
+`GET /works/{key}/editions` is the slowest single lookup at up to 2.2 s, measured above),
+`open_timeout` 3 s (TCP connect), and `resolve_timeout` 60 s, passed as a per-request override on
+`POST /resolve` only. A single 10 s default for the whole client would have been too short:
+"Service, measured" above puts `/resolve` at 5-6 s on a 27-core box, and a smaller or colder
+production box has real room to run longer. `BaseClient#get`/`#post` accept a `timeout:` override
+via Faraday's per-request options, which is how `Client#resolve` gets 60 s while every other call
+keeps the 10 s default.
+
+### Circuit breaker
+
+`CircuitBreaker` is Redis-backed, via `REDIS_POOL` (injectable for tests), because `Rails.cache` is
+`:null_store` in test and `:memory_store` in development and cannot carry breaker state across
+processes. Key `circuit:books:open_library` (`BaseClient` constructs it with
+`key: "books:open_library"`); `failure_threshold` 5; `cooldown` 60 s.
+
+Which errors count (R99/R109/R110): inside `BaseClient#perform`, the HTTP call and the JSON parse
+both happen inside `breaker.call`'s block. A Faraday timeout or connection failure, a 5xx (raised as
+`ServerError`), an unmapped status outside 2xx/4xx/5xx (raised as `HttpError`), and an unparseable
+body (`ParseError`) all propagate out of that block, so `CircuitBreaker#record_failure` counts them
+before `perform`'s own `rescue` clauses translate the Faraday-level errors into
+`Exceptions::TimeoutError`/`NetworkError`. A 4xx (`ClientError`/`NotFoundError`) is classified as
+data rather than raised inside the block, so the block returns normally, `breaker.call` runs
+`reset!`, and only afterward does `perform` raise the typed exception. `reset!` deletes the whole
+Redis hash -- the failure count and any `opened_at` -- so a 4xx does not just skip incrementing the
+count, it clears it (R110). This is deliberate: the breaker is consecutive-failure, not a sliding
+window, and a 4xx is a completed exchange with a live, healthy service; the occasional 500 in a
+mixed run is still visible to the caller as a failure result even though it never accumulates
+toward opening the circuit.
+
+### The `/resolve` body is an allow-list
+
+`Client#resolve` takes exactly the fields the service's `ResolveRequest` accepts
+(`extra="forbid"` server-side): `title`, `subtitle`, `author_names`, `year`, `isbn13`, `isbn10`,
+`asin`, `goodreads_id`, `existing_ol_key`, `description`, `subjects`, `limit` (R103) -- not
+`language`, `oclc` or `lccn`, which nothing in Rails can supply yet (`Language#iso_639_3` is ISO;
+the service wants MARC -- a carry-forward, below). Optional fields are omitted rather than sent
+nil/empty so the service's own defaults apply. `Resolution` is built straight from the response:
+`decision` is the one authoritative verdict, `candidates` is served order and is never re-sorted
+here (the server's rank order is the contract), and `#accepted` looks up the candidate matching
+`decision.key` rather than re-deciding anything client-side.
+
+### The finder rule (R104)
+
+`DataImporters::Books::Book::Finder` checks identifiers first, in order: `open_library_work_key`,
+`isbn13`, `isbn10`, `asin`, `goodreads_id`. Only if none of those match does it fall back to one
+query: an exact case-insensitive title match joined to an author whose name matches one of the
+query's `author_names` case-insensitively. A title with no author names never matches -- the local
+data holds many same-title works, and disambiguating them is the matcher's job, not the finder's.
+The finder never calls the Open Library service.
+
+### The provider's write rule (R105/R106/R107)
+
+`Providers::OpenLibrary#resolve_args` builds the `/resolve` body from the *book's own current
+state* -- title, subtitle, description, author names, year, `existing_ol_key`, and the union of the
+book's own identifier rows with the query's identifiers of the same type -- not from the query
+alone (R106), so the service's `diff.ours` is always what the book actually holds and a re-run
+never drops an identifier the query no longer repeats. `Importer#initialize_item` seeds a new book
+with `title` *and* `first_published_year`, because a title-only seed would make the query's year
+look like the book's own value and the service would score it as agreement rather than a fill.
+
+On `accept`, only the four fillable columns the diff covers -- `title`, `subtitle`, `description`,
+`first_published_year` (`FILLABLE_FIELDS`) -- are ever written, and only when the local column is
+blank (belt and braces alongside the service's own "ours was absent" judgment). A populated column
+the service calls a `conflict` or an `enrichment` is left untouched and recorded in `data_populated`
+as `"skipped:<field>"` (R105) so a human can see it. `authors` and `subjects` also appear in the
+service's diff but are never applied -- creating authors or categories from them belongs to the
+batch reconciliation spec (see "What this plan deliberately does not build" in the plan), not this
+provider. An accept also `find_or_initialize_by`s a `books_work_openlibrary_id` identifier on the
+book.
+
+### Verdict to result (R107)
+
+`accept` -> apply fills, write the identifier, `success_result`. `abstain` ->
+`failure_result(["Open Library abstained: <decision.reason>"])`. `reject` ->
+`failure_result(["Open Library rejected: <decision.reason>"])`. Any
+`Books::OpenLibrary::Exceptions::Error` (circuit open, timeout, network, HTTP, parse) is rescued and
+becomes a `failure_result` naming the exception class and message. Exactly one HTTP call per
+`populate` -- the accepted candidate's `record` is a full `Work`, so no follow-up `GET` is needed.
+
+### Running a manual import locally
+
+    cd data-sources && docker compose up -d api
+
+Redis must be up too (`REDIS_POOL`, the same Redis Sidekiq uses) -- the breaker needs it even for a
+single call.
+
+    cd web-app
+    bin/rails runner 'p DataImporters::Books::Book::Importer.call(title: "…", author_names: ["…"]).summary'
+
+### Bulk guidance
+
+One `/resolve` at a time: each call saturates however many cores DuckDB is given ("Service,
+measured" above), so a background job importing many books should serialize its `/resolve` calls
+through the `serial` Sidekiq queue the way the IGDB and Amazon providers already do
+(`sidekiq_options queue: :serial`) -- not run several in parallel, which makes every one of them
+slower rather than any one faster. No such job exists yet: Increment 5 ships the importer and
+provider only; a Sidekiq job driving many imports through them is deferred.
+
+### Deferred
+
+Language/MARC mapping (`language`, `oclc`, `lccn` are not sent -- R103); a Sidekiq job to drive bulk
+imports through the `serial` queue; the batch reconciliation of the 126,330 books (a separate spec,
+written after the service exists and its real behaviour is known); and the matcher's accept/margin
+dial, which "Service, measured" above already calls a deliberately deferred calibration decision
+for whoever operates the service.
 
 ### Carry-forwards
 

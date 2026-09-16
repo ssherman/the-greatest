@@ -82,6 +82,7 @@ end
 | Music | Release | MusicBrainz | Complete |
 | Games | Game | IGDB, CoverArt, Amazon | Complete |
 | Games | Company | IGDB | Complete |
+| Books | Book | OpenLibrary | Complete |
 
 ### Music Providers
 
@@ -145,6 +146,27 @@ Primary data source for games and companies.
 - Searches Amazon for game-related products
 - AI validation via `AmazonGameMatchTask`
 - Creates external links (no image download)
+
+### Books Providers
+
+#### Open Library (Sync)
+Single provider, backed by the [Open Library data service](./open-library-data-service.md)
+(`data-sources/`, a separate Python process reached over HTTP -- see that doc's "Rails client"
+section for the full contract).
+
+- **Query** (`ImportQuery`) takes `title` (required unless an identifier is present),
+  `author_names`, `year`, `isbn13`, `isbn10`, `asin`, `goodreads_id`, `open_library_work_key`.
+- **Finder is identifier-first**, never the service: it checks `open_library_work_key`, then
+  `isbn13`, `isbn10`, `asin`, `goodreads_id` in that order, and falls back to an exact
+  case-insensitive title match joined to a matching author name only when both a title and author
+  names are present. A title alone never matches -- the local data holds many same-title works,
+  and disambiguating them is the matcher's job, not the finder's.
+- **Provider** calls the service's `/resolve` endpoint with the *book's* current state (not just
+  the query) and, on an accept verdict, applies fills only to blank scalar columns (`title`,
+  `subtitle`, `description`, `first_published_year`). A populated column the service calls a
+  conflict or an enrichment is left alone and reported in `data_populated` as `"skipped:<field>"`.
+  Authors and subjects are never applied from this provider -- creating authors or categories from
+  them belongs to a separate reconciliation effort.
 
 ## Usage Examples
 
