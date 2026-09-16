@@ -2,11 +2,14 @@
 
 Every discovery query below carries an ORDER BY and a predicate that pins the
 shape the test needs (ruling R43 -- a flaky discovery query cost this project
-a day). Two shapes the plan calls out as possibly missing from the fixture
-corpus (a stale-key edition, an identifier filed under a redirect source) were
-checked directly against the built fixture artifact and confirmed absent, so
-those two tests keep a documented `pytest.skip` fallback; every other shape
-here is confirmed present and asserted on directly.
+a day). Three shapes the plan calls out as possibly missing from the fixture
+corpus (a stale-key edition, an identifier filed under a redirect source, and
+a resolvable author redirect whose source appears in `work_authors` -- R87)
+were checked directly against the built fixture artifact and confirmed absent,
+so those tests keep a documented `pytest.skip` fallback (the R87 shape is
+covered deterministically in `test_api_author_redirects.py` and against the
+real artifact in `test_api_artifact.py`); every other shape here is confirmed
+present and asserted on directly.
 """
 
 from __future__ import annotations
@@ -292,6 +295,41 @@ def test_a_malformed_work_key_is_a_422(client):
     assert client.get("/works/not-a-key").status_code == 422
 
 
+@pytest.fixture(scope="module")
+def a_work_filed_under_a_redirected_author(fixture_artifact):
+    """(work_key, source_author_key, terminal_author_key) for a `work_authors`
+    row whose author key is a resolvable author redirect (R87). Measured
+    against the fixture corpus: all 68 of its author redirects are dangling,
+    so this is None today and the two tests below skip -- see
+    `test_api_author_redirects.py` for the deterministic coverage."""
+    con = _con()
+    row = con.execute(
+        f"""
+        SELECT wa.work_key, r.source_key, r.terminal_key
+        FROM '{fixture_artifact.table("redirects")}' r
+        JOIN '{fixture_artifact.table("work_authors")}' wa ON wa.author_key = r.source_key
+        WHERE r.entity = 'author' AND NOT r.is_cycle AND NOT r.is_dangling
+        ORDER BY r.source_key, wa.work_key LIMIT 1
+        """
+    ).fetchone()
+    con.close()
+    return row
+
+
+def test_a_works_redirected_author_key_resolves_to_the_terminal_author(
+    client, a_work_filed_under_a_redirected_author
+):
+    """R87: `authors` on a work record carries the TERMINAL author key, never
+    the merged-away one."""
+    if a_work_filed_under_a_redirected_author is None:
+        pytest.skip("fixture corpus has no work filed under a resolvable author redirect")
+    work_key, source_key, terminal_key = a_work_filed_under_a_redirected_author
+    data = client.get(f"/works/{work_key}").json()["data"]
+    author_keys = [a["key"]["key"] for a in data["authors"]]
+    assert terminal_key in author_keys
+    assert source_key not in author_keys
+
+
 # ---------------------------------------------------------- /works/{key}/editions
 
 
@@ -410,6 +448,19 @@ def test_shelf_negative_offset_is_a_422(client, author_with_the_biggest_shelf):
     assert (
         client.get(f"/authors/{author_with_the_biggest_shelf}/works?offset=-1").status_code == 422
     )
+
+
+def test_the_shelf_reaches_works_filed_under_a_redirected_author_key(
+    client, a_work_filed_under_a_redirected_author
+):
+    """R87: the mirror of `test_editions_reach_through_a_stale_work_key` for
+    authors -- a work filed under a merged-away author key sits on the
+    terminal author's shelf."""
+    if a_work_filed_under_a_redirected_author is None:
+        pytest.skip("fixture corpus has no work filed under a resolvable author redirect")
+    work_key, _source_key, terminal_key = a_work_filed_under_a_redirected_author
+    shelf = client.get(f"/authors/{terminal_key}/works?limit=500").json()["data"]
+    assert work_key in [entry["key"]["key"] for entry in shelf]
 
 
 # ------------------------------------------------------------- /identifiers/{type}/{value}

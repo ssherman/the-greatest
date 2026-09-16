@@ -10,9 +10,16 @@
 
 REDIRECT TRANSPARENCY (see common.schemas): a merged key returns the terminal
 record plus `redirected_from`, so the 9.9% stale keys resolve instead of
-404ing. `redirects` is already transitive (Task 30 built it that way), so a
+404ing. `redirects` is already transitive (Task 9 built it that way), so a
 requested key resolves to its terminal in exactly one join -- there is no
-chain-walking here.
+chain-walking here. The same one-hop join applies in BOTH directions and to
+authors as well as works (R87): `_terminal_join` takes a source key to its
+terminal (a requested key, an identifier's work_key, a `work_authors` author
+key), `_sources_of` takes a terminal back to every key merged into it
+(editions filed under a stale work key, shelf rows filed under a stale
+author key). Measured on the 2026-07-31 artifact, 53,792 `work_authors`
+rows name a merged-away author -- 53,748 works that would otherwise carry
+no author and be missing from the terminal author's shelf.
 
 ONE QUERY PATH (ruling R71): `fetch_works` and `fetch_authors` are set-based --
 they take a list of keys and return a dict keyed by the REQUESTED key, `None`
@@ -155,6 +162,37 @@ class BatchRequest(BaseModel):
 
 # ------------------------------------------------------------------------ resolution
 
+_ENTITIES = ("work", "author")
+
+
+def _terminal_join(paths: ArtifactPaths, source_expr: str, *, entity: str, alias: str = "r") -> str:
+    """The source -> terminal hop as a SQL fragment: a LEFT JOIN of `redirects`
+    (aliased `alias`) on `source_expr`, restricted to resolvable rows of
+    `entity`. The caller reads `COALESCE(<alias>.terminal_key, <source_expr>)`.
+    Used by `_resolve_terminals`, `_fetch_identifier_hits` and the author
+    join in `fetch_works` (R87) so all three agree on what "resolvable" means.
+    `entity` is interpolated, so it is checked against the closed set."""
+    if entity not in _ENTITIES:
+        raise ValueError(f"unknown redirect entity {entity!r}")
+    return (
+        f"LEFT JOIN '{paths.table('redirects')}' {alias} "
+        f"ON {alias}.source_key = {source_expr} AND {alias}.entity = '{entity}' "
+        f"AND NOT {alias}.is_cycle AND NOT {alias}.is_dangling"
+    )
+
+
+def _sources_of(paths: ArtifactPaths, *, entity: str) -> str:
+    """The terminal -> sources direction as a SQL subquery: every key merged
+    into the terminal bound to the fragment's one `?` placeholder. Used by
+    `_fetch_editions_for_terminal` (R83) and `_fetch_shelf` (R87) so rows
+    filed under a stale key still reach the terminal's editions and shelf."""
+    if entity not in _ENTITIES:
+        raise ValueError(f"unknown redirect entity {entity!r}")
+    return (
+        f"(SELECT source_key FROM '{paths.table('redirects')}' "
+        f"WHERE terminal_key = ? AND entity = '{entity}' AND NOT is_cycle)"
+    )
+
 
 def _resolve_terminals(
     cur: duckdb.DuckDBPyConnection,
@@ -164,7 +202,7 @@ def _resolve_terminals(
     entity: str,
 ) -> dict[str, str]:
     """requested key -> terminal key, via one non-cycle non-dangling redirect
-    hop (`redirects` is already transitive -- Task 30). A key with no
+    hop (`redirects` is already transitive -- Task 9). A key with no
     redirect row maps to itself."""
     wanted = list(dict.fromkeys(k for k in keys if k))
     if not wanted:
@@ -174,10 +212,8 @@ def _resolve_terminals(
         f"""
         SELECT k.requested, COALESCE(r.terminal_key, k.requested) AS terminal
         FROM req_keys k
-        LEFT JOIN '{paths.table("redirects")}' r
-          ON r.source_key = k.requested AND r.entity = ? AND NOT r.is_cycle AND NOT r.is_dangling
-        """,
-        [entity],
+        {_terminal_join(paths, "k.requested", entity=entity)}
+        """
     ).fetchall()
     return {requested: terminal for requested, terminal in rows}
 
@@ -248,14 +284,20 @@ def fetch_works(
             ratings_avg=ratings_avg,
         )
 
+    # R87: a `work_authors` row may name a merged-away author key, so the
+    # join to `authors` goes through the redirect hop and lands on the
+    # TERMINAL author. One work filed under both a stale key and its terminal
+    # collapses to one AuthorRef at the smaller position.
     authors_by_key: dict[str, list[AuthorRef]] = {}
-    for work_key, author_key, name, _position in cur.execute(
+    for work_key, author_key, name, _first_position in cur.execute(
         f"""
-        SELECT wa.work_key, a.author_key, a.name, wa.position
+        SELECT wa.work_key, a.author_key, a.name, min(wa.position) AS first_position
         FROM term_work_keys t
         JOIN '{paths.table("work_authors")}' wa ON wa.work_key = t.terminal
-        JOIN '{paths.table("authors")}' a ON a.author_key = wa.author_key
-        ORDER BY wa.work_key, wa.position
+        {_terminal_join(paths, "wa.author_key", entity="author")}
+        JOIN '{paths.table("authors")}' a ON a.author_key = COALESCE(r.terminal_key, wa.author_key)
+        GROUP BY wa.work_key, a.author_key, a.name
+        ORDER BY wa.work_key, first_position, a.author_key
         """
     ).fetchall():
         authors_by_key.setdefault(work_key, []).append(AuthorRef(key=_key(author_key), name=name))
@@ -378,11 +420,7 @@ def _fetch_editions_for_terminal(
         SELECT edition_key, title, subtitle, publish_year, publish_date_raw, language_code,
                page_count, publisher, physical_format, edition_name, series
         FROM '{paths.table("editions")}'
-        WHERE work_key = ?
-           OR work_key IN (
-             SELECT source_key FROM '{paths.table("redirects")}'
-             WHERE terminal_key = ? AND entity = 'work' AND NOT is_cycle
-           )
+        WHERE work_key = ? OR work_key IN {_sources_of(paths, entity="work")}
         ORDER BY publish_year NULLS LAST, edition_key
         """,
         [terminal, terminal],
@@ -453,6 +491,11 @@ def _fetch_shelf(
     limit: int,
     offset: int,
 ) -> list[ShelfEntry]:
+    """R87, the mirror of `_fetch_editions_for_terminal`: shelf rows filed
+    under an author key that has since merged into `author_terminal` still
+    reach it, and a work filed under both the stale key and the terminal
+    appears once (DISTINCT before the join, so LIMIT/OFFSET page over the
+    deduplicated set)."""
     rows = cur.execute(
         f"""
         SELECT w.work_key, w.title,
@@ -460,15 +503,19 @@ def _fetch_shelf(
                COALESCE(p.edition_count, 0) AS edition_count,
                COALESCE(p.ratings_count, 0) AS ratings_count,
                wd.declared_year
-        FROM '{paths.table("work_authors")}' wa
-        JOIN '{paths.table("works")}' w ON w.work_key = wa.work_key
-        LEFT JOIN '{paths.table("popularity")}' p ON p.work_key = wa.work_key
-        LEFT JOIN '{paths.table("work_details")}' wd ON wd.work_key = wa.work_key
-        WHERE wa.author_key = ?
-        ORDER BY readinglog_count DESC, edition_count DESC, w.work_key
+        FROM (
+          SELECT DISTINCT wa.work_key
+          FROM '{paths.table("work_authors")}' wa
+          WHERE wa.author_key = ? OR wa.author_key IN {_sources_of(paths, entity="author")}
+        ) s
+        JOIN '{paths.table("works")}' w ON w.work_key = s.work_key
+        LEFT JOIN '{paths.table("popularity")}' p ON p.work_key = s.work_key
+        LEFT JOIN '{paths.table("work_details")}' wd ON wd.work_key = s.work_key
+        ORDER BY COALESCE(p.readinglog_count, 0) DESC, COALESCE(p.edition_count, 0) DESC,
+                 w.work_key
         LIMIT ? OFFSET ?
         """,
-        [author_terminal, limit, offset],
+        [author_terminal, author_terminal, limit, offset],
     ).fetchall()
     return [
         ShelfEntry(
@@ -515,9 +562,7 @@ def _fetch_identifier_hits(
           SELECT i.edition_key, i.work_key AS requested_work,
                  COALESCE(r.terminal_key, i.work_key) AS terminal
           FROM '{paths.table("identifiers")}' i
-          LEFT JOIN '{paths.table("redirects")}' r
-            ON r.source_key = i.work_key AND r.entity = 'work'
-               AND NOT r.is_cycle AND NOT r.is_dangling
+          {_terminal_join(paths, "i.work_key", entity="work")}
           WHERE i.id_type = ? AND i.value = ? AND i.work_key IS NOT NULL
         )
         SELECT m.terminal, m.requested_work, m.edition_key

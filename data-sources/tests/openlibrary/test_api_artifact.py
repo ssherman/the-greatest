@@ -220,3 +220,54 @@ def test_resolve_finds_the_labelled_work_for_an_easy_baseline_case(tmp_path):
         print(f"  {label}: {seconds:.2f} s")
     print(f"  case: {case.case_id}, labelled work_key: {case.label.work_key}")
     print(f"  Gatsby decision: verdict={gatsby_data['decision']['verdict']!r}, top key={top_key!r}")
+
+
+@pytest.mark.artifact
+def test_a_redirected_author_key_reaches_the_terminal_author_on_the_real_artifact(tmp_path):
+    """R87: `work_authors` rows that name a merged-away author key must
+    resolve through `redirects` to the terminal author. Measured on the
+    2026-07-31 artifact: 53,835 work_authors rows point at an author key
+    absent from `authors`, 53,792 of them resolvable author redirects
+    (53,748 works, 46 terminal authors). "The Sea Wolf" (OL24569011W) names
+    OL9258086A, which redirects to Jack London (OL44633A); before the fix
+    its `authors` was `[]` and London's shelf missed 3,817 works (9,401
+    where ~13.2k are expected). The shelf total and timings are printed
+    (via -s) for the report."""
+    root = os.environ.get("OL_DATA_ROOT")
+    dump_date = os.environ.get("OL_DATA_VERSION")
+    if not (root and dump_date):
+        pytest.skip("set OL_DATA_ROOT and OL_DATA_VERSION")
+
+    state = open_artifact(Settings(data_root=Path(root), data_version=dump_date, temp_dir=tmp_path))
+    timings: dict[str, float] = {}
+    try:
+        with TestClient(create_app(state)) as client:
+            start = time.perf_counter()
+            response = client.get("/works/OL24569011W")
+            timings["GET /works/OL24569011W"] = time.perf_counter() - start
+            assert response.status_code == 200
+            author_keys = [author["key"]["key"] for author in response.json()["data"]["authors"]]
+            assert "OL44633A" in author_keys, (
+                f"The Sea Wolf's author OL9258086A should resolve to OL44633A, got {author_keys}"
+            )
+
+            shelf_total = 0
+            offset = 0
+            start = time.perf_counter()
+            while True:
+                page_response = client.get(f"/authors/OL44633A/works?limit=500&offset={offset}")
+                assert page_response.status_code == 200
+                page = page_response.json()["data"]
+                shelf_total += len(page)
+                if len(page) < 500:
+                    break
+                offset += 500
+            timings["GET /authors/OL44633A/works (all pages of 500)"] = time.perf_counter() - start
+            assert shelf_total > 12_000, f"Jack London's shelf holds {shelf_total} works"
+    finally:
+        state.connection.close()
+
+    print("\nReal-artifact author-redirect timings (R87):")
+    for label, seconds in timings.items():
+        print(f"  {label}: {seconds * 1000:.1f} ms")
+    print(f"  OL44633A shelf total: {shelf_total} (was 9,401 before R87)")
