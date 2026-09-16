@@ -394,3 +394,119 @@ evaluation gate if the matcher regresses past any of those thresholds (Task
 28, `evaluation_gate` in `pipeline/gates.py`), always against the artifact
 being built (R60) -- verified against the real artifact above, where it
 reports `pass`.
+
+## Service, measured
+
+Task 34 built the image, brought it up against the real 2026-07-31 artifact,
+and timed every endpoint. All numbers below are real-artifact wall clock on
+this box: ~27 cores available to DuckDB, `OL_API_MEMORY_LIMIT` at its default
+8GB, and every query an un-indexed Parquet scan (no table here carries an
+index). A smaller container will be slower roughly in proportion to how many
+cores it gets -- these numbers are not portable to a differently-sized box
+without that adjustment.
+
+| Endpoint | Wall clock | Source |
+|---|---|---|
+| `GET /works/{key}` | 0.63-0.91 s (0.914 s re-measured in Task 32) | Task 31 / Task 32 |
+| `GET /works/{key}/editions` | 1.6-2.2 s (1.73 s re-measured after R84a) | Task 31 / Task 32 |
+| `GET /authors/{key}` | 0.04 s | Task 31 |
+| `GET /authors/{key}/works` (shelf) | 0.56-0.77 s; 0.72-0.82 s per page of 500 after R87 (the redirect-aware predicate costs nothing measurable: the old query re-timed at 0.72-0.82 s too) | Task 31 / R87 |
+| `GET /identifiers/{type}/{value}` | 0.16-0.19 s (162 ms in Task 32) | Task 31 / Task 32 |
+| `POST /works/batch` (100 keys) | 1.43 s | Task 32 |
+| `POST /authors/batch` | 0.13 s | Task 32 |
+| `POST /resolve` (labelled case) | ≈5-6 s (4.85-4.89 s in Task 33; 5.57 / 5.95 s re-measured in the final review) | Task 33 / final review |
+| `POST /resolve` (Gatsby, title+author+year) | 5.0-5.03 s (Task 33); 5.4 s wall via `curl` through the Task 34 container | Task 33 / Task 34 |
+
+**What this means for Increment 5's Rails client:**
+
+- **Read timeouts:** at least 30 s for `/resolve` (it is consistently 5-6 s
+  for a real labelled case against the real artifact on a 27-core box; a
+  colder or smaller box, or a query that blocks wider, has real room to run
+  longer) and at least 10 s for any retrieval endpoint
+  (`/works/{key}/editions` is the slowest single lookup at up to 2.2 s, and
+  that number moves with cores, not with request size). The plan's Task 35
+  default `timeout` of 10 s is too short for `/resolve`: the client needs a
+  per-call timeout -- at least 30 s for `/resolve`, 10 s for retrieval --
+  not one number for the whole client.
+- **One `/resolve` at a time.** Each call is `harness.prepare`'s own
+  un-indexed scan over `identifiers` (120M rows) plus four other blocking
+  rules -- it saturates however many cores DuckDB is given. Firing two at
+  once does not make either one faster; it makes both slower. The client
+  should serialize `/resolve` calls, not pool them.
+- **Retrieval goes through the batch endpoints.** 100 works in one
+  `POST /works/batch` call costs ~1.4 s total versus ~0.7-0.9 s **per work**
+  through the singular `GET /works/{key}` -- a ~50-60x reduction in wall
+  clock for a 100-work page. Any Rails code fetching more than a couple of
+  records should batch.
+
+**Response shapes.** Every response is an envelope `{source_version, data}`
+except `/version`, the one unenveloped response -- its fields *are* the
+version (dump date, normalizer/pipeline/matcher versions, this build's
+`built_at`, `gates_passed`, per-table `tables`, per-gate `gates`, and
+`eval`, the code's calibration record from `eval/thresholds.json`, not this
+artifact's gate run). Every work and author key is `{source, key}`, never a
+bare string. `POST /resolve` returns a decision plus a candidate list; each
+candidate carries a six-field work-level `diff` -- `title`, `subtitle`,
+`description`, `first_published_year`, `authors`, `subjects` -- and its
+full `record`, exactly what `GET /works/{key}` would return, so an accepted
+candidate needs no follow-up call (`year_evidence` rides along for the
+89.3% of works with no `declared_year`). Request bodies are strict: an
+unknown field is a 422 naming it, never a 200 that quietly ignored an
+identifier.
+
+**Author redirects, measured.** 53,835 `work_authors` rows on the 2026-07-31
+artifact name an author key absent from `authors`; 53,792 of them are
+resolvable author redirects (53,748 works, 46 terminal authors). Before R87
+"The Sea Wolf" (`OL24569011W`, author `OL9258086A` -> Jack London
+`OL44633A`) returned `authors: []` and London's shelf held 9,401 works. The
+work-record author join and the shelf now go through `redirects` in the
+same way editions and identifiers already did (R83); London's shelf holds
+13,218 works, and the fix costs nothing measurable per page.
+
+**The read-only mount proof.** `docker compose exec api sh -c 'touch
+/data/versions/2026-07-31/works.parquet'` and `mkdir /data/tmp/probe` both
+fail with "Read-only file system" (Task 34, Step 4). What enforces this is
+the compose file's `:ro` bind mount on `/data` -- nothing in DuckDB itself
+refuses a write, and there is no DuckDB flag that would. The one place the
+service does write is `OL_API_TEMP_DIR` (DuckDB's spill directory), which
+defaults to the container's own `/tmp` -- writable, and never under the
+artifact mount.
+
+**Version pinning.** The API always opens an explicit `OL_DATA_VERSION`
+directory (`deps.open_artifact`), never a symlink: `deps.SymlinkedVersion` is
+raised and the process refuses to boot if `versions/<date>` turns out to be a
+symlink, because a symlink flip would not affect a process already holding
+open file handles into the old target. It also refuses a directory with no
+`manifest.json` (an unfinished build is not a version) or one whose manifest
+does not record `gates_passed: true` (`deps.GatesFailed`) -- `build.py`
+writes the manifest and all ten tables before it raises on a failed gate,
+so such a directory looks complete on disk. Compose reads the version from
+the environment (`OL_DATA_VERSION`, defaulting to `2026-07-31` for this box)
+so a new build can be pinned without touching the compose file, and binds
+the port to loopback by default (`OL_API_BIND`, default `127.0.0.1`): the
+service is never on a public request path, and `0.0.0.0` is for a box where
+Rails is not local.
+
+**The Gatsby example, as the shape of an abstain.** `POST /resolve` with
+`{"title": "The Great Gatsby", "author_names": ["F. Scott Fitzgerald"],
+"year": 1925}` against the real artifact returns `verdict: "abstain"`, top
+candidate `OL468431W`, score ~0.986, margin ~0.028 -- a runner-up scores
+~0.957, close enough that the calibrated matcher declines to call it rather
+than guess. This is not a bug: `weights.json`'s `accept_threshold`/
+`reject_threshold`/margin gap are the calibrated matcher's real, measured
+behaviour on this title (see "Matcher, measured" above), and the accept
+threshold is a deliberately deferred dial -- tightening or loosening it is a
+calibration decision for whoever operates the service, not something this
+task changes.
+
+### Carry-forwards
+
+- **Matcher v3: `features.load_work_views` joins author names on the raw
+  `work_authors.author_key`.** The same 53,792-row gap R87 closed in the
+  service's retrieval path exists in the matcher's feature extraction, where
+  `agg_authors` joins `author_names` on the raw key, so a candidate whose only
+  author key is a merged-away one scores with no author names. Untouched here
+  on purpose: `blocking.py`/`features.py` are byte-identical to the evaluated
+  matcher v2, and a change invalidates the 31-minute prepared-cases cache and
+  the calibration on record. Fix it as part of matcher v3, re-run the
+  evaluation, and re-calibrate.

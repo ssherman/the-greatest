@@ -1,0 +1,40 @@
+services:
+  api:
+    build: .
+    image: the-greatest/data-sources:latest
+    restart: unless-stopped
+    ports:
+      # Loopback by default (R92): the service is never on a public request
+      # path. Set OL_API_BIND=0.0.0.0 only where Rails is not on this host.
+      - "${OL_API_BIND:-127.0.0.1}:8080:8080"
+    volumes:
+      # Read-only: the service is physically unable to corrupt its own data.
+      - ${OL_DATA_HOST:-/home/shane/ol-data}:/data:ro
+    environment:
+      OL_DATA_ROOT: /data
+      # An EXPLICIT version directory, never a symlink: a symlink flip does not
+      # affect a process holding open file handles.
+      OL_DATA_VERSION: "${OL_DATA_VERSION:-2026-07-31}"
+      # Forwarded from the host with these defaults -- Compose does not pass
+      # through a host variable that isn't listed here, so without these
+      # entries `OL_API_MEMORY_LIMIT=2GB docker compose up -d api` would
+      # silently keep the 8GB default.
+      OL_API_MEMORY_LIMIT: "${OL_API_MEMORY_LIMIT:-8GB}"
+      OL_API_TEMP_DIR: "${OL_API_TEMP_DIR:-/tmp}"
+
+  build:
+    build: .
+    image: the-greatest/data-sources:latest
+    profiles: ["build"]
+    volumes:
+      - ${OL_DATA_HOST:-/home/shane/ol-data}:/data
+    environment:
+      OL_DATA_ROOT: /data
+    command:
+      - python
+      - -m
+      - openlibrary.pipeline.build
+      - --root
+      - /data
+      - --memory-limit
+      - 12GB

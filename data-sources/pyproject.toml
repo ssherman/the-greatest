@@ -19,7 +19,11 @@ dependencies = [
 calibration = ["splink>=4.0,<5"]
 
 [dependency-groups]
-dev = ["pytest>=8.3,<9", "ruff>=0.7,<1"]
+dev = [
+    "httpx2>=2.13.0",
+    "pytest>=8.3,<9",
+    "ruff>=0.7,<1",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -41,3 +45,9 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's DI pattern calls Depends() in an argument default on purpose; the
+# call returns a sentinel FastAPI reads via introspection, never evaluated
+# per-request. This is ruff's documented allowlist for that idiom.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path"]
