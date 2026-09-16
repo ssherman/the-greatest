@@ -1,0 +1,22 @@
+{
+  "measured_at": "2026-09-14",
+  "dump_date": "2026-07-31",
+  "matcher_version": 2,
+  "n_cases": 448,
+  "weights_calibrated_at": "2026-09-14T05:27:09.847557+00:00",
+  "source": "R64 fix (rule 6 volume-guards itself on fuzzy-search overflow, PR #308 Codex P1): prepared cache rebuilt against blocking.py post-fix, same v2 decision rules and the same shipped vector. Re-calibration was required (correct-no-match moved 0.0896 -> 0.0597, over the ~0.01 trigger): a bare cold start from equal weights regressed to TEST 0.7416 -- it only had to clear the naive equal-weights floor (0.6044), not the shipped vector, and would have shipped a worse matcher (nonzero false_reject on TEST) had it been kept, so it was reverted; a warm start from the shipped vector via --base (the documented procedure for this matcher version) reached TEST 0.9275, still short of the shipped vector's own 0.9333, so the write gate correctly left weights.json untouched. min_correct_no_match_rate loosened 0.05 -> 0.04: two no_candidates cases (no_candidates-001, no_candidates-012) that previously landed in the reject band on rule 6's now-suppressed arbitrary 200 fallbacks correctly abstain instead of asserting a refused search was a confirmed non-match, dropping correct no-match 6/67 (0.0896) -> 4/67 (0.0597); the other five bounds are unchanged -- their measurements are identical or moved less than 0.005",
+  "min_candidate_recall_10": 0.9,
+  "max_false_merge_rate": 0.015,
+  "min_precision_at_accept": 0.98,
+  "max_abstention_rate": 0.7,
+  "min_correct_no_match_rate": 0.04,
+  "max_false_reject_rate": 0.005,
+  "measured": {
+    "min_candidate_recall_10": 0.9216,
+    "max_false_merge_rate": 0.0068,
+    "min_precision_at_accept": 0.9932,
+    "max_abstention_rate": 0.6652,
+    "min_correct_no_match_rate": 0.0597,
+    "max_false_reject_rate": 0.0
+  }
+}

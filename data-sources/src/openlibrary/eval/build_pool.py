@@ -9,6 +9,12 @@ the matcher is judged against; if tuning the matcher could change which cases
 exist or which candidates a labeler saw, the metrics would measure nothing. A
 work key the labeler enters by hand and that no rule here produced is recorded
 as `found_outside_blocking` -- that is how a recall failure becomes visible.
+
+Rule 4 here joins the book's full title fingerprint only; `matcher/blocking.py`'s
+own rule 4 joins all three variants (full/nosub/noart). That is a deliberate
+divergence, not a bug to fix by making the two match: this pool is frozen and
+already labeled, so it is not to be redrawn -- see blocking.py's rule 4 for why
+the wider join there can only raise measured recall.
 """
 
 from __future__ import annotations
@@ -22,10 +28,8 @@ from pydantic import BaseModel, Field
 
 from common.normalize import (
     MIN_BLOCKING_FP_LENGTH,
+    identifier_pairs,
     name_fingerprint,
-    normalize_asin,
-    normalize_goodreads,
-    normalize_isbn,
     title_fingerprints,
 )
 from openlibrary.eval.schema import STRATA, EvalBook
@@ -107,44 +111,16 @@ _EVAL_BOOKS_COLUMNS = [
 def _identifier_pairs(book: EvalBook) -> list[tuple[str, str]]:
     """Canonicalize a book's locally-stored identifiers before they are joined.
 
-    `identifiers.parquet` stores values already run through `isbn13_sql` /
-    `isbn10_sql` / `asin_sql` / `goodreads_sql` (see pipeline/editions.py).
-    Rule 1's join is exact equality, so a local value in any other form -- a
-    hyphenated ISBN, a lowercase ISBN-10 check digit, a slugged Goodreads id
-    -- silently misses. Every value is pushed through the matching Python
-    normalizer (the twin of the SQL one) before it is registered here; values
-    that normalize to None are dropped rather than registered raw.
+    Rule 1's join is exact equality against `identifiers.parquet`, so a local
+    value in any other form -- a hyphenated ISBN, a lowercase ISBN-10 check
+    digit, a slugged Goodreads id -- would silently miss. The canonicalization
+    itself lives in `common.normalize.identifier_pairs`, shared with the
+    matcher's own rule 1; this is a thin adapter from `EvalBook`'s fields to
+    that function's keyword arguments.
     """
-    pairs: set[tuple[str, str]] = set()
-
-    for value in [*book.isbn13, *book.isbn10]:
-        normalized = normalize_isbn(value)
-        if normalized is None:
-            continue
-        if normalized.isbn13:
-            pairs.add(("isbn13", normalized.isbn13))
-        if normalized.isbn10:
-            pairs.add(("isbn10", normalized.isbn10))
-
-    for value in book.asin:
-        asin = normalize_asin(value)
-        if asin is not None:
-            pairs.add(("asin", asin))
-        # An Amazon ASIN for a book is usually its ISBN-10 -- mirrors what the
-        # design specifies for rule 1 (matcher/blocking.py does not exist yet).
-        normalized = normalize_isbn(value)
-        if normalized is not None:
-            if normalized.isbn13:
-                pairs.add(("isbn13", normalized.isbn13))
-            if normalized.isbn10:
-                pairs.add(("isbn10", normalized.isbn10))
-
-    for value in book.goodreads_id:  # [GOODREADS]
-        goodreads = normalize_goodreads(value)
-        if goodreads is not None:
-            pairs.add(("goodreads", goodreads))
-
-    return sorted(pairs)
+    return identifier_pairs(
+        isbn13=book.isbn13, isbn10=book.isbn10, asin=book.asin, goodreads_id=book.goodreads_id
+    )
 
 
 def _register_books(con: duckdb.DuckDBPyConnection, books: list[EvalBook]) -> None:

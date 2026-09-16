@@ -4,16 +4,27 @@ Four families, from the design:
   * row counts and field coverage within tolerance of the previous build
   * redirect closure: every chain terminates, no cycles beyond what was expected
   * canary lookups: a fixed list of known works still resolves
-  * the evaluation set does not regress   <- wired in Increment 3
+  * the evaluation set does not regress against the pinned thresholds (Task 28)
 """
 
 from __future__ import annotations
+
+import json
+import time
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 import duckdb
 
 from common.gates import GateResult, within_tolerance
 
 from .paths import TABLES, ArtifactPaths
+
+if TYPE_CHECKING:
+    # Type-only: keeps the pipeline -> eval dependency lazy at import time
+    # (see evaluation_gate's docstring) while still letting `threshold_failures`
+    # carry a real annotation.
+    from openlibrary.eval.harness import Metrics
 
 # Chosen because they are the four documented shared-key collisions: an omnibus,
 # a two-language work, a wrong-data pairing, and a real duplicate. If any stops
@@ -136,21 +147,114 @@ def run_gates(
         )
     )
 
-    # 5. Evaluation set -- the labeled set exists (Increment 2 is complete);
-    # the regression check itself arrives with the matcher's evaluation
-    # harness (Task 28).
-    results.append(
-        GateResult(
-            name="evaluation_set",
-            status="skipped",
-            detail="labeled set exists (448 cases); regression check arrives with the harness"
-            " (Task 28)",
-            observed={},
-        )
-    )
+    # 5. Evaluation set -- see evaluation_gate's docstring.
+    results.append(evaluation_gate(con, paths))
 
     return results
 
 
 def gates_passed(results: list[GateResult]) -> bool:
     return all(result.status != "fail" for result in results)
+
+
+def threshold_failures(metrics: Metrics, thresholds: dict) -> list[str]:
+    """Every metric that misses its pinned bound in `thresholds`. Empty means
+    no regression.
+
+    A pure function on purpose: the pass/fail logic can be exercised with a
+    hand-built `Metrics` and a hand-built thresholds dict, with no built
+    artifact, no labeled set, and no matcher import required beyond this one
+    (deliberately lazy, matching `evaluation_gate`'s docstring).
+
+    Iterates `harness.THRESHOLD_CHECKS` -- the SAME table
+    `tests/openlibrary/test_eval_regression.py` iterates for the artifact
+    regression assertions and the "every threshold has a measured sibling"
+    check (R56), so a threshold added to `thresholds.json` without a matching
+    entry there, or here, fails a test rather than silently going unchecked
+    on one side.
+    """
+    from openlibrary.eval.harness import THRESHOLD_CHECKS, threshold_value
+
+    failures = []
+    for label, direction, attribute, key in THRESHOLD_CHECKS:
+        bound = thresholds[key]
+        value = threshold_value(metrics, attribute)
+        if direction == "min" and value < bound:
+            failures.append(f"{label} {value:.4f} < {bound:.4f}")
+        elif direction == "max" and value > bound:
+            failures.append(f"{label} {value:.4f} > {bound:.4f}")
+    return failures
+
+
+def evaluation_gate(
+    con: duckdb.DuckDBPyConnection,
+    paths: ArtifactPaths,
+    prepared_cache: Path | None = None,
+) -> GateResult:
+    """The labeled set does not regress against the pinned thresholds
+    (`eval/thresholds.json`, Task 28).
+
+    Skips, rather than failing, whenever the check would not mean anything:
+    no labeled cases, no pinned thresholds yet, or -- R50 -- an artifact whose
+    labeled works are mostly absent from it. That last case is what keeps this
+    gate honest against the fixture corpus, which is built from a handful of
+    real works and does not contain the 370 works the labeled set's `match`
+    cases name, without also skipping a future real dump that is merely
+    missing a handful of keys to normal Open Library churn.
+
+    Costs ~4.5s/case with no prepared cache (~31 minutes for the full
+    448-case set) -- and that is the cost a real build pays, by design (R51
+    accepted it for a monthly build; R60 made it the only option). The gate's
+    job is to evaluate the labelled set against the artifact it is gating, so
+    it NEVER looks for a cache on its own: `run_gates` calls this with
+    `prepared_cache=None`, which means `prepare` against `con`. An explicit
+    `prepared_cache` is for callers who can vouch for it -- the CLIs, tests,
+    and a one-off check against an already-built artifact -- and even then
+    `read_prepared_cache` refuses a file whose header's artifact timestamp or
+    code fingerprint does not match this artifact and this code. The file is
+    read, never written, here.
+    """
+    try:
+        from openlibrary.eval.dataset import load_cases, unknown_labeled_keys
+        from openlibrary.eval.harness import THRESHOLDS_PATH, evaluate, prepare, read_prepared_cache
+        from openlibrary.matcher.scorer import load_weights
+    except ImportError as error:
+        return GateResult("evaluation_set", "skipped", f"matcher not importable: {error}")
+
+    cases = load_cases()
+    if not cases:
+        return GateResult("evaluation_set", "skipped", "no labeled evaluation set")
+
+    n_labeled = sum(1 for case in cases if case.label.work_key)
+    if n_labeled:
+        n_unknown = len(unknown_labeled_keys(con, paths, cases))
+        if n_unknown * 2 > n_labeled:
+            return GateResult(
+                "evaluation_set",
+                "skipped",
+                f"labelled works absent from this artifact ({n_unknown} of {n_labeled}); "
+                "not the labelled dump",
+                observed={"n_unknown": n_unknown, "n_labeled": n_labeled},
+            )
+
+    if not THRESHOLDS_PATH.exists():
+        return GateResult("evaluation_set", "skipped", "no pinned thresholds")
+    thresholds = json.loads(THRESHOLDS_PATH.read_text())
+
+    started = time.monotonic()
+    prepared = read_prepared_cache(prepared_cache, paths, len(cases)) if prepared_cache else None
+    from_cache = prepared is not None
+    if prepared is None:
+        prepared = prepare(con, paths, cases)
+    metrics, _ = evaluate(prepared, load_weights())
+    elapsed = time.monotonic() - started
+
+    failures = threshold_failures(metrics, thresholds)
+    timing = f"{'prepared cache' if from_cache else 'prepared fresh'}, {elapsed:.1f}s"
+    detail = f"{'; '.join(failures) if failures else 'no regression on the labeled set'} ({timing})"
+    return GateResult(
+        name="evaluation_set",
+        status="fail" if failures else "pass",
+        detail=detail,
+        observed={**metrics.model_dump(), "thresholds": thresholds},
+    )
