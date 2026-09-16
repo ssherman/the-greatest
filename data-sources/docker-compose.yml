@@ -15,10 +15,12 @@ services:
       # An EXPLICIT version directory, never a symlink: a symlink flip does not
       # affect a process holding open file handles.
       OL_DATA_VERSION: "${OL_DATA_VERSION:-2026-07-31}"
-      # OL_API_MEMORY_LIMIT (default "8GB") and OL_API_TEMP_DIR (default the
-      # system temp dir, /tmp in this container -- writable, unlike the
-      # read-only /data mount) may also be set here; this box's defaults are
-      # already right.
+      # Forwarded from the host with these defaults -- Compose does not pass
+      # through a host variable that isn't listed here, so without these
+      # entries `OL_API_MEMORY_LIMIT=2GB docker compose up -d api` would
+      # silently keep the 8GB default.
+      OL_API_MEMORY_LIMIT: "${OL_API_MEMORY_LIMIT:-8GB}"
+      OL_API_TEMP_DIR: "${OL_API_TEMP_DIR:-/tmp}"
 
   build:
     build: .
