@@ -29,7 +29,7 @@ convention:
 | `authors` | Author skeleton. |
 | `author_names` | Exploded name -> author_key, including alternate names. |
 | `work_authors` | Exploded work/author pairs. |
-| `editions` | Narrow per-edition columns: work, title, year, language, pages, publisher, format, series. The tenth table -- not in the spec's original nine (see "Two departures from the spec" below). |
+| `editions` | Narrow per-edition columns: work, title, year, language, pages, publisher, format, series. The tenth table -- not in the spec's original nine, added by a correction before the first build (see "Two corrections the spec absorbed" below). |
 | `identifiers` | ISBN/OCLC/LCCN/ASIN/Goodreads -> edition -> work, derived from editions. |
 | `year_evidence` | Year *candidates* per work (declared year, min/second-min/modal edition year), never collapsed to one answer. |
 | `popularity` | Edition, reading-log and rating counts. |
@@ -246,21 +246,25 @@ disposable.
   `redirects` -- meaning most of these are real merges whose edition-year evidence
   is silently lost, not just dangling references to keys OL deleted outright.
 
-### Two departures from the spec, current status
+### Two corrections the spec absorbed
 
-The design spec's artifact section listed nine tables, and its blocking rule 1 named
-"ISBN / OCLC / LCCN / ASIN." Both departures were decided before the first build and both are
-shipped in the 2026-07-31 artifact measured above.
+Two gaps were found while writing the implementation plan, before the first build, and folded into
+the design spec itself (amended 2026-09-02) rather than left as a divergence -- the plan is explicit
+that these are corrections it and the spec agree on, not departures
+(`docs/superpowers/plans/2026-09-01-open-library-data-service.md`, "Two corrections the spec
+absorbed"). Both are shipped in the 2026-07-31 artifact measured above.
 
-**A tenth table, `editions`.** The spec's nine tables carried no per-edition columns, but
+**A tenth table, `editions`.** Before the correction, the spec's artifact section listed nine
+tables with no per-edition columns, but
 `GET /works/{work_key}/editions` needs language, pages, publisher, year, ISBNs and binding, and
 `year_evidence` is derived from edition years -- none of those columns existed anywhere. `editions`
 supplies both, produced by the same pass over the 12.5 GB dump that produces `identifiers`, so it
 cost one extra `COPY` from staging rather than a second read. Status: shipped -- 56,615,822 rows,
 3.14 GB, in the table above.
 
-**`[GOODREADS]` identifiers.** The spec's blocking rule 1 named ISBN/OCLC/LCCN/ASIN only. Goodreads
-was added as a fifth identifier type on the strength of the development database's coverage (95.0%
+**`[GOODREADS]` identifiers.** Before the correction, the spec's blocking rule 1 named
+ISBN/OCLC/LCCN/ASIN only. Goodreads was added as a fifth identifier type on the strength of the
+development database's coverage (95.0%
 of our books carry a Goodreads ID, higher than ISBN's 88.1%; OCLC and LCCN are on zero of them) and
 because the OL editions dump itself carries `identifiers.goodreads` on roughly 12.5% of editions --
 the highest-coverage join key available, costing one more row type in a table already keyed by
@@ -593,8 +597,9 @@ work,author,candidate,resolution,edition,shelf_entry,identifier_hit}.rb` and
 once per `BaseClient`/`Client`. `BaseClient` is the Faraday layer: `#get`/`#post` run every request
 through a `CircuitBreaker`, classify the HTTP response into `Exceptions::*`, and parse JSON.
 `Client` wraps `BaseClient` and returns typed value objects -- `Work`, `Author`, `Edition`,
-`ShelfEntry`, `IdentifierHit`, `Resolution` (which nests `Candidate` and `Decision`) -- instead of
-raw parsed-JSON hashes, so a caller cannot come to depend on a wire key name that moves under it.
+`ShelfEntry`, `IdentifierHit`, `Candidate` (nests `DiffEntry`), and `Resolution` (nests `Decision`;
+`#candidates` holds a list of `Candidate`) -- instead of raw parsed-JSON hashes, so a caller cannot
+come to depend on a wire key name that moves under it.
 `DataImporters::Books::Book` (`ImportQuery`, `Finder`, `Importer`, `Providers::OpenLibrary`) sits
 above `Client` and is the only caller of `#resolve`.
 
@@ -675,10 +680,13 @@ book.
 
 `accept` -> apply fills, write the identifier, `success_result`. `abstain` ->
 `failure_result(["Open Library abstained: <decision.reason>"])`. `reject` ->
-`failure_result(["Open Library rejected: <decision.reason>"])`. Any
-`Books::OpenLibrary::Exceptions::Error` (circuit open, timeout, network, HTTP, parse) is rescued and
-becomes a `failure_result` naming the exception class and message. Exactly one HTTP call per
-`populate` -- the accepted candidate's `record` is a full `Work`, so no follow-up `GET` is needed.
+`failure_result(["Open Library rejected: <decision.reason>"])`. `#populate`'s rescue clause is a
+bare `rescue => e` (catches any `StandardError`), not a match on
+`Books::OpenLibrary::Exceptions::Error` specifically: every client exception (circuit open, timeout,
+network, HTTP, parse) *and* any other `StandardError` raised while building the request or calling
+the client becomes a `failure_result` naming the exception class and message. Exactly one HTTP call
+per `populate` -- the accepted candidate's `record` is a full `Work`, so no follow-up `GET` is
+needed.
 
 ### Running a manual import locally
 
@@ -694,10 +702,11 @@ single call.
 
 One `/resolve` at a time: each call saturates however many cores DuckDB is given ("Service,
 measured" above), so a background job importing many books should serialize its `/resolve` calls
-through the `serial` Sidekiq queue the way the IGDB and Amazon providers already do
-(`sidekiq_options queue: :serial`) -- not run several in parallel, which makes every one of them
-slower rather than any one faster. No such job exists yet: Increment 5 ships the importer and
-provider only; a Sidekiq job driving many imports through them is deferred.
+through the `serial` Sidekiq queue the way the CoverArt and Amazon-enrichment jobs already do
+(`sidekiq_options queue: :serial` in `app/sidekiq/{games,music}/cover_art_download_job.rb` and
+`app/sidekiq/{books,games,music}/amazon_product_enrichment_job.rb`) -- not run several in parallel,
+which makes every one of them slower rather than any one faster. No such job exists yet: Increment 5
+ships the importer and provider only; a Sidekiq job driving many imports through them is deferred.
 
 ### Deferred
 
