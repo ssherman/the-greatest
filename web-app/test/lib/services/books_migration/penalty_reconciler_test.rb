@@ -6,6 +6,7 @@ class Services::BooksMigration::PenaltyReconcilerTest < ActiveSupport::TestCase
     list_penalties_repointed: 0, list_penalties_dropped: 0,
     applications_repointed: 0, applications_merged: 0,
     dynamic_applications_upserted: 0, year_list_penalties_dropped: 0,
+    num_years_covered_backfilled: 0,
     id_map_repointed: 0, penalties_destroyed: 0
   }.freeze
 
@@ -128,6 +129,21 @@ class Services::BooksMigration::PenaltyReconcilerTest < ActiveSupport::TestCase
     assert_equal 45, PenaltyApplication.find_by(penalty: @years_global, ranking_configuration: @rc).value
   end
 
+  test "backfills the legacy bucket onto a tagged list that has no num_years_covered before destroying the static" do
+    ten_years = year_source("List: only covers 10 years")
+    reviewed = ::Books::List.create!(name: "Reviewed", num_years_covered: 11)
+    ListPenalty.create!(list: @list_a, penalty: ten_years)
+    ListPenalty.create!(list: reviewed, penalty: ten_years)
+    PenaltyApplication.create!(penalty: ten_years, ranking_configuration: @rc, value: 30)
+
+    result = R.call
+
+    assert result[:success], result[:error]
+    assert_equal 10, @list_a.reload.num_years_covered
+    assert_equal 11, reviewed.reload.num_years_covered, "a reviewed value is never overwritten"
+    assert_equal 1, result[:data][:num_years_covered_backfilled]
+  end
+
   test "ignores user-authored penalties that share a name" do
     user = users(:regular_user)
     mine = ::Books::Penalty.create!(name: "List: honorable mention", user: user)
@@ -165,5 +181,18 @@ class Services::BooksMigration::PenaltyReconcilerTest < ActiveSupport::TestCase
     refute result[:success]
     assert_match(/num_years_covered/, result[:error])
     assert ::Books::Penalty.exists?(one_year.id), "the transaction must roll back"
+  end
+
+  test "a failed run reports zero counts, not the rolled-back partial work" do
+    @years_global.destroy!
+    source = honorable_source
+    ListPenalty.create!(list: @list_a, penalty: source)
+    PenaltyApplication.create!(penalty: year_source(ONE_YEAR), ranking_configuration: @rc, value: 50)
+
+    result = R.call
+
+    refute result[:success]
+    assert_equal ZERO, result[:data]
+    assert ListPenalty.exists?(list: @list_a, penalty: source), "the merge must have rolled back too"
   end
 end

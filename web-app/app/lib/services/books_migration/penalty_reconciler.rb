@@ -11,7 +11,10 @@ module Services
     # new resolver nothing matches and every count is zero. One transaction.
     #
     # Ordered after NumYearsCoveredMigrator in data_migration:all so the per-list
-    # values exist before the statics (and their list_penalties) vanish.
+    # values exist before the statics (and their list_penalties) vanish. Before a
+    # static goes, any list it tags that still has no num_years_covered gets the
+    # legacy bucket, so the step is safe to run alone -- NumYearsCoveredMigrator's
+    # reviewed values overwrite it on the next list_penalties run.
     class PenaltyReconciler
       MERGES = {
         "List: honorable mention" => "List: is a follow up/honorable mention to a different list",
@@ -22,6 +25,7 @@ module Services
         list_penalties_repointed list_penalties_dropped
         applications_repointed applications_merged
         dynamic_applications_upserted year_list_penalties_dropped
+        num_years_covered_backfilled
         id_map_repointed penalties_destroyed
       ].freeze
 
@@ -47,7 +51,7 @@ module Services
         end
         {success: true, data: @counts}
       rescue => e
-        {success: false, error: e.message, data: @counts}
+        {success: false, error: e.message, data: COUNTS.index_with { 0 }}
       end
 
       private
@@ -98,6 +102,9 @@ module Services
 
         repoint_id_map(source_ids, target.id)
         sources.each do |source|
+          bucket = PenaltyResolver::YEAR_SPAN_BUCKETS.fetch(source.name)
+          tagged = source.list_penalties.select(:list_id)
+          @counts[:num_years_covered_backfilled] += ::Books::List.where(id: tagged, num_years_covered: nil).update_all(num_years_covered: bucket)
           @counts[:year_list_penalties_dropped] += source.list_penalties.count
           source.destroy! # dependent: :destroy takes its list_penalties and applications
           @counts[:penalties_destroyed] += 1
