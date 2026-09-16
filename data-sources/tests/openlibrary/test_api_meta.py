@@ -1,3 +1,4 @@
+import json
 import shutil
 
 import duckdb
@@ -5,6 +6,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from openlibrary.api.deps import (
+    ConfigurationError,
+    GatesFailed,
+    MalformedArtifactFile,
     MissingTable,
     Settings,
     SymlinkedVersion,
@@ -43,6 +47,136 @@ def test_version_reports_per_table_row_counts(client):
 def test_version_reports_the_evaluation_scores_when_they_exist(client):
     body = client.get("/version").json()
     assert "eval" in body
+    # `eval` is the CODE's calibration record (eval/thresholds.json), not
+    # this artifact's gate run -- it names the matcher version it measured.
+    assert body["eval"]["matcher_version"] == body["matcher_version"]
+
+
+def test_version_exposes_the_per_gate_results_of_this_build(client):
+    """R91: `gates` is the build's own per-gate outcome list from
+    build_report.json -- on the fixture build (and the 2026-07-31 one)
+    `evaluation_set` is `skipped`, which `gates_passed: true` alone hides."""
+    body = client.get("/version").json()
+    by_name = {gate["name"]: gate["status"] for gate in body["gates"]}
+    assert by_name["row_counts"] == "pass"
+    assert by_name["evaluation_set"] == "skipped"
+
+
+def _copied_version(tmp_path, fixture_artifact):
+    version_dir = tmp_path / "versions" / fixture_artifact.dump_date
+    shutil.copytree(fixture_artifact.version_dir, version_dir)
+    return ArtifactPaths(root=tmp_path, dump_date=fixture_artifact.dump_date)
+
+
+def _settings(paths):
+    return Settings(data_root=paths.root, data_version=paths.dump_date)
+
+
+def test_a_version_without_a_manifest_refuses_to_boot(tmp_path, fixture_artifact):
+    """R91: build.py writes manifest.json last; a directory with every table
+    but no manifest is an unfinished build, not a version."""
+    paths = _copied_version(tmp_path, fixture_artifact)
+    paths.manifest_path.unlink()
+
+    with pytest.raises(GatesFailed, match="manifest"):
+        open_artifact(_settings(paths))
+
+
+def test_a_gate_failed_version_refuses_to_boot_naming_the_version(tmp_path, fixture_artifact):
+    """R91: build.py writes the manifest (gates_passed: false) and all ten
+    tables BEFORE raising on a failed gate, so the directory looks complete."""
+    paths = _copied_version(tmp_path, fixture_artifact)
+    manifest = json.loads(paths.manifest_path.read_text())
+    manifest["gates_passed"] = False
+    paths.manifest_path.write_text(json.dumps(manifest))
+
+    with pytest.raises(GatesFailed, match=fixture_artifact.dump_date):
+        open_artifact(_settings(paths))
+
+
+def test_a_manifest_without_the_gates_flag_refuses_to_boot(tmp_path, fixture_artifact):
+    paths = _copied_version(tmp_path, fixture_artifact)
+    manifest = json.loads(paths.manifest_path.read_text())
+    del manifest["gates_passed"]
+    paths.manifest_path.write_text(json.dumps(manifest))
+
+    with pytest.raises(GatesFailed):
+        open_artifact(_settings(paths))
+
+
+def test_a_malformed_build_report_fails_at_boot_not_per_request(tmp_path, fixture_artifact):
+    """R91: build_report.json and eval/thresholds.json are read ONCE in
+    `open_artifact`; a malformed file is a boot failure naming the file,
+    never a 500 on every /version call."""
+    paths = _copied_version(tmp_path, fixture_artifact)
+    paths.report_path.write_text("{not json")
+
+    with pytest.raises(MalformedArtifactFile, match="build_report.json"):
+        open_artifact(_settings(paths))
+
+
+def test_a_malformed_manifest_fails_at_boot(tmp_path, fixture_artifact):
+    paths = _copied_version(tmp_path, fixture_artifact)
+    paths.manifest_path.write_text("{not json")
+
+    with pytest.raises(MalformedArtifactFile, match="manifest.json"):
+        open_artifact(_settings(paths))
+
+
+def test_the_report_is_read_once_at_boot(tmp_path, fixture_artifact):
+    """Deleting build_report.json AFTER boot changes nothing: /version serves
+    the tables and gates from `ArtifactState`, not from disk per request."""
+    paths = _copied_version(tmp_path, fixture_artifact)
+    state = open_artifact(_settings(paths))
+    assert state.report["tables"]["works"]["rows"] > 0
+    assert state.eval_thresholds["matcher_version"] == state.source_version.matcher_version
+    paths.report_path.unlink()
+    with TestClient(create_app(state)) as test_client:
+        body = test_client.get("/version").json()
+    assert body["tables"]["works"]["rows"] > 0
+    assert body["gates"]
+
+
+def test_boot_checks_run_in_order_tables_then_gates_then_weights(
+    tmp_path, fixture_artifact, monkeypatch
+):
+    """symlink -> tables -> manifest/gates -> weights -> connect. A version
+    that fails several checks reports the EARLIEST one: a missing table
+    outranks a missing manifest, and a failed gate outranks a weights
+    mismatch."""
+    paths = _copied_version(tmp_path, fixture_artifact)
+    paths.manifest_path.unlink()
+    paths.table("popularity").unlink()
+    with pytest.raises(MissingTable):
+        open_artifact(_settings(paths))
+
+    paths = _copied_version(tmp_path / "second", fixture_artifact)
+    manifest = json.loads(paths.manifest_path.read_text())
+    manifest["gates_passed"] = False
+    paths.manifest_path.write_text(json.dumps(manifest))
+    monkeypatch.setattr("openlibrary.api.deps.MATCHER_VERSION", 999)
+    with pytest.raises(GatesFailed):
+        open_artifact(_settings(paths))
+
+
+def test_from_env_without_a_version_is_a_configuration_error_naming_it(monkeypatch):
+    monkeypatch.delenv("OL_DATA_VERSION", raising=False)
+    monkeypatch.setenv("OL_DATA_ROOT", "/data")
+
+    with pytest.raises(ConfigurationError, match="OL_DATA_VERSION"):
+        Settings.from_env()
+
+
+def test_from_env_reads_every_variable(monkeypatch, tmp_path):
+    monkeypatch.setenv("OL_DATA_ROOT", str(tmp_path))
+    monkeypatch.setenv("OL_DATA_VERSION", "2026-07-31")
+    monkeypatch.setenv("OL_API_MEMORY_LIMIT", "2GB")
+    monkeypatch.setenv("OL_API_TEMP_DIR", str(tmp_path / "spill"))
+    settings = Settings.from_env()
+    assert settings.data_root == tmp_path
+    assert settings.data_version == "2026-07-31"
+    assert settings.memory_limit == "2GB"
+    assert settings.temp_dir == tmp_path / "spill"
 
 
 def test_a_missing_table_refuses_to_boot(tmp_path, fixture_artifact):

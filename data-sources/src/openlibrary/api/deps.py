@@ -9,6 +9,15 @@ The container mounts the artifact root read-only, so `paths.tmp_dir` (a
 directory under that root) cannot be created or spilled into. `Settings.temp_dir`
 points DuckDB's spill directory somewhere writable instead -- the API never
 creates, mkdirs, or writes under the artifact root.
+
+`open_artifact` refuses to boot, in this order, on: a symlinked version
+directory; a missing table; a missing manifest or one whose gates did not
+pass (R91 -- `build.py` writes `manifest.json` with `gates_passed: false`
+and all ten tables BEFORE raising on a failed gate, so a gate-failed
+directory looks complete on disk); a weights/matcher version mismatch.
+Only then does it connect. `build_report.json` and the code's
+`eval/thresholds.json` are read ONCE here into `ArtifactState` so a
+malformed file is a boot failure naming the file, never a 500 per request.
 """
 
 from __future__ import annotations
@@ -49,6 +58,22 @@ class WeightsMismatch(RuntimeError):
     """weights.json was calibrated for a different matcher version than is running."""
 
 
+class GatesFailed(RuntimeError):
+    """The version directory has no manifest (an unfinished build is not a
+    version) or its manifest does not record `gates_passed: true`."""
+
+
+class MalformedArtifactFile(RuntimeError):
+    """manifest.json, build_report.json or eval/thresholds.json is not valid JSON."""
+
+
+class ConfigurationError(RuntimeError):
+    """A required environment variable is missing."""
+
+
+THRESHOLDS_PATH = Path(__file__).resolve().parents[1] / "eval" / "thresholds.json"
+
+
 @dataclass(frozen=True)
 class Settings:
     data_root: Path
@@ -58,9 +83,15 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> Settings:
+        data_version = os.environ.get("OL_DATA_VERSION")
+        if not data_version:
+            raise ConfigurationError(
+                "OL_DATA_VERSION is not set -- the API opens an explicit version directory "
+                "(versions/<dump-date>) and never guesses one"
+            )
         return cls(
             data_root=Path(os.environ.get("OL_DATA_ROOT", "/data")),
-            data_version=os.environ["OL_DATA_VERSION"],
+            data_version=data_version,
             memory_limit=os.environ.get("OL_API_MEMORY_LIMIT", "8GB"),
             temp_dir=Path(os.environ.get("OL_API_TEMP_DIR", tempfile.gettempdir())),
         )
@@ -73,6 +104,23 @@ class ArtifactState:
     manifest: dict
     source_version: SourceVersion
     weights: Weights
+    # build_report.json: this build's per-table stats and per-gate results.
+    report: dict
+    # eval/thresholds.json: the CODE's calibration record (pinned + measured
+    # for the running matcher version), not this artifact's gate run.
+    eval_thresholds: dict
+
+
+def _read_json(path: Path) -> dict:
+    """Read one JSON file at boot: `{}` if absent, a boot failure naming the
+    file if malformed. (The manifest's absence is checked separately -- it
+    is a `GatesFailed`, not an empty dict.)"""
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text())
+    except json.JSONDecodeError as exc:
+        raise MalformedArtifactFile(f"{path} is not valid JSON: {exc}") from exc
 
 
 def open_artifact(settings: Settings) -> ArtifactState:
@@ -88,6 +136,18 @@ def open_artifact(settings: Settings) -> ArtifactState:
     if missing:
         raise MissingTable(f"version {settings.data_version} is missing: {', '.join(missing)}")
 
+    if not paths.manifest_path.exists():
+        raise GatesFailed(
+            f"version {settings.data_version} has no manifest.json -- an unfinished build "
+            "is not a version"
+        )
+    manifest = _read_json(paths.manifest_path)
+    if manifest.get("gates_passed") is not True:
+        raise GatesFailed(
+            f"version {settings.data_version} did not pass its quality gates "
+            f"(manifest gates_passed={manifest.get('gates_passed')!r}); refusing to serve it"
+        )
+
     weights = load_weights()
     if weights.matcher_version != MATCHER_VERSION:
         raise WeightsMismatch(
@@ -95,13 +155,14 @@ def open_artifact(settings: Settings) -> ArtifactState:
             f"but the running code is matcher version {MATCHER_VERSION}"
         )
 
+    # Read once, here: /version serves these from state, so a malformed
+    # file fails the boot rather than every request.
+    report = _read_json(paths.report_path)
+    eval_thresholds = _read_json(THRESHOLDS_PATH)
+
     connection = duck_connect(
         paths, memory_limit=settings.memory_limit, temp_directory=settings.temp_dir
     )
-
-    manifest = {}
-    if paths.manifest_path.exists():
-        manifest = json.loads(paths.manifest_path.read_text())
 
     return ArtifactState(
         paths=paths,
@@ -115,6 +176,8 @@ def open_artifact(settings: Settings) -> ArtifactState:
             matcher_version=MATCHER_VERSION,
         ),
         weights=weights,
+        report=report,
+        eval_thresholds=eval_thresholds,
     )
 
 
