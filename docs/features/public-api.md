@@ -6,6 +6,7 @@ Spec: `docs/superpowers/specs/2026-09-12-public-api-framework-design.md`. Code i
 
 - Per-site path, JSON only: `https://thegreatestbooks.org/api/v1/books`, `/api/v1/books/{slug}`, `/api/v1/authors`, `/api/v1/authors/{slug}`. The domain comes from the host. Indexes are the site's primary ranking, best first; when there is no primary author ranking yet `/api/v1/authors` is a 200 with empty `data`. Lookup is by slug only, and author show does not embed books — a paginated `/api/v1/authors/{slug}/books` is the planned follow-up. Music and games resources are later increments.
 - Contract: `web-app/config/api/v1/openapi.yaml`, served at `GET /api/v1/openapi.json` (public, cached an hour). Path items carry `x-domain`, and the served document keeps only the paths routed on the host it was fetched from — the music host's copy does not advertise `/api/v1/books`. Every API integration test validates against it (`assert_api_conform`), and `test/integration/api/v1/contract_coverage_test.rb` fails if a documented response is not exercised.
+- Pages: `GET /developers` is the documentation, on every site, edge-cached for a day and rendered from the host's OpenAPI document (so it lists only that host's endpoints; every `Api::Problem` code has an `#errors-<code>` anchor there, which is what a problem's `type` URI points at). `GET /developers/tokens` is where a member creates and revokes tokens (`MembershipGate[:api]`, never cached). Create answers with a Turbo Stream that carries the secret exactly once; a revoke refreshes the list and form but never the secret panel. The two write actions answer only in Turbo Streams, by design; there is no JS-off fallback. Links in: the `/members` card and each footer's "API" entry. There is no header nav item, on purpose. `/developers` is cached for a day and `/api/v1/openapi.json` for an hour, so after a contract change the docs page can trail the served contract by up to about 25 hours.
 - Envelope `{"data": …}`; collections add `meta` and `links`. Errors are RFC 9457 `application/problem+json` with a stable `code` (`Api::Problem`).
 
 ## Authentication
@@ -13,6 +14,8 @@ Spec: `docs/superpowers/specs/2026-09-12-public-api-framework-design.md`. Code i
 `Authorization: Bearer tg_…`. Tokens are `ApiToken` rows storing only a SHA-256 digest; the secret is shown once (`Services::Api::Tokens.generate`, which with `authenticate` and `record_use` owns the token lifecycle; the model holds only validations). `Services::Api::Authenticator` is the only code that inspects a token; it yields an `Api::Principal` (user, token, scopes, tier). A person needs an active membership (`User#member?`); a service account (`User#account_kind == service`) does not and gets the `system` tier.
 
 Failures follow RFC 6750: 401 `WWW-Authenticate: Bearer` / `Bearer error="invalid_token"`; 403 `membership_required` (no challenge); 403 `Bearer error="insufficient_scope", scope="…"`.
+
+Members mint tokens at `/developers/tokens`: a name (≤60 chars), any of the three read scopes, and an expiry of never, 30, 90 or 365 days. Ten per account.
 
 ## Scopes
 
@@ -31,6 +34,15 @@ bin/rails api:token:revoke ID=42
 ```
 
 Each prints only the secret. `Services::UserAuthenticationService` scopes every lookup to `User.person`, so a service account can never sign in or be linked.
+
+## Testing the pages
+
+`test/controllers/developers_controller_test.rb` compares `/developers` signed out and signed in
+(it is edge-cached, so any per-visitor byte would leak) and pins an anchor per problem code.
+`test/controllers/developers/tokens_controller_test.rb` covers the gate, the cap, the once-only
+secret and the Turbo Stream shapes. Playwright: `e2e/tests/books/developers.spec.ts` (anonymous),
+`books/account/developers.spec.ts` (signed-in non-member), `books/member/developers-tokens.spec.ts`
+(the member account, see `docs/features/e2e-testing.md`).
 
 ## Edge (Cloudflare)
 
@@ -64,4 +76,4 @@ source of truth; this section only records what they must do and why.
 
 ## Not yet
 
-`/developers` and `/developers/tokens` (increment 3), `/api/v1/authors/{slug}/books`, search, filters, music/games, OAuth/MCP.
+`/api/v1/authors/{slug}/books`, search, filters, music/games resources, OAuth/MCP.

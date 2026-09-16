@@ -74,4 +74,15 @@ class MembersControllerTest < ActionDispatch::IntegrationTest
 
     assert_includes response.headers["Cache-Control"], "no-store"
   end
+
+  # The API is the first feature behind the paywall and this card is one of its
+  # two links in (the footer is the other; there is no header nav item by design).
+  test "the API card links to the token page and the docs" do
+    sign_in_as(users(:regular_user), stub_auth: true)
+
+    get members_url
+
+    assert_select "a[href=?]", developers_tokens_path
+    assert_select "a[href=?]", developers_path
+  end
 end

@@ -7,6 +7,7 @@ dotenv.config({ path: path.resolve(__dirname, '.env') });
 const musicAuthFile = path.join(__dirname, '.auth', 'user.json');
 const gamesAuthFile = path.join(__dirname, '.auth', 'games-user.json');
 const booksAuthFile = path.join(__dirname, '.auth', 'books-user.json');
+const booksMemberAuthFile = path.join(__dirname, '.auth', 'books-member.json');
 
 export default defineConfig({
   testDir: './tests',
@@ -24,6 +25,7 @@ export default defineConfig({
     { name: 'setup', testDir: './auth', testMatch: 'auth.setup.ts', use: { baseURL: 'https://dev.thegreatestmusic.org' } },
     { name: 'games-setup', testDir: './auth', testMatch: 'games-auth.setup.ts' },
     { name: 'books-setup', testDir: './auth', testMatch: 'books-auth.setup.ts' },
+    { name: 'books-member-setup', testDir: './auth', testMatch: 'books-member-auth.setup.ts' },
     {
       name: 'chromium',
       use: {
@@ -50,7 +52,7 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         baseURL: 'https://dev-new.thegreatestbooks.org',
       },
-      testMatch: /books\/(?!admin\/)(?!account\/).*/,
+      testMatch: /books\/(?!admin\/)(?!account\/)(?!member\/).*/,
     },
     {
       name: 'books-admin',
@@ -71,6 +73,16 @@ export default defineConfig({
       },
       testMatch: /books\/account\/.*/,
       dependencies: ['books-setup'],
+    },
+    {
+      name: 'books-member',
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: 'https://dev-new.thegreatestbooks.org',
+        storageState: booksMemberAuthFile,
+      },
+      testMatch: /books\/member\/.*/,
+      dependencies: ['books-member-setup'],
     },
   ],
 });
