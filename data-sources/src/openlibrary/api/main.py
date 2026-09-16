@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from openlibrary.api import meta, retrieval
+from openlibrary.api import meta, resolve, retrieval
 from openlibrary.api.deps import ArtifactState, Settings, open_artifact
 
 
@@ -32,6 +32,7 @@ def create_app(state: ArtifactState | None = None) -> FastAPI:
     app.state.artifact = artifact_state
     app.include_router(meta.router)
     app.include_router(retrieval.router)
+    app.include_router(resolve.router)
     return app
 
 

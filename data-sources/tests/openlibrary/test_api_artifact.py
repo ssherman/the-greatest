@@ -23,9 +23,9 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from openlibrary.api.deps import Settings, open_artifact
+from openlibrary.api.deps import Settings, cursor, open_artifact
 from openlibrary.api.main import create_app
-from openlibrary.eval.dataset import load_cases
+from openlibrary.eval.dataset import load_cases, resolve_keys
 
 
 @pytest.mark.artifact
@@ -139,3 +139,84 @@ def test_batch_endpoints_answer_from_the_real_artifact(tmp_path):
     for label, seconds in timings.items():
         print(f"  {label}: {seconds * 1000:.1f} ms")
     print(f"  authors requested: {len(author_keys)} (from first 20 of the 100 works)")
+
+
+@pytest.mark.artifact
+def test_resolve_finds_the_labelled_work_for_an_easy_baseline_case(tmp_path):
+    """R79/Task 33: one real POST /resolve, timed exactly as `eval.harness._query_for`
+    builds its request, plus a second timed call for the plan's Gatsby query.
+    Timings and the Gatsby verdict/top key are printed (via -s) for the task
+    report, not asserted -- this is a smoke test against real data, not a
+    pinned performance budget."""
+    root = os.environ.get("OL_DATA_ROOT")
+    dump_date = os.environ.get("OL_DATA_VERSION")
+    if not (root and dump_date):
+        pytest.skip("set OL_DATA_ROOT and OL_DATA_VERSION")
+
+    cases = sorted(load_cases(), key=lambda c: c.case_id)
+    case = next(
+        (
+            c
+            for c in cases
+            if c.stratum == "easy_baseline" and c.label.verdict == "match" and c.label.work_key
+        ),
+        None,
+    )
+    assert case is not None, "the evaluation set has no easy_baseline match-labelled case"
+    book = case.book
+    request_body = {
+        "title": book.title,
+        "subtitle": book.subtitle,
+        "author_names": book.author_names,
+        "year": book.first_published_year,
+        "isbn13": book.isbn13,
+        "isbn10": book.isbn10,
+        "asin": book.asin,
+        "goodreads_id": book.goodreads_id,
+        "existing_ol_key": book.existing_ol_work_keys[0] if book.existing_ol_work_keys else None,
+        "limit": 50,
+    }
+
+    state = open_artifact(Settings(data_root=Path(root), data_version=dump_date, temp_dir=tmp_path))
+    timings: dict[str, float] = {}
+    try:
+        with TestClient(create_app(state)) as client:
+            start = time.perf_counter()
+            response = client.post("/resolve", json=request_body)
+            timings["POST /resolve (easy_baseline case)"] = time.perf_counter() - start
+            assert response.status_code == 200
+            data = response.json()["data"]
+            returned_keys = [candidate["key"]["key"] for candidate in data["candidates"]]
+
+            # The label may name a redirect SOURCE (module docstring): compare
+            # terminal keys via one `resolve_keys` call, not string equality.
+            with cursor(state) as cur:
+                resolved = resolve_keys(cur, state.paths, [case.label.work_key, *returned_keys])
+            target_terminal = resolved.get(case.label.work_key, case.label.work_key)
+            returned_terminals = {resolved.get(key, key) for key in returned_keys}
+            assert target_terminal in returned_terminals, (
+                f"labelled work {case.label.work_key} (terminal {target_terminal}) not among "
+                f"the {len(returned_keys)} candidates /resolve returned"
+            )
+
+            start = time.perf_counter()
+            gatsby_response = client.post(
+                "/resolve",
+                json={
+                    "title": "The Great Gatsby",
+                    "author_names": ["F. Scott Fitzgerald"],
+                    "year": 1925,
+                },
+            )
+            timings["POST /resolve (Gatsby)"] = time.perf_counter() - start
+            assert gatsby_response.status_code == 200
+            gatsby_data = gatsby_response.json()["data"]
+    finally:
+        state.connection.close()
+
+    top_key = gatsby_data["candidates"][0]["key"]["key"] if gatsby_data["candidates"] else None
+    print("\nReal-artifact resolve timings (Task 33, R79):")
+    for label, seconds in timings.items():
+        print(f"  {label}: {seconds:.2f} s")
+    print(f"  case: {case.case_id}, labelled work_key: {case.label.work_key}")
+    print(f"  Gatsby decision: verdict={gatsby_data['decision']['verdict']!r}, top key={top_key!r}")
