@@ -23,6 +23,7 @@ require_relative "support/firebase_token_helper"
 require_relative "support/api_token_secrets"
 require_relative "support/api_conformance"
 require_relative "support/sql_capture"
+require_relative "support/books/open_library/fake_redis"
 
 # Configure Sidekiq to run jobs inline during tests
 # Sidekiq 9 removes `require "sidekiq/testing"`. Sidekiq.testing! loads sidekiq/test_api
