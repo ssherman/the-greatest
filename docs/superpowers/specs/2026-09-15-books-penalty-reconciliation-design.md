@@ -43,7 +43,8 @@ missing six penalties:
   byte-for-byte.
 - No admin UI. Per-list values live in a checked-in file (see §4).
 - No sweep for books lists that *should* have had a year-span penalty in legacy but never
-  got one. The review covers the 207 legacy lists that carry one.
+  got one. The review covers the 205 lists that carry one on an active legacy
+  configuration — the same 205 the new database carries.
 - No fix for the `Penalties::Backfill` id-keying problem beyond removing the nine entries
   this work makes dead (§8).
 
@@ -55,7 +56,7 @@ missing six penalties:
 | 2 | **Per-list `num_years_covered` is authoritative from `config/books_migration/num_years_covered.yml`**, keyed by list id (ids survive the migration). A list absent from the file gets its legacy bucket. The migrator reads values only; comments are for the reviewer. |
 | 3 | **The derive task reads the legacy database only** and never rewrites an existing entry. New ids are appended; delete the file to regenerate from scratch. |
 | 4 | **Yearly-award lists stay at 1.** Legacy's intent for `only covers 1 year (yearly book awards …)` was "each pick is best-of-one-year"; the parser never runs on that bucket. |
-| 5 | **Conflicting buckets across legacy configs: the highest legacy RC id wins** (68 is the primary). Exactly one legacy list (237: buckets 1 and 25) is affected, and it appears in the review file. |
+| 5 | **Conflicting buckets across legacy configs: the highest legacy RC id wins** (68 is the primary). No list on the active legacy configurations conflicts today — list 237 (buckets 1 and 25) does only when archived configurations are counted, and nothing here reads those. The rule exists so the outcome is deterministic if that changes. |
 | 6 | **Books curve:** `max × (1 − ln(years) / ln(BOOKS_FULL_COVERAGE_YEARS))`, clamped to `0..max`, 0 at ≥ `BOOKS_FULL_COVERAGE_YEARS` years; the constant is 200. At max 50 this yields 50 / 35 / 28 / 20 / 13 / 9 / 6.5 for 1 / 5 / 10 / 25 / 50 / 75 / 100 years against legacy's 50 / 40 / 30 / 20 / 10 / 7 / 5. |
 | 7 | **The reconcile step is by name, never by id.** Development ids are not production ids. Source and target penalties are located by their legacy/seed names (globals by `dynamic_type` where they have one), `user_id: nil` only. |
 | 8 | **Reconcile treats every configuration uniformly**: any RC holding a year-span application gets `(num_years_covered global, MAX(value))`, including user-owned clones. No special-casing of RC 8. |
@@ -106,10 +107,13 @@ Everything downstream falls out of existing machinery:
 Runs inside `data_migration:list_penalties`, after `ListPenaltyMigrator`. Subclass of
 `Migrator`.
 
-- **Source rows:** legacy `list_con_lists` joined to `ranked_lists` for `list_id`, limited
-  to `list_con_id`s whose `LegacyIdMap "Penalty"` target is the `num_years_covered` global
-  (so it is driven by the resolver's decision, not by re-matching names). Carries the
-  legacy `list_con.name` and `ranking_configuration_id`.
+- **Source rows:** legacy `list_con_lists` joined to `ranked_lists` (for `list_id`) and
+  `list_cons` (for `name` and `ranking_configuration_id`), limited to `list_cons` whose
+  name is a `YEAR_SPAN_BUCKETS` key on an active legacy configuration (the
+  `"Books::RankingConfiguration"` map's legacy ids, like every other penalty-side
+  migrator). Selected by name, not through the `"Penalty"` map: on a database migrated
+  before this change that map still points the seven names at the Books statics, and the
+  migrator has to work there too (§6).
 - **Bucket:** `PenaltyResolver::YEAR_SPAN_BUCKETS.fetch(list_con.name)`.
 - **Per list, in memory:** keep the row with the highest `ranking_configuration_id`
   (Decision 5).
@@ -146,7 +150,6 @@ positive integer, written as text so comments survive:
 # id: years   # list name  (legacy bucket → how the number was derived)
 1893: 24      # 100 Best Books of the 21st Century  (25 → 21st century so far, published 2024)
 2211: 2       # Africa's 100 Best Books of the 20th Century  (100 → 21st century so far, published 2002; FROM DESCRIPTION)
-237: 25       # The 10 Best Books Through Time  (1 and 25 in legacy; CONFLICT, highest RC wins → 25)
 ```
 
 Loaded with `YAML.safe_load` → `Hash{Integer => Integer}`; the migrator validates every
@@ -159,8 +162,9 @@ entries; the rake task does the legacy reads and the file write so the parser is
 testable without a legacy connection).
 
 Input per legacy list: `id`, `name`, `description`, `year_published`, and its bucket
-(same join and highest-RC rule as §3.2, but read directly from legacy `list_cons` by
-name because this runs before or independently of any migration).
+(same join and highest-RC rule as §3.2, limited to active — `archived = false` —
+legacy configurations exactly as the migration is, but read directly from legacy
+`list_cons` by name because this runs before or independently of any migration).
 
 Rules, tried in order, **on the name first; the description only if the name yields
 nothing**, and the entry records which (`FROM DESCRIPTION` is the reviewer's cue for the
@@ -186,9 +190,9 @@ bucket the reason still appears, so agreement is visible too.
 **Regeneration:** the task loads the existing file (if any), keeps every existing line
 verbatim, appends entries for ids not present, and prints how many were kept vs added.
 
-Prototype numbers on the current legacy data, for sizing the review: 205 lists in the
-new DB (207 legacy, two are superseded); 197 parsed, 143 equal to the bucket, 54 differ,
-8 unparsed. Roughly ten of the 54 are description false positives the name-first rule
+Prototype numbers on the current legacy data, for sizing the review: 205 lists (active
+legacy configurations; 207 if archived ones were counted, which they are not); 197
+parsed, 143 equal to the bucket, 54 differ, 8 unparsed. Roughly ten of the 54 are description false positives the name-first rule
 removes; the rest are real refinements (every "21st century" list becomes 15–24 instead
 of a flat 25).
 
@@ -236,6 +240,8 @@ For each pair, when the source exists:
   row, else `update(penalty_id: target)`.
 - `penalty_applications`: for each source row, if `(target, rc)` exists set the target's
   `value = MAX(both)` and delete the source row, else `update(penalty_id: target)`.
+- repoint every `LegacyIdMap "Penalty"` row whose `new_id` is the source to the target, so
+  a later `data_migration:penalties` re-run (which upserts the map) and this step agree.
 - `destroy` the source penalty (its `dependent: :destroy` associations are already empty).
 
 **Step 2 — year-span statics → the dynamic global.** Sources: the seven
@@ -243,13 +249,15 @@ For each pair, when the source exists:
 `num_years_covered` global.
 - For every RC with an application to any source: `find_or_initialize_by(target, rc)`,
   `value = MAX(existing target value, MAX(source values on that rc))`, save.
+- Repoint the `LegacyIdMap "Penalty"` rows of every source to the target.
 - `destroy` each source penalty, which cascades its `list_penalties`. The step is ordered
   after `NumYearsCoveredMigrator` so the per-list values already exist when the statics
   vanish (Decision 9); the migrator reads legacy rows, not these `list_penalties`, so the
   order is about never leaving a list with neither signal, not about data dependency.
 
 **Step 3 — nothing else.** No weight recalculation inside the task; that is a separate,
-deliberate step (§7).
+deliberate step (§7). The whole run is one transaction; a missing `num_years_covered`
+global fails loud and rolls back.
 
 On a fresh run with the new resolver, none of the sources exist and the task is a no-op.
 
@@ -291,6 +299,15 @@ are part of the launch sequence, not of this task.
   entries for penalties this work deletes (ids 24, 28, 29, 30, 33, 35, 40, 41, 48 in
   dev). The task already skips missing ids, but a stale entry whose id is later reused
   by another penalty would trip its mismatch exit.
+- **Dynamic year lists no longer tag books rollups with the static one-year penalty.**
+  `Services::Lists::GenerateDynamicLists#assert_penalties` looks up
+  `RankingConfiguration#one_year_penalty_name`, which only `Books::RankingConfiguration`
+  overrides (to the one-year static this work deletes). Every domain now relies on the
+  `num_years_covered: 1` that `assert_fields` already sets, so the hook, the books
+  override, and the tagging branch are removed rather than left returning nil for
+  nobody. Tests that pinned the tag are replaced by one asserting a books rollup carries
+  no static `list_time_scope` penalty. The `books_one_year_penalty` fixture stays: other
+  tests use it as a generic time-scope static.
 - **Docs:** no feature doc enumerates the `data_migration:*` tasks today and this work
   does not add one; the rake `desc` strings and the review file's own header (§4.1) are
   the documentation of the workflow.
@@ -306,7 +323,8 @@ do.
 - **`NumYearsCoveredMigrator`:** override beats bucket; bucket applies when absent;
   highest-RC wins on conflict; superseded list skipped, other missing list raises;
   non-positive override value raises naming the id; unknown override id is reported not
-  raised; a list with no year-span row is left untouched; second run is a no-op.
+  raised; a list with no year-span row is left untouched; an unknown year-span name
+  fails loud; second run is a no-op.
 - **`NumYearsCoveredDeriver`:** one case per rule in §4.2 plus: name beats description;
   description-only match is flagged; missing `year_published` is flagged; bucket-1 never
   parsed; `millennium` yields no value; regeneration keeps an existing edited line and
@@ -317,9 +335,11 @@ do.
   list at the same inputs still gets the quadratic (assert the exact pre-change value so
   the extraction is proven behaviour-preserving); details hash keys for each branch.
 - **`PenaltyReconciler`:** merge with a colliding `list_penalty` and a colliding
-  application (MAX wins); non-colliding rows are repointed; statics on two RCs produce
-  two dynamic applications at each RC's own MAX; statics and duplicates are gone
-  afterwards; **the task run twice reports all-zero counts the second time and leaves
+  application (MAX wins); non-colliding rows are repointed; the id map is repointed;
+  statics on two RCs produce two dynamic applications at each RC's own MAX; an existing
+  dynamic application is never lowered; user-authored penalties sharing a name are
+  ignored; statics and duplicates are gone afterwards; a missing dynamic global fails
+  loud and rolls back; **the task run twice reports all-zero counts the second time and leaves
   the database identical**; fresh state (no sources) is a no-op.
 - **Rake wiring:** `test/tasks/data_migration_test.rb` gains the new tasks and asserts
   `all` orders `list_penalties` before `penalties:reconcile`.
