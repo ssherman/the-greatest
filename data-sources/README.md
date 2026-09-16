@@ -26,21 +26,25 @@ alongside the Rails app, or on trusted infrastructure only.
 **Local**, against an artifact already built at `OL_DATA_ROOT`:
 
     OL_DATA_ROOT=/home/shane/ol-data OL_DATA_VERSION=2026-07-31 \
-      uv run uvicorn --factory openlibrary.api.main:factory --host 0.0.0.0 --port 8080
+      uv run uvicorn --factory openlibrary.api.main:factory --host 127.0.0.1 --port 8080
 
 `OL_DATA_VERSION` is required (an explicit version directory, never a
-symlink -- see `deps.py`). `OL_API_MEMORY_LIMIT` (default `8GB`) and
-`OL_API_TEMP_DIR` (default the system temp dir) are optional.
+symlink, and one whose `manifest.json` records `gates_passed: true` -- see
+`deps.py`; a missing variable is a `ConfigurationError` naming it).
+`OL_API_MEMORY_LIMIT` (default `8GB`) and `OL_API_TEMP_DIR` (default the
+system temp dir) are optional.
 
 **Docker**, via the compose file in this directory:
 
-    docker compose up -d api                              # serves :8080, artifact mounted read-only
+    docker compose up -d api                              # serves 127.0.0.1:8080, artifact mounted read-only
     docker compose --profile build run --rm build          # rebuild an artifact; artifact mounted writable
 
 `OL_DATA_HOST` (default `/home/shane/ol-data`) picks the artifact root on the
 host; `OL_DATA_VERSION` (default `2026-07-31`) picks the version directory.
 Override either on the command line: `OL_DATA_VERSION=2026-08-31 docker
-compose up -d api`.
+compose up -d api`. The port binds to loopback by default (`OL_API_BIND`,
+default `127.0.0.1`): set `OL_API_BIND=0.0.0.0` only where Rails is not on
+the same host, and never put the service on a public request path.
 
 **Endpoints** (full response shapes and measured latencies are in
 `docs/features/open-library-data-service.md`, "Service, measured"):
@@ -58,3 +62,6 @@ compose up -d api`.
     POST /resolve                          curl -X POST localhost:8080/resolve \
                                               -H 'content-type: application/json' \
                                               -d '{"title":"The Great Gatsby","author_names":["F. Scott Fitzgerald"],"year":1925}'
+
+Request bodies are strict: an unknown field (`"author"`, `"isbn"`) is a 422
+naming it, never a 200 that silently ignored it.

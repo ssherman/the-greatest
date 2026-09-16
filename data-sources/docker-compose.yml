@@ -4,7 +4,9 @@ services:
     image: the-greatest/data-sources:latest
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      # Loopback by default (R92): the service is never on a public request
+      # path. Set OL_API_BIND=0.0.0.0 only where Rails is not on this host.
+      - "${OL_API_BIND:-127.0.0.1}:8080:8080"
     volumes:
       # Read-only: the service is physically unable to corrupt its own data.
       - ${OL_DATA_HOST:-/home/shane/ol-data}:/data:ro
