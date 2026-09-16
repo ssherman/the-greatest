@@ -345,3 +345,188 @@ def test_every_key_is_namespaced_and_no_bare_work_key_leaks(client, a_resolvable
         assert data["decision"]["key"]["source"] == "openlibrary"
     for candidate in data["candidates"]:
         assert candidate["key"]["source"] == "openlibrary"
+
+
+# -------------------------------------------------------------- request strictness (R88)
+
+
+def test_a_resolve_request_with_unknown_fields_is_a_422_naming_them(client):
+    """R88: `ResolveRequest` is `extra="forbid"`. The spec-shaped body below
+    used to validate as `{"title": ...}` and return 200 with the ISBN
+    silently discarded -- the caller believed its identifier had been used."""
+    response = client.post(
+        "/resolve",
+        json={
+            "title": "The Great Gatsby",
+            "author": "F. Scott Fitzgerald",
+            "isbn": "9780743273565",
+        },
+    )
+    assert response.status_code == 422
+    rejected = {
+        loc for error in response.json()["detail"] for loc in error["loc"] if isinstance(loc, str)
+    }
+    assert {"author", "isbn"} <= rejected
+
+
+# ------------------------------------------------------- fingerprint fallback (R89)
+
+
+def test_two_names_that_fingerprint_to_nothing_are_a_conflict_not_an_agreement():
+    """R89: `fingerprint` strips non-Latin scripts to "", so without a
+    fallback two DIFFERENT Japanese names both mapped to "" and read as
+    `agreement`. `_list_diff_kind` now compares `fp(v) or v`."""
+    from common.normalize import name_fingerprint
+    from openlibrary.api.resolve import _list_diff_kind
+
+    assert name_fingerprint("村上春樹") == "" == name_fingerprint("夏目漱石")
+    assert _list_diff_kind(["村上春樹"], ["夏目漱石"], name_fingerprint) == "conflict"
+
+
+def test_the_same_unfingerprintable_name_on_both_sides_is_still_an_agreement():
+    from common.normalize import name_fingerprint
+    from openlibrary.api.resolve import _list_diff_kind
+
+    assert _list_diff_kind(["村上春樹"], ["村上春樹"], name_fingerprint) == "agreement"
+
+
+def test_unfingerprintable_authors_conflict_through_build_diff():
+    from common.schemas import SourceKey
+    from openlibrary.api.resolve import ResolveRequest, build_diff
+    from openlibrary.api.retrieval import AuthorRef
+
+    request = ResolveRequest(title="anything", author_names=["村上春樹"])
+    record = _work_record(
+        authors=[AuthorRef(key=SourceKey(source="openlibrary", key="OL1A"), name="夏目漱石")]
+    )
+    diffs = {d.field: d for d in build_diff(request, record)}
+    assert diffs["authors"].kind == "conflict"
+
+
+# ------------------------------------------------- a candidate carries its record (R90)
+
+
+@pytest.fixture(scope="module")
+def a_resolvable_title_with_year_evidence(fixture_artifact) -> tuple[str, str]:
+    """(title, work_key) for a unique, fingerprintable title (ruling R69)
+    whose work has a `year_evidence` row -- so `record.year_evidence` on the
+    returned candidate is a real assertion, not a None that happens to be
+    allowed."""
+    con = _con()
+    row = con.execute(
+        f"""
+        SELECT w.title, w.work_key FROM '{fixture_artifact.table("works")}' w
+        JOIN '{fixture_artifact.table("year_evidence")}' y USING (work_key)
+        WHERE length(w.title_fp) >= 4 AND w.title_fp_freq = 1
+        ORDER BY w.work_key LIMIT 1
+        """
+    ).fetchone()
+    con.close()
+    assert row is not None, "fixture corpus lost its uniquely-titled work with year evidence"
+    return row[0], row[1]
+
+
+def test_every_candidate_carries_the_record_get_works_would_return(
+    client, a_resolvable_title_with_year_evidence
+):
+    """R90: Rails fills title/first_published_year/description from an
+    accepted candidate and needs `year_evidence` (declared_year exists for
+    10.7% of works), so the candidate carries the WorkRecord `resolve()`
+    already fetched -- no follow-up `GET /works/{key}` needed."""
+    title, work_key = a_resolvable_title_with_year_evidence
+    candidates = client.post("/resolve", json={"title": title}).json()["data"]["candidates"]
+    assert candidates
+    candidate = next(c for c in candidates if c["key"]["key"] == work_key)
+    record = candidate["record"]
+    assert record is not None
+    assert record["key"] == candidate["key"]
+    assert record["year_evidence"] is not None
+    assert "declared_year" in record["year_evidence"]
+    # Exactly what GET /works/{key} returns.
+    assert record == client.get(f"/works/{work_key}").json()["data"]
+
+
+def test_the_diff_covers_exactly_six_work_level_fields_in_order():
+    from openlibrary.api.resolve import ResolveRequest, build_diff
+
+    diffs = build_diff(ResolveRequest(title="anything"), _work_record())
+    assert [d.field for d in diffs] == [
+        "title",
+        "subtitle",
+        "description",
+        "first_published_year",
+        "authors",
+        "subjects",
+    ]
+
+
+def test_a_description_matching_ols_by_fingerprint_is_an_agreement():
+    from openlibrary.api.resolve import ResolveRequest, build_diff
+
+    request = ResolveRequest(title="anything", description="A novel of the Jazz Age!")
+    record = _work_record(description="A novel of the Jazz Age.")
+    diffs = {d.field: d for d in build_diff(request, record)}
+    assert diffs["description"].kind == "agreement"
+    assert diffs["description"].ours == "A novel of the Jazz Age!"
+    assert diffs["description"].theirs == "A novel of the Jazz Age."
+
+
+def test_a_differing_description_is_a_conflict():
+    from openlibrary.api.resolve import ResolveRequest, build_diff
+
+    request = ResolveRequest(title="anything", description="A whaling voyage.")
+    record = _work_record(description="A novel of the Jazz Age.")
+    diffs = {d.field: d for d in build_diff(request, record)}
+    assert diffs["description"].kind == "conflict"
+
+
+def test_a_description_absent_locally_is_a_fill():
+    from openlibrary.api.resolve import ResolveRequest, build_diff
+
+    diffs = {
+        d.field: d
+        for d in build_diff(
+            ResolveRequest(title="anything"), _work_record(description="A novel of the Jazz Age.")
+        )
+    }
+    assert diffs["description"].kind == "fill"
+
+
+def test_our_subjects_are_compared_against_theirs():
+    """`subjects` is no longer a permanent fill: the request may carry ours."""
+    from openlibrary.api.resolve import ResolveRequest, build_diff
+
+    record = _work_record(subjects=["Fiction", "Jazz Age"])
+    agree = build_diff(ResolveRequest(title="x", subjects=["fiction", "JAZZ AGE"]), record)
+    enrich = build_diff(ResolveRequest(title="x", subjects=["Fiction"]), record)
+    fill = build_diff(ResolveRequest(title="x"), record)
+    kinds = {
+        label: {d.field: d.kind for d in diffs}["subjects"]
+        for label, diffs in (("agree", agree), ("enrich", enrich), ("fill", fill))
+    }
+    assert kinds == {"agree": "agreement", "enrich": "enrichment", "fill": "fill"}
+
+
+def test_every_request_field_is_either_the_matchers_or_listed_as_not_for_it():
+    """`description`/`subjects` are diff-only inputs and `BlockingQuery` (the
+    matcher's contract, untouched) has no such fields. `BlockingQuery` runs
+    under pydantic's default `extra="ignore"`, so a `ResolveRequest` field
+    that is neither a `BlockingQuery` field nor in `NOT_FOR_THE_MATCHER`
+    would be dropped SILENTLY on the way to blocking -- this pins the
+    partition so that cannot happen to the next field someone adds."""
+    from openlibrary.api.resolve import NOT_FOR_THE_MATCHER, ResolveRequest
+    from openlibrary.matcher.blocking import BlockingQuery
+
+    assert set(ResolveRequest.model_fields) - NOT_FOR_THE_MATCHER == set(BlockingQuery.model_fields)
+    assert NOT_FOR_THE_MATCHER.isdisjoint(BlockingQuery.model_fields)
+
+
+def test_a_request_carrying_description_and_subjects_resolves_end_to_end(client):
+    """With `extra="forbid"` on (R88) this is only a 200 because the two
+    fields are declared on `ResolveRequest` (R90) and stripped before the
+    matcher sees them."""
+    response = client.post(
+        "/resolve",
+        json={"title": "anything", "description": "words", "subjects": ["Fiction"]},
+    )
+    assert response.status_code == 200

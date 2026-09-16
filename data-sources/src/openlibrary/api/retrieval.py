@@ -44,7 +44,7 @@ from typing import Literal
 
 import duckdb
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from common.normalize import (
     IDENTIFIER_TYPES,
@@ -157,6 +157,11 @@ class IdentifierHit(BaseModel):
 
 
 class BatchRequest(BaseModel):
+    """R88: `extra="forbid"` -- a misspelt field is a 422, never silently
+    ignored."""
+
+    model_config = ConfigDict(extra="forbid")
+
     keys: list[str] = Field(max_length=MAX_BATCH)
 
 

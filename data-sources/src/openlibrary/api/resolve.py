@@ -14,7 +14,8 @@ caller asked to see.
 
 R72: the diff is a WORK-level comparison built from one `retrieval.fetch_works`
 call over the returned candidates (never a per-candidate query) -- see
-`build_diff`.
+`build_diff`. R90: that same record rides on each candidate as `record`, so
+an accepted candidate needs no follow-up `GET /works/{key}`.
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from typing import Literal
 
 import duckdb
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from common.normalize import fingerprint, name_fingerprint
 from common.schemas import DiffEntry, DiffKind, Envelope, SourceKey, classify_diff
@@ -48,14 +49,36 @@ def _key(work_key: str) -> SourceKey:
 
 
 class ResolveRequest(BlockingQuery):
-    """A `BlockingQuery` plus how many candidates to return.
+    """A `BlockingQuery` plus how many candidates to return and two
+    diff-only fields.
 
     `limit` (ruling R75) truncates only the RETURNED candidate list, after
     scoring and `decide` have already run over every candidate blocking
     produced -- the decision is independent of it.
+
+    `description` and `subjects` (R90) feed `build_diff` only: they are
+    what WE hold, compared against each candidate's record, and never reach
+    the matcher -- `NOT_FOR_THE_MATCHER` strips them (with `limit`) before
+    the `BlockingQuery` is built, so blocking and scoring see exactly the
+    contract `BlockingQuery` declares.
+
+    R88: `extra="forbid"` -- `{"author": ..., "isbn": ...}` is a 422 naming
+    the unknown fields, never a 200 that silently discarded the identifier.
+    `BlockingQuery` itself is untouched (it is the matcher's contract).
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     limit: int = Field(10, ge=1, le=50)
+    description: str | None = None
+    subjects: list[str] = Field(default_factory=list)
+
+
+# The `ResolveRequest` fields that are NOT part of `BlockingQuery`. Every
+# field on `ResolveRequest` is either a `BlockingQuery` field or listed here;
+# `test_api_resolve.py` pins that invariant so a new request field cannot
+# be quietly dropped on the way to the matcher.
+NOT_FOR_THE_MATCHER = frozenset({"limit", "description", "subjects"})
 
 
 class ResolveDecision(BaseModel):
@@ -92,6 +115,13 @@ class ResolveCandidate(BaseModel):
     runner-up (`runner_up = 0.0`). That convention is what makes
     `candidates[0].margin == decision.margin` hold whenever the top
     candidate is present in the response (ruling R85).
+
+    `record` (R90) is this candidate's full `WorkRecord` -- exactly what
+    `GET /works/{key}` would return, from the one `fetch_works` call
+    `resolve()` already makes for the diff -- so a caller that accepts a
+    candidate can fill title, description, year evidence and authors from
+    it with no follow-up request. None only if that fetch missed (a
+    candidate key with no `works` row), in which case `diff` is `[]` too.
     """
 
     key: SourceKey
@@ -102,6 +132,7 @@ class ResolveCandidate(BaseModel):
     evidence: dict[str, dict]
     conflicts: list[str]
     diff: list[DiffEntry]
+    record: WorkRecord | None = None
 
 
 class ResolveResponse(BaseModel):
@@ -131,25 +162,32 @@ def _text_diff_kind(ours: str | None, theirs: str | None) -> DiffKind:
 def _list_diff_kind(ours: list[str], theirs: list[str], fp: Callable[[str], str]) -> DiffKind:
     """Ruling R86: the list counterpart of `_text_diff_kind` -- fingerprint
     every element (`fp`) before handing the two lists to `classify_diff`, so
-    its set/enrichment logic runs on normalized names, not raw ones."""
-    return classify_diff([fp(v) for v in ours], [fp(v) for v in theirs])
+    its set/enrichment logic runs on normalized names, not raw ones.
+
+    R89: an element whose fingerprint is empty falls back to its RAW value
+    (`fp(v) or v`), mirroring `_text_diff_kind`'s guard. `fingerprint`
+    strips non-Latin scripts to "", so without this `["村上春樹"]` vs
+    `["夏目漱石"]` compared as `[""] == [""]` and read as `agreement`."""
+    return classify_diff([fp(v) or v for v in ours], [fp(v) or v for v in theirs])
 
 
 def build_diff(request: ResolveRequest, record: WorkRecord) -> list[DiffEntry]:
     """The work-level diff between the query and one candidate's retrieval record.
 
-    Covers exactly the fields both sides carry at the WORK level: `title`,
-    `subtitle`, `first_published_year` (ours is `request.year`; theirs is
-    what OL DECLARES -- `record.year_evidence.declared_year` -- never the
-    surrounding edition-year evidence collapsed into a single number),
-    `authors` (primary names only, both sides), and `subjects` (the request
-    never carries any, so `ours=[]` here and this is a `fill` whenever OL
-    has subjects at all).
+    Covers exactly SIX fields, the ones both sides carry at the WORK level,
+    in this order: `title`, `subtitle`, `description`, `first_published_year`
+    (ours is `request.year`; theirs is what OL DECLARES --
+    `record.year_evidence.declared_year` -- never the surrounding
+    edition-year evidence collapsed into a single number), `authors`
+    (primary names only, both sides), and `subjects` (ours is
+    `request.subjects`, so a request carrying none sees a `fill` whenever
+    OL has subjects at all, and one carrying some sees agreement/
+    enrichment/conflict like any other list).
 
-    Ruling R86: `title`/`subtitle` are compared by fingerprint
-    (`_text_diff_kind`) and `authors`/`subjects` element-wise by fingerprint
-    (`_list_diff_kind`, `name_fingerprint` for authors and `fingerprint` for
-    subjects) -- a case/punctuation-only difference (or "F. Scott
+    Ruling R86: `title`/`subtitle`/`description` are compared by
+    fingerprint (`_text_diff_kind`) and `authors`/`subjects` element-wise
+    by fingerprint (`_list_diff_kind`, `name_fingerprint` for authors and
+    `fingerprint` for subjects) -- a case/punctuation-only difference (or "F. Scott
     Fitzgerald" vs "F. Scott FITZGERALD") reads as `agreement`, which is
     what makes a 126k-row pass tractable rather than 126k manual reviews.
     Every `DiffEntry.ours`/`.theirs` below still carries the RAW value --
@@ -177,6 +215,12 @@ def build_diff(request: ResolveRequest, record: WorkRecord) -> list[DiffEntry]:
             kind=_text_diff_kind(request.subtitle, record.subtitle),
         ),
         DiffEntry(
+            field="description",
+            ours=request.description,
+            theirs=record.description,
+            kind=_text_diff_kind(request.description, record.description),
+        ),
+        DiffEntry(
             field="first_published_year",
             ours=request.year,
             theirs=theirs_year,
@@ -190,9 +234,9 @@ def build_diff(request: ResolveRequest, record: WorkRecord) -> list[DiffEntry]:
         ),
         DiffEntry(
             field="subjects",
-            ours=[],
+            ours=request.subjects,
             theirs=record.subjects,
-            kind=_list_diff_kind([], record.subjects, fingerprint),
+            kind=_list_diff_kind(request.subjects, record.subjects, fingerprint),
         ),
     ]
 
@@ -226,7 +270,7 @@ def resolve(
     paths = state.paths
     weights = state.weights
 
-    query = BlockingQuery.model_validate(request.model_dump(exclude={"limit"}))
+    query = BlockingQuery.model_validate(request.model_dump(exclude=NOT_FOR_THE_MATCHER))
     blocking = generate_candidates(cur, paths, query)
     identifier_hits = blocking.identifier_hits
     views = load_work_views(cur, paths, list(blocking.candidates))
@@ -256,24 +300,27 @@ def resolve(
     truncated = ranked[: request.limit]
     truncated_margins = margins[: request.limit]
 
-    # R72: exactly one fetch_works call, over the RETURNED keys only.
+    # R72: exactly one fetch_works call, over the RETURNED keys only. R90:
+    # the same record rides on the candidate, so the caller never needs a
+    # follow-up GET /works/{key}.
     records = fetch_works(cur, paths, [candidate.work_key for candidate in truncated])
 
-    candidates = [
-        ResolveCandidate(
-            key=_key(scored_candidate.work_key),
-            score=scored_candidate.score,
-            rules=scored_candidate.rules,
-            margin=margin,
-            verdict=_candidate_verdict(scored_candidate, decision, weights),
-            evidence=scored_candidate.evidence,
-            conflicts=scored_candidate.conflicts,
-            diff=build_diff(request, record)
-            if (record := records.get(scored_candidate.work_key)) is not None
-            else [],
+    candidates = []
+    for scored_candidate, margin in zip(truncated, truncated_margins, strict=True):
+        record = records.get(scored_candidate.work_key)
+        candidates.append(
+            ResolveCandidate(
+                key=_key(scored_candidate.work_key),
+                score=scored_candidate.score,
+                rules=scored_candidate.rules,
+                margin=margin,
+                verdict=_candidate_verdict(scored_candidate, decision, weights),
+                evidence=scored_candidate.evidence,
+                conflicts=scored_candidate.conflicts,
+                diff=build_diff(request, record) if record is not None else [],
+                record=record,
+            )
         )
-        for scored_candidate, margin in zip(truncated, truncated_margins, strict=True)
-    ]
 
     return ResolveResponse(
         decision=ResolveDecision(

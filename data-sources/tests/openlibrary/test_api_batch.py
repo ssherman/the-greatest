@@ -162,3 +162,12 @@ def test_an_authors_batch_over_the_cap_is_rejected(client):
         "/authors/batch", json={"keys": [f"OL{i}A" for i in range(MAX_BATCH + 1)]}
     )
     assert response.status_code == 422
+
+
+def test_an_unknown_field_in_a_batch_request_is_a_422(client, a_known_work_key):
+    """R88: `BatchRequest` is `extra="forbid"` -- a misspelt field can never
+    be silently ignored."""
+    response = client.post("/works/batch", json={"keys": [a_known_work_key], "key": "x"})
+    assert response.status_code == 422
+    assert "key" in response.text
+    assert client.post("/authors/batch", json={"keys": [], "key": "x"}).status_code == 422
