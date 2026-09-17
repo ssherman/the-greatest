@@ -101,6 +101,13 @@ whether or not books has launched.
   a refresh after the production migration took books from 126,330 to 157,806 and authors from
   58,247 to 70,973. Anything **derived** from the dev database is stale afterwards and has to be
   regenerated — the Open Library books export and its evaluation pool, for instance.
+- **The legacy books DB (`the_greatest_books_legacy`) is the same script with `--legacy`**
+  (both databases) or `--legacy-only` (leave `the_greatest_development` alone). It comes from
+  the `postgres_tgb_backup_*` files in the same bucket: ~5 GB down, ~65 GB restored, ~25 minutes.
+  Only the books data migration (`data_migration:*`) reads it. A missing legacy DB is harmless
+  otherwise — except that annotaterb's post-`db:migrate` hook tries to connect to every
+  development database in `database.yml` and errors on it; the script sets
+  `ANNOTATERB_SKIP_ON_DB_TASKS=1` for that reason, and so can you.
 
 **The test database is per-checkout.** `config/test_database_name.rb` names the test primary after
 the directory the checkout lives in, so each git worktree gets its own

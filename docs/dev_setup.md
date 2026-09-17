@@ -92,8 +92,11 @@ sudo chmod +x /usr/local/bin/caddy
 Create a `.env` file in the project root:
 
 ```bash
-# .env
-CLOUDFLARE_API_TOKEN=your_cloudflare_api_token_here
+# .env  (project root — distinct from web-app/.env, which .env.example documents)
+CLOUDFLARE_API_TOKEN=your_cloudflare_api_token_here   # Caddy's DNS challenge (run_caddy.sh)
+DOCKER_POSTGRES_PASSWORD=pick_one                     # docker-compose.yml → postgres
+DOCKER_OPENSEARCH_PASSWORD=pick_one                   # docker-compose.yml → opensearch
+BACKUP_BUCKET=the-s3-bucket-with-the-backups          # bin/refresh-dev-db.sh
 ```
 
 **Note**: You'll need to obtain a Cloudflare API token from your Cloudflare dashboard with DNS edit permissions.
@@ -125,9 +128,13 @@ sudo setcap 'cap_net_bind_service=+ep' /usr/local/bin/caddy
 ```
 
 #### macOS
+Nothing to do — macOS lets any process bind ports below 1024. **Do not run Caddy with `sudo`.**
+`sudo` keeps your `$HOME`, so Caddy-as-root writes its certificates and locks into
+`~/Library/Application Support/Caddy/` owned by root, and every later non-sudo run fails with
+`permission denied`. If that has already happened, take the directory back:
+
 ```bash
-# macOS requires running with sudo for port 443
-# This will be handled in the startup script
+sudo chown -R "$(id -un):staff" "$HOME/Library/Application Support/Caddy"
 ```
 
 
@@ -158,13 +165,16 @@ This will:
 - Start any other development processes
 
 ### 3. Start Caddy Reverse Proxy
-From the project root, start Caddy:
+From the project root, start Caddy through the wrapper — it loads `.env` so Caddy has the
+Cloudflare token for its DNS challenge:
 ```bash
-# Linux/macOS
-sudo caddy run --config Caddyfile
-
-
+./run_caddy.sh
 ```
+
+No `sudo` on either platform: Linux gets port 443 from the `setcap` step above, macOS never
+needed it. Certificates for a machine that has sat idle long enough for them to expire get
+deleted and re-issued on the first start; if that first start ends in a
+`no such file or directory` retry loop for a `.key`, just restart Caddy once.
 
 ## Verifying the Setup
 
@@ -209,6 +219,29 @@ rails db:migrate
 rails db:seed  # if you have seed data
 ```
 
+### Loading a Database
+There is no seed that produces a usable site; development runs on a restore of the nightly
+production backup. From the project root, with Docker and the `aws` CLI configured to read
+`BACKUP_BUCKET`:
+
+```bash
+bin/refresh-dev-db.sh                # the_greatest_development from the newest backup (~400 MB, a couple of minutes)
+bin/refresh-dev-db.sh --legacy       # also the_greatest_books_legacy, the old site's DB (~5 GB → ~65 GB, ~25 minutes)
+bin/refresh-dev-db.sh --legacy-only  # just the legacy DB, main left alone
+```
+
+It validates each download before dropping anything, restores inside the `db` container so
+the `pg_restore` version always matches, runs `ANALYZE`, and finishes with `db:migrate` (main
+DB only). The legacy DB is only needed to rehearse the books data migration
+(`data_migration:*`); on macOS check that Docker Desktop's disk image limit has room for it.
+OpenSearch is not part of the backup — reindex afterwards with
+`bin/rails search:{music,games,books}:recreate_and_reindex_all`.
+
+`web-app/.ruby-version` is what selects Ruby, so a version manager that activates on `cd`
+(mise) only does so *inside* `web-app/`. Anything launched from the project root that shells
+out to `bin/rails` — this script included — has to go through `mise exec`, which the script
+does; run `bundle install` from `web-app/`.
+
 ## Troubleshooting
 
 ### Common Issues
@@ -224,10 +257,11 @@ sudo systemctl stop apache2  # or nginx, etc.
 
 #### Caddy Permission Denied
 ```bash
-# Linux: Set capabilities
+# Linux, on the port: set capabilities
 sudo setcap 'cap_net_bind_service=+ep' /usr/local/bin/caddy
 
-# macOS/Windows: Run with sudo/Administrator
+# macOS, on ~/Library/Application Support/Caddy/...: it was run with sudo once
+sudo chown -R "$(id -un):staff" "$HOME/Library/Application Support/Caddy"
 ```
 
 #### Docker Services Not Starting
