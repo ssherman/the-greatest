@@ -121,12 +121,15 @@ restore_db() {
     -c "CREATE DATABASE ${db} OWNER ${DB_USER};"
 
   # Parallel (-j) needs a seekable file, so copy the dump into the container.
+  # IN_CONTAINER_DUMP lets the EXIT trap remove that copy if pg_restore fails.
   say "Restoring '${db}' with ${JOBS} jobs (a minute or two; ~25 minutes for legacy)..."
+  IN_CONTAINER_DUMP="$in_container"
   docker compose cp "$dump" "${DB_SERVICE}:${in_container}"
   dbx pg_restore -U "$DB_USER" -d "$db" \
                  --no-owner --no-privileges --clean --if-exists \
                  -j "$JOBS" "$in_container"
   dbx rm -f "$in_container"
+  IN_CONTAINER_DUMP=""
 
   # pg_restore leaves the planner without statistics; until autovacuum gets
   # round to it, the first queries against a 65 GB legacy DB crawl.
@@ -200,7 +203,13 @@ fi
 # --- download + VALIDATE everything before we wipe anything ------------------
 MAIN_DUMP=""
 LEGACY_DUMP=""
+IN_CONTAINER_DUMP=""
 cleanup() {
+  # The copy inside the container sits on its writable layer and is 5 GB for
+  # legacy, so it goes on every exit path, KEEP_DUMP or not.
+  if [ -n "$IN_CONTAINER_DUMP" ]; then
+    dbx rm -f "$IN_CONTAINER_DUMP" >/dev/null 2>&1 || true
+  fi
   [ "${KEEP_DUMP:-0}" = "1" ] && return 0
   [ -n "$MAIN_DUMP" ]   && rm -f "$MAIN_DUMP"
   [ -n "$LEGACY_DUMP" ] && rm -f "$LEGACY_DUMP"
