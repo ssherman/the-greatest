@@ -2,13 +2,6 @@
 
 ## Auth
 
-**login with apple**
-The last provider not yet enabled. `config/auth_providers.json` already carries the entry
-with `enabled: false`, and the registry, `PROVIDER_MAP`, the `external_provider` enum and
-the icon partial are all in place — so this is a flag flip plus whatever Apple's console
-requires. Watch for private-relay addresses (`@privaterelay.appleid.com`), and for the
-fact that Apple sends the address only on the *first* authorization.
-
 **fix the legacy app's client-supplied email fallback** — *time-boxed*
 `the-greatest-books/admin/app/controllers/users_controller.rb:144` reads
 `decoded_user_data[:email] || provider_data[:email]`, and the second half is the browser's
@@ -58,14 +51,6 @@ Design constraints for whoever writes this:
 - google books integration
 - goodreads import
 
-## API
-
-- API framework
-- books admin api
-- books public api
-- authors admin api
-- authors public api
-
 ## Books data quality
 
 - Books Duplicate fixer
@@ -77,11 +62,9 @@ Design constraints for whoever writes this:
 
 - recommendations
 - add list wizard
-- custom user ranking configurations (paid feature)
 
 ## Growth and infra
 
 - google ads
 - google analytics
-- productize cloudflare rules
 - move worker to a new server
