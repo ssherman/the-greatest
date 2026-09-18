@@ -231,10 +231,11 @@ through `Collections::Registry.find(:books, slug)` (404 on unknown).
   - `ranking_configuration.csv_export` exists, is `ready?`, and `file.attached?` →
     `send_csv(csv_export.file.download, filename: "<slug>-<generated_at date>.csv")`
   - otherwise → `RequestGenerate.call(ranking_configuration:)` (which creates the row if
-    needed), then render `csv_exports/preparing` (HTML, status 202, `no-store`,
-    `<meta http-equiv="refresh" content="15">`) — "Your export is being prepared." Not a
-    flash: the cached rankings page skips the session, so a flash set here would never render
-    there. The view renders in the controller's own domain layout.
+    needed), then render `csv_exports/preparing` (HTML, status 202, `no-store`, with an HTTP
+    `Refresh: 15` header — the header form of a meta refresh, which every browser honours) —
+    "Your export is being prepared." Not a flash: the cached rankings page skips the session, so
+    a flash set here would never render there. The view renders in the controller's own domain
+    layout.
 - `export_limit` — `CsvExports::Limits.limit_for(current_user)`
 
 The books `export` action, as the reference:
@@ -351,9 +352,11 @@ Multi-valued columns join with `", "`; genre/subject/location split on
 `Category#category_type`; URL is the item's canonical public page on its domain. Scores are
 rounded to two decimals. Every file starts with a UTF-8 BOM.
 
-Filenames: pre-built `the-greatest-<slug>-<generated_at YYYY-MM-DD>.csv`; on demand
-`the-greatest-<slug>-<today>.csv`; saved search `<search name parameterized>-<today>.csv`;
-user list unchanged.
+Filenames (`CsvExports::Registry.filename_for`): a global configuration's export is
+`the-greatest-<slug>-rankings-<date>.csv` and a user-owned one is
+`<configuration name parameterized>-<slug>-<date>.csv`, where `<date>` is `generated_at` for the
+pre-built file and today for an on-demand one; saved search
+`<search name parameterized>-<today>.csv`; user list unchanged.
 
 ## 13. Errors and security
 
@@ -391,8 +394,9 @@ user list unchanged.
   unfiltered without one → 202 and `RequestGenerate` called once; member filtered → on demand,
   uncapped, and the filter changes the rows; `/rc/` gating (private user-owned config → 404
   for a stranger); `no-store` on every export response; the rate limit trips on the 21st
-  request; a `.csv` request to any cached `index` route is not routable (404), so no CSV can
-  ever come from a cached action.
+  request; a `.csv` request to a cached `index` route never yields a CSV body (Rails' implicit
+  `(.:format)` routes `/.csv` to `index`, which has no CSV template and answers 406), so no CSV
+  can ever come from a cached action.
 - **E2E** (`e2e/tests/books/rankings-csv-export.spec.ts` plus one each for music and games
   rankings, saved searches, and the existing my-lists spec updated): a signed-in non-member
   clicks Download, sees the modal (`getByRole("dialog")`), "Download top 500" yields a
