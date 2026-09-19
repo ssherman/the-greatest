@@ -1,4 +1,5 @@
 require "test_helper"
+require "csv"
 
 module Books
   class RankedItemsControllerTest < ActionDispatch::IntegrationTest
@@ -321,6 +322,170 @@ module Books
     test "the books nav links to My Rankings" do
       get "/"
       assert_select "#navbar_my_books a[href=?]", "/my/rankings", minimum: 1
+    end
+
+    # --- CSV export (spec §9) ---
+
+    BOM = CsvExports::Writer::BOM
+
+    def parsed_csv
+      CSV.parse(response.body.delete_prefix(BOM))
+    end
+
+    def generate_ok
+      Services::CsvExports::RequestGenerate::Result.new(success?: true, data: {}, errors: [])
+    end
+
+    test "export requires sign-in" do
+      get "/export.csv"
+
+      assert_redirected_to "/"
+    end
+
+    test "export without the csv format is not routable" do
+      get "/export"
+
+      assert_response :not_found
+    end
+
+    test "a non-member gets the top 500 rows on demand, uncached" do
+      seed_ranked_books(600)
+      sign_in_as users(:user_with_expired_membership), stub_auth: true
+
+      get "/export.csv"
+
+      assert_response :success
+      assert_includes response.media_type, "text/csv"
+      assert_match "no-store", response.headers["Cache-Control"].to_s
+      assert_equal "noindex", response.headers["X-Robots-Tag"]
+      assert_includes response.headers["Content-Disposition"], "the-greatest-books-rankings-#{Date.current.iso8601}.csv"
+      assert response.body.start_with?(BOM)
+      rows = parsed_csv
+      assert_equal CsvExports::Books::RankedBookRow::HEADERS, rows.first
+      assert_equal 500, rows.size - 1
+      assert_equal "War and Peace", rows[1][3]
+    end
+
+    test "a member's unfiltered export is served from the pre-built file" do
+      export = CsvExport.create!(ranking_configuration: @rc, status: :ready, generated_at: Time.current)
+      export.file.attach(io: StringIO.new("#{BOM}Rank,Title\n1,Prebuilt\n"),
+        filename: "the-greatest-books-rankings-2026-09-18.csv", content_type: "text/csv")
+      Services::CsvExports::RequestGenerate.expects(:call).never
+      sign_in_as users(:regular_user), stub_auth: true
+
+      get "/export.csv"
+
+      assert_response :success
+      assert_equal "#{BOM}Rank,Title\n1,Prebuilt\n", response.body
+      assert_includes response.headers["Content-Disposition"], "the-greatest-books-rankings-2026-09-18.csv"
+      assert_match "no-store", response.headers["Cache-Control"].to_s
+    end
+
+    test "a member's unfiltered export with no file requests one and shows the preparing page" do
+      Services::CsvExports::RequestGenerate.expects(:call).with(ranking_configuration: @rc).once.returns(generate_ok)
+      sign_in_as users(:regular_user), stub_auth: true
+
+      get "/export.csv"
+
+      assert_response :accepted
+      assert_equal "text/html", response.media_type
+      assert_equal "15", response.headers["Refresh"]
+      assert_match "no-store", response.headers["Cache-Control"].to_s
+      assert_select "[data-testid=csv-export-preparing]"
+    end
+
+    # Both fixture books carry the novels category; the 600 filler books carry
+    # none, so the filter is what keeps them out of a member's uncapped export.
+    test "a member's filtered export is generated on demand without a cap" do
+      seed_ranked_books(600)
+      Services::CsvExports::RequestGenerate.expects(:call).never
+      sign_in_as users(:regular_user), stub_auth: true
+
+      get "/export.csv?category_id=novels"
+
+      assert_response :success
+      rows = parsed_csv
+      assert_equal ["War and Peace", "Crime and Punishment"], rows.drop(1).map { |row| row[3] }
+    end
+
+    test "every filter the page accepts applies to the export" do
+      sign_in_as users(:regular_user), stub_auth: true
+
+      get "/export.csv?country_id=french&published_start=1800&published_end=1900"
+
+      assert_response :success
+      assert_equal ["War and Peace"], parsed_csv.drop(1).map { |row| row[3] }
+    end
+
+    test "a collection filter applies to the export" do
+      sign_in_as users(:regular_user), stub_auth: true
+
+      get "/export.csv?collection=#{Collections::Registry.slugs(:books).first}"
+
+      assert_response :success
+      assert_includes response.media_type, "text/csv"
+    end
+
+    test "an unknown collection 404s" do
+      sign_in_as users(:regular_user), stub_auth: true
+
+      get "/export.csv?collection=nope"
+
+      assert_response :not_found
+    end
+
+    test "an explicit ranking configuration exports its own ranks" do
+      other = ranking_configurations(:books_inherited)
+      RankedItem.create!(item: books_books(:crime_and_punishment), ranking_configuration: other, rank: 1, score: 1)
+      sign_in_as users(:user_with_expired_membership), stub_auth: true
+
+      get "/rc/#{other.id}/export.csv"
+
+      assert_response :success
+      assert_equal ["Crime and Punishment"], parsed_csv.drop(1).map { |row| row[3] }
+    end
+
+    test "a private user-owned configuration's export 404s for a non-owner" do
+      sign_in_as users(:editor_user), stub_auth: true
+
+      get "/rc/#{ranking_configurations(:books_user).id}/export.csv"
+
+      assert_response :not_found
+    end
+
+    test "the export is rate limited per user" do
+      sign_in_as users(:user_with_expired_membership), stub_auth: true
+
+      20.times { get "/export.csv" }
+      assert_response :success
+
+      get "/export.csv"
+      assert_response :too_many_requests
+    end
+
+    # Rails appends an optional (.:format) to every route, so /.csv does reach
+    # the cached index action -- and must come back as an error (406, no
+    # template for csv), never as a CSV body carrying public cache headers.
+    test "the cached index never answers with a csv body" do
+      get "/.csv"
+      refute_equal 200, response.status
+      refute_equal "text/csv", response.media_type
+
+      get "/index.csv"
+      assert_response :not_found
+    end
+
+    test "the index carries the export link with the current filters" do
+      get "/the-greatest/novels/books"
+
+      assert_response :success
+      assert_equal "/export.csv?category_id=novels", @controller.view_assigns["csv_export_path"]
+    end
+
+    test "the index on a configuration carries an rc export link" do
+      get "/rc/#{@rc.id}"
+
+      assert_equal "/rc/#{@rc.id}/export.csv", @controller.view_assigns["csv_export_path"]
     end
 
     private

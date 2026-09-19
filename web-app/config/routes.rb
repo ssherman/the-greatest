@@ -866,6 +866,14 @@ Rails.application.routes.draw do
     # Ranked index. Root is canonical; pagination is path-based.
     # Order matters: /page/1 must precede the generic /page/:page.
     root to: "books/ranked_items#index", as: :books_root
+    # CSV export (spec §9). Its own action, never a format of the cached
+    # index. `format: true` makes the extension mandatory (a bare constraint
+    # only restricts the optional segment, so /export alone would still route)
+    # and the constraint pins it to .csv, so /export and /export.json both 404.
+    get "export", to: "books/ranked_items#export", as: :books_export,
+      format: true, constraints: {format: /csv/}
+    get "rc/:ranking_configuration_id/export", to: "books/ranked_items#export", as: :books_rc_export,
+      format: true, constraints: {format: /csv/}
     get "page/1", to: redirect("/", status: 301)
     get "page/:page", to: "books/ranked_items#index", as: :books_page, constraints: {page: /\d+/}
     get "the-greatest-books", to: redirect("/", status: 301)
