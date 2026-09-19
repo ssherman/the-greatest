@@ -340,7 +340,7 @@ dialog). The component renders its own `<dialog>`, so it is rendered once per pa
     <h3 class="text-lg font-bold">This download includes the top 500 <%= noun %></h3>
     <p class="py-4">Members can download the whole ranking and the full results of any filter or saved search.</p>
     <div class="modal-action">
-      <a href="<%= export_path %>" class="btn btn-primary" data-turbo="false">Download top 500</a>
+      <a href="<%= export_path %>" rel="nofollow" class="btn btn-primary" data-turbo="false">Download top 500</a>
       <%= link_to "Become a member", membership_path, class: "btn btn-outline" %>
       <form method="dialog"><button class="btn btn-ghost">Cancel</button></form>
     </div>
@@ -360,10 +360,14 @@ enforces.
 2. No `tg_uid` cookie → `document.getElementById("login_modal")?.showModal?.()` and return
    (the same check `user_list_widget_controller.js#open` uses; sign-in reloads the page).
 3. `fetch("/membership_state", {headers: {Accept: "application/json"}, credentials: "same-origin"})`.
-   `member: true` → `window.location = href`. Anything else, including a non-OK response or a
-   thrown fetch → `showModal()` on the dialog. The fallback is safe in the direction that
+   `member: true` → `window.location = href`. A 401 means the `tg_uid` marker outlived the
+   session → open the sign-in modal instead. Anything else, including another non-OK response
+   or a thrown fetch → `showModal()` on the dialog. The fallback is safe in the direction that
    matters: a member who hits it sees one unnecessary modal, and "Download top 500" points at
    the same URL, so the server still gives them the full file.
+4. The controller closes the dialog on `turbo:before-cache` (as the nav drawer does), so a
+   Turbo visit from inside the dialog — "Become a member" — does not snapshot it open and
+   restore it non-modal on Back.
 
 ## 12. Columns
 
