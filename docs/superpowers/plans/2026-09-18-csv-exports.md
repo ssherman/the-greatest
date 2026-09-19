@@ -2400,10 +2400,12 @@ In `config/routes.rb`, directly after `root to: "books/ranked_items#index", as: 
 
 ```ruby
     # CSV export (spec §9). Its own action, never a format of the cached
-    # index; `.csv` is required by the format constraint so /export alone 404s.
-    get "export", to: "books/ranked_items#export", as: :books_export, constraints: {format: /csv/}
+    # index. `format: true` makes the extension mandatory (a constraint alone
+    # only restricts the optional segment, so bare /export would still route)
+    # and the constraint pins it to .csv.
+    get "export", to: "books/ranked_items#export", as: :books_export, format: true, constraints: {format: /csv/}
     get "rc/:ranking_configuration_id/export", to: "books/ranked_items#export", as: :books_rc_export,
-      constraints: {format: /csv/}
+      format: true, constraints: {format: /csv/}
 ```
 
 - [ ] **Step 4: Add the action**
@@ -2608,13 +2610,13 @@ Expected: new tests fail (404 / nil ivar).
 In `config/routes.rb`, in the music `scope "(/rc/:ranking_configuration_id)"` block, directly after `get "albums/page/:page", ...`:
 
 ```ruby
-      get "albums/export", to: "music/albums/ranked_items#export", as: :albums_export, constraints: {format: /csv/}
+      get "albums/export", to: "music/albums/ranked_items#export", as: :albums_export, format: true, constraints: {format: /csv/}
 ```
 
 and directly after `get "songs/page/:page", ...`:
 
 ```ruby
-      get "songs/export", to: "music/songs/ranked_items#export", as: :songs_export, constraints: {format: /csv/}
+      get "songs/export", to: "music/songs/ranked_items#export", as: :songs_export, format: true, constraints: {format: /csv/}
 ```
 
 (Both sit before the `albums/:year` / `songs/:year` routes, whose `\d{4}` constraint would not capture "export" anyway.)
@@ -2771,7 +2773,7 @@ Expected: the new tests fail.
 In `config/routes.rb`, in the games `scope "(/rc/:ranking_configuration_id)"` block, directly after `get "video-games/page/:page", ...`:
 
 ```ruby
-      get "video-games/export", to: "games/ranked_items#export", as: :video_games_export, constraints: {format: /csv/}
+      get "video-games/export", to: "games/ranked_items#export", as: :video_games_export, format: true, constraints: {format: /csv/}
 ```
 
 - [ ] **Step 4: Add the action**
@@ -3055,7 +3057,7 @@ In `config/routes.rb`, in the saved searches block, before `get "searches/:id"`:
 
 ```ruby
   get "searches/:id/export", to: "saved_searches#export", as: :export_saved_search,
-    constraints: {id: /\d+/, format: /csv/}
+    format: true, constraints: {id: /\d+/, format: /csv/}
 ```
 
 In `app/controllers/saved_searches_controller.rb`: add `include CsvExportable` after `include SavedSearchDomainScoped`, and add the action after `show`:
@@ -4163,7 +4165,7 @@ it then cached files on a 24-hour TTL behind nginx and served them stale. Here:
 | `GET /searches/:id/export.csv` | none — the search's criteria |
 | `GET /my/lists/:id.csv` | `sort` |
 
-The `.csv` format is required by a route constraint; each `export` action parses its filters with
+The `.csv` extension is mandatory (`format: true` plus a `/csv/` constraint); each `export` action parses its filters with
 the same code its `index` uses, so the relation is identical by construction. `?collection=` is
 accepted here although `index` rejects it (the soft-duplicate-URL concern does not apply to an
 uncached, `nofollow`, sign-in-only endpoint).
