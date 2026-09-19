@@ -114,5 +114,18 @@ module RankingConfigurations
 
       RefreshJob.new.perform(@config.id)
     end
+
+    test "a failure requesting the CSV regenerate does not fail the refresh" do
+      Rankings::BulkWeightCalculator.any_instance.expects(:call).returns(@clean_weights)
+      RankingConfiguration.any_instance.expects(:calculate_rankings).returns(@success)
+      Services::CsvExports::RequestGenerate.expects(:call).raises(StandardError, "csv_exports hiccup")
+
+      RefreshJob.new.perform(@config.id)
+
+      @config.reload
+      assert @config.refresh_idle?
+      refute @config.needs_refresh?
+      assert_nil @config.last_refresh_error
+    end
   end
 end

@@ -43,7 +43,7 @@ module RankingConfigurations
         last_refresh_error: nil
       )
 
-      Services::CsvExports::RequestGenerate.call(ranking_configuration: config)
+      request_csv_regenerate(config)
     rescue => e
       Rails.logger.error "[RankingConfigurations::RefreshJob] configuration #{ranking_configuration_id}: #{e.message}"
       ::RankingConfiguration.where(id: ranking_configuration_id).update_all(
@@ -51,6 +51,18 @@ module RankingConfigurations
         needs_refresh: true,
         last_refresh_error: e.message.truncate(500)
       )
+    end
+
+    private
+
+    # The CSV is a side effect of the refresh, not part of it: a failure here
+    # must not flip a configuration whose rankings did land to "failed". Logged
+    # rather than raised -- retry: false means a raise would only be logged
+    # anyway, and the next Refresh or member download re-claims the row.
+    def request_csv_regenerate(config)
+      Services::CsvExports::RequestGenerate.call(ranking_configuration: config)
+    rescue => e
+      Rails.logger.error "[RankingConfigurations::RefreshJob] configuration #{config.id}: CSV regenerate not requested: #{e.message}"
     end
   end
 end

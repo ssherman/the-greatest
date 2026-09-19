@@ -129,4 +129,14 @@ class CalculateRankingsJobTest < ActiveSupport::TestCase
 
     assert_raises(StandardError) { CalculateRankingsJob.new.perform(@ranking_configuration.id) }
   end
+
+  test "requests a CSV export regenerate for a non-exportable type too; the service decides" do
+    config = ranking_configurations(:books_authors_global)
+    RankingConfiguration.any_instance.stubs(:calculate_rankings).returns(
+      ItemRankings::Calculator::Result.new(success?: true, data: [], errors: [])
+    )
+    Services::CsvExports::RequestGenerate.expects(:call).with(ranking_configuration: config).once
+
+    CalculateRankingsJob.new.perform(config.id)
+  end
 end

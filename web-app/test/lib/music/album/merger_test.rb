@@ -114,6 +114,7 @@ module Music
       end
 
       test "should destroy source ranked_items when source album is destroyed" do
+        CalculateRankingsJob.stubs(:perform_in)
         config = Music::Albums::RankingConfiguration.create!(
           name: "Test Ranking",
           description: "Test"
