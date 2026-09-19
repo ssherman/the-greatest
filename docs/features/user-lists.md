@@ -282,7 +282,13 @@ Each STI subclass declares which `list_type`s support a completion date via `sel
 
 ### CSV export
 
-`show.csv` streams a UTF-8 CSV with a BOM prefix (Excel-friendly) via `send_data`, filename `"#{list.name.parameterize}-#{Date.current.iso8601}.csv"`. Columns vary per listable (albums/songs: Position, Title, Artists, Year; books: Position, Title, Authors, Year, via `Books::Book#first_published_year`; games/movies: Position, Title, Year), with a `Completed On` column only when `completed_on_enabled?`. The CSV is unpaginated and follows the current sort.
+`show.csv` streams the list through `CsvExports::UserList` (see `docs/features/csv-exports.md`):
+a UTF-8 CSV with a BOM prefix, filename `"#{list.name.parameterize}-#{Date.current.iso8601}.csv"`.
+Columns vary per listable (albums/songs: Position, Title, Artists, Year; books: Position, Title,
+Authors, Year; games/movies: Position, Title, Year), plus `Completed On` only when
+`completed_on_enabled?`. Unpaginated, follows the current sort, and — unlike the rankings and
+saved-search exports — never capped: a list is the viewer's own data or data someone made public.
+The Download button is `CsvExports::DownloadButtonComponent` with `capped: false` (a plain link).
 
 ### "My Lists" nav link
 
